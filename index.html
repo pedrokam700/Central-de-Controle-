@@ -13,7 +13,7 @@
     .brand h1 { margin:0; color:#fff; font-size:16px; font-weight:680; letter-spacing:-.015em; } .brand p { margin:4px 0 0; color:#a7a7a2; font-size:12px; }.main-nav { display:grid; gap:4px; margin:17px 0 11px; }.main-nav button { width:100%; border:0; background:transparent; border-radius:7px; padding:9px 10px; color:#b9b9b4; text-align:left; }.main-nav button:hover,.main-nav button.active { background:#272727; color:#fff; }.main-nav button.active { font-weight:680; }
     .side-action { width:100%; margin:8px 0 9px; border:1px solid #4a4a47; background:transparent; color:#f2f2ee; border-radius:7px; padding:9px 10px; font-weight:650; text-align:left; }.side-action:hover { background:#252525; }
     .all-reports { width:100%; border:0; border-radius:7px; background:transparent; color:#b9b9b4; padding:9px 10px; text-align:left; }.all-reports:hover,.all-reports.active { background:#272727; color:#fff; }.all-reports.active { font-weight:650; }
-    .tree-heading { display:flex; justify-content:space-between; align-items:center; margin:20px 10px 8px; color:#9f9f9a; font-size:11px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; }.tree { display:grid; gap:13px; overflow:auto; }.family { display:grid; gap:4px; }
+    .tree-heading { display:flex; justify-space-between:space-between; align-items:center; margin:20px 10px 8px; color:#9f9f9a; font-size:11px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; }.tree { display:grid; gap:13px; overflow:auto; }.family { display:grid; gap:4px; }
     .family-header { display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
     .family-name { color:#ecece8; font-size:12px; font-weight:680; }
     .delete-family-btn { border:0; background:transparent; color:#888883; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold; line-height:1; }
@@ -551,8 +551,50 @@
     document.addEventListener('click',e=>{const productRow=e.target.closest('tr[data-id]'),productItem=e.target.closest('[data-id]'),activityRow=e.target.closest('[data-activity]'),flowRow=e.target.closest('[data-flow]');if(activityRow)return openActivityDetail(activityRow.dataset.activity);if(flowRow)return openFlowDetail(flowRow.dataset.flow);if(productRow)return openDetail(productRow.dataset.id);if(productItem)return openDetail(productItem.dataset.id);});['productSearch','componentFilter','productStatus'].forEach(id=>document.querySelector('#'+id).addEventListener(id==='productSearch'?'input':'change',renderProduct));['allSearch','allFamily','allComponent','allStatus'].forEach(id=>document.querySelector('#'+id).addEventListener(id==='allSearch'?'input':'change',renderAll));['workSearch','workOwner','workStatus'].forEach(id=>document.querySelector('#'+id).addEventListener(id==='workSearch'?'input':'change',renderWork));['flowSearch','flowOwner','flowStatus'].forEach(id=>document.querySelector('#'+id).addEventListener(id==='flowSearch'?'input':'change',renderFlows));
     document.querySelector('#saveArtifacts').addEventListener('click',async ()=>{const r=selected(),reportLink=document.querySelector('#detailReportLink').value.trim(),responseLink=document.querySelector('#detailResponseLink').value.trim(),newFiles=await readAttachments(document.querySelector('#detailEvidenceInput').files);const changes=[];if(reportLink!==r.reportLink){r.reportLink=reportLink;changes.push(reportLink?'Link do report atualizado.':'Link do report removido.');}if(responseLink!==r.responseLink){r.responseLink=responseLink;changes.push(responseLink?'Link da resposta atualizado.':'Link da resposta removido.');}if(newFiles.length){r.evidence=[...evidenceEntries(r.evidence),...newFiles];changes.push(`${newFiles.length} evidência(s) adicionada(s).`);}if(!changes.length)return;r.updates.push({text:changes.join(' '),date:now()});save();render();renderDetail();});document.querySelector('#addUpdate').addEventListener('click',()=>{const input=document.querySelector('#updateInput'),text=input.value.trim();if(!text)return input.focus();const r=selected();r.updates.push({text,date:now()});input.value='';save();render();renderDetail();});document.querySelector('#deleteReport').addEventListener('click',()=>{if(currentAccount?.role!=='admin'){alert('Apenas administradores podem excluir registros.');return;}const r=selected();if(!r||!confirm(`Excluir ${r.id}? Esta ação não pode ser desfeita.`))return;state.reports=state.reports.filter(item=>item.id!==r.id);save();render();closeDetail();});
     document.querySelector('#saveActivityChanges').addEventListener('click',()=>{const activity=selectedActivity(),status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value,changes=[];if(status!==activity.status){activity.status=status;changes.push(`Status alterado para “${activityStatusName[status]}”.`);}if(dueDate!==activity.dueDate){activity.dueDate=dueDate;changes.push(dueDate?`Prazo atualizado para ${dueDate.split('-').reverse().join('/')}.`:'Prazo removido.');}if(!changes.length)return;activity.updates.push({text:changes.join(' '),date:now()});save();render();renderActivityDetail();});document.querySelector('#addActivityUpdate').addEventListener('click',()=>{const input=document.querySelector('#activityUpdateInput'),text=input.value.trim();if(!text)return input.focus();const activity=selectedActivity();activity.updates.push({text,date:now()});input.value='';save();render();renderActivityDetail();});document.querySelector('#deleteActivity').addEventListener('click',()=>{if(currentAccount?.role!=='admin'){alert('Apenas administradores podem excluir atividades.');return;}const activity=selectedActivity();if(!activity||!confirm(`Excluir ${activity.id}? Esta ação não pode ser desfeita.`))return;state.activities=state.activities.filter(item=>item.id!==activity.id);save();render();closeActivityDetail();});
-    document.querySelector('#saveFlowChanges').addEventListener('click',async ()=>{const flow=selectedFlow(),emailLink=document.querySelector('#flowDetailEmailLink').value.trim(),coverLink=document.querySelector('#flowDetailCoverLink').value.trim(),followUpLink=document.querySelector('#flowDetailFollowUpLink').value.trim(),followUpOwner=document.querySelector('#flowDetailOwner').value,newFiles=await readAttachments(document.querySelector('#flowDetailAttachment').files),changes=[];if(emailLink!==flow.emailLink){flow.emailLink=emailLink;changes.push(emailLink?'Link do e-mail atualizado.':'Link do e-mail removido.');}if(coverLink!==flow.coverLink){flow.coverLink=coverLink;changes.push(coverLink?'Folha de rosto atualizada.':'Folha de rosto removida.');}if(followUpLink!==flow.followUpLink){flow.followUpLink=followUpLink;changes.push(followUpLink?'Seguimento atualizado.':'Registro de seguimento removido.');}if(followUpOwner!==flow.followUpOwner){flow.followUpOwner=followUpOwner;changes.push(`Seguimento atribuído a ${followUpOwner}.`);}if(newFiles.length){flow.formAttachment=[...evidenceEntries(flow.formAttachment),...newFiles];changes.push(`${newFiles.length} arquivo(s) de formulário adicionado(s).`);}if(!changes.length)return;flow.updates.push({text:changes.join(' '),date:now()});save();render();renderFlowDetail();});document.querySelector('#deleteFlow').addEventListener('click',()=>{if(currentAccount?.role!=='admin'){alert('Apenas administradores podem excluir fluxos.');return;}const flow=selectedFlow();if(!flow||!confirm(`Excluir ${flow.id}? Esta ação não pode ser desfeita.`))return;state.flows=state.flows.filter(item=>item.id!==flow.id);save();render();closeFlowDetail();});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeConfirmModal();closeProductModal();closeComponentModal();closeFailureModal();closeActivityModal();closeFlowModal();closeDetail();closeActivityDetail();closeFlowDetail();}});
+    document.querySelector('#saveFlowChanges').addEventListener('click',async ()=>{const flow=selectedFlow(),emailLink=document.querySelector('#flowDetailEmailLink').value.trim(),coverLink=document.querySelector('#flowDetailCoverLink').value.trim(),followUpLink=document.querySelector('#flowDetailFollowUpLink').value.trim(),followUpOwner=document.querySelector('#flowDetailOwner').value,newFiles=await readAttachments(document.querySelector('#flowDetailAttachment').files),changes=[];if(emailLink!==flow.emailLink){flow.emailLink=emailLink;changes.push(emailLink?'Link do e-mail atualizado.':'Link do e-mail removido.');}if(coverLink!==flow.coverLink){flow.coverLink=coverLink;changes.push(coverLink?'Folha de rosto atualizada.':'Folha de rosto removida.');}if(followUpLink!==flow.followUpLink){flow.followUpLink=followUpLink;changes.push(followUpLink?'Seguimento atualizado.':'Registro de seguimento removido.');}if(followUpOwner!==flow.followUpOwner){flow.followUpOwner=followUpOwner;changes.push(`Seguimento atribuído a ${followUpOwner}.`);}if(newFiles.length){flow.formAttachment=[...evidenceEntries(flow.formAttachment),...newFiles];changes.push(`${newFiles.length} arquivo(s) de formulário adicionado(s).`);}if(!changes.length)return;flow.updates.push({text:changes.join(' '),date:now()});save();render();renderFlowDetail();});document.querySelector('#deleteFlow').addEventListener('click',()=>{if(currentAccount?.role!=='admin'){alert('Apenas administradores podem excluir fluxos.');return;}const flow=selectedFlow();if(!flow||!confirm(`Excluir ${flow.id}? Esta ação não pode ser desfeita.`))return;state.flows=state.flows.filter(item=>item.id!==flow.id);save();render();closeFlowDetail();});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeConfirmModal();closeProductModal();closeComponentModal();closeFailureModal();closeActivityModal();closeFlowModal();closeDetail();closeActivityDetail();closeFlowFlow();}});
     render();
+  </script>
+
+  <!-- Módulos do Firebase (v10) importados via CDN -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      onSnapshot, 
+      doc, 
+      deleteDoc, 
+      updateDoc 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // Suas credenciais oficiais do projeto
+    const firebaseConfig = {
+      apiKey: "AIzaSyBi8ll-uiEh9L9sPBXQZhqIbFxgLfnTjeM",
+      authDomain: "central-de-controle-88962.firebaseapp.com",
+      projectId: "central-de-controle-88962",
+      storageBucket: "central-de-controle-88962.firebasestorage.app",
+      messagingSenderId: "557459646371",
+      appId: "1:557459646371:web:e5bfb77bfbcad6d50bdc16",
+      measurementId: "G-J8RQMXQT4D"
+    };
+
+    // Inicializa o Firebase e o Banco de Dados Firestore
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Expõe o banco e funções essenciais para o escopo global (window)
+    window.db = db;
+    window.fb = {
+      collection,
+      addDoc,
+      onSnapshot,
+      doc,
+      deleteDoc,
+      updateDoc
+    };
+
+    console.log("Firebase conectado com sucesso ao projeto central-de-controle-88962!");
   </script>
 </body>
 </html>
