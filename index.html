@@ -29,6 +29,7 @@
     .confirm-body { padding:20px 24px; color:var(--text); font-size:13px; line-height:1.5; } .confirm-warning { margin-top:12px; padding:12px; background:var(--danger-soft); color:var(--danger); border-radius:8px; font-weight:600; font-size:12px; border:1px solid rgba(217,45,32,0.2); }
     .detail { display:grid; grid-template-columns:minmax(0,1fr) 280px; }.detail-main { padding:21px 24px 25px; }.detail-side { padding:20px; background:#fafafa; border-left:1px solid var(--line); }.detail-label { display:block; margin-top:18px; color:var(--muted); font-size:10px; letter-spacing:.05em; text-transform:uppercase; font-weight:720; }.detail-value { display:block; margin-top:5px; line-height:1.45; }.task-list { display:grid; gap:8px; margin:12px 0; }.task { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px; background:#fff; border:1px solid var(--line); border-radius:8px; font-size:12px; font-weight:600; }.timeline { display:grid; gap:13px; margin-top:14px; }.event { border-left:2px solid #ccc; padding-left:14px; }.event time { display:block; color:var(--muted); font-size:11px; margin-bottom:3px; }.event p { margin:0; line-height:1.45; }.update { padding-top:18px; margin-top:20px; border-top:1px solid var(--line); }.update-row { display:flex; gap:8px; margin-top:8px; }.update-row input { min-width:0; }.artifact-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; margin-top:8px; }.artifact-grid .span2 { grid-column:span 2; }.artifact-actions { margin-top:11px; }.evidence-gallery { display:flex; flex-wrap:wrap; gap:9px; margin-top:8px; }.evidence-image { display:block; width:104px; height:82px; object-fit:cover; border-radius:7px; border:1px solid var(--line); background:var(--soft); }.evidence-file { display:inline-flex; align-items:center; min-height:34px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; color:var(--text); font-size:12px; background:#fff; }
     .home-layout { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(255px,.8fr); gap:18px; }.home-list { display:grid; gap:0; }.home-item { display:grid; grid-template-columns:74px minmax(0,1fr) auto; align-items:center; gap:14px; padding:14px 16px; border-bottom:1px solid var(--line); cursor:pointer; }.home-item:last-child { border-bottom:0; }.home-item:hover .identifier { text-decoration:underline; }.home-item-type { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.045em; color:var(--muted); }.home-side { display:grid; gap:14px; align-content:start; }.quick-action { display:block; width:100%; border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:15px; color:var(--text); text-align:left; }.quick-action:hover { background:var(--soft); }.quick-action strong,.quick-action span { display:block; }.quick-action span { color:var(--muted); font-size:12px; margin-top:4px; }.home-note { padding:16px; background:#111; color:#fff; border-radius:10px; }.home-note span { display:block; color:#bcbcb7; font-size:12px; margin-top:5px; line-height:1.45; }.account-screen { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:22px; background:#0d0d0d; }.account-card { width:min(460px,100%); background:#fff; border-radius:12px; padding:27px; box-shadow:0 30px 100px rgba(0,0,0,.34); }.account-card h1 { margin:0; font-size:23px; letter-spacing:-.03em; }.account-card p { color:var(--muted); line-height:1.5; margin:7px 0 22px; }.account-card .mark { background:#111; color:#fff; }.account-info { margin:14px 10px 0; font-size:11px; color:#a8a8a3; }.notification-list { display:grid; gap:8px; }.notification { padding:11px; border:1px solid var(--line); border-radius:8px; background:#fff; }.notification strong,.notification span { display:block; }.notification span { margin-top:3px; color:var(--muted); font-size:12px; line-height:1.35; }
+    .user-actions { display:flex; gap:6px; } .user-actions button { border:0; padding:5px 9px; border-radius:5px; font-size:11px; font-weight:600; }
     @media (max-width:930px) { .app { grid-template-columns:1fr; }.sidebar { padding:14px 17px; display:block; }.brand { display:inline-block; border:0; padding:0; }.mark,.brand p,.sidebar-foot,.tree-heading { display:none; }.main-nav { display:inline-flex; margin:0 0 0 13px; }.main-nav button { width:auto; }.side-action { width:auto; margin:0 0 0 10px; }.all-reports { width:auto; margin-left:8px; }.tree { display:flex; gap:5px; margin-top:12px; overflow-x:auto; }.family { display:contents; }.family-name { display:none; }.product-btn { padding:7px 9px; white-space:nowrap; }.product-btn small { display:none; }.stats { grid-template-columns:repeat(2,minmax(0,1fr)); }.detail { grid-template-columns:1fr; }.detail-side { border-left:0; border-top:1px solid var(--line); }.home-layout { grid-template-columns:1fr; } }
     @media (max-width:560px) { .topbar { padding:17px 18px; align-items:flex-start; }.content { padding:22px 18px 40px; }.stats,.filters,.filters.all,.form-grid,.checks,.artifact-grid { grid-template-columns:1fr; }.span2,.artifact-grid .span2 { grid-column:auto; }.modal-backdrop { padding:11px; }.modal-head,form { padding-left:17px; padding-right:17px; }.toolbar { justify-content:flex-start; }.page-title { font-size:18px; } }
   </style>
@@ -37,7 +38,13 @@
   <div class="app">
     <aside class="sidebar">
       <div class="brand"><div class="mark">Q</div><h1>Central de trabalho</h1><p>Qualidade, reports e atividades</p></div>
-      <nav class="main-nav" aria-label="Áreas de trabalho"><button data-page="home" class="active">Início</button><button data-page="product">Falhas de produto</button><button data-page="work">Atividades gerais</button><button data-page="flow">Fluxos</button></nav>
+      <nav class="main-nav" aria-label="Áreas de trabalho">
+        <button data-page="home" class="active">Início</button>
+        <button data-page="product">Falhas de produto</button>
+        <button data-page="work">Atividades gerais</button>
+        <button data-page="flow">Fluxos</button>
+        <button data-page="profile">Meu perfil</button>
+      </nav>
       <div id="productBrowser" class="hidden"><button class="side-action" id="newProduct">+ Cadastrar produto</button><button class="all-reports" id="allReports">Todos os reports</button><div class="tree-heading"><span>Produtos por família</span></div><div class="tree" id="productTree"></div></div>
       <div class="sidebar-foot">Registre agora. Complete o restante no momento certo.<div class="account-info" id="accountInfo"></div><button class="all-reports" id="changeAccount">Sair / Trocar conta</button></div>
     </aside>
@@ -51,6 +58,42 @@
           <div class="stats"><article class="stat"><div class="stat-label">Pendências totais</div><div class="stat-value" id="homePending">0</div><div class="stat-note">Falhas e atividades abertas</div></article><article class="stat"><div class="stat-label">Falhas de produto</div><div class="stat-value" id="homeProductOpen">0</div><div class="stat-note">Com ação necessária</div></article><article class="stat"><div class="stat-label">Atividades gerais</div><div class="stat-value" id="homeActivities">0</div><div class="stat-note">E-mails, análises e alinhamentos</div></article><article class="stat"><div class="stat-label">Aguardando fornecedor</div><div class="stat-value" id="homeWaiting">0</div><div class="stat-note">Reports enviados sem resposta</div></article></div>
           <div class="home-layout"><section><div class="section-head"><div><h2>Fila de trabalho</h2><p>O que merece sua atenção primeiro.</p></div></div><div class="panel"><div class="home-list" id="homeQueue"></div><div class="empty hidden" id="homeQueueEmpty">Nenhuma pendência no momento.</div></div></section><aside class="home-side"><button class="quick-action" id="quickActivity"><strong>Nova atividade geral</strong><span>Ex.: enviar e-mail, analisar um reparo ou organizar uma reunião.</span></button><button class="quick-action" id="quickFailure"><strong>Registrar falha de produto</strong><span>Use a família, produto e componente já cadastrados.</span></button><button class="quick-action" id="quickFlow"><strong>Novo fluxo</strong><span>Organize formulário, e-mail, folha de rosto e seguimento.</span></button><div class="home-note"><strong>Trabalho organizado</strong><span>Falhas de produto e tarefas administrativas ficam em áreas separadas, mas aparecem juntas na fila de prioridades.</span></div><section><div class="section-head"><div><h2>Lembretes</h2></div></div><div class="notification-list" id="notificationList"></div></section></aside></div>
         </section>
+        
+        <!-- Tela de Perfil do Usuário / Administração -->
+        <section class="overview hidden" id="profileView">
+          <div class="stats">
+            <article class="stat"><div class="stat-label">Reports subidos</div><div class="stat-value" id="userReportCount">0</div><div class="stat-note">Registrados por você</div></article>
+            <article class="stat"><div class="stat-label">Reports concluídos</div><div class="stat-value" id="userDoneCount">0</div><div class="stat-note">Finalizados com sucesso</div></article>
+            <article class="stat"><div class="stat-label">Reports pendentes</div><div class="stat-value" id="userPendingCount">0</div><div class="stat-note">Precisam ser finalizados</div></article>
+            <article class="stat"><div class="stat-label">Atividades & Fluxos</div><div class="stat-value" id="userWorkCount">0</div><div class="stat-note">Atribuídos a você</div></article>
+          </div>
+
+          <section>
+            <div class="section-head"><div><h2>Meus Reports Enviados</h2><p>Falhas de produto registradas sob a sua autoria.</p></div></div>
+            <div class="panel">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Registro</th><th>Produto / Família</th><th>Componente / Falha</th><th>Links</th><th>Status</th></tr></thead>
+                  <tbody id="userReportRows"></tbody>
+                </table>
+                <div class="empty hidden" id="userReportEmpty">Você ainda não subiu nenhum report.</div>
+              </div>
+            </div>
+          </section>
+
+          <section id="adminUsersSection" class="hidden">
+            <div class="section-head"><div><h2>Gestão de Usuários (Acesso do Administrador)</h2><p>Gerencie quem tem acesso ao sistema e eleve privilégios de usuário.</p></div></div>
+            <div class="panel">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Nome</th><th>E-mail</th><th>Nível de Acesso</th><th>Ações</th></tr></thead>
+                  <tbody id="adminUserRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </section>
+
         <section class="overview hidden" id="productView">
           <div class="stats">
             <article class="stat"><div class="stat-label">Falhas registradas</div><div class="stat-value" id="totalCount">0</div><div class="stat-note">Neste produto</div></article>
@@ -91,21 +134,15 @@
         </form>
       </div>
 
-      <!-- Formulário de Cadastro -->
+      <!-- Formulário de Cadastro (Usuários novos entram sempre como Usuário Normal) -->
       <div id="authRegisterBox" class="hidden">
         <h1>Criar nova conta</h1>
-        <p>Cadastre-se para acessar a central de trabalho.</p>
+        <p>Cadastre-se para acessar a central de trabalho. Novas contas são criadas como Usuário Normal.</p>
         <form id="registerForm">
           <div class="form-grid">
             <label class="span2">Seu nome<input name="name" required placeholder="Ex.: Pedro Henrique"></label>
             <label class="span2">E-mail corporativo<input name="email" type="email" required placeholder="nome@empresa.com"></label>
-            <label>Senha<input name="password" type="password" minlength="4" required placeholder="••••••••"></label>
-            <label>Nível de acesso
-              <select name="role" required>
-                <option value="user">Usuário Normal (Criar)</option>
-                <option value="admin">Administrador (Criar e Excluir)</option>
-              </select>
-            </label>
+            <label class="span2">Senha<input name="password" type="password" minlength="4" required placeholder="••••••••"></label>
           </div>
           <div style="margin-top: 10px; text-align: right;">
             <a href="#" class="link" id="btnGoLoginFromReg">Já tenho uma conta</a>
@@ -173,7 +210,7 @@
 
   <div class="modal-backdrop hidden" id="activityDetailModal" role="dialog" aria-modal="true" aria-labelledby="activityDetailTitle"><div class="modal"><div class="modal-head"><div><h2 id="activityDetailTitle" class="modal-title"></h2><p id="activityDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-activity-detail" aria-label="Fechar">×</button></div><div class="detail" style="grid-template-columns:1fr"><div class="detail-main"><span class="detail-label" style="margin-top:0">Contexto</span><span id="activityDetailDescription" class="detail-value"></span><span class="detail-label">Link relacionado</span><div id="activityDetailLink" class="links detail-value"></div><div class="update"><div class="artifact-grid"><label>Status<select id="activityDetailStatus"><option value="pendente">Pendente</option><option value="andamento">Em andamento</option><option value="concluido">Concluída</option></select></label><label>Prazo<input id="activityDetailDue" type="date"></label></div><div class="artifact-actions"><button id="saveActivityChanges" class="button secondary">Salvar alterações</button></div></div><div class="update"><label>Atualização<input id="activityUpdateInput" placeholder="Ex.: E-mail preparado e aguardando aprovação."></label><div class="update-row"><button class="button secondary" id="addActivityUpdate">Adicionar atualização</button></div></div><span class="detail-label">Histórico</span><div id="activityTimeline" class="timeline"></div><div class="form-actions"><button id="deleteActivity" class="button danger">Excluir atividade</button></div></div></div></div></div>
 
-  <div class="modal-backdrop hidden" id="flowDetailModal" role="dialog" aria-modal="true" aria-labelledby="flowDetailTitle"><div class="modal large"><div class="modal-head"><div><h2 id="flowDetailTitle" class="modal-title"></h2><p id="flowDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-flow-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Situação</span><span id="flowDetailDescription" class="detail-value"></span><span class="detail-label">Etapa 1 · Formulário e e-mail</span><div class="artifact-grid"><label>Formulário do fluxo<input id="flowDetailAttachment" type="file" accept="image/*,.pdf,.doc,.docx"></label><label>Link do e-mail<input id="flowDetailEmailLink" type="url" placeholder="https://..."></label></div><span class="detail-label">Etapa 2 · Folha de rosto</span><div class="artifact-grid"><label>Link / arquivo da folha de rosto<input id="flowDetailCoverLink" type="url" placeholder="https://..."></label><label>Responsável pelo seguimento<select id="flowDetailOwner"><option>Pedro Henrique</option><option>Marcelo</option><option>Victor</option><option>Rafael</option><option>Bruno Mota</option></select></label></div><span class="detail-label">Etapa 3 · Seguimento no fluxo</span><div class="artifact-grid"><label class="span2">Link ou registro do seguimento<input id="flowDetailFollowUpLink" type="url" placeholder="https://..."></label></div><div class="artifact-actions"><button id="saveFlowChanges" class="button secondary">Salvar etapas</button></div><span class="detail-label">Arquivos e links</span><div id="flowDetailFiles" class="evidence-gallery"></div><span class="detail-label">Histórico</span><div id="flowTimeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" style="margin-top:0">Andamento do fluxo</span><div id="flowSteps" class="task-list"></div><span class="detail-label">Status calculado</span><div id="flowDetailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteFlow" class="button danger">Excluir fluxo</button></div></aside></div></div></div>
+  <div class="modal-backdrop hidden" id="flowDetailModal" role="dialog" aria-modal="true" aria-labelledby="flowDetailTitle"><div class="modal large"><div class="modal-head"><div><h2 id="flowDetailTitle" class="modal-title"></h2><p id="flowDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-flow-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Situação</span><span id="flowDetailDescription" class="detail-value"></span><span class="detail-label">Etapa 1 · Formulário e e-mail</span><div class="artifact-grid"><label>Formulário do fluxo<input id="flowDetailAttachment" type="file" accept="image/*,.pdf,.doc,.docx"></label><label>Link do e-mail<input id="flowDetailEmailLink" type="url" placeholder="https://..."></label></div><span class="detail-label">Etapa 2 · Folha de rosto</span><div class="artifact-grid"><label>Link / arquivo da folha de rosto<input id="flowDetailCoverLink" type="url" placeholder="https://..."></label><label>Responsável pelo seguimento<select id="flowDetailOwner"><option>Pedro Henrique</option><option>Marcelo</option><option>Victor</option><option>Rafael</option><option>Bruno Mota</option></select></label></div><span class="detail-label">Etapa 3 · Seguimento no fluxo</span><div class="artifact-grid"><label class="span2">Link ou registro do seguimento<input id="flowDetailFollowUpLink" type="url" placeholder="https://..."></label></div><div class="artifact-actions"><button id="saveFlowChanges" class="button secondary">Salvar etapas</button></div><span class="detail-label">Arquivos e links</span><div id="flowDetailFiles" class="evidence-gallery"></div><span class="detail-label">Histórico</span><div id="flowTimeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" style="margin-top:0">Andamento do fluxo</span><div id="flowSteps" class="task-list"></div><span class="detail-label">Status calculated</span><div id="flowDetailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteFlow" class="button danger">Excluir fluxo</button></div></aside></div></div></div>
 
   <script>
     const storeKey = 'controleFalhas.v2';
@@ -265,11 +302,12 @@
         return;
       }
 
+      // Todo novo cadastro entra automaticamente como Usuário Normal
       const newUser = {
         name: form.get('name').trim(),
         email: email,
         password: form.get('password'),
-        role: form.get('role')
+        role: 'user'
       };
 
       users.push(newUser);
@@ -345,6 +383,25 @@
       closeConfirmModal();
     }
 
+    function toggleUserRole(email) {
+      const u = users.find(user => user.email === email);
+      if (!u) return;
+      u.role = u.role === 'admin' ? 'user' : 'admin';
+      saveUsers();
+      if (currentAccount?.email === u.email) {
+        currentAccount.role = u.role;
+        localStorage.setItem('controleFalhas.account.v2', JSON.stringify(currentAccount));
+      }
+      render();
+    }
+
+    function deleteUser(email) {
+      if (!confirm(`Tem certeza que deseja excluir o usuário ${email}?`)) return;
+      users = users.filter(u => u.email !== email);
+      saveUsers();
+      render();
+    }
+
     function renderTree(){ 
       const groups=state.products.reduce((acc,p)=>{(acc[p.family]??=[]).push(p);return acc;},{}); 
       const isAdmin = currentAccount?.role === 'admin';
@@ -364,7 +421,7 @@
       document.querySelector('#allReports').classList.toggle('active',activeView==='all'); 
     }
 
-    function updatePageHeader(){ const p=activeData(), productArea=['product','all'].includes(activeView), page=activeView==='all'?'product':activeView; document.querySelector('#productActions').classList.toggle('hidden',!productArea);document.querySelector('#activityActions').classList.toggle('hidden',activeView!=='work');document.querySelector('#flowActions').classList.toggle('hidden',activeView!=='flow');document.querySelector('#productBrowser').classList.toggle('hidden',!productArea);document.querySelectorAll('.main-nav button').forEach(button=>button.classList.toggle('active',button.dataset.page===page));if(activeView==='home'){document.querySelector('#pageTitle').textContent='Minha central de trabalho';document.querySelector('#pageSubtitle').textContent='Prioridades, reports de produto e atividades gerais em um só lugar.';return;}if(activeView==='work'){document.querySelector('#pageTitle').textContent='Atividades gerais';document.querySelector('#pageSubtitle').textContent='E-mails, análises, alinhamentos e tarefas que precisam acontecer.';return;}if(activeView==='flow'){document.querySelector('#pageTitle').textContent='Fluxos';document.querySelector('#pageSubtitle').textContent='Formulário, e-mail, folha de rosto e seguimento em um processo único.';return;}if(activeView==='product'&&p){document.querySelector('#pageTitle').textContent=p.code;document.querySelector('#pageSubtitle').textContent=`${p.family} · registros e pendências deste produto`;document.querySelector('#newFailure').disabled=false;document.querySelector('#newFailure').style.opacity='1';}else if(activeView==='all'){document.querySelector('#pageTitle').textContent='Todos os reports';document.querySelector('#pageSubtitle').textContent='Consulta geral por família, produto e componente.';document.querySelector('#newFailure').disabled=!p;document.querySelector('#newFailure').style.opacity=p?'1':'.5';}else{document.querySelector('#pageTitle').textContent='Nenhum produto cadastrado';document.querySelector('#pageSubtitle').textContent='Cadastre uma família e um produto para começar.';document.querySelector('#newFailure').disabled=true;document.querySelector('#newFailure').style.opacity='.5';}}
+    function updatePageHeader(){ const p=activeData(), productArea=['product','all'].includes(activeView), page=activeView==='all'?'product':activeView; document.querySelector('#productActions').classList.toggle('hidden',!productArea);document.querySelector('#activityActions').classList.toggle('hidden',activeView!=='work');document.querySelector('#flowActions').classList.toggle('hidden',activeView!=='flow');document.querySelector('#productBrowser').classList.toggle('hidden',!productArea);document.querySelectorAll('.main-nav button').forEach(button=>button.classList.toggle('active',button.dataset.page===page));if(activeView==='home'){document.querySelector('#pageTitle').textContent='Minha central de trabalho';document.querySelector('#pageSubtitle').textContent='Prioridades, reports de produto e atividades gerais em um só lugar.';return;}if(activeView==='profile'){document.querySelector('#pageTitle').textContent='Meu perfil de usuário';document.querySelector('#pageSubtitle').textContent='Resumo de suas atividades, reports subidos e configurações de conta.';return;}if(activeView==='work'){document.querySelector('#pageTitle').textContent='Atividades gerais';document.querySelector('#pageSubtitle').textContent='E-mails, análises, alinhamentos e tarefas que precisam acontecer.';return;}if(activeView==='flow'){document.querySelector('#pageTitle').textContent='Fluxos';document.querySelector('#pageSubtitle').textContent='Formulário, e-mail, folha de rosto e seguimento em um processo único.';return;}if(activeView==='product'&&p){document.querySelector('#pageTitle').textContent=p.code;document.querySelector('#pageSubtitle').textContent=`${p.family} · registros e pendências deste produto`;document.querySelector('#newFailure').disabled=false;document.querySelector('#newFailure').style.opacity='1';}else if(activeView==='all'){document.querySelector('#pageTitle').textContent='Todos os reports';document.querySelector('#pageSubtitle').textContent='Consulta geral por família, produto e componente.';document.querySelector('#newFailure').disabled=!p;document.querySelector('#newFailure').style.opacity=p?'1':'.5';}else{document.querySelector('#pageTitle').textContent='Nenhum produto cadastrado';document.querySelector('#pageSubtitle').textContent='Cadastre uma família e um produto para começar.';document.querySelector('#newFailure').disabled=true;document.querySelector('#newFailure').style.opacity='.5';}}
     function setOptions(selectId,values,placeholder='Todos'){const select=document.querySelector(selectId),current=select.value;select.innerHTML=`<option value="">${placeholder}</option>`+[...new Set(values.filter(Boolean))].sort((a,b)=>a.localeCompare(b)).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');select.value=[...select.options].some(o=>o.value===current)?current:'';}
     function renderProductStats(reports){document.querySelector('#totalCount').textContent=reports.length;document.querySelector('#openCount').textContent=reports.filter(r=>calculatedStatus(r)!=='concluido').length;document.querySelector('#reportCount').textContent=reports.filter(r=>!completedTasks(r).report).length;document.querySelector('#waitingCount').textContent=reports.filter(r=>calculatedStatus(r)==='aguardando').length;}
     function linksCell(r){const links=[safeLink(r.reportLink,'Meu report'),safeLink(r.responseLink,'Resposta')].filter(Boolean);return links.length?`<div class="links">${links.join('')}</div>`:'<span class="muted">—</span>';}
@@ -380,6 +437,60 @@
     function flowRow(flow){const steps=completedFlowSteps(flow),done=Object.values(steps).filter(Boolean).length;return `<tr data-flow="${flow.id}"><td><span class="identifier">${esc(flow.id)}</span><span class="secondary-text">${esc(flow.product||'Sem produto relacionado')}</span></td><td><span class="identifier">${esc(flow.scope)}</span><span class="secondary-text wrap">${esc(flow.description)}</span></td><td>${esc(flow.creator)}</td><td>${done}/3 concluídas</td><td>${esc(flow.followUpOwner)}</td><td>${activityChip(calculatedFlowStatus(flow))}</td></tr>`;}
     function renderFlows(){const search=document.querySelector('#flowSearch').value.toLowerCase().trim(),owner=document.querySelector('#flowOwner').value,status=document.querySelector('#flowStatus').value;const filtered=ordered(state.flows.filter(flow=>{const text=[flow.id,flow.product,flow.scope,flow.description,flow.creator,flow.followUpOwner].join(' ').toLowerCase();return(!search||text.includes(search))&&(!owner||flow.followUpOwner===owner)&&(!status||calculatedFlowStatus(flow)===status);}));document.querySelector('#flowRows').innerHTML=filtered.map(flowRow).join('');document.querySelector('#flowEmpty').classList.toggle('hidden',filtered.length>0);}
     
+    function renderProfile() {
+      if (!currentAccount) return;
+      const userName = currentAccount.name;
+      const userReports = state.reports.filter(r => r.owner === userName);
+      const userDone = userReports.filter(r => calculatedStatus(r) === 'concluido');
+      const userPending = userReports.filter(r => calculatedStatus(r) !== 'concluido');
+      const userWork = state.activities.filter(a => a.owner === userName).length + state.flows.filter(f => f.followUpOwner === userName).length;
+
+      document.querySelector('#userReportCount').textContent = userReports.length;
+      document.querySelector('#userDoneCount').textContent = userDone.length;
+      document.querySelector('#userPendingCount').textContent = userPending.length;
+      document.querySelector('#userWorkCount').textContent = userWork;
+
+      const userRowsEl = document.querySelector('#userReportRows');
+      if (userReports.length) {
+        userRowsEl.innerHTML = userReports.map(r => `
+          <tr data-id="${r.id}">
+            <td><span class="identifier">${esc(r.id)}</span><span class="secondary-text">${formatDate(r.createdAt)}</span></td>
+            <td><span class="identifier">${esc(r.product)}</span><span class="secondary-text">${esc(r.family)}</span></td>
+            <td><span class="identifier">${esc(r.component)}</span><span class="secondary-text wrap">${esc(r.issue)}</span></td>
+            <td>${linksCell(r)}</td>
+            <td>${chip(calculatedStatus(r))}</td>
+          </tr>
+        `).join('');
+        document.querySelector('#userReportEmpty').classList.add('hidden');
+      } else {
+        userRowsEl.innerHTML = '';
+        document.querySelector('#userReportEmpty').classList.remove('hidden');
+      }
+
+      // Área exclusiva do Administrador
+      const isAdmin = currentAccount.role === 'admin';
+      const adminSection = document.querySelector('#adminUsersSection');
+      adminSection.classList.toggle('hidden', !isAdmin);
+
+      if (isAdmin) {
+        document.querySelector('#adminUserRows').innerHTML = users.map(u => `
+          <tr>
+            <td><span class="identifier">${esc(u.name)}</span></td>
+            <td>${esc(u.email)}</td>
+            <td><span class="status ${u.role === 'admin' ? 'done' : 'waiting'}">${u.role === 'admin' ? 'Administrador' : 'Usuário Normal'}</span></td>
+            <td>
+              <div class="user-actions">
+                ${u.email !== currentAccount.email ? `
+                  <button class="button secondary" onclick="toggleUserRole('${u.email}')">${u.role === 'admin' ? 'Tornar Usuário' : 'Promover a Adm'}</button>
+                  <button class="button danger" onclick="deleteUser('${u.email}')">Excluir</button>
+                ` : '<span class="muted">(Sua conta)</span>'}
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
+
     function renderAccount(){
       const accountInfoEl = document.querySelector('#accountInfo');
       if (currentAccount) {
@@ -392,7 +503,7 @@
     }
 
     function renderHome(){const productOpen=state.reports.filter(report=>calculatedStatus(report)!=='concluido'), activitiesOpen=state.activities.filter(activity=>activity.status!=='concluido'), flowsOpen=state.flows.filter(flow=>calculatedFlowStatus(flow)!=='concluido');document.querySelector('#homePending').textContent=productOpen.length+activitiesOpen.length+flowsOpen.length;document.querySelector('#homeProductOpen').textContent=productOpen.length;document.querySelector('#homeActivities').textContent=activitiesOpen.length+flowsOpen.length;document.querySelector('#homeWaiting').textContent=state.reports.filter(report=>calculatedStatus(report)==='aguardando').length;const tasks=[...activitiesOpen.map(activity=>({kind:'activity',item:activity,sort:activity.dueDate?new Date(`${activity.dueDate}T12:00:00`):new Date(activity.createdAt)})),...productOpen.map(report=>({kind:'report',item:report,sort:new Date(report.createdAt)})),...flowsOpen.map(flow=>({kind:'flow',item:flow,sort:new Date(flow.createdAt)}))].sort((a,b)=>a.sort-b.sort).slice(0,7);document.querySelector('#homeQueue').innerHTML=tasks.map(task=>task.kind==='activity'?`<div class="home-item" data-activity="${task.item.id}"><span class="home-item-type">${esc(task.item.type)}</span><div><span class="identifier">${esc(task.item.title)}</span><span class="secondary-text">${esc(task.item.area)} · ${esc(task.item.owner)}${task.item.dueDate?` · prazo ${esc(task.item.dueDate.split('-').reverse().join('/'))}`:''}</span></div>${activityChip(task.item.status)}</div>`:task.kind==='flow'?`<div class="home-item" data-flow="${task.item.id}"><span class="home-item-type">Fluxo</span><div><span class="identifier">${esc(task.item.scope)}</span><span class="secondary-text">${esc(task.item.product||'Sem produto')} · seguimento: ${esc(task.item.followUpOwner)}</span></div>${activityChip(calculatedFlowStatus(task.item))}</div>`:`<div class="home-item" data-id="${task.item.id}"><span class="home-item-type">Produto</span><div><span class="identifier">${esc(task.item.product)} · ${esc(task.item.component)}</span><span class="secondary-text">${esc(task.item.issue)}</span></div>${chip(calculatedStatus(task.item))}</div>`).join('');document.querySelector('#homeQueueEmpty').classList.toggle('hidden',tasks.length>0);const reminders=currentAccount?[...activitiesOpen.filter(activity=>activity.owner===currentAccount.name).map(activity=>`<div class="notification"><strong>${esc(activity.title)}</strong><span>Pendência atribuída a você${activity.dueDate?` · prazo ${esc(activity.dueDate.split('-').reverse().join('/'))}`:''}.</span></div>`),...flowsOpen.filter(flow=>flow.followUpOwner===currentAccount.name).map(flow=>`<div class="notification"><strong>Fluxo ${esc(flow.id)}</strong><span>Você é responsável pelo seguimento de ${esc(flow.scope)}.</span></div>`)].slice(0,4):[];document.querySelector('#notificationList').innerHTML=reminders.length?reminders.join(''):'<div class="notification"><strong>Sem lembretes para esta conta</strong><span>Atividades atribuídas a você aparecerão aqui.</span></div>';}
-    function render(){renderTree();updatePageHeader();renderProduct();renderAll();renderWork();renderFlows();renderHome();renderAccount();document.querySelector('#homeView').classList.toggle('hidden',activeView!=='home');document.querySelector('#productView').classList.toggle('hidden',activeView!=='product');document.querySelector('#allReportsView').classList.toggle('hidden',activeView!=='all');document.querySelector('#workView').classList.toggle('hidden',activeView!=='work');document.querySelector('#flowView').classList.toggle('hidden',activeView!=='flow');}
+    function render(){renderTree();updatePageHeader();renderProduct();renderAll();renderWork();renderFlows();renderProfile();renderHome();renderAccount();document.querySelector('#homeView').classList.toggle('hidden',activeView!=='home');document.querySelector('#profileView').classList.toggle('hidden',activeView!=='profile');document.querySelector('#productView').classList.toggle('hidden',activeView!=='product');document.querySelector('#allReportsView').classList.toggle('hidden',activeView!=='all');document.querySelector('#workView').classList.toggle('hidden',activeView!=='work');document.querySelector('#flowView').classList.toggle('hidden',activeView!=='flow');}
     function show(view){activeView=view;render();}
     let continueToFailureAfterComponent = false;
     function openProductModal(){document.querySelector('#productModal').classList.remove('hidden');document.querySelector('#productForm input').focus();} function closeProductModal(){document.querySelector('#productModal').classList.add('hidden');document.querySelector('#productForm').reset();}
