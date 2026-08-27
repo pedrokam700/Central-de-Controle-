@@ -39,7 +39,7 @@
       <div class="brand"><div class="mark">Q</div><h1>Central de trabalho</h1><p>Qualidade, reports e atividades</p></div>
       <nav class="main-nav" aria-label="Áreas de trabalho"><button data-page="home" class="active">Início</button><button data-page="product">Falhas de produto</button><button data-page="work">Atividades gerais</button><button data-page="flow">Fluxos</button></nav>
       <div id="productBrowser" class="hidden"><button class="side-action" id="newProduct">+ Cadastrar produto</button><button class="all-reports" id="allReports">Todos os reports</button><div class="tree-heading"><span>Produtos por família</span></div><div class="tree" id="productTree"></div></div>
-      <div class="sidebar-foot">Registre agora. Complete o restante no momento certo.<div class="account-info" id="accountInfo"></div><button class="all-reports" id="changeAccount">Trocar conta</button></div>
+      <div class="sidebar-foot">Registre agora. Complete o restante no momento certo.<div class="account-info" id="accountInfo"></div><button class="all-reports" id="changeAccount">Sair / Trocar conta</button></div>
     </aside>
     <main class="main">
       <header class="topbar">
@@ -67,7 +67,74 @@
     </main>
   </div>
 
-  <div class="account-screen hidden" id="accountScreen"><div class="account-card"><div class="mark">Q</div><h1>Crie sua conta de trabalho</h1><p>Use seu nome e e-mail para identificar quem abriu uma atividade e receber lembretes dentro da central.</p><form id="accountForm"><div class="form-grid"><label>Seu nome<input name="name" required list="peopleList" placeholder="Ex.: Pedro Henrique"></label><label>E-mail corporativo<input name="email" type="email" required placeholder="nome@empresa.com"></label></div><datalist id="peopleList"><option>Pedro Henrique</option><option>Marcelo</option><option>Victor</option><option>Rafael</option><option>Bruno Mota</option></datalist><div class="form-actions"><button class="button primary">Entrar na central</button></div></form></div></div>
+  <!-- Tela de Login / Cadastro / Esqueci minha senha -->
+  <div class="account-screen hidden" id="accountScreen">
+    <div class="account-card">
+      <div class="mark">Q</div>
+      
+      <!-- Formulário de Login -->
+      <div id="authLoginBox">
+        <h1>Entrar na central</h1>
+        <p>Acesse com seu e-mail e senha corporativos.</p>
+        <form id="loginForm">
+          <div class="form-grid">
+            <label class="span2">E-mail corporativo<input name="email" type="email" required placeholder="nome@empresa.com"></label>
+            <label class="span2">Senha<input name="password" type="password" required placeholder="••••••••"></label>
+          </div>
+          <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <a href="#" class="link" id="btnGoForgot">Esqueci minha senha</a>
+            <a href="#" class="link" id="btnGoRegister">Criar uma conta</a>
+          </div>
+          <div class="form-actions">
+            <button class="button primary" style="width:100%">Entrar</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Formulário de Cadastro -->
+      <div id="authRegisterBox" class="hidden">
+        <h1>Criar nova conta</h1>
+        <p>Cadastre-se para acessar a central de trabalho.</p>
+        <form id="registerForm">
+          <div class="form-grid">
+            <label class="span2">Seu nome<input name="name" required placeholder="Ex.: Pedro Henrique"></label>
+            <label class="span2">E-mail corporativo<input name="email" type="email" required placeholder="nome@empresa.com"></label>
+            <label>Senha<input name="password" type="password" minlength="4" required placeholder="••••••••"></label>
+            <label>Nível de acesso
+              <select name="role" required>
+                <option value="user">Usuário Normal (Criar)</option>
+                <option value="admin">Administrador (Criar e Excluir)</option>
+              </select>
+            </label>
+          </div>
+          <div style="margin-top: 10px; text-align: right;">
+            <a href="#" class="link" id="btnGoLoginFromReg">Já tenho uma conta</a>
+          </div>
+          <div class="form-actions">
+            <button class="button primary" style="width:100%">Cadastrar conta</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Formulário de Esqueci Minha Senha -->
+      <div id="authForgotBox" class="hidden">
+        <h1>Recuperar senha</h1>
+        <p>Informe seu e-mail para redefinir sua senha de acesso.</p>
+        <form id="forgotForm">
+          <div class="form-grid">
+            <label class="span2">E-mail corporativo<input name="email" type="email" required placeholder="nome@empresa.com"></label>
+            <label class="span2">Nova senha<input name="newPassword" type="password" minlength="4" required placeholder="Digite a nova senha"></label>
+          </div>
+          <div style="margin-top: 10px; text-align: right;">
+            <a href="#" class="link" id="btnGoLoginFromForgot">Voltar para o login</a>
+          </div>
+          <div class="form-actions">
+            <button class="button primary" style="width:100%">Redefinir senha</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal de Confirmação Personalizado -->
   <div class="modal-backdrop hidden" id="deleteConfirmModal" role="dialog" aria-modal="true">
@@ -96,7 +163,6 @@
 
   <div class="modal-backdrop hidden" id="componentModal" role="dialog" aria-modal="true" aria-labelledby="componentModalTitle"><div class="modal"><div class="modal-head"><div><h2 id="componentModalTitle" class="modal-title">Cadastrar componente</h2><p id="componentModalSubtitle" class="modal-subtitle"></p></div><button class="close close-component" aria-label="Fechar">×</button></div><form id="componentForm"><div class="form-grid"><label class="span2">Nome do componente<input name="name" required placeholder="Ex.: LCD, speaker, middle frame"></label></div><div class="form-actions"><button type="button" class="button secondary close-component">Cancelar</button><button class="button primary">Adicionar componente</button></div></form></div></div>
 
-  <!-- Modal de Cadastro de Falha Simplificado -->
   <div class="modal-backdrop hidden" id="failureModal" role="dialog" aria-modal="true" aria-labelledby="failureModalTitle"><div class="modal"><div class="modal-head"><div><h2 id="failureModalTitle" class="modal-title">Cadastrar falha</h2><p id="failureModalSubtitle" class="modal-subtitle"></p></div><button class="close close-failure" aria-label="Fechar">×</button></div><form id="failureForm"><div class="form-grid"><label>Componente<select id="failureComponent" name="component" required><option value="">Selecione</option></select><span class="help">Cadastre componentes do produto pelo botão “+ Componente”.</span></label><label>Código do material<input name="material" placeholder="Ex.: MAT-02841"></label><label>Responsável pelo report<select name="owner" required><option value="">Selecione</option><option>Pedro Henrique</option><option>Marcelo</option><option>Victor</option><option>Rafael</option><option>Bruno Mota</option></select></label><label class="span2">Descrição da falha<textarea name="issue" required placeholder="Descreva objetivamente o defeito identificado."></textarea></label><label class="span2">Link do seu report<input name="reportLink" type="url" placeholder="https://..."></label><label class="span2">Evidências (opcional)<input name="evidence" type="file" multiple accept="image/*,.pdf"><span class="help">As pendências são atualizadas automaticamente conforme fotos e links forem anexados.</span></label></div><div class="form-actions"><button type="button" class="button secondary close-failure">Cancelar</button><button class="button primary">Salvar falha</button></div></form></div></div>
 
   <div class="modal-backdrop hidden" id="activityModal" role="dialog" aria-modal="true" aria-labelledby="activityModalTitle"><div class="modal"><div class="modal-head"><div><h2 id="activityModalTitle" class="modal-title">Nova atividade geral</h2><p class="modal-subtitle">Use para e-mails, análises, alinhamentos e outras tarefas de trabalho.</p></div><button class="close close-activity" aria-label="Fechar">×</button></div><form id="activityForm"><div class="form-grid"><label class="span2">Título da atividade<input name="title" required placeholder="Ex.: Enviar e-mail sobre análise de falhas de reparo"></label><label>Tipo<select name="type" required><option value="E-mail">E-mail</option><option value="Análise">Análise</option><option value="Alinhamento">Alinhamento</option><option value="Reunião">Reunião</option><option value="Outro">Outro</option></select></label><label>Área / assunto<input name="area" required placeholder="Ex.: Reparos"></label><label>Responsável<select name="owner" required><option value="">Selecione</option><option>Pedro Henrique</option><option>Marcelo</option><option>Victor</option><option>Rafael</option><option>Bruno Mota</option></select></label><label>Prazo<input name="dueDate" type="date"></label><label class="span2">Descrição / contexto<textarea name="description" required placeholder="Ex.: Orientar corretamente o time sobre como finalizar falhas de reparo; a análise estava sendo feita de forma incorreta."></textarea></label><label class="span2">Link relacionado (opcional)<input name="link" type="url" placeholder="https://..."></label></div><div class="form-actions"><button type="button" class="button secondary close-activity">Cancelar</button><button class="button primary">Salvar atividade</button></div></form></div></div>
@@ -111,28 +177,38 @@
 
   <script>
     const storeKey = 'controleFalhas.v2';
-    const people = ['Pedro Henrique', 'Marcelo', 'Victor', 'Rafael', 'Bruno Mota'];
+    const usersKey = 'controleFalhas.users.v1';
     const now = () => new Date().toISOString();
     const dateFormat = new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'});
     const esc = value => { const el=document.createElement('div'); el.textContent=value||''; return el.innerHTML; };
     const formatDate = iso => dateFormat.format(new Date(iso));
+
+    const defaultUsers = [
+      { name: 'Administrador', email: 'admin@empresa.com', password: 'admin', role: 'admin' },
+      { name: 'Pedro Henrique', email: 'pedro@empresa.com', password: 'user', role: 'user' }
+    ];
+
+    let users = JSON.parse(localStorage.getItem(usersKey) || 'null') || defaultUsers;
+    const saveUsers = () => localStorage.setItem(usersKey, JSON.stringify(users));
+
     const initial = { products:[{code:'RX7435',family:'Linha RX',components:['LCD','Middle frame','Speaker']},{code:'TX2100',family:'Linha TX',components:['Speaker','Bateria','Câmera']}], reports:[
       {id:'F-2026-001',product:'RX7435',family:'Linha RX',component:'LCD',material:'MAT-02841',supplier:'Fornecedor Padrão',owner:'Pedro Henrique',issue:'Risco visível na superfície do LCD após a montagem.',evidence:[],reportLink:'',responseLink:'',tasks:{photo:false,report:false,response:false},status:'pendente',createdAt:'2026-08-20T08:15:00',updates:[{text:'Falha identificada durante a inspeção de linha.',date:'2026-08-20T08:15:00'}]},
-      {id:'F-2026-002',product:'RX7435',family:'Linha RX',component:'Middle frame',material:'MAT-03192',supplier:'Fornecedor Padrão',owner:'Marcelo',issue:'Variação de tonalidade no acabamento do middle frame.',evidence:['amostra-rx7435.jpg'],reportLink:'https://example.com/report-rx7435',responseLink:'',tasks:{photo:true,report:true,response:false},status:'aguardando',createdAt:'2026-08-19T15:32:00',updates:[{text:'Report enviado ao fornecedor. Aguardando posicionamento.',date:'2026-08-19T16:10:00'}]},
-      {id:'F-2026-003',product:'TX2100',family:'Linha TX',component:'Speaker',material:'MAT-01887',supplier:'Fornecedor Padrão',owner:'Victor',issue:'Furo fora de posição, impedindo o encaixe correto do speaker.',evidence:['medicao-tx2100.pdf','evidencia-01.jpg'],reportLink:'https://example.com/report-tx2100',responseLink:'https://example.com/resposta-tx2100',tasks:{photo:true,report:true,response:true},status:'concluido',createdAt:'2026-08-18T10:20:00',updates:[{text:'Fornecedor confirmou ação corretiva no próximo lote.',date:'2026-08-19T11:05:00'}]}
+      {id:'F-2026-002',product:'RX7435',family:'Linha RX',component:'Middle frame',material:'MAT-03192',supplier:'Fornecedor Padrão',owner:'Marcelo',issue:'Variação de tonalidade no acabamento do middle frame.',evidence:['amostra-rx7435.jpg'],reportLink:'https://example.com/report-rx7435',responseLink:'',tasks:{photo:true,report:true,response:false},status:'aguardando',createdAt:'2026-08-19T15:32:00',updates:[{text:'Report enviado ao fornecedor. Aguardando posicionamento.',date:'2026-08-19T16:10:00'}]}
     ], activities:[
-      {id:'A-2026-001',title:'Enviar e-mail sobre análise de falhas de reparo',type:'E-mail',area:'Reparos',owner:'Pedro Henrique',dueDate:'2026-08-20',description:'Orientar corretamente o time sobre como finalizar as falhas de reparo. A análise estava sendo feita de forma incorreta.',link:'',status:'pendente',createdAt:'2026-08-20T08:30:00',updates:[{text:'Atividade registrada para preparar e enviar a orientação.',date:'2026-08-20T08:30:00'}]}
+      {id:'A-2026-001',title:'Enviar e-mail sobre análise de falhas de reparo',type:'E-mail',area:'Reparos',owner:'Pedro Henrique',dueDate:'2026-08-20',description:'Orientar corretamente o time sobre como finalizar as falhas de reparo.',link:'',status:'pendente',createdAt:'2026-08-20T08:30:00',updates:[]}
     ], flows:[
-      {id:'FL-2026-001',product:'RX7435',scope:'Retrabalho de embalagem',creator:'Pedro Henrique',followUpOwner:'Marcelo',description:'Ajuste de embalagem necessário após identificação de risco de dano durante o transporte.',formAttachment:[],emailLink:'',coverLink:'',followUpLink:'',createdAt:'2026-08-20T09:10:00',updates:[{text:'Fluxo aberto para organizar o retrabalho.',date:'2026-08-20T09:10:00'}]}
+      {id:'FL-2026-001',product:'RX7435',scope:'Retrabalho de embalagem',creator:'Pedro Henrique',followUpOwner:'Marcelo',description:'Ajuste de embalagem necessário.',formAttachment:[],emailLink:'',coverLink:'',followUpLink:'',createdAt:'2026-08-20T09:10:00',updates:[]}
     ]};
-    function migrate() { const legacy=JSON.parse(localStorage.getItem('controleFalhas.v1')||'null'); if(!Array.isArray(legacy)) return initial; const products=[...new Map(legacy.map(r=>[r.product,{code:r.product,family:r.family||'Sem família',components:[r.component||'Não informado']}])).values()]; return {products,reports:legacy.map((r,index)=>({...r,component:r.component||'Não informado',owner:r.owner||people[index%people.length],reportLink:r.reportLink||'',responseLink:r.responseLink||'',evidence:r.evidence||[],updates:r.updates||[]}))}; }
+
+    function migrate() { const legacy=JSON.parse(localStorage.getItem('controleFalhas.v1')||'null'); if(!Array.isArray(legacy)) return initial; const products=[...new Map(legacy.map(r=>[r.product,{code:r.product,family:r.family||'Sem família',components:[r.component||'Não informado']}])).values()]; return {products,reports:legacy.map((r,index)=>({...r,component:r.component||'Não informado',owner:r.owner||'Pedro Henrique',reportLink:r.reportLink||'',responseLink:r.responseLink||'',evidence:r.evidence||[],updates:r.updates||[]}))}; }
     let state=JSON.parse(localStorage.getItem(storeKey)||'null')||migrate();
     if (!Array.isArray(state.activities)) state.activities = structuredClone(initial.activities);
     if (!Array.isArray(state.flows)) state.flows = structuredClone(initial.flows);
-    let currentAccount=JSON.parse(localStorage.getItem('controleFalhas.account.v1')||'null');
+    let currentAccount=JSON.parse(localStorage.getItem('controleFalhas.account.v2')||'null');
     let activeProduct=state.products[0]?.code||null, activeView='home', selectedId=null, selectedActivityId=null, selectedFlowId=null, familyToDelete=null;
     const save=()=>localStorage.setItem(storeKey,JSON.stringify(state));
     state.products.forEach(product => { if (!Array.isArray(product.components)) product.components = [...new Set(state.reports.filter(report => report.product === product.code).map(report => report.component).filter(Boolean))]; });
+
     const activeData=()=>state.products.find(p=>p.code===activeProduct);
     const taskName={photo:'Fotos',report:'Report',response:'Resposta'};
     const statusName={pendente:'Pendente',aguardando:'Aguardando fornecedor',concluido:'Concluído'};
@@ -142,7 +218,6 @@
     const activityStatusClass={pendente:'pending',andamento:'waiting',concluido:'done'};
     const activityChip=status=>`<span class="status ${activityStatusClass[status]}">${activityStatusName[status]}</span>`;
     const evidenceEntries = evidence => (evidence||[]).map(item=>typeof item==='string'?{name:item,type:''}:item).filter(item=>item?.name);
-    const evidenceName = item => evidenceEntries([item])[0]?.name||'';
     const completedTasks = report => ({ photo: Boolean(evidenceEntries(report.evidence).length), report: Boolean(report.reportLink), response: Boolean(report.responseLink) });
     const calculatedStatus = report => { const tasks = completedTasks(report); if (tasks.photo && tasks.report && tasks.response) return 'concluido'; if (tasks.report && !tasks.response) return 'aguardando'; return 'pendente'; };
     const ordered=(arr)=>[...arr].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
@@ -151,8 +226,84 @@
     const readAttachments = files => Promise.all([...files].map(file=>new Promise((resolve,reject)=>{if(!file.type.startsWith('image/')) return resolve({name:file.name,type:file.type});const reader=new FileReader();reader.onload=()=>{const image=new Image();image.onload=()=>{const limit=1280,scale=Math.min(1,limit/Math.max(image.width,image.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);resolve({name:file.name,type:'image/jpeg',data:canvas.toDataURL('image/jpeg',.78)});};image.onerror=()=>resolve({name:file.name,type:file.type,data:reader.result});image.src=reader.result;};reader.onerror=()=>reject(new Error(`Não foi possível ler ${file.name}`));reader.readAsDataURL(file);}))); 
     const evidenceGallery = evidence => { const entries=evidenceEntries(evidence); return entries.length?entries.map(item=>item.data?`<a href="${esc(item.data)}" target="_blank" rel="noopener"><img class="evidence-image" src="${esc(item.data)}" alt="${esc(item.name)}"></a>`:`<span class="evidence-file">${esc(item.name)}</span>`).join(''):'Nenhuma evidência anexada ainda.'; };
 
-    // Modal de Confirmação Personalizado
+    function showAuthScreen(screen) {
+      document.querySelector('#authLoginBox').classList.toggle('hidden', screen !== 'login');
+      document.querySelector('#authRegisterBox').classList.toggle('hidden', screen !== 'register');
+      document.querySelector('#authForgotBox').classList.toggle('hidden', screen !== 'forgot');
+    }
+
+    document.querySelector('#btnGoRegister').addEventListener('click', e => { e.preventDefault(); showAuthScreen('register'); });
+    document.querySelector('#btnGoForgot').addEventListener('click', e => { e.preventDefault(); showAuthScreen('forgot'); });
+    document.querySelector('#btnGoLoginFromReg').addEventListener('click', e => { e.preventDefault(); showAuthScreen('login'); });
+    document.querySelector('#btnGoLoginFromForgot').addEventListener('click', e => { e.preventDefault(); showAuthScreen('login'); });
+
+    document.querySelector('#loginForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const form = new FormData(e.currentTarget);
+      const email = form.get('email').trim().toLowerCase();
+      const password = form.get('password');
+      
+      const found = users.find(u => u.email.toLowerCase() === email && u.password === password);
+      if (!found) {
+        alert('E-mail ou senha incorretos.');
+        return;
+      }
+
+      currentAccount = { name: found.name, email: found.email, role: found.role };
+      localStorage.setItem('controleFalhas.account.v2', JSON.stringify(currentAccount));
+      e.currentTarget.reset();
+      render();
+    });
+
+    document.querySelector('#registerForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const form = new FormData(e.currentTarget);
+      const email = form.get('email').trim().toLowerCase();
+
+      if (users.some(u => u.email.toLowerCase() === email)) {
+        alert('Este e-mail já está cadastrado.');
+        return;
+      }
+
+      const newUser = {
+        name: form.get('name').trim(),
+        email: email,
+        password: form.get('password'),
+        role: form.get('role')
+      };
+
+      users.push(newUser);
+      saveUsers();
+      currentAccount = { name: newUser.name, email: newUser.email, role: newUser.role };
+      localStorage.setItem('controleFalhas.account.v2', JSON.stringify(currentAccount));
+      e.currentTarget.reset();
+      render();
+    });
+
+    document.querySelector('#forgotForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const form = new FormData(e.currentTarget);
+      const email = form.get('email').trim().toLowerCase();
+      const newPassword = form.get('newPassword');
+
+      const user = users.find(u => u.email.toLowerCase() === email);
+      if (!user) {
+        alert('E-mail não encontrado na plataforma.');
+        return;
+      }
+
+      user.password = newPassword;
+      saveUsers();
+      alert('Senha redefinida com sucesso! Faça login com a nova senha.');
+      e.currentTarget.reset();
+      showAuthScreen('login');
+    });
+
     function requestDeleteFamily(familyName) {
+      if (currentAccount?.role !== 'admin') {
+        alert('Apenas usuários administradores podem excluir famílias e produtos.');
+        return;
+      }
       familyToDelete = familyName;
       const familyProducts = state.products.filter(p => p.family === familyName);
       const productCodes = familyProducts.map(p => p.code);
@@ -177,13 +328,11 @@
       familyToDelete = null;
     }
 
-    // Exclusão em Cascata (Família + Produtos + Componentes + Falhas)
     function confirmDeleteFamily() {
       if (!familyToDelete) return;
       const familyProducts = state.products.filter(p => p.family === familyToDelete);
       const productCodes = familyProducts.map(p => p.code);
 
-      // Remove produtos e falhas atrelados
       state.products = state.products.filter(p => p.family !== familyToDelete);
       state.reports = state.reports.filter(r => !productCodes.includes(r.product) && r.family !== familyToDelete);
 
@@ -198,11 +347,13 @@
 
     function renderTree(){ 
       const groups=state.products.reduce((acc,p)=>{(acc[p.family]??=[]).push(p);return acc;},{}); 
+      const isAdmin = currentAccount?.role === 'admin';
+      
       document.querySelector('#productTree').innerHTML=Object.entries(groups).sort(([a],[b])=>a.localeCompare(b)).map(([family,products])=>`
         <section class="family">
           <div class="family-header">
             <span class="family-name">${esc(family)}</span>
-            <button class="delete-family-btn" data-delete-family="${esc(family)}" title="Apagar família e seu conteúdo">✕</button>
+            ${isAdmin ? `<button class="delete-family-btn" data-delete-family="${esc(family)}" title="Apagar família e seu conteúdo">✕</button>` : ''}
           </div>
           ${products.sort((a,b)=>a.code.localeCompare(b.code)).map(p=>{
             const count=state.reports.filter(r=>r.product===p.code&&calculatedStatus(r)!=='concluido').length;
@@ -228,7 +379,18 @@
     const calculatedFlowStatus=flow=>{const steps=completedFlowSteps(flow);if(steps.formEmail&&steps.cover&&steps.followUp)return'concluido';if(steps.formEmail)return'andamento';return'pendente';};
     function flowRow(flow){const steps=completedFlowSteps(flow),done=Object.values(steps).filter(Boolean).length;return `<tr data-flow="${flow.id}"><td><span class="identifier">${esc(flow.id)}</span><span class="secondary-text">${esc(flow.product||'Sem produto relacionado')}</span></td><td><span class="identifier">${esc(flow.scope)}</span><span class="secondary-text wrap">${esc(flow.description)}</span></td><td>${esc(flow.creator)}</td><td>${done}/3 concluídas</td><td>${esc(flow.followUpOwner)}</td><td>${activityChip(calculatedFlowStatus(flow))}</td></tr>`;}
     function renderFlows(){const search=document.querySelector('#flowSearch').value.toLowerCase().trim(),owner=document.querySelector('#flowOwner').value,status=document.querySelector('#flowStatus').value;const filtered=ordered(state.flows.filter(flow=>{const text=[flow.id,flow.product,flow.scope,flow.description,flow.creator,flow.followUpOwner].join(' ').toLowerCase();return(!search||text.includes(search))&&(!owner||flow.followUpOwner===owner)&&(!status||calculatedFlowStatus(flow)===status);}));document.querySelector('#flowRows').innerHTML=filtered.map(flowRow).join('');document.querySelector('#flowEmpty').classList.toggle('hidden',filtered.length>0);}
-    function renderAccount(){document.querySelector('#accountInfo').textContent=currentAccount?`${currentAccount.name} · ${currentAccount.email}`:'Conta não configurada';document.querySelector('#accountScreen').classList.toggle('hidden',Boolean(currentAccount));}
+    
+    function renderAccount(){
+      const accountInfoEl = document.querySelector('#accountInfo');
+      if (currentAccount) {
+        const roleLabel = currentAccount.role === 'admin' ? 'Administrador' : 'Usuário Normal';
+        accountInfoEl.textContent = `${currentAccount.name} (${roleLabel}) · ${currentAccount.email}`;
+      } else {
+        accountInfoEl.textContent = 'Conta não configurada';
+      }
+      document.querySelector('#accountScreen').classList.toggle('hidden', Boolean(currentAccount));
+    }
+
     function renderHome(){const productOpen=state.reports.filter(report=>calculatedStatus(report)!=='concluido'), activitiesOpen=state.activities.filter(activity=>activity.status!=='concluido'), flowsOpen=state.flows.filter(flow=>calculatedFlowStatus(flow)!=='concluido');document.querySelector('#homePending').textContent=productOpen.length+activitiesOpen.length+flowsOpen.length;document.querySelector('#homeProductOpen').textContent=productOpen.length;document.querySelector('#homeActivities').textContent=activitiesOpen.length+flowsOpen.length;document.querySelector('#homeWaiting').textContent=state.reports.filter(report=>calculatedStatus(report)==='aguardando').length;const tasks=[...activitiesOpen.map(activity=>({kind:'activity',item:activity,sort:activity.dueDate?new Date(`${activity.dueDate}T12:00:00`):new Date(activity.createdAt)})),...productOpen.map(report=>({kind:'report',item:report,sort:new Date(report.createdAt)})),...flowsOpen.map(flow=>({kind:'flow',item:flow,sort:new Date(flow.createdAt)}))].sort((a,b)=>a.sort-b.sort).slice(0,7);document.querySelector('#homeQueue').innerHTML=tasks.map(task=>task.kind==='activity'?`<div class="home-item" data-activity="${task.item.id}"><span class="home-item-type">${esc(task.item.type)}</span><div><span class="identifier">${esc(task.item.title)}</span><span class="secondary-text">${esc(task.item.area)} · ${esc(task.item.owner)}${task.item.dueDate?` · prazo ${esc(task.item.dueDate.split('-').reverse().join('/'))}`:''}</span></div>${activityChip(task.item.status)}</div>`:task.kind==='flow'?`<div class="home-item" data-flow="${task.item.id}"><span class="home-item-type">Fluxo</span><div><span class="identifier">${esc(task.item.scope)}</span><span class="secondary-text">${esc(task.item.product||'Sem produto')} · seguimento: ${esc(task.item.followUpOwner)}</span></div>${activityChip(calculatedFlowStatus(task.item))}</div>`:`<div class="home-item" data-id="${task.item.id}"><span class="home-item-type">Produto</span><div><span class="identifier">${esc(task.item.product)} · ${esc(task.item.component)}</span><span class="secondary-text">${esc(task.item.issue)}</span></div>${chip(calculatedStatus(task.item))}</div>`).join('');document.querySelector('#homeQueueEmpty').classList.toggle('hidden',tasks.length>0);const reminders=currentAccount?[...activitiesOpen.filter(activity=>activity.owner===currentAccount.name).map(activity=>`<div class="notification"><strong>${esc(activity.title)}</strong><span>Pendência atribuída a você${activity.dueDate?` · prazo ${esc(activity.dueDate.split('-').reverse().join('/'))}`:''}.</span></div>`),...flowsOpen.filter(flow=>flow.followUpOwner===currentAccount.name).map(flow=>`<div class="notification"><strong>Fluxo ${esc(flow.id)}</strong><span>Você é responsável pelo seguimento de ${esc(flow.scope)}.</span></div>`)].slice(0,4):[];document.querySelector('#notificationList').innerHTML=reminders.length?reminders.join(''):'<div class="notification"><strong>Sem lembretes para esta conta</strong><span>Atividades atribuídas a você aparecerão aqui.</span></div>';}
     function render(){renderTree();updatePageHeader();renderProduct();renderAll();renderWork();renderFlows();renderHome();renderAccount();document.querySelector('#homeView').classList.toggle('hidden',activeView!=='home');document.querySelector('#productView').classList.toggle('hidden',activeView!=='product');document.querySelector('#allReportsView').classList.toggle('hidden',activeView!=='all');document.querySelector('#workView').classList.toggle('hidden',activeView!=='work');document.querySelector('#flowView').classList.toggle('hidden',activeView!=='flow');}
     function show(view){activeView=view;render();}
@@ -249,18 +411,16 @@
     function renderFlowDetail(){const flow=selectedFlow();if(!flow)return;document.querySelector('#flowDetailTitle').textContent=`${flow.id} · ${flow.scope}`;document.querySelector('#flowDetailSubtitle').textContent=`${flow.product||'Sem produto relacionado'} · aberto por ${flow.creator}`;document.querySelector('#flowDetailDescription').textContent=flow.description;document.querySelector('#flowDetailAttachment').value='';document.querySelector('#flowDetailEmailLink').value=flow.emailLink||'';document.querySelector('#flowDetailCoverLink').value=flow.coverLink||'';document.querySelector('#flowDetailOwner').value=flow.followUpOwner||'Pedro Henrique';document.querySelector('#flowDetailFollowUpLink').value=flow.followUpLink||'';const flowLinks=[safeLink(flow.emailLink,'E-mail enviado'),safeLink(flow.coverLink,'Folha de rosto'),safeLink(flow.followUpLink,'Registro de seguimento')].filter(Boolean);document.querySelector('#flowDetailFiles').innerHTML=`${evidenceGallery(flow.formAttachment)}${flowLinks.join('')}`;const steps=completedFlowSteps(flow);document.querySelector('#flowSteps').innerHTML=Object.entries(steps).map(([step,completed])=>`<div class="task"><span>${flowTaskName[step]}</span>${completed?'<span class="status done">Concluída</span>':'<span class="status pending">Pendente</span>'}</div>`).join('');document.querySelector('#flowDetailStatus').innerHTML=activityChip(calculatedFlowStatus(flow));const events=[{text:'Fluxo criado.',date:flow.createdAt},...(flow.updates||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));document.querySelector('#flowTimeline').innerHTML=events.map(event=>`<div class="event"><time>${formatDate(event.date)}</time><p>${esc(event.text)}</p></div>`).join('');}
     function renderDetail(){const r=selected();if(!r)return;document.querySelector('#detailTitle').textContent=`${r.id} · ${r.component}`;document.querySelector('#detailSubtitle').textContent=`${r.product} · ${r.family} · ${r.material||'Sem código de material'} · Responsável: ${r.owner}`;document.querySelector('#detailIssue').textContent=r.issue;const links=[safeLink(r.reportLink,'Abrir meu report'),safeLink(r.responseLink,'Abrir resposta do fornecedor')].filter(Boolean);document.querySelector('#detailLinks').innerHTML=links.length?links.join(''):'Nenhum link informado.';document.querySelector('#detailReportLink').value=r.reportLink||'';document.querySelector('#detailResponseLink').value=r.responseLink||'';document.querySelector('#detailEvidenceInput').value='';document.querySelector('#detailEvidence').innerHTML=evidenceGallery(r.evidence);document.querySelector('#detailEvidence').classList.toggle('evidence-gallery',Boolean(evidenceEntries(r.evidence).length));const tasks=completedTasks(r);document.querySelector('#detailStatus').innerHTML=chip(calculatedStatus(r));document.querySelector('#detailTasks').innerHTML=Object.entries(tasks).map(([task,completed])=>`<div class="task"><span>${taskName[task]}</span>${completed?'<span class="status done">Preenchido</span>':'<span class="status pending">Pendente</span>'}</div>`).join('');const events=[{text:'Registro criado.',date:r.createdAt},...(r.updates||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));document.querySelector('#timeline').innerHTML=events.map(e=>`<div class="event"><time>${formatDate(e.date)}</time><p>${esc(e.text)}</p></div>`).join('');}
     function nextId(){const max=state.reports.reduce((n,r)=>Math.max(n,Number((r.id.match(/(\d+)$/)||[0,0])[1])),0);return `F-${new Date().getFullYear()}-${String(max+1).padStart(3,'0')}`;}
-    document.querySelectorAll('.main-nav button').forEach(button=>button.addEventListener('click',()=>show(button.dataset.page)));document.querySelector('#newProduct').addEventListener('click',openProductModal);document.querySelector('#headerNewProduct').addEventListener('click',openProductModal);document.querySelector('#newComponent').addEventListener('click',()=>openComponentModal());document.querySelector('#newFailure').addEventListener('click',openFailureModal);document.querySelector('#newActivity').addEventListener('click',openActivityModal);document.querySelector('#newFlow').addEventListener('click',openFlowModal);document.querySelector('#quickActivity').addEventListener('click',openActivityModal);document.querySelector('#quickFailure').addEventListener('click',()=>{show('product');openFailureModal();});document.querySelector('#quickFlow').addEventListener('click',openFlowModal);document.querySelector('#allReports').addEventListener('click',()=>show('all'));document.querySelector('#changeAccount').addEventListener('click',()=>{currentAccount=null;localStorage.removeItem('controleFalhas.account.v1');render();});
+    document.querySelectorAll('.main-nav button').forEach(button=>button.addEventListener('click',()=>show(button.dataset.page)));document.querySelector('#newProduct').addEventListener('click',openProductModal);document.querySelector('#headerNewProduct').addEventListener('click',openProductModal);document.querySelector('#newComponent').addEventListener('click',()=>openComponentModal());document.querySelector('#newFailure').addEventListener('click',openFailureModal);document.querySelector('#newActivity').addEventListener('click',openActivityModal);document.querySelector('#newFlow').addEventListener('click',openFlowModal);document.querySelector('#quickActivity').addEventListener('click',openActivityModal);document.querySelector('#quickFailure').addEventListener('click',()=>{show('product');openFailureModal();});document.querySelector('#quickFlow').addEventListener('click',openFlowModal);document.querySelector('#allReports').addEventListener('click',()=>show('all'));document.querySelector('#changeAccount').addEventListener('click',()=>{currentAccount=null;localStorage.removeItem('controleFalhas.account.v2');showAuthScreen('login');render();});
     
-    // Ações do Modal de Confirmação
     document.querySelectorAll('.close-confirm').forEach(b => b.addEventListener('click', closeConfirmModal));
     document.querySelector('#btnConfirmDelete').addEventListener('click', confirmDeleteFamily);
 
     document.querySelectorAll('.close-product').forEach(b=>b.addEventListener('click',closeProductModal));document.querySelectorAll('.close-component').forEach(b=>b.addEventListener('click',closeComponentModal));document.querySelectorAll('.close-failure').forEach(b=>b.addEventListener('click',closeFailureModal));document.querySelectorAll('.close-activity').forEach(b=>b.addEventListener('click',closeActivityModal));document.querySelectorAll('.close-flow').forEach(b=>b.addEventListener('click',closeFlowModal));document.querySelector('.close-detail').addEventListener('click',closeDetail);document.querySelector('.close-activity-detail').addEventListener('click',closeActivityDetail);document.querySelector('.close-flow-detail').addEventListener('click',closeFlowDetail);document.querySelectorAll('.modal-backdrop').forEach(backdrop=>backdrop.addEventListener('click',e=>{if(e.target===backdrop){if(backdrop.id==='deleteConfirmModal')closeConfirmModal();else if(backdrop.id==='productModal')closeProductModal();else if(backdrop.id==='componentModal')closeComponentModal();else if(backdrop.id==='failureModal')closeFailureModal();else if(backdrop.id==='activityModal')closeActivityModal();else if(backdrop.id==='activityDetailModal')closeActivityDetail();else if(backdrop.id==='flowModal')closeFlowModal();else if(backdrop.id==='flowDetailModal')closeFlowDetail();else closeDetail();}}));
-    document.querySelector('#accountForm').addEventListener('submit',e=>{e.preventDefault();const form=new FormData(e.currentTarget);currentAccount={name:form.get('name').trim(),email:form.get('email').trim()};localStorage.setItem('controleFalhas.account.v1',JSON.stringify(currentAccount));render();});
+    
     document.querySelector('#productForm').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.currentTarget),code=f.get('code').trim(),family=f.get('family').trim();if(state.products.some(p=>p.code.toLowerCase()===code.toLowerCase())){alert('Este produto já está cadastrado.');return;}state.products.push({code,family,components:[]});activeProduct=code;save();closeProductModal();show('product');});
     document.querySelector('#componentForm').addEventListener('submit',e=>{e.preventDefault();const name=new FormData(e.currentTarget).get('name').trim(),product=activeData();if(product.components.some(component=>component.toLowerCase()===name.toLowerCase())){alert('Este componente já está cadastrado para este produto.');return;}const shouldOpenFailure=continueToFailureAfterComponent;product.components.push(name);save();closeComponentModal();render();if(shouldOpenFailure)openFailureModal();});
     
-    // Cadastro de Falhas sem Fornecedor nem Resposta do Fornecedor
     document.querySelector('#failureForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget),fileInput=e.currentTarget.elements.evidence,p=activeData(),evidence=await readAttachments(fileInput.files);const report={id:nextId(),product:p.code,family:p.family,component:f.get('component'),material:f.get('material').trim(),supplier:'Fornecedor Padrão',owner:f.get('owner'),issue:f.get('issue').trim(),reportLink:f.get('reportLink').trim(),responseLink:'',evidence,createdAt:now(),updates:[]};state.reports.unshift(report);save();closeFailureModal();show('product');openDetail(report.id);});
     
     document.querySelector('#activityForm').addEventListener('submit',e=>{e.preventDefault();const form=new FormData(e.currentTarget),activity={id:nextActivityId(),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:form.get('owner'),openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',createdAt:now(),updates:[]};state.activities.unshift(activity);save();closeActivityModal();show('work');openActivityDetail(activity.id);});
@@ -280,9 +440,9 @@
     });
 
     document.addEventListener('click',e=>{const productRow=e.target.closest('tr[data-id]'),productItem=e.target.closest('[data-id]'),activityRow=e.target.closest('[data-activity]'),flowRow=e.target.closest('[data-flow]');if(activityRow)return openActivityDetail(activityRow.dataset.activity);if(flowRow)return openFlowDetail(flowRow.dataset.flow);if(productRow)return openDetail(productRow.dataset.id);if(productItem)return openDetail(productItem.dataset.id);});['productSearch','componentFilter','productStatus'].forEach(id=>document.querySelector('#'+id).addEventListener(id==='productSearch'?'input':'change',renderProduct));['allSearch','allFamily','allComponent','allStatus'].forEach(id=>document.querySelector('#'+id).addEventListener(id==='allSearch'?'input':'change',renderAll));['workSearch','workOwner','workStatus'].forEach(id=>document.querySelector('#'+id).addEventListener(id==='workSearch'?'input':'change',renderWork));['flowSearch','flowOwner','flowStatus'].forEach(id=>document.querySelector('#'+id).addEventListener(id==='flowSearch'?'input':'change',renderFlows));
-    document.querySelector('#saveArtifacts').addEventListener('click',async ()=>{const r=selected(),reportLink=document.querySelector('#detailReportLink').value.trim(),responseLink=document.querySelector('#detailResponseLink').value.trim(),newFiles=await readAttachments(document.querySelector('#detailEvidenceInput').files);const changes=[];if(reportLink!==r.reportLink){r.reportLink=reportLink;changes.push(reportLink?'Link do report atualizado.':'Link do report removido.');}if(responseLink!==r.responseLink){r.responseLink=responseLink;changes.push(responseLink?'Link da resposta atualizado.':'Link da resposta removido.');}if(newFiles.length){r.evidence=[...evidenceEntries(r.evidence),...newFiles];changes.push(`${newFiles.length} evidência(s) adicionada(s).`);}if(!changes.length)return;r.updates.push({text:changes.join(' '),date:now()});save();render();renderDetail();});document.querySelector('#addUpdate').addEventListener('click',()=>{const input=document.querySelector('#updateInput'),text=input.value.trim();if(!text)return input.focus();const r=selected();r.updates.push({text,date:now()});input.value='';save();render();renderDetail();});document.querySelector('#deleteReport').addEventListener('click',()=>{const r=selected();if(!r||!confirm(`Excluir ${r.id}? Esta ação não pode ser desfeita.`))return;state.reports=state.reports.filter(item=>item.id!==r.id);save();render();closeDetail();});
-    document.querySelector('#saveActivityChanges').addEventListener('click',()=>{const activity=selectedActivity(),status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value,changes=[];if(status!==activity.status){activity.status=status;changes.push(`Status alterado para “${activityStatusName[status]}”.`);}if(dueDate!==activity.dueDate){activity.dueDate=dueDate;changes.push(dueDate?`Prazo atualizado para ${dueDate.split('-').reverse().join('/')}.`:'Prazo removido.');}if(!changes.length)return;activity.updates.push({text:changes.join(' '),date:now()});save();render();renderActivityDetail();});document.querySelector('#addActivityUpdate').addEventListener('click',()=>{const input=document.querySelector('#activityUpdateInput'),text=input.value.trim();if(!text)return input.focus();const activity=selectedActivity();activity.updates.push({text,date:now()});input.value='';save();render();renderActivityDetail();});document.querySelector('#deleteActivity').addEventListener('click',()=>{const activity=selectedActivity();if(!activity||!confirm(`Excluir ${activity.id}? Esta ação não pode ser desfeita.`))return;state.activities=state.activities.filter(item=>item.id!==activity.id);save();render();closeActivityDetail();});
-    document.querySelector('#saveFlowChanges').addEventListener('click',async ()=>{const flow=selectedFlow(),emailLink=document.querySelector('#flowDetailEmailLink').value.trim(),coverLink=document.querySelector('#flowDetailCoverLink').value.trim(),followUpLink=document.querySelector('#flowDetailFollowUpLink').value.trim(),followUpOwner=document.querySelector('#flowDetailOwner').value,newFiles=await readAttachments(document.querySelector('#flowDetailAttachment').files),changes=[];if(emailLink!==flow.emailLink){flow.emailLink=emailLink;changes.push(emailLink?'Link do e-mail atualizado.':'Link do e-mail removido.');}if(coverLink!==flow.coverLink){flow.coverLink=coverLink;changes.push(coverLink?'Folha de rosto atualizada.':'Folha de rosto removida.');}if(followUpLink!==flow.followUpLink){flow.followUpLink=followUpLink;changes.push(followUpLink?'Seguimento atualizado.':'Registro de seguimento removido.');}if(followUpOwner!==flow.followUpOwner){flow.followUpOwner=followUpOwner;changes.push(`Seguimento atribuído a ${followUpOwner}.`);}if(newFiles.length){flow.formAttachment=[...evidenceEntries(flow.formAttachment),...newFiles];changes.push(`${newFiles.length} arquivo(s) de formulário adicionado(s).`);}if(!changes.length)return;flow.updates.push({text:changes.join(' '),date:now()});save();render();renderFlowDetail();});document.querySelector('#deleteFlow').addEventListener('click',()=>{const flow=selectedFlow();if(!flow||!confirm(`Excluir ${flow.id}? Esta ação não pode ser desfeita.`))return;state.flows=state.flows.filter(item=>item.id!==flow.id);save();render();closeFlowDetail();});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeConfirmModal();closeProductModal();closeComponentModal();closeFailureModal();closeActivityModal();closeFlowModal();closeDetail();closeActivityDetail();closeFlowDetail();}});
+    document.querySelector('#saveArtifacts').addEventListener('click',async ()=>{const r=selected(),reportLink=document.querySelector('#detailReportLink').value.trim(),responseLink=document.querySelector('#detailResponseLink').value.trim(),newFiles=await readAttachments(document.querySelector('#detailEvidenceInput').files);const changes=[];if(reportLink!==r.reportLink){r.reportLink=reportLink;changes.push(reportLink?'Link do report atualizado.':'Link do report removido.');}if(responseLink!==r.responseLink){r.responseLink=responseLink;changes.push(responseLink?'Link da resposta atualizado.':'Link da resposta removido.');}if(newFiles.length){r.evidence=[...evidenceEntries(r.evidence),...newFiles];changes.push(`${newFiles.length} evidência(s) adicionada(s).`);}if(!changes.length)return;r.updates.push({text:changes.join(' '),date:now()});save();render();renderDetail();});document.querySelector('#addUpdate').addEventListener('click',()=>{const input=document.querySelector('#updateInput'),text=input.value.trim();if(!text)return input.focus();const r=selected();r.updates.push({text,date:now()});input.value='';save();render();renderDetail();});document.querySelector('#deleteReport').addEventListener('click',()=>{if(currentAccount?.role!=='admin'){alert('Apenas administradores podem excluir registros.');return;}const r=selected();if(!r||!confirm(`Excluir ${r.id}? Esta ação não pode ser desfeita.`))return;state.reports=state.reports.filter(item=>item.id!==r.id);save();render();closeDetail();});
+    document.querySelector('#saveActivityChanges').addEventListener('click',()=>{const activity=selectedActivity(),status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value,changes=[];if(status!==activity.status){activity.status=status;changes.push(`Status alterado para “${activityStatusName[status]}”.`);}if(dueDate!==activity.dueDate){activity.dueDate=dueDate;changes.push(dueDate?`Prazo atualizado para ${dueDate.split('-').reverse().join('/')}.`:'Prazo removido.');}if(!changes.length)return;activity.updates.push({text:changes.join(' '),date:now()});save();render();renderActivityDetail();});document.querySelector('#addActivityUpdate').addEventListener('click',()=>{const input=document.querySelector('#activityUpdateInput'),text=input.value.trim();if(!text)return input.focus();const activity=selectedActivity();activity.updates.push({text,date:now()});input.value='';save();render();renderActivityDetail();});document.querySelector('#deleteActivity').addEventListener('click',()=>{if(currentAccount?.role!=='admin'){alert('Apenas administradores podem excluir atividades.');return;}const activity=selectedActivity();if(!activity||!confirm(`Excluir ${activity.id}? Esta ação não pode ser desfeita.`))return;state.activities=state.activities.filter(item=>item.id!==activity.id);save();render();closeActivityDetail();});
+    document.querySelector('#saveFlowChanges').addEventListener('click',async ()=>{const flow=selectedFlow(),emailLink=document.querySelector('#flowDetailEmailLink').value.trim(),coverLink=document.querySelector('#flowDetailCoverLink').value.trim(),followUpLink=document.querySelector('#flowDetailFollowUpLink').value.trim(),followUpOwner=document.querySelector('#flowDetailOwner').value,newFiles=await readAttachments(document.querySelector('#flowDetailAttachment').files),changes=[];if(emailLink!==flow.emailLink){flow.emailLink=emailLink;changes.push(emailLink?'Link do e-mail atualizado.':'Link do e-mail removido.');}if(coverLink!==flow.coverLink){flow.coverLink=coverLink;changes.push(coverLink?'Folha de rosto atualizada.':'Folha de rosto removida.');}if(followUpLink!==flow.followUpLink){flow.followUpLink=followUpLink;changes.push(followUpLink?'Seguimento atualizado.':'Registro de seguimento removido.');}if(followUpOwner!==flow.followUpOwner){flow.followUpOwner=followUpOwner;changes.push(`Seguimento atribuído a ${followUpOwner}.`);}if(newFiles.length){flow.formAttachment=[...evidenceEntries(flow.formAttachment),...newFiles];changes.push(`${newFiles.length} arquivo(s) de formulário adicionado(s).`);}if(!changes.length)return;flow.updates.push({text:changes.join(' '),date:now()});save();render();renderFlowDetail();});document.querySelector('#deleteFlow').addEventListener('click',()=>{if(currentAccount?.role!=='admin'){alert('Apenas administradores podem excluir fluxos.');return;}const flow=selectedFlow();if(!flow||!confirm(`Excluir ${flow.id}? Esta ação não pode ser desfeita.`))return;state.flows=state.flows.filter(item=>item.id!==flow.id);save();render();closeFlowDetail();});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeConfirmModal();closeProductModal();closeComponentModal();closeFailureModal();closeActivityModal();closeFlowModal();closeDetail();closeActivityDetail();closeFlowDetail();}});
     render();
   </script>
 </body>
