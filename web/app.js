@@ -1767,6 +1767,16 @@
       }
 
       // Só revela uma das interfaces depois que o Firebase responder.
+      // Modais pertencem a uma sessão autenticada; ao sair ou durante a tela
+      // de login, nenhum formulário antigo pode permanecer sobre a autenticação.
+      if (authReady && !currentAccount) {
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.classList.add('hidden'));
+        document.body.classList.remove('mobile-modal-open');
+        selectedId = null;
+        selectedActivityId = null;
+        selectedFlowId = null;
+        selectedOperationalId = null;
+      }
       appEl.classList.toggle('auth-ready', authReady && Boolean(currentAccount));
       accountScreenEl.classList.toggle('hidden', !authReady || Boolean(currentAccount));
     }
