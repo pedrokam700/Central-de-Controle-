@@ -10,6 +10,24 @@
   --safe-left:env(safe-area-inset-left,0px);
 }
 
+/* Authentication is exclusive in every viewport. The legacy build exposed
+   .app while Firebase was resolving, which allowed authenticated controls to
+   leak behind the login. */
+.app{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+.app.auth-ready{
+  display:grid!important;
+  visibility:visible!important;
+  pointer-events:auto!important;
+}
+
+/* Semantic hidden state always wins over responsive toolbar layout. */
+.hidden,
+.toolbar.hidden{display:none!important}
+
 .mobile-nav-toggle,
 .mobile-nav-backdrop,
 .ai-mobile-menu,
