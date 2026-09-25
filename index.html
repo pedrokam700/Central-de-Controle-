@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.22">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
@@ -2425,6 +2425,53 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-status{background:#1f1f1e!i
 body.dark.cora-route-active #aiAnalysisView .ai-work-status summary{background:#1f1f1e!important;color:#f2f2ee!important;}
 body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f!important;color:#c6c6c0!important;}
 </style>
+
+<style id="mobile-polish-v15-1-13-22">
+.mobile-menu-toggle,.mobile-menu-overlay{display:none}
+@media (max-width:860px){
+  html,body{overflow-x:hidden!important}
+  body{font-size:14px!important}
+  .app{grid-template-columns:1fr!important;min-height:100dvh!important}
+  .sidebar{position:fixed!important;left:0!important;top:0!important;bottom:0!important;width:min(86vw,320px)!important;max-width:320px!important;z-index:1000!important;transform:translateX(-104%)!important;transition:transform .22s ease,box-shadow .22s ease!important;box-shadow:none!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}
+  body.mobile-menu-open .sidebar{transform:translateX(0)!important;box-shadow:16px 0 34px rgba(0,0,0,.28)!important}
+  body.mobile-menu-open{overflow:hidden!important}
+  .mobile-menu-toggle{display:grid!important;place-items:center!important;width:42px!important;height:42px!important;min-width:42px!important;min-height:42px!important;flex:0 0 42px!important;border:1px solid var(--line)!important;border-radius:11px!important;background:var(--surface,#fff)!important;color:var(--text,#111)!important;margin-right:2px!important;padding:0!important}
+  .mobile-menu-toggle span{display:block!important;width:19px!important;height:2px!important;background:currentColor!important;margin:2.5px 0!important;border-radius:999px!important}
+  .mobile-menu-overlay{position:fixed!important;inset:0!important;background:rgba(0,0,0,.42)!important;z-index:999!important;display:none!important}
+  body.mobile-menu-open .mobile-menu-overlay{display:block!important}
+  .main{width:100%!important;min-width:0!important}
+  .topbar{position:sticky!important;top:0!important;z-index:120!important;display:flex!important;align-items:flex-start!important;gap:10px!important;padding:12px!important;flex-wrap:wrap!important;background:var(--surface,#fff)!important;border-bottom:1px solid var(--line)!important}
+  .topbar>div:first-of-type{flex:1 1 180px!important;min-width:0!important}
+  .topbar>div:last-child{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:8px!important;flex:1 1 100%!important;min-width:0!important}
+  .page-title{font-size:20px!important;line-height:1.15!important}
+  .page-subtitle{font-size:12px!important;line-height:1.35!important;white-space:normal!important}
+  .content{padding:12px!important;overflow-x:hidden!important}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}
+  .home-layout,.dashboard-grid,.team-panel-grid,.profile-grid,.grid-2,.grid-3,.split-grid{grid-template-columns:1fr!important}
+  .home-side{order:2!important}
+  .toolbar{width:100%!important;justify-content:stretch!important;gap:8px!important;overflow-x:auto!important;padding-bottom:2px!important}
+  .toolbar .button{flex:1 0 auto!important}
+  .language-switcher{min-width:0!important;flex:1 1 160px!important}
+  .language-switcher select{width:100%!important;min-height:42px!important}
+  #themeToggle{min-height:42px!important}
+  .section-head,.central-head,.team-panel-head,.dashboard-indicator-panel-head{flex-direction:column!important;align-items:stretch!important;gap:10px!important}
+  .central-switch{width:100%!important;overflow-x:auto!important;overflow-y:hidden!important;padding-bottom:4px!important;-webkit-overflow-scrolling:touch!important}
+  .central-switch-btn{flex:1 0 auto!important;white-space:nowrap!important}
+  .panel,.stat,.quick-action,.team-panel,.priority-card{border-radius:16px!important}
+  table{display:block!important;overflow-x:auto!important;white-space:nowrap!important}
+}
+@media (max-width:560px){
+  .content{padding:10px!important}
+  .stats{grid-template-columns:1fr!important}
+  .topbar{padding:10px!important;gap:8px!important}
+  .topbar>div:last-child{gap:6px!important}
+  .toolbar{display:grid!important;grid-template-columns:1fr!important;overflow:visible!important}
+  .toolbar .button{width:100%!important}
+  input,select,textarea{font-size:16px!important}
+  .sidebar{width:min(88vw,330px)!important}
+  .stat-value{font-size:34px!important}
+}
+</style>
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -3006,7 +3053,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.21"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.22"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */
