@@ -3253,6 +3253,140 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
       });
     }
 
+
+    // V15.1.13.22 — mobile navigation, visual viewport and full-screen interaction surfaces.
+    const MOBILE_UI_QUERY = '(max-width: 930px)';
+    const CORA_MOBILE_QUERY = '(max-width: 760px)';
+
+    function isMobileUI(){
+      return window.matchMedia(MOBILE_UI_QUERY).matches;
+    }
+
+    function setMobileVisualViewport(){
+      const viewport = window.visualViewport;
+      const height = Math.max(320, Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 0));
+      document.documentElement.style.setProperty('--app-visual-height', `${height}px`);
+      document.documentElement.style.setProperty('--cora-input-font', window.matchMedia(CORA_MOBILE_QUERY).matches ? '16px' : '14px');
+    }
+
+    function closeMobileNavigation(){
+      document.body.classList.remove('sidebar-open');
+      const toggle = document.querySelector('#mobileNavToggle');
+      if(toggle) toggle.setAttribute('aria-expanded','false');
+    }
+
+    function openMobileNavigation(){
+      if(!isMobileUI()) return;
+      document.body.classList.add('sidebar-open');
+      document.body.classList.remove('sidebar-collapsed');
+      const toggle = document.querySelector('#mobileNavToggle');
+      if(toggle) toggle.setAttribute('aria-expanded','true');
+    }
+
+    function closeCoraMobileNavigation(){
+      document.body.classList.remove('cora-mobile-nav-open');
+      document.documentElement.style.removeProperty('--cora-mobile-drawer-x');
+      const panel=document.querySelector('#aiCoraSidebar');
+      panel?.classList.remove('open');
+      const toggle=document.querySelector('#aiMobileMenu');
+      if(toggle) toggle.setAttribute('aria-expanded','false');
+    }
+
+    function openCoraMobileNavigation(){
+      if(!window.matchMedia(CORA_MOBILE_QUERY).matches) return;
+      document.body.classList.add('cora-mobile-nav-open');
+      document.documentElement.style.setProperty('--cora-mobile-drawer-x','0%');
+      const panel=document.querySelector('#aiCoraSidebar');
+      panel?.classList.add('open');
+      const toggle=document.querySelector('#aiMobileMenu');
+      if(toggle) toggle.setAttribute('aria-expanded','true');
+    }
+
+    function updateMobileModalState(){
+      const openModal=[...document.querySelectorAll('.modal-backdrop')].some(el=>!el.classList.contains('hidden'));
+      document.body.classList.toggle('mobile-modal-open',isMobileUI() && openModal);
+    }
+
+    function syncMobileMode(){
+      setMobileVisualViewport();
+      if(isMobileUI()){
+        document.body.classList.add('mobile-ui');
+        // Desktop collapsed state must never shrink a mobile drawer to an icon rail.
+        document.body.classList.remove('sidebar-collapsed');
+      }else{
+        document.body.classList.remove('mobile-ui','sidebar-open','cora-mobile-nav-open','mobile-modal-open');
+        document.documentElement.style.removeProperty('--cora-mobile-drawer-x');
+        const savedCollapse=localStorage.getItem('centralAI.sidebarCollapsed')==='true';
+        document.body.classList.toggle('sidebar-collapsed',savedCollapse);
+      }
+      if(!window.matchMedia(CORA_MOBILE_QUERY).matches) closeCoraMobileNavigation();
+      updateMobileModalState();
+    }
+
+    function initMobileExperience(){
+      setMobileVisualViewport();
+      syncMobileMode();
+
+      const mobileToggle=document.querySelector('#mobileNavToggle');
+      const mobileBackdrop=document.querySelector('#mobileNavBackdrop');
+      const coraToggle=document.querySelector('#aiMobileMenu');
+      const coraBackdrop=document.querySelector('#aiMobileBackdrop');
+
+      if(mobileToggle && mobileToggle.dataset.bound!=='true'){
+        mobileToggle.dataset.bound='true';
+        mobileToggle.addEventListener('click',event=>{
+          event.preventDefault();
+          document.body.classList.contains('sidebar-open') ? closeMobileNavigation() : openMobileNavigation();
+        });
+      }
+      mobileBackdrop?.addEventListener('click',closeMobileNavigation);
+
+      if(coraToggle && coraToggle.dataset.bound!=='true'){
+        coraToggle.dataset.bound='true';
+        coraToggle.addEventListener('click',event=>{
+          event.preventDefault();
+          document.body.classList.contains('cora-mobile-nav-open') ? closeCoraMobileNavigation() : openCoraMobileNavigation();
+        });
+      }
+      coraBackdrop?.addEventListener('click',closeCoraMobileNavigation);
+
+      document.addEventListener('click',event=>{
+        if(isMobileUI() && event.target.closest('.sidebar button[data-page], .sidebar [data-family-toggle], .sidebar [data-base-family][data-base-code], .sidebar .product-btn, .sidebar .all-reports')){
+          setTimeout(closeMobileNavigation,0);
+        }
+        if(window.matchMedia(CORA_MOBILE_QUERY).matches && event.target.closest('#aiCoraSidebar .ai-side-link, #aiCoraSidebar #aiNewChat, #aiCoraSidebar #aiFocusBack')){
+          setTimeout(closeCoraMobileNavigation,0);
+        }
+      });
+
+      document.addEventListener('keydown',event=>{
+        if(event.key!=='Escape') return;
+        closeMobileNavigation();
+        closeCoraMobileNavigation();
+      });
+
+      const media=window.matchMedia(MOBILE_UI_QUERY);
+      media.addEventListener?.('change',syncMobileMode);
+      window.addEventListener('resize',syncMobileMode,{passive:true});
+      window.addEventListener('orientationchange',()=>setTimeout(syncMobileMode,60),{passive:true});
+      window.visualViewport?.addEventListener('resize',setMobileVisualViewport,{passive:true});
+      window.visualViewport?.addEventListener('scroll',setMobileVisualViewport,{passive:true});
+
+      const modalObserver=new MutationObserver(updateMobileModalState);
+      modalObserver.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
+
+      document.addEventListener('focusin',event=>{
+        if(!isMobileUI()) return;
+        const field=event.target.closest('.modal input, .modal textarea, .modal select, .account-card input, .account-card textarea, #aiContext');
+        if(!field) return;
+        setTimeout(()=>{
+          const vv=window.visualViewport;
+          const keyboardOpen=vv && vv.height < window.innerHeight - 80;
+          if(keyboardOpen) field.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});
+        },120);
+      });
+    }
+
     function initV1424Interface(){
       enforceCentralUIIntegrity();
       const navShortMap={home:'⌂',dashboard:'▦',product:'F',operations:'O',work:'✓',flow:'≡',aiAnalysis:'C',profile:'P'};
@@ -3269,6 +3403,10 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
         toggle.addEventListener('click',event=>{
           event.preventDefault();
           event.stopPropagation();
+          if(isMobileUI()){
+            closeMobileNavigation();
+            return;
+          }
           const c=!document.body.classList.contains('sidebar-collapsed');
           document.body.classList.toggle('sidebar-collapsed',c);
           localStorage.setItem('centralAI.sidebarCollapsed',String(c));
@@ -3420,6 +3558,8 @@ ${m.text}`).join('\n\n');
         document.querySelectorAll('[data-dashboard-indicator]').forEach(card => card.classList.remove('dashboard-indicator-selected'));
       }
       render();
+      if (isMobileUI()) closeMobileNavigation();
+      if (activeView !== 'aiAnalysis') closeCoraMobileNavigation();
       if (activeView === 'aiAnalysis') {
         enterCoraRoute();
         applyCoraPageLayout(true);
@@ -4364,9 +4504,10 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         document.body.classList.toggle('dark',dark);document.documentElement.classList.toggle('dark',dark);localStorage.setItem('centralAI.theme',dark?'dark':'light');
       });
     }
+    try{initMobileExperience();}catch(e){console.warn('Experiência mobile indisponível:',e);}
     try{initV1424Interface();}catch(e){console.warn('Interface V14.22 indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 try{const aiLang=document.querySelector('#aiLanguageSelect');if(aiLang)aiLang.value=currentLanguage;}catch{}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.21'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.21'){localStorage.setItem('cora.sw.loaded','15.1.13.21');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.22'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.22'){localStorage.setItem('cora.sw.loaded','15.1.13.22');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
