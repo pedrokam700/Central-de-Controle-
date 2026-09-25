@@ -3317,13 +3317,18 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
     }
 
     function updateMobileModalState(preferred=null){
-      const open=[...document.querySelectorAll('.modal-backdrop')].filter(el=>!el.classList.contains('hidden'));
-      document.querySelectorAll('.modal-backdrop.mobile-active-surface').forEach(el=>el.classList.remove('mobile-active-surface'));
-      if(isMobileUI() && open.length){
-        const active=(preferred && open.includes(preferred)) ? preferred : open[open.length-1];
-        active.classList.add('mobile-active-surface');
-      }
-      document.body.classList.toggle('mobile-modal-open',isMobileUI() && open.length>0);
+      const all=[...document.querySelectorAll('.modal-backdrop')];
+      const open=all.filter(el=>!el.classList.contains('hidden'));
+      const active=(isMobileUI() && open.length)
+        ? ((preferred && open.includes(preferred)) ? preferred : open[open.length-1])
+        : null;
+      all.forEach(el=>{
+        const shouldBeActive=el===active;
+        if(el.classList.contains('mobile-active-surface')!==shouldBeActive){
+          el.classList.toggle('mobile-active-surface',shouldBeActive);
+        }
+      });
+      document.body.classList.toggle('mobile-modal-open',Boolean(active));
     }
 
     function syncMobileMode(){
