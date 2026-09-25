@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.22">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.23">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.21';
+  const BUILD='15.1.13.23';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -3053,7 +3053,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.22"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.23"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */
@@ -3566,4 +3566,89 @@ body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:
 }
 </style>
 
+
+<style id="auth-mobile-isolation-v15-1-13-23">
+/* V15.1.13.23 — authentication and mobile surfaces are mutually exclusive.
+   This repairs a pre-existing leak where the Central remained rendered behind
+   the login and a responsive .toolbar rule overrode the semantic .hidden class. */
+.app{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+.app.auth-ready{
+  display:grid!important;
+  visibility:visible!important;
+  pointer-events:auto!important;
+}
+
+/* Semantic hidden state must always beat responsive presentation rules. */
+.hidden,
+.toolbar.hidden{
+  display:none!important;
+}
+
+/* Login is an exclusive unauthenticated surface. */
+.account-screen{
+  z-index:1000000!important;
+}
+
+/* Mobile creation/detail flows own the small viewport instead of stacking on
+   top of a squeezed desktop page. */
+@media(max-width:860px){
+  .toolbar.hidden{display:none!important}
+
+  .modal-backdrop:not(.hidden){
+    position:fixed!important;
+    inset:0!important;
+    width:100vw!important;
+    height:100dvh!important;
+    padding:0!important;
+    margin:0!important;
+    display:flex!important;
+    align-items:stretch!important;
+    justify-content:stretch!important;
+    overflow:hidden!important;
+    background:var(--surface,#fff)!important;
+    z-index:2000!important;
+  }
+
+  .modal-backdrop:not(.hidden) > .modal,
+  .modal-backdrop:not(.hidden) > .modal.large,
+  .modal-backdrop:not(.hidden) > .modal.small{
+    width:100%!important;
+    max-width:none!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+    max-height:100dvh!important;
+    margin:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior:contain!important;
+  }
+
+  .modal-backdrop:not(.hidden) .modal-head{
+    position:sticky!important;
+    top:0!important;
+    z-index:4!important;
+    background:var(--surface,#fff)!important;
+  }
+
+  body.dark .modal-backdrop:not(.hidden),
+  body.dark .modal-backdrop:not(.hidden) .modal-head{
+    background:#191919!important;
+  }
+
+  .account-screen:not(.hidden){
+    position:fixed!important;
+    inset:0!important;
+    width:100vw!important;
+    min-height:100dvh!important;
+    z-index:1000000!important;
+  }
+}
+</style>
 </html>
