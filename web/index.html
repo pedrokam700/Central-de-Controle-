@@ -3,14 +3,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#111111">
   <link rel="manifest" href="/manifest.webmanifest">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.21';
+  const BUILD='15.1.13.22';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2224,7 +2224,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-composer-wrap{background:linear-
 body.cora-route-active #aiAnalysisView .ai-composer{width:min(940px,100%)!important;max-width:940px!important;min-height:54px!important;margin:0 auto!important;padding:6px 8px!important;border-radius:16px!important;background:#fff!important;color:#111!important;border:1px solid #d7d7d1!important;box-shadow:0 5px 20px rgba(0,0,0,.07)!important;display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;grid-template-rows:auto auto!important;gap:2px 6px!important}
 body.dark.cora-route-active #aiAnalysisView .ai-composer{background:#191918!important;color:#f5f5f2!important;border-color:#353532!important;box-shadow:0 10px 28px rgba(0,0,0,.28)!important}
 body.cora-route-active #aiAnalysisView .ai-composer-text{grid-column:1 / -1!important;min-width:0!important}
-body.cora-route-active #aiAnalysisView .ai-composer-text textarea{width:100%!important;min-height:34px!important;height:34px!important;max-height:150px!important;padding:6px 6px!important;border:0!important;background:transparent!important;color:#111!important;font-size:14px!important;line-height:1.45!important;resize:none!important;outline:none!important;box-shadow:none!important}
+body.cora-route-active #aiAnalysisView .ai-composer-text textarea{width:100%!important;min-height:34px!important;height:34px!important;max-height:150px!important;padding:6px 6px!important;border:0!important;background:transparent!important;color:#111!important;font-size:var(--cora-input-font,14px)!important;line-height:1.45!important;resize:none!important;outline:none!important;box-shadow:none!important}
 body.dark.cora-route-active #aiAnalysisView .ai-composer-text textarea{color:#f5f5f2!important}
 body.cora-route-active #aiAnalysisView .ai-composer-tools{grid-column:1 / -1!important;display:flex!important;align-items:center!important;gap:5px!important;padding-top:1px!important}
 body.cora-route-active #aiAnalysisView .ai-tool{width:32px!important;height:32px!important;min-width:32px!important;min-height:32px!important;padding:0!important;border-radius:9px!important;background:transparent!important;border:1px solid #d7d7d1!important;color:#6f6f69!important;display:grid!important;place-items:center!important}
@@ -2430,7 +2430,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
 <body>
   <div id="saveToast" class="save-toast" role="status" aria-live="polite"></div>
   <div class="app">
-    <aside class="sidebar">
+    <aside class="sidebar" id="centralSidebar">
       <div class="brand">
         <div class="brand-top"><div class="mark">Q</div><button type="button" class="sidebar-collapse" id="sidebarCollapse" title="Recolher menu" aria-label="Recolher menu" data-collapsed="false"><span class="sidebar-collapse-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M14 6 8 12l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button></div><h1>Central de trabalho</h1><p>Qualidade, reports e atividades</p>
       </div>
@@ -2467,10 +2467,12 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
       </nav>
       <div class="sidebar-foot"><div class="account-info" id="accountInfo"></div><button class="all-reports" id="changeAccount">Sair / Trocar conta</button></div>
     </aside>
+    <button type="button" class="mobile-nav-backdrop" id="mobileNavBackdrop" aria-label="Fechar navegação" tabindex="-1"></button>
     <main class="main">
       <header class="topbar">
-        <div><h1 id="pageTitle" class="page-title"></h1><p id="pageSubtitle" class="page-subtitle"></p></div>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+        <button type="button" class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Abrir navegação" aria-expanded="false" aria-controls="centralSidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        <div class="topbar-title"><h1 id="pageTitle" class="page-title"></h1><p id="pageSubtitle" class="page-subtitle"></p></div>
+        <div class="topbar-actions">
           <div class="language-switcher"><span aria-hidden="true">🌐</span><select id="languageSelect" aria-label="Idioma"><option value="pt-BR">Português</option><option value="en-US">English</option></select></div><button class="button secondary" type="button" id="themeToggle" aria-label="Alternar modo escuro">◐ Tema</button>
           <div class="toolbar hidden" id="productActions"><button class="button secondary" id="headerNewProduct">Novo produto</button><button class="button secondary" id="newComponent">+ Componente</button><button class="button primary" id="newFailure">+ Cadastrar falha</button></div><div class="toolbar hidden" id="operationsActions"><button class="button primary" id="headerNewOperationalFailure">+ Registrar falha</button></div><div class="toolbar hidden" id="activityActions"><button class="button primary" id="newActivity">+ Nova atividade</button></div><div class="toolbar hidden" id="flowActions"><button class="button primary" id="newFlow">+ Novo fluxo</button></div>
         </div>
@@ -2576,7 +2578,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
         <!-- V15V — CORA: Central de Orientação e Raciocínio Assistido -->
         <section class="overview hidden" id="aiAnalysisView" aria-label="CORA">
           <div class="ai-app">
-            <aside class="ai-side-panel" aria-label="Navegação da CORA">
+            <aside class="ai-side-panel" id="aiCoraSidebar" aria-label="Navegação da CORA">
               <div class="cora-side-brand">
                 <button type="button" class="ai-focus-back" id="aiFocusBack" title="Voltar à Central" aria-label="Voltar à Central">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2601,9 +2603,11 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
                 </div>
               </details>
             </aside>
+            <button type="button" class="ai-mobile-backdrop" id="aiMobileBackdrop" aria-label="Fechar navegação da CORA" tabindex="-1"></button>
 
             <section class="ai-chat-shell">
               <header class="ai-chat-head">
+                <button type="button" class="ai-mobile-menu" id="aiMobileMenu" aria-label="Abrir navegação da CORA" aria-expanded="false" aria-controls="aiCoraSidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
                 <div class="ai-head-main"><div class="ai-head-title-row"><div class="ai-head-mark">C</div><div><div class="ai-head-kicker">CORA</div><h2 id="aiChatTitle">Conversa</h2></div></div></div>
                 <div class="ai-head-actions">
                   <div class="ai-language-wrap"><span aria-hidden="true">🌐</span><select id="aiLanguageSelect" aria-label="Idioma"><option value="pt-BR">Português</option><option value="en-US">English</option></select></div>
@@ -3006,7 +3010,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/app.js?v=15.1.13.21"></script>
+  <script type="module" src="/app.js?v=15.1.13.22"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */
@@ -3455,7 +3459,7 @@ body.cora-route-active #aiAnalysisView .ai-message{width:min(980px,100%)!importa
 /* Mobile: sidebar becomes drawer; chat remains the sole scrolling region. */
 @media(max-width:760px){
   body.cora-route-active #aiAnalysisView .ai-app{grid-template-columns:1fr!important}
-  body.cora-route-active #aiAnalysisView .ai-side-panel{position:fixed!important;left:0!important;top:0!important;bottom:0!important;width:min(290px,86vw)!important;min-width:0!important;transform:translateX(-102%)!important;z-index:100001!important;box-shadow:14px 0 32px rgba(0,0,0,.28)!important}
+  body.cora-route-active #aiAnalysisView .ai-side-panel{position:fixed!important;left:0!important;top:0!important;bottom:0!important;width:min(290px,86vw)!important;min-width:0!important;transform:translateX(var(--cora-mobile-drawer-x,-102%))!important;z-index:100001!important;box-shadow:14px 0 32px rgba(0,0,0,.28)!important}
   body.cora-route-active #aiAnalysisView .ai-chat-shell{grid-column:1!important}
   body.cora-route-active #aiAnalysisView .ai-chat-scroll{padding:66px 12px 130px!important}
   body.cora-route-active #aiAnalysisView .ai-composer-wrap{width:calc(100% - 20px)!important;bottom:10px!important}
@@ -3519,4 +3523,6 @@ body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:
 }
 </style>
 
+
+<link rel="stylesheet" href="/mobile.css?v=15.1.13.22" id="mobile-foundation-styles">
 </html>
