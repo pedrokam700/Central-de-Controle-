@@ -1766,9 +1766,39 @@
         accountInfoEl.textContent = 'Conta não configurada';
       }
 
-      // Só revela uma das interfaces depois que o Firebase responder.
-      appEl.classList.toggle('auth-ready', authReady && Boolean(currentAccount));
-      accountScreenEl.classList.toggle('hidden', !authReady || Boolean(currentAccount));
+      // V15.1.13.23 — autenticação é um estado de tela exclusivo.
+      // A Central nunca pode permanecer visível atrás do login, e nenhuma
+      // superfície de uma sessão anterior pode sobreviver ao logout.
+      const signedIn = authReady && Boolean(currentAccount);
+      if (!signedIn) {
+        document.querySelectorAll('.modal-backdrop').forEach(el => {
+          el.classList.add('hidden');
+          el.classList.remove('mobile-active-surface');
+        });
+        document.body.classList.remove(
+          'mobile-menu-open',
+          'sidebar-open',
+          'cora-mobile-nav-open',
+          'mobile-modal-open',
+          'ai-focus-mode',
+          'cora-route-active'
+        );
+        document.documentElement.classList.remove('cora-route-active');
+        const coraView = document.querySelector('#aiAnalysisView');
+        if (coraView) {
+          coraView.classList.add('hidden');
+          coraView.style.display = '';
+        }
+        selectedId = null;
+        selectedActivityId = null;
+        selectedFlowId = null;
+        selectedOperationalId = null;
+      }
+
+      appEl.classList.toggle('auth-ready', signedIn);
+      // Mantém a tela de autenticação visível inclusive durante a resolução
+      // inicial do Firebase; ela só desaparece quando a sessão está pronta.
+      accountScreenEl.classList.toggle('hidden', signedIn);
     }
 
     
@@ -2211,7 +2241,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.22'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.22'){localStorage.setItem('cora.sw.loaded','15.1.13.22');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.23'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.23'){localStorage.setItem('cora.sw.loaded','15.1.13.23');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -4372,5 +4402,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 try{const aiLang=document.querySelector('#aiLanguageSelect');if(aiLang)aiLang.value=currentLanguage;}catch{}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.22'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.22'){localStorage.setItem('cora.sw.loaded','15.1.13.22');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.23'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.23'){localStorage.setItem('cora.sw.loaded','15.1.13.23');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
