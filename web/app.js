@@ -1771,7 +1771,13 @@
       // de login, nenhum formulário antigo pode permanecer sobre a autenticação.
       if (authReady && !currentAccount) {
         document.querySelectorAll('.modal-backdrop').forEach(el => el.classList.add('hidden'));
-        document.body.classList.remove('mobile-modal-open');
+        document.body.classList.remove('mobile-modal-open','sidebar-open','cora-mobile-nav-open');
+        closeMobileNavigation();
+        closeCoraMobileNavigation();
+        if (activeView === 'aiAnalysis') {
+          exitCoraRoute();
+          activeView = 'home';
+        }
         selectedId = null;
         selectedActivityId = null;
         selectedFlowId = null;
