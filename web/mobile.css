@@ -250,6 +250,13 @@
     max-width:100%;
   }
 
+  .content img,
+  .content video,
+  .content canvas,
+  .content svg{
+    max-width:100%;
+  }
+
   .table-wrap{
     width:100%;
     max-width:100%;
@@ -362,7 +369,7 @@
     flex-wrap:wrap;
     gap:8px;
     padding:12px 0 calc(8px + var(--safe-bottom));
-    background:inherit;
+    background:var(--surface);
   }
 
   .modal .form-actions .button{
