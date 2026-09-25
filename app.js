@@ -3152,7 +3152,10 @@ ${rowsText.slice(0,50000)}`;
       document.addEventListener('keydown',event=>{if(event.key==='Escape')close();});
       sidebar.addEventListener('click',event=>{
         if(!isMobile())return;
-        if(event.target.closest('.main-nav button[data-page],.side-action,.all-reports,.product-btn,[data-family-toggle],[data-base-family][data-base-code]')){
+        // Keep expandable groups/families open so the user can actually reach
+        // products. Close only after choosing a final destination/action.
+        if(event.target.closest('.nav-group-toggle,[data-family-toggle],.base-toggle'))return;
+        if(event.target.closest('.main-nav > button[data-page],.side-action,.all-reports,.product-btn,[data-base-family][data-base-code]')){
           setTimeout(close,0);
         }
       });
@@ -3483,9 +3486,15 @@ ${m.text}`).join('\n\n');
       }
       render();
       if(window.matchMedia('(max-width:860px)').matches){
-        document.body.classList.remove('mobile-menu-open');
+        document.body.classList.remove('mobile-menu-open','sidebar-collapsed');
         const mobileToggle=document.querySelector('#mobileMenuToggle');
-        if(mobileToggle)mobileToggle.setAttribute('aria-expanded','false');
+        if(mobileToggle){
+          mobileToggle.setAttribute('aria-expanded','false');
+          mobileToggle.setAttribute('aria-label','Abrir menu');
+        }
+        // Each page starts at its own top instead of inheriting the previous
+        // page's desktop-like scroll position on Safari/Chrome mobile.
+        window.scrollTo({top:0,left:0,behavior:'auto'});
       }
       if (activeView === 'aiAnalysis') {
         enterCoraRoute();
