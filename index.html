@@ -3,14 +3,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.23">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.24">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.23';
+  const BUILD='15.1.13.24';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2426,58 +2426,13 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-status summary{background:#
 body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f!important;color:#c6c6c0!important;}
 </style>
 
-<style id="mobile-polish-v15-1-13-22">
-.mobile-menu-toggle,.mobile-menu-overlay{display:none}
-@media (max-width:860px){
-  html,body{overflow-x:hidden!important}
-  body{font-size:14px!important}
-  .app{grid-template-columns:1fr!important;min-height:100dvh!important}
-  .sidebar{position:fixed!important;left:0!important;top:0!important;bottom:0!important;width:min(86vw,320px)!important;max-width:320px!important;z-index:1000!important;transform:translateX(-104%)!important;transition:transform .22s ease,box-shadow .22s ease!important;box-shadow:none!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}
-  body.mobile-menu-open .sidebar{transform:translateX(0)!important;box-shadow:16px 0 34px rgba(0,0,0,.28)!important}
-  body.mobile-menu-open{overflow:hidden!important}
-  .mobile-menu-toggle{display:grid!important;place-items:center!important;width:42px!important;height:42px!important;min-width:42px!important;min-height:42px!important;flex:0 0 42px!important;border:1px solid var(--line)!important;border-radius:11px!important;background:var(--surface,#fff)!important;color:var(--text,#111)!important;margin-right:2px!important;padding:0!important}
-  .mobile-menu-toggle span{display:block!important;width:19px!important;height:2px!important;background:currentColor!important;margin:2.5px 0!important;border-radius:999px!important}
-  .mobile-menu-overlay{position:fixed!important;inset:0!important;background:rgba(0,0,0,.42)!important;z-index:999!important;display:none!important}
-  body.mobile-menu-open .mobile-menu-overlay{display:block!important}
-  .main{width:100%!important;min-width:0!important}
-  .topbar{position:sticky!important;top:0!important;z-index:120!important;display:flex!important;align-items:flex-start!important;gap:10px!important;padding:12px!important;flex-wrap:wrap!important;background:var(--surface,#fff)!important;border-bottom:1px solid var(--line)!important}
-  .topbar>div:first-of-type{flex:1 1 180px!important;min-width:0!important}
-  .topbar>div:last-child{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:8px!important;flex:1 1 100%!important;min-width:0!important}
-  .page-title{font-size:20px!important;line-height:1.15!important}
-  .page-subtitle{font-size:12px!important;line-height:1.35!important;white-space:normal!important}
-  .content{padding:12px!important;overflow-x:hidden!important}
-  .stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}
-  .home-layout,.dashboard-grid,.team-panel-grid,.profile-grid,.grid-2,.grid-3,.split-grid{grid-template-columns:1fr!important}
-  .home-side{order:2!important}
-  .toolbar{width:100%!important;justify-content:stretch!important;gap:8px!important;overflow-x:auto!important;padding-bottom:2px!important}
-  .toolbar .button{flex:1 0 auto!important}
-  .language-switcher{min-width:0!important;flex:1 1 160px!important}
-  .language-switcher select{width:100%!important;min-height:42px!important}
-  #themeToggle{min-height:42px!important}
-  .section-head,.central-head,.team-panel-head,.dashboard-indicator-panel-head{flex-direction:column!important;align-items:stretch!important;gap:10px!important}
-  .central-switch{width:100%!important;overflow-x:auto!important;overflow-y:hidden!important;padding-bottom:4px!important;-webkit-overflow-scrolling:touch!important}
-  .central-switch-btn{flex:1 0 auto!important;white-space:nowrap!important}
-  .panel,.stat,.quick-action,.team-panel,.priority-card{border-radius:16px!important}
-  table{display:block!important;overflow-x:auto!important;white-space:nowrap!important}
-}
-@media (max-width:560px){
-  .content{padding:10px!important}
-  .stats{grid-template-columns:1fr!important}
-  .topbar{padding:10px!important;gap:8px!important}
-  .topbar>div:last-child{gap:6px!important}
-  .toolbar{display:grid!important;grid-template-columns:1fr!important;overflow:visible!important}
-  .toolbar .button{width:100%!important}
-  input,select,textarea{font-size:16px!important}
-  .sidebar{width:min(88vw,330px)!important}
-  .stat-value{font-size:34px!important}
-}
-</style>
+
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
   <div id="saveToast" class="save-toast" role="status" aria-live="polite"></div>
   <div class="app">
-    <aside class="sidebar">
+    <aside class="sidebar" id="centralSidebar">
       <div class="brand">
         <div class="brand-top"><div class="mark">Q</div><button type="button" class="sidebar-collapse" id="sidebarCollapse" title="Recolher menu" aria-label="Recolher menu" data-collapsed="false"><span class="sidebar-collapse-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M14 6 8 12l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button></div><h1>Central de trabalho</h1><p>Qualidade, reports e atividades</p>
       </div>
@@ -2514,10 +2469,12 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
       </nav>
       <div class="sidebar-foot"><div class="account-info" id="accountInfo"></div><button class="all-reports" id="changeAccount">Sair / Trocar conta</button></div>
     </aside>
+    <button id="mobileMenuOverlay" type="button" class="mobile-menu-overlay" aria-label="Fechar menu" tabindex="-1"></button>
     <main class="main">
       <header class="topbar">
-        <div><h1 id="pageTitle" class="page-title"></h1><p id="pageSubtitle" class="page-subtitle"></p></div>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+        <button id="mobileMenuToggle" type="button" class="mobile-menu-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="centralSidebar"><span></span><span></span><span></span></button>
+        <div class="topbar-title"><h1 id="pageTitle" class="page-title"></h1><p id="pageSubtitle" class="page-subtitle"></p></div>
+        <div class="topbar-actions">
           <div class="language-switcher"><span aria-hidden="true">🌐</span><select id="languageSelect" aria-label="Idioma"><option value="pt-BR">Português</option><option value="en-US">English</option></select></div><button class="button secondary" type="button" id="themeToggle" aria-label="Alternar modo escuro">◐ Tema</button>
           <div class="toolbar hidden" id="productActions"><button class="button secondary" id="headerNewProduct">Novo produto</button><button class="button secondary" id="newComponent">+ Componente</button><button class="button primary" id="newFailure">+ Cadastrar falha</button></div><div class="toolbar hidden" id="operationsActions"><button class="button primary" id="headerNewOperationalFailure">+ Registrar falha</button></div><div class="toolbar hidden" id="activityActions"><button class="button primary" id="newActivity">+ Nova atividade</button></div><div class="toolbar hidden" id="flowActions"><button class="button primary" id="newFlow">+ Novo fluxo</button></div>
         </div>
@@ -3053,7 +3010,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.23"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.24"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */
@@ -3567,50 +3524,360 @@ body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:
 </style>
 
 
-<style id="auth-mobile-isolation-v15-1-13-23">
-/* V15.1.13.23 — authentication and mobile surfaces are mutually exclusive.
-   This repairs a pre-existing leak where the Central remained rendered behind
-   the login and a responsive .toolbar rule overrode the semantic .hidden class. */
-.app{
-  display:none!important;
-  visibility:hidden!important;
-  pointer-events:none!important;
-}
-.app.auth-ready{
-  display:grid!important;
-  visibility:visible!important;
-  pointer-events:auto!important;
+<style id="mobile-layout-v15-1-13-24">
+/* V15.1.13.24 — single mobile authority.
+   Desktop remains governed by the existing desktop rules. On phones/tablets,
+   navigation is a drawer, forms own the viewport and data lists become readable cards. */
+
+:root{
+  --mobile-safe-top:env(safe-area-inset-top,0px);
+  --mobile-safe-right:env(safe-area-inset-right,0px);
+  --mobile-safe-bottom:env(safe-area-inset-bottom,0px);
+  --mobile-safe-left:env(safe-area-inset-left,0px);
 }
 
-/* Semantic hidden state must always beat responsive presentation rules. */
+/* Semantic state must always beat layout rules. */
 .hidden,
-.toolbar.hidden{
-  display:none!important;
-}
+.toolbar.hidden{display:none!important}
 
-/* Login is an exclusive unauthenticated surface. */
+/* Authentication overlays the Central; it does not change whether the Central exists. */
 .account-screen{
   z-index:1000000!important;
 }
 
-/* Mobile creation/detail flows own the small viewport instead of stacking on
-   top of a squeezed desktop page. */
-@media(max-width:860px){
-  .toolbar.hidden{display:none!important}
+.mobile-menu-toggle,
+.mobile-menu-overlay{display:none}
 
+/* Preserve the original desktop topbar layout; only the mobile breakpoint
+   restructures it into two rows. */
+.topbar-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+@media(max-width:860px){
+  html,body{
+    width:100%;
+    max-width:100%;
+    overflow-x:hidden!important;
+    overscroll-behavior-x:none;
+  }
+
+  body.mobile-menu-open{overflow:hidden!important}
+
+  .app,
+  body.sidebar-collapsed .app{
+    grid-template-columns:minmax(0,1fr)!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:100dvh!important;
+  }
+
+  .main{
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+  }
+
+  .sidebar{
+    position:fixed!important;
+    inset:0 auto 0 0!important;
+    width:min(88vw,330px)!important;
+    min-width:0!important;
+    max-width:330px!important;
+    height:100dvh!important;
+    z-index:1000!important;
+    transform:translateX(-105%)!important;
+    transition:transform .2s ease,box-shadow .2s ease!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior:contain!important;
+    padding-top:calc(12px + var(--mobile-safe-top))!important;
+    padding-bottom:calc(12px + var(--mobile-safe-bottom))!important;
+  }
+
+  /* A desktop-collapsed preference must never turn the mobile drawer into a
+     64 px rail or hide its labels/tree before JavaScript finishes syncing. */
+  body.sidebar-collapsed .sidebar{
+    width:min(88vw,330px)!important;
+    min-width:0!important;
+    max-width:330px!important;
+    padding-top:calc(12px + var(--mobile-safe-top))!important;
+    padding-right:12px!important;
+    padding-bottom:calc(12px + var(--mobile-safe-bottom))!important;
+    padding-left:12px!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+  }
+
+  body.sidebar-collapsed .brand h1,
+  body.sidebar-collapsed .brand p,
+  body.sidebar-collapsed .global-search-wrap,
+  body.sidebar-collapsed .sidebar-foot,
+  body.sidebar-collapsed .tree-heading,
+  body.sidebar-collapsed .tree,
+  body.sidebar-collapsed .side-action,
+  body.sidebar-collapsed .all-reports,
+  body.sidebar-collapsed .main-nav .nav-label,
+  body.sidebar-collapsed .main-nav .nav-chevron{
+    display:revert!important;
+  }
+
+  body.sidebar-collapsed .side-subnav:not(.hidden){
+    display:block!important;
+  }
+
+  body.sidebar-collapsed .main-nav,
+  body.sidebar-collapsed .main-nav .nav-group{
+    width:100%!important;
+  }
+
+  body.sidebar-collapsed .main-nav > button,
+  body.sidebar-collapsed .main-nav .nav-group-toggle{
+    width:100%!important;
+    min-width:0!important;
+    height:auto!important;
+    min-height:44px!important;
+    margin:0!important;
+    padding:10px 11px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    gap:9px!important;
+    font-size:12px!important;
+    line-height:1.3!important;
+  }
+
+  body.sidebar-collapsed .main-nav .nav-icon{
+    flex:0 0 22px!important;
+  }
+
+  body.mobile-menu-open .sidebar{
+    transform:translateX(0)!important;
+    box-shadow:16px 0 36px rgba(0,0,0,.34)!important;
+  }
+
+  .mobile-menu-overlay{
+    position:fixed!important;
+    inset:0!important;
+    z-index:990!important;
+    width:100%!important;
+    height:100dvh!important;
+    padding:0!important;
+    border:0!important;
+    background:rgba(0,0,0,.46)!important;
+    opacity:0!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+  }
+
+  body.mobile-menu-open .mobile-menu-overlay{
+    display:block!important;
+    opacity:1!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+  }
+
+  .mobile-menu-toggle{
+    display:grid!important;
+    grid-template-rows:repeat(3,2px)!important;
+    align-content:center!important;
+    justify-items:center!important;
+    gap:4px!important;
+    width:44px!important;
+    height:44px!important;
+    min-width:44px!important;
+    min-height:44px!important;
+    padding:0!important;
+    border:1px solid var(--line)!important;
+    border-radius:11px!important;
+    background:var(--surface)!important;
+    color:var(--text)!important;
+    flex:0 0 44px!important;
+  }
+
+  .mobile-menu-toggle span{
+    display:block!important;
+    width:19px!important;
+    height:2px!important;
+    margin:0!important;
+    border-radius:999px!important;
+    background:currentColor!important;
+  }
+
+  .topbar{
+    position:sticky!important;
+    top:0!important;
+    z-index:120!important;
+    display:grid!important;
+    grid-template-columns:auto minmax(0,1fr)!important;
+    align-items:center!important;
+    gap:8px 10px!important;
+    width:100%!important;
+    min-width:0!important;
+    padding:calc(10px + var(--mobile-safe-top)) calc(12px + var(--mobile-safe-right)) 10px calc(12px + var(--mobile-safe-left))!important;
+    background:var(--surface)!important;
+    border-bottom:1px solid var(--line)!important;
+  }
+
+  .topbar-title{
+    min-width:0!important;
+    max-width:100%!important;
+  }
+
+  .topbar-title .page-title{
+    margin:0!important;
+    font-size:20px!important;
+    line-height:1.18!important;
+    overflow-wrap:anywhere!important;
+  }
+
+  .topbar-title .page-subtitle{
+    margin-top:5px!important;
+    font-size:12px!important;
+    line-height:1.4!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+  }
+
+  .topbar-actions{
+    grid-column:1 / -1!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    flex-wrap:wrap!important;
+    gap:8px!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+
+  .language-switcher{
+    flex:1 1 180px!important;
+    min-width:0!important;
+  }
+
+  .language-switcher select{
+    width:100%!important;
+    min-height:44px!important;
+  }
+
+  #themeToggle{min-height:44px!important}
+
+  .toolbar:not(.hidden){
+    display:flex!important;
+    flex:1 1 100%!important;
+    width:100%!important;
+    min-width:0!important;
+    gap:8px!important;
+    flex-wrap:wrap!important;
+    overflow:visible!important;
+    padding:0!important;
+    margin:0!important;
+  }
+
+  .toolbar:not(.hidden) .button{
+    flex:1 1 180px!important;
+    min-height:44px!important;
+  }
+
+  .content{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    overflow-x:hidden!important;
+    padding:16px calc(12px + var(--mobile-safe-right)) calc(34px + var(--mobile-safe-bottom)) calc(12px + var(--mobile-safe-left))!important;
+  }
+
+  .content > *,
+  .overview,
+  .overview > *,
+  .panel,
+  .section-head,
+  .table-wrap{
+    min-width:0!important;
+    max-width:100%!important;
+  }
+
+  .section-head,
+  .central-head,
+  .team-panel-head,
+  .dashboard-indicator-panel-head{
+    flex-direction:column!important;
+    align-items:stretch!important;
+    gap:8px!important;
+  }
+
+  .section-head p{
+    max-width:100%!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+  }
+
+  .stats{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:12px!important;
+  }
+
+  .home-layout,
+  .dashboard-grid,
+  .team-panel-grid,
+  .profile-grid,
+  .grid-2,
+  .grid-3,
+  .split-grid,
+  .analysis-grid,
+  .artifact-grid,
+  .detail{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+
+  .span2,
+  .analysis-grid .span2,
+  .artifact-grid .span2{grid-column:auto!important}
+
+  .home-side{position:static!important}
+
+  .filters,
+  .filters.all,
+  .work-filters{
+    min-width:0!important;
+  }
+
+  .table-wrap{
+    width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior-x:contain!important;
+  }
+
+  .table-wrap table{
+    display:table!important;
+    width:100%!important;
+    min-width:760px!important;
+    white-space:normal!important;
+  }
+
+  input,select,textarea{font-size:16px!important}
+
+  /* A creation/edit action owns the phone/tablet viewport. */
   .modal-backdrop:not(.hidden){
     position:fixed!important;
     inset:0!important;
+    z-index:2000!important;
     width:100vw!important;
     height:100dvh!important;
-    padding:0!important;
     margin:0!important;
+    padding:0!important;
     display:flex!important;
     align-items:stretch!important;
     justify-content:stretch!important;
     overflow:hidden!important;
-    background:var(--surface,#fff)!important;
-    z-index:2000!important;
+    background:var(--surface)!important;
   }
 
   .modal-backdrop:not(.hidden) > .modal,
@@ -3634,7 +3901,12 @@ body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:
     position:sticky!important;
     top:0!important;
     z-index:4!important;
-    background:var(--surface,#fff)!important;
+    background:var(--surface)!important;
+    padding-top:calc(12px + var(--mobile-safe-top))!important;
+  }
+
+  .modal-backdrop:not(.hidden) form{
+    padding-bottom:calc(28px + var(--mobile-safe-bottom))!important;
   }
 
   body.dark .modal-backdrop:not(.hidden),
@@ -3645,9 +3917,177 @@ body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:
   .account-screen:not(.hidden){
     position:fixed!important;
     inset:0!important;
+    z-index:1000000!important;
     width:100vw!important;
     min-height:100dvh!important;
-    z-index:1000000!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+}
+
+@media(max-width:620px){
+  .content{
+    padding-left:10px!important;
+    padding-right:10px!important;
+  }
+
+  .stats{grid-template-columns:minmax(0,1fr)!important}
+
+  .filters,
+  .filters.all,
+  .work-filters,
+  .form-grid,
+  .checks,
+  .artifact-grid{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+
+  .toolbar:not(.hidden){
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+
+  .toolbar:not(.hidden) .button{
+    width:100%!important;
+    min-width:0!important;
+  }
+
+  /* Data tables become native mobile cards. No horizontal page clipping. */
+  #allReportsView .table-wrap,
+  #workView .table-wrap,
+  #flowView .table-wrap,
+  #operationsView .table-wrap,
+  #productView #tab-falhas .table-wrap,
+  #profileView .table-wrap{
+    overflow:visible!important;
+  }
+
+  #allReportsView table,
+  #workView table,
+  #flowView table,
+  #operationsView table,
+  #productView #tab-falhas table,
+  #profileView table{
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+
+  #allReportsView thead,
+  #workView thead,
+  #flowView thead,
+  #operationsView thead,
+  #productView #tab-falhas thead,
+  #profileView thead{
+    display:none!important;
+  }
+
+  #allReportsView tbody,
+  #workView tbody,
+  #flowView tbody,
+  #operationsView tbody,
+  #productView #tab-falhas tbody,
+  #profileView tbody{
+    display:grid!important;
+    gap:10px!important;
+    width:100%!important;
+  }
+
+  #allReportsView tbody tr,
+  #workView tbody tr,
+  #flowView tbody tr,
+  #operationsView tbody tr,
+  #productView #tab-falhas tbody tr,
+  #profileView tbody tr{
+    display:grid!important;
+    width:100%!important;
+    min-width:0!important;
+    padding:12px 14px!important;
+    border:1px solid var(--line)!important;
+    border-radius:12px!important;
+    background:var(--surface)!important;
+  }
+
+  #allReportsView tbody td,
+  #workView tbody td,
+  #flowView tbody td,
+  #operationsView tbody td,
+  #productView #tab-falhas tbody td,
+  #profileView tbody td{
+    display:grid!important;
+    grid-template-columns:minmax(104px,34%) minmax(0,1fr)!important;
+    align-items:start!important;
+    gap:10px!important;
+    width:100%!important;
+    min-width:0!important;
+    padding:7px 0!important;
+    border:0!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+  }
+
+  #allReportsView tbody td::before,
+  #workView tbody td::before,
+  #flowView tbody td::before,
+  #operationsView tbody td::before,
+  #productView #tab-falhas tbody td::before,
+  #profileView tbody td::before{
+    color:var(--muted)!important;
+    font-size:10px!important;
+    font-weight:750!important;
+    letter-spacing:.05em!important;
+    text-transform:uppercase!important;
+    line-height:1.35!important;
+  }
+
+  #allReportsView td:nth-child(1)::before{content:"Produto / família"}
+  #allReportsView td:nth-child(2)::before{content:"Componente / falha"}
+  #allReportsView td:nth-child(3)::before{content:"Material"}
+  #allReportsView td:nth-child(4)::before{content:"Responsável"}
+  #allReportsView td:nth-child(5)::before{content:"Links"}
+  #allReportsView td:nth-child(6)::before{content:"Status"}
+  #allReportsView td:nth-child(7)::before{content:"Atualização"}
+
+  #workView td:nth-child(1)::before{content:"Atividade"}
+  #workView td:nth-child(2)::before{content:"Tipo / área"}
+  #workView td:nth-child(3)::before{content:"Responsável"}
+  #workView td:nth-child(4)::before{content:"Prazo"}
+  #workView td:nth-child(5)::before{content:"Link"}
+  #workView td:nth-child(6)::before{content:"Status"}
+
+  #flowView td:nth-child(1)::before{content:"Fluxo / produto"}
+  #flowView td:nth-child(2)::before{content:"Escopo"}
+  #flowView td:nth-child(3)::before{content:"Criado por"}
+  #flowView td:nth-child(4)::before{content:"Etapas"}
+  #flowView td:nth-child(5)::before{content:"Seguimento"}
+  #flowView td:nth-child(6)::before{content:"Status"}
+
+  #operationsView td:nth-child(1)::before{content:"Registro"}
+  #operationsView td:nth-child(2)::before{content:"Produto / componente"}
+  #operationsView td:nth-child(3)::before{content:"Máquina / posto"}
+  #operationsView td:nth-child(4)::before{content:"Classificação / processo"}
+  #operationsView td:nth-child(5)::before{content:"Falha"}
+  #operationsView td:nth-child(6)::before{content:"Status"}
+
+  #productView #tab-falhas td:nth-child(1)::before{content:"Registro"}
+  #productView #tab-falhas td:nth-child(2)::before{content:"Componente / falha"}
+  #productView #tab-falhas td:nth-child(3)::before{content:"Material"}
+  #productView #tab-falhas td:nth-child(4)::before{content:"Responsável"}
+  #productView #tab-falhas td:nth-child(5)::before{content:"Pendências"}
+  #productView #tab-falhas td:nth-child(6)::before{content:"Links"}
+  #productView #tab-falhas td:nth-child(7)::before{content:"Status"}
+
+  #profileView td:nth-child(1)::before{content:"Registro"}
+  #profileView td:nth-child(2)::before{content:"Produto / família"}
+  #profileView td:nth-child(3)::before{content:"Componente / falha"}
+  #profileView td:nth-child(4)::before{content:"Links"}
+  #profileView td:nth-child(5)::before{content:"Status"}
+
+  .wrap,
+  .secondary-text{
+    max-width:100%!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
   }
 }
 </style>
