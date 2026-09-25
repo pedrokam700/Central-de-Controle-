@@ -3282,7 +3282,9 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
     function closeMobileNavigation(){
       document.body.classList.remove('sidebar-open');
       const toggle = document.querySelector('#mobileNavToggle');
+      const sidebar = document.querySelector('#centralSidebar');
       if(toggle) toggle.setAttribute('aria-expanded','false');
+      if(isMobileUI()) sidebar?.setAttribute('aria-hidden','true');
     }
 
     function openMobileNavigation(){
@@ -3290,7 +3292,9 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
       document.body.classList.add('sidebar-open');
       document.body.classList.remove('sidebar-collapsed');
       const toggle = document.querySelector('#mobileNavToggle');
+      const sidebar = document.querySelector('#centralSidebar');
       if(toggle) toggle.setAttribute('aria-expanded','true');
+      sidebar?.setAttribute('aria-hidden','false');
     }
 
     function closeCoraMobileNavigation(){
@@ -3319,15 +3323,27 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
 
     function syncMobileMode(){
       setMobileVisualViewport();
+      const centralSidebar=document.querySelector('#centralSidebar');
+      const collapse=document.querySelector('#sidebarCollapse');
       if(isMobileUI()){
         document.body.classList.add('mobile-ui');
         // Desktop collapsed state must never shrink a mobile drawer to an icon rail.
         document.body.classList.remove('sidebar-collapsed');
+        if(!document.body.classList.contains('sidebar-open')) centralSidebar?.setAttribute('aria-hidden','true');
+        if(collapse){
+          collapse.title='Fechar navegação';
+          collapse.setAttribute('aria-label','Fechar navegação');
+        }
       }else{
         document.body.classList.remove('mobile-ui','sidebar-open','cora-mobile-nav-open','mobile-modal-open');
         document.documentElement.style.removeProperty('--cora-mobile-drawer-x');
+        centralSidebar?.removeAttribute('aria-hidden');
         const savedCollapse=localStorage.getItem('centralAI.sidebarCollapsed')==='true';
         document.body.classList.toggle('sidebar-collapsed',savedCollapse);
+        if(collapse){
+          collapse.title=savedCollapse?'Expandir menu':'Recolher menu';
+          collapse.setAttribute('aria-label',collapse.title);
+        }
       }
       if(!window.matchMedia(CORA_MOBILE_QUERY).matches) closeCoraMobileNavigation();
       updateMobileModalState();
