@@ -1766,39 +1766,10 @@
         accountInfoEl.textContent = 'Conta não configurada';
       }
 
-      // V15.1.13.23 — autenticação é um estado de tela exclusivo.
-      // A Central nunca pode permanecer visível atrás do login, e nenhuma
-      // superfície de uma sessão anterior pode sobreviver ao logout.
-      const signedIn = authReady && Boolean(currentAccount);
-      if (!signedIn) {
-        document.querySelectorAll('.modal-backdrop').forEach(el => {
-          el.classList.add('hidden');
-          el.classList.remove('mobile-active-surface');
-        });
-        document.body.classList.remove(
-          'mobile-menu-open',
-          'sidebar-open',
-          'cora-mobile-nav-open',
-          'mobile-modal-open',
-          'ai-focus-mode',
-          'cora-route-active'
-        );
-        document.documentElement.classList.remove('cora-route-active');
-        const coraView = document.querySelector('#aiAnalysisView');
-        if (coraView) {
-          coraView.classList.add('hidden');
-          coraView.style.display = '';
-        }
-        selectedId = null;
-        selectedActivityId = null;
-        selectedFlowId = null;
-        selectedOperationalId = null;
-      }
-
-      appEl.classList.toggle('auth-ready', signedIn);
-      // Mantém a tela de autenticação visível inclusive durante a resolução
-      // inicial do Firebase; ela só desaparece quando a sessão está pronta.
-      accountScreenEl.classList.toggle('hidden', signedIn);
+      // O login é uma camada de acesso sobre a Central.
+      // A Central continua montada; a autenticação controla apenas a tela de login.
+      appEl.classList.toggle('auth-ready', authReady && Boolean(currentAccount));
+      accountScreenEl.classList.toggle('hidden', !authReady || Boolean(currentAccount));
     }
 
     
@@ -2241,7 +2212,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.23'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.23'){localStorage.setItem('cora.sw.loaded','15.1.13.23');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.24'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.24'){localStorage.setItem('cora.sw.loaded','15.1.13.24');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3118,25 +3089,76 @@ ${rowsText.slice(0,50000)}`;
     }
 
     function installMobileCentralShell(){
-      if(document.querySelector('#mobileMenuToggle'))return;
       const topbar=document.querySelector('.topbar');
-      const sidebar=document.querySelector('.sidebar');
+      const sidebar=document.querySelector('#centralSidebar')||document.querySelector('.sidebar');
       const app=document.querySelector('.app');
       if(!topbar||!sidebar||!app)return;
-      const btn=document.createElement('button');
-      btn.id='mobileMenuToggle';btn.type='button';btn.className='mobile-menu-toggle';btn.setAttribute('aria-label','Abrir menu');btn.innerHTML='<span></span><span></span><span></span>';
-      topbar.prepend(btn);
-      const overlay=document.createElement('div');overlay.id='mobileMenuOverlay';overlay.className='mobile-menu-overlay';
-      document.body.appendChild(overlay);
-      const syncState=()=>{const open=document.body.classList.contains('mobile-menu-open');btn.setAttribute('aria-label',open?'Fechar menu':'Abrir menu');btn.setAttribute('aria-expanded',String(open));};
-      const close=()=>{document.body.classList.remove('mobile-menu-open');syncState();};
-      const toggleMenu=()=>{document.body.classList.toggle('mobile-menu-open');syncState();};
-      syncState();
-      btn.addEventListener('click',toggleMenu);
+
+      let btn=document.querySelector('#mobileMenuToggle');
+      if(!btn){
+        btn=document.createElement('button');
+        btn.id='mobileMenuToggle';
+        btn.type='button';
+        btn.className='mobile-menu-toggle';
+        btn.setAttribute('aria-controls','centralSidebar');
+        btn.innerHTML='<span></span><span></span><span></span>';
+        topbar.prepend(btn);
+      }
+
+      let overlay=document.querySelector('#mobileMenuOverlay');
+      if(!overlay){
+        overlay=document.createElement('button');
+        overlay.id='mobileMenuOverlay';
+        overlay.type='button';
+        overlay.className='mobile-menu-overlay';
+        overlay.setAttribute('aria-label','Fechar menu');
+        overlay.tabIndex=-1;
+        app.insertBefore(overlay,document.querySelector('.main'));
+      }
+
+      if(btn.dataset.mobileBound==='true')return;
+      btn.dataset.mobileBound='true';
+
+      const isMobile=()=>window.matchMedia('(max-width:860px)').matches;
+      const syncState=()=>{
+        const open=isMobile()&&document.body.classList.contains('mobile-menu-open');
+        btn.setAttribute('aria-label',open?'Fechar menu':'Abrir menu');
+        btn.setAttribute('aria-expanded',String(open));
+        sidebar.setAttribute('aria-hidden',String(isMobile()&&!open));
+      };
+      const close=()=>{
+        document.body.classList.remove('mobile-menu-open');
+        syncState();
+      };
+      const toggleMenu=()=>{
+        if(!isMobile())return;
+        document.body.classList.toggle('mobile-menu-open');
+        syncState();
+      };
+      const syncBreakpoint=()=>{
+        if(isMobile()){
+          document.body.classList.remove('sidebar-collapsed');
+        }else{
+          close();
+          sidebar.removeAttribute('aria-hidden');
+          const saved=localStorage.getItem('centralAI.sidebarCollapsed')==='true';
+          document.body.classList.toggle('sidebar-collapsed',saved);
+        }
+        syncState();
+      };
+
+      btn.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();toggleMenu();});
       overlay.addEventListener('click',close);
-      document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
-      sidebar.addEventListener('click',e=>{if(e.target.closest('.main-nav button,.side-action,.all-reports,.nav-group-toggle'))close();});
-      window.addEventListener('resize',()=>{if(window.innerWidth>860)close();},{passive:true});
+      document.addEventListener('keydown',event=>{if(event.key==='Escape')close();});
+      sidebar.addEventListener('click',event=>{
+        if(!isMobile())return;
+        if(event.target.closest('.main-nav button[data-page],.side-action,.all-reports,.product-btn,[data-family-toggle],[data-base-family][data-base-code]')){
+          setTimeout(close,0);
+        }
+      });
+      window.matchMedia('(max-width:860px)').addEventListener?.('change',syncBreakpoint);
+      window.addEventListener('orientationchange',()=>setTimeout(syncBreakpoint,50),{passive:true});
+      syncBreakpoint();
     }
 
     async function aiRunV14(){
@@ -3278,10 +3300,10 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
     function enforceCentralUIIntegrity(){
       // A collapse control belongs only to the Central sidebar. Remove any legacy/dynamic copy elsewhere.
       document.querySelectorAll('.main > .topbar .sidebar-collapse, .main > .topbar [data-sidebar-collapse], .main > .topbar #sidebarCollapse').forEach(el=>el.remove());
-      // Remove a legacy standalone dash/placeholder from the left side of the Central header.
+      // Remove only explicitly identified legacy placeholders.
+      // The first topbar child is now the real mobile navigation trigger.
       const topbar=document.querySelector('.main > .topbar');
-      const heading=topbar?.firstElementChild;
-      if(heading && !heading.querySelector('.page-title:not(:empty), .page-subtitle:not(:empty)')) heading.remove();
+      topbar?.querySelectorAll('[data-legacy-sidebar-placeholder]').forEach(el=>el.remove());
       document.querySelectorAll('.sidebar .main-nav button[data-page]').forEach(btn=>{
         btn.classList.remove('sidebar-icon-legacy');
       });
@@ -3294,8 +3316,9 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
         const page=btn.dataset.page||'';
         if(!btn.dataset.short) btn.dataset.short=navShortMap[page]||page.slice(0,1).toUpperCase();
       });
+      const mobileShell=()=>window.matchMedia('(max-width:860px)').matches;
       const savedCollapse=localStorage.getItem('centralAI.sidebarCollapsed')==='true';
-      document.body.classList.toggle('sidebar-collapsed',savedCollapse);
+      document.body.classList.toggle('sidebar-collapsed',!mobileShell()&&savedCollapse);
       const toggle=document.querySelector('#sidebarCollapse');
       const updateToggle=()=>{if(!toggle)return;const c=document.body.classList.contains('sidebar-collapsed');toggle.dataset.collapsed=String(c);toggle.title=c?'Expandir menu':'Recolher menu';toggle.setAttribute('aria-label',toggle.title);toggle.setAttribute('aria-expanded',String(!c));};
       if(toggle && toggle.dataset.bound!=='true'){
@@ -3303,6 +3326,12 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
         toggle.addEventListener('click',event=>{
           event.preventDefault();
           event.stopPropagation();
+          if(mobileShell()){
+            document.body.classList.remove('mobile-menu-open');
+            const mobileToggle=document.querySelector('#mobileMenuToggle');
+            if(mobileToggle)mobileToggle.setAttribute('aria-expanded','false');
+            return;
+          }
           const c=!document.body.classList.contains('sidebar-collapsed');
           document.body.classList.toggle('sidebar-collapsed',c);
           localStorage.setItem('centralAI.sidebarCollapsed',String(c));
@@ -3343,7 +3372,6 @@ ${m.text}`).join('\n\n');
       document.querySelector('#aiShareConversationMenu')?.addEventListener('click',()=>{document.querySelector('#aiAddMenu')?.classList.add('hidden');aiShareConversation();});
       document.querySelector('#aiAddButton')?.addEventListener('click',e=>{e.stopPropagation();document.querySelector('#aiAddMenu')?.classList.toggle('hidden');});
       document.querySelector('#aiVoiceButton')?.addEventListener('click',aiToggleVoice);
-      installMobileCentralShell();
       document.addEventListener('click',e=>{if(!e.target.closest('#aiAddMenu')&&!e.target.closest('#aiAddButton'))document.querySelector('#aiAddMenu')?.classList.add('hidden');});
       document.querySelectorAll('[data-ai-add]')?.forEach(b=>b.addEventListener('click',()=>{document.querySelector('#aiAddMenu')?.classList.add('hidden'); if(b.dataset.aiAdd==='image')document.querySelector('#aiImageInput')?.click(); else document.querySelector('#aiFileInput')?.click();}));
       const composer=document.querySelector('#aiContext');
@@ -3454,6 +3482,11 @@ ${m.text}`).join('\n\n');
         document.querySelectorAll('[data-dashboard-indicator]').forEach(card => card.classList.remove('dashboard-indicator-selected'));
       }
       render();
+      if(window.matchMedia('(max-width:860px)').matches){
+        document.body.classList.remove('mobile-menu-open');
+        const mobileToggle=document.querySelector('#mobileMenuToggle');
+        if(mobileToggle)mobileToggle.setAttribute('aria-expanded','false');
+      }
       if (activeView === 'aiAnalysis') {
         enterCoraRoute();
         applyCoraPageLayout(true);
@@ -4399,8 +4432,9 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       });
     }
     try{initV1424Interface();}catch(e){console.warn('Interface V14.22 indisponível:',e);}
+    try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 try{const aiLang=document.querySelector('#aiLanguageSelect');if(aiLang)aiLang.value=currentLanguage;}catch{}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.23'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.23'){localStorage.setItem('cora.sw.loaded','15.1.13.23');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.24'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.24'){localStorage.setItem('cora.sw.loaded','15.1.13.24');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
