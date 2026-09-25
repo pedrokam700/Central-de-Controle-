@@ -1783,8 +1783,9 @@
         selectedFlowId = null;
         selectedOperationalId = null;
       }
-      appEl.classList.toggle('auth-ready', authReady && Boolean(currentAccount));
-      accountScreenEl.classList.toggle('hidden', !authReady || Boolean(currentAccount));
+      const signedIn = authReady && Boolean(currentAccount);
+      appEl.classList.toggle('auth-ready', signedIn);
+      accountScreenEl.classList.toggle('hidden', signedIn);
     }
 
     
