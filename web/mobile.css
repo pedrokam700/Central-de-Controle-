@@ -58,6 +58,43 @@
 
   body.sidebar-open .sidebar{transform:translateX(0)}
 
+  /* A drawer must navigate vertically; legacy tablet rules used a horizontal
+     nav because the sidebar was previously rendered as a page header. */
+  .sidebar .main-nav{
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    gap:4px;
+    width:100%;
+    margin:12px 0 8px;
+    overflow:visible;
+  }
+
+  .sidebar .main-nav > button,
+  .sidebar .main-nav .nav-group,
+  .sidebar .main-nav .nav-group-toggle{
+    width:100%;
+    max-width:100%;
+    min-width:0;
+  }
+
+  .sidebar .main-nav > button,
+  .sidebar .main-nav .nav-group-toggle{
+    justify-content:stretch;
+    text-align:left;
+  }
+
+  .sidebar .side-action,
+  .sidebar .all-reports{
+    display:block;
+    width:100%;
+    margin:8px 0;
+  }
+
+  .sidebar .tree{
+    max-height:none;
+    min-height:0;
+  }
+
   .mobile-nav-toggle{
     display:grid;
     place-items:center;
@@ -243,6 +280,15 @@
   .menu,
   .family-menu{
     max-width:calc(100vw - 24px - var(--safe-left) - var(--safe-right));
+  }
+
+  .save-toast{
+    left:calc(12px + var(--safe-left));
+    right:calc(12px + var(--safe-right));
+    bottom:calc(12px + var(--safe-bottom));
+    width:auto;
+    min-width:0;
+    max-width:none;
   }
 
   /* Mobile creation/editing surfaces own the viewport instead of floating
