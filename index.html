@@ -3548,6 +3548,16 @@ body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:
 .mobile-menu-toggle,
 .mobile-menu-overlay{display:none}
 
+/* Preserve the original desktop topbar layout; only the mobile breakpoint
+   restructures it into two rows. */
+.topbar-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
 @media(max-width:860px){
   html,body{
     width:100%;
@@ -3612,10 +3622,13 @@ body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:
   body.sidebar-collapsed .tree,
   body.sidebar-collapsed .side-action,
   body.sidebar-collapsed .all-reports,
-  body.sidebar-collapsed .side-subnav,
   body.sidebar-collapsed .main-nav .nav-label,
   body.sidebar-collapsed .main-nav .nav-chevron{
     display:revert!important;
+  }
+
+  body.sidebar-collapsed .side-subnav:not(.hidden){
+    display:block!important;
   }
 
   body.sidebar-collapsed .main-nav,
