@@ -1,0 +1,2657 @@
+🧭 MAPA OFICIAL — CENTRAL DE TRABALHO
+Versão-base histórica: V13.8
+Documento de referência do projeto — atualizado em 15/09/2026
+
+Regra principal: o código é a implementação. A documentação é a memória do projeto.
+
+Estado atual: V15.1.13.19 — fluxo universal de Falhas + Reports de Produto + captura rápida CORA.
+Nenhuma nova versão deve ser criada ignorando este mapa. A V13.8 permanece a base histórica; a linha V14.x deve ser validada contra ela.
+
+0. PRINCÍPIO DO PROJETO
+
+A Central de Trabalho é um sistema interno para organizar e rastrear:
+
+falhas de produto;
+falhas operacionais;
+problemas de máquinas/equipamentos;
+atividades;
+fluxos;
+responsabilidades;
+evidências;
+análises;
+colaboração entre pessoas;
+histórico das ocorrências;
+indicadores;
+investigação inteligente com IA (linha V14.x em evolução).
+
+A Central não deve ser apenas um formulário de registro.
+
+Ela deve permitir que uma informação entre no sistema de forma simples e, posteriormente, seja completada, investigada, relacionada e transformada em conhecimento.
+
+1. ARQUITETURA
+CENTRAL DE TRABALHO
+│
+├── AUTENTICAÇÃO
+│   ├── Firebase Authentication
+│   ├── Login
+│   ├── Cadastro
+│   ├── Recuperação de senha
+│   └── Controle de acesso
+│
+├── FRONTEND
+│   ├── HTML
+│   ├── CSS
+│   └── JavaScript
+│
+├── FIREBASE
+│   ├── Authentication
+│   └── Firestore
+│
+├── DADOS
+│   ├── Produtos
+│   ├── Reports
+│   ├── Falhas operacionais
+│   ├── Atividades
+│   ├── Fluxos
+│   └── Usuários
+│
+└── IA / AGENTE (linha V14.x)
+    ├── Backend seguro
+Arquitetura atual
+
+BASE HISTÓRICA (V13.8): aplicação predominantemente frontend web conectada diretamente ao Firebase.
+
+Não existe atualmente um servidor próprio tradicional entre o navegador e o Firestore.
+
+Consequência importante
+
+A evolução da IA não deve colocar chave de API de IA diretamente dentro do HTML.
+
+A futura IA deverá utilizar um backend seguro, por exemplo:
+
+Central
+   ↓
+Backend seguro
+   ↓
+Modelo de IA
+   ↓
+Ferramentas / conhecimento
+2. AUTENTICAÇÃO E USUÁRIOS
+Firebase Authentication
+
+Responsável pela identidade real da pessoa.
+
+E-mail
+Senha
+   ↓
+Firebase Authentication
+   ↓
+UID único
+Firestore — users
+
+O documento do usuário é associado ao UID do Firebase.
+
+Informações principais:
+
+users
+├── uid
+├── name
+├── email
+├── role
+├── disabled
+├── createdAt
+└── updatedAt
+Níveis
+Usuário Normal
+Administrador
+Administrador
+
+Pode:
+
+alterar nível de acesso;
+promover usuário;
+retirar privilégio administrativo;
+desativar usuário;
+reativar usuário;
+administrar registros conforme as regras da Central.
+Regra importante
+
+Usuário duplicado nunca deve ser automaticamente apagado.
+
+Detectar duplicidade é diferente de excluir.
+
+Futuro ideal:
+
+Possível duplicidade
+       ↓
+Comparar perfis
+       ↓
+Administrador decide
+       ↓
+Manter / desativar / corrigir
+3. BANCO DE DADOS
+Coleções principais
+Firestore
+│
+├── users
+├── products
+├── reports
+├── activities
+├── flows
+└── operationalFailures
+
+A V13.8 mantém essas áreas separadas.
+
+4. PRODUTOS
+products
+
+Representa o cadastro estrutural dos produtos.
+
+Conceito:
+
+Família
+   ↓
+Produto
+   ↓
+Componentes
+   ↓
+Reports
+
+A mesma família/produto pode ser utilizada na investigação de diferentes ocorrências.
+
+Regra
+
+Produto é a estrutura.
+
+O problema encontrado não deve ser confundido com o cadastro do produto.
+
+5. REPORT DE PRODUTO
+Conceito oficial
+Report responde:
+
+O que aconteceu?
+
+É o registro inicial da ocorrência.
+
+O objetivo é não deixar problemas desaparecerem simplesmente porque ainda não existe tempo ou informação suficiente para investigá-los.
+
+Um report pode existir mesmo quando:
+
+a causa ainda é desconhecida;
+a prioridade é baixa;
+a investigação ainda não começou;
+faltam evidências;
+ainda não se sabe se é recorrente.
+Informações possíveis
+Produto
+Família
+Componente
+Material
+Descrição do problema
+Quantidade
+Responsável
+Link
+Evidências
+Status
+Histórico
+Análise
+Hipóteses
+Testes
+Causa
+Ação corretiva
+6. ANÁLISE DE FALHAS
+
+A análise deve ser conceitualmente separada do Report.
+
+Report
+
+O que aconteceu?
+
+Análise
+
+Por que aconteceu?
+
+Isso é fundamental para a evolução da Central.
+
+Uma análise pode reunir vários reports
+Report 001 ─┐
+Report 002 ─┤
+Report 003 ─┼──→ ANÁLISE DE FALHA
+Report 004 ─┘
+
+Por exemplo:
+
+Uma mesma falha pode aparecer diversas vezes em reports diferentes e posteriormente ser consolidada em uma investigação.
+
+7. UMA FALHA PODE TER MÚLTIPLAS CAUSAS
+
+A Central não deve obrigar uma investigação a possuir uma única causa.
+
+Exemplo:
+
+Vazamento Battery Cover
+│
+├── Excesso de cola
+├── Cola dupla face não ativou
+├── Falha não encontrada no local
+├── Borracha do speaker danificada
+└── Vazamento pelo anel decorativo
+
+Cada causa pode possuir:
+
+evidência;
+quantidade;
+teste;
+responsável;
+ação;
+status.
+8. PERSPECTIVAS DE INVESTIGAÇÃO
+
+Uma análise pode investigar diferentes dimensões:
+
+ANÁLISE
+│
+├── Produto
+├── Processo / Operação
+├── Máquina / Equipamento
+├── Mão de obra
+├── Material
+├── Fornecedor
+├── Inspeção / Teste
+└── Outros
+Importante
+
+O tipo da ocorrência é contexto inicial.
+
+Não significa automaticamente que seja a causa.
+
+Exemplo:
+
+Falha encontrada em máquina
+
+não significa:
+
+causa = máquina.
+
+A investigação precisa provar a relação.
+
+9. PRINCÍPIO FUNDAMENTAL DA INVESTIGAÇÃO
+
+A Central deve separar:
+
+FATO
+   ≠
+HIPÓTESE
+   ≠
+CAUSA CONFIRMADA
+
+Exemplo:
+
+Fato:
+
+12 peças apresentaram vazamento.
+
+Hipótese:
+
+Pode haver falha na ativação da cola.
+
+Teste:
+
+Verificar ativação da cola nas peças.
+
+Resultado:
+
+6 das 12 apresentaram falha de ativação.
+
+Causa confirmada:
+
+Cola não ativada nas condições identificadas.
+
+Essa distinção deve existir tanto para usuários quanto para a futura IA.
+
+10. PONTO DE DETECÇÃO ≠ PONTO DE GERAÇÃO
+
+Regra importante para RCA.
+
+Onde encontrei
+       ≠
+Onde aconteceu
+
+Exemplo:
+
+Uma câmera pode ser encontrada suja no teste final.
+
+Isso não significa necessariamente que a contaminação nasceu no teste final.
+
+Pode ter ocorrido:
+
+Preparação
+   ↓
+Exposição
+   ↓
+Partícula
+   ↓
+Montagem
+   ↓
+Contaminação
+   ↓
+Teste final detecta
+
+A IA futura deverá raciocinar dessa forma.
+
+11. FALHAS OPERACIONAIS / MÁQUINAS
+
+Coleção:
+
+operationalFailures
+
+Área separada das falhas de produto.
+
+Pode envolver:
+
+máquina;
+equipamento;
+linha;
+estação;
+peça danificada;
+local;
+quantidade;
+motivo;
+hipótese;
+testes;
+causa;
+solução;
+evidência/fotos.
+Conceito
+
+Nem todo problema operacional é necessariamente uma falha do produto.
+
+12. ATIVIDADES
+
+Coleção:
+
+activities
+
+Usada para trabalhos que precisam acontecer.
+
+Exemplos:
+
+enviar e-mail;
+analisar um reparo;
+fazer alinhamento;
+solicitar informação;
+acompanhar pendência;
+organizar reunião.
+
+Possui:
+
+Título
+Tipo
+Área
+Prazo
+Descrição
+Responsável
+Status
+Links
+Histórico
+13. FLUXOS
+
+Coleção:
+
+flows
+
+Utilizados para processos que possuem etapas.
+
+Estrutura conceitual:
+
+FLUXO
+│
+├── Etapa 1
+│   └── Formulário + e-mail
+│
+├── Etapa 2
+│   └── Folha de rosto
+│
+└── Etapa 3
+    └── Seguimento
+
+O sistema calcula o andamento do fluxo a partir das etapas.
+
+14. MINHA CENTRAL
+
+A Minha Central mostra aquilo que precisa da atenção do usuário.
+
+Inclui conceitos como:
+
+Atrasados
+Hoje
+Aguardando
+Próximos
+
+E reúne diferentes tipos de trabalho.
+
+Objetivo:
+
+Não obrigar o usuário a entrar em cada módulo para descobrir o que precisa fazer.
+
+15. CENTRAL DA EQUIPE
+
+Conceito introduzido nas versões posteriores da Central.
+
+Existem diferentes formas de atribuição:
+
+Privado
+
+Somente a pessoa responsável.
+
+Pessoas específicas
+
+Uma ou várias pessoas podem ser responsáveis.
+
+Aberto
+
+Qualquer membro autorizado pode assumir.
+
+Colaboração
+
+Quando uma atividade já está em andamento:
+
+Pessoa A iniciou
+      ↓
+Pessoa B quer participar
+      ↓
+Solicitação de participação
+      ↓
+Permissão
+      ↓
+Colaboração
+
+Isso evita que outra pessoa simplesmente altere o responsável sem controle.
+
+16. EVIDÊNCIAS
+
+Evidências podem acompanhar:
+
+reports;
+análises;
+falhas operacionais;
+investigações.
+
+Exemplos:
+
+fotos;
+documentos;
+links;
+registros.
+Arquitetura atual
+
+A aplicação historicamente utilizou imagens comprimidas/Base64 em registros.
+
+Evolução recomendada
+
+Para escala:
+
+Imagem
+   ↓
+Firebase Storage
+   ↓
+URL / metadata
+   ↓
+Firestore
+
+Não colocar arquivos grandes diretamente dentro dos documentos Firestore.
+
+17. DASHBOARD
+
+O Dashboard é a visão executiva.
+
+Indicadores existentes incluem conceitos como:
+
+total de falhas;
+taxa de resolução;
+falhas críticas/abertas;
+pendências;
+componentes ofensores;
+distribuição de status;
+progresso geral.
+Regra
+
+Clicar em um indicador deve levar ao detalhamento correspondente.
+
+O detalhe não pode desaparecer por causa de um re-render geral.
+
+Esse foi um dos bugs corrigidos durante a evolução V13.
+
+18. INTERFACE
+Princípios
+
+A Central deve ser:
+
+limpa;
+objetiva;
+rápida;
+responsiva;
+utilizável no computador;
+utilizável no celular.
+Desktop
+Sidebar
+   +
+Área principal
+Mobile
+
+Os elementos devem se reorganizar sem perder funcionalidade.
+
+19. PRINCÍPIO DE INTERFACE PARA A IA
+
+A IA não deve começar mostrando uma parede de informações.
+
+A experiência desejada é:
+
+              Assistente
+                  │
+            Conversa simples
+                  │
+          usuário pergunta
+                  │
+          IA responde naturalmente
+                  │
+        ┌─────────┴─────────┐
+        ↓                   ↓
+     expandir             expandir
+     detalhes             evidências
+Não fazer:
+Leitura e raciocínio
+Resumo
+Padrões
+Correlações
+Hipóteses
+RCA
+Ações
+...
+
+para uma mensagem simples como:
+
+"opa"
+
+Uma saudação deve receber uma saudação.
+
+20. IA — OBJETIVO
+
+A futura IA será um assistente de investigação industrial.
+
+Ela deverá compreender conceitos de:
+
+Física
+Eletricidade
+Eletrônica
+Componentes
+PCBA
+Circuitos
+Fontes
+Reguladores
+Sensores
+Processos
+Montagem
+Máquinas
+Testes
+Inspeção
+Qualidade
+Estatística
+RCA
+5 Why
+Ishikawa / 6M
+Causa e efeito
+
+Mas não deve apenas procurar palavras iguais.
+
+Ela deve raciocinar sobre relações.
+
+21. IA — FONTES DE CONHECIMENTO
+
+A IA deverá possuir várias camadas.
+
+                 IA
+                  │
+     ┌────────────┼────────────┐
+     ↓            ↓            ↓
+Conhecimento   Conhecimento   Internet
+ técnico       interno
+     │            │
+     ↓            ↓
+ Física       Central
+ Eletrônica   Reports
+ Processo     Análises
+ etc.         Histórico
+                  │
+                  ↓
+            Correções
+            validadas
+22. CONHECIMENTO INTERNO
+
+A IA deverá aprender com aquilo que os usuários colocam em toda a Central, e não somente na página da IA.
+
+Fontes:
+
+Reports
+Análises
+Falhas operacionais
+Atividades
+Histórico
+Evidências
+Documentos
+Lessons Learned
+Bases Excel
+CSV
+Conversas técnicas
+Correções dos usuários
+23. DOCUMENTOS JÁ ANALISADOS PARA A IA
+
+Já foram considerados como fontes de conhecimento:
+
+Lessons Learned
+
+OLL - Oppo Lessons Lerned.xlsx
+
+Contém informações como:
+
+Sintoma;
+Análise;
+Origem;
+Causa Raiz;
+Plano de ação;
+Status da ação.
+Bases de defeitos
+
+Vários arquivos:
+
+View_Defect_Repair_List...
+
+Contendo informações como:
+
+modelo;
+material;
+linha;
+operação;
+descrição da falha;
+categoria;
+tipo de motivo;
+localização;
+reparo;
+comentários;
+resultado.
+Conversas técnicas
+
+Arquivo de conversas do time de Lean/produção.
+
+Esse tipo de fonte é especialmente importante porque contém contexto que uma tabela normalmente não possui:
+
+Discussões
+↓
+Observações
+↓
+Correções
+↓
+Decisões
+↓
+SOP
+↓
+Testes
+↓
+Conclusões
+24. IA MULTIMODAL
+
+A IA deverá conseguir trabalhar com:
+
+Texto
++
+Imagem
++
+Excel
++
+CSV
++
+Dados da Central
++
+Internet
+Imagem
+
+Não apenas "descrever a foto".
+
+A intenção é utilizar visão para ajudar a identificar:
+
+componentes;
+peças;
+posição;
+desalinhamento;
+dano;
+contaminação;
+condições visuais;
+diferenças entre imagens;
+evidências relacionadas à hipótese.
+
+Sempre distinguindo:
+
+"a imagem mostra"
+
+de:
+
+"isso prova a causa".
+
+25. IA + INTERNET
+
+A IA poderá pesquisar informações externas quando necessário.
+
+Exemplo:
+
+"Esse comportamento desse componente pode causar esse sintoma?"
+
+Ela poderá buscar:
+
+datasheets;
+documentação técnica;
+literatura;
+informações de fabricantes;
+conhecimento técnico público.
+Regra
+
+Informação da internet não vira automaticamente conhecimento interno da empresa.
+
+Fluxo:
+
+Internet
+   ↓
+Informação externa
+   ↓
+IA apresenta fonte
+   ↓
+Usuário valida
+   ↓
+Pode virar conhecimento interno
+26. IA — MEMÓRIA
+
+A IA deverá possuir memória de:
+
+Conversa
+Pergunta
+↓
+Resposta
+↓
+Continuação
+Conhecimento
+
+Informações persistentes.
+
+Correções
+
+Exemplo:
+
+Usuário:
+
+"Não é assim. Nesse processo a pressão no meio não é permitida."
+
+IA:
+
+Recebe correção
+      ↓
+Registra conhecimento
+      ↓
+Relaciona com contexto
+      ↓
+Usa em investigações futuras
+27. CORREÇÃO DA IA
+
+Regra:
+
+IA afirma algo
+      ↓
+Usuário diz que está errado
+      ↓
+IA não insiste
+      ↓
+Pergunta / registra a informação correta
+      ↓
+Conhecimento validado
+      ↓
+Futuras respostas consideram a correção
+
+Mas existe uma proteção:
+
+uma opinião casual não deve automaticamente virar verdade universal.
+
+É necessário distinguir:
+
+correção factual;
+hipótese;
+preferência;
+decisão específica de um processo;
+conhecimento validado.
+28. MOTOR DE INVESTIGAÇÃO DA IA
+
+Fluxo desejado:
+
+DADOS
+  ↓
+ENTENDER
+  ↓
+RESUMIR
+  ↓
+IDENTIFICAR PADRÕES
+  ↓
+ENCONTRAR CORRELAÇÕES
+  ↓
+GERAR HIPÓTESES
+  ↓
+IDENTIFICAR CONTRADIÇÕES
+  ↓
+IDENTIFICAR DADOS AUSENTES
+  ↓
+SUGERIR TESTES
+  ↓
+ANALISAR RESULTADOS
+  ↓
+CAUSA PROVÁVEL
+  ↓
+CAUSA CONFIRMADA PELO USUÁRIO/EVIDÊNCIA
+  ↓
+AÇÃO CORRETIVA
+  ↓
+APRENDIZADO
+29. RACIOCÍNIO MULTICAUSAL
+
+A IA não deve procurar somente:
+
+"Qual é a causa?"
+
+Ela deve poder responder:
+
+"Quais fatores podem estar contribuindo?"
+
+Exemplo:
+
+Falha
+│
+├── Processo
+│   └── excesso de cola
+│
+├── Material
+│   └── característica da borracha
+│
+├── Inspeção
+│   └── falha não encontrada
+│
+└── Produto
+    └── vazamento pelo DECO
+
+Depois ela pode calcular quais possuem mais evidências.
+
+30. APRENDIZADO COM CASOS REAIS
+
+Um caso de investigação pode virar referência futura.
+
+Exemplo:
+
+Caso real
+Battery Cover
+      ↓
+Causa confirmada
+      ↓
+Ação
+      ↓
+Resultado
+      ↓
+Conhecimento interno
+
+Posteriormente:
+
+"Estou tendo um problema parecido."
+
+A IA pode recuperar:
+
+"Existe um caso anterior semelhante..."
+
+Mas deve deixar claro que semelhança não significa mesma causa.
+
+31. ARQUITETURA FUTURA DA IA
+                    ASSISTENTE
+                         │
+              ┌──────────┼──────────┐
+              ↓          ↓          ↓
+            TEXTO      IMAGEM      DADOS
+              │          │          │
+              └──────────┼──────────┘
+                         ↓
+                    ENTENDIMENTO
+                         │
+              ┌──────────┼──────────┐
+              ↓          ↓          ↓
+           CENTRAL     MEMÓRIA    INTERNET
+              │          │          │
+              └──────────┼──────────┘
+                         ↓
+                    RECUPERAÇÃO
+                         ↓
+                    RACIOCÍNIO
+                         ↓
+          ┌──────────────┼──────────────┐
+          ↓              ↓              ↓
+       PADRÕES       HIPÓTESES       TESTES
+          │              │              │
+          └──────────────┼──────────────┘
+                         ↓
+                        RCA
+                         ↓
+                       AÇÕES
+                         ↓
+                    CONHECIMENTO
+32. ARQUITETURA DE DADOS FUTURA DA IA
+
+Conceitualmente:
+
+products
+   ↓
+reports
+   ↓
+failureAnalyses
+   ├── reportsRelacionados[]
+   ├── causas[]
+   ├── testes[]
+   ├── evidências[]
+   ├── ações[]
+   └── histórico[]
+
+Isso deve ser implementado sem destruir a estrutura existente.
+
+33. RAG / BUSCA DE CONHECIMENTO
+
+Para a IA realmente funcionar em escala:
+
+Documentos
+Excel
+CSV
+WhatsApp
+Reports
+Análises
+Lessons Learned
+      ↓
+INGESTÃO
+      ↓
+DIVISÃO EM CONTEÚDOS
+      ↓
+INDEXAÇÃO
+      ↓
+REPRESENTAÇÃO SEMÂNTICA
+      ↓
+BUSCA
+      ↓
+CONTEXTO PARA IA
+
+Firestore sozinho não deve ser tratado como um mecanismo completo de busca semântica para uma base grande.
+
+34. SEGURANÇA DA IA
+
+Nunca:
+
+HTML
+ ↓
+API KEY DA IA
+
+Correto:
+
+HTML
+ ↓
+Backend seguro
+ ↓
+API da IA
+
+A chave fica no servidor.
+
+35. HISTÓRICO DE VERSÕES
+V7
+ ↓
+V8
+ ↓
+V9
+ ↓
+V10
+ ↓
+V11
+ ↓
+V12
+ ↓
+V13
+ ↓
+V13.1
+ ↓
+V13.2
+ ↓
+V13.3
+ ↓
+V13.4
+ ↓
+V13.5
+ ↓
+V13.6
+ ↓
+V13.7
+ ↓
+V13.8
+ ↓
+V14.x — evolução da IA
+36. V7 → V13.8 — EVOLUÇÃO CONCEITUAL
+V7
+
+Base da Central e separação das categorias de falha.
+
+V8
+
+Alterações de estrutura.
+
+V9
+
+Evoluções posteriores, com perda de alguns elementos da V7.
+
+V10
+
+Recuperação/união das funcionalidades.
+
+V11
+
+Continuidade da estrutura.
+
+V12
+
+Grande evolução para:
+
+colaboração;
+Minha Central;
+Central da equipe;
+atribuições;
+participação;
+atividades;
+fluxos;
+falhas operacionais/máquinas.
+V13
+
+Evolução de:
+
+Dashboard;
+indicadores;
+detalhes;
+histórico;
+evidências;
+edição;
+salvamento;
+estabilidade.
+V13.8
+
+BASE OFICIAL DE REFERÊNCIA.
+
+37. BUGS HISTÓRICOS IMPORTANTES
+Dashboard
+
+Houve problema em indicadores que não abriam detalhes corretamente.
+
+Causa identificada:
+
+dashboardIndicatorItem()
+        ↓
+formatDateTime()
+        ↓
+função inexistente
+
+Foi corrigido.
+
+Re-render do Dashboard
+
+Um render geral podia apagar o detalhe aberto.
+
+Foi criado controle para evitar que uma atualização geral destruísse o painel selecionado.
+
+Salvamento de falha
+
+Foi identificado problema envolvendo:
+
+tipo_falha
+
+e também risco de documentos grandes por causa de imagens Base64.
+
+Correções foram feitas na linha de evolução V13.
+
+Mobile
+
+Houve ajustes de:
+
+modal;
+rolagem;
+detalhes;
+indicadores;
+disposição dos elementos.
+38. BUG ATUAL DA LINHA V14
+NÃO É BASE ESTÁVEL.
+
+As versões V14.x criadas durante a evolução da IA apresentaram um problema de autenticação.
+
+Sintoma:
+
+Usuário digita e-mail
+       ↓
+Senha
+       ↓
+Entrar
+       ↓
+Campos desaparecem
+       ↓
+Usuário continua no login
+
+Esse problema não deve ser incorporado à V13.8 como se fosse uma característica da base oficial.
+
+A investigação deve partir da comparação:
+
+V13.8 funcionando
+       ↓
+mudanças V14
+       ↓
+identificar exatamente o ponto que quebrou
+
+E não continuar empilhando correções sobre uma V14 quebrada.
+
+39. REGRA DE PRESERVAÇÃO
+
+Toda nova versão precisa ter cinco categorias:
+
+NOVO +
+
+O que foi adicionado.
+
+ALTERADO ~
+
+O que mudou.
+
+CORRIGIDO ✓
+
+O que foi corrigido.
+
+PRESERVADO =
+
+O que foi explicitamente verificado e continua funcionando.
+
+NÃO ALTERAR !
+
+O que não pode ser modificado durante aquela evolução.
+
+40. PROCESSO OBRIGATÓRIO DE DESENVOLVIMENTO
+
+Quando surgir:
+
+"Adicione X"
+
+o processo será:
+
+1. Entender solicitação
+        ↓
+2. Consultar mapa
+        ↓
+3. Consultar arquitetura
+        ↓
+4. Consultar regras
+        ↓
+5. Consultar histórico de bugs
+        ↓
+6. Verificar código atual
+        ↓
+7. Implementar
+        ↓
+8. Verificar impacto
+        ↓
+9. Testar sintaxe
+        ↓
+10. Testar funções afetadas
+        ↓
+11. Atualizar documentação
+        ↓
+12. Registrar versão
+        ↓
+13. Gerar arquivo
+41. REGRA DE OURO DAS VERSÕES
+
+Nunca construir uma versão nova simplesmente em cima da memória da conversa.
+
+Sempre:
+
+VERSÃO ANTERIOR
++
+MAPA OFICIAL
++
+SOLICITAÇÃO NOVA
+=
+NOVA VERSÃO
+
+E não:
+
+memória da conversa
++
+alteração rápida
+=
+nova versão
+42. O QUE NÃO PODE ACONTECER
+❌ Adicionar uma função e remover outra sem perceber.
+❌ Alterar uma regra existente para fazer uma nova função funcionar.
+❌ Apagar usuários automaticamente.
+❌ Migrar dados sem verificar duplicidade.
+❌ Transformar hipótese em causa confirmada.
+❌ Transformar informação da internet em conhecimento interno automaticamente.
+❌ Fazer a IA analisar uma simples saudação.
+❌ Colocar toda a informação da IA na tela de uma vez.
+❌ Colocar chave de API no frontend.
+❌ Colocar arquivos grandes diretamente no Firestore.
+❌ Considerar uma V14 experimental como substituta da V13.8 antes de validação.
+43. ESTADO OFICIAL DO PROJETO
+Área	Estado
+Autenticação	Existente na base V13.8
+Usuários	Existente
+Produtos	Existente
+Reports	Existente
+Falhas operacionais	Existente
+Atividades	Existente
+Fluxos	Existente
+Minha Central	Existente
+Central da equipe	Existente/evoluída nas versões recentes
+Colaboração	Existente/evoluída nas versões recentes
+Dashboard	Existente
+Evidências	Existente
+Histórico	Existente
+Análise estruturada de falhas	Em evolução
+IA conversacional	Protótipo V14
+IA multimodal real	Arquitetura planejada
+IA com internet	Arquitetura planejada
+Memória persistente da IA	Em evolução
+RAG/base semântica	Ainda não implementado
+Backend seguro de IA	Ainda não implementado
+Aprendizado com correções	Conceito definido; implementação precisa amadurecer
+44. ROADMAP OFICIAL
+BASE
+V13.8
+ │
+ ├── Estabilizar autenticação
+ │
+ ├── Garantir preservação das funções
+ │
+ ├── Documentação
+ │
+ ↓
+V14
+ │
+ ├── Assistente
+ ├── Memória
+ ├── Histórico
+ ├── Conhecimento interno
+ └── Interface conversacional
+ │
+ ↓
+V15
+ │
+ ├── Backend seguro
+ ├── IA real
+ ├── Multimodal
+ ├── RAG
+ └── Busca na Central
+ │
+ ↓
+V16
+ │
+ ├── Internet
+ ├── Documentos
+ ├── Excel/CSV
+ ├── Imagens
+ └── conhecimento técnico integrado
+ │
+ ↓
+V17+
+ │
+ ├── Investigação automática
+ ├── correlação entre falhas
+ ├── RCA assistido
+ ├── aprendizado validado
+ └── inteligência industrial
+45. VISÃO FINAL DA CENTRAL
+
+O projeto não deve terminar como:
+
+"um sistema para registrar falhas."
+
+A visão é:
+
+                 CENTRAL DE TRABALHO
+                         │
+        ┌────────────────┼────────────────┐
+        ↓                ↓                ↓
+     REGISTRAR       ORGANIZAR        INVESTIGAR
+        │                │                │
+        ↓                ↓                ↓
+      Reports         Trabalho           IA
+      Falhas          Equipe          Conhecimento
+      Evidências      Atividades      RCA
+        │                │                │
+        └────────────────┼────────────────┘
+                         ↓
+                    HISTÓRICO
+                         ↓
+                   CONHECIMENTO
+                         ↓
+                   APRENDIZADO
+                         ↓
+                 MELHORIA CONTÍNUA
+🧠 PRINCÍPIO CENTRAL
+
+A Central registra o que aconteceu.
+A investigação descobre por que aconteceu.
+O histórico evita que o conhecimento seja perdido.
+A IA conecta tudo isso para ajudar a investigar problemas futuros.
+
+46. DOCUMENTO-MESTRE DE DESENVOLVIMENTO
+
+A partir deste mapa, cada nova versão deverá começar com:
+
+CENTRAL DE TRABALHO
+Versão anterior: V13.8
+Nova versão: Vxx
+
+NOVO
++
+
+ALTERADO
+~
+
+CORRIGIDO
+✓
+
+PRESERVADO
+=
+
+NÃO ALTERAR
+!
+
+E antes de entregar o arquivo:
+
+☐ Arquitetura preservada
+☐ Regras preservadas
+☐ Firestore preservado
+☐ Usuários preservados
+☐ Produtos preservados
+☐ Reports preservados
+☐ Falhas operacionais preservadas
+☐ Atividades preservadas
+☐ Fluxos preservados
+☐ Dashboard preservado
+☐ Colaboração preservada
+☐ Evidências preservadas
+☐ Mobile preservado
+☐ Sintaxe validada
+☐ Nova funcionalidade testada
+☐ Documentação atualizada
+☐ Registro da versão criado
+
+Este passa a ser o mapa de referência da Central.
+
+47. LINHA V14.x — ESTADO ATUAL DO AGENTE
+==================================================
+
+Versão atual de referência:
+V14.26 — CORA / Agent Cognitivo / Modo Foco
+
+Data de atualização:
+10/09/2026
+
+Regra:
+A V13.8 continua sendo a BASE HISTÓRICA OFICIAL.
+A V14.x é a linha de evolução da IA e da interface do Assistente.
+Nenhuma funcionalidade estrutural da V13.8 deve ser removida ou alterada sem comparação e validação explícitas.
+
+47.1. IDENTIDADE DO ASSISTENTE
+
+Nome curto adotado:
+CORA
+
+Significado:
+Central de Orientação e Raciocínio Assistido
+
+Nome funcional exibido:
+Assistente de Investigação
+
+Princípio:
+CORA deve agir como parceiro de investigação industrial, não como um chatbot que simplesmente responde à última frase.
+
+47.2. PRINCÍPIO COGNITIVO CENTRAL
+
+A IA possui acesso amplo às fontes, mas NÃO deve usar todas as fontes em todas as perguntas.
+
+Regra:
+
+ACESSO AMPLO
++
+SELEÇÃO ADAPTATIVA
++
+RELEVÂNCIA CONTEXTUAL
++
+SÍNTESE PROPORCIONAL À PERGUNTA
+=
+INTELIGÊNCIA ÚTIL
+
+A presença de uma palavra em comum não é evidência de relevância.
+
+Exemplo:
+"LCD com vazamento no CPH2817"
+não deve puxar automaticamente:
+"CPH2817 + P-Sensor"
+apenas porque o produto/família coincide.
+
+Por outro lado:
+outro produto + mesmo componente + mesmo mecanismo + mesmo modo de falha
+pode ser altamente relevante para comparação.
+
+47.3. MODELO DE RELEVÂNCIA
+
+Antes de utilizar uma informação recuperada, a IA deve avaliar:
+
+1. Relação com a pergunta atual
+2. Produto / família / componente
+3. Modo de falha
+4. Mecanismo técnico plausível
+5. Processo / operação / estação
+6. Evidência disponível
+7. Similaridade com casos anteriores
+8. Possibilidade de relação causal
+9. Conflitos com fontes já aceitas
+10. Utilidade real para a decisão atual
+
+Regra:
+SIMILARIDADE ≠ RELEVÂNCIA ≠ CAUSA
+
+47.4. FONTES ADAPTATIVAS
+
+Fontes disponíveis à IA:
+
+- conversa atual;
+- histórico da conversa;
+- memória estruturada;
+- dados da Central;
+- reports;
+- análises;
+- falhas operacionais;
+- atividades;
+- fluxos;
+- histórico de ocorrências;
+- evidências;
+- fotos;
+- documentos;
+- Excel / CSV;
+- Lessons Learned;
+- conhecimento técnico;
+- internet / fontes externas;
+- ferramentas / Function Calling;
+- estado da interface quando necessário.
+
+A IA escolhe dinamicamente quais fontes consultar.
+
+Exemplos:
+
+Pergunta simples:
+conhecimento do modelo → resposta direta.
+
+Pergunta sobre um produto:
+Central + conversa + memória.
+
+Investigação de causa:
+Central + histórico + casos semelhantes + evidências + comparação + internet, se necessário.
+
+Pergunta sem cobertura interna:
+Central → informar ausência relevante → complementar externamente, quando fizer sentido.
+
+47.5. PROFUNDIDADE ADAPTATIVA
+
+A profundidade da investigação deve acompanhar a complexidade da pergunta.
+
+Não fazer:
+
+Pergunta simples
+→ busca extensa
+→ dezenas de fontes
+→ relatório gigante
+
+Fazer:
+
+Pergunta simples
+→ resposta curta.
+
+Pergunta técnica
+→ explicação + evidências pertinentes.
+
+Investigação complexa
+→ pesquisa multidimensional + comparação + hipóteses.
+
+Conflito
+→ investigação adicional + pergunta discriminatória.
+
+47.6. COMUNICAÇÃO PROGRESSIVA
+
+A IA deve investigar amplamente nos bastidores e responder de forma proporcional.
+
+Resposta padrão:
+curta, direta e útil.
+
+Aprofundamento:
+somente quando necessário ou solicitado.
+
+A IA pode encerrar com:
+"Posso aprofundar essa comparação."
+"Quer que eu investigue a causa mais provável?"
+"Preciso de uma evidência para separar estas duas hipóteses."
+
+Nunca despejar automaticamente:
+resumo + padrões + correlações + hipóteses + RCA + ações
+para uma pergunta simples.
+
+47.7. STATUS OPERACIONAL SEGURO
+
+Durante investigação longa, a interface pode mostrar estados operacionais, sem revelar raciocínio privado.
+
+Exemplos:
+
+🔍 Verificando registros relevantes...
+🔄 Comparando ocorrências semelhantes...
+🖼️ Analisando evidências visuais...
+🌐 Consultando informação externa...
+⚖️ Verificando conflito entre fontes...
+🧩 Consolidando evidências...
+
+Não exibir Chain of Thought privado.
+
+47.8. PERGUNTAS DISCRIMINATÓRIAS
+
+Quando duas ou mais hipóteses plausíveis entrarem em conflito, a IA deve procurar a informação que melhor separa as hipóteses.
+
+Fluxo:
+
+CONFLITO
+↓
+IDENTIFICAR HIPÓTESES
+↓
+IDENTIFICAR EVIDÊNCIA QUE AS DIFERENCIA
+↓
+FAZER UMA PERGUNTA OBJETIVA
+↓
+ATUALIZAR HIPÓTESES
+↓
+CONTINUAR INVESTIGAÇÃO
+
+Nunca escolher uma causa apenas porque uma fonte parece mais parecida.
+
+47.9. MAPA ZERO / AUSÊNCIA DE COBERTURA
+
+Quando nenhuma informação interna relevante for encontrada, a IA deve declarar o limite.
+
+Exemplo:
+
+"Não encontrei registro histórico relevante na Central para esta combinação. Posso complementar com conhecimento técnico externo."
+
+Regra:
+ausência de registro interno não pode ser transformada em fato inventado.
+
+47.10. HIERARQUIA DE CONHECIMENTO
+
+🟢 CONHECIMENTO VALIDADO
+Fato confirmado e autorizado como conhecimento da Central.
+
+🟡 EVIDÊNCIA
+Dado, foto, medição ou registro observado.
+
+🔵 CONHECIMENTO EXTERNO
+Informação técnica de fonte externa.
+
+🟠 HIPÓTESE
+Possibilidade ainda em investigação.
+
+🔴 CONFLITO
+Fontes ou evidências divergentes.
+
+Regra:
+hipótese não vira causa confirmada automaticamente.
+
+47.11. MEMÓRIA GOVERNADA
+
+A IA pode aprender com a utilização da Central, mas aprendizado persistente precisa de governança.
+
+Usuário comum / Técnico / Operador:
+- registra evidências;
+- registra observações;
+- registra hipóteses;
+- propõe correções.
+
+Perfil autorizado / Engenharia / Especialista:
+- valida conhecimento;
+- promove informação para conhecimento validado;
+- corrige conhecimento incorreto quando comprovado.
+
+Regra:
+uma frase dita casualmente não vira verdade universal.
+
+47.12. APRENDIZADO DE CASOS REAIS
+
+Investigação concluída pode gerar conhecimento reutilizável.
+
+Caso:
+Sintoma
+↓
+Evidências
+↓
+Hipóteses
+↓
+Testes
+↓
+Causa confirmada
+↓
+Ação
+↓
+Resultado
+↓
+Conhecimento validado
+
+Quando recuperado futuramente:
+"A Central possui um caso semelhante."
+
+Nunca:
+"Este é o mesmo problema."
+
+47.13. MULTIMODAL
+
+A IA deve trabalhar com:
+
+Texto + Imagem + Documento + Excel/CSV + Dados da Central + Web
+
+Visão computacional deve distinguir:
+
+A imagem mostra:
+- componente;
+- posição;
+- dano;
+- desalinhamento;
+- contaminação;
+- característica visual;
+- diferença entre imagens.
+
+Isso prova a causa:
+somente se houver evidência adicional suficiente.
+
+47.14. BUSCA / RAG
+
+Arquitetura atual da linha V14.x:
+
+Documentos / Central / Histórico / Evidências
+↓
+INGESTÃO
+↓
+CHUNKING / NORMALIZAÇÃO
+↓
+INDEXAÇÃO
+↓
+REPRESENTAÇÃO SEMÂNTICA
++
+RECUPERAÇÃO LEXICAL
+↓
+RAG HÍBRIDO
+↓
+FILTRO DE RELEVÂNCIA
+↓
+CONTEXTO FINAL PARA O MODELO
+
+Estado observado na V14.24:
+hybridRag = true
+relevanceFirewall = true
+adaptiveSources = true
+
+Regra:
+RAG é mecanismo de recuperação.
+O modelo ainda deve decidir se o conteúdo recuperado realmente se aplica.
+
+47.15. MULTI-PROVIDER
+
+A Central possui arquitetura para múltiplos provedores:
+
+GEMINI
++
+OPENAI
+
+Princípio:
+
+Provedor principal
+↓
+Fallback / segunda opinião
+↓
+Consolidação
+
+O sistema deve permitir:
+- fallback por erro;
+- fallback por timeout;
+- segunda opinião independente;
+- comparação de hipóteses;
+- uso de ferramentas compatíveis com cada provedor.
+
+Chaves:
+DEVEM ficar somente no backend / .env.
+NUNCA no frontend.
+
+Modelos:
+devem ser configuráveis por variável de ambiente, sem amarrar a aplicação a um único modelo.
+
+47.16. DUPLA VERIFICAÇÃO
+
+Para investigações complexas, um segundo modelo pode revisar:
+
+- salto lógico;
+- evidência ausente;
+- hipótese fraca;
+- conflito;
+- interpretação excessiva;
+- conclusão incompatível com os dados.
+
+A segunda opinião não substitui a primeira automaticamente.
+
+Fluxo:
+
+Investigação principal
+↓
+Revisão independente
+↓
+Comparação
+↓
+Convergência / conflito
+↓
+Resposta final
+
+Estado:
+implementado na arquitetura da linha V14.x;
+deve ser verificado em runtime antes de ser considerado 100% validado.
+
+47.17. FUNCTION CALLING / FERRAMENTAS
+
+O agente possui arquitetura para ferramentas como:
+
+- consultar registros da Central;
+- encontrar falhas semelhantes;
+- recuperar estado da investigação;
+- criar ação;
+- navegar na interface;
+- consultar outras fontes;
+- interagir com elementos da página quando autorizado.
+
+Regra de segurança:
+ações que alteram dados devem exigir autorização/confirmacão quando apropriado.
+
+Exemplo:
+
+Usuário:
+"Crie uma ação para verificar o fornecedor."
+
+IA:
+"Posso criar a ação X. Confirmar?"
+
+Somente depois:
+execução.
+
+47.18. AGENTE DE INTERFACE / DOM
+
+A linha V14.x possui agente capaz de observar elementos interativos e executar ações controladas na interface.
+
+Capacidades:
+
+- clicar;
+- preencher;
+- rolar;
+- navegar;
+- observar novo estado;
+- corrigir estratégia quando a execução falhar.
+
+Regra:
+não dar acesso irrestrito a ações perigosas.
+
+Prioridade:
+ferramentas semânticas da Central têm preferência sobre cliques genéricos quando uma ação equivalente existir.
+
+47.19. INTERFACE — CORA / MODO FOCO
+
+Ao abrir o Assistente:
+
+MODO FOCO
+↓
+a navegação global da Central sai da área principal
+↓
+CORA ocupa a tela de trabalho
+
+Elemento de retorno:
+←
+
+Objetivo:
+maximizar a área de conversa.
+
+47.20. BARRA LATERAL DO ASSISTENTE
+
+A barra deve iniciar compacta, mas ser legível quando expandida.
+
+Conteúdo:
+
+- CORA / Assistente
+- Nova conversa
+- Conversa
+- Histórico
+- Memória
+- Como me usar
+
+Padrão:
+painel compacto / rail quando possível.
+
+Expansão:
+permitir leitura integral das funções sem ocupar permanentemente a maior parte da tela.
+
+47.21. CONVERSA — HIERARQUIA VISUAL
+
+A conversa é a área dominante.
+
+Regra:
+
+HEADER
+↓
+CONVERSA = MAIOR ÁREA
+↓
+COMPOSER
+
+O título "Vamos investigar" é informação de entrada:
+deve ser compacto e perder protagonismo quando a conversa começar.
+
+O contexto automático deve ser compacto e expansível.
+
+47.22. CONTEXTO AUTOMÁTICO
+
+Padrão:
+ATIVO
+
+Texto conceitual:
+
+"A IA decide quais fontes são relevantes para cada pergunta."
+
+O usuário não precisa ligar:
+- Central;
+- Web;
+- Memória;
+- RAG.
+
+O agente decide.
+
+Controle técnico/manual:
+somente em configurações avançadas.
+
+47.23. COMPOSER
+
+Estado vazio:
+baixo e discreto.
+
+Ao escrever:
+expande verticalmente.
+
+Limite:
+crescimento até altura confortável;
+depois utiliza rolagem interna.
+
+Objetivo:
+imitar o comportamento confortável de interfaces modernas de conversa sem dominar a tela quando vazio.
+
+47.24. MENU DE ADIÇÃO / EVIDÊNCIAS
+
+O botão "+" pode abrir:
+
+- Adicionar fotos;
+- Adicionar arquivo;
+- Compartilhar conversa;
+- Inserir evidência;
+- outras ferramentas compatíveis.
+
+O usuário adiciona evidências quando quiser.
+A IA continua responsável por decidir como combinar essas evidências com as demais fontes.
+
+47.25. HISTÓRICO DE CONVERSAS
+
+Estrutura:
+
+CONVERSAS
+├── Fixadas
+└── Recentes
+
+Capacidades:
+
+- abrir conversa;
+- continuar conversa;
+- fixar;
+- desafixar;
+- preservar histórico;
+- identificar conversa atual.
+
+Regra:
+histórico não pode ser perdido por re-render da interface.
+
+47.26. COMO ME USAR
+
+"Como me usar" permanece como a última opção da barra lateral.
+
+Fechado por padrão.
+
+Quando aberto, deve explicar:
+
+1. Conte o problema.
+2. Adicione evidências quando necessário.
+3. Converse com a IA.
+4. A IA cruza fontes relevantes automaticamente.
+5. Peça aprofundamento quando quiser.
+
+Objetivo:
+um usuário novo deve entender o Assistente sem precisar conhecer a arquitetura de IA.
+
+48. PRESERVAÇÃO DA CENTRAL DURANTE A EVOLUÇÃO V14.x
+==================================================
+
+Não alterar sem validação:
+
+- autenticação;
+- usuários;
+- produtos;
+- reports;
+- falhas operacionais;
+- atividades;
+- fluxos;
+- Minha Central;
+- Central da equipe;
+- colaboração;
+- Dashboard;
+- evidências;
+- histórico;
+- mobile;
+- regras de negócio;
+- estrutura Firestore.
+
+A IA deve ser adicionada sobre a Central, não substituir a Central.
+
+49. TESTES OBRIGATÓRIOS PARA A LINHA V14.x
+==================================================
+
+Antes de declarar uma versão pronta:
+
+49.1. TESTE DE SERVIDOR
+- npm install
+- npm start
+- /api/health
+- verificar ausência de erro de inicialização
+
+49.2. TESTE DE PROVEDORES
+- Gemini responde
+- OpenAI responde
+- fallback funciona
+- timeout funciona
+- nenhuma chave aparece no frontend
+
+49.3. TESTE DE RAG
+- busca encontra caso exato
+- caso semanticamente relacionado pode aparecer
+- caso apenas lexicalmente parecido pode ser descartado
+- busca zero é comunicada
+- RAG híbrido está ativo quando requerido
+
+49.4. TESTE DE CONTEXTO
+- conversa preserva contexto
+- memória relevante entra
+- informação irrelevante não entra
+- pergunta simples não dispara investigação excessiva
+
+49.5. TESTE DE INVESTIGAÇÃO
+- ponto de detecção ≠ ponto de geração
+- fato ≠ hipótese ≠ causa confirmada
+- múltiplas causas são permitidas
+- conflito gera pergunta discriminatória
+- dados ausentes são explicitados
+
+49.6. TESTE MULTIMODAL
+- imagem chega ao modelo
+- atributos visuais são extraídos
+- interpretação não é confundida com prova de causa
+
+49.7. TESTE DE AÇÕES
+- ferramenta correta é selecionada
+- alteração de dados exige confirmação quando necessário
+- falha de execução devolve observação ao agente
+- agente consegue recuperar de ação inválida
+
+49.8. TESTE DE INTERFACE
+- modo foco
+- barra lateral compacta
+- conversa domina a tela
+- composer cresce quando digitado
+- contexto automático é compacto/expansível
+- "Como me usar" inicia fechado
+- histórico permite fixar conversas
+- Dark Mode cobre todas as superfícies
+- não existem scrollbars desnecessárias
+
+50. LIÇÕES E BUGS DA LINHA V14.x
+==================================================
+
+50.1. ERRO useWeb
+
+Foi identificado em uma chamada de teste:
+"useWeb is not defined"
+
+Impacto:
+a rota /api/failure-analysis não executava corretamente.
+
+Regra aprendida:
+toda nova variável opcional deve possuir valor padrão seguro e ser coberta por teste de execução, não apenas por teste de sintaxe.
+
+50.2. .ENV EM NOVAS EXTRAÇÕES
+
+As versões ZIP não devem conter chaves secretas.
+
+Consequência:
+o .env precisa ser criado/copied no novo ambiente.
+
+Regra:
+documentar claramente:
+ZIP
+↓
+.env local
+↓
+npm install
+↓
+npm start
+↓
+health check
+
+50.3. RAG HÍBRIDO
+
+Foi observado durante a transição da V14.22:
+hybridRag = false
+
+Depois:
+hybridRag = true
+
+Regra:
+um recurso declarado no código só é considerado funcional depois de confirmado em /api/health e em teste real.
+
+50.4. EXCESSO DE PESQUISA PARA PERGUNTAS SIMPLES
+
+Teste:
+"Qual é a função de um P-Sensor?"
+
+A OpenAI retornou muitas fontes externas.
+
+Lição:
+não é suficiente ter pesquisa disponível.
+A IA deve decidir quando a pesquisa é necessária.
+
+50.5. RELEVÂNCIA POR PALAVRA
+
+Problema identificado:
+casos semelhantes eram recuperados por palavras/produto compartilhado, mesmo sem relação causal.
+
+Correção conceitual:
+relevanceFirewall + avaliação contextual.
+
+50.6. INTERFACE DO ASSISTENTE
+
+Problemas encontrados:
+- header ocupando espaço;
+- contexto automático ocupando espaço;
+- conversa pequena;
+- composer grande quando vazio;
+- múltiplas áreas competindo visualmente.
+
+Correção conceitual:
+Modo Foco + conversa dominante + sidebar compacta + contexto sob demanda + composer expansível.
+
+51. MATRIZ DE ESTADO ATUAL — V14.26
+==================================================
+
+Área | Estado
+
+Autenticação | Base V13.8 preservada; runtime da linha V14.x deve ser validado
+Usuários | Preservado
+Produtos | Preservado
+Reports | Preservado
+Falhas operacionais | Preservado
+Atividades | Preservado
+Fluxos | Preservado
+Minha Central | Preservado
+Central da equipe | Preservado
+Colaboração | Preservado
+Dashboard | Preservado
+Evidências | Preservado
+Histórico | Preservado
+
+Assistente conversacional | Implementado
+Memória de conversa | Implementado
+Memória governada | Arquitetura implementada; validar fluxos completos
+RAG híbrido | Implementado / runtime confirmado nas versões recentes
+Relevance Firewall | Implementado
+Fontes adaptativas | Implementado
+Busca zero | Implementado
+Multimodal | Arquitetura/implementação em evolução; validar com imagens reais
+Internet | Disponível quando configurada; ativação deve ser adaptativa
+Function Calling | Implementado
+Agente DOM | Implementado
+Streaming | Implementado
+Markdown | Implementado
+Retry | Implementado
+Fallback multi-provider | Implementado
+Gemini | Configurado
+OpenAI | Configurado
+Dupla verificação | Arquitetura implementada; runtime deve ser validado
+Investigação multicausal | Implementado conceitualmente
+Perguntas discriminatórias | Implementado conceitualmente / validar com conflito real
+Interface CORA / Modo Foco | Implementado na V14.26
+Histórico com fixação | Implementado na V14.26
+"Como me usar" expansível | Implementado na V14.26
+
+52. ROADMAP ATUALIZADO
+==================================================
+
+BASE
+V13.8
+ │
+ ├── Preservação da estrutura
+ ├── Regras de negócio
+ ├── Firestore
+ ├── Usuários
+ ├── Dashboard
+ └── funcionalidades da Central
+ │
+ ↓
+V14.x — AGENTE COGNITIVO
+ │
+ ├── Assistente conversacional
+ ├── Memória
+ ├── RAG
+ ├── busca contextual
+ ├── multimodal
+ ├── internet
+ ├── Function Calling
+ ├── Multi-provider
+ ├── relevância
+ ├── governança
+ ├── agente de interface
+ └── CORA / Modo Foco
+ │
+ ↓
+V14.x PRÓXIMOS PASSOS
+ │
+ ├── validar dupla verificação em casos reais
+ ├── validar visão com fotos reais
+ ├── validar comparação entre produtos
+ ├── validar perguntas discriminatórias
+ ├── validar memória governada
+ ├── validar ações com confirmação
+ ├── validar ingestão de documentos/Excel/CSV em escala
+ └── validar preservação completa da base V13.8
+ │
+ ↓
+V15+
+ │
+ ├── Backend seguro de produção
+ ├── indexação semântica escalável
+ ├── conhecimento técnico integrado
+ ├── investigação automática assistida
+ ├── correlação entre falhas
+ ├── RCA assistida
+ ├── ações inteligentes
+ └── aprendizado validado em escala
+ │
+ ↓
+VISÃO FINAL
+INTELIGÊNCIA INDUSTRIAL DA CENTRAL
+
+53. REGRA-MESTRE DA IA
+==================================================
+
+A IA deve ser:
+
+AMPLAMENTE INFORMADA
++
+SELETIVA NA RECUPERAÇÃO
++
+CRÍTICA NA RELEVÂNCIA
++
+CAUTELOSA COM CAUSAS
++
+EXPLÍCITA SOBRE INCERTEZA
++
+PROPORCIONAL NA RESPOSTA
++
+CAPAZ DE APRENDER COM GOVERNANÇA
+
+Ela deve investigar profundamente quando necessário,
+mas nunca confundir profundidade interna com excesso de informação entregue ao usuário.
+
+54. REGRA-MESTRE DA INTERFACE
+==================================================
+
+A Central é o sistema.
+CORA é o assistente.
+
+A interface deve:
+
+- privilegiar a tarefa atual;
+- reduzir elementos permanentes;
+- manter a conversa como área dominante;
+- revelar detalhes sob demanda;
+- preservar a identidade visual da Central;
+- funcionar no desktop e mobile;
+- não exigir que o usuário conheça a arquitetura interna para usar a IA.
+
+55. REGRA-MESTRE DO DESENVOLVIMENTO
+==================================================
+
+V13.8 / versão anterior validada
++
+MAPA OFICIAL
++
+SOLICITAÇÃO NOVA
++
+CÓDIGO REAL
+=
+NOVA VERSÃO VALIDADA
+
+Nunca:
+
+memória da conversa
++
+alteração rápida
+=
+versão oficial
+
+56. CHECKLIST-MESTRE V14.x
+==================================================
+
+Antes de entregar:
+
+☐ Versão anterior identificada
+☐ Mapa consultado
+☐ Arquitetura consultada
+☐ Regras consultadas
+☐ Bugs históricos consultados
+☐ Código anterior verificado
+☐ Funcionalidades existentes preservadas
+☐ Nova funcionalidade implementada
+☐ Sintaxe validada
+☐ Runtime validado
+☐ /api/health validado
+☐ Gemini validado
+☐ OpenAI validado
+☐ RAG validado
+☐ Relevância validada
+☐ Memória validada
+☐ Multimodal validado
+☐ Function Calling validado
+☐ Interface validada
+☐ Mobile validado
+☐ Segurança validada
+☐ Documentação atualizada
+☐ VERSAO.md atualizado
+☐ Registro da versão criado
+☐ ZIP gerado
+☐ .env excluído do ZIP
+
+57. REGISTRO HISTÓRICO DO MAPA V13.8
+==================================================
+
+As seções 35 em diante do documento original continuam preservadas como histórico da evolução anterior.
+Elas não devem ser apagadas porque registram decisões, bugs e aprendizados da base histórica.
+Quando houver conflito entre uma regra histórica e o estado V14.x atual, usar a seção mais recente deste mapa, mantendo a informação histórica para rastreabilidade.
+
+58. V15V — BASE DE PRODUÇÃO / CORA
+==================================================
+
+Versão:
+V15V — CORA / Experiência Cognitiva
+
+Objetivo:
+Consolidar a evolução da linha V14.x em uma área própria de investigação com IA, mantendo a Central como sistema principal.
+
+58.1. RESILIÊNCIA OFFLINE-FIRST
+- PWA com cache do shell da aplicação.
+- IndexedDB para fila local de Reports, Falhas Operacionais e evidências temporárias.
+- Fallback para LocalStorage quando IndexedDB não estiver disponível.
+- Sincronização automática ao retornar online.
+- Evidências locais permanecem pendentes até upload confirmado.
+- Conflitos de sincronização não devem sobrescrever silenciosamente alterações mais recentes.
+
+58.2. RAG VETORIAL
+- Firestore Vector Search é o primeiro mecanismo vetorial adotado para manter a arquitetura próxima ao Firebase.
+- Embeddings configuráveis; padrão V15V: gemini-embedding-2.
+- Dimensão padrão de armazenamento: 1536, nunca superior ao limite compatível com o índice.
+- Recuperação híbrida: lexical + semântica.
+- Registros vetorizados devem carregar metadata de produto, material, componente, falha, data, linha, operação, fonte e registro.
+- Excel/CSV devem ser fragmentados preservando o cabeçalho e a identidade das colunas.
+- Reindexação deve ser controlada e auditável.
+
+58.3. AUDITORIA DA IA
+Coleção:
+aiAuditLogs
+
+Registrar, quando permitido:
+- userId;
+- conversationId;
+- requestId;
+- provider/model;
+- ferramenta solicitada;
+- parâmetros sanitizados;
+- necessidade de confirmação;
+- confirmação do usuário;
+- resultado da execução;
+- erro;
+- registros consultados;
+- impacto antes/depois quando aplicável.
+
+Segredos e PII desnecessária não devem entrar no audit log.
+
+58.4. PRIVACIDADE E LGPD
+Antes de enviar dados para Gemini, OpenAI ou ferramentas externas:
+
+Central
+↓
+classificação
+↓
+PII / dado sensível
+↓
+pseudonimização / mascaramento contextual
+↓
+provedor externo
+
+Nomes não devem ser removidos indiscriminadamente quando forem necessários para a análise; o sistema deve preferir pseudônimos/identificadores contextuais quando possível.
+
+58.5. LLMOPS
+Separar métricas em:
+
+Saúde:
+- latência;
+- erros;
+- timeout;
+- fallback;
+- falha de ferramenta.
+
+Consumo:
+- tokens de entrada/saída;
+- custo estimado;
+- consultas;
+- embeddings;
+- pesquisas web.
+
+Qualidade:
+- hipóteses sugeridas;
+- hipóteses aceitas/rejeitadas;
+- correções do usuário;
+- conclusões confirmadas;
+- retrabalho da investigação.
+
+Métrica prioritária de qualidade:
+hipóteses que se tornaram confirmadas após evidência/teste.
+
+58.6. TIMELINE DA INVESTIGAÇÃO
+Toda investigação importante deve preservar a evolução:
+
+Report criado
+↓
+Evidência adicionada
+↓
+Hipótese criada
+↓
+Teste realizado
+↓
+Hipótese rejeitada/confirmada
+↓
+Causa confirmada
+↓
+Ação
+↓
+Resultado
+↓
+Conhecimento
+
+58.7. CONFIANÇA DA INFORMAÇÃO
+- 🟢 Validado
+- 🟡 Evidência
+- 🔵 Externo
+- 🟠 Hipótese
+- 🔴 Conflitante
+
+A apresentação dessas categorias deve ser contextual e não poluir respostas simples.
+
+58.8. EXPORTAÇÃO INDUSTRIAL
+A investigação estruturada pode ser exportada para:
+- 8D;
+- A3;
+- Ishikawa.
+
+Exportações devem usar somente dados existentes na investigação, preservando a distinção entre hipótese e causa confirmada.
+
+58.9. CORA — INTERFACE
+CORA é uma view própria da Central.
+
+Entrada:
+Central → CORA
+
+Durante CORA:
+- navegação global fica fora da área útil;
+- sidebar própria da CORA;
+- retorno por seta moderna;
+- conversa como área dominante;
+- cabeçalho mínimo;
+- idioma e tema dentro da CORA;
+- contexto automático discreto e expansível;
+- composer pequeno quando vazio e expansível ao escrever;
+- histórico com fixadas e recentes;
+- Como me usar fechado por padrão.
+
+58.10. REGRA COGNITIVA DA V15V
+
+A CORA não deve:
+- usar toda fonte disponível em toda pergunta;
+- confundir similaridade textual com relevância;
+- confundir mesmo produto com mesmo mecanismo;
+- transformar hipótese em fato;
+- inventar quando a busca interna é vazia;
+- pesquisar profundamente perguntas que não exigem profundidade;
+- despejar o raciocínio interno para o usuário.
+
+A CORA deve:
+- adaptar a profundidade à pergunta;
+- cruzar fontes quando houver ganho real;
+- comparar outros produtos quando o mecanismo justificar;
+- usar conhecimento externo para complementar lacunas;
+- declarar conflitos;
+- fazer perguntas discriminatórias quando necessário;
+- pedir confirmação antes de ações de escrita relevantes;
+- aprender somente através de memória governada.
+
+58.11. CRITÉRIO DE ACEITE V15V
+
+A versão não é considerada consolidada apenas porque inicia sem erros.
+É necessário validar em runtime:
+
+☐ Login
+☐ Funções da Central
+☐ CORA
+☐ Gemini
+☐ OpenAI
+☐ RAG híbrido
+☐ Relevância
+☐ Memória
+☐ Imagens
+☐ Function Calling
+☐ Audit Trail
+☐ LGPD masking
+☐ Offline queue
+☐ Sincronização
+☐ LLMOps
+☐ Exportações
+☐ Histórico/fixação
+☐ Dark Mode global
+☐ Mobile
+
+V15V é candidata à publicação após os testes acima e após configuração segura do ambiente de produção (Firebase Admin, regras Firestore/Storage, índices vetoriais, domínio HTTPS e monitoramento).
+
+
+59. V15.0.1 — TEMA GLOBAL HARMONIZADO
+- Corrigidas superfícies claras residuais no modo escuro.
+- Padronizados campos, selects/options, modais, tabelas, botões e estados hover/focus.
+- A regra vale para todas as páginas, não apenas para a CORA.
+
+
+REGISTRO V15.0.3
+- Correção estrutural da CORA como view independente.
+- Sidebar global e topbar ocultados diretamente no modo CORA.
+- Scroll passa a ser do documento.
+- Contexto automático tratado como disclosure compacto.
+- Cache do Service Worker versionado para impedir carregamento de UI antiga.
+
+
+## V15.0.9 — Estrutura de Produtos e Navegação
+
+- Navegação hierárquica: Falhas de produto e Falhas operacionais expandem seus submenus imediatamente abaixo do item acionado.
+- Família: nome exibido pode ser alterado somente por Administrador; a alteração é propagada aos registros vinculados.
+- Produto: Família → Produto base → Variante.
+- SKU/variante: diferenciação exclusivamente por Cor/Variante. Memória da placa não participa da identificação do SKU.
+- Nome comercial: atributo descritivo opcional, sem ser chave de identificação.
+- Código final: Código base + Cor/Variante, quando informada.
+- Compatibilidade: registros antigos sem baseCode/color continuam sendo aceitos; novos cadastros já são estruturados.
+- Busca: código completo, código-base, família, nome comercial e cor passam a compor o contexto de consulta.
+
+
+## V15.1.0 — Navegação de produtos + CORA estável
+- Sidebar da CORA fixa e escura em ambos os temas; apenas a área de conversa rola.
+- Composer fixado ao rodapé do painel de conversa.
+- Status de investigação reduzido a indicador compacto; sem bloco de passos acumulado.
+- Streaming/progressive reveal no chat, inclusive no fallback de resposta completa.
+- Navegação de falhas: Falhas de produto → Família → Código-base/variante.
+- Cadastro duplicado removido da sidebar; novo produto permanece na ação principal da página.
+- Ações de família ADM em menu discreto.
+
+
+23. FLUXO EVOLUÍDO — FALHAS → INVESTIGAÇÃO → REPORT DE PRODUTO
+
+A área “Falhas operacionais / Máquinas” torna-se **Falhas**, um registro universal de ocorrências. A área “Falhas de produto” torna-se **Reports de produto**.
+
+23.1 FALHAS
+
+Uma Falha pode começar com qualquer nível de informação. É válido registrar sem saber a origem.
+
+Classificação inicial:
+- Não definido / Em análise
+- Operacional
+- Máquina
+- Processo
+- Produto (suspeita)
+- Teste / Inspeção
+- Outro
+
+A classificação é contexto atual, não causa confirmada.
+
+23.2 CAMPOS INDEPENDENTES
+
+Produto, componente, máquina, linha, posto/estação, processo, onde foi detectado, momento da detecção, data de início, quantidade, descrição, hipótese, testes, causa confirmada, ação corretiva, observações e evidências podem ser preenchidos independentemente.
+
+23.3 PRODUTO COMO SUSPEITA
+
+“Produto” em Falhas significa suspeita de problema de produto.
+
+No exemplo da moldura:
+- antes da montagem: pode sustentar hipótese de recebimento/fornecedor, desde que as evidências suportem;
+- depois da montagem: não permite culpar automaticamente o fornecedor. Processo, operação, máquina, manuseio e outras hipóteses devem permanecer abertas.
+
+23.4 PONTO DE DETECÇÃO ≠ PONTO DE GERAÇÃO
+
+Onde o defeito é encontrado não determina onde foi gerado. O formulário mantém os campos separados para permitir RCA correta.
+
+23.5 REPORTS DE PRODUTO
+
+Somente quando a equipe confirmar/tratar a ocorrência como problema de produto ela deve ir para Reports de produto. A conversão preserva dados/evidências e marca **E-mail de cobrança: Pendente**.
+
+23.6 CAPTURA RÁPIDA COM CORA
+
+No celular:
+texto/voz + fotos → CORA → estrutura sugerida → revisão humana → salvar Falha.
+
+A CORA não inventa dados e não promove hipótese a causa confirmada.
+
+23.7 TRABALHO MANUAL
+
+A CORA não é obrigatória. O usuário pode preencher os campos da Falha manualmente e usar a CORA depois para organizar ou investigar.
+
+24. IA E CONSUMO
+
+Otimização de custo deve ocorrer por roteamento conforme complexidade, não por travas frequentes de tokens. Para o cenário interno com aproximadamente cinco usuários, controles devem funcionar como proteção financeira e observabilidade, preservando o uso normal da CORA.
+
+
+25. V15.1.13.17 — NAVEGAÇÃO DE FAMÍLIA E PRODUTO + LIMPEZA VISUAL
+- Corrigido CSS que estava sendo renderizado como texto bruto após o fechamento do documento.
+- Árvore de Reports de produto preserva códigos completos; não usa reticências para esconder códigos longos.
+- Clique em uma família abre a visão de todos os reports daquela família.
+- Clique em um produto/variante abre a visão daquele produto específico.
+- Filtro de família sincronizado com a visão aberta.
+- “Todos os reports de produto” remove o filtro de família.
+- Navegação hierárquica permanece Família → Código-base → Produto/variante.
+
+
+============================================================
+V15.1.13.18 — NAVEGAÇÃO / HIERARQUIA VISUAL DE REPORTS
+============================================================
+
+- Atalho lateral: “Todos os reports de produto” → “Todos os reports”.
+- Regra visual: um código-base com uma única variante não é duplicado na árvore; o próprio produto é exibido uma vez.
+- Regra visual: código-base com múltiplas variantes continua expandível e separa base de variantes.
+- Família continua sendo o nível que abre o conjunto completo de itens da família.
+- Clique no produto/variante abre o produto específico.
+- Mantida a navegação geral de Reports e a filtragem por família.
+- CSS revisado para evitar quebras artificiais, truncamentos indevidos e textos laterais em colunas estreitas.
+
+
+============================================================
+V15.1.13.18 — CORREÇÃO CONSOLIDADA DE VERSIONAMENTO
+============================================================
+
+- package.json corrigido para 15.1.13.18; npm exibe a versão correta ao iniciar.
+- Identificador de build, cache do Service Worker e mensagem de atualização sincronizados em 15.1.13.18.
+- Referências de distribuição (README, VERSAO e auditoria) alinhadas à V15.1.13.18.
+- Nenhuma alteração de funcionalidade em IA, backend ou navegação de Reports.
+
+
+============================================================
+V15.1.13.19 — ÁRVORE DE REPORTS E RENOMEAR FAMÍLIA
+============================================================
+
+- A árvore apresenta família, código e status em níveis separados.
+- Código de produto é uma unidade: não quebra no meio e não recebe reticências.
+- Códigos legados numéricos com quatro dígitos são mostrados com o prefixo CPH; os demais códigos, como 2859V, são preservados por inteiro.
+- "Todos os reports" permanece um único atalho visual, sem quebra palavra por palavra.
+- A navegação Família → código-base (quando houver variantes) → produto específico continua a mesma.
+- Renomear família é restrito a administradores e atualiza produtos, reports, falhas, atividades, fluxos e análises relacionadas em batches do Firestore.
+- Build e cache atualizados para 15.1.13.19.
+
+
+============================================================
+V15.1.13.20 — REVISÃO CONSOLIDADA / CONSUMO / PDF
+============================================================
+
+- Roteamento automático: simples → econômico, técnico normal → intermediário, investigação → forte configurável.
+- Orçamentos financeiros opcionais por dia, mês e usuário; ao aproximar do teto, degrada o tier antes de bloquear.
+- Métricas por usuário, provedor, modelo e tier, com tokens, custo estimado e latência.
+- Dual verification apenas em investigação complexa encadeada quando configurada.
+- Artefatos 8D, A3 e Ishikawa retornam HTML, DOCX, PPTX e PDF real.
+- Cache PWA sincronizado em raiz/web; CORS permitido somente para origens explicitamente configuradas.
+- Auditoria documentada em AUDITORIA_V15.1.13.20.md; testes externos de Firebase, IA e celular permanecem pendentes de ambiente real.
+V15.1.13.21 — correção estrutural da sidebar CORA e renomeação de família autenticada
+- Sidebar CORA: histórico em uma trilha rolável própria; marca, navegação e “Como me usar” permanecem fora dela.
+- `POST /api/families/rename`: atualização autorizada e em lote de products, reports, operationalFailures, activities, flows e failureAnalyses.

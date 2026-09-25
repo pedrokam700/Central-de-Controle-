@@ -2338,7 +2338,7 @@ body.cora-route-active #aiAnalysisView .ai-message{width:min(980px,100%)!importa
 
 <style id="v1511-authority">
 /* V15.1.11 — navigation/history polish and hard cleanup */
-.ai-sidebar-history{display:flex!important;flex-direction:column!important;gap:12px!important;overflow:visible!important;min-height:0!important;}
+.ai-sidebar-history{display:flex!important;flex-direction:column!important;gap:12px!important;min-height:0!important;}
 .ai-sidebar-history-section{display:flex!important;flex-direction:column!important;gap:3px!important;min-width:0!important;}
 .ai-sidebar-history-title{font-size:10px!important;font-weight:750!important;color:var(--muted)!important;margin:2px 6px 4px!important;letter-spacing:.02em!important;}
 .ai-sidebar-history-item{position:relative!important;display:grid!important;grid-template-columns:22px minmax(0,1fr) 24px!important;align-items:center!important;gap:3px!important;min-height:34px!important;padding:2px 2px!important;border-radius:8px!important;background:transparent!important;border:1px solid transparent!important;overflow:visible!important;}
@@ -2590,7 +2590,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
                 <button type="button" class="ai-side-link" data-ai-side="memory" title="Memória"><span class="ai-side-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4v16M17 4v16M4 7h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/><rect x="8" y="8" width="8" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg></span><span class="ai-side-text">Memória</span></button>
                 <button type="button" class="ai-side-link" data-ai-side="metrics" title="Saúde da IA"><span class="ai-side-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 13h3l2-6 3 10 2-5h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ai-side-text">Saúde da IA</span></button>
               </nav>
-              <div class="ai-side-spacer"></div>
+              <div id="aiSidebarHistory" class="ai-sidebar-history" aria-label="Histórico de conversas"></div>
               <details class="ai-how">
                 <summary><span>Como me usar</span><span class="ai-how-chevron" aria-hidden="true">⌄</span></summary>
                 <div class="ai-how-body">
@@ -3485,6 +3485,38 @@ body.dark.cora-route-active #aiAnalysisView #aiChatScroll{padding-bottom:150px!i
 .product-btn{display:block!important;width:max-content!important;min-width:100%!important;white-space:normal!important}
 .product-btn small,.product-btn .variant-meta{display:block!important;width:max-content;max-width:100%;margin-top:3px;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis}
 .product-btn .variant-color{white-space:nowrap!important;overflow:visible!important}
+</style>
+
+<style id="cora-sidebar-structure-v15-1-13-21">
+/* The rail owns its height. Only the history track can consume remaining space. */
+body.cora-route-active #aiAnalysisView .ai-side-panel {
+  display:grid;
+  grid-template-rows:auto auto auto minmax(0,1fr) auto;
+  align-content:stretch;
+  row-gap:10px;
+}
+body.cora-route-active #aiAnalysisView .ai-side-panel > .cora-side-brand,
+body.cora-route-active #aiAnalysisView .ai-side-panel > .ai-new-chat,
+body.cora-route-active #aiAnalysisView .ai-side-panel > .ai-side-links,
+body.cora-route-active #aiAnalysisView .ai-side-panel > .ai-how { min-width:0; }
+body.cora-route-active #aiAnalysisView #aiSidebarHistory {
+  min-height:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  padding:2px 2px 4px;
+}
+body.cora-route-active #aiAnalysisView .ai-how {
+  margin:0;
+  min-height:0;
+  max-height:42vh;
+  overflow:auto;
+}
+body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:auto; }
+@media (max-width:760px) {
+  body.cora-route-active #aiAnalysisView .ai-side-panel { grid-template-rows:auto auto auto minmax(0,1fr) auto; }
+}
 </style>
 
 </html>
