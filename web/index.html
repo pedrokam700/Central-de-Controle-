@@ -2425,6 +2425,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-status{background:#1f1f1e!i
 body.dark.cora-route-active #aiAnalysisView .ai-work-status summary{background:#1f1f1e!important;color:#f2f2ee!important;}
 body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f!important;color:#c6c6c0!important;}
 </style>
+  <link rel="stylesheet" href="/mobile.css?v=15.1.13.22" id="mobile-foundation-styles">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -3459,10 +3460,10 @@ body.cora-route-active #aiAnalysisView .ai-message{width:min(980px,100%)!importa
 /* Mobile: sidebar becomes drawer; chat remains the sole scrolling region. */
 @media(max-width:760px){
   body.cora-route-active #aiAnalysisView .ai-app{grid-template-columns:1fr!important}
-  body.cora-route-active #aiAnalysisView .ai-side-panel{position:fixed!important;left:0!important;top:0!important;bottom:0!important;width:min(290px,86vw)!important;min-width:0!important;transform:translateX(var(--cora-mobile-drawer-x,-102%))!important;z-index:100001!important;box-shadow:14px 0 32px rgba(0,0,0,.28)!important}
+  body.cora-route-active #aiAnalysisView .ai-side-panel{position:fixed!important;left:0!important;top:0!important;bottom:0!important;width:min(290px,86vw)!important;min-width:0!important;transform:translateX(var(--cora-mobile-drawer-x,-102%))!important;z-index:100001!important;box-shadow:14px 0 32px rgba(0,0,0,.28)!important;padding-top:calc(13px + env(safe-area-inset-top,0px))!important;padding-bottom:calc(13px + env(safe-area-inset-bottom,0px))!important}
   body.cora-route-active #aiAnalysisView .ai-chat-shell{grid-column:1!important}
-  body.cora-route-active #aiAnalysisView .ai-chat-scroll{padding:66px 12px 130px!important}
-  body.cora-route-active #aiAnalysisView .ai-composer-wrap{width:calc(100% - 20px)!important;bottom:10px!important}
+  body.cora-route-active #aiAnalysisView .ai-chat-scroll{padding:calc(66px + env(safe-area-inset-top,0px)) 12px calc(130px + env(safe-area-inset-bottom,0px))!important}
+  body.cora-route-active #aiAnalysisView .ai-composer-wrap{width:calc(100% - 20px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px))!important;bottom:max(10px,env(safe-area-inset-bottom,0px))!important}
   body.cora-route-active #aiAnalysisView .ai-composer{grid-template-columns:38px minmax(0,1fr) 38px 40px!important}
 }
 
@@ -3524,5 +3525,4 @@ body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:
 </style>
 
 
-<link rel="stylesheet" href="/mobile.css?v=15.1.13.22" id="mobile-foundation-styles">
 </html>
