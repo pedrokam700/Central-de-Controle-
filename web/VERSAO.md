@@ -1,14 +1,17 @@
-# V15.1.13.18
+# V15.1.13.22 — Mobile first candidate
 
-## Navegação de Reports de Produto
+Revisão estrutural da experiência mobile da Central de Trabalho + CORA.
 
-- Atalho lateral abreviado para `Todos os reports`.
-- O código do produto não é repetido quando a família possui uma única variante.
-- Com múltiplas variantes, a hierarquia permanece `Família → código-base → produto/variante`.
-- Regras de largura, quebra de linha, truncamento e overflow revisadas para a árvore lateral.
+- Drawer de navegação para iOS/Android.
+- Formulários e detalhes em superfície de viewport completo no mobile.
+- Controle de teclado por VisualViewport.
+- Safe areas/notch/home indicator.
+- CORA com navegação mobile própria.
+- Um único modal visualmente ativo por vez.
+- Login protegido contra superfícies antigas da sessão.
+- Grids, filtros, Dashboard, tabelas e feedback adaptados a telas pequenas.
+- Cache/PWA atualizado para 15.1.13.22.
 
-## Correção consolidada de versionamento
+A versão permanece em branch de validação e só deve ser promovida após teste real em iPhone e Android.
 
-- `package.json` identificado como `15.1.13.18` para instalação, validações e inicialização.
-- Build da interface, cache do Service Worker e sincronização root/web atualizados para `15.1.13.18`.
-- Sem alteração de funcionalidades de IA, backend ou navegação.
+Consulte `AUDITORIA_V15.1.13.22_MOBILE.md`.
