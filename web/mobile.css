@@ -256,7 +256,20 @@
     justify-content:stretch;
     overflow:hidden;
     background:var(--surface);
+    z-index:200;
+    opacity:0;
+    pointer-events:none;
+    visibility:hidden;
   }
+
+  .modal-backdrop.mobile-active-surface{
+    opacity:1;
+    pointer-events:auto;
+    visibility:visible;
+    z-index:220;
+  }
+
+  body.dark .modal-backdrop{background:#101010}
 
   .modal,
   .modal.large,
@@ -320,6 +333,8 @@
     align-items:stretch;
     overflow-y:auto;
     overscroll-behavior:contain;
+    z-index:300;
+    background:#0d0d0d;
   }
 
   .account-card{
