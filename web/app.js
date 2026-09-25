@@ -3316,9 +3316,14 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
       if(toggle) toggle.setAttribute('aria-expanded','true');
     }
 
-    function updateMobileModalState(){
-      const openModal=[...document.querySelectorAll('.modal-backdrop')].some(el=>!el.classList.contains('hidden'));
-      document.body.classList.toggle('mobile-modal-open',isMobileUI() && openModal);
+    function updateMobileModalState(preferred=null){
+      const open=[...document.querySelectorAll('.modal-backdrop')].filter(el=>!el.classList.contains('hidden'));
+      document.querySelectorAll('.modal-backdrop.mobile-active-surface').forEach(el=>el.classList.remove('mobile-active-surface'));
+      if(isMobileUI() && open.length){
+        const active=(preferred && open.includes(preferred)) ? preferred : open[open.length-1];
+        active.classList.add('mobile-active-surface');
+      }
+      document.body.classList.toggle('mobile-modal-open',isMobileUI() && open.length>0);
     }
 
     function syncMobileMode(){
@@ -3398,7 +3403,16 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
       window.visualViewport?.addEventListener('resize',setMobileVisualViewport,{passive:true});
       window.visualViewport?.addEventListener('scroll',setMobileVisualViewport,{passive:true});
 
-      const modalObserver=new MutationObserver(updateMobileModalState);
+      const modalObserver=new MutationObserver(records=>{
+        let preferred=null;
+        for(const record of records){
+          const target=record.target;
+          if(target instanceof Element && target.classList.contains('modal-backdrop') && !target.classList.contains('hidden')){
+            preferred=target;
+          }
+        }
+        updateMobileModalState(preferred);
+      });
       modalObserver.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
 
       document.addEventListener('focusin',event=>{
