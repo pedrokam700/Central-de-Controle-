@@ -3336,11 +3336,11 @@ body.dark #sidebarCollapse{background:#141414!important;color:#f5f5f2!important;
 
 /* ========================= CORA ========================= */
 html.cora-route-active,
-body.cora-route-active{height:100dvh!important;min-height:100dvh!important;max-height:100dvh!important;overflow:hidden!important}
+body.cora-route-active{height:var(--app-visual-height,100dvh)!important;min-height:var(--app-visual-height,100dvh)!important;max-height:var(--app-visual-height,100dvh)!important;overflow:hidden!important}
 body.cora-route-active .app{display:none!important}
 body.cora-route-active #aiAnalysisView{
   position:fixed!important;inset:0!important;z-index:99999!important;
-  width:100vw!important;height:100dvh!important;min-height:100dvh!important;max-height:100dvh!important;
+  width:100vw!important;height:var(--app-visual-height,100dvh)!important;min-height:var(--app-visual-height,100dvh)!important;max-height:var(--app-visual-height,100dvh)!important;
   margin:0!important;padding:0!important;overflow:hidden!important;border:0!important;
   background:#fff!important;color:#111!important;
 }
@@ -3491,7 +3491,7 @@ body.dark.cora-route-active #aiAnalysisView #aiChatScroll{padding-bottom:150px!i
 .product-btn .variant-color{white-space:nowrap!important;overflow:visible!important}
 </style>
 
-<style id="cora-sidebar-structure-v15-1-13-21">
+<style id="cora-sidebar-structure-v15-1-13-22">
 /* The rail owns its height. Only the history track can consume remaining space. */
 body.cora-route-active #aiAnalysisView .ai-side-panel {
   display:grid;
