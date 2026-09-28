@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.25">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.26">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.25';
+  const BUILD='15.1.13.26';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2427,7 +2427,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
 </style>
 
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.25" id="mobile-layout-styles">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.26" id="mobile-layout-styles">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -2935,8 +2935,19 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
         <label>Classificação<select id="failureClassification" name="classification"><option value="NAO_DEFINIDO">Não definido / Em análise</option><option value="OPERACIONAL">Operacional</option><option value="MAQUINA">Máquina</option><option value="PROCESSO">Processo</option><option value="PRODUTO">Produto (suspeita)</option><option value="TESTE_INSPECAO">Teste / Inspeção</option><option value="OUTRO">Outro</option></select><span class="help">Isso descreve o estado atual da ocorrência, não prova a causa.</span></label>
         <label>Nível de certeza<select name="classification_confidence"><option value="BAIXA">Baixa</option><option value="MEDIA" selected>Média</option><option value="ALTA">Alta</option></select></label>
         <div class="form-section"><h3 class="form-section-title">Identificação</h3></div>
+        <label class="span2">Aplicar esta falha a
+          <select id="operationalScopeSelect" name="scope_type">
+            <option value="variant" selected>SKU / cor específica</option>
+            <option value="base_product">Produto base · todas as cores</option>
+            <option value="multi_sku">Múltiplos SKUs</option>
+            <option value="family">Família inteira</option>
+          </select>
+          <span class="help" id="operationalScopeHelp">A falha vale somente para o SKU/cor selecionado.</span>
+        </label>
         <label>Família<select id="operationalFamilySelect" name="family"><option value="">Não informado</option></select></label>
-        <label>Código / produto<select id="operationalProductSelect" name="product"><option value="">Não informado</option></select></label>
+        <label id="operationalProductScopeLabel">SKU / cor específica<select id="operationalProductSelect" name="product"><option value="">Selecione</option></select></label>
+        <label id="operationalBaseScopeLabel" class="hidden">Produto base<select id="operationalBaseSelect" name="base_product"><option value="">Selecione</option></select><span class="help">O produto base inclui todas as cores/variantes cadastradas.</span></label>
+        <label id="operationalMultiScopeLabel" class="span2 hidden">Múltiplos SKUs<select id="operationalMultiProductSelect" name="products" multiple size="5"></select><span class="help">Selecione pelo menos dois SKUs relacionados à mesma falha.</span></label>
         <label>Componente / peça<input name="component" placeholder="Ex.: Middle Frame, P-Sensor, LCD"></label>
         <label>Código do material<input name="material" placeholder="Ex.: MAT-02841"></label>
         <label class="span2">O que aconteceu?<textarea name="issue" required placeholder="Descreva objetivamente a falha, mesmo que as informações estejam incompletas."></textarea></label>
@@ -3011,7 +3022,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.25"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.26"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */
