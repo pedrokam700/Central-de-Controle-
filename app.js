@@ -3832,7 +3832,10 @@ ${m.text}`).join('\n\n');
       }
 
       const ownerSelect=document.querySelector('#operationalOwnerSelect');
-      if(ownerSelect){ownerSelect.value=currentAccount?.name||'';ownerSelect.disabled=currentAccount?.role!=='admin';}
+      if(ownerSelect){
+        ownerSelect.value=currentAccount?.name||'';
+        ownerSelect.disabled=currentAccount?.role!=='admin';
+      }
       if(prefill.text)form.elements.issue.value=prefill.text;
       if(prefill.context)form.elements.description_context.value=prefill.context;
       if(prefill.classification)form.elements.classification.value=prefill.classification;
@@ -3846,14 +3849,6 @@ ${m.text}`).join('\n\n');
       document.querySelector('#operationalFailureModal').classList.remove('hidden');
       form.elements.issue.focus();
       translatePage();
-    }){
-      fillOperationalProducts();updateOwnerDropdowns();
-      const ownerSelect=document.querySelector('#operationalOwnerSelect'); if(ownerSelect){ownerSelect.value=currentAccount?.name||'';ownerSelect.disabled=currentAccount?.role!=='admin';}
-      const form=document.querySelector('#operationalFailureForm'); form.reset();
-      form.elements.classification.value='NAO_DEFINIDO'; form.elements.classification_confidence.value='MEDIA';
-      if(prefill.text)form.elements.issue.value=prefill.text; if(prefill.context)form.elements.description_context.value=prefill.context;
-      if(prefill.classification)form.elements.classification.value=prefill.classification; if(prefill.component)form.elements.component.value=prefill.component; if(prefill.machine)form.elements.maquina.value=prefill.machine; if(prefill.station)form.elements.estacao.value=prefill.station; if(prefill.line)form.elements.linha.value=prefill.line; if(prefill.process)form.elements.processo.value=prefill.process; if(prefill.detectionMoment)form.elements.detection_moment.value=prefill.detectionMoment;
-      document.querySelector('#operationalFailureModal').classList.remove('hidden'); form.elements.issue.focus(); translatePage();
     }
     function closeOperationalFailureModal(){document.querySelector('#operationalFailureModal').classList.add('hidden');document.querySelector('#operationalFailureForm').reset();document.querySelector('#operationalEvidencePreview').innerHTML='';setOccurrenceMode();}
     function openOperationalDetail(id){
