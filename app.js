@@ -408,6 +408,20 @@
     const productCodeKey = value => productDisplayCode(value).toLocaleUpperCase();
     const sameProductCode = (a,b) => Boolean(productCodeKey(a)) && productCodeKey(a) === productCodeKey(b);
 
+    const productColorIsEncoded = product => {
+      const color = productColor(product).toLocaleUpperCase();
+      const code = productCodeKey(product?.code);
+      return Boolean(color) && code.endsWith(color);
+    };
+    const parseProductColors = value => [...new Set(
+      String(value || '').toUpperCase().trim().split(/[,;\s]+/).map(v => v.trim()).filter(Boolean)
+    )];
+    const buildProductVariantCodes = (baseCode, colors=[]) => {
+      const base = productDisplayCode(baseCode);
+      const variants = colors.length ? colors : [''];
+      return variants.map(color => ({ color, code: productDisplayCode(base + color) }));
+    };
+
     const productMatchesQuery = (product, query) => {
       const q = String(query || '').toLowerCase().trim();
       if (!q) return true;
@@ -790,7 +804,7 @@
     function renderGlobalResults(q){
       const term=q.toLowerCase().trim(), groups=[], match=(...v)=>v.flat(Infinity).filter(Boolean).join(' ').toLowerCase().includes(term);
       const products=state.products.filter(p=>productMatchesQuery(p, term) || match(p.components?.join(' ')));
-      if(products.length) groups.push(['Produtos',products.map(p=>({title:productDisplayCode(p.code),sub:`Família: ${p.family}${productCommercialName(p) ? ` · ${productCommercialName(p)}` : ''}${productColor(p) ? ` · Cor: ${productColor(p)}` : ''}${productCodeKey(productBaseCode(p))!==productCodeKey(p.code) ? ` · Base: ${productDisplayCode(productBaseCode(p))}` : ''}`,fn:()=>{activeProduct=p.code;activeFamily='';localStorage.removeItem('central.sidebar.productActiveFamily.v1');show('product');document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      if(products.length) groups.push(['Produtos',products.map(p=>({title:productDisplayCode(p.code),sub:`Família: ${p.family}${productCommercialName(p) ? ` · ${productCommercialName(p)}` : ''}${productColor(p) && !productColorIsEncoded(p) ? ` · Cor: ${productColor(p)}` : ''}${productCodeKey(productBaseCode(p))!==productCodeKey(p.code) ? ` · Base: ${productDisplayCode(productBaseCode(p))}` : ''}`,fn:()=>{activeProduct=p.code;activeFamily='';localStorage.removeItem('central.sidebar.productActiveFamily.v1');show('product');document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
       const reports=state.reports.filter(r=>(r.tipo_falha||'PRODUTO')==='PRODUTO' && match(r.id,failureScopeSummary(r),failureProductCodes(r),r.baseCode,r.family,r.component,r.material,r.issue,r.owner,r.defectCode,r.defectCategory,r.repairComment,r.updates?.map(u=>u.text)));
       if(reports.length) groups.push(['Reports de produto',reports.map(r=>({title:`${r.id} · ${failureScopeSummary(r)}`,sub:`${r.component||'Componente'} · ${r.issue||''}`,fn:()=>{openDetail(r.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
       const ops=state.operationalFailures.filter(r=>match(r.id,failureScopeSummary(r),failureProductCodes(r),r.baseCode,r.family,r.category,r.maquina,r.linha,r.estacao,r.onde_detectado,r.issue,r.owner,r.hypothesis,r.cause,r.correctiveAction));
@@ -1351,9 +1365,10 @@
             const count = state.reports.filter(r => failureAppliesToProduct(r,p) && calculatedStatus(r) !== 'concluido').length;
             const color = productColor(p);
             const displayCode = esc(productDisplayCode(p.code));
-            const meta = [color ? `<strong>Cor:</strong> ${esc(color)}` : '', productCommercialName(p) ? `<strong>Comercial:</strong> ${esc(productCommercialName(p))}` : ''].filter(Boolean).join(' · ');
+            const showColor = color && !productColorIsEncoded(p);
+            const meta = [showColor ? `<strong>Cor:</strong> ${esc(color)}` : '', productCommercialName(p) ? `<strong>Comercial:</strong> ${esc(productCommercialName(p))}` : ''].filter(Boolean).join(' · ');
             const metaHtml = meta ? `<span class="variant-meta">${meta}</span>` : '';
-            return `<button class="product-btn ${activeView === 'product' && p.code === activeProduct ? 'active' : ''}" data-product="${esc(p.code)}" title="Abrir ${esc(productDisplayCode(p.code))}${color ? ' · '+color : ''}"><span>${displayCode}${color ? `<span class="variant-color">· ${esc(color)}</span>` : ''}</span><small>${count ? `${count} em aberto` : 'Sem pendências'}</small>${metaHtml}</button>`;
+            return `<button class="product-btn ${activeView === 'product' && p.code === activeProduct ? 'active' : ''}" data-product="${esc(p.code)}" title="Abrir ${esc(productDisplayCode(p.code))}"><span>${displayCode}${showColor ? `<span class="variant-color">· ${esc(color)}</span>` : ''}</span><small>${count ? `${count} em aberto` : 'Sem pendências'}</small>${metaHtml}</button>`;
           };
           const variantItems = sorted.map(renderProductButton).join('');
           if (!variantsNeedExpand) return `<div class="base-group base-group-single">${variantItems}</div>`;
@@ -1473,7 +1488,8 @@
       const product = activeData();
       const titleEl = document.querySelector('#activeProductTitle');
       if (titleEl && product) {
-        titleEl.textContent = `${productDisplayCode(product.code)} (${product.family}${productColor(product) ? ` · ${productColor(product)}` : ''})`;
+        const extraColor = productColor(product) && !productColorIsEncoded(product) ? ` · ${productColor(product)}` : '';
+        titleEl.textContent = `${productDisplayCode(product.code)} (${product.family}${extraColor})`;
       }
 
       const selected = product ? state.reports.filter(r => failureAppliesToProduct(r, product)) : [];
@@ -1523,7 +1539,7 @@
     }
     function operationalRow(r) {
       const classification=r.classification || (r.occurrenceMode==='MAQUINA'?'MAQUINA':(r.category==='Processo'?'PROCESSO':'NAO_DEFINIDO'));
-      return `<tr data-op-id="${esc(r.id)}"><td><span class="identifier">${esc(r.id)}</span><span class="secondary-text">${formatDate(r.createdAt)}</span></td><td><span class="identifier">${esc(failureScopeSummary(r))}</span><span class="secondary-text">${esc(r.component||r.peca_danificada||'Sem componente')}</span></td><td><span class="identifier">${esc(r.maquina||'—')}</span><span class="secondary-text">${esc(r.estacao||'Sem posto')} · ${esc(r.linha||'Sem linha')}</span></td><td><span class="identifier">${esc(failureClassificationLabel(classification))}</span><span class="secondary-text">${esc(r.processo||r.category||'Processo não informado')}</span></td><td><span class="wrap">${esc(r.issue||'')}</span><span class="secondary-text">${esc(r.detection_moment_label||r.detectionMoment||r.onde_detectado||'Momento/local não informado')}</span></td><td>${chip(operationalStatus(r))}</td></tr>`;
+      return `<tr data-op-id="${esc(r.id)}" role="button" tabindex="0" title="Abrir falha"><td><span class="identifier">${esc(r.id)}</span><span class="secondary-text">${formatDate(r.createdAt)}</span></td><td><span class="identifier">${esc(failureScopeSummary(r))}</span><span class="secondary-text">${esc(r.component||r.peca_danificada||'Sem componente')}</span></td><td><span class="identifier">${esc(r.maquina||'—')}</span><span class="secondary-text">${esc(r.estacao||'Sem posto')} · ${esc(r.linha||'Sem linha')}</span></td><td><span class="identifier">${esc(failureClassificationLabel(classification))}</span><span class="secondary-text">${esc(r.processo||r.category||'Processo não informado')}</span></td><td><span class="wrap">${esc(r.issue||'')}</span><span class="secondary-text">${esc(r.detection_moment_label||r.detectionMoment||r.onde_detectado||'Momento/local não informado')}</span></td><td>${chip(operationalStatus(r))}</td></tr>`;
     }
     function renderOperations() {
       const search=document.querySelector('#opSearch')?.value.toLowerCase().trim()||'';
@@ -2292,7 +2308,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.26'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.26'){localStorage.setItem('cora.sw.loaded','15.1.13.26');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.27'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.27'){localStorage.setItem('cora.sw.loaded','15.1.13.27');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3595,9 +3611,11 @@ ${m.text}`).join('\n\n');
       const form = document.querySelector('#productForm');
       if (!form) return;
       const base = String(form.elements.baseCode?.value || '').trim();
-      const color = String(form.elements.color?.value || '').trim().toUpperCase();
+      const colors = parseProductColors(form.elements.colors?.value || '');
       const preview = form.elements.codePreview;
-      if (preview) preview.value = productDisplayCode(base + color);
+      if (!preview) return;
+      if (!base) { preview.value=''; return; }
+      preview.value = buildProductVariantCodes(base, colors).map(v => v.code).join(' · ');
     }
     function fillProductFamilySelector(selectedFamily='') {
       const select = document.querySelector('#productFamilySelect');
@@ -3636,7 +3654,7 @@ ${m.text}`).join('\n\n');
       syncProductFamilyInput();
       updateProductCodePreview();
     }
-    function openComponentModal(returnToFailure = false) { if (!activeData()) return openProductModal(); continueToFailureAfterComponent = returnToFailure; document.querySelector('#componentModalSubtitle').textContent = `Produto selecionado: ${activeData().code} · ${activeData().family}`; document.querySelector('#componentModal').classList.remove('hidden'); document.querySelector('#componentForm input').focus(); }
+    function openComponentModal(returnToFailure = false) { if (!activeData()) return openProductModal(); continueToFailureAfterComponent = returnToFailure; document.querySelector('#componentModalSubtitle').textContent = `Produto selecionado: ${productDisplayCode(activeData().code)} · ${activeData().family}`; document.querySelector('#componentModal').classList.remove('hidden'); document.querySelector('#componentForm input').focus(); }
     function closeComponentModal() { document.querySelector('#componentModal').classList.add('hidden'); document.querySelector('#componentForm').reset(); continueToFailureAfterComponent = false; }
     function fillFailureComponents() { const components = activeData()?.components || []; document.querySelector('#failureComponent').innerHTML = '<option value="">Selecione</option>' + components.sort((a, b) => a.localeCompare(b)).map(component => `<option value="${esc(component)}">${esc(component)}</option>`).join(''); }
     function openFailureModal() {
@@ -3789,7 +3807,10 @@ ${m.text}`).join('\n\n');
 
       const products=state.products.filter(p=>!familySelect.value||productFamily(p)===familySelect.value).sort((a,b)=>productDisplayCode(a.code).localeCompare(productDisplayCode(b.code)));
       const currentProduct=productSelect.value||activeProduct||'';
-      productSelect.innerHTML='<option value="">Selecione</option>'+products.map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))} · ${esc(p.family)}${productColor(p)?` · Cor ${esc(productColor(p))}`:''}</option>`).join('');
+      productSelect.innerHTML='<option value="">Selecione</option>'+products.map(p=>{
+        const extraColor=productColor(p)&&!productColorIsEncoded(p)?` · Cor ${esc(productColor(p))}`:'';
+        return `<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))} · ${esc(p.family)}${extraColor}</option>`;
+      }).join('');
       const productMatch=products.find(p=>sameProductCode(p.code,currentProduct));
       productSelect.value=productMatch?.code||'';
 
@@ -3801,7 +3822,10 @@ ${m.text}`).join('\n\n');
       baseSelect.value=baseMatch||'';
 
       const selectedKeys=new Set([...multiSelect.selectedOptions].map(opt=>productCodeKey(opt.value)));
-      multiSelect.innerHTML=products.map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))}${productColor(p)?` · Cor ${esc(productColor(p))}`:''}</option>`).join('');
+      multiSelect.innerHTML=products.map(p=>{
+        const extraColor=productColor(p)&&!productColorIsEncoded(p)?` · Cor ${esc(productColor(p))}`:'';
+        return `<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))}${extraColor}</option>`;
+      }).join('');
       [...multiSelect.options].forEach(opt=>{opt.selected=selectedKeys.has(productCodeKey(opt.value));});
       updateOperationalScopeUI();
     }
@@ -3851,6 +3875,104 @@ ${m.text}`).join('\n\n');
       translatePage();
     }
     function closeOperationalFailureModal(){document.querySelector('#operationalFailureModal').classList.add('hidden');document.querySelector('#operationalFailureForm').reset();document.querySelector('#operationalEvidencePreview').innerHTML='';setOccurrenceMode();}
+    function updateOperationalDetailScopeUI(){
+      const scope=document.querySelector('#opDetailScopeSelect')?.value||'variant';
+      document.querySelector('#opDetailProductScopeLabel')?.classList.toggle('hidden',scope!=='variant');
+      document.querySelector('#opDetailBaseScopeLabel')?.classList.toggle('hidden',scope!=='base_product');
+      document.querySelector('#opDetailMultiScopeLabel')?.classList.toggle('hidden',scope!=='multi_sku');
+      const productSelect=document.querySelector('#opDetailProductSelect');
+      const baseSelect=document.querySelector('#opDetailBaseSelect');
+      const multiSelect=document.querySelector('#opDetailMultiProductSelect');
+      if(productSelect)productSelect.required=scope==='variant';
+      if(baseSelect)baseSelect.required=scope==='base_product';
+      if(multiSelect)multiSelect.required=scope==='multi_sku';
+      const messages={
+        variant:'A falha ficará vinculada somente ao SKU selecionado.',
+        base_product:'A falha ficará vinculada ao produto base e aparecerá em todas as cores cadastradas.',
+        multi_sku:'A falha ficará vinculada somente aos SKUs selecionados.',
+        family:'A falha ficará vinculada à família inteira.'
+      };
+      const help=document.querySelector('#opDetailScopeHelp');
+      if(help)help.textContent=messages[scope]||'';
+    }
+
+    function fillOperationalDetailProducts(record=null){
+      const familySelect=document.querySelector('#opDetailFamilySelect');
+      const productSelect=document.querySelector('#opDetailProductSelect');
+      const baseSelect=document.querySelector('#opDetailBaseSelect');
+      const multiSelect=document.querySelector('#opDetailMultiProductSelect');
+      const scopeSelect=document.querySelector('#opDetailScopeSelect');
+      if(!familySelect||!productSelect||!baseSelect||!multiSelect||!scopeSelect)return;
+
+      const requestedFamily=record?String(record.family||''):familySelect.value;
+      const currentProduct=record?(record.product||failureProductCodes(record)[0]||''):productSelect.value;
+      const currentBase=record?String(record.baseCode||''):baseSelect.value;
+      const currentMulti=record?failureProductCodes(record):[...multiSelect.selectedOptions].map(o=>o.value);
+
+      const families=[...new Set(state.products.map(p=>productFamily(p)).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+      familySelect.innerHTML='<option value="">Não informado</option>'+families.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join('');
+      familySelect.value=families.includes(requestedFamily)?requestedFamily:'';
+
+      const products=state.products.filter(p=>!familySelect.value||productFamily(p)===familySelect.value)
+        .sort((a,b)=>productDisplayCode(a.code).localeCompare(productDisplayCode(b.code)));
+
+      productSelect.innerHTML='<option value="">Selecione</option>'+products.map(p=>{
+        const extraColor=productColor(p)&&!productColorIsEncoded(p)?` · Cor ${esc(productColor(p))}`:'';
+        return `<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))} · ${esc(p.family)}${extraColor}</option>`;
+      }).join('');
+      const productMatch=products.find(p=>sameProductCode(p.code,currentProduct));
+      productSelect.value=productMatch?.code||'';
+
+      const bases=[...new Map(products.map(p=>[productCodeKey(productBaseCode(p)),productBaseCode(p)])).values()].filter(Boolean)
+        .sort((a,b)=>productDisplayCode(a).localeCompare(productDisplayCode(b)));
+      baseSelect.innerHTML='<option value="">Selecione</option>'+bases.map(base=>`<option value="${esc(base)}">${esc(productDisplayCode(base))} · todas as cores</option>`).join('');
+      const baseMatch=bases.find(base=>productCodeKey(base)===productCodeKey(currentBase));
+      baseSelect.value=baseMatch||'';
+
+      const selectedKeys=new Set(currentMulti.map(productCodeKey));
+      multiSelect.innerHTML=products.map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))}</option>`).join('');
+      [...multiSelect.options].forEach(opt=>{opt.selected=selectedKeys.has(productCodeKey(opt.value));});
+
+      if(record)scopeSelect.value=failureScopeType(record);
+      updateOperationalDetailScopeUI();
+    }
+
+    function readOperationalDetailScope(record){
+      const scopeType=document.querySelector('#opDetailScopeSelect')?.value||'variant';
+      const selectedFamily=document.querySelector('#opDetailFamilySelect')?.value||'';
+      const exactProduct=document.querySelector('#opDetailProductSelect')?.value||'';
+      const selectedBase=document.querySelector('#opDetailBaseSelect')?.value||'';
+      const multiCodes=[...(document.querySelector('#opDetailMultiProductSelect')?.selectedOptions||[])].map(o=>o.value).filter(Boolean);
+      let product='',productCodes=[],baseCode='';
+
+      if(scopeType==='family'){
+        if(!selectedFamily){alert('Selecione a família antes de salvar.');return null;}
+      }else if(scopeType==='base_product'){
+        if(!selectedBase){alert('Selecione o produto base antes de salvar.');return null;}
+        baseCode=selectedBase;
+      }else if(scopeType==='multi_sku'){
+        const unique=new Map(multiCodes.map(code=>[productCodeKey(code),code]));
+        productCodes=[...unique.values()];
+        if(productCodes.length<2){alert('Selecione pelo menos dois SKUs.');return null;}
+        product=productCodes[0];
+      }else{
+        if(!exactProduct){alert('Selecione o SKU antes de salvar.');return null;}
+        product=exactProduct;
+        productCodes=[exactProduct];
+        const selected=state.products.find(p=>sameProductCode(p.code,exactProduct));
+        baseCode=selected?productBaseCode(selected):String(record?.baseCode||'');
+      }
+
+      const related=state.products.filter(p=>{
+        if(scopeType==='family')return selectedFamily&&productFamily(p)===selectedFamily;
+        if(scopeType==='base_product')return productCodeKey(productBaseCode(p))===productCodeKey(baseCode);
+        return productCodes.some(code=>sameProductCode(code,p.code));
+      });
+      const inferred=[...new Set(related.map(productFamily).filter(Boolean))];
+      const family=selectedFamily||(inferred.length===1?inferred[0]:'');
+      return {scopeType,family,product,productCodes,baseCode};
+    }
+
     function openOperationalDetail(id){
       const r=state.operationalFailures.find(x=>x.id===id); if(!r)return; selectedOperationalId=id;
       document.querySelector('#opDetailTitle').textContent=`${r.id} · ${r.maquina||r.estacao||'Ocorrência operacional'}`;
@@ -3859,7 +3981,8 @@ ${m.text}`).join('\n\n');
       document.querySelector('#opDetailOwnerSelect').value=r.owner||'';
       document.querySelector('#opDetailOwnerSelect').disabled=currentAccount?.role !== 'admin';
       document.querySelector('#opDetailIssue').textContent=r.issue||'';
-      document.querySelector('#opMachineInfo').innerHTML = `<strong>Classificação</strong>: ${esc(failureClassificationLabel(r.classification||'NAO_DEFINIDO'))} · Certeza: ${esc(r.classificationConfidence||'MEDIA')}<br><strong>Escopo de produto</strong>: ${esc(failureScopeSummary(r))} · <strong>Componente</strong>: ${esc(r.component||r.peca_danificada||'Não informado')}<br><strong>Máquina</strong>: ${esc(r.maquina||'Não informada')} · <strong>Posto</strong>: ${esc(r.estacao||'Não informado')} · <strong>Linha</strong>: ${esc(r.linha||'Não informada')}<br><strong>Processo</strong>: ${esc(r.processo||'Não informado')} · <strong>Detectado</strong>: ${esc(r.detection_moment_label||r.detectionMoment||'Desconhecido')} · <strong>Onde</strong>: ${esc(r.onde_detectado||'Não informado')}`;
+      document.querySelector('#opMachineInfo').innerHTML = `<strong>Classificação</strong>: ${esc(failureClassificationLabel(r.classification||'NAO_DEFINIDO'))} · Certeza: ${esc(r.classificationConfidence||'MEDIA')}<br><strong>Escopo atual</strong>: ${esc(failureScopeSummary(r))} · <strong>Componente</strong>: ${esc(r.component||r.peca_danificada||'Não informado')}<br><strong>Máquina</strong>: ${esc(r.maquina||'Não informada')} · <strong>Posto</strong>: ${esc(r.estacao||'Não informado')} · <strong>Linha</strong>: ${esc(r.linha||'Não informada')}<br><strong>Processo</strong>: ${esc(r.processo||'Não informado')} · <strong>Detectado</strong>: ${esc(r.detection_moment_label||r.detectionMoment||'Desconhecido')} · <strong>Onde</strong>: ${esc(r.onde_detectado||'Não informado')}`;
+      fillOperationalDetailProducts(r);
       document.querySelector('#opDetailEvidence').innerHTML=evidenceGallery(r.evidence,{allowDelete:true,kind:'operational',id:r.id});
       document.querySelector('#opDetailEvidencePreview').innerHTML='';
       document.querySelector('#opDetailCause').value=r.cause||'';
@@ -4080,6 +4203,20 @@ ${m.text}`).join('\n\n');
       }catch(err){ console.error(err); alert('Não foi possível atualizar a solicitação.'); }
     });
 
+    document.querySelector('#opRows')?.addEventListener('click', e => {
+      const row=e.target.closest('[data-op-id]');
+      if(row)openOperationalDetail(row.dataset.opId);
+    });
+    document.querySelector('#opRows')?.addEventListener('keydown', e => {
+      if(e.key!=='Enter'&&e.key!==' ')return;
+      const row=e.target.closest('[data-op-id]');
+      if(!row)return;
+      e.preventDefault();
+      openOperationalDetail(row.dataset.opId);
+    });
+    document.querySelector('#opDetailScopeSelect')?.addEventListener('change', updateOperationalDetailScopeUI);
+    document.querySelector('#opDetailFamilySelect')?.addEventListener('change', () => fillOperationalDetailProducts());
+
     ['workSearch','workProduct','workOwner','workStatus'].forEach(id => document.querySelector('#'+id).addEventListener(id==='workSearch' ? 'input' : 'change', renderWork));
     ['flowSearch','flowProductFilter','flowOwner','flowStatus'].forEach(id => document.querySelector('#'+id).addEventListener(id==='flowSearch' ? 'input' : 'change', renderFlows));
 
@@ -4096,7 +4233,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     document.querySelector('#btnConfirmDelete').addEventListener('click', confirmDeleteFamily);
     document.querySelectorAll('.close-product').forEach(b => b.addEventListener('click', closeProductModal));
     document.querySelector('#productForm [name="baseCode"]')?.addEventListener('input', updateProductCodePreview);
-    document.querySelector('#productForm [name="color"]')?.addEventListener('input', updateProductCodePreview);
+    document.querySelector('#productForm [name="colors"]')?.addEventListener('input', updateProductCodePreview);
     document.querySelector('#productFamilySelect')?.addEventListener('change', syncProductFamilyInput);
     document.querySelector('#productNewFamily')?.addEventListener('input', e => { e.target.value = e.target.value.replace(/^\s+/, ''); });
     document.querySelectorAll('.close-family-rename').forEach(b => b.addEventListener('click', closeFamilyRenameModal));
@@ -4113,23 +4250,66 @@ document.querySelectorAll('.product-tab').forEach(btn => {
 
     document.querySelector('#productForm').addEventListener('submit', async e => {
       e.preventDefault();
-      const f = new FormData(e.currentTarget);
-      const selectedFamily = String(f.get('familySelect') || '').trim();
-      const newFamilyName = String(f.get('newFamilyName') || '').trim();
-      const family = selectedFamily === '__NEW__' ? newFamilyName : selectedFamily;
-      const commercialName = String(f.get('commercialName') || '').trim();
-      const baseCode = String(f.get('baseCode') || '').trim();
-      const color = String(f.get('color') || '').trim().toUpperCase();
-      const code = (baseCode + color).trim();
-      if (!family || !baseCode || !code) { alert('Selecione uma família existente ou crie uma nova família, e informe o código-base.'); return; }
-      if (!selectedFamily && !newFamilyName) { alert('Selecione uma família existente ou crie uma nova família.'); return; }
-      if (state.products.some(p => sameProductCode(p.code, code))) {
-        alert('Este produto/variante já está cadastrado.'); return;
+      const form=e.currentTarget;
+      const saveButton=form.querySelector('button.button.primary');
+      const f=new FormData(form);
+      const selectedFamily=String(f.get('familySelect')||'').trim();
+      const newFamilyName=String(f.get('newFamilyName')||'').trim();
+      const family=selectedFamily==='__NEW__'?newFamilyName:selectedFamily;
+      const commercialName=String(f.get('commercialName')||'').trim();
+      const rawBase=String(f.get('baseCode')||'').trim();
+      const baseCode=productDisplayCode(rawBase);
+      const colors=parseProductColors(f.get('colors'));
+
+      if(!family||!baseCode){alert('Selecione uma família e informe o código-base.');return;}
+      if(colors.some(color=>!/^[A-Z0-9-]{1,4}$/.test(color))){
+        alert('Use variantes curtas, com até 4 caracteres. Ex.: V, B, G.');
+        return;
       }
-      await addDoc(collection(db, "products"), { code, baseCode, color, family, commercialName, components: [], variantType: color ? 'cor' : 'base', createdAt: now() });
-      activeProduct = code;
-      closeProductModal();
-      show('product');
+
+      const requested=buildProductVariantCodes(baseCode,colors);
+      const existing=requested.filter(v=>state.products.some(p=>sameProductCode(p.code,v.code)));
+      const pending=requested.filter(v=>!state.products.some(p=>sameProductCode(p.code,v.code)));
+      if(!pending.length){
+        alert('Todas as variantes informadas já estão cadastradas.');
+        return;
+      }
+
+      const template=state.products.find(p=>productFamily(p)===family && productCodeKey(productBaseCode(p))===productCodeKey(baseCode));
+      const effectiveCommercialName=commercialName||productCommercialName(template);
+      const inheritedComponents=[...(template?.components||[])];
+
+      if(saveButton){saveButton.disabled=true;saveButton.textContent='Salvando...';}
+      try{
+        const batch=writeBatch(db);
+        const created=pending.map(variant=>{
+          const ref=doc(collection(db,'products'));
+          const payload={
+            code:variant.code,
+            baseCode,
+            color:variant.color,
+            family,
+            commercialName:effectiveCommercialName,
+            components:[...inheritedComponents],
+            variantType:variant.color?'cor':'base',
+            createdAt:now()
+          };
+          batch.set(ref,payload);
+          return {ref,payload};
+        });
+        await batch.commit();
+        state.products=[...state.products,...created.map(item=>({...item.payload,docId:item.ref.id}))];
+        activeProduct=created[0]?.payload.code||activeProduct;
+        closeProductModal();
+        show('product');
+        const skipped=existing.length?` ${existing.length} variante(s) já existente(s) foram ignoradas.`:'';
+        showSaveToast(`${created.length} produto(s)/variante(s) criado(s).${skipped}`,'success');
+      }catch(err){
+        console.error('[Central] Erro ao cadastrar produto(s):',err);
+        showSaveToast(`Não foi possível cadastrar: ${err?.message||'erro inesperado'}`,'error');
+      }finally{
+        if(saveButton){saveButton.disabled=false;saveButton.textContent='Salvar produto(s)';}
+      }
     });
 
     document.querySelector('#componentForm').addEventListener('submit', async e => {
@@ -4231,6 +4411,8 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         if(!exactProduct)return alert('Selecione o SKU / cor específica.');
         productCode=exactProduct;
         productCodes=[exactProduct];
+        const selectedProduct=state.products.find(p=>sameProductCode(p.code,exactProduct));
+        baseCode=selectedProduct?productBaseCode(selectedProduct):'';
       }
 
       const referencedProducts=state.products.filter(p=>{
@@ -4322,21 +4504,34 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     });
 
     document.querySelector('#saveOperationalDetail').addEventListener('click', async () => {
-      const r = state.operationalFailures.find(x => x.id === selectedOperationalId);
-      if (!r) return;
-      const cause = document.querySelector('#opDetailCause').value.trim();
-      const action = document.querySelector('#opDetailAction').value.trim();
-      const notes = document.querySelector('#opDetailNotes').value.trim();
-      const status = document.querySelector('#opDetailStatus').value;
-      const owner = document.querySelector('#opDetailOwnerSelect').value;
-      if(currentAccount?.role !== 'admin' && owner !== r.owner){ alert('Apenas administradores podem alterar o responsável.'); return; }
+      const r=state.operationalFailures.find(x=>x.id===selectedOperationalId);
+      if(!r)return;
+      const scope=readOperationalDetailScope(r);
+      if(!scope)return;
+      const cause=document.querySelector('#opDetailCause').value.trim();
+      const action=document.querySelector('#opDetailAction').value.trim();
+      const notes=document.querySelector('#opDetailNotes').value.trim();
+      const status=document.querySelector('#opDetailStatus').value;
+      const owner=document.querySelector('#opDetailOwnerSelect').value;
+      if(currentAccount?.role!=='admin'&&owner!==r.owner){alert('Apenas administradores podem alterar o responsável.');return;}
+
       const changes=[];
-      if(owner !== r.owner) changes.push(`Responsável alterado para ${owner || 'não definido'}.`);
-      if(status !== r.status) changes.push(`Status alterado para ${status}.`);
-      if(cause !== (r.cause||'') || action !== (r.correctiveAction||'') || notes !== (r.notes||'')) changes.push('Registro operacional atualizado.');
-      const updates = changes.length ? [...(r.updates || []), { text: changes.join(' '), date: now() }] : (r.updates || []);
-      await updateDoc(doc(db, 'operationalFailures', r.docId), { cause, correctiveAction: action, notes, status, owner, updates });
-      renderOperations(); closeOperationalDetail();
+      if(owner!==r.owner)changes.push(`Responsável alterado para ${owner||'não definido'}.`);
+      if(status!==r.status)changes.push(`Status alterado para ${status}.`);
+      if(cause!==(r.cause||'')||action!==(r.correctiveAction||'')||notes!==(r.notes||''))changes.push('Registro operacional atualizado.');
+      const oldScope=failureScopeSummary(r);
+      const newScope=failureScopeSummary({...r,...scope});
+      if(oldScope!==newScope||failureScopeType(r)!==scope.scopeType)changes.push(`Escopo de produto alterado de ${oldScope} para ${newScope}.`);
+      const updates=changes.length?[...(r.updates||[]),{text:changes.join(' '),date:now()}]:(r.updates||[]);
+
+      await updateDoc(doc(db,'operationalFailures',r.docId),{
+        cause,correctiveAction:action,notes,status,owner,updates,
+        family:scope.family,product:scope.product,productCodes:scope.productCodes,baseCode:scope.baseCode,scopeType:scope.scopeType
+      });
+      Object.assign(r,{cause,correctiveAction:action,notes,status,owner,updates,...scope});
+      renderOperations();
+      closeOperationalDetail();
+      showSaveToast('Alterações salvas.','success');
     });
 
     document.querySelector('#deleteOperationalDetail').addEventListener('click', async () => {
@@ -4657,5 +4852,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 try{const aiLang=document.querySelector('#aiLanguageSelect');if(aiLang)aiLang.value=currentLanguage;}catch{}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.26'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.26'){localStorage.setItem('cora.sw.loaded','15.1.13.26');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.27'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.27'){localStorage.setItem('cora.sw.loaded','15.1.13.27');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
