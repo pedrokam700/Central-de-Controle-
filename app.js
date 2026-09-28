@@ -758,21 +758,47 @@
       ['Overdue','Today','Waiting','Next'].forEach((n,i)=>{ const el=document.querySelector('#priority'+n+'Count'); if(el) el.textContent=[overdue,today,waiting,next][i].length; });
       renderPriorityList('priorityOverdueList',overdue); renderPriorityList('priorityTodayList',today); renderPriorityList('priorityWaitingList',waiting); renderPriorityList('priorityNextList',next);
     }
-    function generateReportText(r) { const lines=[`REPORT — ${r.product || ''}${r.component ? ' · '+r.component : r.maquina ? ' · Máquina '+r.maquina : ''}`,``, `Problema: ${r.issue || 'Não informado'}`]; if(r.material) lines.push(`Material: ${r.material}`); if(r.quantity != null) lines.push(`Quantidade acumulada: ${r.quantity} peças`); if(r.quantityPeriod) lines.push(`Período: ${r.quantityPeriod}`); if(r.analysis?.where) lines.push(`Local de detecção: ${r.analysis.where}`); if(r.analysis?.when) lines.push(`Início: ${formatDate(r.analysis.when)}`); if(r.analysis?.hypothesis) lines.push(`Hipótese de causa: ${r.analysis.hypothesis}`); if(r.analysis?.tests) lines.push(`Testes realizados: ${r.analysis.tests}`); if(r.analysis?.cause) lines.push(`Causa confirmada: ${r.analysis.cause}`); if(r.analysis?.action) lines.push(`Ação corretiva: ${r.analysis.action}`); return lines.join('\n'); }
-    function generateAnalysisText(r) { const a=r.analysis||{}; const parts=[]; if(a.problem||r.issue) parts.push(`Foi identificada uma ocorrência relacionada ao ${r.component || r.maquina || 'item'} do produto ${r.product || 'registro operacional'}. Problema: ${a.problem || r.issue}.`); if(a.where) parts.push(`O problema foi detectado em ${a.where}.`); if(a.when) parts.push(`O início registrado foi ${formatDate(a.when)}.`); if(r.quantity!=null) parts.push(`A quantidade acumulada registrada é de ${r.quantity} peças.`); if(a.affected!=null && a.affected!=='') parts.push(`Quantidade afetada informada na análise: ${a.affected} peças.`); if(a.hypothesis) parts.push(`Hipótese de causa: ${a.hypothesis}.`); if(a.tests) parts.push(`Testes realizados: ${a.tests}.`); if(a.cause) parts.push(`Causa confirmada: ${a.cause}.`); if(a.action) parts.push(`Ação corretiva: ${a.action}.`); if(a.notes) parts.push(`Observações: ${a.notes}.`); return parts.join('\n\n'); }
+    function generateReportText(r) {
+      const scope=failureScopeSummary(r);
+      const lines=[`REPORT — ${scope}${r.component ? ' · '+r.component : r.maquina ? ' · Máquina '+r.maquina : ''}`,` `, `Problema: ${r.issue || 'Não informado'}`];
+      if(r.material) lines.push(`Material: ${r.material}`);
+      if(r.quantity != null) lines.push(`Quantidade acumulada: ${r.quantity} peças`);
+      if(r.quantityPeriod) lines.push(`Período: ${r.quantityPeriod}`);
+      if(r.analysis?.where) lines.push(`Local de detecção: ${r.analysis.where}`);
+      if(r.analysis?.when) lines.push(`Início: ${formatDate(r.analysis.when)}`);
+      if(r.analysis?.hypothesis) lines.push(`Hipótese de causa: ${r.analysis.hypothesis}`);
+      if(r.analysis?.tests) lines.push(`Testes realizados: ${r.analysis.tests}`);
+      if(r.analysis?.cause) lines.push(`Causa confirmada: ${r.analysis.cause}`);
+      if(r.analysis?.action) lines.push(`Ação corretiva: ${r.analysis.action}`);
+      return lines.join('\n');
+    }
+    function generateAnalysisText(r) {
+      const a=r.analysis||{}, parts=[], scope=failureScopeSummary(r);
+      if(a.problem||r.issue) parts.push(`Foi identificada uma ocorrência relacionada ao ${r.component || r.maquina || 'item'} no escopo ${scope}. Problema: ${a.problem || r.issue}.`);
+      if(a.where) parts.push(`O problema foi detectado em ${a.where}.`);
+      if(a.when) parts.push(`O início registrado foi ${formatDate(a.when)}.`);
+      if(r.quantity!=null) parts.push(`A quantidade acumulada registrada é de ${r.quantity} peças.`);
+      if(a.affected!=null && a.affected!=='') parts.push(`Quantidade afetada informada na análise: ${a.affected} peças.`);
+      if(a.hypothesis) parts.push(`Hipótese de causa: ${a.hypothesis}.`);
+      if(a.tests) parts.push(`Testes realizados: ${a.tests}.`);
+      if(a.cause) parts.push(`Causa confirmada: ${a.cause}.`);
+      if(a.action) parts.push(`Ação corretiva: ${a.action}.`);
+      if(a.notes) parts.push(`Observações: ${a.notes}.`);
+      return parts.join('\n\n');
+    }
     function copyText(text){ if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>alert('Texto copiado.')); else { const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('Texto copiado.'); } }
     function renderGlobalResults(q){
-      const term=q.toLowerCase().trim(), groups=[], match=(...v)=>v.filter(Boolean).join(' ').toLowerCase().includes(term);
+      const term=q.toLowerCase().trim(), groups=[], match=(...v)=>v.flat(Infinity).filter(Boolean).join(' ').toLowerCase().includes(term);
       const products=state.products.filter(p=>productMatchesQuery(p, term) || match(p.components?.join(' ')));
-      if(products.length) groups.push(['Produtos',products.map(p=>({title:productDisplayCode(p.code),sub:`Família: ${p.family}${productCommercialName(p) ? ` · ${productCommercialName(p)}` : ''}${productColor(p) ? ` · Cor: ${productColor(p)}` : ''}${productBaseCode(p)!==p.code ? ` · Base: ${productBaseCode(p)}` : ''}`,fn:()=>{activeProduct=p.code;activeFamily='';localStorage.removeItem('central.sidebar.productActiveFamily.v1');show('product');document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
-      const reports=state.reports.filter(r=>(r.tipo_falha||'PRODUTO')==='PRODUTO' && match(r.id,r.product,r.family,r.component,r.material,r.issue,r.owner,r.defectCode,r.defectCategory,r.repairComment,r.updates?.map(u=>u.text).join(' ')));
+      if(products.length) groups.push(['Produtos',products.map(p=>({title:productDisplayCode(p.code),sub:`Família: ${p.family}${productCommercialName(p) ? ` · ${productCommercialName(p)}` : ''}${productColor(p) ? ` · Cor: ${productColor(p)}` : ''}${productCodeKey(productBaseCode(p))!==productCodeKey(p.code) ? ` · Base: ${productDisplayCode(productBaseCode(p))}` : ''}`,fn:()=>{activeProduct=p.code;activeFamily='';localStorage.removeItem('central.sidebar.productActiveFamily.v1');show('product');document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      const reports=state.reports.filter(r=>(r.tipo_falha||'PRODUTO')==='PRODUTO' && match(r.id,failureScopeSummary(r),failureProductCodes(r),r.baseCode,r.family,r.component,r.material,r.issue,r.owner,r.defectCode,r.defectCategory,r.repairComment,r.updates?.map(u=>u.text)));
       if(reports.length) groups.push(['Reports de produto',reports.map(r=>({title:`${r.id} · ${failureScopeSummary(r)}`,sub:`${r.component||'Componente'} · ${r.issue||''}`,fn:()=>{openDetail(r.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
-      const ops=state.operationalFailures.filter(r=>match(r.id,r.category,r.maquina,r.linha,r.estacao,r.onde_detectado,r.issue,r.owner,r.hypothesis,r.cause,r.correctiveAction));
-      if(ops.length) groups.push(['Falhas',ops.map(r=>({title:`${r.id} · ${r.maquina||r.estacao||'Ocorrência'}`,sub:`${r.category||'Outro'} · ${r.issue||''}`,fn:()=>{show('operations');openOperationalDetail(r.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
-      const acts=state.activities.filter(a=>match(a.id,a.product,a.title,a.type,a.area,a.description,a.owner,a.updates?.map(u=>u.text).join(' ')));
-      if(acts.length) groups.push(['Atividades',acts.map(a=>({title:`${a.id} · ${a.title}`,sub:a.product?`${a.product} · ${a.area}`:a.area,fn:()=>{openActivityDetail(a.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
-      const flows=state.flows.filter(f=>match(f.id,f.product,f.scope,f.description,f.creator,f.followUpOwner,f.updates?.map(u=>u.text).join(' ')));
-      if(flows.length) groups.push(['Fluxos',flows.map(f=>({title:`${f.id} · ${f.scope}`,sub:f.product||'Sem produto',fn:()=>{openFlowDetail(f.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      const ops=state.operationalFailures.filter(r=>match(r.id,failureScopeSummary(r),failureProductCodes(r),r.baseCode,r.family,r.category,r.maquina,r.linha,r.estacao,r.onde_detectado,r.issue,r.owner,r.hypothesis,r.cause,r.correctiveAction));
+      if(ops.length) groups.push(['Falhas',ops.map(r=>({title:`${r.id} · ${failureScopeSummary(r)}`,sub:`${r.category||'Outro'} · ${r.issue||''}`,fn:()=>{show('operations');openOperationalDetail(r.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      const acts=state.activities.filter(a=>match(a.id,a.product,a.title,a.type,a.area,a.description,a.owner,a.updates?.map(u=>u.text)));
+      if(acts.length) groups.push(['Atividades',acts.map(a=>({title:`${a.id} · ${a.title}`,sub:a.product?`${productDisplayCode(a.product)} · ${a.area}`:a.area,fn:()=>{openActivityDetail(a.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      const flows=state.flows.filter(f=>match(f.id,f.product,f.scope,f.description,f.creator,f.followUpOwner,f.updates?.map(u=>u.text)));
+      if(flows.length) groups.push(['Fluxos',flows.map(f=>({title:`${f.id} · ${f.scope}`,sub:f.product?productDisplayCode(f.product):'Sem produto',fn:()=>{openFlowDetail(f.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
       document.querySelector('#searchResultsSubtitle').textContent=`Resultados para “${q}”`;
       window.__globalSearchActions=[]; let actionIndex=0;
       document.querySelector('#globalResults').innerHTML=groups.length ? groups.map(([name,arr])=>`<div class="search-result-group"><h4>${name} · ${arr.length}</h4>${arr.slice(0,12).map(x=>{const idx=actionIndex++;window.__globalSearchActions[idx]=x.fn;return `<div class="search-result" data-search-index="${idx}"><strong>${esc(x.title)}</strong><div class="secondary-text">${esc(x.sub)}</div></div>`;}).join('')}</div>`).join('') : '<div class="muted-box">Nenhum resultado encontrado.</div>';
@@ -1307,7 +1333,7 @@
         return acc;
       }, {});
       const isAdmin = currentAccount?.role === 'admin';
-      const chevron = dir => `<span class="family-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+      const chevron = () => `<span class="family-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
       const menuIcon = `<svg viewBox="0 0 24 24"><path d="M12 6.5a1.4 1.4 0 1 0 0 .01M12 12a1.4 1.4 0 1 0 0 .01M12 17.5a1.4 1.4 0 1 0 0 .01" fill="currentColor"/></svg>`;
       const html = Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([family, products]) => {
         const bases = products.reduce((acc, p) => {
@@ -1317,23 +1343,20 @@
         }, {});
         const familyOpen = expandedProductFamily === family;
         const familyId = `family-${btoa(unescape(encodeURIComponent(family))).replace(/=/g,'')}`;
-        const baseHtml = Object.entries(bases).sort(([a], [b]) => a.localeCompare(b)).map(([baseCode, variants]) => {
-          const sorted = [...variants].sort((a,b) => a.code.localeCompare(b.code));
+        const baseHtml = Object.entries(bases).sort(([a], [b]) => productDisplayCode(a).localeCompare(productDisplayCode(b))).map(([baseCode, variants]) => {
+          const sorted = [...variants].sort((a,b) => productDisplayCode(a.code).localeCompare(productDisplayCode(b.code)));
           const baseOpen = expandedProductBase === `${family}::${baseCode}`;
           const variantsNeedExpand = sorted.length > 1;
           const renderProductButton = p => {
-            const count = state.reports.filter(r => r.product === p.code && calculatedStatus(r) !== 'concluido').length;
+            const count = state.reports.filter(r => failureAppliesToProduct(r,p) && calculatedStatus(r) !== 'concluido').length;
             const color = productColor(p);
             const displayCode = esc(productDisplayCode(p.code));
             const meta = [color ? `<strong>Cor:</strong> ${esc(color)}` : '', productCommercialName(p) ? `<strong>Comercial:</strong> ${esc(productCommercialName(p))}` : ''].filter(Boolean).join(' · ');
             const metaHtml = meta ? `<span class="variant-meta">${meta}</span>` : '';
-            return `<button class="product-btn ${activeView === 'product' && p.code === activeProduct ? 'active' : ''}" data-product="${esc(p.code)}" title="Abrir ${esc(p.code)}${color ? ' · '+color : ''}"><span>${displayCode}${color ? `<span class="variant-color">· ${esc(color)}</span>` : ''}</span><small>${count ? `${count} em aberto` : 'Sem pendências'}</small>${metaHtml}</button>`;
+            return `<button class="product-btn ${activeView === 'product' && p.code === activeProduct ? 'active' : ''}" data-product="${esc(p.code)}" title="Abrir ${esc(productDisplayCode(p.code))}${color ? ' · '+color : ''}"><span>${displayCode}${color ? `<span class="variant-color">· ${esc(color)}</span>` : ''}</span><small>${count ? `${count} em aberto` : 'Sem pendências'}</small>${metaHtml}</button>`;
           };
           const variantItems = sorted.map(renderProductButton).join('');
-          if (!variantsNeedExpand) {
-            // Uma única variante já é o produto final: não repetir o código-base.
-            return `<div class="base-group base-group-single">${variantItems}</div>`;
-          }
+          if (!variantsNeedExpand) return `<div class="base-group base-group-single">${variantItems}</div>`;
           const baseButton = `<button type="button" class="base-toggle ${baseOpen?'active':''}" data-base-family="${esc(family)}" data-base-code="${esc(baseCode)}" aria-expanded="${baseOpen}" title="Abrir ${esc(productDisplayCode(baseCode))}"><span>${esc(productDisplayCode(baseCode))}</span><span class="base-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>`;
           return `<div class="base-group base-group-multi">${baseButton}<div class="base-variants ${baseOpen?'':'hidden'}">${baseOpen?variantItems:''}</div></div>`;
         }).join('');
@@ -1481,8 +1504,12 @@
         document.querySelector('#allFamily').value = activeFamily;
       }
       const filtered = ordered(state.reports.filter(r => {
-        const product = state.products.find(p => p.code === r.product);
-        const text = [r.product, r.family, r.component, r.material, r.issue, r.owner, product?.baseCode, product?.commercialName, product?.color].join(' ').toLowerCase();
+        const relatedProducts=state.products.filter(p=>failureAppliesToProduct(r,p));
+        const text = [
+          r.id,failureScopeSummary(r),r.family,r.component,r.material,r.issue,r.owner,r.baseCode,
+          ...failureProductCodes(r),
+          ...relatedProducts.flatMap(p=>[p.code,productDisplayCode(p.code),productBaseCode(p),productDisplayCode(productBaseCode(p)),productCommercialName(p),productColor(p)])
+        ].filter(Boolean).join(' ').toLowerCase();
         return (!search || text.includes(search)) && (!family || r.family === family) && (!component || r.component === component) && (!status || calculatedStatus(r) === status);
       }));
       document.querySelector('#allRows').innerHTML = filtered.map(allRow).join('');
@@ -1594,7 +1621,7 @@
     }
 
     function dashboardIndicatorItem(r){
-      const secondary = [r.product || 'Sem produto', r.family || '', r.component || 'Componente não informado', formatDate(r.createdAt)].filter(Boolean).join(' · ');
+      const secondary = [failureScopeSummary(r), r.family || '', r.component || 'Componente não informado', formatDate(r.createdAt)].filter(Boolean).join(' · ');
       const status = chip(calculatedStatus(r));
       return `<button type="button" class="dashboard-detail-item" data-dashboard-report="${esc(r.id)}"><div><strong>${esc(r.id || 'Registro')}</strong><span class="secondary-text">${esc(secondary)}</span><span class="secondary-text">${esc(r.issue || r.defectCode || 'Sem descrição')}</span></div><div class="dashboard-detail-count">${status}</div></button>`;
     }
@@ -1770,7 +1797,7 @@
         userRowsEl.innerHTML = userReports.map(r => `
           <tr data-id="${r.id}">
             <td><span class="identifier">${esc(r.id)}</span><span class="secondary-text">${formatDate(r.createdAt)}</span></td>
-            <td><span class="identifier">${esc(r.product)}</span><span class="secondary-text">${esc(r.family)}</span></td>
+            <td><span class="identifier">${esc(failureScopeSummary(r))}</span><span class="secondary-text">${esc(r.family)}</span></td>
             <td><span class="identifier">${esc(r.component || r.maquina || 'Geral')}</span><span class="secondary-text wrap">${esc(r.issue)}</span></td>
             <td>${linksCell(r)}</td>
             <td>${chip(calculatedStatus(r))}</td>
