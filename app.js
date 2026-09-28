@@ -396,17 +396,64 @@
     const productColor = product => String(product?.color || '').trim();
     const productFamily = product => String(product?.family || '').trim();
     const productCommercialName = product => String(product?.commercialName || product?.commercial || '').trim();
-    // O identificador salvo continua sendo a chave da aplicação. Esta função só
-    // normaliza a apresentação de códigos legados que foram cadastrados sem CPH.
+
+    // Códigos legados podem estar salvos como 2859/2859V. A chave persistida não
+    // é alterada automaticamente; a apresentação e as comparações usam CPH2859/CPH2859V.
     const productDisplayCode = value => {
       const code = String(value || '').trim().replace(/\s+/g, '');
-      return /^\d{4}$/.test(code) ? `CPH${code}` : code;
+      if (!code) return '';
+      if (/^CPH/i.test(code)) return `CPH${code.slice(3).toUpperCase()}`;
+      return /^\d{4}[A-Z0-9]*$/i.test(code) ? `CPH${code.toUpperCase()}` : code;
     };
+    const productCodeKey = value => productDisplayCode(value).toLocaleUpperCase();
+    const sameProductCode = (a,b) => Boolean(productCodeKey(a)) && productCodeKey(a) === productCodeKey(b);
+
     const productMatchesQuery = (product, query) => {
       const q = String(query || '').toLowerCase().trim();
       if (!q) return true;
-      const fields = [product?.code, product?.baseCode, product?.family, product?.commercialName, product?.color].filter(Boolean).map(v => String(v).toLowerCase());
+      const fields = [product?.code, productDisplayCode(product?.code), product?.baseCode, productDisplayCode(product?.baseCode), product?.family, product?.commercialName, product?.color]
+        .filter(Boolean).map(v => String(v).toLowerCase());
       return fields.some(value => value.includes(q));
+    };
+
+    const failureProductCodes = record => {
+      const values = [
+        ...(Array.isArray(record?.productCodes) ? record.productCodes : []),
+        record?.product
+      ].filter(Boolean);
+      const seen = new Set();
+      return values.filter(code => {
+        const key = productCodeKey(code);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    };
+    const failureScopeType = record => {
+      const explicit = String(record?.scopeType || '').toLowerCase();
+      if (['family','base_product','variant','multi_sku'].includes(explicit)) return explicit;
+      if (!record?.product && record?.family) return 'family';
+      return 'variant';
+    };
+    const failureScopeSummary = record => {
+      const scope = failureScopeType(record);
+      if (scope === 'family') return record?.family ? `Família ${record.family}` : 'Família não informada';
+      if (scope === 'base_product') return record?.baseCode ? `${productDisplayCode(record.baseCode)} · todas as cores` : 'Produto base';
+      const codes = failureProductCodes(record).map(productDisplayCode);
+      if (scope === 'multi_sku') return codes.length ? codes.join(' · ') : 'Múltiplos SKUs';
+      return codes[0] || 'Sem produto';
+    };
+    const failureAppliesToProduct = (record, product) => {
+      if (!record || !product) return false;
+      const scope = failureScopeType(record);
+      if (scope === 'family') {
+        return String(record.family || '').toLocaleLowerCase() === productFamily(product).toLocaleLowerCase();
+      }
+      if (scope === 'base_product') {
+        return productCodeKey(record.baseCode) === productCodeKey(productBaseCode(product));
+      }
+      const keys = new Set(failureProductCodes(record).map(productCodeKey));
+      return keys.has(productCodeKey(product.code));
     };
     const activeData = () => state.products.find(p => p.code === activeProduct);
 
@@ -717,9 +764,9 @@
     function renderGlobalResults(q){
       const term=q.toLowerCase().trim(), groups=[], match=(...v)=>v.filter(Boolean).join(' ').toLowerCase().includes(term);
       const products=state.products.filter(p=>productMatchesQuery(p, term) || match(p.components?.join(' ')));
-      if(products.length) groups.push(['Produtos',products.map(p=>({title:p.code,sub:`Família: ${p.family}${productCommercialName(p) ? ` · ${productCommercialName(p)}` : ''}${productColor(p) ? ` · Cor: ${productColor(p)}` : ''}${productBaseCode(p)!==p.code ? ` · Base: ${productBaseCode(p)}` : ''}`,fn:()=>{activeProduct=p.code;activeFamily='';localStorage.removeItem('central.sidebar.productActiveFamily.v1');show('product');document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      if(products.length) groups.push(['Produtos',products.map(p=>({title:productDisplayCode(p.code),sub:`Família: ${p.family}${productCommercialName(p) ? ` · ${productCommercialName(p)}` : ''}${productColor(p) ? ` · Cor: ${productColor(p)}` : ''}${productBaseCode(p)!==p.code ? ` · Base: ${productBaseCode(p)}` : ''}`,fn:()=>{activeProduct=p.code;activeFamily='';localStorage.removeItem('central.sidebar.productActiveFamily.v1');show('product');document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
       const reports=state.reports.filter(r=>(r.tipo_falha||'PRODUTO')==='PRODUTO' && match(r.id,r.product,r.family,r.component,r.material,r.issue,r.owner,r.defectCode,r.defectCategory,r.repairComment,r.updates?.map(u=>u.text).join(' ')));
-      if(reports.length) groups.push(['Reports de produto',reports.map(r=>({title:`${r.id} · ${r.product}`,sub:`${r.component||'Componente'} · ${r.issue||''}`,fn:()=>{openDetail(r.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      if(reports.length) groups.push(['Reports de produto',reports.map(r=>({title:`${r.id} · ${failureScopeSummary(r)}`,sub:`${r.component||'Componente'} · ${r.issue||''}`,fn:()=>{openDetail(r.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
       const ops=state.operationalFailures.filter(r=>match(r.id,r.category,r.maquina,r.linha,r.estacao,r.onde_detectado,r.issue,r.owner,r.hypothesis,r.cause,r.correctiveAction));
       if(ops.length) groups.push(['Falhas',ops.map(r=>({title:`${r.id} · ${r.maquina||r.estacao||'Ocorrência'}`,sub:`${r.category||'Outro'} · ${r.issue||''}`,fn:()=>{show('operations');openOperationalDetail(r.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
       const acts=state.activities.filter(a=>match(a.id,a.product,a.title,a.type,a.area,a.description,a.owner,a.updates?.map(u=>u.text).join(' ')));
@@ -1130,8 +1177,9 @@
       const next = String(newFamilyName || '').trim();
       if (!oldFamily || !next) return;
       if (currentAccount?.role !== 'admin') return alert('Apenas usuários administradores podem renomear famílias.');
-      if (next.toLowerCase() === oldFamily.toLowerCase()) { closeFamilyRenameModal(); return; }
-      if (state.products.some(p => productFamily(p).toLowerCase() === next.toLowerCase())) {
+      if (next === oldFamily) { closeFamilyRenameModal(); return; }
+      const collision = state.products.some(p => productFamily(p) !== oldFamily && productFamily(p).toLocaleLowerCase() === next.toLocaleLowerCase());
+      if (collision) {
         alert('Já existe uma família com esse nome.');
         return;
       }
@@ -1142,15 +1190,13 @@
       }
       const productCodes = products.map(p => p.code);
       try {
-        // Uma família é uma alteração única. O batch impede que a árvore fique
-        // renomeada apenas em parte caso uma gravação seja recusada pelas regras.
         const writes = [
           ...products.map(p => ({ collection: 'products', docId: p.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } })),
-          ...state.reports.filter(r => r.family === oldFamily || productCodes.includes(r.product)).map(r => ({ collection: 'reports', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } })),
-          ...state.operationalFailures.filter(r => r.family === oldFamily || productCodes.includes(r.product)).map(r => ({ collection: 'operationalFailures', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } })),
-          ...state.activities.filter(r => r.family === oldFamily || productCodes.includes(r.product)).map(r => ({ collection: 'activities', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } })),
-          ...state.flows.filter(r => r.family === oldFamily || productCodes.includes(r.product)).map(r => ({ collection: 'flows', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } })),
-          ...state.failureAnalyses.filter(r => r.family === oldFamily || productCodes.includes(r.product)).map(r => ({ collection: 'failureAnalyses', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } }))
+          ...state.reports.filter(r => r.family === oldFamily || failureProductCodes(r).some(code => productCodes.some(p => sameProductCode(p, code)))).map(r => ({ collection: 'reports', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } })),
+          ...state.operationalFailures.filter(r => r.family === oldFamily || failureProductCodes(r).some(code => productCodes.some(p => sameProductCode(p, code)))).map(r => ({ collection: 'operationalFailures', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } })),
+          ...state.activities.filter(r => r.family === oldFamily || productCodes.some(code => sameProductCode(code, r.product))).map(r => ({ collection: 'activities', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } })),
+          ...state.flows.filter(r => r.family === oldFamily || productCodes.some(code => sameProductCode(code, r.product))).map(r => ({ collection: 'flows', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } })),
+          ...state.failureAnalyses.filter(r => r.family === oldFamily || failureProductCodes(r).some(code => productCodes.some(p => sameProductCode(p, code)))).map(r => ({ collection: 'failureAnalyses', docId: r.docId, payload: { family: next, familyUpdatedAt: now(), familyUpdatedBy: currentAccount.email } }))
         ].filter(write => write.docId);
         for (let offset = 0; offset < writes.length; offset += 450) {
           const batch = writeBatch(db);
@@ -1183,29 +1229,33 @@
       const oldFamily = familyToRename;
       const next = String(newFamilyName || '').trim();
       if (!oldFamily || !next) return;
-      if (currentAccount?.role !== 'admin') return alert('Only administrators can rename families.');
-      if (next.toLocaleLowerCase() === oldFamily.toLocaleLowerCase()) { closeFamilyRenameModal(); return; }
-      if (state.products.some(p => productFamily(p).toLocaleLowerCase() === next.toLocaleLowerCase())) {
-        alert('A family with this name already exists.');
+      if (currentAccount?.role !== 'admin') return alert('Apenas administradores podem renomear famílias.');
+      if (next === oldFamily) { closeFamilyRenameModal(); return; }
+
+      const collision = state.products.some(p => productFamily(p) !== oldFamily && productFamily(p).toLocaleLowerCase() === next.toLocaleLowerCase());
+      if (collision) {
+        alert('Já existe uma família com esse nome.');
         return;
       }
+
+      // Mudanças apenas de caixa (Reno -> RENO) precisam de uma gravação real.
+      // Alguns backends tratam os dois nomes como equivalentes, então usamos o
+      // caminho Firestore persistente diretamente nesse caso.
+      if (next.toLocaleLowerCase() === oldFamily.toLocaleLowerCase()) {
+        return renameFamilyLegacy(next);
+      }
+
       try {
         const result = await aiPostJSON('/api/families/rename', { oldFamily, newFamily: next, clientRole: currentAccount?.role || 'user' });
-        if (!result?.ok) throw new Error(result?.error || 'Rename was not confirmed by the server.');
+        if (!result?.ok) throw new Error(result?.error || 'Rename não foi confirmado pelo servidor.');
         if (activeFamily === oldFamily) { activeFamily = next; localStorage.setItem('central.sidebar.productActiveFamily.v1', next); }
         if (expandedProductFamily === oldFamily) { expandedProductFamily = next; localStorage.setItem('central.sidebar.productFamily.v1', next); }
         if (expandedProductBase.startsWith(`${oldFamily}::`)) { expandedProductBase = `${next}::${expandedProductBase.slice(oldFamily.length + 2)}`; localStorage.setItem('central.sidebar.productBase.v1', expandedProductBase); }
         closeFamilyRenameModal();
-        showSaveToast(`Family renamed to “${next}” and synchronized.`, 'success');
+        showSaveToast(`Família renomeada para “${next}”.`, 'success');
       } catch (error) {
-        console.error('Family rename failed:', error);
-        // Preserve the existing direct-Firestore path for installations that have
-        // not yet configured the optional Admin backend. It still persists data;
-        // it is not a local-only UI fallback.
-        if (/firebase admin|backend|http 503|failed to fetch/i.test(String(error?.message || ''))) {
-          return renameFamilyLegacy(next);
-        }
-        showSaveToast(error?.message || 'Unable to rename the family now.', 'error');
+        console.warn('Backend de rename indisponível; usando persistência direta no Firestore:', error);
+        return renameFamilyLegacy(next);
       }
     }
 
@@ -1362,10 +1412,11 @@
     }
 
     function renderProductStats() {
-      const prodReports = state.reports.filter(r => r.product === activeProduct && (r.tipo_falha === 'PRODUTO' || !r.tipo_falha));
+      const product = activeData();
+      const prodReports = product ? state.reports.filter(r => failureAppliesToProduct(r, product) && (r.tipo_falha === 'PRODUTO' || !r.tipo_falha)) : [];
       document.querySelector('#prodTotalCount').textContent = prodReports.length;
 
-      const allProductEvents = state.reports.filter(r => r.product === activeProduct).flatMap(r => (r.updates || []).map(u => ({ ...u, label: `${r.id} (${r.component || 'Operacional'})` })))
+      const allProductEvents = prodReports.flatMap(r => (r.updates || []).map(u => ({ ...u, label: `${r.id} (${r.component || 'Operacional'})` })))
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
       document.querySelector('#productHistoryTimeline').innerHTML = allProductEvents.length ? `
@@ -1392,27 +1443,27 @@
     }
 
     function allRow(r) {
-      return `<tr data-id="${r.id}"><td><span class="identifier">${esc(r.product)}</span><span class="secondary-text">${esc(r.family)}</span></td><td><span class="identifier">${esc(r.component || r.maquina || 'Geral')}</span><span class="secondary-text wrap">${esc(r.issue)}</span></td><td>${esc(r.material || '—')}</td><td>${esc(r.owner)}</td><td>${linksCell(r)}</td><td>${chip(calculatedStatus(r))}</td><td><span class="secondary-text wrap" style="margin:0">${r.updates?.length ? esc(r.updates[r.updates.length - 1].text) : 'Sem atualização'}</span></td></tr>`;
+      return `<tr data-id="${r.id}"><td><span class="identifier">${esc(failureScopeSummary(r))}</span><span class="secondary-text">${esc(r.family)}</span></td><td><span class="identifier">${esc(r.component || r.maquina || 'Geral')}</span><span class="secondary-text wrap">${esc(r.issue)}</span></td><td>${esc(r.material || '—')}</td><td>${esc(r.owner)}</td><td>${linksCell(r)}</td><td>${chip(calculatedStatus(r))}</td><td><span class="secondary-text wrap" style="margin:0">${r.updates?.length ? esc(r.updates[r.updates.length - 1].text) : 'Sem atualização'}</span></td></tr>`;
     }
 
     function renderProduct() {
+      const product = activeData();
       const titleEl = document.querySelector('#activeProductTitle');
-      if (titleEl && activeData()) {
-        titleEl.textContent = `${activeData().code} (${activeData().family}${productColor(activeData()) ? ` · ${productColor(activeData())}` : ''})`;
+      if (titleEl && product) {
+        titleEl.textContent = `${productDisplayCode(product.code)} (${product.family}${productColor(product) ? ` · ${productColor(product)}` : ''})`;
       }
 
-      const selected = state.reports.filter(r => r.product === activeProduct);
-      setOptions('#componentFilter', (activeData()?.components || selected.map(r => r.component)));
+      const selected = product ? state.reports.filter(r => failureAppliesToProduct(r, product)) : [];
+      setOptions('#componentFilter', (product?.components || selected.map(r => r.component)));
       const search = document.querySelector('#productSearch').value.toLowerCase().trim(), component = document.querySelector('#componentFilter').value, status = document.querySelector('#productStatus').value;
 
       const filtered = ordered(selected.filter(r => {
         const rType = r.tipo_falha || 'PRODUTO';
         if (rType !== 'PRODUTO') return false;
-        const product = state.products.find(p => p.code === r.product);
-        const text = [r.id, r.component, r.material, r.issue, r.owner, product?.baseCode, product?.color].join(' ').toLowerCase();
+        const text = [r.id, failureScopeSummary(r), r.component, r.material, r.issue, r.owner, r.baseCode, ...failureProductCodes(r)].join(' ').toLowerCase();
         return (!search || text.includes(search)) && (!component || r.component === component) && (!status || calculatedStatus(r) === status);
       }));
-      
+
       renderProductStats();
       document.querySelector('#productRows').innerHTML = filtered.map(productRow).join('');
       document.querySelector('#productEmpty').classList.toggle('hidden', filtered.length > 0);
@@ -1445,14 +1496,14 @@
     }
     function operationalRow(r) {
       const classification=r.classification || (r.occurrenceMode==='MAQUINA'?'MAQUINA':(r.category==='Processo'?'PROCESSO':'NAO_DEFINIDO'));
-      return `<tr data-op-id="${esc(r.id)}"><td><span class="identifier">${esc(r.id)}</span><span class="secondary-text">${formatDate(r.createdAt)}</span></td><td><span class="identifier">${esc(r.product||'Sem produto')}</span><span class="secondary-text">${esc(r.component||r.peca_danificada||'Sem componente')}</span></td><td><span class="identifier">${esc(r.maquina||'—')}</span><span class="secondary-text">${esc(r.estacao||'Sem posto')} · ${esc(r.linha||'Sem linha')}</span></td><td><span class="identifier">${esc(failureClassificationLabel(classification))}</span><span class="secondary-text">${esc(r.processo||r.category||'Processo não informado')}</span></td><td><span class="wrap">${esc(r.issue||'')}</span><span class="secondary-text">${esc(r.detection_moment_label||r.detectionMoment||r.onde_detectado||'Momento/local não informado')}</span></td><td>${chip(operationalStatus(r))}</td></tr>`;
+      return `<tr data-op-id="${esc(r.id)}"><td><span class="identifier">${esc(r.id)}</span><span class="secondary-text">${formatDate(r.createdAt)}</span></td><td><span class="identifier">${esc(failureScopeSummary(r))}</span><span class="secondary-text">${esc(r.component||r.peca_danificada||'Sem componente')}</span></td><td><span class="identifier">${esc(r.maquina||'—')}</span><span class="secondary-text">${esc(r.estacao||'Sem posto')} · ${esc(r.linha||'Sem linha')}</span></td><td><span class="identifier">${esc(failureClassificationLabel(classification))}</span><span class="secondary-text">${esc(r.processo||r.category||'Processo não informado')}</span></td><td><span class="wrap">${esc(r.issue||'')}</span><span class="secondary-text">${esc(r.detection_moment_label||r.detectionMoment||r.onde_detectado||'Momento/local não informado')}</span></td><td>${chip(operationalStatus(r))}</td></tr>`;
     }
     function renderOperations() {
       const search=document.querySelector('#opSearch')?.value.toLowerCase().trim()||'';
       const status=document.querySelector('#opStatus')?.value||'';
       const category=document.querySelector('#opCategory')?.value||'';
       const filtered=ordered(state.operationalFailures.filter(r=>{
-        const text=[r.id,r.family,r.product,r.component,r.category,r.classification,r.maquina,r.linha,r.estacao,r.processo,r.onde_detectado,r.issue,r.owner,r.hypothesis,r.cause,r.correctiveAction].join(' ').toLowerCase();
+        const text=[r.id,r.family,failureScopeSummary(r),r.baseCode,...failureProductCodes(r),r.component,r.category,r.classification,r.maquina,r.linha,r.estacao,r.processo,r.onde_detectado,r.issue,r.owner,r.hypothesis,r.cause,r.correctiveAction].join(' ').toLowerCase();
         const cls=String(r.classification||'NAO_DEFINIDO').toUpperCase();
         return (!search||text.includes(search))&&(!status||operationalStatus(r)===status)&&(!category||cls===category);
       }));
@@ -1769,7 +1820,9 @@
       // O login é uma camada de acesso sobre a Central.
       // A Central continua montada; a autenticação controla apenas a tela de login.
       appEl.classList.toggle('auth-ready', authReady && Boolean(currentAccount));
-      accountScreenEl.classList.toggle('hidden', !authReady || Boolean(currentAccount));
+      // A tela de login cobre a Central até existir uma conta autenticada.
+      // Não esconda o login apenas porque o Firebase ainda está resolvendo a sessão.
+      accountScreenEl.classList.toggle('hidden', Boolean(currentAccount));
     }
 
     
@@ -2212,7 +2265,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.25'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.25'){localStorage.setItem('cora.sw.loaded','15.1.13.25');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.26'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.26'){localStorage.setItem('cora.sw.loaded','15.1.13.26');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -2253,7 +2306,15 @@ function registerOfflineSupport(){
         const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||`Erro HTTP ${res.status}`);
         const f=form.elements;const set=(name,val)=>{if(f[name]&&val!=null&&String(val).trim())f[name].value=String(val);};
         set('issue',data.issue);set('description_context',data.contextSummary);set('component',data.component);set('material',data.material);set('maquina',data.machine);set('linha',data.line);set('estacao',data.station);set('processo',data.process);set('onde_detectado',data.detectedAt);set('detection_moment',data.detectionMoment);set('quando_inicio',data.startDate);set('quantidade_afetada',data.quantity);set('hipotese_causa',data.hypothesis);set('testes_realizados',data.tests);set('acao_corretiva',data.correctiveAction);set('observacoes',data.notes);set('category_label',data.defectType);
-        if(data.family){fillOperationalProducts();f.family.value=data.family;}if(data.product){document.querySelector('#operationalProductSelect').value=data.product;}if(data.classification)f.classification.value=data.classification;if(data.confidence)f.classification_confidence.value=data.confidence;
+        if(data.family){f.family.value=data.family;fillOperationalProducts();}
+        if(data.product){
+          f.scope_type.value='variant';
+          updateOperationalScopeUI();
+          const select=document.querySelector('#operationalProductSelect');
+          const match=[...select.options].find(o=>sameProductCode(o.value,data.product));
+          if(match)select.value=match.value;
+        }
+        if(data.classification)f.classification.value=data.classification;if(data.confidence)f.classification_confidence.value=data.confidence;
         showSaveToast('A CORA organizou os dados disponíveis. Revise antes de salvar.','success');
       }catch(err){showSaveToast(err.message||'Não foi possível organizar com a CORA. Preencha manualmente.','error');}
       finally{if(button){button.disabled=false;button.textContent='Organizar com a CORA';}}
@@ -3507,9 +3568,9 @@ ${m.text}`).join('\n\n');
       const form = document.querySelector('#productForm');
       if (!form) return;
       const base = String(form.elements.baseCode?.value || '').trim();
-      const color = String(form.elements.color?.value || '').trim();
+      const color = String(form.elements.color?.value || '').trim().toUpperCase();
       const preview = form.elements.codePreview;
-      if (preview) preview.value = base + color;
+      if (preview) preview.value = productDisplayCode(base + color);
     }
     function fillProductFamilySelector(selectedFamily='') {
       const select = document.querySelector('#productFamilySelect');
@@ -3551,7 +3612,15 @@ ${m.text}`).join('\n\n');
     function openComponentModal(returnToFailure = false) { if (!activeData()) return openProductModal(); continueToFailureAfterComponent = returnToFailure; document.querySelector('#componentModalSubtitle').textContent = `Produto selecionado: ${activeData().code} · ${activeData().family}`; document.querySelector('#componentModal').classList.remove('hidden'); document.querySelector('#componentForm input').focus(); }
     function closeComponentModal() { document.querySelector('#componentModal').classList.add('hidden'); document.querySelector('#componentForm').reset(); continueToFailureAfterComponent = false; }
     function fillFailureComponents() { const components = activeData()?.components || []; document.querySelector('#failureComponent').innerHTML = '<option value="">Selecione</option>' + components.sort((a, b) => a.localeCompare(b)).map(component => `<option value="${esc(component)}">${esc(component)}</option>`).join(''); }
-    function openFailureModal() { if (!activeData()) return openProductModal(); if (!(activeData().components || []).length) return openComponentModal(true); fillFailureComponents(); document.querySelector('#failureOwnerDisplay').value = currentAccount?.name || 'Usuário atual'; document.querySelector('#failureModalSubtitle').textContent = `Produto selecionado: ${activeData().code} · ${activeData().family}`; document.querySelector('#failureModal').classList.remove('hidden'); document.querySelector('#failureComponent').focus(); }
+    function openFailureModal() {
+      if (!activeData()) return openProductModal();
+      if (!(activeData().components || []).length) return openComponentModal(true);
+      fillFailureComponents();
+      document.querySelector('#failureOwnerDisplay').value = currentAccount?.name || 'Usuário atual';
+      document.querySelector('#failureModalSubtitle').textContent = `Produto selecionado: ${productDisplayCode(activeData().code)} · ${activeData().family}`;
+      document.querySelector('#failureModal').classList.remove('hidden');
+      document.querySelector('#failureComponent').focus();
+    }
     function closeFailureModal() { document.querySelector('#failureModal').classList.add('hidden'); document.querySelector('#failureForm').reset(); }
     function fillActivityProducts(){ const select=document.querySelector('#activityProduct'); if(!select)return; const current=select.value; select.innerHTML='<option value="">Não relacionado a produto</option>'+state.products.sort((a,b)=>a.code.localeCompare(b.code)).map(p=>`<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.family)}</option>`).join(''); select.value=current||activeProduct||''; }
     function openActivityModal() { fillActivityProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#activityModal').classList.remove('hidden'); document.querySelector('#activityForm [name="title"]').focus(); }
@@ -3653,16 +3722,61 @@ ${m.text}`).join('\n\n');
     }
 
 
+    function updateOperationalScopeUI(){
+      const scope=document.querySelector('#operationalScopeSelect')?.value||'variant';
+      const baseLabel=document.querySelector('#operationalBaseScopeLabel');
+      const productLabel=document.querySelector('#operationalProductScopeLabel');
+      const multiLabel=document.querySelector('#operationalMultiScopeLabel');
+      baseLabel?.classList.toggle('hidden',scope!=='base_product');
+      productLabel?.classList.toggle('hidden',scope!=='variant');
+      multiLabel?.classList.toggle('hidden',scope!=='multi_sku');
+      const productSelect=document.querySelector('#operationalProductSelect');
+      const baseSelect=document.querySelector('#operationalBaseSelect');
+      const multiSelect=document.querySelector('#operationalMultiProductSelect');
+      if(productSelect) productSelect.required=scope==='variant';
+      if(baseSelect) baseSelect.required=scope==='base_product';
+      if(multiSelect) multiSelect.required=scope==='multi_sku';
+      const help=document.querySelector('#operationalScopeHelp');
+      if(help){
+        const messages={
+          family:'A falha vale para a família selecionada, sem limitar a um SKU.',
+          base_product:'O código-base vale para todas as cores/variantes desse produto.',
+          variant:'A falha vale somente para o SKU/cor selecionado.',
+          multi_sku:'Selecione dois ou mais SKUs relacionados à mesma ocorrência.'
+        };
+        help.textContent=messages[scope]||'';
+      }
+    }
+
     function fillOperationalProducts(){
-      const familySelect=document.querySelector('#operationalFamilySelect'),productSelect=document.querySelector('#operationalProductSelect');
-      const families=[...new Set(state.products.map(p=>p.family).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-      const currentFamily=familySelect.value||activeData()?.family||'';
+      const familySelect=document.querySelector('#operationalFamilySelect');
+      const productSelect=document.querySelector('#operationalProductSelect');
+      const baseSelect=document.querySelector('#operationalBaseSelect');
+      const multiSelect=document.querySelector('#operationalMultiProductSelect');
+      if(!familySelect||!productSelect||!baseSelect||!multiSelect)return;
+
+      const families=[...new Set(state.products.map(p=>productFamily(p)).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+      const requestedFamily=familySelect.value||activeData()?.family||'';
       familySelect.innerHTML='<option value="">Não informado</option>'+families.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join('');
-      familySelect.value=families.includes(currentFamily)?currentFamily:'';
-      const products=state.products.filter(p=>!familySelect.value||p.family===familySelect.value).sort((a,b)=>a.code.localeCompare(b.code));
+      familySelect.value=families.includes(requestedFamily)?requestedFamily:'';
+
+      const products=state.products.filter(p=>!familySelect.value||productFamily(p)===familySelect.value).sort((a,b)=>productDisplayCode(a.code).localeCompare(productDisplayCode(b.code)));
       const currentProduct=productSelect.value||activeProduct||'';
-      productSelect.innerHTML='<option value="">Não informado</option>'+products.map(p=>`<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.family)}</option>`).join('');
-      productSelect.value=products.some(p=>p.code===currentProduct)?currentProduct:'';
+      productSelect.innerHTML='<option value="">Selecione</option>'+products.map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))} · ${esc(p.family)}${productColor(p)?` · Cor ${esc(productColor(p))}`:''}</option>`).join('');
+      const productMatch=products.find(p=>sameProductCode(p.code,currentProduct));
+      productSelect.value=productMatch?.code||'';
+
+      const bases=[...new Map(products.map(p=>[productCodeKey(productBaseCode(p)),productBaseCode(p)])).values()].filter(Boolean)
+        .sort((a,b)=>productDisplayCode(a).localeCompare(productDisplayCode(b)));
+      const currentBase=baseSelect.value||'';
+      baseSelect.innerHTML='<option value="">Selecione</option>'+bases.map(base=>`<option value="${esc(base)}">${esc(productDisplayCode(base))} · todas as cores</option>`).join('');
+      const baseMatch=bases.find(base=>productCodeKey(base)===productCodeKey(currentBase));
+      baseSelect.value=baseMatch||'';
+
+      const selectedKeys=new Set([...multiSelect.selectedOptions].map(opt=>productCodeKey(opt.value)));
+      multiSelect.innerHTML=products.map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))}${productColor(p)?` · Cor ${esc(productColor(p))}`:''}</option>`).join('');
+      [...multiSelect.options].forEach(opt=>{opt.selected=selectedKeys.has(productCodeKey(opt.value));});
+      updateOperationalScopeUI();
     }
     function setOccurrenceMode(){document.querySelector('#occurrenceMode').value='UNIFICADA';}
     function previewOperationalEvidence(){
@@ -3670,6 +3784,42 @@ ${m.text}`).join('\n\n');
       preview.innerHTML=''; [...(input.files||[])].filter(f=>f.type.startsWith('image/')).slice(0,8).forEach(file=>{const reader=new FileReader();reader.onload=e=>{const box=document.createElement('div');box.className='preview-thumb';box.innerHTML=`<img src="${e.target.result}" alt="Prévia da evidência">`;preview.appendChild(box);};reader.readAsDataURL(file);});
     }
     function openOperationalFailureModal(prefill={}){
+      updateOwnerDropdowns();
+      const form=document.querySelector('#operationalFailureForm');
+      form.reset();
+      form.elements.scope_type.value='variant';
+      form.elements.classification.value='NAO_DEFINIDO';
+      form.elements.classification_confidence.value='MEDIA';
+
+      const preferredFamily=prefill.family||activeData()?.family||'';
+      const familySelect=document.querySelector('#operationalFamilySelect');
+      fillOperationalProducts();
+      if(preferredFamily && [...familySelect.options].some(o=>o.value===preferredFamily)){
+        familySelect.value=preferredFamily;
+        fillOperationalProducts();
+      }
+      if(activeProduct){
+        const productSelect=document.querySelector('#operationalProductSelect');
+        const match=[...productSelect.options].find(o=>sameProductCode(o.value,activeProduct));
+        if(match) productSelect.value=match.value;
+      }
+
+      const ownerSelect=document.querySelector('#operationalOwnerSelect');
+      if(ownerSelect){ownerSelect.value=currentAccount?.name||'';ownerSelect.disabled=currentAccount?.role!=='admin';}
+      if(prefill.text)form.elements.issue.value=prefill.text;
+      if(prefill.context)form.elements.description_context.value=prefill.context;
+      if(prefill.classification)form.elements.classification.value=prefill.classification;
+      if(prefill.component)form.elements.component.value=prefill.component;
+      if(prefill.machine)form.elements.maquina.value=prefill.machine;
+      if(prefill.station)form.elements.estacao.value=prefill.station;
+      if(prefill.line)form.elements.linha.value=prefill.line;
+      if(prefill.process)form.elements.processo.value=prefill.process;
+      if(prefill.detectionMoment)form.elements.detection_moment.value=prefill.detectionMoment;
+      updateOperationalScopeUI();
+      document.querySelector('#operationalFailureModal').classList.remove('hidden');
+      form.elements.issue.focus();
+      translatePage();
+    }){
       fillOperationalProducts();updateOwnerDropdowns();
       const ownerSelect=document.querySelector('#operationalOwnerSelect'); if(ownerSelect){ownerSelect.value=currentAccount?.name||'';ownerSelect.disabled=currentAccount?.role!=='admin';}
       const form=document.querySelector('#operationalFailureForm'); form.reset();
@@ -3682,19 +3832,18 @@ ${m.text}`).join('\n\n');
     function openOperationalDetail(id){
       const r=state.operationalFailures.find(x=>x.id===id); if(!r)return; selectedOperationalId=id;
       document.querySelector('#opDetailTitle').textContent=`${r.id} · ${r.maquina||r.estacao||'Ocorrência operacional'}`;
-      document.querySelector('#opDetailSubtitle').textContent=`${r.product||'Sem código'} · ${r.family||'Sem família'} · ${r.category||'Outro'} · ${r.linha||'Sem linha'}`;
+      document.querySelector('#opDetailSubtitle').textContent=`${failureScopeSummary(r)} · ${r.family||'Sem família'} · ${r.category||'Outro'} · ${r.linha||'Sem linha'}`;
       updateOwnerDropdowns();
       document.querySelector('#opDetailOwnerSelect').value=r.owner||'';
       document.querySelector('#opDetailOwnerSelect').disabled=currentAccount?.role !== 'admin';
       document.querySelector('#opDetailIssue').textContent=r.issue||'';
-      document.querySelector('#opMachineInfo').innerHTML = `<strong>Classificação</strong>: ${esc(failureClassificationLabel(r.classification||'NAO_DEFINIDO'))} · Certeza: ${esc(r.classificationConfidence||'MEDIA')}<br><strong>Produto</strong>: ${esc(r.product||'Não informado')} · <strong>Componente</strong>: ${esc(r.component||r.peca_danificada||'Não informado')}<br><strong>Máquina</strong>: ${esc(r.maquina||'Não informada')} · <strong>Posto</strong>: ${esc(r.estacao||'Não informado')} · <strong>Linha</strong>: ${esc(r.linha||'Não informada')}<br><strong>Processo</strong>: ${esc(r.processo||'Não informado')} · <strong>Detectado</strong>: ${esc(r.detection_moment_label||r.detectionMoment||'Desconhecido')} · <strong>Onde</strong>: ${esc(r.onde_detectado||'Não informado')}`;
+      document.querySelector('#opMachineInfo').innerHTML = `<strong>Classificação</strong>: ${esc(failureClassificationLabel(r.classification||'NAO_DEFINIDO'))} · Certeza: ${esc(r.classificationConfidence||'MEDIA')}<br><strong>Escopo de produto</strong>: ${esc(failureScopeSummary(r))} · <strong>Componente</strong>: ${esc(r.component||r.peca_danificada||'Não informado')}<br><strong>Máquina</strong>: ${esc(r.maquina||'Não informada')} · <strong>Posto</strong>: ${esc(r.estacao||'Não informado')} · <strong>Linha</strong>: ${esc(r.linha||'Não informada')}<br><strong>Processo</strong>: ${esc(r.processo||'Não informado')} · <strong>Detectado</strong>: ${esc(r.detection_moment_label||r.detectionMoment||'Desconhecido')} · <strong>Onde</strong>: ${esc(r.onde_detectado||'Não informado')}`;
       document.querySelector('#opDetailEvidence').innerHTML=evidenceGallery(r.evidence,{allowDelete:true,kind:'operational',id:r.id});
       document.querySelector('#opDetailEvidencePreview').innerHTML='';
       document.querySelector('#opDetailCause').value=r.cause||'';
       document.querySelector('#opDetailAction').value=r.correctiveAction||'';
       document.querySelector('#opDetailStatus').value=operationalStatus(r);
       document.querySelector('#opDetailNotes').value=r.notes||'';
-      document.querySelector('#opDetailEvidence').innerHTML=evidenceGallery(r.evidence,{allowDelete:true,kind:'operational',id:r.id});
       document.querySelector('#operationalDetailModal').classList.remove('hidden');
     }
     function closeOperationalDetail(){document.querySelector('#operationalDetailModal').classList.add('hidden');selectedOperationalId=null;}
@@ -3702,7 +3851,16 @@ ${m.text}`).join('\n\n');
     async function convertFailureToProductReport(failureId){
       const source=state.operationalFailures.find(r=>r.id===failureId);if(!source)return;
       if(String(source.classification||'').toUpperCase()!=='PRODUTO')return alert('Classifique a falha como Produto antes de transformá-la em Report.');
-      const report={id:nextId('F'),tipo_falha:'PRODUTO',produtoConfirmado:true,emailStatus:'pendente',emailDraft:'',family:source.family||'',product:source.product||'',component:source.component||source.peca_danificada||'',material:source.material||'',issue:source.issue||'',owner:source.owner||currentAccount?.name||'',assignees:source.assignees||[],assignmentMode:source.assignmentMode||'private',teamShared:source.teamShared,evidence:source.evidence||[],status:'pendente',createdAt:now(),updates:[{text:`Convertido da Falha ${source.id}.`,date:now()}],detectionMoment:source.detectionMoment||'',originConfirmed:source.originConfirmed||''};
+      const report={
+        id:nextId('F'),tipo_falha:'PRODUTO',produtoConfirmado:true,emailStatus:'pendente',emailDraft:'',
+        family:source.family||'',product:source.product||'',productCodes:failureProductCodes(source),
+        baseCode:source.baseCode||'',scopeType:failureScopeType(source),
+        component:source.component||source.peca_danificada||'',material:source.material||'',issue:source.issue||'',
+        owner:source.owner||currentAccount?.name||'',assignees:source.assignees||[],assignmentMode:source.assignmentMode||'private',
+        teamShared:source.teamShared,evidence:source.evidence||[],status:'pendente',createdAt:now(),
+        updates:[{text:`Convertido da Falha ${source.id}.`,date:now()}],
+        detectionMoment:source.detectionMoment||'',originConfirmed:source.originConfirmed||''
+      };
       await addDoc(collection(db,'reports'),report);
       await updateDoc(doc(db,'operationalFailures',source.docId),{convertedToReportId:report.id,convertedAt:now(),updates:[...(source.updates||[]),{text:`Convertido para Report de Produto ${report.id}.`,date:now()}]});
       showSaveToast(`Falha convertida em Report de Produto ${report.id}. E-mail pendente.`,'success');show('all');openDetail(report.id);
@@ -3823,13 +3981,8 @@ ${m.text}`).join('\n\n');
     document.querySelector('#headerNewOperationalFailure').addEventListener('click', openOperationalFailureModal);
     document.querySelector('#operationalEvidenceInput').addEventListener('change', previewOperationalEvidence);
 
-    document.querySelector('#operationalFamilySelect').addEventListener('change', () => {
-      const family=document.querySelector('#operationalFamilySelect').value;
-      const productSelect=document.querySelector('#operationalProductSelect');
-      const products=state.products.filter(p=>!family || p.family===family).sort((a,b)=>a.code.localeCompare(b.code));
-      productSelect.innerHTML='<option value="">Selecione</option>'+products.map(p=>`<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.family)}</option>`).join('');
-      if(products.length===1) productSelect.value=products[0].code;
-    });
+    document.querySelector('#operationalFamilySelect').addEventListener('change', () => fillOperationalProducts());
+    document.querySelector('#operationalScopeSelect')?.addEventListener('change', updateOperationalScopeUI);
     document.querySelector('#quickOperationalFailure').addEventListener('click', () => openOperationalFailureModal());
     document.querySelector('#newActivity').addEventListener('click', openActivityModal);
     document.querySelector('#newFlow').addEventListener('click', openFlowModal);
@@ -3948,7 +4101,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const code = (baseCode + color).trim();
       if (!family || !baseCode || !code) { alert('Selecione uma família existente ou crie uma nova família, e informe o código-base.'); return; }
       if (!selectedFamily && !newFamilyName) { alert('Selecione uma família existente ou crie uma nova família.'); return; }
-      if (state.products.some(p => p.code.toLowerCase() === code.toLowerCase())) {
+      if (state.products.some(p => sameProductCode(p.code, code))) {
         alert('Este produto/variante já está cadastrado.'); return;
       }
       await addDoc(collection(db, "products"), { code, baseCode, color, family, commercialName, components: [], variantType: color ? 'cor' : 'base', createdAt: now() });
@@ -3994,6 +4147,9 @@ document.querySelectorAll('.product-tab').forEach(btn => {
           emailStatus: 'pendente',
           emailDraft: '',
           product: p.code,
+          productCodes: [p.code],
+          baseCode: productBaseCode(p),
+          scopeType: 'variant',
           family: p.family,
           component,
           maquina: '',
@@ -4029,15 +4185,49 @@ document.querySelectorAll('.product-tab').forEach(btn => {
 
     document.querySelector('#operationalFailureForm').addEventListener('submit', async e => {
       e.preventDefault();
-      const form=e.currentTarget;const f=new FormData(form);
+      const form=e.currentTarget;
+      const f=new FormData(form);
       const assignment=assignmentPayload(form,String(f.get('owner')||'').trim());
-      const productCode=String(f.get('product')||'').trim();const product=state.products.find(p=>p.code===productCode);
-      const rawQty=String(f.get('quantidade_afetada')||'').trim();const evidence=await readAttachments(f.getAll('evidence').filter(Boolean));
-      const classification=String(f.get('classification')||'NAO_DEFINIDO').toUpperCase();const detectionMoment=String(f.get('detection_moment')||'DESCONHECIDO');
+      const scopeType=String(f.get('scope_type')||'variant').trim();
+      const selectedFamily=String(f.get('family')||'').trim();
+      const exactProduct=String(f.get('product')||'').trim();
+      const selectedBase=String(f.get('base_product')||'').trim();
+      const multiCodes=f.getAll('products').map(v=>String(v||'').trim()).filter(Boolean);
+      let productCode='',productCodes=[],baseCode='';
+
+      if(scopeType==='family'){
+        if(!selectedFamily)return alert('Selecione a família à qual a falha se aplica.');
+      }else if(scopeType==='base_product'){
+        if(!selectedBase)return alert('Selecione o código-base do produto.');
+        baseCode=selectedBase;
+      }else if(scopeType==='multi_sku'){
+        const unique=new Map(multiCodes.map(code=>[productCodeKey(code),code]));
+        productCodes=[...unique.values()];
+        if(productCodes.length<2)return alert('Selecione pelo menos dois SKUs para usar o escopo de múltiplos SKUs.');
+        productCode=productCodes[0]||'';
+      }else{
+        if(!exactProduct)return alert('Selecione o SKU / cor específica.');
+        productCode=exactProduct;
+        productCodes=[exactProduct];
+      }
+
+      const referencedProducts=state.products.filter(p=>{
+        if(scopeType==='family')return selectedFamily && productFamily(p)===selectedFamily;
+        if(scopeType==='base_product')return productCodeKey(productBaseCode(p))===productCodeKey(baseCode);
+        return productCodes.some(code=>sameProductCode(code,p.code));
+      });
+      const inferredFamilies=[...new Set(referencedProducts.map(productFamily).filter(Boolean))];
+      const family=selectedFamily||(inferredFamilies.length===1?inferredFamilies[0]:'');
+
+      const rawQty=String(f.get('quantidade_afetada')||'').trim();
+      const evidence=await readAttachments(f.getAll('evidence').filter(Boolean));
+      const classification=String(f.get('classification')||'NAO_DEFINIDO').toUpperCase();
+      const detectionMoment=String(f.get('detection_moment')||'DESCONHECIDO');
       const detectionLabels={DESCONHECIDO:'Desconhecido',ANTES_MONTAGEM:'Antes da montagem',DURANTE_MONTAGEM:'Durante a montagem',APOS_MONTAGEM:'Após a montagem',TESTE:'No teste',INSPECAO:'Na inspeção',RETRABALHO:'No retrabalho',ENTRADA_LINHA:'Na entrada da linha',OUTRO:'Outro'};
       const issue=String(f.get('issue')||'').trim();if(!issue)return alert('Descreva a falha antes de salvar.');
       const item={
-        id:nextId('FO'),family:String(f.get('family')||product?.family||'').trim(),product:productCode,component:String(f.get('component')||'').trim(),material:String(f.get('material')||'').trim(),
+        id:nextId('FO'),family,product:productCode,productCodes,baseCode,scopeType,
+        component:String(f.get('component')||'').trim(),material:String(f.get('material')||'').trim(),
         occurrenceMode:'UNIFICADA',classification,classificationConfidence:String(f.get('classification_confidence')||'MEDIA'),category:classification,categoryLabel:String(f.get('category_label')||'').trim(),
         maquina:String(f.get('maquina')||'').trim(),linha:String(f.get('linha')||'').trim(),estacao:String(f.get('estacao')||'').trim(),processo:String(f.get('processo')||'').trim(),peca_danificada:String(f.get('component')||'').trim(),
         detectionMoment,detection_moment_label:detectionLabels[detectionMoment]||detectionMoment,quando_inicio:f.get('quando_inicio')||'',onde_detectado:String(f.get('onde_detectado')||'').trim(),quantity:rawQty===''?null:Number(rawQty),
@@ -4445,5 +4635,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 try{const aiLang=document.querySelector('#aiLanguageSelect');if(aiLang)aiLang.value=currentLanguage;}catch{}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.25'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.25'){localStorage.setItem('cora.sw.loaded','15.1.13.25');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.26'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.26'){localStorage.setItem('cora.sw.loaded','15.1.13.26');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
