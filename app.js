@@ -4380,6 +4380,11 @@ ${m.text}`).join('\n\n');
       translatePage();
     }
 
+    function fillFlowProducts() { const select = document.querySelector('#flowProduct'); select.innerHTML = `<option value="">${esc(t('Não relacionado a produto'))}</option>` + state.products.sort((a, b) => a.code.localeCompare(b.code)).map(product => `<option value="${esc(product.code)}">${esc(product.code)} · ${esc(product.family)}</option>`).join(''); }
+    function openFlowModal() { fillFlowProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#flowModal').classList.remove('hidden'); document.querySelector('#flowForm select').focus(); }
+    function closeFlowModal() { document.querySelector('#flowModal').classList.add('hidden'); document.querySelector('#flowForm').reset(); }
+    function openFlowDetail(id) { selectedFlowId = id; renderFlowDetail(); document.querySelector('#flowDetailModal').classList.remove('hidden'); }
+    function closeFlowDetail() { document.querySelector('#flowDetailModal').classList.add('hidden'); selectedFlowId = null; }
     function renderFlowDetail() {
       const flow = selectedFlow();
       if (!flow) return;
