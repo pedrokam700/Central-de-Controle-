@@ -237,6 +237,7 @@
       if(kind==='report') renderDetail();
       else if(kind==='operational') openOperationalDetail(id);
       else if(kind==='flow') renderFlowDetail();
+      else if(kind==='activity') renderActivityDetail();
     }
 
     function clearDataListeners() {
@@ -1596,9 +1597,11 @@
     }
 
     function activityRow(activity) {
-      const assignment=normalizeAssignment(activity);
-      const who=assignment.mode==='open' ? 'Aberta para todos' : assignment.assignees.join(', ') || activity.owner || '—';
-      return `<tr data-activity="${activity.id}"><td><span class="identifier">${esc(activity.title)}</span><span class="secondary-text wrap">${esc(activity.description)}</span></td><td><span class="identifier">${esc(activity.type)}</span><span class="secondary-text">${esc(activity.area)}</span></td><td>${esc(who)}</td><td>${activity.dueDate ? formatDate(activity.dueDate) : '—'}</td><td>${safeLink(activity.link, 'Abrir link') || '<span class="muted">—</span>'}</td><td>${activityChip(activity.status)}</td></tr>`;
+      const assignment=normalizeAssignment(activity),who=assignment.mode==='open'?'Aberta para todos':assignment.assignees.join(', ')||activity.owner||'—';
+      const structured=activity.activityMode==='structured'||Boolean(activity.nextAction)||(activity.steps||[]).length;
+      const continuation=structured&&activity.nextAction?`<span class="secondary-text wrap activity-next-action">Próxima: ${esc(activity.nextAction)}</span>`:`<span class="secondary-text wrap">${esc(activity.description)}</span>`;
+      const movement=structured?`<span class="secondary-text">${esc(activityMovementText(activity))}</span>`:'';
+      return `<tr data-activity="${activity.id}"><td><span class="identifier">${esc(activity.title)}${structured?' · Estruturada':''}</span>${continuation}</td><td><span class="identifier">${esc(activity.type)}</span><span class="secondary-text">${esc(activity.area)}</span>${movement}</td><td>${esc(who)}</td><td>${activity.dueDate?formatDate(activity.dueDate):'—'}</td><td>${safeLink(activity.link,'Abrir link')||'<span class="muted">—</span>'}</td><td>${activityChip(activity.status)}</td></tr>`;
     }
 
     function renderWork() {
@@ -1609,7 +1612,7 @@
       const status = document.querySelector('#workStatus').value;
       const filtered = ordered(state.activities.filter(activity => {
         const assignment=normalizeAssignment(activity);
-        const text = [activity.title, activity.type, activity.area, activity.description, activity.owner, ...(assignment.assignees||[])].join(' ').toLowerCase();
+        const text = [activity.title, activity.type, activity.area, activity.description, activity.nextAction, ...(activity.steps||[]).map(x=>x.text), activity.owner, ...(assignment.assignees||[])].join(' ').toLowerCase();
         return (!search || text.includes(search)) && (!product || activity.product === product) && (!owner || assignment.assignees.includes(owner) || activity.owner === owner) && (!status || activity.status === status);
       }));
       document.querySelector('#workRows').innerHTML = filtered.map(activityRow).join('');
@@ -3456,7 +3459,7 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
 
     function initV1424Interface(){
       enforceCentralUIIntegrity();
-      const navShortMap={home:'⌂',dashboard:'▦',product:'F',operations:'O',work:'✓',flow:'≡',aiAnalysis:'C',profile:'P'};
+      const navShortMap={home:'⌂',daily:'◷',dashboard:'▦',product:'F',operations:'O',work:'✓',flow:'≡',aiAnalysis:'C',profile:'P'};
       document.querySelectorAll('.main-nav button[data-page]').forEach(btn=>{
         const page=btn.dataset.page||'';
         if(!btn.dataset.short) btn.dataset.short=navShortMap[page]||page.slice(0,1).toUpperCase();
@@ -3990,6 +3993,212 @@ ${m.text}`).join('\n\n');
       if(body) body.innerHTML=rows.map(x=>`<tr><td><span class="identifier">${esc(x.dateKey||'')}</span><span class="secondary-text">${esc(x.shiftName||'')}</span></td><td>${esc(x.routineName||'Rotina')}</td><td>${esc(x.scopeName||'—')}</td><td>${esc((x.expectedUserNames||[]).join(', ')||x.assignedUserName||'—')}</td><td>${esc(dailyResultLabel(x.result))}</td><td>${esc(x.plannedTime||'Turno')}${x.completedAt?` · ${esc(new Date(x.completedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))}`:''}</td></tr>`).join('');
       document.querySelector('#dailyDashEmpty')?.classList.toggle('hidden',rows.length>0);
     }
+
+    function resetDailyAdminForm(kind){
+      const map={shift:'#dailyShiftForm',scope:'#dailyScopeForm',allocation:'#dailyAllocationForm',routine:'#dailyRoutineForm'};
+      const form=document.querySelector(map[kind]); if(!form) return;
+      form.reset();
+      if(form.elements.docId) form.elements.docId.value='';
+      if(kind==='shift'&&form.elements.active) form.elements.active.checked=true;
+      if(kind==='scope'&&form.elements.active) form.elements.active.checked=true;
+      if(kind==='routine'){
+        form.elements.active.checked=true;
+        form.elements.allowFailure.checked=true;
+        form.elements.allowActivity.checked=true;
+        form.elements.requireNgNote.checked=true;
+        form.elements.minParticipants.value=1;
+        form.elements.windowMinutes.value=60;
+        const weekdays=new Set(['1','2','3','4','5']);
+        [...form.elements.routineDays].forEach(x=>x.checked=weekdays.has(x.value));
+        renderDailyRoutineScheduleEditor();
+      }
+    }
+
+    function dailyEditAdminItem(kind,id){
+      if(currentAccount?.role!=='admin') return;
+      if(kind==='shift'){
+        const item=state.workShifts.find(x=>x.docId===id); if(!item)return;
+        const f=document.querySelector('#dailyShiftForm'); f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.startTime.value=item.startTime||'';f.elements.endTime.value=item.endTime||'';f.elements.active.checked=item.active!==false;f.scrollIntoView({behavior:'smooth',block:'center'});
+      }else if(kind==='scope'){
+        const item=state.operationalScopes.find(x=>x.docId===id); if(!item)return;
+        const f=document.querySelector('#dailyScopeForm');f.elements.docId.value=item.docId;f.elements.type.value=item.type||'line';f.elements.name.value=item.name||'';f.elements.code.value=item.code||'';f.elements.active.checked=item.active!==false;f.scrollIntoView({behavior:'smooth',block:'center'});
+      }else if(kind==='allocation'){
+        const item=state.workAllocations.find(x=>x.docId===id); if(!item)return;
+        const f=document.querySelector('#dailyAllocationForm');f.elements.docId.value=item.docId;f.elements.userId.value=item.userId||'';f.elements.shiftId.value=item.shiftId||'';f.elements.position.value=item.position||'member';
+        const selected=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=selected.has(o.value));f.scrollIntoView({behavior:'smooth',block:'center'});
+      }else if(kind==='routine'){
+        const item=state.routineTemplates.find(x=>x.docId===id); if(!item)return;
+        const f=document.querySelector('#dailyRoutineForm');f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.description.value=item.description||'';f.elements.executionPolicy.value=item.executionPolicy||'scope_once';f.elements.minParticipants.value=item.minParticipants||1;f.elements.windowMinutes.value=item.windowMinutes??60;f.elements.resultMode.value=item.resultMode||'ok_ng';f.elements.checklistTemplate.value=(item.checklistTemplate||[]).join('\n');f.elements.allowFailure.checked=item.allowFailure!==false;f.elements.allowActivity.checked=item.allowActivity!==false;f.elements.requireNgNote.checked=item.requireNgNote!==false;f.elements.active.checked=item.active!==false;
+        const scopes=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=scopes.has(o.value));
+        const days=new Set((item.days||[1,2,3,4,5]).map(String));[...f.elements.routineDays].forEach(o=>o.checked=days.has(o.value));
+        renderDailyRoutineScheduleEditor(item);f.scrollIntoView({behavior:'smooth',block:'start'});
+      }
+    }
+
+    async function dailyToggleAdminItem(kind,id){
+      if(currentAccount?.role!=='admin') return;
+      const map={shift:['workShifts',state.workShifts],scope:['operationalScopes',state.operationalScopes],routine:['routineTemplates',state.routineTemplates]};
+      const entry=map[kind]; if(!entry)return; const item=entry[1].find(x=>x.docId===id);if(!item)return;
+      await updateDoc(doc(db,entry[0],id),{active:item.active===false,updatedAt:now(),updatedBy:currentAccount.email});
+      dailyMaterializeSignature='';
+    }
+
+    async function dailyDeleteAllocation(id){
+      if(currentAccount?.role!=='admin')return;
+      const item=state.workAllocations.find(x=>x.docId===id);if(!item)return;
+      if(!confirm('Remover esta alocação atual? O histórico das execuções já realizadas será preservado.'))return;
+      await deleteDoc(doc(db,'workAllocations',id));dailyMaterializeSignature='';
+    }
+
+    function dailyRoutineSchedulePayload(){
+      const map={};
+      document.querySelectorAll('#dailyRoutineSchedules [data-routine-shift]').forEach(check=>{
+        if(!check.checked)return;
+        const id=check.dataset.routineShift;
+        const input=[...document.querySelectorAll('#dailyRoutineSchedules [data-routine-times]')].find(x=>x.dataset.routineTimes===id);
+        const raw=input?.value||'';
+        const times=[...new Set(raw.split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean))];
+        if(times.some(x=>!/^([01]\d|2[0-3]):[0-5]\d$/.test(x))) throw new Error('Use horários no formato HH:MM. Ex.: 09:00, 14:30.');
+        map[id]=times;
+      });
+      return map;
+    }
+
+    async function saveDailyShift(form){
+      if(currentAccount?.role!=='admin')return;
+      const f=new FormData(form), id=String(f.get('docId')||''), payload={name:String(f.get('name')||'').trim(),startTime:String(f.get('startTime')||''),endTime:String(f.get('endTime')||''),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
+      if(!payload.name||!payload.startTime||!payload.endTime)return alert('Preencha nome, início e fim do turno.');
+      if(id) await updateDoc(doc(db,'workShifts',id),payload); else await addDoc(collection(db,'workShifts'),{...payload,createdAt:now()});
+      resetDailyAdminForm('shift');dailyMaterializeSignature='';showSaveToast('Turno salvo.','success');
+    }
+
+    async function saveDailyScope(form){
+      if(currentAccount?.role!=='admin')return;
+      const f=new FormData(form), id=String(f.get('docId')||''), payload={type:String(f.get('type')||'line'),name:String(f.get('name')||'').trim(),code:String(f.get('code')||'').trim(),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
+      if(!payload.name)return alert('Informe o nome do escopo.');
+      if(id)await updateDoc(doc(db,'operationalScopes',id),payload);else await addDoc(collection(db,'operationalScopes'),{...payload,createdAt:now()});
+      resetDailyAdminForm('scope');dailyMaterializeSignature='';showSaveToast('Escopo salvo.','success');
+    }
+
+    async function saveDailyAllocation(form){
+      if(currentAccount?.role!=='admin')return;
+      const f=new FormData(form), requestedId=String(f.get('docId')||''), userId=String(f.get('userId')||''), shiftId=String(f.get('shiftId')||''), scopeIds=f.getAll('scopeIds').filter(Boolean);
+      if(!userId||!shiftId||!scopeIds.length)return alert('Selecione pessoa, turno e pelo menos um escopo.');
+      const user=users.find(u=>u.docId===userId), shift=state.workShifts.find(s=>s.docId===shiftId);
+      const existing=state.workAllocations.find(a=>a.userId===userId&&a.shiftId===shiftId&&a.docId!==requestedId);
+      const id=requestedId||existing?.docId||'';
+      const payload={userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:String(f.get('position')||'member'),updatedAt:now(),updatedBy:currentAccount.email};
+      if(id)await updateDoc(doc(db,'workAllocations',id),payload);else await addDoc(collection(db,'workAllocations'),{...payload,createdAt:now()});
+      resetDailyAdminForm('allocation');dailyMaterializeSignature='';showSaveToast(existing&&!requestedId?'Alocação atualizada.':'Alocação salva.','success');
+    }
+
+    async function saveDailyRoutine(form){
+      if(currentAccount?.role!=='admin')return;
+      const f=new FormData(form), id=String(f.get('docId')||'');
+      let scheduleMap;try{scheduleMap=dailyRoutineSchedulePayload();}catch(error){return alert(error.message);}
+      if(!Object.keys(scheduleMap).length)return alert('Selecione pelo menos um turno na agenda da rotina.');
+      const days=f.getAll('routineDays').map(Number), scopeIds=f.getAll('scopeIds').filter(Boolean);
+      const payload={
+        name:String(f.get('name')||'').trim(),description:String(f.get('description')||'').trim(),scopeIds,scheduleMap,days,
+        executionPolicy:String(f.get('executionPolicy')||'scope_once'),minParticipants:Math.max(1,Number(f.get('minParticipants')||1)),
+        windowMinutes:Math.max(0,Number(f.get('windowMinutes')||60)),resultMode:String(f.get('resultMode')||'ok_ng'),
+        checklistTemplate:String(f.get('checklistTemplate')||'').split('\n').map(x=>x.trim()).filter(Boolean),
+        allowFailure:f.get('allowFailure')==='on',allowActivity:f.get('allowActivity')==='on',requireNgNote:f.get('requireNgNote')==='on',active:f.get('active')==='on',
+        updatedAt:now(),updatedBy:currentAccount.email
+      };
+      if(!payload.name)return alert('Informe o nome da rotina.');
+      if(!days.length)return alert('Selecione pelo menos um dia ativo.');
+      if(id)await updateDoc(doc(db,'routineTemplates',id),payload);else await addDoc(collection(db,'routineTemplates'),{...payload,createdAt:now()});
+      resetDailyAdminForm('routine');dailyMaterializeSignature='';showSaveToast('Rotina salva.','success');
+    }
+
+    function dailyFindExecution(key){
+      const expected=dailyExpectedExecutions().find(x=>x.executionKey===key)||{};
+      const actual=state.routineExecutions.find(x=>(x.executionKey||x.docId)===key)||{};
+      return Object.keys(expected).length||Object.keys(actual).length ? {...expected,...actual,executionKey:key,status:actual.status||'planned'} : null;
+    }
+
+    function dailyParticipantList(execution,includeCurrent=true){
+      const list=Array.isArray(execution?.participants)?execution.participants.map(x=>({...x})):[];
+      const uid=currentAuthUser?.uid;
+      if(includeCurrent&&uid&&!list.some(p=>p.userId===uid))list.push({userId:uid,name:currentAccount?.name||'Usuário',joinedAt:now()});
+      return list;
+    }
+
+    async function startDailyExecution(key){
+      const execution=dailyFindExecution(key);if(!execution)return;
+      if(!dailyExecutionVisibleToCurrent(execution)&&currentAccount?.role!=='admin')return alert('Esta rotina não está atribuída a você.');
+      const participants=dailyParticipantList(execution,true);
+      await setDoc(doc(db,'routineExecutions',key),{status:'in_progress',startedAt:execution.startedAt||now(),startedById:execution.startedById||currentAuthUser?.uid||'',startedByName:execution.startedByName||currentAccount?.name||'',participants,updatedAt:now()},{merge:true});
+      showSaveToast('Rotina iniciada.','success');
+    }
+
+    function openRoutineExecution(key){
+      const execution=dailyFindExecution(key);if(!execution)return;
+      selectedRoutineExecutionId=key;
+      document.querySelector('#routineExecutionTitle').textContent=execution.routineName||'Executar rotina';
+      document.querySelector('#routineExecutionSubtitle').textContent=`${execution.scopeName||''} · ${execution.shiftName||''}${execution.plannedTime?` · ${execution.plannedTime}`:''}`;
+      const result=document.querySelector('#routineExecutionResult');
+      result.innerHTML=execution.resultMode==='simple'
+        ? '<option value="done">Concluído</option><option value="na">Não aplicável</option>'
+        : '<option value="ok">OK</option><option value="ng">NG / Anormalidade</option><option value="na">Não aplicável</option>';
+      result.value=execution.result|| (execution.resultMode==='simple'?'done':'ok');
+      document.querySelector('#routineExecutionNote').value=execution.note||'';
+      const template=execution.checklistTemplate||[];
+      const saved=Array.isArray(execution.checklist)?execution.checklist:[];
+      const box=document.querySelector('#routineExecutionChecklistBox'),list=document.querySelector('#routineExecutionChecklist');
+      box.classList.toggle('hidden',!template.length);
+      list.innerHTML=template.map((text,index)=>{const previous=saved.find(x=>x.text===text)||saved[index]||{};return `<label class="routine-check-item"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}><span>${esc(text)}</span></label>`;}).join('');
+      document.querySelector('#routineExecutionForm').elements.evidence.value='';
+      document.querySelector('#routineExecutionModal').classList.remove('hidden');
+    }
+
+    function closeRoutineExecution(){
+      document.querySelector('#routineExecutionModal')?.classList.add('hidden');
+      selectedRoutineExecutionId=null;
+      document.querySelector('#routineExecutionForm')?.reset();
+    }
+
+    async function saveRoutineExecution(form){
+      const key=selectedRoutineExecutionId,execution=dailyFindExecution(key);if(!execution)return;
+      const f=new FormData(form), result=String(f.get('result')||'done'), note=String(f.get('note')||'').trim();
+      if(result==='ng'&&execution.requireNgNote!==false&&!note)return alert('Descreva a anormalidade antes de salvar o resultado NG.');
+      const participants=dailyParticipantList(execution,true);
+      if(execution.executionPolicy==='min_people'&&participants.length<Number(execution.requiredParticipants||1))return alert(`Esta rotina exige pelo menos ${execution.requiredParticipants} participantes. Outros alocados podem abrir a mesma rotina e clicar em Iniciar.`);
+      const template=execution.checklistTemplate||[];
+      const checklist=template.map((text,index)=>({text,done:Boolean(document.querySelector(`[data-routine-check="${index}"]`)?.checked)}));
+      if(template.length&&['ok','done'].includes(result)&&checklist.some(x=>!x.done))return alert('Conclua os itens do checklist ou registre a execução como NG.');
+      const newEvidence=await readAttachments(f.getAll('evidence').filter(Boolean));
+      const evidence=[...evidenceEntries(execution.evidence),...newEvidence];
+      const completedAt=now(),onTime=new Date(completedAt)<=dailyExecutionDeadline(execution);
+      await setDoc(doc(db,'routineExecutions',key),{status:'completed',result,note,checklist,evidence,participants,startedAt:execution.startedAt||completedAt,startedById:execution.startedById||currentAuthUser?.uid||'',startedByName:execution.startedByName||currentAccount?.name||'',completedAt,completedById:currentAuthUser?.uid||'',completedByName:currentAccount?.name||'',onTime,updatedAt:completedAt},{merge:true});
+      closeRoutineExecution();
+      showSaveToast(result==='ng'?'NG registrado. A rotina pode gerar uma Falha ou Atividade.':'Execução salva.','success');
+    }
+
+    function dailyOpenLinkedItem(kind,id){
+      if(kind==='activity')return openActivityDetail(id);
+      if(kind==='flow')return openFlowDetail(id);
+      if(kind==='operational')return openOperationalDetail(id);
+      if(kind==='report')return openDetail(id);
+    }
+
+    function dailySetOrigin(execution){
+      pendingOriginContext={type:'routineExecution',executionKey:execution.executionKey,routineId:execution.routineId||'',routineName:execution.routineName||'Rotina',scopeId:execution.scopeId||'',scopeName:execution.scopeName||'',scopeType:execution.scopeType||'',shiftId:execution.shiftId||'',shiftName:execution.shiftName||'',dateKey:execution.dateKey||''};
+    }
+
+    function dailyCreateFailureFromExecution(key){
+      const execution=dailyFindExecution(key);if(!execution)return;
+      dailySetOrigin(execution);
+      openOperationalFailureModal({text:execution.note||`Anormalidade identificada durante ${execution.routineName}.`,context:`Origem: ${execution.routineName} · ${execution.scopeName} · ${execution.shiftName}.`,line:execution.scopeType==='line'?execution.scopeName:''});
+    }
+
+    function dailyCreateActivityFromExecution(key){
+      const execution=dailyFindExecution(key);if(!execution)return;
+      dailySetOrigin(execution);
+      openActivityModal({title:`Ação — ${execution.routineName} · ${execution.scopeName}`,area:execution.scopeName||'Operação',description:execution.note||`Atividade originada da rotina ${execution.routineName}, ${execution.shiftName}.`,activityMode:'simple'});
+    }
+
     // ===================== FIM CENTRAL DO DIA · V15.1.13.28 =====================
 
     function renderSafely(name, fn) {
@@ -4129,9 +4338,10 @@ ${m.text}`).join('\n\n');
       document.querySelector('#failureComponent').focus();
     }
     function closeFailureModal() { document.querySelector('#failureModal').classList.add('hidden'); document.querySelector('#failureForm').reset(); }
-    function fillActivityProducts(){ const select=document.querySelector('#activityProduct'); if(!select)return; const current=select.value; select.innerHTML='<option value="">Não relacionado a produto</option>'+state.products.sort((a,b)=>a.code.localeCompare(b.code)).map(p=>`<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.family)}</option>`).join(''); select.value=current||activeProduct||''; }
-    function openActivityModal() { fillActivityProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#activityModal').classList.remove('hidden'); document.querySelector('#activityForm [name="title"]').focus(); }
-    function closeActivityModal() { document.querySelector('#activityModal').classList.add('hidden'); document.querySelector('#activityForm').reset(); }
+    function fillActivityProducts(){ const select=document.querySelector('#activityProduct'); if(!select)return; const current=select.value; select.innerHTML='<option value="">Não relacionado a produto</option>'+state.products.sort((a,b)=>productDisplayCode(a.code).localeCompare(productDisplayCode(b.code))).map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))} · ${esc(p.family)}</option>`).join(''); select.value=current||activeProduct||''; }
+    function syncActivityModeUI(){const form=document.querySelector('#activityForm');if(!form)return;const structured=form.elements.activityMode?.value==='structured';document.querySelector('#activityStructuredCreate')?.classList.toggle('hidden',!structured);}
+    function openActivityModal(prefill={}) {fillActivityProducts();updateOwnerDropdowns();const form=document.querySelector('#activityForm');if(prefill.title)form.elements.title.value=prefill.title;if(prefill.area)form.elements.area.value=prefill.area;if(prefill.description)form.elements.description.value=prefill.description;if(prefill.activityMode)form.elements.activityMode.value=prefill.activityMode;syncActivityModeUI();translatePage();document.querySelector('#activityModal').classList.remove('hidden');document.querySelector('#activityForm [name="title"]').focus();}
+    function closeActivityModal() {document.querySelector('#activityModal').classList.add('hidden');document.querySelector('#activityForm').reset();syncActivityModeUI();pendingOriginContext=null;}
     function openDetail(id) { selectedId = id; renderDetail(); document.querySelector('#detailModal').classList.remove('hidden'); }
     function closeDetail() { document.querySelector('#detailModal').classList.add('hidden'); selectedId = null; }
     const selected = () => state.reports.find(r => r.id === selectedId);
@@ -4140,30 +4350,35 @@ ${m.text}`).join('\n\n');
     function closeActivityDetail() { document.querySelector('#activityDetailModal').classList.add('hidden'); selectedActivityId = null; }
     const selectedActivity = () => state.activities.find(activity => activity.id === selectedActivityId);
 
+    function activityLastMovementAt(activity){const dates=[activity?.createdAt,activity?.lastMovedAt,...(activity?.updates||[]).map(x=>x.date),...(activity?.steps||[]).map(x=>x.doneAt)].filter(Boolean).map(x=>new Date(x)).filter(x=>!Number.isNaN(x.getTime()));return dates.length?new Date(Math.max(...dates.map(x=>x.getTime()))):null;}
+    function activityMovementText(activity){const date=activityLastMovementAt(activity);if(!date)return 'Sem movimentação registrada.';const days=Math.max(0,Math.floor((Date.now()-date.getTime())/86400000));if(days===0)return `Último avanço hoje · ${date.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;if(days===1)return 'Último avanço há 1 dia';return `Último avanço há ${days} dias`;}
+
     function renderActivityDetail() {
-      const activity = selectedActivity();
-      if (!activity) return;
-      document.querySelector('#activityDetailTitle').textContent = activity.title;
-      document.querySelector('#activityDetailSubtitle').textContent = `${activity.type} · ${activity.area} · Responsável: ${activity.owner}`;
-      document.querySelector('#activityDetailDescription').textContent = activity.description;
-      document.querySelector('#activityDetailDescriptionInput').value = activity.description || '';
-      document.querySelector('#activityDescriptionEditor').classList.add('hidden');
-      document.querySelector('#activityDetailDescription').classList.remove('hidden');
-      document.querySelector('#activityDetailLink').innerHTML = safeLink(activity.link, 'Abrir link relacionado') || 'Nenhum link informado.';
-      document.querySelector('#activityDetailStatus').value = activity.status;
-      document.querySelector('#activityDetailDue').value = activity.dueDate || '';
-      const events = [{ text: 'Atividade criada.', date: activity.createdAt }, ...(activity.updates || [])].sort((a, b) => new Date(b.date) - new Date(a.date));
-      document.querySelector('#activityTimeline').innerHTML = events.map(event => `<div class="event"><time>${formatDate(event.date)}</time><p>${esc(event.text)}</p></div>`).join('');
+      const activity=selectedActivity();if(!activity)return;
+      const structured=activity.activityMode==='structured'||Boolean(activity.nextAction)||(activity.steps||[]).length>0||evidenceEntries(activity.evidence).length>0;
+      document.querySelector('#activityDetailTitle').textContent=activity.title;
+      const origin=activity.originRoutineName?` · Origem: ${activity.originRoutineName}`:'';
+      document.querySelector('#activityDetailSubtitle').textContent=`${activity.type} · ${activity.area} · Responsável: ${activity.owner}${origin}`;
+      document.querySelector('#activityDetailDescription').textContent=activity.description;
+      document.querySelector('#activityDetailDescriptionInput').value=activity.description||'';
+      document.querySelector('#activityDescriptionEditor').classList.add('hidden');document.querySelector('#activityDetailDescription').classList.remove('hidden');
+      document.querySelector('#activityDetailLink').innerHTML=safeLink(activity.link,'Abrir link relacionado')||'Nenhum link informado.';
+      document.querySelector('#activityDetailStatus').value=activity.status;document.querySelector('#activityDetailDue').value=activity.dueDate||'';
+      document.querySelector('#structureActivity')?.classList.toggle('hidden',structured);
+      document.querySelector('#activityStructuredSection')?.classList.toggle('hidden',!structured);
+      if(structured){
+        document.querySelector('#activityNextAction').value=activity.nextAction||'';
+        document.querySelector('#activityMovementInfo').textContent=activityMovementText(activity);
+        const steps=Array.isArray(activity.steps)?activity.steps:[],done=steps.filter(x=>x.done).length;
+        document.querySelector('#activityStepProgress').textContent=`${done}/${steps.length}`;
+        document.querySelector('#activityStepProgressBar').style.width=steps.length?`${Math.round(done/steps.length*100)}%`:'0%';
+        document.querySelector('#activitySteps').innerHTML=steps.length?steps.map((step,index)=>`<div class="activity-step-row ${step.done?'done':''}"><label><input type="checkbox" data-activity-step-toggle="${index}" ${step.done?'checked':''}><span>${esc(step.text)}</span></label><button type="button" data-activity-step-delete="${index}" aria-label="Excluir etapa">×</button></div>`).join(''):'<div class="daily-soft-empty">Nenhuma etapa ainda.</div>';
+        document.querySelector('#activityEvidenceGallery').innerHTML=evidenceGallery(activity.evidence,{allowDelete:true,kind:'activity',id:activity.id});
+      }
+      const events=[{text:'Atividade criada.',date:activity.createdAt},...(activity.updates||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
+      document.querySelector('#activityTimeline').innerHTML=events.map(event=>`<div class="event"><time>${formatDate(event.date)}</time><p>${esc(event.text)}</p></div>`).join('');
       translatePage();
     }
-
-    function fillFlowProducts() { const select = document.querySelector('#flowProduct'); select.innerHTML = `<option value="">${esc(t('Não relacionado a produto'))}</option>` + state.products.sort((a, b) => a.code.localeCompare(b.code)).map(product => `<option value="${esc(product.code)}">${esc(product.code)} · ${esc(product.family)}</option>`).join(''); }
-    function openFlowModal() { fillFlowProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#flowModal').classList.remove('hidden'); document.querySelector('#flowForm select').focus(); }
-    function closeFlowModal() { document.querySelector('#flowModal').classList.add('hidden'); document.querySelector('#flowForm').reset(); }
-
-    function openFlowDetail(id) { selectedFlowId = id; renderFlowDetail(); document.querySelector('#flowDetailModal').classList.remove('hidden'); }
-    function closeFlowDetail() { document.querySelector('#flowDetailModal').classList.add('hidden'); selectedFlowId = null; }
-    const selectedFlow = () => state.flows.find(flow => flow.id === selectedFlowId);
 
     function renderFlowDetail() {
       const flow = selectedFlow();
@@ -4479,6 +4694,8 @@ ${m.text}`).join('\n\n');
     }
 
     document.querySelector('#languageSelect').value = currentLanguage;
+    document.querySelector('#activityModeSelect')?.addEventListener('change',syncActivityModeUI);
+    syncActivityModeUI();
     document.querySelector('#closeEvidenceLightbox').addEventListener('click', e => { e.stopPropagation(); closeEvidenceLightbox(); });
     document.querySelector('#evidenceLightbox').addEventListener('click', e => { if(e.target.id==='evidenceLightbox') closeEvidenceLightbox(); });
     document.addEventListener('keydown', e => { if(e.key==='Escape') closeEvidenceLightbox(); });
@@ -4579,6 +4796,28 @@ ${m.text}`).join('\n\n');
     });
     document.querySelector('#clearDashboardIndicator')?.addEventListener('click', clearDashboardIndicator);
     document.querySelector('#dashboardIndicatorModal')?.addEventListener('click',e=>{if(e.target.id==='dashboardIndicatorModal')e.currentTarget.classList.add('hidden');});
+
+    document.querySelector('#quickDaily')?.addEventListener('click',()=>show('daily'));
+    document.querySelector('#dailyDate')?.addEventListener('change',e=>{dailySelectedDate=e.target.value||localDateKey();dailyMaterializeSignature='';renderDaily();});
+    document.querySelector('#dailyShiftSelect')?.addEventListener('change',e=>{dailySelectedShiftId=e.target.value||'';localStorage.setItem('central.daily.shift.v1',dailySelectedShiftId);dailyMaterializeSignature='';renderDaily();});
+    document.querySelector('#dailyTodayBtn')?.addEventListener('click',()=>{const current=dailyCurrentShiftInfo();dailySelectedShiftId=current.shift?.docId||dailySelectedShiftId;dailySelectedDate=current.dateKey;dailyMaterializeSignature='';renderDaily();});
+    document.querySelector('#dailyAdminToggle')?.addEventListener('click',()=>{if(currentAccount?.role!=='admin')return;document.querySelector('#dailyAdminPanel').classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel').scrollIntoView({behavior:'smooth',block:'start'});});
+    document.querySelector('#dailyAdminClose')?.addEventListener('click',()=>document.querySelector('#dailyAdminPanel').classList.add('hidden'));
+    document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.addEventListener('click',()=>{dailyAdminTab=btn.dataset.dailyAdminTab||'config';renderDailyAdmin();}));
+    document.querySelectorAll('.daily-filter').forEach(btn=>btn.addEventListener('click',()=>{dailyFilter=btn.dataset.dailyFilter||'all';document.querySelectorAll('.daily-filter').forEach(x=>x.classList.toggle('active',x===btn));renderDaily();}));
+    ['dailyDashFrom','dailyDashTo','dailyDashShift','dailyDashScope','dailyDashUser'].forEach(id=>document.querySelector('#'+id)?.addEventListener('change',renderDailyAdminDashboard));
+    document.querySelector('#dailyShiftForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyShift(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar o turno.','error');});});
+    document.querySelector('#dailyScopeForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyScope(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar o escopo.','error');});});
+    document.querySelector('#dailyAllocationForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyAllocation(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar a alocação.','error');});});
+    document.querySelector('#dailyRoutineForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyRoutine(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar a rotina.','error');});});
+    document.querySelectorAll('[data-daily-reset]').forEach(btn=>btn.addEventListener('click',()=>resetDailyAdminForm(btn.dataset.dailyReset)));
+    document.querySelector('#dailyAdminPanel')?.addEventListener('click',e=>{const edit=e.target.closest('[data-daily-edit]');if(edit){dailyEditAdminItem(edit.dataset.dailyEdit,edit.dataset.id);return;}const toggle=e.target.closest('[data-daily-toggle]');if(toggle){dailyToggleAdminItem(toggle.dataset.dailyToggle,toggle.dataset.id).catch(console.error);return;}const del=e.target.closest('[data-daily-delete="allocation"]');if(del)dailyDeleteAllocation(del.dataset.id).catch(console.error);});
+    document.querySelector('#dailyView')?.addEventListener('click',e=>{const start=e.target.closest('[data-daily-start]');if(start){startDailyExecution(start.dataset.dailyStart).catch(err=>{console.error(err);showSaveToast('Não foi possível iniciar.','error');});return;}const complete=e.target.closest('[data-daily-complete]');if(complete){openRoutineExecution(complete.dataset.dailyComplete);return;}const fail=e.target.closest('[data-daily-failure]');if(fail){dailyCreateFailureFromExecution(fail.dataset.dailyFailure);return;}const activity=e.target.closest('[data-daily-activity]');if(activity){dailyCreateActivityFromExecution(activity.dataset.dailyActivity);return;}const linked=e.target.closest('[data-kind][data-ref]');if(linked)dailyOpenLinkedItem(linked.dataset.kind,linked.dataset.ref);});
+    document.querySelector('#closeRoutineExecution')?.addEventListener('click',closeRoutineExecution);
+    document.querySelector('#cancelRoutineExecution')?.addEventListener('click',closeRoutineExecution);
+    document.querySelector('#routineExecutionModal')?.addEventListener('click',e=>{if(e.target.id==='routineExecutionModal')closeRoutineExecution();});
+    document.querySelector('#routineExecutionForm')?.addEventListener('submit',e=>{e.preventDefault();saveRoutineExecution(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar a execução.','error');});});
+    setInterval(()=>{if(activeView==='daily')renderDaily();},60000);
 
     document.querySelector('#newProduct')?.addEventListener('click', openProductModal);
     document.querySelector('#headerNewProduct').addEventListener('click', openProductModal);
@@ -4898,39 +5137,28 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         maquina:String(f.get('maquina')||'').trim(),linha:String(f.get('linha')||'').trim(),estacao:String(f.get('estacao')||'').trim(),processo:String(f.get('processo')||'').trim(),peca_danificada:String(f.get('component')||'').trim(),
         detectionMoment,detection_moment_label:detectionLabels[detectionMoment]||detectionMoment,quando_inicio:f.get('quando_inicio')||'',onde_detectado:String(f.get('onde_detectado')||'').trim(),quantity:rawQty===''?null:Number(rawQty),
         issue,descriptionContext:String(f.get('description_context')||'').trim(),hypothesis:String(f.get('hipotese_causa')||'').trim(),tests:String(f.get('testes_realizados')||'').trim(),cause:String(f.get('causa_confirmada')||'').trim(),correctiveAction:String(f.get('acao_corretiva')||'').trim(),notes:String(f.get('observacoes')||'').trim(),
-        owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[]
+        owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[],
+        originType:pendingOriginContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:pendingOriginContext?.scopeId||'',originScopeName:pendingOriginContext?.scopeName||'',originShiftId:pendingOriginContext?.shiftId||'',originShiftName:pendingOriginContext?.shiftName||''
       };
       if(!navigator.onLine){item.docId=`offline-${Date.now()}`;await queueOfflineWrite('operationalFailures',item);state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
+      const origin=pendingOriginContext;
+      if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedFailureIds||[]),item.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedFailureIds:linked,updatedAt:now()},{merge:true});}
+      pendingOriginContext=null;
       closeOperationalFailureModal();show('operations');openOperationalDetail(item.id);
     });
 
     document.querySelector('#activityForm').addEventListener('submit', async e => {
       e.preventDefault();
-      const formElement = e.currentTarget;
-      const form = new FormData(formElement);
-      const assignment = assignmentPayload(formElement, form.get('owner'));
-      const activity = {
-        id: nextId('A'),
-        title: form.get('title').trim(),
-        type: form.get('type'),
-        area: form.get('area').trim(),
-        owner: assignment.owner,
-        assignees: assignment.assignees,
-        assignmentMode: assignment.assignmentMode,
-        teamShared: assignment.teamShared,
-        openedBy: currentAccount?.name || form.get('owner'),
-        dueDate: form.get('dueDate'),
-        description: form.get('description').trim(),
-        link: form.get('link').trim(),
-        status: 'pendente',
-        product: form.get('product') || activeProduct || '',
-        createdAt: now(),
-        updates: []
-      };
-      await addDoc(collection(db, "activities"), activity);
-      closeActivityModal();
-      show('work');
-      openActivityDetail(activity.id);
+      const formElement=e.currentTarget,form=new FormData(formElement),assignment=assignmentPayload(formElement,form.get('owner'));
+      const activityMode=String(form.get('activityMode')||'simple');
+      const steps=activityMode==='structured'?String(form.get('initialSteps')||'').split('\n').map(x=>x.trim()).filter(Boolean).map((text,index)=>({id:`step-${Date.now()}-${index}`,text,done:false,doneAt:'',doneBy:''})):[];
+      const evidence=activityMode==='structured'?await readAttachments(form.getAll('activityEvidence').filter(Boolean)):[];
+      const origin=pendingOriginContext;
+      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction:activityMode==='structured'?String(form.get('nextAction')||'').trim():'',steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
+      const ref=await addDoc(collection(db,'activities'),activity);activity.docId=ref.id;
+      if(!state.activities.some(x=>x.id===activity.id))state.activities=[...state.activities,activity];
+      if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedActivityIds||[]),activity.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedActivityIds:linked,updatedAt:now()},{merge:true});}
+      pendingOriginContext=null;closeActivityModal();show('work');openActivityDetail(activity.id);
     });
 
     document.querySelector('#convertOperationalToProductReport')?.addEventListener('click', () => { if(selectedOperationalId) convertFailureToProductReport(selectedOperationalId); });
@@ -5195,23 +5423,21 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       if (!description) return alert('A descrição não pode ficar vazia.');
       if (description === (activity.description || '')) return renderActivityDetail();
       const updates = [...(activity.updates || []), { text: 'Descrição da atividade alterada.', date: now() }];
-      await updateDoc(doc(db, 'activities', activity.docId), { description, updates });
+      await updateDoc(doc(db, 'activities', activity.docId), { description, updates, lastMovedAt:now() });
       renderActivityDetail();
     });
 
     document.querySelector('#saveActivityChanges').addEventListener('click', async () => {
-      const activity = selectedActivity(); if (!activity) return;
-      const status = document.querySelector('#activityDetailStatus').value;
-      const dueDate = document.querySelector('#activityDetailDue').value;
-      const changes = [];
-      
-      if (status !== activity.status) changes.push(`Status alterado para “${activityStatusName[status]}”.`);
-      if (dueDate !== activity.dueDate) changes.push(dueDate ? `Prazo atualizado para ${formatDate(dueDate)}.` : 'Prazo removido.');
-      
-      if (!changes.length) return;
-      const updates = [...(activity.updates || []), { text: changes.join(' '), date: now() }];
-      await updateDoc(doc(db, "activities", activity.docId), { status, dueDate, updates });
-      renderActivityDetail();
+      const activity=selectedActivity();if(!activity)return;
+      const status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value;
+      const nextAction=!document.querySelector('#activityStructuredSection').classList.contains('hidden')?document.querySelector('#activityNextAction').value.trim():(activity.nextAction||'');
+      const changes=[];
+      if(status!==activity.status)changes.push(`Status alterado para “${activityStatusName[status]}”.`);
+      if(dueDate!==activity.dueDate)changes.push(dueDate?`Prazo atualizado para ${formatDate(dueDate)}.`:'Prazo removido.');
+      if(nextAction!==(activity.nextAction||''))changes.push(nextAction?`Próxima ação: ${nextAction}`:'Próxima ação removida.');
+      if(!changes.length)return;
+      const updates=[...(activity.updates||[]),{text:changes.join(' '),date:now()}];
+      await updateDoc(doc(db,'activities',activity.docId),{status,dueDate,nextAction,updates,lastMovedAt:now()});renderActivityDetail();
     });
 
     document.querySelector('#addActivityUpdate').addEventListener('click', async () => {
@@ -5219,10 +5445,16 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       if (!text) return input.focus();
       const activity = selectedActivity(); if (!activity) return;
       const updates = [...(activity.updates || []), { text, date: now() }];
-      await updateDoc(doc(db, "activities", activity.docId), { updates });
+      await updateDoc(doc(db, "activities", activity.docId), { updates, lastMovedAt:now() });
       input.value = '';
       renderActivityDetail();
     });
+
+    document.querySelector('#structureActivity')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const updates=[...(activity.updates||[]),{text:'Atividade transformada em estruturada.',date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#addActivityStep')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityNewStep'),text=input.value.trim();if(!text)return input.focus();const steps=[...(activity.steps||[]),{id:`step-${Date.now()}`,text,done:false,doneAt:'',doneBy:''}],updates=[...(activity.updates||[]),{text:`Etapa adicionada: ${text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',steps,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
+    document.querySelector('#activitySteps')?.addEventListener('click',async e=>{const activity=selectedActivity();if(!activity)return;const del=e.target.closest('[data-activity-step-delete]');if(!del)return;const index=Number(del.dataset.activityStepDelete),step=(activity.steps||[])[index];if(!step)return;const steps=(activity.steps||[]).filter((_,i)=>i!==index),updates=[...(activity.updates||[]),{text:`Etapa removida: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#activitySteps')?.addEventListener('change',async e=>{const toggle=e.target.closest('[data-activity-step-toggle]');if(!toggle)return;const activity=selectedActivity();if(!activity)return;const index=Number(toggle.dataset.activityStepToggle),steps=(activity.steps||[]).map((step,i)=>i===index?{...step,done:toggle.checked,doneAt:toggle.checked?now():'',doneBy:toggle.checked?(currentAccount?.name||''):''}:step),step=steps[index],updates=[...(activity.updates||[]),{text:`${toggle.checked?'Etapa concluída':'Etapa reaberta'}: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#saveActivityEvidence')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityEvidenceInput'),files=await readAttachments([...(input.files||[])]);if(!files.length)return alert('Selecione pelo menos um arquivo.');const evidence=[...evidenceEntries(activity.evidence),...files],updates=[...(activity.updates||[]),{text:`${files.length} arquivo(s)/evidência(s) adicionado(s).`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',evidence,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
 
     document.querySelector('#deleteActivity').addEventListener('click', async () => {
       if (currentAccount?.role !== 'admin') { alert('Apenas administradores podem excluir atividades.'); return; }
