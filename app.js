@@ -3991,7 +3991,7 @@ ${m.text}`).join('\n\n');
       localStorage.setItem(dailyTourStorageKey(),'seen');
     }
 
-    function renderDailyHomeSummaryfunction renderDailyHomeSummary(){
+    function renderDailyHomeSummary(){
       const el=document.querySelector('#homeDailySummary'); if(!el) return;
       const current=dailyCurrentShiftInfo();
       if(!current.shift){el.textContent='Nenhum turno configurado ainda.';return;}
@@ -4488,7 +4488,7 @@ ${m.text}`).join('\n\n');
       showSaveToast(wasCompleted?t('Execução atualizada.'):(result==='ng'?'NG registrado. A rotina pode gerar uma Falha ou Atividade.':'Execução salva.'),'success');
     }
 
-    function dailyOpenLinkedItemfunction dailyOpenLinkedItem(kind,id){
+    function dailyOpenLinkedItem(kind,id){
       if(kind==='activity')return openActivityDetail(id);
       if(kind==='flow')return openFlowDetail(id);
       if(kind==='operational')return openOperationalDetail(id);
