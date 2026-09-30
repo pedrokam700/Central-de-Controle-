@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.27">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.28">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.27';
+  const BUILD='15.1.13.28';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2427,7 +2427,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
 </style>
 
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.27" id="mobile-layout-styles">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.28" id="mobile-layout-styles">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -2445,6 +2445,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
 
       <nav class="main-nav" aria-label="Áreas de trabalho">
         <button data-page="home" class="active"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5v7a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 18.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9.5 20v-5h5v5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span><span class="nav-label">Início</span></button>
+        <button data-page="daily"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 3v4M16 3v4M4 9h16M8 13h3M8 17h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span class="nav-label">Central do Dia</span></button>
         <button data-page="dashboard"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="4" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="14" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="14" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/></svg></span><span class="nav-label">Dashboard</span></button>
         <div class="nav-group" data-nav-group="product">
           <button data-page="product" class="nav-group-toggle" aria-expanded="false"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5h8l3 3v8l-3 3H8l-3-3V8z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 8h8M8 16h8M12 5v14" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span><span class="nav-label">Reports de produto</span><span class="nav-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 9 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
@@ -2522,7 +2523,141 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
   <div id="participationRequestsList"></div>
 </div>
 </div>
-</div></div></section><aside class="home-side"><button class="quick-action" id="quickActivity"><strong>Nova atividade geral</strong><span>Ex.: enviar e-mail, analisar um reparo ou organizar uma reunião.</span></button><button class="quick-action" id="quickFailure"><strong>Registrar Report de Produto</strong><span>Use quando a falha de produto já estiver confirmada para tratamento/cobrança.</span></button><button class="quick-action" id="quickOperationalFailure"><strong>Registrar falha</strong><span>Registre uma ocorrência mesmo quando ainda não souber se é máquina, processo, operacional ou produto.</span></button><button class="quick-action" id="quickFlow"><strong>Novo fluxo</strong><span>Organize formulário, e-mail, folha de rosto e seguimento.</span></button><div class="home-note"><strong>Minha Central</strong><span>Aqui aparecem somente pendências atribuídas a você. Tarefas abertas para toda a equipe ficam fora desta fila pessoal. Solicitações para participar de tarefas compartilhadas aparecem separadamente quando houver autorização pendente.</span></div><section><div class="section-head"><div><h2>Lembretes</h2></div></div><div class="notification-list" id="notificationList"></div></section></aside></div>
+</div></div></section><aside class="home-side"><button class="quick-action daily-home-entry" id="quickDaily"><strong>Central do Dia</strong><span id="homeDailySummary">Veja sua alocação, próximas rotinas e o que precisa ser executado neste turno.</span></button><button class="quick-action" id="quickActivity"><strong>Nova atividade geral</strong><span>Ex.: enviar e-mail, analisar um reparo ou organizar uma reunião.</span></button><button class="quick-action" id="quickFailure"><strong>Registrar Report de Produto</strong><span>Use quando a falha de produto já estiver confirmada para tratamento/cobrança.</span></button><button class="quick-action" id="quickOperationalFailure"><strong>Registrar falha</strong><span>Registre uma ocorrência mesmo quando ainda não souber se é máquina, processo, operacional ou produto.</span></button><button class="quick-action" id="quickFlow"><strong>Novo fluxo</strong><span>Organize formulário, e-mail, folha de rosto e seguimento.</span></button><div class="home-note"><strong>Minha Central</strong><span>Aqui aparecem somente pendências atribuídas a você. Tarefas abertas para toda a equipe ficam fora desta fila pessoal. Solicitações para participar de tarefas compartilhadas aparecem separadamente quando houver autorização pendente.</span></div><section><div class="section-head"><div><h2>Lembretes</h2></div></div><div class="notification-list" id="notificationList"></div></section></aside></div>
+        </section>
+        <!-- Central do Dia · V15.1.13.28 -->
+        <section class="overview hidden daily-view" id="dailyView">
+          <section class="daily-hero">
+            <div class="daily-hero-copy">
+              <div class="daily-eyebrow"><span class="daily-live-dot"></span><span id="dailyLiveLabel">Operação do turno</span></div>
+              <h2>Central do Dia</h2>
+              <p>Rotinas operacionais, alocações e continuidade do trabalho em uma visão única.</p>
+            </div>
+            <div class="daily-controls">
+              <label>Data<input id="dailyDate" type="date"></label>
+              <label>Turno<select id="dailyShiftSelect"><option value="">Carregando turnos…</option></select></label>
+              <button type="button" class="button secondary" id="dailyTodayBtn">Agora</button>
+              <button type="button" class="button secondary hidden" id="dailyAdminToggle">⚙ Configurar operação</button>
+            </div>
+          </section>
+
+          <section class="daily-assignment-bar">
+            <div><span class="daily-mini-label">Sua alocação atual</span><div class="daily-chip-row" id="dailyAssignmentChips"><span class="daily-chip muted-chip">Nenhuma alocação configurada</span></div></div>
+            <div class="daily-shift-clock"><span id="dailyShiftWindow">—</span><strong id="dailyClock">--:--</strong></div>
+          </section>
+
+          <div class="stats daily-stats">
+            <article class="stat"><div class="stat-label">Cobertura do turno</div><div class="stat-value" id="dailyCoverage">0%</div><div class="stat-note">Rotinas previstas × concluídas</div></article>
+            <article class="stat"><div class="stat-label">Concluídas</div><div class="stat-value" id="dailyDone">0</div><div class="stat-note">Execuções finalizadas</div></article>
+            <article class="stat"><div class="stat-label">Pendentes</div><div class="stat-value" id="dailyPending">0</div><div class="stat-note">Ainda precisam de ação</div></article>
+            <article class="stat"><div class="stat-label">Anormalidades</div><div class="stat-value" id="dailyAbnormal">0</div><div class="stat-note">Execuções com resultado NG</div></article>
+          </div>
+
+          <div class="daily-layout">
+            <main class="daily-main-column">
+              <section class="daily-focus-card" id="dailyNowCard">
+                <div class="daily-focus-kicker">AGORA</div>
+                <div id="dailyNowContent"><strong>Nenhuma rotina disponível.</strong><span>Configure turnos, alocações e rotinas para começar.</span></div>
+              </section>
+              <section class="panel daily-timeline-panel">
+                <div class="section-head compact"><div><h2>Mapa do turno</h2><p>O que já foi feito, o que está acontecendo e o que vem a seguir.</p></div><div class="daily-view-switch"><button type="button" class="daily-filter active" data-daily-filter="all">Todas</button><button type="button" class="daily-filter" data-daily-filter="mine">Minhas</button><button type="button" class="daily-filter" data-daily-filter="pending">Pendentes</button></div></div>
+                <div class="daily-timeline" id="dailyRoutineTimeline"></div>
+                <div class="empty hidden" id="dailyRoutineEmpty">Nenhuma rotina prevista para este turno.</div>
+              </section>
+            </main>
+            <aside class="daily-side-column">
+              <section class="panel daily-connected-panel">
+                <div class="section-head compact"><div><h3>Trabalho conectado</h3><p>Atividades, falhas e reports relevantes para você.</p></div></div>
+                <div class="daily-connected-list" id="dailyLinkedWork"></div>
+              </section>
+              <section class="panel">
+                <div class="section-head compact"><div><h3>Gerado pelo turno</h3><p>Falhas e atividades abertas a partir das rotinas.</p></div></div>
+                <div class="daily-connected-list" id="dailyGeneratedItems"></div>
+              </section>
+            </aside>
+          </div>
+
+          <section class="daily-admin-shell hidden" id="dailyAdminPanel">
+            <div class="daily-admin-head">
+              <div><span class="daily-mini-label">ADMINISTRAÇÃO</span><h2>Configuração operacional</h2><p>Sem validade de alocação: a configuração atual permanece até um administrador alterá-la.</p></div>
+              <button type="button" class="button secondary" id="dailyAdminClose">Fechar</button>
+            </div>
+            <div class="daily-admin-tabs" role="tablist">
+              <button type="button" class="daily-admin-tab active" data-daily-admin-tab="config">Estrutura & rotinas</button>
+              <button type="button" class="daily-admin-tab" data-daily-admin-tab="dashboard">Dashboard operacional</button>
+            </div>
+
+            <div id="dailyAdminConfig">
+              <div class="daily-config-grid">
+                <section class="daily-config-card">
+                  <div class="daily-config-title"><div><span>1</span><h3>Turnos</h3></div><p>Horários livres, inclusive virada de dia.</p></div>
+                  <form id="dailyShiftForm" class="daily-config-form">
+                    <input type="hidden" name="docId">
+                    <label>Nome<input name="name" required placeholder="Ex.: 1º turno"></label>
+                    <div class="daily-inline-fields"><label>Início<input name="startTime" type="time" required></label><label>Fim<input name="endTime" type="time" required></label></div>
+                    <label class="check"><input name="active" type="checkbox" checked> Turno ativo</label>
+                    <div class="daily-form-actions"><button type="button" class="button secondary" data-daily-reset="shift">Limpar</button><button class="button primary">Salvar turno</button></div>
+                  </form>
+                  <div class="daily-admin-list" id="dailyShiftList"></div>
+                </section>
+
+                <section class="daily-config-card">
+                  <div class="daily-config-title"><div><span>2</span><h3>Escopos operacionais</h3></div><p>Comece por linhas; depois pode incluir área, estação ou processo.</p></div>
+                  <form id="dailyScopeForm" class="daily-config-form">
+                    <input type="hidden" name="docId">
+                    <label>Tipo<select name="type"><option value="line">Linha</option><option value="area">Área</option><option value="station">Estação</option><option value="process">Processo</option><option value="other">Outro</option></select></label>
+                    <label>Nome<input name="name" required placeholder="Ex.: Linha 3"></label>
+                    <label>Código curto <span class="muted">(opcional)</span><input name="code" placeholder="Ex.: L3"></label>
+                    <label class="check"><input name="active" type="checkbox" checked> Escopo ativo</label>
+                    <div class="daily-form-actions"><button type="button" class="button secondary" data-daily-reset="scope">Limpar</button><button class="button primary">Salvar escopo</button></div>
+                  </form>
+                  <div class="daily-admin-list" id="dailyScopeList"></div>
+                </section>
+
+                <section class="daily-config-card">
+                  <div class="daily-config-title"><div><span>3</span><h3>Alocações</h3></div><p>Uma pessoa pode estar em vários escopos e várias pessoas no mesmo escopo.</p></div>
+                  <form id="dailyAllocationForm" class="daily-config-form">
+                    <input type="hidden" name="docId">
+                    <label>Pessoa<select name="userId" id="dailyAllocationUser" required><option value="">Selecione</option></select></label>
+                    <label>Turno<select name="shiftId" id="dailyAllocationShift" required><option value="">Selecione</option></select></label>
+                    <label>Escopos<select name="scopeIds" id="dailyAllocationScopes" multiple size="5" required></select></label>
+                    <label>Papel na alocação<select name="position"><option value="member">Sem distinção</option><option value="primary">Principal</option><option value="support">Apoio</option></select></label>
+                    <div class="daily-form-actions"><button type="button" class="button secondary" data-daily-reset="allocation">Limpar</button><button class="button primary">Salvar alocação</button></div>
+                  </form>
+                  <div class="daily-admin-list" id="dailyAllocationList"></div>
+                </section>
+
+                <section class="daily-config-card daily-routine-config-card">
+                  <div class="daily-config-title"><div><span>4</span><h3>Rotinas</h3></div><p>Modelos reutilizáveis: patrulha é só o primeiro exemplo.</p></div>
+                  <form id="dailyRoutineForm" class="daily-config-form">
+                    <input type="hidden" name="docId">
+                    <label>Nome<input name="name" required placeholder="Ex.: Patrulha da linha"></label>
+                    <label>Descrição<textarea name="description" rows="2" placeholder="O que deve ser verificado?"></textarea></label>
+                    <label>Aplicar aos escopos<select name="scopeIds" id="dailyRoutineScopes" multiple size="5"></select><span class="help">Sem seleção = todos os escopos em que a pessoa estiver alocada.</span></label>
+                    <fieldset class="daily-schedule-fieldset"><legend>Agenda por turno</legend><div id="dailyRoutineSchedules" class="daily-schedule-editor"></div></fieldset>
+                    <div class="daily-inline-fields"><label>Regra de execução<select name="executionPolicy"><option value="scope_once">Uma execução por escopo</option><option value="each_user">Cada pessoa alocada executa</option><option value="collaborative">Execução colaborativa</option><option value="min_people">Mínimo de pessoas</option></select></label><label>Mínimo<input name="minParticipants" type="number" min="1" value="1"></label></div>
+                    <div class="daily-inline-fields"><label>Janela após o horário <span class="muted">(min)</span><input name="windowMinutes" type="number" min="0" step="5" value="60"></label><label>Resultado<select name="resultMode"><option value="ok_ng">OK / NG</option><option value="simple">Concluir</option><option value="checklist">Checklist + resultado</option></select></label><label>Checklist <span class="muted">(um item por linha)</span><textarea name="checklistTemplate" rows="3" placeholder="Verificar processo&#10;Verificar condição visual"></textarea></label></div>
+                    <fieldset class="daily-days"><legend>Dias ativos</legend><label><input type="checkbox" name="routineDays" value="1" checked>Seg</label><label><input type="checkbox" name="routineDays" value="2" checked>Ter</label><label><input type="checkbox" name="routineDays" value="3" checked>Qua</label><label><input type="checkbox" name="routineDays" value="4" checked>Qui</label><label><input type="checkbox" name="routineDays" value="5" checked>Sex</label><label><input type="checkbox" name="routineDays" value="6">Sáb</label><label><input type="checkbox" name="routineDays" value="0">Dom</label></fieldset>
+                    <div class="daily-routine-options"><label class="check"><input name="allowFailure" type="checkbox" checked> Permitir abrir Falha</label><label class="check"><input name="allowActivity" type="checkbox" checked> Permitir criar Atividade</label><label class="check"><input name="requireNgNote" type="checkbox" checked> Exigir observação em NG</label><label class="check"><input name="active" type="checkbox" checked> Rotina ativa</label></div>
+                    <div class="daily-form-actions"><button type="button" class="button secondary" data-daily-reset="routine">Limpar</button><button class="button primary">Salvar rotina</button></div>
+                  </form>
+                  <div class="daily-admin-list" id="dailyRoutineList"></div>
+                </section>
+              </div>
+            </div>
+
+            <div id="dailyAdminDashboard" class="hidden">
+              <div class="daily-dashboard-filters">
+                <label>De<input id="dailyDashFrom" type="date"></label><label>Até<input id="dailyDashTo" type="date"></label><label>Turno<select id="dailyDashShift"><option value="">Todos</option></select></label><label>Escopo<select id="dailyDashScope"><option value="">Todos</option></select></label><label>Pessoa<select id="dailyDashUser"><option value="">Todos</option></select></label>
+              </div>
+              <div class="stats daily-admin-stats"><article class="stat"><div class="stat-label">Cobertura</div><div class="stat-value" id="dailyDashCoverage">0%</div><div class="stat-note">Previstas × concluídas</div></article><article class="stat"><div class="stat-label">No prazo</div><div class="stat-value" id="dailyDashOnTime">0%</div><div class="stat-note">Conclusões dentro da janela</div></article><article class="stat"><div class="stat-label">Não executadas</div><div class="stat-value" id="dailyDashMissed">0</div><div class="stat-note">Rotinas vencidas sem conclusão</div></article><article class="stat"><div class="stat-label">NG</div><div class="stat-value" id="dailyDashNg">0</div><div class="stat-note">Anormalidades registradas</div></article></div>
+              <div class="daily-dashboard-grid">
+                <section class="panel"><div class="section-head compact"><div><h3>Cobertura por escopo</h3><p>Primeiro a operação; depois o detalhamento por pessoa.</p></div></div><div id="dailyDashScopeRows" class="daily-metric-list"></div></section>
+                <section class="panel"><div class="section-head compact"><div><h3>Execução por pessoa</h3><p>Respeita a política da rotina e não transforma trabalho em equipe em falta individual.</p></div></div><div id="dailyDashUserRows" class="daily-metric-list"></div></section>
+              </div>
+              <section class="panel"><div class="section-head compact"><div><h3>Execuções</h3><p>Histórico operacional com rotina, turno, escopo e responsáveis daquele momento.</p></div></div><div class="table-wrap"><table><thead><tr><th>Data / turno</th><th>Rotina</th><th>Escopo</th><th>Responsáveis</th><th>Resultado</th><th>Horário</th></tr></thead><tbody id="dailyDashRows"></tbody></table><div class="empty hidden" id="dailyDashEmpty">Nenhuma execução no período.</div></div></section>
+            </div>
+          </section>
         </section>
         <!-- Dashboard Estratégico -->
         <section class="overview hidden" id="dashboardView">
@@ -2937,7 +3072,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
         <div class="form-section"><h3 class="form-section-title">Identificação</h3></div>
         <label class="span2">Aplicar esta falha a
           <select id="operationalScopeSelect" name="scope_type">
-            <option value="variant" selected>SKU / cor específica</option>
+            <option value="variant" selected>SKU / cor específica</option><option value="none">Sem produto definido</option>
             <option value="base_product">Produto base · todas as cores</option>
             <option value="multi_sku">Múltiplos SKUs</option>
             <option value="family">Família inteira</option>
@@ -2982,7 +3117,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
       <div class="analysis-section" id="opDetailProductScopeSection">
         <div class="section-head compact"><div><h3>Produto(s) afetado(s)</h3><p>Você pode corrigir o escopo depois do registro: um SKU, produto base, vários SKUs ou a família inteira.</p></div></div>
         <div class="form-grid">
-          <label class="span2">Aplicar esta falha a<select id="opDetailScopeSelect"><option value="variant">SKU / cor específica</option><option value="base_product">Produto base · todas as cores</option><option value="multi_sku">Múltiplos SKUs</option><option value="family">Família inteira</option></select><span class="help" id="opDetailScopeHelp"></span></label>
+          <label class="span2">Aplicar esta falha a<select id="opDetailScopeSelect"><option value="variant">SKU / cor específica</option><option value="none">Sem produto definido</option><option value="base_product">Produto base · todas as cores</option><option value="multi_sku">Múltiplos SKUs</option><option value="family">Família inteira</option></select><span class="help" id="opDetailScopeHelp"></span></label>
           <label>Família<select id="opDetailFamilySelect"><option value="">Não informado</option></select></label>
           <label id="opDetailProductScopeLabel">SKU / cor específica<select id="opDetailProductSelect"><option value="">Selecione</option></select></label>
           <label id="opDetailBaseScopeLabel" class="hidden">Produto base<select id="opDetailBaseSelect"><option value="">Selecione</option></select></label>
@@ -3004,7 +3139,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
             </div>
             <p class="assignment-note" id="activityAssignmentNote">Apenas o administrador pode distribuir para outras pessoas. “Aberta para todos” significa que qualquer pessoa da equipe pode assumir e executar.</p>
           </div>
-          <label>Prazo<input name="dueDate" type="date"></label><label class="span2">Descrição / contexto<textarea name="description" required placeholder="Detalhes da atividade..."></textarea></label><label>Produto relacionado<select id="activityProduct" name="product"><option value="">Não relacionado a produto</option></select></label><label class="span2">Link relacionado<input name="link" type="url" placeholder="https://..."></label></div><div class="form-actions"><button type="button" class="button secondary close-activity">Cancelar</button><button class="button primary">Salvar atividade</button></div></form></div></div>
+          <label>Prazo<input name="dueDate" type="date"></label><label>Formato<select name="activityMode" id="activityModeSelect"><option value="simple">Atividade simples</option><option value="structured">Atividade estruturada</option></select></label><label class="span2">Descrição / contexto<textarea name="description" required placeholder="Detalhes da atividade..."></textarea></label><label>Produto relacionado<select id="activityProduct" name="product"><option value="">Não relacionado a produto</option></select></label><label class="span2">Link relacionado<input name="link" type="url" placeholder="https://..."></label><div class="span2 activity-structured-create hidden" id="activityStructuredCreate"><div class="analysis-section"><div class="section-head compact"><div><h3>Continuidade do trabalho</h3><p>Use para validações, estudos e trabalhos com várias etapas, como o Gage.</p></div></div><div class="form-grid"><label class="span2">Próxima ação<input name="nextAction" placeholder="Ex.: Aplicar avaliação com o primeiro inspetor"></label><label class="span2">Etapas iniciais <span class="muted">(uma por linha)</span><textarea name="initialSteps" rows="5" placeholder="Preparar amostras&#10;Mapear Part Numbers&#10;Aplicar avaliação"></textarea></label><label class="span2">Arquivos / evidências<input name="activityEvidence" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"></label></div></div></div></div><div class="form-actions"><button type="button" class="button secondary close-activity">Cancelar</button><button class="button primary">Salvar atividade</button></div></form></div></div>
   <div class="modal-backdrop hidden" id="flowModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 class="modal-title">Novo fluxo</h2><p class="modal-subtitle">Acompanhamento de processos em três etapas.</p></div><button class="close close-flow" aria-label="Fechar">×</button></div><form id="flowForm"><div class="form-grid"><label>Produto relacionado<select id="flowProduct" name="product"><option value="">Não relacionado a produto</option></select></label><label>Tipo de retrabalho<select name="scope" required><option value="Retrabalho de embalagem">Retrabalho de embalagem</option><option value="Retrabalho de montagem">Retrabalho de montagem</option><option value="Embalagem e montagem">Embalagem e montagem</option><option value="Outro fluxo">Outro fluxo</option></select></label><label>Responsável pelo seguimento<select id="flowOwnerSelect" name="followUpOwner" required><option value="">Selecione</option></select></label>
           <div class="assignment-box" id="flowAssignmentBox">
             <h3>Distribuição da tarefa</h3>
@@ -3024,16 +3159,17 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
           <div class="analysis-section"><div class="section-head compact"><div><h3>Quantidade acumulada</h3><p>Atualize somente quando houver uma nova consolidação. Não é necessário lançar diariamente.</p></div></div><div class="artifact-grid"><label>Quantidade acumulada<input id="detailQuantity" type="number" min="0" step="1" placeholder="Ex.: 468"></label><label>Período considerado<input id="detailQuantityPeriod" placeholder="Ex.: 20/03/2026 a 07/08/2026"></label><label class="span2">Observações sobre a quantidade<textarea id="detailQuantityNotes" placeholder="Ex.: quantidade consolidada retroativamente."></textarea></label></div><div class="artifact-actions"><button id="saveQuantity" class="button secondary">Salvar quantidade</button></div><div class="quantity-history" id="quantityHistory"></div></div>
           <div class="analysis-section"><div class="section-head compact"><div><h3>Ferramentas</h3><p>Use os dados já registrados para preparar a comunicação ou consultar o histórico.</p></div></div><div class="inline-actions"><button id="generateReport" class="button secondary">Gerar Report rápido</button><button id="openEngineeringAssistant" class="button secondary">✦ Assistente</button></div><div id="generatedOutput" class="generated-output hidden" style="margin-top:10px"></div></div>
           <div class="update"><label>Atualização da falha<input id="updateInput" placeholder="Ex.: Report enviado."></label><div class="update-row"><button class="button secondary" id="addUpdate">Adicionar atualização</button></div></div><span class="detail-label">Histórico de atualizações</span><div id="timeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" style="margin-top:0">Pendências automáticas</span><div id="detailTasks" class="task-list"></div><span class="detail-label">Status calculated</span><div id="detailStatus" class="detail-value"></div><span class="detail-label">E-mail de cobrança</span><div id="detailEmailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteReport" class="button danger">Excluir registro</button></div></aside></div></div></div>
-  <div class="modal-backdrop hidden" id="activityDetailModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 id="activityDetailTitle" class="modal-title"></h2><p id="activityDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-activity-detail" aria-label="Fechar">×</button></div><div class="detail" style="grid-template-columns:1fr"><div class="detail-main"><div class="detail-heading-row"><span class="detail-label" style="margin-top:0">Contexto</span><button id="editActivityDescription" class="button secondary button-compact" type="button">Editar descrição</button></div><span id="activityDetailDescription" class="detail-value"></span><div id="activityDescriptionEditor" class="description-editor hidden"><label>Descrição / contexto<textarea id="activityDetailDescriptionInput"></textarea></label><div class="artifact-actions"><button id="cancelActivityDescription" class="button secondary" type="button">Cancelar</button><button id="saveActivityDescription" class="button primary" type="button">Salvar descrição</button></div></div><span class="detail-label">Link relacionado</span><div id="activityDetailLink" class="links detail-value"></div><div class="update"><div class="artifact-grid"><label>Status<select id="activityDetailStatus"><option value="pendente">Pendente</option><option value="aguardando">Aguardando</option><option value="andamento">Em andamento</option><option value="concluido">Pronto</option></select></label><label>Prazo<input id="activityDetailDue" type="date"></label></div><div class="artifact-actions"><button id="saveActivityChanges" class="button secondary">Salvar alterações</button></div></div><div class="update"><label>Atualização<input id="activityUpdateInput" placeholder="Ex.: E-mail enviado."></label><div class="update-row"><button class="button secondary" id="addActivityUpdate">Adicionar atualização</button></div></div><span class="detail-label">Histórico</span><div id="activityTimeline" class="timeline"></div><div class="inline-actions"><button id="generateActivityEmail" class="button secondary">✦ Gerar e-mail</button><button id="deleteActivity" class="button danger">Excluir atividade</button></div></div></div></div></div>
+  <div class="modal-backdrop hidden" id="activityDetailModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 id="activityDetailTitle" class="modal-title"></h2><p id="activityDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-activity-detail" aria-label="Fechar">×</button></div><div class="detail" style="grid-template-columns:1fr"><div class="detail-main"><div class="detail-heading-row"><span class="detail-label" style="margin-top:0">Contexto</span><button id="editActivityDescription" class="button secondary button-compact" type="button">Editar descrição</button></div><span id="activityDetailDescription" class="detail-value"></span><div id="activityDescriptionEditor" class="description-editor hidden"><label>Descrição / contexto<textarea id="activityDetailDescriptionInput"></textarea></label><div class="artifact-actions"><button id="cancelActivityDescription" class="button secondary" type="button">Cancelar</button><button id="saveActivityDescription" class="button primary" type="button">Salvar descrição</button></div></div><span class="detail-label">Link relacionado</span><div id="activityDetailLink" class="links detail-value"></div><div class="activity-continuity-entry"><button type="button" class="button secondary button-compact" id="structureActivity">Estruturar atividade</button></div><section class="analysis-section hidden" id="activityStructuredSection"><div class="section-head compact"><div><h3>Plano & continuidade</h3><p id="activityMovementInfo">Mantenha explícito onde o trabalho está e qual é a próxima ação.</p></div></div><div class="activity-progress-row"><div><span class="daily-mini-label">Progresso das etapas</span><strong id="activityStepProgress">0/0</strong></div><div class="activity-progress-track"><span id="activityStepProgressBar"></span></div></div><label>Próxima ação<input id="activityNextAction" placeholder="Qual é o próximo passo concreto?"></label><div class="activity-steps" id="activitySteps"></div><div class="activity-step-add"><input id="activityNewStep" placeholder="Adicionar uma etapa"><button type="button" class="button secondary" id="addActivityStep">+ Etapa</button></div><div class="evidence-box"><label>Adicionar arquivos / evidências<input id="activityEvidenceInput" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"></label><div class="artifact-actions"><button type="button" class="button secondary" id="saveActivityEvidence">Salvar arquivos</button></div><div class="evidence-gallery" id="activityEvidenceGallery"></div></div></section><div class="update"><div class="artifact-grid"><label>Status<select id="activityDetailStatus"><option value="pendente">Pendente</option><option value="aguardando">Aguardando</option><option value="andamento">Em andamento</option><option value="concluido">Pronto</option></select></label><label>Prazo<input id="activityDetailDue" type="date"></label></div><div class="artifact-actions"><button id="saveActivityChanges" class="button secondary">Salvar alterações</button></div></div><div class="update"><label>Atualização<input id="activityUpdateInput" placeholder="Ex.: E-mail enviado."></label><div class="update-row"><button class="button secondary" id="addActivityUpdate">Adicionar atualização</button></div></div><span class="detail-label">Histórico</span><div id="activityTimeline" class="timeline"></div><div class="inline-actions"><button id="generateActivityEmail" class="button secondary">✦ Gerar e-mail</button><button id="deleteActivity" class="button danger">Excluir atividade</button></div></div></div></div></div>
   <div class="modal-backdrop hidden" id="flowDetailModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 id="flowDetailTitle" class="modal-title"></h2><p id="flowDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-flow-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Situação</span><span id="flowDetailDescription" class="detail-value"></span><span class="detail-label">Etapa 1 · Formulário e e-mail</span><div class="artifact-grid"><label>Formulário do fluxo<input id="flowDetailAttachment" type="file" accept="image/*,.pdf,.doc,.docx"></label><label>Link do e-mail<input id="flowDetailEmailLink" type="url" placeholder="https://..."></label></div><span class="detail-label">Etapa 2 · Folha de rosto</span><div class="artifact-grid"><label>Link / arquivo da folha de rosto<input id="flowDetailCoverLink" type="url" placeholder="https://..."></label><label>Responsável pelo seguimento<select id="flowDetailOwnerSelect"><option value="">Selecione</option></select></label></div><span class="detail-label">Etapa 3 · Seguimento no fluxo</span><div class="artifact-grid"><label class="span2">Link ou registro do seguimento<input id="flowDetailFollowUpLink" type="url" placeholder="https://..."></label></div><div class="artifact-actions"><button id="saveFlowChanges" class="button secondary">Salvar etapas</button></div><span class="detail-label">Arquivos e links</span><div id="flowDetailFiles" class="evidence-gallery"></div><span class="detail-label">Histórico</span><div id="flowTimeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" style="margin-top:0">Andamento do fluxo</span><div id="flowSteps" class="task-list"></div><span class="detail-label">Status calculado</span><div id="flowDetailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteFlow" class="button danger">Excluir fluxo</button></div></aside></div></div></div>
 
 
-<div class="modal-backdrop hidden" id="weeklyModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resumo da semana</h2><p class="modal-subtitle">Tudo que foi trabalhado e o que merece atenção.</p></div><button class="close close-weekly" aria-label="Fechar">×</button></div><div id="weeklyContent" class="detail-main"></div><div class="form-actions"><button class="button secondary close-weekly">Fechar</button></div></div></div>
+<div class="modal-backdrop hidden" id="routineExecutionModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 class="modal-title" id="routineExecutionTitle">Executar rotina</h2><p class="modal-subtitle" id="routineExecutionSubtitle"></p></div><button class="close" id="closeRoutineExecution" aria-label="Fechar">×</button></div><form id="routineExecutionForm"><div class="form-grid"><label>Resultado<select name="result" id="routineExecutionResult"><option value="ok">OK</option><option value="ng">NG / Anormalidade</option><option value="done">Concluído</option><option value="na">Não aplicável</option></select></label><label class="span2">Observação<textarea name="note" id="routineExecutionNote" rows="3" placeholder="Registre somente o que agrega contexto."></textarea></label><div class="span2 routine-checklist-box hidden" id="routineExecutionChecklistBox"><span class="detail-label">Checklist</span><div id="routineExecutionChecklist"></div></div><label class="span2">Fotos / evidências <span class="muted">(opcional)</span><input name="evidence" type="file" multiple accept="image/*,.pdf"></label></div><div class="form-actions"><button type="button" class="button secondary" id="cancelRoutineExecution">Cancelar</button><button class="button primary">Salvar execução</button></div></form></div></div>
+  <div class="modal-backdrop hidden" id="weeklyModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resumo da semana</h2><p class="modal-subtitle">Tudo que foi trabalhado e o que merece atenção.</p></div><button class="close close-weekly" aria-label="Fechar">×</button></div><div id="weeklyContent" class="detail-main"></div><div class="form-actions"><button class="button secondary close-weekly">Fechar</button></div></div></div>
   <div class="modal-backdrop hidden" id="dashboardIndicatorModal" role="dialog" aria-modal="true" aria-labelledby="dashboardIndicatorTitle"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title" id="dashboardIndicatorTitle">Detalhamento do indicador</h2><p class="modal-subtitle" id="dashboardIndicatorSubtitle"></p></div><button class="close close-dashboard-indicator" aria-label="Fechar">×</button></div><div id="dashboardIndicatorContent" class="detail-main"></div><div class="form-actions"><button class="button secondary close-dashboard-indicator">Fechar</button></div></div></div>
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.27"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.28"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */

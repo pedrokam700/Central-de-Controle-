@@ -753,3 +753,65 @@
     overflow-wrap:anywhere!important;
   }
 }
+
+
+/* V15.1.13.28 — Central do Dia mobile */
+@media(max-width:860px){
+  .daily-hero{display:grid;gap:16px;padding:17px!important;border-radius:13px}
+  .daily-hero-copy h2{font-size:22px}
+  .daily-controls{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:end!important;width:100%!important}
+  .daily-controls label,.daily-controls .button{width:100%!important;min-width:0!important}
+  .daily-controls .button{white-space:normal!important}
+  .daily-assignment-bar{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:start!important}
+  .daily-shift-clock{min-width:0!important}.daily-shift-clock span{white-space:normal!important;max-width:120px}
+  .daily-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .daily-layout{grid-template-columns:minmax(0,1fr)!important}
+  .daily-focus-card{display:grid!important;gap:10px!important;padding:14px!important}
+  .daily-focus-card #dailyNowContent{display:grid!important;gap:12px!important;width:100%!important}
+  .daily-now-actions .button{width:100%!important}
+  .daily-timeline-panel{padding:13px!important}
+  .daily-timeline-panel .section-head{display:grid!important;gap:10px!important}
+  .daily-view-switch{width:100%!important;display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .daily-filter{min-width:0!important}
+  .daily-task-card{grid-template-columns:66px minmax(0,1fr)!important;gap:10px!important;padding:11px!important}
+  .daily-task-heading{display:grid!important;gap:7px!important}
+  .daily-task-status{justify-self:start!important}
+  .daily-task-meta{display:grid!important;gap:3px!important}
+  .daily-task-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .daily-task-actions .button{width:100%!important;white-space:normal!important}
+  .daily-admin-shell{padding:13px!important;border-radius:13px!important}
+  .daily-admin-head{display:grid!important;gap:11px!important}.daily-admin-head .button{width:100%!important}
+  .daily-admin-tabs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important}
+  .daily-admin-tab{white-space:normal!important}
+  .daily-config-grid,.daily-dashboard-grid{grid-template-columns:minmax(0,1fr)!important}
+  .daily-routine-config-card{grid-column:auto!important}
+  .daily-config-title{display:grid!important;gap:4px!important}.daily-config-title p{text-align:left!important;max-width:none!important}
+  .daily-inline-fields{grid-template-columns:minmax(0,1fr)!important}
+  .daily-schedule-row{grid-template-columns:minmax(0,1fr)!important}.daily-schedule-row small{grid-column:1!important}
+  .daily-form-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}.daily-form-actions .button{width:100%!important}
+  .daily-admin-item{align-items:flex-start!important}.daily-admin-item>div:last-child{display:grid!important;gap:4px!important}
+  .daily-dashboard-filters{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .daily-metric-row{grid-template-columns:minmax(0,1fr)!important;gap:6px!important}.daily-metric-value{text-align:left!important}
+  .activity-progress-row{grid-template-columns:minmax(0,1fr)!important}
+  .activity-step-add{grid-template-columns:minmax(0,1fr)!important}
+  #activityStructuredSection .evidence-box{min-width:0!important}
+  #dailyAdminDashboard .table-wrap{overflow:visible!important}
+  #dailyAdminDashboard table,#dailyAdminDashboard thead,#dailyAdminDashboard tbody,#dailyAdminDashboard tr,#dailyAdminDashboard td{display:block!important;width:100%!important}
+  #dailyAdminDashboard thead{display:none!important}
+  #dailyAdminDashboard tbody{display:grid!important;gap:10px!important}
+  #dailyAdminDashboard tbody tr{padding:11px 12px!important;border:1px solid var(--line)!important;border-radius:11px!important;background:var(--surface)!important}
+  #dailyAdminDashboard tbody td{display:grid!important;grid-template-columns:minmax(95px,34%) minmax(0,1fr)!important;gap:8px!important;padding:5px 0!important;border:0!important;white-space:normal!important;overflow-wrap:anywhere!important}
+  #dailyAdminDashboard tbody td::before{color:var(--muted);font-size:9px;font-weight:750;text-transform:uppercase}
+  #dailyAdminDashboard td:nth-child(1)::before{content:"Data / turno"}
+  #dailyAdminDashboard td:nth-child(2)::before{content:"Rotina"}
+  #dailyAdminDashboard td:nth-child(3)::before{content:"Escopo"}
+  #dailyAdminDashboard td:nth-child(4)::before{content:"Responsáveis"}
+  #dailyAdminDashboard td:nth-child(5)::before{content:"Resultado"}
+  #dailyAdminDashboard td:nth-child(6)::before{content:"Horário"}
+}
+@media(max-width:520px){
+  .daily-controls,.daily-stats,.daily-dashboard-filters{grid-template-columns:minmax(0,1fr)!important}
+  .daily-assignment-bar{grid-template-columns:minmax(0,1fr)!important}.daily-shift-clock{text-align:left!important}
+  .daily-task-card{grid-template-columns:minmax(0,1fr)!important}.daily-task-time{display:flex!important;justify-content:space-between!important}
+  .daily-task-actions{grid-template-columns:minmax(0,1fr)!important}
+}

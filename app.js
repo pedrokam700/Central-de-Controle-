@@ -40,7 +40,12 @@
       flows: [],
       failureAnalyses: [],
       aiKnowledge: [],
-      aiConversations: []
+      aiConversations: [],
+      workShifts: [],
+      operationalScopes: [],
+      workAllocations: [],
+      routineTemplates: [],
+      routineExecutions: []
     };
 
     let users = [];
@@ -67,6 +72,16 @@
     let expandedProductBase = localStorage.getItem('central.sidebar.productBase.v1') || '';
     let activeFamily = localStorage.getItem('central.sidebar.productActiveFamily.v1') || '';
     let familyToRename = null;
+
+    // Central do Dia — configuração atual sem período de validade.
+    let dailySelectedShiftId = localStorage.getItem('central.daily.shift.v1') || '';
+    let dailySelectedDate = '';
+    let dailyFilter = 'all';
+    let dailyAdminTab = 'config';
+    let selectedRoutineExecutionId = null;
+    let pendingOriginContext = null;
+    let dailyMaterializeSignature = '';
+    let dailyMaterializeInFlight = null;
 
     // Internationalization: Portuguese is the source language; English is a UI translation.
     const LANGUAGE_KEY = 'controleFalhas.language.v1';
@@ -222,6 +237,7 @@
       if(kind==='report') renderDetail();
       else if(kind==='operational') openOperationalDetail(id);
       else if(kind==='flow') renderFlowDetail();
+      else if(kind==='activity') renderActivityDetail();
     }
 
     function clearDataListeners() {
@@ -365,6 +381,21 @@
         state.aiConversations = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         renderAIHistory();
       }, error => console.error('Falha ao sincronizar conversas da IA:', error)));
+
+      const dailyCollections = [
+        ['workShifts','workShifts','turnos'],
+        ['operationalScopes','operationalScopes','escopos operacionais'],
+        ['workAllocations','workAllocations','alocações'],
+        ['routineTemplates','routineTemplates','rotinas'],
+        ['routineExecutions','routineExecutions','execuções de rotina']
+      ];
+      dailyCollections.forEach(([collectionName,stateKey,label]) => {
+        unsubscribeData.push(onSnapshot(collection(db, collectionName), snapshot => {
+          state[stateKey] = snapshot.docs.map(item => ({ docId:item.id, ...item.data() }));
+          dailyMaterializeSignature = '';
+          render();
+        }, error => console.error(`Falha ao sincronizar ${label}:`, error)));
+      });
     }
 
     function updateOwnerDropdowns() {
@@ -382,6 +413,10 @@
       populateAssigneeSelect('#failureAssignees', currentAccount ? [currentAccount.name] : []);
       populateAssigneeSelect('#operationalAssignees', currentAccount ? [currentAccount.name] : []);
       populateAssigneeSelect('#flowAssignees', currentAccount ? [currentAccount.name] : []);
+      if (document.querySelector('#dailyView')) {
+        populateDailyAdminControls();
+        renderDailyAdminLists();
+      }
       configureAssignmentUI('#activityAssignmentBox','#activityAssignees','#activityAssignmentNote');
       configureAssignmentUI('#failureAssignmentBox','#failureAssignees','#failureAssignmentNote');
       configureAssignmentUI('#operationalAssignmentBox','#operationalAssignees','#operationalAssignmentNote');
@@ -445,12 +480,13 @@
     };
     const failureScopeType = record => {
       const explicit = String(record?.scopeType || '').toLowerCase();
-      if (['family','base_product','variant','multi_sku'].includes(explicit)) return explicit;
+      if (['none','family','base_product','variant','multi_sku'].includes(explicit)) return explicit;
       if (!record?.product && record?.family) return 'family';
       return 'variant';
     };
     const failureScopeSummary = record => {
       const scope = failureScopeType(record);
+      if (scope === 'none') return 'Sem produto definido';
       if (scope === 'family') return record?.family ? `Família ${record.family}` : 'Família não informada';
       if (scope === 'base_product') return record?.baseCode ? `${productDisplayCode(record.baseCode)} · todas as cores` : 'Produto base';
       const codes = failureProductCodes(record).map(productDisplayCode);
@@ -460,6 +496,7 @@
     const failureAppliesToProduct = (record, product) => {
       if (!record || !product) return false;
       const scope = failureScopeType(record);
+      if (scope === 'none') return false;
       if (scope === 'family') {
         return String(record.family || '').toLocaleLowerCase() === productFamily(product).toLocaleLowerCase();
       }
@@ -1405,6 +1442,9 @@
       if (activeView === 'home') {
         document.querySelector('#pageTitle').textContent = t('Minha central de trabalho');
         document.querySelector('#pageSubtitle').textContent = t('Prioridades, reports de produto e atividades gerais em um só lugar.');
+      } else if (activeView === 'daily') {
+        document.querySelector('#pageTitle').textContent = 'Central do Dia';
+        document.querySelector('#pageSubtitle').textContent = 'Rotinas do turno, alocações e execução operacional em tempo real.';
       } else if (activeView === 'dashboard') {
         document.querySelector('#pageTitle').textContent = t('Dashboard Estratégico');
         document.querySelector('#pageSubtitle').textContent = t('Visão executiva e indicadores gerais de falhas de produtos.');
@@ -1559,9 +1599,11 @@
     }
 
     function activityRow(activity) {
-      const assignment=normalizeAssignment(activity);
-      const who=assignment.mode==='open' ? 'Aberta para todos' : assignment.assignees.join(', ') || activity.owner || '—';
-      return `<tr data-activity="${activity.id}"><td><span class="identifier">${esc(activity.title)}</span><span class="secondary-text wrap">${esc(activity.description)}</span></td><td><span class="identifier">${esc(activity.type)}</span><span class="secondary-text">${esc(activity.area)}</span></td><td>${esc(who)}</td><td>${activity.dueDate ? formatDate(activity.dueDate) : '—'}</td><td>${safeLink(activity.link, 'Abrir link') || '<span class="muted">—</span>'}</td><td>${activityChip(activity.status)}</td></tr>`;
+      const assignment=normalizeAssignment(activity),who=assignment.mode==='open'?'Aberta para todos':assignment.assignees.join(', ')||activity.owner||'—';
+      const structured=activity.activityMode==='structured'||Boolean(activity.nextAction)||(activity.steps||[]).length;
+      const continuation=structured&&activity.nextAction?`<span class="secondary-text wrap activity-next-action">Próxima: ${esc(activity.nextAction)}</span>`:`<span class="secondary-text wrap">${esc(activity.description)}</span>`;
+      const movement=structured?`<span class="secondary-text">${esc(activityMovementText(activity))}</span>`:'';
+      return `<tr data-activity="${activity.id}"><td><span class="identifier">${esc(activity.title)}${structured?' · Estruturada':''}</span>${continuation}</td><td><span class="identifier">${esc(activity.type)}</span><span class="secondary-text">${esc(activity.area)}</span>${movement}</td><td>${esc(who)}</td><td>${activity.dueDate?formatDate(activity.dueDate):'—'}</td><td>${safeLink(activity.link,'Abrir link')||'<span class="muted">—</span>'}</td><td>${activityChip(activity.status)}</td></tr>`;
     }
 
     function renderWork() {
@@ -1572,7 +1614,7 @@
       const status = document.querySelector('#workStatus').value;
       const filtered = ordered(state.activities.filter(activity => {
         const assignment=normalizeAssignment(activity);
-        const text = [activity.title, activity.type, activity.area, activity.description, activity.owner, ...(assignment.assignees||[])].join(' ').toLowerCase();
+        const text = [activity.title, activity.type, activity.area, activity.description, activity.nextAction, ...(activity.steps||[]).map(x=>x.text), activity.owner, ...(assignment.assignees||[])].join(' ').toLowerCase();
         return (!search || text.includes(search)) && (!product || activity.product === product) && (!owner || assignment.assignees.includes(owner) || activity.owner === owner) && (!status || activity.status === status);
       }));
       document.querySelector('#workRows').innerHTML = filtered.map(activityRow).join('');
@@ -2012,6 +2054,7 @@ function applyActiveView() {
       document.body.classList.toggle('ai-focus-mode', activeView === 'aiAnalysis');
       const views = {
         home: '#homeView',
+        daily: '#dailyView',
         dashboard: '#dashboardView',
         profile: '#profileView',
         product: '#productView',
@@ -2308,7 +2351,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.27'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.27'){localStorage.setItem('cora.sw.loaded','15.1.13.27');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.28'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.28'){localStorage.setItem('cora.sw.loaded','15.1.13.28');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3418,7 +3461,7 @@ A execução foi encerrada para não deixar a Central presa em espera.`);}
 
     function initV1424Interface(){
       enforceCentralUIIntegrity();
-      const navShortMap={home:'⌂',dashboard:'▦',product:'F',operations:'O',work:'✓',flow:'≡',aiAnalysis:'C',profile:'P'};
+      const navShortMap={home:'⌂',daily:'◷',dashboard:'▦',product:'F',operations:'O',work:'✓',flow:'≡',aiAnalysis:'C',profile:'P'};
       document.querySelectorAll('.main-nav button[data-page]').forEach(btn=>{
         const page=btn.dataset.page||'';
         if(!btn.dataset.short) btn.dataset.short=navShortMap[page]||page.slice(0,1).toUpperCase();
@@ -3531,6 +3574,645 @@ ${m.text}`).join('\n\n');
     // ======================= FIM V14.1 — IA multimodal ======================
     // ======================= FIM V14.0 — IA DE ANÁLISE (legado) =======================
 
+
+    // ======================= CENTRAL DO DIA · V15.1.13.28 =======================
+    const localDateKey = (date = new Date()) => {
+      const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
+      return `${y}-${m}-${d}`;
+    };
+    const dateFromLocalKey = key => {
+      const [y,m,d]=String(key||'').split('-').map(Number);
+      return y&&m&&d ? new Date(y,m-1,d,12,0,0,0) : new Date();
+    };
+    const addLocalDays = (key, amount) => {
+      const d=dateFromLocalKey(key); d.setDate(d.getDate()+Number(amount||0)); return localDateKey(d);
+    };
+    const dailyTimeMinutes = value => {
+      const [h,m]=String(value||'00:00').split(':').map(Number);
+      return (Number.isFinite(h)?h:0)*60+(Number.isFinite(m)?m:0);
+    };
+    const dailyShiftCrossesMidnight = shift => dailyTimeMinutes(shift?.endTime) <= dailyTimeMinutes(shift?.startTime);
+    const dailyShiftWindowLabel = shift => shift ? `${shift.startTime||'--:--'}–${shift.endTime||'--:--'}${dailyShiftCrossesMidnight(shift)?' · vira o dia':''}` : 'Turno não configurado';
+    const dailyScopeTypeLabel = type => ({line:'Linha',area:'Área',station:'Estação',process:'Processo',other:'Outro'}[type]||'Escopo');
+    const dailyPolicyLabel = policy => ({scope_once:'Uma execução por escopo',each_user:'Cada pessoa executa',collaborative:'Colaborativa',min_people:'Mínimo de pessoas'}[policy]||'Por escopo');
+    const dailyResultLabel = result => ({ok:'OK',ng:'NG',done:'Concluído',na:'Não aplicável'}[result]||'Pendente');
+
+    function dailyCurrentShiftInfo(nowDate=new Date()){
+      const shifts=state.workShifts.filter(s=>s.active!==false).sort((a,b)=>dailyTimeMinutes(a.startTime)-dailyTimeMinutes(b.startTime));
+      if(!shifts.length) return {shift:null,dateKey:localDateKey(nowDate)};
+      const nowMinutes=nowDate.getHours()*60+nowDate.getMinutes();
+      let shift=shifts.find(s=>{
+        const start=dailyTimeMinutes(s.startTime), end=dailyTimeMinutes(s.endTime);
+        return dailyShiftCrossesMidnight(s) ? (nowMinutes>=start || nowMinutes<end) : (nowMinutes>=start && nowMinutes<end);
+      }) || shifts[0];
+      let dateKey=localDateKey(nowDate);
+      if(dailyShiftCrossesMidnight(shift) && nowMinutes<dailyTimeMinutes(shift.endTime)) dateKey=addLocalDays(dateKey,-1);
+      return {shift,dateKey};
+    }
+
+    function resolveDailySelection(){
+      const shifts=state.workShifts.filter(s=>s.active!==false);
+      const current=dailyCurrentShiftInfo();
+      if(!dailySelectedShiftId || !shifts.some(s=>s.docId===dailySelectedShiftId)){
+        dailySelectedShiftId=current.shift?.docId || shifts[0]?.docId || '';
+      }
+      if(!dailySelectedDate) dailySelectedDate=current.shift?.docId===dailySelectedShiftId ? current.dateKey : localDateKey();
+      const dateInput=document.querySelector('#dailyDate');
+      if(dateInput && dateInput.value!==dailySelectedDate) dateInput.value=dailySelectedDate;
+      const shiftSelect=document.querySelector('#dailyShiftSelect');
+      if(shiftSelect){
+        const existing=shiftSelect.value;
+        shiftSelect.innerHTML=shifts.length ? shifts.map(s=>`<option value="${esc(s.docId)}">${esc(s.name||'Turno')} · ${esc(dailyShiftWindowLabel(s))}</option>`).join('') : '<option value="">Nenhum turno configurado</option>';
+        shiftSelect.value=shifts.some(s=>s.docId===dailySelectedShiftId)?dailySelectedShiftId:(existing||'');
+      }
+      localStorage.setItem('central.daily.shift.v1',dailySelectedShiftId||'');
+      return state.workShifts.find(s=>s.docId===dailySelectedShiftId)||null;
+    }
+
+    function dailyPlannedDateTime(execution){
+      const shift=state.workShifts.find(s=>s.docId===execution.shiftId) || {startTime:execution.shiftStart,endTime:execution.shiftEnd};
+      const key=execution.dateKey||dailySelectedDate||localDateKey();
+      const time=execution.plannedTime || shift?.startTime || '00:00';
+      let dayKey=key;
+      if(shift && dailyShiftCrossesMidnight(shift) && execution.plannedTime && dailyTimeMinutes(time)<dailyTimeMinutes(shift.startTime)) dayKey=addLocalDays(key,1);
+      const [y,m,d]=dayKey.split('-').map(Number), [hh,mm]=time.split(':').map(Number);
+      return new Date(y,m-1,d,hh||0,mm||0,0,0);
+    }
+
+    function dailyExecutionDeadline(execution){
+      const shift=state.workShifts.find(s=>s.docId===execution.shiftId)||{startTime:execution.shiftStart,endTime:execution.shiftEnd};
+      if(!execution.plannedTime&&shift?.endTime){
+        let endKey=execution.dateKey||dailySelectedDate||localDateKey();
+        if(dailyShiftCrossesMidnight(shift))endKey=addLocalDays(endKey,1);
+        const [y,m,d]=endKey.split('-').map(Number),[hh,mm]=String(shift.endTime).split(':').map(Number);
+        return new Date(y,m-1,d,hh||0,mm||0,0,0);
+      }
+      const planned=dailyPlannedDateTime(execution);
+      const mins=Number(execution.windowMinutes||60);
+      return new Date(planned.getTime()+Math.max(0,mins)*60000);
+    }
+
+    function dailyExecutionKey({dateKey,shiftId,routineId,scopeId,plannedTime,assignedUserId,executionPolicy}){
+      const owner=executionPolicy==='each_user' ? (assignedUserId||'user') : 'team';
+      return [dateKey,shiftId,routineId,scopeId,plannedTime||'shift',owner].join('__').replace(/[^a-zA-Z0-9_-]/g,'-');
+    }
+
+    function dailyExpectedExecutions(dateKey=dailySelectedDate,shiftId=dailySelectedShiftId){
+      if(!dateKey||!shiftId) return [];
+      const day=dateFromLocalKey(dateKey).getDay();
+      const scopes=state.operationalScopes.filter(s=>s.active!==false);
+      const shift=state.workShifts.find(s=>s.docId===shiftId);
+      if(!shift) return [];
+      const allocations=state.workAllocations.filter(a=>a.shiftId===shiftId);
+      const expected=[];
+
+      state.routineTemplates.filter(r=>r.active!==false).forEach(routine=>{
+        const days=Array.isArray(routine.days)&&routine.days.length ? routine.days.map(Number) : [1,2,3,4,5];
+        if(!days.includes(day)) return;
+        const schedule=Array.isArray(routine.scheduleMap?.[shiftId]) ? routine.scheduleMap[shiftId] : null;
+        if(!schedule) return;
+        const times=schedule.length ? schedule : [''];
+        const configuredScopes=(routine.scopeIds||[]).filter(Boolean);
+        const scopeIds=configuredScopes.length ? configuredScopes : [...new Set(allocations.flatMap(a=>a.scopeIds||[]))];
+
+        scopeIds.forEach(scopeId=>{
+          const scope=scopes.find(s=>s.docId===scopeId); if(!scope) return;
+          const scopeAllocations=allocations.filter(a=>(a.scopeIds||[]).includes(scopeId));
+          const userIds=[...new Set(scopeAllocations.map(a=>a.userId).filter(Boolean))];
+          const userNames=userIds.map(uid=>users.find(u=>u.docId===uid)?.name||scopeAllocations.find(a=>a.userId===uid)?.userName||uid);
+          if(!userIds.length) return;
+
+          times.forEach(plannedTime=>{
+            const common={
+              dateKey,shiftId,shiftName:shift.name||'Turno',shiftStart:shift.startTime||'',shiftEnd:shift.endTime||'',
+              routineId:routine.docId,routineName:routine.name||'Rotina',routineDescription:routine.description||'',
+              scopeId,scopeName:scope.name||'Escopo',scopeType:scope.type||'other',
+              plannedTime,windowMinutes:Number(routine.windowMinutes||60),
+              executionPolicy:routine.executionPolicy||'scope_once',
+              resultMode:routine.resultMode||'ok_ng',
+              requireNgNote:routine.requireNgNote!==false,
+              allowFailure:routine.allowFailure!==false,
+              allowActivity:routine.allowActivity!==false,
+              checklistTemplate:Array.isArray(routine.checklistTemplate)?routine.checklistTemplate:[],
+              requiredParticipants:Math.max(1,Number(routine.minParticipants||1)),
+              expectedUserIds:userIds,expectedUserNames:userNames
+            };
+            if((routine.executionPolicy||'scope_once')==='each_user'){
+              userIds.forEach((uid,index)=>{
+                const item={...common,assignedUserId:uid,assignedUserName:userNames[index]||uid};
+                item.executionKey=dailyExecutionKey(item); expected.push(item);
+              });
+            }else{
+              const item={...common,assignedUserId:'',assignedUserName:''};
+              item.executionKey=dailyExecutionKey(item); expected.push(item);
+            }
+          });
+        });
+      });
+      return expected.sort((a,b)=>dailyPlannedDateTime(a)-dailyPlannedDateTime(b) || a.scopeName.localeCompare(b.scopeName));
+    }
+
+    function dailyMergedExecutions(dateKey=dailySelectedDate,shiftId=dailySelectedShiftId){
+      const actual=new Map(state.routineExecutions.filter(x=>x.dateKey===dateKey&&x.shiftId===shiftId).map(x=>[x.executionKey||x.docId,x]));
+      return dailyExpectedExecutions(dateKey,shiftId).map(expected=>({...expected,...(actual.get(expected.executionKey)||{}),executionKey:expected.executionKey,status:(actual.get(expected.executionKey)?.status||'planned')}));
+    }
+
+    function dailyExecutionVisibleToCurrent(execution){
+      if(currentAccount?.role==='admin') return true;
+      const uid=currentAuthUser?.uid;
+      if(!uid) return false;
+      return execution.assignedUserId===uid || (execution.expectedUserIds||[]).includes(uid) || (execution.participants||[]).some(p=>p.userId===uid);
+    }
+
+    async function materializeDailyExecutions(){
+      if(activeView!=='daily'||!currentAuthUser||!dailySelectedDate||!dailySelectedShiftId) return;
+      const configVersion=[
+        dailySelectedDate,dailySelectedShiftId,
+        ...state.routineTemplates.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}:${x.active}`),
+        ...state.workAllocations.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}`),
+        ...state.operationalScopes.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}:${x.active}`)
+      ].join('|');
+      if(dailyMaterializeSignature===configVersion || dailyMaterializeInFlight) return;
+      dailyMaterializeSignature=configVersion;
+      const expected=dailyExpectedExecutions();
+      dailyMaterializeInFlight=Promise.all(expected.map(item=>{
+        const ref=doc(db,'routineExecutions',item.executionKey);
+        const snapshot={
+          executionKey:item.executionKey,dateKey:item.dateKey,
+          shiftId:item.shiftId,shiftName:item.shiftName,shiftStart:item.shiftStart,shiftEnd:item.shiftEnd,
+          routineId:item.routineId,routineName:item.routineName,routineDescription:item.routineDescription,
+          scopeId:item.scopeId,scopeName:item.scopeName,scopeType:item.scopeType,plannedTime:item.plannedTime,
+          windowMinutes:item.windowMinutes,executionPolicy:item.executionPolicy,resultMode:item.resultMode,
+          requireNgNote:item.requireNgNote,allowFailure:item.allowFailure,allowActivity:item.allowActivity,
+          checklistTemplate:item.checklistTemplate,requiredParticipants:item.requiredParticipants,
+          expectedUserIds:item.expectedUserIds,expectedUserNames:item.expectedUserNames,
+          assignedUserId:item.assignedUserId||'',assignedUserName:item.assignedUserName||'',
+          snapshotAt:now()
+        };
+        return setDoc(ref,snapshot,{merge:true});
+      })).catch(error=>{
+        dailyMaterializeSignature='';
+        console.error('[Central do Dia] Falha ao materializar execuções:',error);
+      }).finally(()=>{dailyMaterializeInFlight=null;});
+      return dailyMaterializeInFlight;
+    }
+
+    function dailyTaskState(execution,nowDate=new Date()){
+      if(execution.status==='completed') return execution.result==='ng'?'ng':'done';
+      if(execution.status==='in_progress') return 'progress';
+      const planned=dailyPlannedDateTime(execution);
+      const deadline=dailyExecutionDeadline(execution);
+      if(nowDate>deadline) return 'late';
+      if(nowDate>=planned) return 'due';
+      return 'future';
+    }
+
+    function dailyExecutionCard(execution){
+      const stateName=dailyTaskState(execution);
+      const statusLabel={done:'Concluída',ng:'NG',progress:'Em andamento',late:'Atrasada',due:'Agora',future:'Próxima'}[stateName]||'Pendente';
+      const people=execution.executionPolicy==='each_user' ? execution.assignedUserName : (execution.expectedUserNames||[]).join(', ');
+      const time=execution.plannedTime||'Durante o turno';
+      const canAct=dailyExecutionVisibleToCurrent(execution)||currentAccount?.role==='admin';
+      const startedBy=execution.startedByName ? ` · iniciada por ${esc(execution.startedByName)}` : '';
+      let actions='';
+      if(canAct && execution.status!=='completed'){
+        actions=execution.status==='in_progress'
+          ? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(execution.executionKey)}">Registrar resultado</button>`
+          : `<button type="button" class="button primary button-compact" data-daily-start="${esc(execution.executionKey)}">Iniciar</button>`;
+      }
+      if(execution.status==='completed'){
+        const derived=[];
+        if(execution.allowFailure!==false) derived.push(`<button type="button" class="button secondary button-compact" data-daily-failure="${esc(execution.executionKey)}">+ Falha</button>`);
+        if(execution.allowActivity!==false) derived.push(`<button type="button" class="button secondary button-compact" data-daily-activity="${esc(execution.executionKey)}">+ Atividade</button>`);
+        actions=derived.join('');
+      }
+      const note=execution.note ? `<p class="daily-task-note">${esc(execution.note)}</p>` : '';
+      const participants=(execution.participants||[]).map(p=>p.name).filter(Boolean);
+      const participation=participants.length ? `<span>Participantes: ${esc(participants.join(', '))}</span>` : '';
+      return `<article class="daily-task-card state-${stateName}" data-daily-exec="${esc(execution.executionKey)}">
+        <div class="daily-task-time"><strong>${esc(time)}</strong><span>${esc(execution.shiftName||'')}</span></div>
+        <div class="daily-task-body"><div class="daily-task-heading"><div><strong>${esc(execution.routineName)}</strong><span>${esc(execution.scopeName)} · ${esc(dailyPolicyLabel(execution.executionPolicy))}</span></div><span class="daily-task-status">${statusLabel}</span></div>
+        ${execution.routineDescription?`<p>${esc(execution.routineDescription)}</p>`:''}${note}<div class="daily-task-meta"><span>${esc(people||'Sem responsável')}</span>${participation}<span>${startedBy}</span></div>
+        <div class="daily-task-actions">${actions}</div></div>
+      </article>`;
+    }
+
+    function renderDailyHomeSummary(){
+      const el=document.querySelector('#homeDailySummary'); if(!el) return;
+      const current=dailyCurrentShiftInfo();
+      if(!current.shift){el.textContent='Nenhum turno configurado ainda.';return;}
+      const previousShift=dailySelectedShiftId, previousDate=dailySelectedDate;
+      const expected=dailyExpectedExecutions(current.dateKey,current.shift.docId).filter(dailyExecutionVisibleToCurrent);
+      const actualMap=new Map(state.routineExecutions.filter(x=>x.dateKey===current.dateKey&&x.shiftId===current.shift.docId).map(x=>[x.executionKey||x.docId,x]));
+      const pending=expected.filter(x=>(actualMap.get(x.executionKey)?.status||'planned')!=='completed').length;
+      const allocations=state.workAllocations.filter(a=>a.userId===currentAuthUser?.uid&&a.shiftId===current.shift.docId);
+      const scopeNames=[...new Set(allocations.flatMap(a=>a.scopeIds||[]).map(id=>state.operationalScopes.find(s=>s.docId===id)?.name).filter(Boolean))];
+      el.textContent=`${current.shift.name||'Turno'} · ${scopeNames.join(', ')||'sem alocação'} · ${pending} pendência(s) de rotina`;
+      dailySelectedShiftId=previousShift; dailySelectedDate=previousDate;
+    }
+
+    function renderDaily(){
+      renderDailyHomeSummary();
+      const view=document.querySelector('#dailyView'); if(!view) return;
+      const shift=resolveDailySelection();
+      const dateInput=document.querySelector('#dailyDate'); if(dateInput) dateInput.value=dailySelectedDate||localDateKey();
+      const isAdmin=currentAccount?.role==='admin';
+      document.querySelector('#dailyAdminToggle')?.classList.toggle('hidden',!isAdmin);
+      if(!isAdmin) document.querySelector('#dailyAdminPanel')?.classList.add('hidden');
+
+      const clock=document.querySelector('#dailyClock'); if(clock) clock.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      const shiftWindow=document.querySelector('#dailyShiftWindow'); if(shiftWindow) shiftWindow.textContent=shift ? `${shift.name} · ${dailyShiftWindowLabel(shift)}` : 'Turno não configurado';
+
+      const myAllocations=state.workAllocations.filter(a=>a.userId===currentAuthUser?.uid && (!dailySelectedShiftId||a.shiftId===dailySelectedShiftId));
+      const myScopeIds=[...new Set(myAllocations.flatMap(a=>a.scopeIds||[]))];
+      const chips=myScopeIds.map(id=>state.operationalScopes.find(s=>s.docId===id)).filter(Boolean);
+      const chipBox=document.querySelector('#dailyAssignmentChips');
+      if(chipBox) chipBox.innerHTML=chips.length ? chips.map(s=>`<span class="daily-chip"><small>${esc(dailyScopeTypeLabel(s.type))}</small>${esc(s.name)}</span>`).join('') : '<span class="daily-chip muted-chip">Nenhuma alocação neste turno</span>';
+
+      if(activeView==='daily') materializeDailyExecutions();
+      let executions=dailyMergedExecutions().filter(dailyExecutionVisibleToCurrent);
+      if(dailyFilter==='mine') executions=executions.filter(x=>x.assignedUserId===currentAuthUser?.uid || (x.participants||[]).some(p=>p.userId===currentAuthUser?.uid) || x.executionPolicy!=='each_user');
+      if(dailyFilter==='pending') executions=executions.filter(x=>x.status!=='completed');
+
+      const allVisible=dailyMergedExecutions().filter(dailyExecutionVisibleToCurrent);
+      const completed=allVisible.filter(x=>x.status==='completed'), abnormal=completed.filter(x=>x.result==='ng');
+      const coverage=allVisible.length?Math.round(completed.length/allVisible.length*100):0;
+      document.querySelector('#dailyCoverage').textContent=`${coverage}%`;
+      document.querySelector('#dailyDone').textContent=completed.length;
+      document.querySelector('#dailyPending').textContent=Math.max(0,allVisible.length-completed.length);
+      document.querySelector('#dailyAbnormal').textContent=abnormal.length;
+
+      const timeline=document.querySelector('#dailyRoutineTimeline');
+      if(timeline) timeline.innerHTML=executions.map(dailyExecutionCard).join('');
+      document.querySelector('#dailyRoutineEmpty')?.classList.toggle('hidden',executions.length>0);
+
+      const nowExec=allVisible.find(x=>x.status==='in_progress') || allVisible.find(x=>['due','late'].includes(dailyTaskState(x))) || allVisible.find(x=>x.status!=='completed') || completed.at(-1);
+      const nowContent=document.querySelector('#dailyNowContent');
+      if(nowContent){
+        nowContent.innerHTML=nowExec ? `<div><strong>${esc(nowExec.routineName)}</strong><span>${esc(nowExec.scopeName)} · ${esc(nowExec.plannedTime||'durante o turno')}</span></div><div class="daily-now-actions">${nowExec.status==='completed'?'<span class="daily-complete-mark">✓ concluída</span>':nowExec.status==='in_progress'? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(nowExec.executionKey)}">Registrar resultado</button>`:`<button type="button" class="button primary button-compact" data-daily-start="${esc(nowExec.executionKey)}">Iniciar</button>`}</div>` : '<strong>Nenhuma rotina prevista para este turno.</strong><span>Se isso não era esperado, confira a configuração ou sua alocação.</span>';
+      }
+
+      renderDailyConnectedWork(allVisible);
+      renderDailyAdmin();
+    }
+
+    function renderDailyConnectedWork(executions=[]){
+      const linked=document.querySelector('#dailyLinkedWork');
+      if(linked){
+        const items=allWorkItems().filter(x=>isVisibleInMyCentral(x.item)).slice(0,6);
+        linked.innerHTML=items.length ? items.map(x=>`<button type="button" class="daily-linked-item" data-kind="${esc(x.kind)}" data-ref="${esc(x.item.id)}"><span>${esc(itemLabel(x))}</span><small>${esc(itemSub(x))}</small></button>`).join('') : '<div class="daily-soft-empty">Sem outras pendências atribuídas.</div>';
+      }
+      const ids=new Set(executions.map(x=>x.executionKey));
+      const generated=[
+        ...state.operationalFailures.filter(x=>ids.has(x.originRoutineExecutionId)).map(x=>({kind:'operational',id:x.id,title:x.issue||x.id,sub:`Falha · ${x.id}`})),
+        ...state.activities.filter(x=>ids.has(x.originRoutineExecutionId)).map(x=>({kind:'activity',id:x.id,title:x.title,sub:`Atividade · ${x.id}`}))
+      ].slice(0,8);
+      const box=document.querySelector('#dailyGeneratedItems');
+      if(box) box.innerHTML=generated.length ? generated.map(x=>`<button type="button" class="daily-linked-item" data-kind="${x.kind}" data-ref="${esc(x.id)}"><span>${esc(x.title)}</span><small>${esc(x.sub)}</small></button>`).join('') : '<div class="daily-soft-empty">Nada gerado por estas rotinas ainda.</div>';
+    }
+
+    function dailyMetricBar(label,done,total,sub=''){
+      const pct=total?Math.round(done/total*100):0;
+      return `<div class="daily-metric-row"><div><strong>${esc(label)}</strong><span>${esc(sub||`${done}/${total} concluídas`)}</span></div><div class="daily-metric-value"><strong>${pct}%</strong><div><span style="width:${pct}%"></span></div></div></div>`;
+    }
+
+    function renderDailyAdmin(){
+      const adminPanel=document.querySelector('#dailyAdminPanel'); if(!adminPanel) return;
+      if(currentAccount?.role!=='admin') return;
+      populateDailyAdminControls();
+      renderDailyAdminLists();
+      document.querySelector('#dailyAdminConfig')?.classList.toggle('hidden',dailyAdminTab!=='config');
+      document.querySelector('#dailyAdminDashboard')?.classList.toggle('hidden',dailyAdminTab!=='dashboard');
+      document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.classList.toggle('active',btn.dataset.dailyAdminTab===dailyAdminTab));
+      if(dailyAdminTab==='dashboard') renderDailyAdminDashboard();
+    }
+
+    function populateDailyAdminControls(){
+      const shifts=state.workShifts.filter(s=>s.active!==false);
+      const scopes=state.operationalScopes.filter(s=>s.active!==false);
+      const setSelect=(selector,items,labelFn,blank='Selecione')=>{
+        const el=document.querySelector(selector); if(!el) return;
+        const old=el.value;
+        el.innerHTML=`<option value="">${blank}</option>`+items.map(x=>`<option value="${esc(x.docId)}">${esc(labelFn(x))}</option>`).join('');
+        if(items.some(x=>x.docId===old)) el.value=old;
+      };
+      setSelect('#dailyAllocationShift',shifts,s=>`${s.name} · ${dailyShiftWindowLabel(s)}`);
+      setSelect('#dailyDashShift',shifts,s=>s.name,'Todos');
+      setSelect('#dailyDashScope',scopes,s=>s.name,'Todos');
+      const allocationUser=document.querySelector('#dailyAllocationUser');
+      if(allocationUser){
+        const old=allocationUser.value;
+        allocationUser.innerHTML='<option value="">Selecione</option>'+users.filter(u=>!u.disabled).map(u=>`<option value="${esc(u.docId)}">${esc(u.name)} · ${esc(u.role==='admin'?'Admin':'Usuário')}</option>`).join('');
+        allocationUser.value=users.some(u=>u.docId===old)?old:'';
+      }
+      const dashUser=document.querySelector('#dailyDashUser');
+      if(dashUser){
+        const old=dashUser.value;
+        dashUser.innerHTML='<option value="">Todos</option>'+users.filter(u=>!u.disabled).map(u=>`<option value="${esc(u.docId)}">${esc(u.name)}</option>`).join('');
+        dashUser.value=users.some(u=>u.docId===old)?old:'';
+      }
+      ['#dailyAllocationScopes','#dailyRoutineScopes'].forEach(selector=>{
+        const el=document.querySelector(selector); if(!el) return;
+        const selected=new Set([...el.selectedOptions].map(o=>o.value));
+        el.innerHTML=scopes.map(s=>`<option value="${esc(s.docId)}">${esc(s.name)} · ${esc(dailyScopeTypeLabel(s.type))}</option>`).join('');
+        [...el.options].forEach(o=>o.selected=selected.has(o.value));
+      });
+      const editor=document.querySelector('#dailyRoutineSchedules');
+      const shiftSignature=shifts.map(s=>s.docId).join('|');
+      if(editor && editor.dataset.shiftSignature!==shiftSignature && !document.querySelector('#dailyRoutineForm [name="docId"]')?.value){
+        renderDailyRoutineScheduleEditor();
+      }
+      const today=localDateKey();
+      if(document.querySelector('#dailyDashFrom')&&!document.querySelector('#dailyDashFrom').value) document.querySelector('#dailyDashFrom').value=today;
+      if(document.querySelector('#dailyDashTo')&&!document.querySelector('#dailyDashTo').value) document.querySelector('#dailyDashTo').value=today;
+    }
+
+    function renderDailyRoutineScheduleEditor(routine=null){
+      const editor=document.querySelector('#dailyRoutineSchedules'); if(!editor) return;
+      const shifts=state.workShifts.filter(s=>s.active!==false);
+      editor.dataset.shiftSignature=shifts.map(s=>s.docId).join('|');
+      editor.innerHTML=shifts.length ? shifts.map(shift=>{
+        const configured=Object.prototype.hasOwnProperty.call(routine?.scheduleMap||{},shift.docId);
+        const times=Array.isArray(routine?.scheduleMap?.[shift.docId]) ? routine.scheduleMap[shift.docId].filter(Boolean).join(', ') : '';
+        return `<div class="daily-schedule-row"><label class="check"><input type="checkbox" data-routine-shift="${esc(shift.docId)}" ${configured?'checked':''}> ${esc(shift.name)}</label><input data-routine-times="${esc(shift.docId)}" placeholder="09:00, 14:30" value="${esc(times)}"><small>${esc(dailyShiftWindowLabel(shift))} · vazio = uma vez no turno</small></div>`;
+      }).join('') : '<div class="daily-soft-empty">Cadastre um turno primeiro.</div>';
+    }
+
+    function renderDailyAdminLists(){
+      const shifts=document.querySelector('#dailyShiftList');
+      if(shifts) shifts.innerHTML=state.workShifts.length?state.workShifts.sort((a,b)=>dailyTimeMinutes(a.startTime)-dailyTimeMinutes(b.startTime)).map(s=>`<div class="daily-admin-item ${s.active===false?'is-off':''}"><div><strong>${esc(s.name)}</strong><span>${esc(dailyShiftWindowLabel(s))}</span></div><div><button type="button" data-daily-edit="shift" data-id="${esc(s.docId)}">Editar</button><button type="button" data-daily-toggle="shift" data-id="${esc(s.docId)}">${s.active===false?'Ativar':'Desativar'}</button></div></div>`).join(''):'<div class="daily-soft-empty">Nenhum turno.</div>';
+
+      const scopes=document.querySelector('#dailyScopeList');
+      if(scopes) scopes.innerHTML=state.operationalScopes.length?state.operationalScopes.map(s=>`<div class="daily-admin-item ${s.active===false?'is-off':''}"><div><strong>${esc(s.name)}</strong><span>${esc(dailyScopeTypeLabel(s.type))}${s.code?` · ${esc(s.code)}`:''}</span></div><div><button type="button" data-daily-edit="scope" data-id="${esc(s.docId)}">Editar</button><button type="button" data-daily-toggle="scope" data-id="${esc(s.docId)}">${s.active===false?'Ativar':'Desativar'}</button></div></div>`).join(''):'<div class="daily-soft-empty">Nenhum escopo.</div>';
+
+      const allocations=document.querySelector('#dailyAllocationList');
+      if(allocations) allocations.innerHTML=state.workAllocations.length?state.workAllocations.map(a=>{
+        const user=users.find(u=>u.docId===a.userId), shift=state.workShifts.find(s=>s.docId===a.shiftId);
+        const scopeNames=(a.scopeIds||[]).map(id=>state.operationalScopes.find(s=>s.docId===id)?.name).filter(Boolean);
+        return `<div class="daily-admin-item"><div><strong>${esc(user?.name||a.userName||'Pessoa')}</strong><span>${esc(shift?.name||a.shiftName||'Turno')} · ${esc(scopeNames.join(', ')||'sem escopo')}</span></div><div><button type="button" data-daily-edit="allocation" data-id="${esc(a.docId)}">Editar</button><button type="button" data-daily-delete="allocation" data-id="${esc(a.docId)}">Remover</button></div></div>`;
+      }).join(''):'<div class="daily-soft-empty">Nenhuma alocação.</div>';
+
+      const routines=document.querySelector('#dailyRoutineList');
+      if(routines) routines.innerHTML=state.routineTemplates.length?state.routineTemplates.map(r=>{
+        const schedules=Object.entries(r.scheduleMap||{}).map(([sid,times])=>{const sh=state.workShifts.find(s=>s.docId===sid);return sh?`${sh.name}: ${(times||[]).filter(Boolean).join(', ')||'1× no turno'}`:'';}).filter(Boolean);
+        return `<div class="daily-admin-item ${r.active===false?'is-off':''}"><div><strong>${esc(r.name)}</strong><span>${esc(schedules.join(' · ')||'Sem agenda')} · ${esc(dailyPolicyLabel(r.executionPolicy))}</span></div><div><button type="button" data-daily-edit="routine" data-id="${esc(r.docId)}">Editar</button><button type="button" data-daily-toggle="routine" data-id="${esc(r.docId)}">${r.active===false?'Ativar':'Desativar'}</button></div></div>`;
+      }).join(''):'<div class="daily-soft-empty">Nenhuma rotina.</div>';
+    }
+
+    function renderDailyAdminDashboard(){
+      const from=document.querySelector('#dailyDashFrom')?.value||localDateKey();
+      const to=document.querySelector('#dailyDashTo')?.value||from;
+      const shiftId=document.querySelector('#dailyDashShift')?.value||'';
+      const scopeId=document.querySelector('#dailyDashScope')?.value||'';
+      const userId=document.querySelector('#dailyDashUser')?.value||'';
+      const rows=state.routineExecutions.filter(x=>
+        (x.dateKey||'')>=from && (x.dateKey||'')<=to &&
+        (!shiftId||x.shiftId===shiftId) && (!scopeId||x.scopeId===scopeId) &&
+        (!userId||x.assignedUserId===userId||(x.expectedUserIds||[]).includes(userId)||(x.participants||[]).some(p=>p.userId===userId))
+      ).sort((a,b)=>String(b.dateKey||'').localeCompare(String(a.dateKey||'')) || dailyPlannedDateTime(a)-dailyPlannedDateTime(b));
+      const done=rows.filter(x=>x.status==='completed');
+      const coverage=rows.length?Math.round(done.length/rows.length*100):0;
+      const onTime=done.filter(x=>x.onTime!==false).length;
+      const missed=rows.filter(x=>x.status!=='completed' && new Date()>dailyExecutionDeadline(x)).length;
+      const ng=done.filter(x=>x.result==='ng').length;
+      document.querySelector('#dailyDashCoverage').textContent=`${coverage}%`;
+      document.querySelector('#dailyDashOnTime').textContent=done.length?`${Math.round(onTime/done.length*100)}%`:'0%';
+      document.querySelector('#dailyDashMissed').textContent=missed;
+      document.querySelector('#dailyDashNg').textContent=ng;
+
+      const byScope=new Map();
+      rows.forEach(x=>{const key=x.scopeId||x.scopeName||'sem';if(!byScope.has(key))byScope.set(key,{label:x.scopeName||'Sem escopo',total:0,done:0});const r=byScope.get(key);r.total++;if(x.status==='completed')r.done++;});
+      const scopeBox=document.querySelector('#dailyDashScopeRows');
+      if(scopeBox) scopeBox.innerHTML=[...byScope.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(r=>dailyMetricBar(r.label,r.done,r.total)).join('')||'<div class="daily-soft-empty">Sem dados.</div>';
+
+      const personRows=users.filter(u=>!u.disabled).map(user=>{
+        const individual=rows.filter(x=>x.executionPolicy==='each_user'&&x.assignedUserId===user.docId);
+        const shared=rows.filter(x=>x.executionPolicy!=='each_user'&&(x.expectedUserIds||[]).includes(user.docId));
+        const participated=shared.filter(x=>(x.participants||[]).some(p=>p.userId===user.docId)).length;
+        return {user,individual,shared,participated};
+      }).filter(x=>x.individual.length||x.shared.length);
+      const userBox=document.querySelector('#dailyDashUserRows');
+      if(userBox) userBox.innerHTML=personRows.map(x=>{
+        const doneIndividual=x.individual.filter(e=>e.status==='completed').length;
+        if(!x.individual.length){
+          return `<div class="daily-metric-row"><div><strong>${esc(x.user.name)}</strong><span>Participou de ${x.participated}/${x.shared.length} execuções compartilhadas · não conta como obrigação individual</span></div><div class="daily-metric-value"><strong>Equipe</strong><div><span style="width:${x.shared.length?Math.round(x.participated/x.shared.length*100):0}%"></span></div></div></div>`;
+        }
+        const sub=x.shared.length?`${doneIndividual}/${x.individual.length} individuais · participação em ${x.participated}/${x.shared.length} compartilhadas`:`${doneIndividual}/${x.individual.length} individuais`;
+        return dailyMetricBar(x.user.name,doneIndividual,x.individual.length,sub);
+      }).join('')||'<div class="daily-soft-empty">Sem dados por pessoa.</div>';
+
+      const body=document.querySelector('#dailyDashRows');
+      if(body) body.innerHTML=rows.map(x=>`<tr><td><span class="identifier">${esc(x.dateKey||'')}</span><span class="secondary-text">${esc(x.shiftName||'')}</span></td><td>${esc(x.routineName||'Rotina')}</td><td>${esc(x.scopeName||'—')}</td><td>${esc((x.expectedUserNames||[]).join(', ')||x.assignedUserName||'—')}</td><td>${esc(dailyResultLabel(x.result))}</td><td>${esc(x.plannedTime||'Turno')}${x.completedAt?` · ${esc(new Date(x.completedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))}`:''}</td></tr>`).join('');
+      document.querySelector('#dailyDashEmpty')?.classList.toggle('hidden',rows.length>0);
+    }
+
+    function resetDailyAdminForm(kind){
+      const map={shift:'#dailyShiftForm',scope:'#dailyScopeForm',allocation:'#dailyAllocationForm',routine:'#dailyRoutineForm'};
+      const form=document.querySelector(map[kind]); if(!form) return;
+      form.reset();
+      if(form.elements.docId) form.elements.docId.value='';
+      if(kind==='shift'&&form.elements.active) form.elements.active.checked=true;
+      if(kind==='scope'&&form.elements.active) form.elements.active.checked=true;
+      if(kind==='routine'){
+        form.elements.active.checked=true;
+        form.elements.allowFailure.checked=true;
+        form.elements.allowActivity.checked=true;
+        form.elements.requireNgNote.checked=true;
+        form.elements.minParticipants.value=1;
+        form.elements.windowMinutes.value=60;
+        const weekdays=new Set(['1','2','3','4','5']);
+        [...form.elements.routineDays].forEach(x=>x.checked=weekdays.has(x.value));
+        renderDailyRoutineScheduleEditor();
+      }
+    }
+
+    function dailyEditAdminItem(kind,id){
+      if(currentAccount?.role!=='admin') return;
+      if(kind==='shift'){
+        const item=state.workShifts.find(x=>x.docId===id); if(!item)return;
+        const f=document.querySelector('#dailyShiftForm'); f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.startTime.value=item.startTime||'';f.elements.endTime.value=item.endTime||'';f.elements.active.checked=item.active!==false;f.scrollIntoView({behavior:'smooth',block:'center'});
+      }else if(kind==='scope'){
+        const item=state.operationalScopes.find(x=>x.docId===id); if(!item)return;
+        const f=document.querySelector('#dailyScopeForm');f.elements.docId.value=item.docId;f.elements.type.value=item.type||'line';f.elements.name.value=item.name||'';f.elements.code.value=item.code||'';f.elements.active.checked=item.active!==false;f.scrollIntoView({behavior:'smooth',block:'center'});
+      }else if(kind==='allocation'){
+        const item=state.workAllocations.find(x=>x.docId===id); if(!item)return;
+        const f=document.querySelector('#dailyAllocationForm');f.elements.docId.value=item.docId;f.elements.userId.value=item.userId||'';f.elements.shiftId.value=item.shiftId||'';f.elements.position.value=item.position||'member';
+        const selected=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=selected.has(o.value));f.scrollIntoView({behavior:'smooth',block:'center'});
+      }else if(kind==='routine'){
+        const item=state.routineTemplates.find(x=>x.docId===id); if(!item)return;
+        const f=document.querySelector('#dailyRoutineForm');f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.description.value=item.description||'';f.elements.executionPolicy.value=item.executionPolicy||'scope_once';f.elements.minParticipants.value=item.minParticipants||1;f.elements.windowMinutes.value=item.windowMinutes??60;f.elements.resultMode.value=item.resultMode||'ok_ng';f.elements.checklistTemplate.value=(item.checklistTemplate||[]).join('\n');f.elements.allowFailure.checked=item.allowFailure!==false;f.elements.allowActivity.checked=item.allowActivity!==false;f.elements.requireNgNote.checked=item.requireNgNote!==false;f.elements.active.checked=item.active!==false;
+        const scopes=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=scopes.has(o.value));
+        const days=new Set((item.days||[1,2,3,4,5]).map(String));[...f.elements.routineDays].forEach(o=>o.checked=days.has(o.value));
+        renderDailyRoutineScheduleEditor(item);f.scrollIntoView({behavior:'smooth',block:'start'});
+      }
+    }
+
+    async function dailyToggleAdminItem(kind,id){
+      if(currentAccount?.role!=='admin') return;
+      const map={shift:['workShifts',state.workShifts],scope:['operationalScopes',state.operationalScopes],routine:['routineTemplates',state.routineTemplates]};
+      const entry=map[kind]; if(!entry)return; const item=entry[1].find(x=>x.docId===id);if(!item)return;
+      await updateDoc(doc(db,entry[0],id),{active:item.active===false,updatedAt:now(),updatedBy:currentAccount.email});
+      dailyMaterializeSignature='';
+    }
+
+    async function dailyDeleteAllocation(id){
+      if(currentAccount?.role!=='admin')return;
+      const item=state.workAllocations.find(x=>x.docId===id);if(!item)return;
+      if(!confirm('Remover esta alocação atual? O histórico das execuções já realizadas será preservado.'))return;
+      await deleteDoc(doc(db,'workAllocations',id));dailyMaterializeSignature='';
+    }
+
+    function dailyRoutineSchedulePayload(){
+      const map={};
+      document.querySelectorAll('#dailyRoutineSchedules [data-routine-shift]').forEach(check=>{
+        if(!check.checked)return;
+        const id=check.dataset.routineShift;
+        const input=[...document.querySelectorAll('#dailyRoutineSchedules [data-routine-times]')].find(x=>x.dataset.routineTimes===id);
+        const raw=input?.value||'';
+        const times=[...new Set(raw.split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean))];
+        if(times.some(x=>!/^([01]\d|2[0-3]):[0-5]\d$/.test(x))) throw new Error('Use horários no formato HH:MM. Ex.: 09:00, 14:30.');
+        map[id]=times;
+      });
+      return map;
+    }
+
+    async function saveDailyShift(form){
+      if(currentAccount?.role!=='admin')return;
+      const f=new FormData(form), id=String(f.get('docId')||''), payload={name:String(f.get('name')||'').trim(),startTime:String(f.get('startTime')||''),endTime:String(f.get('endTime')||''),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
+      if(!payload.name||!payload.startTime||!payload.endTime)return alert('Preencha nome, início e fim do turno.');
+      if(id) await updateDoc(doc(db,'workShifts',id),payload); else await addDoc(collection(db,'workShifts'),{...payload,createdAt:now()});
+      resetDailyAdminForm('shift');dailyMaterializeSignature='';showSaveToast('Turno salvo.','success');
+    }
+
+    async function saveDailyScope(form){
+      if(currentAccount?.role!=='admin')return;
+      const f=new FormData(form), id=String(f.get('docId')||''), payload={type:String(f.get('type')||'line'),name:String(f.get('name')||'').trim(),code:String(f.get('code')||'').trim(),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
+      if(!payload.name)return alert('Informe o nome do escopo.');
+      if(id)await updateDoc(doc(db,'operationalScopes',id),payload);else await addDoc(collection(db,'operationalScopes'),{...payload,createdAt:now()});
+      resetDailyAdminForm('scope');dailyMaterializeSignature='';showSaveToast('Escopo salvo.','success');
+    }
+
+    async function saveDailyAllocation(form){
+      if(currentAccount?.role!=='admin')return;
+      const f=new FormData(form), requestedId=String(f.get('docId')||''), userId=String(f.get('userId')||''), shiftId=String(f.get('shiftId')||''), scopeIds=f.getAll('scopeIds').filter(Boolean);
+      if(!userId||!shiftId||!scopeIds.length)return alert('Selecione pessoa, turno e pelo menos um escopo.');
+      const user=users.find(u=>u.docId===userId), shift=state.workShifts.find(s=>s.docId===shiftId);
+      const existing=state.workAllocations.find(a=>a.userId===userId&&a.shiftId===shiftId&&a.docId!==requestedId);
+      const id=requestedId||existing?.docId||'';
+      const payload={userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:String(f.get('position')||'member'),updatedAt:now(),updatedBy:currentAccount.email};
+      if(id)await updateDoc(doc(db,'workAllocations',id),payload);else await addDoc(collection(db,'workAllocations'),{...payload,createdAt:now()});
+      resetDailyAdminForm('allocation');dailyMaterializeSignature='';showSaveToast(existing&&!requestedId?'Alocação atualizada.':'Alocação salva.','success');
+    }
+
+    async function saveDailyRoutine(form){
+      if(currentAccount?.role!=='admin')return;
+      const f=new FormData(form), id=String(f.get('docId')||'');
+      let scheduleMap;try{scheduleMap=dailyRoutineSchedulePayload();}catch(error){return alert(error.message);}
+      if(!Object.keys(scheduleMap).length)return alert('Selecione pelo menos um turno na agenda da rotina.');
+      const days=f.getAll('routineDays').map(Number), scopeIds=f.getAll('scopeIds').filter(Boolean);
+      const payload={
+        name:String(f.get('name')||'').trim(),description:String(f.get('description')||'').trim(),scopeIds,scheduleMap,days,
+        executionPolicy:String(f.get('executionPolicy')||'scope_once'),minParticipants:Math.max(1,Number(f.get('minParticipants')||1)),
+        windowMinutes:Math.max(0,Number(f.get('windowMinutes')||60)),resultMode:String(f.get('resultMode')||'ok_ng'),
+        checklistTemplate:String(f.get('checklistTemplate')||'').split('\n').map(x=>x.trim()).filter(Boolean),
+        allowFailure:f.get('allowFailure')==='on',allowActivity:f.get('allowActivity')==='on',requireNgNote:f.get('requireNgNote')==='on',active:f.get('active')==='on',
+        updatedAt:now(),updatedBy:currentAccount.email
+      };
+      if(!payload.name)return alert('Informe o nome da rotina.');
+      if(!days.length)return alert('Selecione pelo menos um dia ativo.');
+      if(id)await updateDoc(doc(db,'routineTemplates',id),payload);else await addDoc(collection(db,'routineTemplates'),{...payload,createdAt:now()});
+      resetDailyAdminForm('routine');dailyMaterializeSignature='';showSaveToast('Rotina salva.','success');
+    }
+
+    function dailyFindExecution(key){
+      const expected=dailyExpectedExecutions().find(x=>x.executionKey===key)||{};
+      const actual=state.routineExecutions.find(x=>(x.executionKey||x.docId)===key)||{};
+      return Object.keys(expected).length||Object.keys(actual).length ? {...expected,...actual,executionKey:key,status:actual.status||'planned'} : null;
+    }
+
+    function dailyParticipantList(execution,includeCurrent=true){
+      const list=Array.isArray(execution?.participants)?execution.participants.map(x=>({...x})):[];
+      const uid=currentAuthUser?.uid;
+      if(includeCurrent&&uid&&!list.some(p=>p.userId===uid))list.push({userId:uid,name:currentAccount?.name||'Usuário',joinedAt:now()});
+      return list;
+    }
+
+    async function startDailyExecution(key){
+      const execution=dailyFindExecution(key);if(!execution)return;
+      if(!dailyExecutionVisibleToCurrent(execution)&&currentAccount?.role!=='admin')return alert('Esta rotina não está atribuída a você.');
+      const participants=dailyParticipantList(execution,true);
+      await setDoc(doc(db,'routineExecutions',key),{status:'in_progress',startedAt:execution.startedAt||now(),startedById:execution.startedById||currentAuthUser?.uid||'',startedByName:execution.startedByName||currentAccount?.name||'',participants,updatedAt:now()},{merge:true});
+      showSaveToast('Rotina iniciada.','success');
+    }
+
+    function openRoutineExecution(key){
+      const execution=dailyFindExecution(key);if(!execution)return;
+      selectedRoutineExecutionId=key;
+      document.querySelector('#routineExecutionTitle').textContent=execution.routineName||'Executar rotina';
+      document.querySelector('#routineExecutionSubtitle').textContent=`${execution.scopeName||''} · ${execution.shiftName||''}${execution.plannedTime?` · ${execution.plannedTime}`:''}`;
+      const result=document.querySelector('#routineExecutionResult');
+      result.innerHTML=execution.resultMode==='simple'
+        ? '<option value="done">Concluído</option><option value="na">Não aplicável</option>'
+        : '<option value="ok">OK</option><option value="ng">NG / Anormalidade</option><option value="na">Não aplicável</option>';
+      result.value=execution.result|| (execution.resultMode==='simple'?'done':'ok');
+      document.querySelector('#routineExecutionNote').value=execution.note||'';
+      const template=execution.checklistTemplate||[];
+      const saved=Array.isArray(execution.checklist)?execution.checklist:[];
+      const box=document.querySelector('#routineExecutionChecklistBox'),list=document.querySelector('#routineExecutionChecklist');
+      box.classList.toggle('hidden',!template.length);
+      list.innerHTML=template.map((text,index)=>{const previous=saved.find(x=>x.text===text)||saved[index]||{};return `<label class="routine-check-item"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}><span>${esc(text)}</span></label>`;}).join('');
+      document.querySelector('#routineExecutionForm').elements.evidence.value='';
+      document.querySelector('#routineExecutionModal').classList.remove('hidden');
+    }
+
+    function closeRoutineExecution(){
+      document.querySelector('#routineExecutionModal')?.classList.add('hidden');
+      selectedRoutineExecutionId=null;
+      document.querySelector('#routineExecutionForm')?.reset();
+    }
+
+    async function saveRoutineExecution(form){
+      const key=selectedRoutineExecutionId,execution=dailyFindExecution(key);if(!execution)return;
+      const f=new FormData(form), result=String(f.get('result')||'done'), note=String(f.get('note')||'').trim();
+      if(result==='ng'&&execution.requireNgNote!==false&&!note)return alert('Descreva a anormalidade antes de salvar o resultado NG.');
+      const participants=dailyParticipantList(execution,true);
+      if(execution.executionPolicy==='min_people'&&participants.length<Number(execution.requiredParticipants||1))return alert(`Esta rotina exige pelo menos ${execution.requiredParticipants} participantes. Outros alocados podem abrir a mesma rotina e clicar em Iniciar.`);
+      const template=execution.checklistTemplate||[];
+      const checklist=template.map((text,index)=>({text,done:Boolean(document.querySelector(`[data-routine-check="${index}"]`)?.checked)}));
+      if(template.length&&['ok','done'].includes(result)&&checklist.some(x=>!x.done))return alert('Conclua os itens do checklist ou registre a execução como NG.');
+      const newEvidence=await readAttachments(f.getAll('evidence').filter(Boolean));
+      const evidence=[...evidenceEntries(execution.evidence),...newEvidence];
+      const completedAt=now(),onTime=new Date(completedAt)<=dailyExecutionDeadline(execution);
+      await setDoc(doc(db,'routineExecutions',key),{status:'completed',result,note,checklist,evidence,participants,startedAt:execution.startedAt||completedAt,startedById:execution.startedById||currentAuthUser?.uid||'',startedByName:execution.startedByName||currentAccount?.name||'',completedAt,completedById:currentAuthUser?.uid||'',completedByName:currentAccount?.name||'',onTime,updatedAt:completedAt},{merge:true});
+      closeRoutineExecution();
+      showSaveToast(result==='ng'?'NG registrado. A rotina pode gerar uma Falha ou Atividade.':'Execução salva.','success');
+    }
+
+    function dailyOpenLinkedItem(kind,id){
+      if(kind==='activity')return openActivityDetail(id);
+      if(kind==='flow')return openFlowDetail(id);
+      if(kind==='operational')return openOperationalDetail(id);
+      if(kind==='report')return openDetail(id);
+    }
+
+    function dailySetOrigin(execution){
+      pendingOriginContext={type:'routineExecution',executionKey:execution.executionKey,routineId:execution.routineId||'',routineName:execution.routineName||'Rotina',scopeId:execution.scopeId||'',scopeName:execution.scopeName||'',scopeType:execution.scopeType||'',shiftId:execution.shiftId||'',shiftName:execution.shiftName||'',dateKey:execution.dateKey||''};
+    }
+
+    function dailyCreateFailureFromExecution(key){
+      const execution=dailyFindExecution(key);if(!execution)return;
+      dailySetOrigin(execution);
+      openOperationalFailureModal({text:execution.note||`Anormalidade identificada durante ${execution.routineName}.`,context:`Origem: ${execution.routineName} · ${execution.scopeName} · ${execution.shiftName}.`,line:execution.scopeType==='line'?execution.scopeName:'',unscoped:true});
+    }
+
+    function dailyCreateActivityFromExecution(key){
+      const execution=dailyFindExecution(key);if(!execution)return;
+      dailySetOrigin(execution);
+      openActivityModal({title:`Ação — ${execution.routineName} · ${execution.scopeName}`,area:execution.scopeName||'Operação',description:execution.note||`Atividade originada da rotina ${execution.routineName}, ${execution.shiftName}.`,activityMode:'simple'});
+    }
+
+    // ===================== FIM CENTRAL DO DIA · V15.1.13.28 =====================
+
     function renderSafely(name, fn) {
       try {
         fn();
@@ -3550,6 +4232,7 @@ ${m.text}`).join('\n\n');
       renderSafely('todos os reports', renderAll);
       renderSafely('falhas operacionais', renderOperations);
       renderSafely('atividades gerais', renderWork);
+      renderSafely('Central do Dia', renderDaily);
       renderSafely('fluxos', renderFlows);
       renderSafely('IA de análise', renderAIAnalysis);
       renderSafely('dashboard', renderDashboard);
@@ -3667,9 +4350,10 @@ ${m.text}`).join('\n\n');
       document.querySelector('#failureComponent').focus();
     }
     function closeFailureModal() { document.querySelector('#failureModal').classList.add('hidden'); document.querySelector('#failureForm').reset(); }
-    function fillActivityProducts(){ const select=document.querySelector('#activityProduct'); if(!select)return; const current=select.value; select.innerHTML='<option value="">Não relacionado a produto</option>'+state.products.sort((a,b)=>a.code.localeCompare(b.code)).map(p=>`<option value="${esc(p.code)}">${esc(p.code)} · ${esc(p.family)}</option>`).join(''); select.value=current||activeProduct||''; }
-    function openActivityModal() { fillActivityProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#activityModal').classList.remove('hidden'); document.querySelector('#activityForm [name="title"]').focus(); }
-    function closeActivityModal() { document.querySelector('#activityModal').classList.add('hidden'); document.querySelector('#activityForm').reset(); }
+    function fillActivityProducts(){ const select=document.querySelector('#activityProduct'); if(!select)return; const current=select.value; select.innerHTML='<option value="">Não relacionado a produto</option>'+state.products.sort((a,b)=>productDisplayCode(a.code).localeCompare(productDisplayCode(b.code))).map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))} · ${esc(p.family)}</option>`).join(''); select.value=current||activeProduct||''; }
+    function syncActivityModeUI(){const form=document.querySelector('#activityForm');if(!form)return;const structured=form.elements.activityMode?.value==='structured';document.querySelector('#activityStructuredCreate')?.classList.toggle('hidden',!structured);}
+    function openActivityModal(prefill={}) {fillActivityProducts();updateOwnerDropdowns();const form=document.querySelector('#activityForm');if(prefill.title)form.elements.title.value=prefill.title;if(prefill.area)form.elements.area.value=prefill.area;if(prefill.description)form.elements.description.value=prefill.description;if(prefill.activityMode)form.elements.activityMode.value=prefill.activityMode;syncActivityModeUI();translatePage();document.querySelector('#activityModal').classList.remove('hidden');document.querySelector('#activityForm [name="title"]').focus();}
+    function closeActivityModal() {document.querySelector('#activityModal').classList.add('hidden');document.querySelector('#activityForm').reset();syncActivityModeUI();pendingOriginContext=null;}
     function openDetail(id) { selectedId = id; renderDetail(); document.querySelector('#detailModal').classList.remove('hidden'); }
     function closeDetail() { document.querySelector('#detailModal').classList.add('hidden'); selectedId = null; }
     const selected = () => state.reports.find(r => r.id === selectedId);
@@ -3678,31 +4362,41 @@ ${m.text}`).join('\n\n');
     function closeActivityDetail() { document.querySelector('#activityDetailModal').classList.add('hidden'); selectedActivityId = null; }
     const selectedActivity = () => state.activities.find(activity => activity.id === selectedActivityId);
 
+    function activityLastMovementAt(activity){const dates=[activity?.createdAt,activity?.lastMovedAt,...(activity?.updates||[]).map(x=>x.date),...(activity?.steps||[]).map(x=>x.doneAt)].filter(Boolean).map(x=>new Date(x)).filter(x=>!Number.isNaN(x.getTime()));return dates.length?new Date(Math.max(...dates.map(x=>x.getTime()))):null;}
+    function activityMovementText(activity){const date=activityLastMovementAt(activity);if(!date)return 'Sem movimentação registrada.';const days=Math.max(0,Math.floor((Date.now()-date.getTime())/86400000));if(days===0)return `Último avanço hoje · ${date.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;if(days===1)return 'Último avanço há 1 dia';return `Último avanço há ${days} dias`;}
+
     function renderActivityDetail() {
-      const activity = selectedActivity();
-      if (!activity) return;
-      document.querySelector('#activityDetailTitle').textContent = activity.title;
-      document.querySelector('#activityDetailSubtitle').textContent = `${activity.type} · ${activity.area} · Responsável: ${activity.owner}`;
-      document.querySelector('#activityDetailDescription').textContent = activity.description;
-      document.querySelector('#activityDetailDescriptionInput').value = activity.description || '';
-      document.querySelector('#activityDescriptionEditor').classList.add('hidden');
-      document.querySelector('#activityDetailDescription').classList.remove('hidden');
-      document.querySelector('#activityDetailLink').innerHTML = safeLink(activity.link, 'Abrir link relacionado') || 'Nenhum link informado.';
-      document.querySelector('#activityDetailStatus').value = activity.status;
-      document.querySelector('#activityDetailDue').value = activity.dueDate || '';
-      const events = [{ text: 'Atividade criada.', date: activity.createdAt }, ...(activity.updates || [])].sort((a, b) => new Date(b.date) - new Date(a.date));
-      document.querySelector('#activityTimeline').innerHTML = events.map(event => `<div class="event"><time>${formatDate(event.date)}</time><p>${esc(event.text)}</p></div>`).join('');
+      const activity=selectedActivity();if(!activity)return;
+      const structured=activity.activityMode==='structured'||Boolean(activity.nextAction)||(activity.steps||[]).length>0||evidenceEntries(activity.evidence).length>0;
+      document.querySelector('#activityDetailTitle').textContent=activity.title;
+      const origin=activity.originRoutineName?` · Origem: ${activity.originRoutineName}`:'';
+      document.querySelector('#activityDetailSubtitle').textContent=`${activity.type} · ${activity.area} · Responsável: ${activity.owner}${origin}`;
+      document.querySelector('#activityDetailDescription').textContent=activity.description;
+      document.querySelector('#activityDetailDescriptionInput').value=activity.description||'';
+      document.querySelector('#activityDescriptionEditor').classList.add('hidden');document.querySelector('#activityDetailDescription').classList.remove('hidden');
+      document.querySelector('#activityDetailLink').innerHTML=safeLink(activity.link,'Abrir link relacionado')||'Nenhum link informado.';
+      document.querySelector('#activityDetailStatus').value=activity.status;document.querySelector('#activityDetailDue').value=activity.dueDate||'';
+      document.querySelector('#structureActivity')?.classList.toggle('hidden',structured);
+      document.querySelector('#activityStructuredSection')?.classList.toggle('hidden',!structured);
+      if(structured){
+        document.querySelector('#activityNextAction').value=activity.nextAction||'';
+        document.querySelector('#activityMovementInfo').textContent=activityMovementText(activity);
+        const steps=Array.isArray(activity.steps)?activity.steps:[],done=steps.filter(x=>x.done).length;
+        document.querySelector('#activityStepProgress').textContent=`${done}/${steps.length}`;
+        document.querySelector('#activityStepProgressBar').style.width=steps.length?`${Math.round(done/steps.length*100)}%`:'0%';
+        document.querySelector('#activitySteps').innerHTML=steps.length?steps.map((step,index)=>`<div class="activity-step-row ${step.done?'done':''}"><label><input type="checkbox" data-activity-step-toggle="${index}" ${step.done?'checked':''}><span>${esc(step.text)}</span></label><button type="button" data-activity-step-delete="${index}" aria-label="Excluir etapa">×</button></div>`).join(''):'<div class="daily-soft-empty">Nenhuma etapa ainda.</div>';
+        document.querySelector('#activityEvidenceGallery').innerHTML=evidenceGallery(activity.evidence,{allowDelete:true,kind:'activity',id:activity.id});
+      }
+      const events=[{text:'Atividade criada.',date:activity.createdAt},...(activity.updates||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
+      document.querySelector('#activityTimeline').innerHTML=events.map(event=>`<div class="event"><time>${formatDate(event.date)}</time><p>${esc(event.text)}</p></div>`).join('');
       translatePage();
     }
 
     function fillFlowProducts() { const select = document.querySelector('#flowProduct'); select.innerHTML = `<option value="">${esc(t('Não relacionado a produto'))}</option>` + state.products.sort((a, b) => a.code.localeCompare(b.code)).map(product => `<option value="${esc(product.code)}">${esc(product.code)} · ${esc(product.family)}</option>`).join(''); }
     function openFlowModal() { fillFlowProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#flowModal').classList.remove('hidden'); document.querySelector('#flowForm select').focus(); }
     function closeFlowModal() { document.querySelector('#flowModal').classList.add('hidden'); document.querySelector('#flowForm').reset(); }
-
     function openFlowDetail(id) { selectedFlowId = id; renderFlowDetail(); document.querySelector('#flowDetailModal').classList.remove('hidden'); }
     function closeFlowDetail() { document.querySelector('#flowDetailModal').classList.add('hidden'); selectedFlowId = null; }
-    const selectedFlow = () => state.flows.find(flow => flow.id === selectedFlowId);
-
     function renderFlowDetail() {
       const flow = selectedFlow();
       if (!flow) return;
@@ -3784,6 +4478,7 @@ ${m.text}`).join('\n\n');
       const help=document.querySelector('#operationalScopeHelp');
       if(help){
         const messages={
+          none:'A falha ainda não está vinculada a um produto. Útil para máquina, processo ou ocorrência ainda em análise.',
           family:'A falha vale para a família selecionada, sem limitar a um SKU.',
           base_product:'O código-base vale para todas as cores/variantes desse produto.',
           variant:'A falha vale somente para o SKU/cor selecionado.',
@@ -3838,7 +4533,7 @@ ${m.text}`).join('\n\n');
       updateOwnerDropdowns();
       const form=document.querySelector('#operationalFailureForm');
       form.reset();
-      form.elements.scope_type.value='variant';
+      form.elements.scope_type.value=prefill.unscoped?'none':'variant';
       form.elements.classification.value='NAO_DEFINIDO';
       form.elements.classification_confidence.value='MEDIA';
 
@@ -3874,7 +4569,7 @@ ${m.text}`).join('\n\n');
       form.elements.issue.focus();
       translatePage();
     }
-    function closeOperationalFailureModal(){document.querySelector('#operationalFailureModal').classList.add('hidden');document.querySelector('#operationalFailureForm').reset();document.querySelector('#operationalEvidencePreview').innerHTML='';setOccurrenceMode();}
+    function closeOperationalFailureModal(){document.querySelector('#operationalFailureModal').classList.add('hidden');document.querySelector('#operationalFailureForm').reset();document.querySelector('#operationalEvidencePreview').innerHTML='';pendingOriginContext=null;setOccurrenceMode();}
     function updateOperationalDetailScopeUI(){
       const scope=document.querySelector('#opDetailScopeSelect')?.value||'variant';
       document.querySelector('#opDetailProductScopeLabel')?.classList.toggle('hidden',scope!=='variant');
@@ -3887,6 +4582,7 @@ ${m.text}`).join('\n\n');
       if(baseSelect)baseSelect.required=scope==='base_product';
       if(multiSelect)multiSelect.required=scope==='multi_sku';
       const messages={
+        none:'A falha ficará sem produto definido.',
         variant:'A falha ficará vinculada somente ao SKU selecionado.',
         base_product:'A falha ficará vinculada ao produto base e aparecerá em todas as cores cadastradas.',
         multi_sku:'A falha ficará vinculada somente aos SKUs selecionados.',
@@ -3945,7 +4641,9 @@ ${m.text}`).join('\n\n');
       const multiCodes=[...(document.querySelector('#opDetailMultiProductSelect')?.selectedOptions||[])].map(o=>o.value).filter(Boolean);
       let product='',productCodes=[],baseCode='';
 
-      if(scopeType==='family'){
+      if(scopeType==='none'){
+        product='';productCodes=[];baseCode='';
+      }else if(scopeType==='family'){
         if(!selectedFamily){alert('Selecione a família antes de salvar.');return null;}
       }else if(scopeType==='base_product'){
         if(!selectedBase){alert('Selecione o produto base antes de salvar.');return null;}
@@ -3964,12 +4662,13 @@ ${m.text}`).join('\n\n');
       }
 
       const related=state.products.filter(p=>{
+        if(scopeType==='none')return false;
         if(scopeType==='family')return selectedFamily&&productFamily(p)===selectedFamily;
         if(scopeType==='base_product')return productCodeKey(productBaseCode(p))===productCodeKey(baseCode);
         return productCodes.some(code=>sameProductCode(code,p.code));
       });
       const inferred=[...new Set(related.map(productFamily).filter(Boolean))];
-      const family=selectedFamily||(inferred.length===1?inferred[0]:'');
+      const family=scopeType==='none'?'':(selectedFamily||(inferred.length===1?inferred[0]:''));
       return {scopeType,family,product,productCodes,baseCode};
     }
 
@@ -4017,6 +4716,8 @@ ${m.text}`).join('\n\n');
     }
 
     document.querySelector('#languageSelect').value = currentLanguage;
+    document.querySelector('#activityModeSelect')?.addEventListener('change',syncActivityModeUI);
+    syncActivityModeUI();
     document.querySelector('#closeEvidenceLightbox').addEventListener('click', e => { e.stopPropagation(); closeEvidenceLightbox(); });
     document.querySelector('#evidenceLightbox').addEventListener('click', e => { if(e.target.id==='evidenceLightbox') closeEvidenceLightbox(); });
     document.addEventListener('keydown', e => { if(e.key==='Escape') closeEvidenceLightbox(); });
@@ -4117,6 +4818,28 @@ ${m.text}`).join('\n\n');
     });
     document.querySelector('#clearDashboardIndicator')?.addEventListener('click', clearDashboardIndicator);
     document.querySelector('#dashboardIndicatorModal')?.addEventListener('click',e=>{if(e.target.id==='dashboardIndicatorModal')e.currentTarget.classList.add('hidden');});
+
+    document.querySelector('#quickDaily')?.addEventListener('click',()=>show('daily'));
+    document.querySelector('#dailyDate')?.addEventListener('change',e=>{dailySelectedDate=e.target.value||localDateKey();dailyMaterializeSignature='';renderDaily();});
+    document.querySelector('#dailyShiftSelect')?.addEventListener('change',e=>{dailySelectedShiftId=e.target.value||'';localStorage.setItem('central.daily.shift.v1',dailySelectedShiftId);dailyMaterializeSignature='';renderDaily();});
+    document.querySelector('#dailyTodayBtn')?.addEventListener('click',()=>{const current=dailyCurrentShiftInfo();dailySelectedShiftId=current.shift?.docId||dailySelectedShiftId;dailySelectedDate=current.dateKey;dailyMaterializeSignature='';renderDaily();});
+    document.querySelector('#dailyAdminToggle')?.addEventListener('click',()=>{if(currentAccount?.role!=='admin')return;document.querySelector('#dailyAdminPanel').classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel').scrollIntoView({behavior:'smooth',block:'start'});});
+    document.querySelector('#dailyAdminClose')?.addEventListener('click',()=>document.querySelector('#dailyAdminPanel').classList.add('hidden'));
+    document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.addEventListener('click',()=>{dailyAdminTab=btn.dataset.dailyAdminTab||'config';renderDailyAdmin();}));
+    document.querySelectorAll('.daily-filter').forEach(btn=>btn.addEventListener('click',()=>{dailyFilter=btn.dataset.dailyFilter||'all';document.querySelectorAll('.daily-filter').forEach(x=>x.classList.toggle('active',x===btn));renderDaily();}));
+    ['dailyDashFrom','dailyDashTo','dailyDashShift','dailyDashScope','dailyDashUser'].forEach(id=>document.querySelector('#'+id)?.addEventListener('change',renderDailyAdminDashboard));
+    document.querySelector('#dailyShiftForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyShift(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar o turno.','error');});});
+    document.querySelector('#dailyScopeForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyScope(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar o escopo.','error');});});
+    document.querySelector('#dailyAllocationForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyAllocation(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar a alocação.','error');});});
+    document.querySelector('#dailyRoutineForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyRoutine(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar a rotina.','error');});});
+    document.querySelectorAll('[data-daily-reset]').forEach(btn=>btn.addEventListener('click',()=>resetDailyAdminForm(btn.dataset.dailyReset)));
+    document.querySelector('#dailyAdminPanel')?.addEventListener('click',e=>{const edit=e.target.closest('[data-daily-edit]');if(edit){dailyEditAdminItem(edit.dataset.dailyEdit,edit.dataset.id);return;}const toggle=e.target.closest('[data-daily-toggle]');if(toggle){dailyToggleAdminItem(toggle.dataset.dailyToggle,toggle.dataset.id).catch(console.error);return;}const del=e.target.closest('[data-daily-delete="allocation"]');if(del)dailyDeleteAllocation(del.dataset.id).catch(console.error);});
+    document.querySelector('#dailyView')?.addEventListener('click',e=>{const start=e.target.closest('[data-daily-start]');if(start){startDailyExecution(start.dataset.dailyStart).catch(err=>{console.error(err);showSaveToast('Não foi possível iniciar.','error');});return;}const complete=e.target.closest('[data-daily-complete]');if(complete){openRoutineExecution(complete.dataset.dailyComplete);return;}const fail=e.target.closest('[data-daily-failure]');if(fail){dailyCreateFailureFromExecution(fail.dataset.dailyFailure);return;}const activity=e.target.closest('[data-daily-activity]');if(activity){dailyCreateActivityFromExecution(activity.dataset.dailyActivity);return;}const linked=e.target.closest('[data-kind][data-ref]');if(linked)dailyOpenLinkedItem(linked.dataset.kind,linked.dataset.ref);});
+    document.querySelector('#closeRoutineExecution')?.addEventListener('click',closeRoutineExecution);
+    document.querySelector('#cancelRoutineExecution')?.addEventListener('click',closeRoutineExecution);
+    document.querySelector('#routineExecutionModal')?.addEventListener('click',e=>{if(e.target.id==='routineExecutionModal')closeRoutineExecution();});
+    document.querySelector('#routineExecutionForm')?.addEventListener('submit',e=>{e.preventDefault();saveRoutineExecution(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar a execução.','error');});});
+    setInterval(()=>{if(activeView==='daily')renderDaily();},60000);
 
     document.querySelector('#newProduct')?.addEventListener('click', openProductModal);
     document.querySelector('#headerNewProduct').addEventListener('click', openProductModal);
@@ -4397,7 +5120,9 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const multiCodes=f.getAll('products').map(v=>String(v||'').trim()).filter(Boolean);
       let productCode='',productCodes=[],baseCode='';
 
-      if(scopeType==='family'){
+      if(scopeType==='none'){
+        productCode='';productCodes=[];baseCode='';
+      }else if(scopeType==='family'){
         if(!selectedFamily)return alert('Selecione a família à qual a falha se aplica.');
       }else if(scopeType==='base_product'){
         if(!selectedBase)return alert('Selecione o código-base do produto.');
@@ -4416,12 +5141,13 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       }
 
       const referencedProducts=state.products.filter(p=>{
+        if(scopeType==='none')return false;
         if(scopeType==='family')return selectedFamily && productFamily(p)===selectedFamily;
         if(scopeType==='base_product')return productCodeKey(productBaseCode(p))===productCodeKey(baseCode);
         return productCodes.some(code=>sameProductCode(code,p.code));
       });
       const inferredFamilies=[...new Set(referencedProducts.map(productFamily).filter(Boolean))];
-      const family=selectedFamily||(inferredFamilies.length===1?inferredFamilies[0]:'');
+      const family=scopeType==='none'?'':(selectedFamily||(inferredFamilies.length===1?inferredFamilies[0]:''));
 
       const rawQty=String(f.get('quantidade_afetada')||'').trim();
       const evidence=await readAttachments(f.getAll('evidence').filter(Boolean));
@@ -4436,39 +5162,28 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         maquina:String(f.get('maquina')||'').trim(),linha:String(f.get('linha')||'').trim(),estacao:String(f.get('estacao')||'').trim(),processo:String(f.get('processo')||'').trim(),peca_danificada:String(f.get('component')||'').trim(),
         detectionMoment,detection_moment_label:detectionLabels[detectionMoment]||detectionMoment,quando_inicio:f.get('quando_inicio')||'',onde_detectado:String(f.get('onde_detectado')||'').trim(),quantity:rawQty===''?null:Number(rawQty),
         issue,descriptionContext:String(f.get('description_context')||'').trim(),hypothesis:String(f.get('hipotese_causa')||'').trim(),tests:String(f.get('testes_realizados')||'').trim(),cause:String(f.get('causa_confirmada')||'').trim(),correctiveAction:String(f.get('acao_corretiva')||'').trim(),notes:String(f.get('observacoes')||'').trim(),
-        owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[]
+        owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[],
+        originType:pendingOriginContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:pendingOriginContext?.scopeId||'',originScopeName:pendingOriginContext?.scopeName||'',originShiftId:pendingOriginContext?.shiftId||'',originShiftName:pendingOriginContext?.shiftName||''
       };
       if(!navigator.onLine){item.docId=`offline-${Date.now()}`;await queueOfflineWrite('operationalFailures',item);state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
+      const origin=pendingOriginContext;
+      if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedFailureIds||[]),item.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedFailureIds:linked,updatedAt:now()},{merge:true});}
+      pendingOriginContext=null;
       closeOperationalFailureModal();show('operations');openOperationalDetail(item.id);
     });
 
     document.querySelector('#activityForm').addEventListener('submit', async e => {
       e.preventDefault();
-      const formElement = e.currentTarget;
-      const form = new FormData(formElement);
-      const assignment = assignmentPayload(formElement, form.get('owner'));
-      const activity = {
-        id: nextId('A'),
-        title: form.get('title').trim(),
-        type: form.get('type'),
-        area: form.get('area').trim(),
-        owner: assignment.owner,
-        assignees: assignment.assignees,
-        assignmentMode: assignment.assignmentMode,
-        teamShared: assignment.teamShared,
-        openedBy: currentAccount?.name || form.get('owner'),
-        dueDate: form.get('dueDate'),
-        description: form.get('description').trim(),
-        link: form.get('link').trim(),
-        status: 'pendente',
-        product: form.get('product') || activeProduct || '',
-        createdAt: now(),
-        updates: []
-      };
-      await addDoc(collection(db, "activities"), activity);
-      closeActivityModal();
-      show('work');
-      openActivityDetail(activity.id);
+      const formElement=e.currentTarget,form=new FormData(formElement),assignment=assignmentPayload(formElement,form.get('owner'));
+      const activityMode=String(form.get('activityMode')||'simple');
+      const steps=activityMode==='structured'?String(form.get('initialSteps')||'').split('\n').map(x=>x.trim()).filter(Boolean).map((text,index)=>({id:`step-${Date.now()}-${index}`,text,done:false,doneAt:'',doneBy:''})):[];
+      const evidence=activityMode==='structured'?await readAttachments(form.getAll('activityEvidence').filter(Boolean)):[];
+      const origin=pendingOriginContext;
+      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction:activityMode==='structured'?String(form.get('nextAction')||'').trim():'',steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
+      const ref=await addDoc(collection(db,'activities'),activity);activity.docId=ref.id;
+      if(!state.activities.some(x=>x.id===activity.id))state.activities=[...state.activities,activity];
+      if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedActivityIds||[]),activity.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedActivityIds:linked,updatedAt:now()},{merge:true});}
+      pendingOriginContext=null;closeActivityModal();show('work');openActivityDetail(activity.id);
     });
 
     document.querySelector('#convertOperationalToProductReport')?.addEventListener('click', () => { if(selectedOperationalId) convertFailureToProductReport(selectedOperationalId); });
@@ -4733,23 +5448,21 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       if (!description) return alert('A descrição não pode ficar vazia.');
       if (description === (activity.description || '')) return renderActivityDetail();
       const updates = [...(activity.updates || []), { text: 'Descrição da atividade alterada.', date: now() }];
-      await updateDoc(doc(db, 'activities', activity.docId), { description, updates });
+      await updateDoc(doc(db, 'activities', activity.docId), { description, updates, lastMovedAt:now() });
       renderActivityDetail();
     });
 
     document.querySelector('#saveActivityChanges').addEventListener('click', async () => {
-      const activity = selectedActivity(); if (!activity) return;
-      const status = document.querySelector('#activityDetailStatus').value;
-      const dueDate = document.querySelector('#activityDetailDue').value;
-      const changes = [];
-      
-      if (status !== activity.status) changes.push(`Status alterado para “${activityStatusName[status]}”.`);
-      if (dueDate !== activity.dueDate) changes.push(dueDate ? `Prazo atualizado para ${formatDate(dueDate)}.` : 'Prazo removido.');
-      
-      if (!changes.length) return;
-      const updates = [...(activity.updates || []), { text: changes.join(' '), date: now() }];
-      await updateDoc(doc(db, "activities", activity.docId), { status, dueDate, updates });
-      renderActivityDetail();
+      const activity=selectedActivity();if(!activity)return;
+      const status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value;
+      const nextAction=!document.querySelector('#activityStructuredSection').classList.contains('hidden')?document.querySelector('#activityNextAction').value.trim():(activity.nextAction||'');
+      const changes=[];
+      if(status!==activity.status)changes.push(`Status alterado para “${activityStatusName[status]}”.`);
+      if(dueDate!==activity.dueDate)changes.push(dueDate?`Prazo atualizado para ${formatDate(dueDate)}.`:'Prazo removido.');
+      if(nextAction!==(activity.nextAction||''))changes.push(nextAction?`Próxima ação: ${nextAction}`:'Próxima ação removida.');
+      if(!changes.length)return;
+      const updates=[...(activity.updates||[]),{text:changes.join(' '),date:now()}];
+      await updateDoc(doc(db,'activities',activity.docId),{status,dueDate,nextAction,updates,lastMovedAt:now()});renderActivityDetail();
     });
 
     document.querySelector('#addActivityUpdate').addEventListener('click', async () => {
@@ -4757,10 +5470,16 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       if (!text) return input.focus();
       const activity = selectedActivity(); if (!activity) return;
       const updates = [...(activity.updates || []), { text, date: now() }];
-      await updateDoc(doc(db, "activities", activity.docId), { updates });
+      await updateDoc(doc(db, "activities", activity.docId), { updates, lastMovedAt:now() });
       input.value = '';
       renderActivityDetail();
     });
+
+    document.querySelector('#structureActivity')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const updates=[...(activity.updates||[]),{text:'Atividade transformada em estruturada.',date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#addActivityStep')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityNewStep'),text=input.value.trim();if(!text)return input.focus();const steps=[...(activity.steps||[]),{id:`step-${Date.now()}`,text,done:false,doneAt:'',doneBy:''}],updates=[...(activity.updates||[]),{text:`Etapa adicionada: ${text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',steps,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
+    document.querySelector('#activitySteps')?.addEventListener('click',async e=>{const activity=selectedActivity();if(!activity)return;const del=e.target.closest('[data-activity-step-delete]');if(!del)return;const index=Number(del.dataset.activityStepDelete),step=(activity.steps||[])[index];if(!step)return;const steps=(activity.steps||[]).filter((_,i)=>i!==index),updates=[...(activity.updates||[]),{text:`Etapa removida: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#activitySteps')?.addEventListener('change',async e=>{const toggle=e.target.closest('[data-activity-step-toggle]');if(!toggle)return;const activity=selectedActivity();if(!activity)return;const index=Number(toggle.dataset.activityStepToggle),steps=(activity.steps||[]).map((step,i)=>i===index?{...step,done:toggle.checked,doneAt:toggle.checked?now():'',doneBy:toggle.checked?(currentAccount?.name||''):''}:step),step=steps[index],updates=[...(activity.updates||[]),{text:`${toggle.checked?'Etapa concluída':'Etapa reaberta'}: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#saveActivityEvidence')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityEvidenceInput'),files=await readAttachments([...(input.files||[])]);if(!files.length)return alert('Selecione pelo menos um arquivo.');const evidence=[...evidenceEntries(activity.evidence),...files],updates=[...(activity.updates||[]),{text:`${files.length} arquivo(s)/evidência(s) adicionado(s).`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',evidence,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
 
     document.querySelector('#deleteActivity').addEventListener('click', async () => {
       if (currentAccount?.role !== 'admin') { alert('Apenas administradores podem excluir atividades.'); return; }
@@ -4852,5 +5571,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 try{const aiLang=document.querySelector('#aiLanguageSelect');if(aiLang)aiLang.value=currentLanguage;}catch{}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.27'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.27'){localStorage.setItem('cora.sw.loaded','15.1.13.27');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.28'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.28'){localStorage.setItem('cora.sw.loaded','15.1.13.28');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
