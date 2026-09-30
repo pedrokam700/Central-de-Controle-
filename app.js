@@ -40,7 +40,12 @@
       flows: [],
       failureAnalyses: [],
       aiKnowledge: [],
-      aiConversations: []
+      aiConversations: [],
+      workShifts: [],
+      operationalScopes: [],
+      workAllocations: [],
+      routineTemplates: [],
+      routineExecutions: []
     };
 
     let users = [];
@@ -67,6 +72,16 @@
     let expandedProductBase = localStorage.getItem('central.sidebar.productBase.v1') || '';
     let activeFamily = localStorage.getItem('central.sidebar.productActiveFamily.v1') || '';
     let familyToRename = null;
+
+    // Central do Dia — configuração atual sem período de validade.
+    let dailySelectedShiftId = localStorage.getItem('central.daily.shift.v1') || '';
+    let dailySelectedDate = '';
+    let dailyFilter = 'all';
+    let dailyAdminTab = 'config';
+    let selectedRoutineExecutionId = null;
+    let pendingOriginContext = null;
+    let dailyMaterializeSignature = '';
+    let dailyMaterializeInFlight = null;
 
     // Internationalization: Portuguese is the source language; English is a UI translation.
     const LANGUAGE_KEY = 'controleFalhas.language.v1';
@@ -365,6 +380,21 @@
         state.aiConversations = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         renderAIHistory();
       }, error => console.error('Falha ao sincronizar conversas da IA:', error)));
+
+      const dailyCollections = [
+        ['workShifts','workShifts','turnos'],
+        ['operationalScopes','operationalScopes','escopos operacionais'],
+        ['workAllocations','workAllocations','alocações'],
+        ['routineTemplates','routineTemplates','rotinas'],
+        ['routineExecutions','routineExecutions','execuções de rotina']
+      ];
+      dailyCollections.forEach(([collectionName,stateKey,label]) => {
+        unsubscribeData.push(onSnapshot(collection(db, collectionName), snapshot => {
+          state[stateKey] = snapshot.docs.map(item => ({ docId:item.id, ...item.data() }));
+          dailyMaterializeSignature = '';
+          render();
+        }, error => console.error(`Falha ao sincronizar ${label}:`, error)));
+      });
     }
 
     function updateOwnerDropdowns() {
@@ -382,6 +412,10 @@
       populateAssigneeSelect('#failureAssignees', currentAccount ? [currentAccount.name] : []);
       populateAssigneeSelect('#operationalAssignees', currentAccount ? [currentAccount.name] : []);
       populateAssigneeSelect('#flowAssignees', currentAccount ? [currentAccount.name] : []);
+      if (document.querySelector('#dailyView')) {
+        populateDailyAdminControls();
+        renderDailyAdminLists();
+      }
       configureAssignmentUI('#activityAssignmentBox','#activityAssignees','#activityAssignmentNote');
       configureAssignmentUI('#failureAssignmentBox','#failureAssignees','#failureAssignmentNote');
       configureAssignmentUI('#operationalAssignmentBox','#operationalAssignees','#operationalAssignmentNote');
@@ -1405,6 +1439,9 @@
       if (activeView === 'home') {
         document.querySelector('#pageTitle').textContent = t('Minha central de trabalho');
         document.querySelector('#pageSubtitle').textContent = t('Prioridades, reports de produto e atividades gerais em um só lugar.');
+      } else if (activeView === 'daily') {
+        document.querySelector('#pageTitle').textContent = 'Central do Dia';
+        document.querySelector('#pageSubtitle').textContent = 'Rotinas do turno, alocações e execução operacional em tempo real.';
       } else if (activeView === 'dashboard') {
         document.querySelector('#pageTitle').textContent = t('Dashboard Estratégico');
         document.querySelector('#pageSubtitle').textContent = t('Visão executiva e indicadores gerais de falhas de produtos.');
@@ -2012,6 +2049,7 @@ function applyActiveView() {
       document.body.classList.toggle('ai-focus-mode', activeView === 'aiAnalysis');
       const views = {
         home: '#homeView',
+        daily: '#dailyView',
         dashboard: '#dashboardView',
         profile: '#profileView',
         product: '#productView',
@@ -2308,7 +2346,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.27'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.27'){localStorage.setItem('cora.sw.loaded','15.1.13.27');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.28'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.28'){localStorage.setItem('cora.sw.loaded','15.1.13.28');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3531,6 +3569,429 @@ ${m.text}`).join('\n\n');
     // ======================= FIM V14.1 — IA multimodal ======================
     // ======================= FIM V14.0 — IA DE ANÁLISE (legado) =======================
 
+
+    // ======================= CENTRAL DO DIA · V15.1.13.28 =======================
+    const localDateKey = (date = new Date()) => {
+      const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
+      return `${y}-${m}-${d}`;
+    };
+    const dateFromLocalKey = key => {
+      const [y,m,d]=String(key||'').split('-').map(Number);
+      return y&&m&&d ? new Date(y,m-1,d,12,0,0,0) : new Date();
+    };
+    const addLocalDays = (key, amount) => {
+      const d=dateFromLocalKey(key); d.setDate(d.getDate()+Number(amount||0)); return localDateKey(d);
+    };
+    const dailyTimeMinutes = value => {
+      const [h,m]=String(value||'00:00').split(':').map(Number);
+      return (Number.isFinite(h)?h:0)*60+(Number.isFinite(m)?m:0);
+    };
+    const dailyShiftCrossesMidnight = shift => dailyTimeMinutes(shift?.endTime) <= dailyTimeMinutes(shift?.startTime);
+    const dailyShiftWindowLabel = shift => shift ? `${shift.startTime||'--:--'}–${shift.endTime||'--:--'}${dailyShiftCrossesMidnight(shift)?' · vira o dia':''}` : 'Turno não configurado';
+    const dailyScopeTypeLabel = type => ({line:'Linha',area:'Área',station:'Estação',process:'Processo',other:'Outro'}[type]||'Escopo');
+    const dailyPolicyLabel = policy => ({scope_once:'Uma execução por escopo',each_user:'Cada pessoa executa',collaborative:'Colaborativa',min_people:'Mínimo de pessoas'}[policy]||'Por escopo');
+    const dailyResultLabel = result => ({ok:'OK',ng:'NG',done:'Concluído',na:'Não aplicável'}[result]||'Pendente');
+
+    function dailyCurrentShiftInfo(nowDate=new Date()){
+      const shifts=state.workShifts.filter(s=>s.active!==false).sort((a,b)=>dailyTimeMinutes(a.startTime)-dailyTimeMinutes(b.startTime));
+      if(!shifts.length) return {shift:null,dateKey:localDateKey(nowDate)};
+      const nowMinutes=nowDate.getHours()*60+nowDate.getMinutes();
+      let shift=shifts.find(s=>{
+        const start=dailyTimeMinutes(s.startTime), end=dailyTimeMinutes(s.endTime);
+        return dailyShiftCrossesMidnight(s) ? (nowMinutes>=start || nowMinutes<end) : (nowMinutes>=start && nowMinutes<end);
+      }) || shifts[0];
+      let dateKey=localDateKey(nowDate);
+      if(dailyShiftCrossesMidnight(shift) && nowMinutes<dailyTimeMinutes(shift.endTime)) dateKey=addLocalDays(dateKey,-1);
+      return {shift,dateKey};
+    }
+
+    function resolveDailySelection(){
+      const shifts=state.workShifts.filter(s=>s.active!==false);
+      const current=dailyCurrentShiftInfo();
+      if(!dailySelectedShiftId || !shifts.some(s=>s.docId===dailySelectedShiftId)){
+        dailySelectedShiftId=current.shift?.docId || shifts[0]?.docId || '';
+      }
+      if(!dailySelectedDate) dailySelectedDate=current.shift?.docId===dailySelectedShiftId ? current.dateKey : localDateKey();
+      const dateInput=document.querySelector('#dailyDate');
+      if(dateInput && dateInput.value!==dailySelectedDate) dateInput.value=dailySelectedDate;
+      const shiftSelect=document.querySelector('#dailyShiftSelect');
+      if(shiftSelect){
+        const existing=shiftSelect.value;
+        shiftSelect.innerHTML=shifts.length ? shifts.map(s=>`<option value="${esc(s.docId)}">${esc(s.name||'Turno')} · ${esc(dailyShiftWindowLabel(s))}</option>`).join('') : '<option value="">Nenhum turno configurado</option>';
+        shiftSelect.value=shifts.some(s=>s.docId===dailySelectedShiftId)?dailySelectedShiftId:(existing||'');
+      }
+      localStorage.setItem('central.daily.shift.v1',dailySelectedShiftId||'');
+      return state.workShifts.find(s=>s.docId===dailySelectedShiftId)||null;
+    }
+
+    function dailyPlannedDateTime(execution){
+      const shift=state.workShifts.find(s=>s.docId===execution.shiftId) || {startTime:execution.shiftStart,endTime:execution.shiftEnd};
+      const key=execution.dateKey||dailySelectedDate||localDateKey();
+      const time=execution.plannedTime || shift?.startTime || '00:00';
+      let dayKey=key;
+      if(shift && dailyShiftCrossesMidnight(shift) && execution.plannedTime && dailyTimeMinutes(time)<dailyTimeMinutes(shift.startTime)) dayKey=addLocalDays(key,1);
+      const [y,m,d]=dayKey.split('-').map(Number), [hh,mm]=time.split(':').map(Number);
+      return new Date(y,m-1,d,hh||0,mm||0,0,0);
+    }
+
+    function dailyExecutionDeadline(execution){
+      const planned=dailyPlannedDateTime(execution);
+      const mins=Number(execution.windowMinutes||60);
+      return new Date(planned.getTime()+Math.max(0,mins)*60000);
+    }
+
+    function dailyExecutionKey({dateKey,shiftId,routineId,scopeId,plannedTime,assignedUserId,executionPolicy}){
+      const owner=executionPolicy==='each_user' ? (assignedUserId||'user') : 'team';
+      return [dateKey,shiftId,routineId,scopeId,plannedTime||'shift',owner].join('__').replace(/[^a-zA-Z0-9_-]/g,'-');
+    }
+
+    function dailyExpectedExecutions(dateKey=dailySelectedDate,shiftId=dailySelectedShiftId){
+      if(!dateKey||!shiftId) return [];
+      const day=dateFromLocalKey(dateKey).getDay();
+      const scopes=state.operationalScopes.filter(s=>s.active!==false);
+      const shift=state.workShifts.find(s=>s.docId===shiftId);
+      if(!shift) return [];
+      const allocations=state.workAllocations.filter(a=>a.shiftId===shiftId);
+      const expected=[];
+
+      state.routineTemplates.filter(r=>r.active!==false).forEach(routine=>{
+        const days=Array.isArray(routine.days)&&routine.days.length ? routine.days.map(Number) : [1,2,3,4,5];
+        if(!days.includes(day)) return;
+        const schedule=Array.isArray(routine.scheduleMap?.[shiftId]) ? routine.scheduleMap[shiftId] : null;
+        if(!schedule) return;
+        const times=schedule.length ? schedule : [''];
+        const configuredScopes=(routine.scopeIds||[]).filter(Boolean);
+        const scopeIds=configuredScopes.length ? configuredScopes : [...new Set(allocations.flatMap(a=>a.scopeIds||[]))];
+
+        scopeIds.forEach(scopeId=>{
+          const scope=scopes.find(s=>s.docId===scopeId); if(!scope) return;
+          const scopeAllocations=allocations.filter(a=>(a.scopeIds||[]).includes(scopeId));
+          const userIds=[...new Set(scopeAllocations.map(a=>a.userId).filter(Boolean))];
+          const userNames=userIds.map(uid=>users.find(u=>u.docId===uid)?.name||scopeAllocations.find(a=>a.userId===uid)?.userName||uid);
+          if(!userIds.length) return;
+
+          times.forEach(plannedTime=>{
+            const common={
+              dateKey,shiftId,shiftName:shift.name||'Turno',shiftStart:shift.startTime||'',shiftEnd:shift.endTime||'',
+              routineId:routine.docId,routineName:routine.name||'Rotina',routineDescription:routine.description||'',
+              scopeId,scopeName:scope.name||'Escopo',scopeType:scope.type||'other',
+              plannedTime,windowMinutes:Number(routine.windowMinutes||60),
+              executionPolicy:routine.executionPolicy||'scope_once',
+              resultMode:routine.resultMode||'ok_ng',
+              requireNgNote:routine.requireNgNote!==false,
+              allowFailure:routine.allowFailure!==false,
+              allowActivity:routine.allowActivity!==false,
+              checklistTemplate:Array.isArray(routine.checklistTemplate)?routine.checklistTemplate:[],
+              requiredParticipants:Math.max(1,Number(routine.minParticipants||1)),
+              expectedUserIds:userIds,expectedUserNames:userNames
+            };
+            if((routine.executionPolicy||'scope_once')==='each_user'){
+              userIds.forEach((uid,index)=>{
+                const item={...common,assignedUserId:uid,assignedUserName:userNames[index]||uid};
+                item.executionKey=dailyExecutionKey(item); expected.push(item);
+              });
+            }else{
+              const item={...common,assignedUserId:'',assignedUserName:''};
+              item.executionKey=dailyExecutionKey(item); expected.push(item);
+            }
+          });
+        });
+      });
+      return expected.sort((a,b)=>dailyPlannedDateTime(a)-dailyPlannedDateTime(b) || a.scopeName.localeCompare(b.scopeName));
+    }
+
+    function dailyMergedExecutions(dateKey=dailySelectedDate,shiftId=dailySelectedShiftId){
+      const actual=new Map(state.routineExecutions.filter(x=>x.dateKey===dateKey&&x.shiftId===shiftId).map(x=>[x.executionKey||x.docId,x]));
+      return dailyExpectedExecutions(dateKey,shiftId).map(expected=>({...expected,...(actual.get(expected.executionKey)||{}),executionKey:expected.executionKey,status:(actual.get(expected.executionKey)?.status||'planned')}));
+    }
+
+    function dailyExecutionVisibleToCurrent(execution){
+      if(currentAccount?.role==='admin') return true;
+      const uid=currentAuthUser?.uid;
+      if(!uid) return false;
+      return execution.assignedUserId===uid || (execution.expectedUserIds||[]).includes(uid) || (execution.participants||[]).some(p=>p.userId===uid);
+    }
+
+    async function materializeDailyExecutions(){
+      if(activeView!=='daily'||!currentAuthUser||!dailySelectedDate||!dailySelectedShiftId) return;
+      const configVersion=[
+        dailySelectedDate,dailySelectedShiftId,
+        ...state.routineTemplates.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}:${x.active}`),
+        ...state.workAllocations.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}`),
+        ...state.operationalScopes.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}:${x.active}`)
+      ].join('|');
+      if(dailyMaterializeSignature===configVersion || dailyMaterializeInFlight) return;
+      dailyMaterializeSignature=configVersion;
+      const expected=dailyExpectedExecutions();
+      dailyMaterializeInFlight=Promise.all(expected.map(item=>{
+        const ref=doc(db,'routineExecutions',item.executionKey);
+        const snapshot={
+          executionKey:item.executionKey,dateKey:item.dateKey,
+          shiftId:item.shiftId,shiftName:item.shiftName,shiftStart:item.shiftStart,shiftEnd:item.shiftEnd,
+          routineId:item.routineId,routineName:item.routineName,routineDescription:item.routineDescription,
+          scopeId:item.scopeId,scopeName:item.scopeName,scopeType:item.scopeType,plannedTime:item.plannedTime,
+          windowMinutes:item.windowMinutes,executionPolicy:item.executionPolicy,resultMode:item.resultMode,
+          requireNgNote:item.requireNgNote,allowFailure:item.allowFailure,allowActivity:item.allowActivity,
+          checklistTemplate:item.checklistTemplate,requiredParticipants:item.requiredParticipants,
+          expectedUserIds:item.expectedUserIds,expectedUserNames:item.expectedUserNames,
+          assignedUserId:item.assignedUserId||'',assignedUserName:item.assignedUserName||'',
+          snapshotAt:now()
+        };
+        return setDoc(ref,snapshot,{merge:true});
+      })).catch(error=>{
+        dailyMaterializeSignature='';
+        console.error('[Central do Dia] Falha ao materializar execuções:',error);
+      }).finally(()=>{dailyMaterializeInFlight=null;});
+      return dailyMaterializeInFlight;
+    }
+
+    function dailyTaskState(execution,nowDate=new Date()){
+      if(execution.status==='completed') return execution.result==='ng'?'ng':'done';
+      if(execution.status==='in_progress') return 'progress';
+      const planned=dailyPlannedDateTime(execution);
+      const deadline=dailyExecutionDeadline(execution);
+      if(nowDate>deadline) return 'late';
+      if(nowDate>=planned) return 'due';
+      return 'future';
+    }
+
+    function dailyExecutionCard(execution){
+      const stateName=dailyTaskState(execution);
+      const statusLabel={done:'Concluída',ng:'NG',progress:'Em andamento',late:'Atrasada',due:'Agora',future:'Próxima'}[stateName]||'Pendente';
+      const people=execution.executionPolicy==='each_user' ? execution.assignedUserName : (execution.expectedUserNames||[]).join(', ');
+      const time=execution.plannedTime||'Durante o turno';
+      const canAct=dailyExecutionVisibleToCurrent(execution)||currentAccount?.role==='admin';
+      const startedBy=execution.startedByName ? ` · iniciada por ${esc(execution.startedByName)}` : '';
+      let actions='';
+      if(canAct && execution.status!=='completed'){
+        actions=execution.status==='in_progress'
+          ? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(execution.executionKey)}">Registrar resultado</button>`
+          : `<button type="button" class="button primary button-compact" data-daily-start="${esc(execution.executionKey)}">Iniciar</button>`;
+      }
+      if(execution.status==='completed'){
+        const derived=[];
+        if(execution.allowFailure!==false) derived.push(`<button type="button" class="button secondary button-compact" data-daily-failure="${esc(execution.executionKey)}">+ Falha</button>`);
+        if(execution.allowActivity!==false) derived.push(`<button type="button" class="button secondary button-compact" data-daily-activity="${esc(execution.executionKey)}">+ Atividade</button>`);
+        actions=derived.join('');
+      }
+      const note=execution.note ? `<p class="daily-task-note">${esc(execution.note)}</p>` : '';
+      const participants=(execution.participants||[]).map(p=>p.name).filter(Boolean);
+      const participation=participants.length ? `<span>Participantes: ${esc(participants.join(', '))}</span>` : '';
+      return `<article class="daily-task-card state-${stateName}" data-daily-exec="${esc(execution.executionKey)}">
+        <div class="daily-task-time"><strong>${esc(time)}</strong><span>${esc(execution.shiftName||'')}</span></div>
+        <div class="daily-task-body"><div class="daily-task-heading"><div><strong>${esc(execution.routineName)}</strong><span>${esc(execution.scopeName)} · ${esc(dailyPolicyLabel(execution.executionPolicy))}</span></div><span class="daily-task-status">${statusLabel}</span></div>
+        ${execution.routineDescription?`<p>${esc(execution.routineDescription)}</p>`:''}${note}<div class="daily-task-meta"><span>${esc(people||'Sem responsável')}</span>${participation}<span>${startedBy}</span></div>
+        <div class="daily-task-actions">${actions}</div></div>
+      </article>`;
+    }
+
+    function renderDailyHomeSummary(){
+      const el=document.querySelector('#homeDailySummary'); if(!el) return;
+      const current=dailyCurrentShiftInfo();
+      if(!current.shift){el.textContent='Nenhum turno configurado ainda.';return;}
+      const previousShift=dailySelectedShiftId, previousDate=dailySelectedDate;
+      const expected=dailyExpectedExecutions(current.dateKey,current.shift.docId).filter(dailyExecutionVisibleToCurrent);
+      const actualMap=new Map(state.routineExecutions.filter(x=>x.dateKey===current.dateKey&&x.shiftId===current.shift.docId).map(x=>[x.executionKey||x.docId,x]));
+      const pending=expected.filter(x=>(actualMap.get(x.executionKey)?.status||'planned')!=='completed').length;
+      const allocations=state.workAllocations.filter(a=>a.userId===currentAuthUser?.uid&&a.shiftId===current.shift.docId);
+      const scopeNames=[...new Set(allocations.flatMap(a=>a.scopeIds||[]).map(id=>state.operationalScopes.find(s=>s.docId===id)?.name).filter(Boolean))];
+      el.textContent=`${current.shift.name||'Turno'} · ${scopeNames.join(', ')||'sem alocação'} · ${pending} pendência(s) de rotina`;
+      dailySelectedShiftId=previousShift; dailySelectedDate=previousDate;
+    }
+
+    function renderDaily(){
+      renderDailyHomeSummary();
+      const view=document.querySelector('#dailyView'); if(!view) return;
+      const shift=resolveDailySelection();
+      const dateInput=document.querySelector('#dailyDate'); if(dateInput) dateInput.value=dailySelectedDate||localDateKey();
+      const isAdmin=currentAccount?.role==='admin';
+      document.querySelector('#dailyAdminToggle')?.classList.toggle('hidden',!isAdmin);
+      if(!isAdmin) document.querySelector('#dailyAdminPanel')?.classList.add('hidden');
+
+      const clock=document.querySelector('#dailyClock'); if(clock) clock.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      const shiftWindow=document.querySelector('#dailyShiftWindow'); if(shiftWindow) shiftWindow.textContent=shift ? `${shift.name} · ${dailyShiftWindowLabel(shift)}` : 'Turno não configurado';
+
+      const myAllocations=state.workAllocations.filter(a=>a.userId===currentAuthUser?.uid && (!dailySelectedShiftId||a.shiftId===dailySelectedShiftId));
+      const myScopeIds=[...new Set(myAllocations.flatMap(a=>a.scopeIds||[]))];
+      const chips=myScopeIds.map(id=>state.operationalScopes.find(s=>s.docId===id)).filter(Boolean);
+      const chipBox=document.querySelector('#dailyAssignmentChips');
+      if(chipBox) chipBox.innerHTML=chips.length ? chips.map(s=>`<span class="daily-chip"><small>${esc(dailyScopeTypeLabel(s.type))}</small>${esc(s.name)}</span>`).join('') : '<span class="daily-chip muted-chip">Nenhuma alocação neste turno</span>';
+
+      if(activeView==='daily') materializeDailyExecutions();
+      let executions=dailyMergedExecutions().filter(dailyExecutionVisibleToCurrent);
+      if(dailyFilter==='mine') executions=executions.filter(x=>x.assignedUserId===currentAuthUser?.uid || (x.participants||[]).some(p=>p.userId===currentAuthUser?.uid) || x.executionPolicy!=='each_user');
+      if(dailyFilter==='pending') executions=executions.filter(x=>x.status!=='completed');
+
+      const allVisible=dailyMergedExecutions().filter(dailyExecutionVisibleToCurrent);
+      const completed=allVisible.filter(x=>x.status==='completed'), abnormal=completed.filter(x=>x.result==='ng');
+      const coverage=allVisible.length?Math.round(completed.length/allVisible.length*100):0;
+      document.querySelector('#dailyCoverage').textContent=`${coverage}%`;
+      document.querySelector('#dailyDone').textContent=completed.length;
+      document.querySelector('#dailyPending').textContent=Math.max(0,allVisible.length-completed.length);
+      document.querySelector('#dailyAbnormal').textContent=abnormal.length;
+
+      const timeline=document.querySelector('#dailyRoutineTimeline');
+      if(timeline) timeline.innerHTML=executions.map(dailyExecutionCard).join('');
+      document.querySelector('#dailyRoutineEmpty')?.classList.toggle('hidden',executions.length>0);
+
+      const nowExec=allVisible.find(x=>x.status==='in_progress') || allVisible.find(x=>['due','late'].includes(dailyTaskState(x))) || allVisible.find(x=>x.status!=='completed') || completed.at(-1);
+      const nowContent=document.querySelector('#dailyNowContent');
+      if(nowContent){
+        nowContent.innerHTML=nowExec ? `<div><strong>${esc(nowExec.routineName)}</strong><span>${esc(nowExec.scopeName)} · ${esc(nowExec.plannedTime||'durante o turno')}</span></div><div class="daily-now-actions">${nowExec.status==='completed'?'<span class="daily-complete-mark">✓ concluída</span>':nowExec.status==='in_progress'? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(nowExec.executionKey)}">Registrar resultado</button>`:`<button type="button" class="button primary button-compact" data-daily-start="${esc(nowExec.executionKey)}">Iniciar</button>`}</div>` : '<strong>Nenhuma rotina prevista para este turno.</strong><span>Se isso não era esperado, confira a configuração ou sua alocação.</span>';
+      }
+
+      renderDailyConnectedWork(allVisible);
+      renderDailyAdmin();
+    }
+
+    function renderDailyConnectedWork(executions=[]){
+      const linked=document.querySelector('#dailyLinkedWork');
+      if(linked){
+        const items=allWorkItems().filter(x=>isVisibleInMyCentral(x.item)).slice(0,6);
+        linked.innerHTML=items.length ? items.map(x=>`<button type="button" class="daily-linked-item" data-kind="${esc(x.kind)}" data-ref="${esc(x.item.id)}"><span>${esc(itemLabel(x))}</span><small>${esc(itemSub(x))}</small></button>`).join('') : '<div class="daily-soft-empty">Sem outras pendências atribuídas.</div>';
+      }
+      const ids=new Set(executions.map(x=>x.executionKey));
+      const generated=[
+        ...state.operationalFailures.filter(x=>ids.has(x.originRoutineExecutionId)).map(x=>({kind:'operational',id:x.id,title:x.issue||x.id,sub:`Falha · ${x.id}`})),
+        ...state.activities.filter(x=>ids.has(x.originRoutineExecutionId)).map(x=>({kind:'activity',id:x.id,title:x.title,sub:`Atividade · ${x.id}`}))
+      ].slice(0,8);
+      const box=document.querySelector('#dailyGeneratedItems');
+      if(box) box.innerHTML=generated.length ? generated.map(x=>`<button type="button" class="daily-linked-item" data-kind="${x.kind}" data-ref="${esc(x.id)}"><span>${esc(x.title)}</span><small>${esc(x.sub)}</small></button>`).join('') : '<div class="daily-soft-empty">Nada gerado por estas rotinas ainda.</div>';
+    }
+
+    function dailyMetricBar(label,done,total,sub=''){
+      const pct=total?Math.round(done/total*100):0;
+      return `<div class="daily-metric-row"><div><strong>${esc(label)}</strong><span>${esc(sub||`${done}/${total} concluídas`)}</span></div><div class="daily-metric-value"><strong>${pct}%</strong><div><span style="width:${pct}%"></span></div></div></div>`;
+    }
+
+    function renderDailyAdmin(){
+      const adminPanel=document.querySelector('#dailyAdminPanel'); if(!adminPanel) return;
+      if(currentAccount?.role!=='admin') return;
+      populateDailyAdminControls();
+      renderDailyAdminLists();
+      document.querySelector('#dailyAdminConfig')?.classList.toggle('hidden',dailyAdminTab!=='config');
+      document.querySelector('#dailyAdminDashboard')?.classList.toggle('hidden',dailyAdminTab!=='dashboard');
+      document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.classList.toggle('active',btn.dataset.dailyAdminTab===dailyAdminTab));
+      if(dailyAdminTab==='dashboard') renderDailyAdminDashboard();
+    }
+
+    function populateDailyAdminControls(){
+      const shifts=state.workShifts.filter(s=>s.active!==false);
+      const scopes=state.operationalScopes.filter(s=>s.active!==false);
+      const setSelect=(selector,items,labelFn,blank='Selecione')=>{
+        const el=document.querySelector(selector); if(!el) return;
+        const old=el.value;
+        el.innerHTML=`<option value="">${blank}</option>`+items.map(x=>`<option value="${esc(x.docId)}">${esc(labelFn(x))}</option>`).join('');
+        if(items.some(x=>x.docId===old)) el.value=old;
+      };
+      setSelect('#dailyAllocationShift',shifts,s=>`${s.name} · ${dailyShiftWindowLabel(s)}`);
+      setSelect('#dailyDashShift',shifts,s=>s.name,'Todos');
+      setSelect('#dailyDashScope',scopes,s=>s.name,'Todos');
+      const allocationUser=document.querySelector('#dailyAllocationUser');
+      if(allocationUser){
+        const old=allocationUser.value;
+        allocationUser.innerHTML='<option value="">Selecione</option>'+users.filter(u=>!u.disabled).map(u=>`<option value="${esc(u.docId)}">${esc(u.name)} · ${esc(u.role==='admin'?'Admin':'Usuário')}</option>`).join('');
+        allocationUser.value=users.some(u=>u.docId===old)?old:'';
+      }
+      const dashUser=document.querySelector('#dailyDashUser');
+      if(dashUser){
+        const old=dashUser.value;
+        dashUser.innerHTML='<option value="">Todos</option>'+users.filter(u=>!u.disabled).map(u=>`<option value="${esc(u.docId)}">${esc(u.name)}</option>`).join('');
+        dashUser.value=users.some(u=>u.docId===old)?old:'';
+      }
+      ['#dailyAllocationScopes','#dailyRoutineScopes'].forEach(selector=>{
+        const el=document.querySelector(selector); if(!el) return;
+        const selected=new Set([...el.selectedOptions].map(o=>o.value));
+        el.innerHTML=scopes.map(s=>`<option value="${esc(s.docId)}">${esc(s.name)} · ${esc(dailyScopeTypeLabel(s.type))}</option>`).join('');
+        [...el.options].forEach(o=>o.selected=selected.has(o.value));
+      });
+      const editor=document.querySelector('#dailyRoutineSchedules');
+      const shiftSignature=shifts.map(s=>s.docId).join('|');
+      if(editor && editor.dataset.shiftSignature!==shiftSignature && !document.querySelector('#dailyRoutineForm [name="docId"]')?.value){
+        renderDailyRoutineScheduleEditor();
+      }
+      const today=localDateKey();
+      if(document.querySelector('#dailyDashFrom')&&!document.querySelector('#dailyDashFrom').value) document.querySelector('#dailyDashFrom').value=today;
+      if(document.querySelector('#dailyDashTo')&&!document.querySelector('#dailyDashTo').value) document.querySelector('#dailyDashTo').value=today;
+    }
+
+    function renderDailyRoutineScheduleEditor(routine=null){
+      const editor=document.querySelector('#dailyRoutineSchedules'); if(!editor) return;
+      const shifts=state.workShifts.filter(s=>s.active!==false);
+      editor.dataset.shiftSignature=shifts.map(s=>s.docId).join('|');
+      editor.innerHTML=shifts.length ? shifts.map(shift=>{
+        const configured=Object.prototype.hasOwnProperty.call(routine?.scheduleMap||{},shift.docId);
+        const times=Array.isArray(routine?.scheduleMap?.[shift.docId]) ? routine.scheduleMap[shift.docId].filter(Boolean).join(', ') : '';
+        return `<div class="daily-schedule-row"><label class="check"><input type="checkbox" data-routine-shift="${esc(shift.docId)}" ${configured?'checked':''}> ${esc(shift.name)}</label><input data-routine-times="${esc(shift.docId)}" placeholder="09:00, 14:30" value="${esc(times)}"><small>${esc(dailyShiftWindowLabel(shift))} · vazio = uma vez no turno</small></div>`;
+      }).join('') : '<div class="daily-soft-empty">Cadastre um turno primeiro.</div>';
+    }
+
+    function renderDailyAdminLists(){
+      const shifts=document.querySelector('#dailyShiftList');
+      if(shifts) shifts.innerHTML=state.workShifts.length?state.workShifts.sort((a,b)=>dailyTimeMinutes(a.startTime)-dailyTimeMinutes(b.startTime)).map(s=>`<div class="daily-admin-item ${s.active===false?'is-off':''}"><div><strong>${esc(s.name)}</strong><span>${esc(dailyShiftWindowLabel(s))}</span></div><div><button type="button" data-daily-edit="shift" data-id="${esc(s.docId)}">Editar</button><button type="button" data-daily-toggle="shift" data-id="${esc(s.docId)}">${s.active===false?'Ativar':'Desativar'}</button></div></div>`).join(''):'<div class="daily-soft-empty">Nenhum turno.</div>';
+
+      const scopes=document.querySelector('#dailyScopeList');
+      if(scopes) scopes.innerHTML=state.operationalScopes.length?state.operationalScopes.map(s=>`<div class="daily-admin-item ${s.active===false?'is-off':''}"><div><strong>${esc(s.name)}</strong><span>${esc(dailyScopeTypeLabel(s.type))}${s.code?` · ${esc(s.code)}`:''}</span></div><div><button type="button" data-daily-edit="scope" data-id="${esc(s.docId)}">Editar</button><button type="button" data-daily-toggle="scope" data-id="${esc(s.docId)}">${s.active===false?'Ativar':'Desativar'}</button></div></div>`).join(''):'<div class="daily-soft-empty">Nenhum escopo.</div>';
+
+      const allocations=document.querySelector('#dailyAllocationList');
+      if(allocations) allocations.innerHTML=state.workAllocations.length?state.workAllocations.map(a=>{
+        const user=users.find(u=>u.docId===a.userId), shift=state.workShifts.find(s=>s.docId===a.shiftId);
+        const scopeNames=(a.scopeIds||[]).map(id=>state.operationalScopes.find(s=>s.docId===id)?.name).filter(Boolean);
+        return `<div class="daily-admin-item"><div><strong>${esc(user?.name||a.userName||'Pessoa')}</strong><span>${esc(shift?.name||a.shiftName||'Turno')} · ${esc(scopeNames.join(', ')||'sem escopo')}</span></div><div><button type="button" data-daily-edit="allocation" data-id="${esc(a.docId)}">Editar</button><button type="button" data-daily-delete="allocation" data-id="${esc(a.docId)}">Remover</button></div></div>`;
+      }).join(''):'<div class="daily-soft-empty">Nenhuma alocação.</div>';
+
+      const routines=document.querySelector('#dailyRoutineList');
+      if(routines) routines.innerHTML=state.routineTemplates.length?state.routineTemplates.map(r=>{
+        const schedules=Object.entries(r.scheduleMap||{}).map(([sid,times])=>{const sh=state.workShifts.find(s=>s.docId===sid);return sh?`${sh.name}: ${(times||[]).filter(Boolean).join(', ')||'1× no turno'}`:'';}).filter(Boolean);
+        return `<div class="daily-admin-item ${r.active===false?'is-off':''}"><div><strong>${esc(r.name)}</strong><span>${esc(schedules.join(' · ')||'Sem agenda')} · ${esc(dailyPolicyLabel(r.executionPolicy))}</span></div><div><button type="button" data-daily-edit="routine" data-id="${esc(r.docId)}">Editar</button><button type="button" data-daily-toggle="routine" data-id="${esc(r.docId)}">${r.active===false?'Ativar':'Desativar'}</button></div></div>`;
+      }).join(''):'<div class="daily-soft-empty">Nenhuma rotina.</div>';
+    }
+
+    function renderDailyAdminDashboard(){
+      const from=document.querySelector('#dailyDashFrom')?.value||localDateKey();
+      const to=document.querySelector('#dailyDashTo')?.value||from;
+      const shiftId=document.querySelector('#dailyDashShift')?.value||'';
+      const scopeId=document.querySelector('#dailyDashScope')?.value||'';
+      const userId=document.querySelector('#dailyDashUser')?.value||'';
+      const rows=state.routineExecutions.filter(x=>
+        (x.dateKey||'')>=from && (x.dateKey||'')<=to &&
+        (!shiftId||x.shiftId===shiftId) && (!scopeId||x.scopeId===scopeId) &&
+        (!userId||x.assignedUserId===userId||(x.expectedUserIds||[]).includes(userId)||(x.participants||[]).some(p=>p.userId===userId))
+      ).sort((a,b)=>String(b.dateKey||'').localeCompare(String(a.dateKey||'')) || dailyPlannedDateTime(a)-dailyPlannedDateTime(b));
+      const done=rows.filter(x=>x.status==='completed');
+      const coverage=rows.length?Math.round(done.length/rows.length*100):0;
+      const onTime=done.filter(x=>x.onTime!==false).length;
+      const missed=rows.filter(x=>x.status!=='completed' && new Date()>dailyExecutionDeadline(x)).length;
+      const ng=done.filter(x=>x.result==='ng').length;
+      document.querySelector('#dailyDashCoverage').textContent=`${coverage}%`;
+      document.querySelector('#dailyDashOnTime').textContent=done.length?`${Math.round(onTime/done.length*100)}%`:'0%';
+      document.querySelector('#dailyDashMissed').textContent=missed;
+      document.querySelector('#dailyDashNg').textContent=ng;
+
+      const byScope=new Map();
+      rows.forEach(x=>{const key=x.scopeId||x.scopeName||'sem';if(!byScope.has(key))byScope.set(key,{label:x.scopeName||'Sem escopo',total:0,done:0});const r=byScope.get(key);r.total++;if(x.status==='completed')r.done++;});
+      const scopeBox=document.querySelector('#dailyDashScopeRows');
+      if(scopeBox) scopeBox.innerHTML=[...byScope.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(r=>dailyMetricBar(r.label,r.done,r.total)).join('')||'<div class="daily-soft-empty">Sem dados.</div>';
+
+      const personRows=users.filter(u=>!u.disabled).map(user=>{
+        const individual=rows.filter(x=>x.executionPolicy==='each_user'&&x.assignedUserId===user.docId);
+        const shared=rows.filter(x=>x.executionPolicy!=='each_user'&&(x.expectedUserIds||[]).includes(user.docId));
+        const participated=shared.filter(x=>(x.participants||[]).some(p=>p.userId===user.docId)).length;
+        return {user,individual,shared,participated};
+      }).filter(x=>x.individual.length||x.shared.length);
+      const userBox=document.querySelector('#dailyDashUserRows');
+      if(userBox) userBox.innerHTML=personRows.map(x=>{
+        const doneIndividual=x.individual.filter(e=>e.status==='completed').length;
+        const sub=x.shared.length?`${doneIndividual}/${x.individual.length} individuais · participou de ${x.participated}/${x.shared.length} compartilhadas`:`${doneIndividual}/${x.individual.length} individuais`;
+        return dailyMetricBar(x.user.name,doneIndividual,x.individual.length||1,sub);
+      }).join('')||'<div class="daily-soft-empty">Sem dados por pessoa.</div>';
+
+      const body=document.querySelector('#dailyDashRows');
+      if(body) body.innerHTML=rows.map(x=>`<tr><td><span class="identifier">${esc(x.dateKey||'')}</span><span class="secondary-text">${esc(x.shiftName||'')}</span></td><td>${esc(x.routineName||'Rotina')}</td><td>${esc(x.scopeName||'—')}</td><td>${esc((x.expectedUserNames||[]).join(', ')||x.assignedUserName||'—')}</td><td>${esc(dailyResultLabel(x.result))}</td><td>${esc(x.plannedTime||'Turno')}${x.completedAt?` · ${esc(new Date(x.completedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))}`:''}</td></tr>`).join('');
+      document.querySelector('#dailyDashEmpty')?.classList.toggle('hidden',rows.length>0);
+    }
+    // ===================== FIM CENTRAL DO DIA · V15.1.13.28 =====================
+
     function renderSafely(name, fn) {
       try {
         fn();
@@ -3550,6 +4011,7 @@ ${m.text}`).join('\n\n');
       renderSafely('todos os reports', renderAll);
       renderSafely('falhas operacionais', renderOperations);
       renderSafely('atividades gerais', renderWork);
+      renderSafely('Central do Dia', renderDaily);
       renderSafely('fluxos', renderFlows);
       renderSafely('IA de análise', renderAIAnalysis);
       renderSafely('dashboard', renderDashboard);
@@ -4852,5 +5314,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 try{const aiLang=document.querySelector('#aiLanguageSelect');if(aiLang)aiLang.value=currentLanguage;}catch{}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.27'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.27'){localStorage.setItem('cora.sw.loaded','15.1.13.27');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.28'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.28'){localStorage.setItem('cora.sw.loaded','15.1.13.28');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
