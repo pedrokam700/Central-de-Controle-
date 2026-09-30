@@ -4421,7 +4421,7 @@ ${m.text}`).join('\n\n');
       box.classList.toggle('hidden',!template.length);
       list.innerHTML=template.map((text,index)=>{
         const previous=saved.find(x=>x.text===text)||saved[index]||{};
-        return `<div class="routine-check-item"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}><span>${esc(text)}</span><input class="routine-check-value" data-routine-value="${index}" value="${esc(previous.value||'')}" placeholder="${esc(t('Valor / dado (opcional)'))}"></div>`;
+        return `<div class="routine-check-item"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}><span>${esc(text)}</span><input class="routine-check-value" data-routine-value="${index}" value="${esc(previous.value||'').replace(/"/g,'&quot;')}" placeholder="${esc(t('Valor / dado (opcional)'))}"></div>`;
       }).join('');
       const history=document.querySelector('#routineExecutionHistory');
       const revisions=Array.isArray(execution.editHistory)?execution.editHistory:[];
@@ -4467,7 +4467,8 @@ ${m.text}`).join('\n\n');
         result:execution.result||'',
         note:execution.note||'',
         checklist:Array.isArray(execution.checklist)?execution.checklist:[],
-        evidence:evidenceEntries(execution.evidence)
+        evidenceNames:evidenceEntries(execution.evidence).map(item=>item?.name||'evidência').filter(Boolean),
+        evidenceCount:evidenceEntries(execution.evidence).length
       }].slice(-20):previousHistory;
       await setDoc(doc(db,'routineExecutions',key),{
         status:'completed',result,note,checklist,evidence,participants,participantRequirementMet,
