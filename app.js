@@ -480,12 +480,13 @@
     };
     const failureScopeType = record => {
       const explicit = String(record?.scopeType || '').toLowerCase();
-      if (['family','base_product','variant','multi_sku'].includes(explicit)) return explicit;
+      if (['none','family','base_product','variant','multi_sku'].includes(explicit)) return explicit;
       if (!record?.product && record?.family) return 'family';
       return 'variant';
     };
     const failureScopeSummary = record => {
       const scope = failureScopeType(record);
+      if (scope === 'none') return 'Sem produto definido';
       if (scope === 'family') return record?.family ? `Família ${record.family}` : 'Família não informada';
       if (scope === 'base_product') return record?.baseCode ? `${productDisplayCode(record.baseCode)} · todas as cores` : 'Produto base';
       const codes = failureProductCodes(record).map(productDisplayCode);
@@ -495,6 +496,7 @@
     const failureAppliesToProduct = (record, product) => {
       if (!record || !product) return false;
       const scope = failureScopeType(record);
+      if (scope === 'none') return false;
       if (scope === 'family') {
         return String(record.family || '').toLocaleLowerCase() === productFamily(product).toLocaleLowerCase();
       }
@@ -4200,7 +4202,7 @@ ${m.text}`).join('\n\n');
     function dailyCreateFailureFromExecution(key){
       const execution=dailyFindExecution(key);if(!execution)return;
       dailySetOrigin(execution);
-      openOperationalFailureModal({text:execution.note||`Anormalidade identificada durante ${execution.routineName}.`,context:`Origem: ${execution.routineName} · ${execution.scopeName} · ${execution.shiftName}.`,line:execution.scopeType==='line'?execution.scopeName:''});
+      openOperationalFailureModal({text:execution.note||`Anormalidade identificada durante ${execution.routineName}.`,context:`Origem: ${execution.routineName} · ${execution.scopeName} · ${execution.shiftName}.`,line:execution.scopeType==='line'?execution.scopeName:'',unscoped:true});
     }
 
     function dailyCreateActivityFromExecution(key){
@@ -4476,6 +4478,7 @@ ${m.text}`).join('\n\n');
       const help=document.querySelector('#operationalScopeHelp');
       if(help){
         const messages={
+          none:'A falha ainda não está vinculada a um produto. Útil para máquina, processo ou ocorrência ainda em análise.',
           family:'A falha vale para a família selecionada, sem limitar a um SKU.',
           base_product:'O código-base vale para todas as cores/variantes desse produto.',
           variant:'A falha vale somente para o SKU/cor selecionado.',
@@ -4530,7 +4533,7 @@ ${m.text}`).join('\n\n');
       updateOwnerDropdowns();
       const form=document.querySelector('#operationalFailureForm');
       form.reset();
-      form.elements.scope_type.value='variant';
+      form.elements.scope_type.value=prefill.unscoped?'none':'variant';
       form.elements.classification.value='NAO_DEFINIDO';
       form.elements.classification_confidence.value='MEDIA';
 
@@ -4579,6 +4582,7 @@ ${m.text}`).join('\n\n');
       if(baseSelect)baseSelect.required=scope==='base_product';
       if(multiSelect)multiSelect.required=scope==='multi_sku';
       const messages={
+        none:'A falha ficará sem produto definido.',
         variant:'A falha ficará vinculada somente ao SKU selecionado.',
         base_product:'A falha ficará vinculada ao produto base e aparecerá em todas as cores cadastradas.',
         multi_sku:'A falha ficará vinculada somente aos SKUs selecionados.',
@@ -4637,7 +4641,9 @@ ${m.text}`).join('\n\n');
       const multiCodes=[...(document.querySelector('#opDetailMultiProductSelect')?.selectedOptions||[])].map(o=>o.value).filter(Boolean);
       let product='',productCodes=[],baseCode='';
 
-      if(scopeType==='family'){
+      if(scopeType==='none'){
+        product='';productCodes=[];baseCode='';
+      }else if(scopeType==='family'){
         if(!selectedFamily){alert('Selecione a família antes de salvar.');return null;}
       }else if(scopeType==='base_product'){
         if(!selectedBase){alert('Selecione o produto base antes de salvar.');return null;}
@@ -4656,12 +4662,13 @@ ${m.text}`).join('\n\n');
       }
 
       const related=state.products.filter(p=>{
+        if(scopeType==='none')return false;
         if(scopeType==='family')return selectedFamily&&productFamily(p)===selectedFamily;
         if(scopeType==='base_product')return productCodeKey(productBaseCode(p))===productCodeKey(baseCode);
         return productCodes.some(code=>sameProductCode(code,p.code));
       });
       const inferred=[...new Set(related.map(productFamily).filter(Boolean))];
-      const family=selectedFamily||(inferred.length===1?inferred[0]:'');
+      const family=scopeType==='none'?'':(selectedFamily||(inferred.length===1?inferred[0]:''));
       return {scopeType,family,product,productCodes,baseCode};
     }
 
@@ -5113,7 +5120,9 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const multiCodes=f.getAll('products').map(v=>String(v||'').trim()).filter(Boolean);
       let productCode='',productCodes=[],baseCode='';
 
-      if(scopeType==='family'){
+      if(scopeType==='none'){
+        productCode='';productCodes=[];baseCode='';
+      }else if(scopeType==='family'){
         if(!selectedFamily)return alert('Selecione a família à qual a falha se aplica.');
       }else if(scopeType==='base_product'){
         if(!selectedBase)return alert('Selecione o código-base do produto.');
@@ -5132,12 +5141,13 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       }
 
       const referencedProducts=state.products.filter(p=>{
+        if(scopeType==='none')return false;
         if(scopeType==='family')return selectedFamily && productFamily(p)===selectedFamily;
         if(scopeType==='base_product')return productCodeKey(productBaseCode(p))===productCodeKey(baseCode);
         return productCodes.some(code=>sameProductCode(code,p.code));
       });
       const inferredFamilies=[...new Set(referencedProducts.map(productFamily).filter(Boolean))];
-      const family=selectedFamily||(inferredFamilies.length===1?inferredFamilies[0]:'');
+      const family=scopeType==='none'?'':(selectedFamily||(inferredFamilies.length===1?inferredFamilies[0]:''));
 
       const rawQty=String(f.get('quantidade_afetada')||'').trim();
       const evidence=await readAttachments(f.getAll('evidence').filter(Boolean));
