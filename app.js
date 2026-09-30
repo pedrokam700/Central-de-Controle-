@@ -889,6 +889,174 @@
       return parts.join('\n\n');
     }
     function copyText(text){ if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>alert('Texto copiado.')); else { const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('Texto copiado.'); } }
+    // ==================== V15.1.13.33 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
+    function notificationPrefsKey(){return 'central.notifications.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
+    function notificationSentKey(){return 'central.notifications.sent.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
+    function centralNotificationPrefs(){
+      try{return {...{browserEnabled:false,leadMinutes:15},...JSON.parse(localStorage.getItem(notificationPrefsKey())||'{}')};}
+      catch{return {browserEnabled:false,leadMinutes:15};}
+    }
+    function saveCentralNotificationPrefs(next){localStorage.setItem(notificationPrefsKey(),JSON.stringify({...centralNotificationPrefs(),...next}));}
+    function centralAlertTimeLabel(minutes){
+      if(minutes==null)return t('Vence hoje');
+      if(minutes>1)return currentLanguage==='en-US'?`In ${minutes} min`:`Em ${minutes} min`;
+      if(minutes>=0)return t('Agora');
+      const late=Math.abs(minutes);
+      return currentLanguage==='en-US'?`${late} min overdue`:`Atrasada ${late} min`;
+    }
+    function centralAlerts(){
+      if(!currentAccount||!currentAuthUser)return [];
+      const prefs=centralNotificationPrefs(),lead=Math.max(0,Number(prefs.leadMinutes||15)),out=[],nowDate=new Date();
+      const current=dailyCurrentShiftInfo();
+      if(current.shift){
+        const executions=dailyMergedExecutions(current.dateKey,current.shift.docId).filter(dailyExecutionVisibleToCurrent).filter(x=>x.status!=='completed');
+        executions.forEach(execution=>{
+          if(!execution.plannedTime)return;
+          const planned=dailyPlannedDateTime(execution);
+          const diff=Math.ceil((planned-nowDate)/60000);
+          const deadline=dailyExecutionDeadline(execution);
+          const late=nowDate>deadline;
+          const attention=late||diff<=lead;
+          out.push({
+            id:`routine:${execution.executionKey}:${current.dateKey}`,
+            kind:'routine',level:late?'danger':attention?'warning':'normal',attention,
+            title:execution.routineName||t('Rotina programada'),
+            body:[execution.scopeName,execution.shiftName,execution.plannedTime].filter(Boolean).join(' · '),
+            timeLabel:centralAlertTimeLabel(diff),
+            minutes:diff,notify:attention,
+            executionKey:execution.executionKey,dateKey:current.dateKey,shiftId:current.shift.docId
+          });
+        });
+      }
+      const today=localDateKey(),accountName=String(currentAccount?.name||'');
+      state.activities.filter(a=>activityEffectiveStatus(a)!=='concluido'&&a.dueDate).forEach(activity=>{
+        const assignment=normalizeAssignment(activity);
+        const mine=activity.owner===accountName||(assignment.assignees||[]).includes(accountName);
+        if(!mine)return;
+        const overdue=activity.dueDate<today,dueToday=activity.dueDate===today;
+        if(!overdue&&!dueToday)return;
+        out.push({
+          id:`activity:${activity.id}:${activity.dueDate}`,
+          kind:'activity',level:overdue?'danger':'warning',attention:true,
+          title:activity.title||activity.id,body:overdue?(currentLanguage==='en-US'?'Activity overdue':'Atividade com prazo vencido'):(currentLanguage==='en-US'?'Activity due today':'Atividade com prazo hoje'),
+          timeLabel:overdue?t('Atrasada'):t('Vence hoje'),minutes:null,notify:true,activityId:activity.id
+        });
+      });
+      return out.sort((a,b)=>{
+        const rank={danger:0,warning:1,normal:2};
+        return (rank[a.level]??3)-(rank[b.level]??3) || (a.minutes??99999)-(b.minutes??99999) || String(a.title).localeCompare(String(b.title));
+      });
+    }
+    function renderCentralNotifications(){
+      const list=document.querySelector('#centralNotificationList'),badge=document.querySelector('#centralNotificationBadge'),lead=document.querySelector('#centralNotificationLead'),permission=document.querySelector('#centralNotificationPermission'),enable=document.querySelector('#enableBrowserNotifications');
+      if(!list||!badge)return;
+      const prefs=centralNotificationPrefs(),alerts=centralAlerts(),attention=alerts.filter(x=>x.attention);
+      if(lead)lead.value=String(prefs.leadMinutes??15);
+      badge.textContent=String(attention.length);
+      badge.classList.toggle('hidden',!attention.length);
+      list.innerHTML=alerts.length?alerts.slice(0,20).map((a,index)=>`<button type="button" class="central-alert-item ${a.level==='danger'?'is-danger':a.level==='warning'?'is-warning':''}" data-central-alert="${index}"><span class="central-alert-dot"></span><span class="central-alert-copy"><strong>${esc(a.title)}</strong><span>${esc(a.body||'')}</span></span><span class="central-alert-time">${esc(a.timeLabel||'')}</span></button>`).join(''):`<div class="daily-soft-empty">${esc(t('Nenhuma notificação agora.'))}</div>`;
+      window.__centralAlerts=alerts;
+      if(permission){
+        if(!('Notification' in window))permission.textContent=t('Seu navegador não oferece notificações neste modo.');
+        else if(Notification.permission==='granted'&&prefs.browserEnabled)permission.textContent=t('Permissão de notificações concedida.');
+        else if(Notification.permission==='denied')permission.textContent=t('Notificações do navegador bloqueadas. Você pode continuar usando os alertas dentro da Central.');
+        else permission.textContent=t('Alertas dentro da Central já estão ativos.');
+      }
+      if(enable){
+        enable.disabled=!('Notification' in window)||Notification.permission==='denied';
+        enable.textContent=('Notification' in window&&Notification.permission==='granted'&&prefs.browserEnabled)?(currentLanguage==='en-US'?'Browser alerts enabled':'Alertas do navegador ativos'):t('Ativar alertas do navegador');
+      }
+    }
+    async function enableCentralBrowserNotifications(){
+      if(!('Notification' in window)){showSaveToast(t('Seu navegador não oferece notificações neste modo.'),'error');return;}
+      const permission=await Notification.requestPermission();
+      saveCentralNotificationPrefs({browserEnabled:permission==='granted'});
+      renderCentralNotifications();
+      if(permission==='granted'){showSaveToast(t('Permissão de notificações concedida.'),'success');await checkCentralBrowserNotifications(true);}
+      else showSaveToast(t('Notificações do navegador bloqueadas. Você pode continuar usando os alertas dentro da Central.'),'error');
+    }
+    function centralNotificationSent(){
+      try{const stored=JSON.parse(localStorage.getItem(notificationSentKey())||'{}');return stored.date===localDateKey()?new Set(stored.ids||[]):new Set();}
+      catch{return new Set();}
+    }
+    function saveCentralNotificationSent(set){localStorage.setItem(notificationSentKey(),JSON.stringify({date:localDateKey(),ids:[...set].slice(-200)}));}
+    async function showCentralSystemNotification(alertItem){
+      const title=`Central · ${alertItem.title}`;
+      const options={body:[alertItem.body,alertItem.timeLabel].filter(Boolean).join(' — '),tag:alertItem.id,renotify:false,data:{kind:alertItem.kind,executionKey:alertItem.executionKey||'',activityId:alertItem.activityId||'',dateKey:alertItem.dateKey||'',shiftId:alertItem.shiftId||''}};
+      if('serviceWorker' in navigator){try{const reg=await navigator.serviceWorker.ready;await reg.showNotification(title,options);return;}catch{}}
+      try{new Notification(title,options);}catch{}
+    }
+    async function checkCentralBrowserNotifications(force=false){
+      renderCentralNotifications();
+      const prefs=centralNotificationPrefs();
+      if(!prefs.browserEnabled||!('Notification' in window)||Notification.permission!=='granted')return;
+      const sent=centralNotificationSent(),alerts=centralAlerts().filter(a=>a.notify);
+      for(const alertItem of alerts){if(sent.has(alertItem.id)&&!force)continue;await showCentralSystemNotification(alertItem);sent.add(alertItem.id);}
+      saveCentralNotificationSent(sent);
+    }
+    function ensureCentralNotificationEngine(){
+      if(centralNotificationTimer)return;
+      centralNotificationTimer=setInterval(()=>checkCentralBrowserNotifications().catch(console.warn),60000);
+      setTimeout(()=>checkCentralBrowserNotifications().catch(()=>{}),1200);
+    }
+    function openCentralAlert(alertItem){
+      if(!alertItem)return;
+      document.querySelector('#centralNotificationPanel')?.classList.add('hidden');
+      document.querySelector('#centralNotificationButton')?.setAttribute('aria-expanded','false');
+      if(alertItem.kind==='activity'&&alertItem.activityId){show('work');openActivityDetail(alertItem.activityId);return;}
+      if(alertItem.kind==='routine'){
+        dailySelectedDate=alertItem.dateKey||dailySelectedDate;dailySelectedShiftId=alertItem.shiftId||dailySelectedShiftId;show('daily');
+        setTimeout(()=>{const card=document.querySelector(`[data-daily-exec="${CSS.escape(alertItem.executionKey||'')}"]`);if(card){card.scrollIntoView({behavior:'smooth',block:'center'});card.classList.add('daily-tour-highlight');setTimeout(()=>card.classList.remove('daily-tour-highlight'),1800);}},120);
+      }
+    }
+
+    function commandPaletteEntries(query=''){
+      const q=String(query||'').trim().toLowerCase(),items=[];
+      const add=(title,sub,kind,fn,searchText='')=>{if(!q||[title,sub,kind,searchText].join(' ').toLowerCase().includes(q))items.push({title,sub,kind,fn});};
+      add(t('Abrir Central do Dia'),currentLanguage==='en-US'?'Current shift, routines and assignments':'Turno atual, rotinas e alocações',t('Ação'),()=>show('daily'),'central rotina turno');
+      add(t('Nova atividade'),currentLanguage==='en-US'?'Create a task or structured activity':'Criar tarefa ou atividade estruturada',t('Ação'),()=>openActivityModal(),'atividade tarefa');
+      add(t('Registrar falha'),currentLanguage==='en-US'?'Register an operational occurrence':'Registrar ocorrência operacional',t('Ação'),()=>openOperationalFailureModal(),'falha ocorrência');
+      add(t('Cadastrar produto'),currentLanguage==='en-US'?'Add product / CPH':'Adicionar produto / CPH',t('Ação'),()=>openProductModal(),'produto cph');
+      add(t('Abrir saúde dos dados'),currentLanguage==='en-US'?'Review incomplete or inconsistent records':'Revisar registros incompletos ou inconsistentes',t('Ação'),()=>openDataHealth(),'saúde dados');
+      if(currentAccount?.role==='admin')add(t('Configurar operação'),currentLanguage==='en-US'?'Shifts, scopes, assignment matrix and routines':'Turnos, escopos, matriz e rotinas',t('Admin'),()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel')?.scrollIntoView({behavior:'smooth',block:'start'});},80);},'admin matriz');
+      const match=(...v)=>!q||v.flat(Infinity).filter(Boolean).join(' ').toLowerCase().includes(q);
+      state.products.filter(p=>match(p.code,p.family,p.name,p.commercialName,p.components)).slice(0,8).forEach(p=>add(productDisplayCode(p.code),`Produto · ${p.family||'—'}`,t('Produto'),()=>{activeProduct=p.code;activeFamily='';show('product');},[p.code,p.family,p.components].join(' ')));
+      state.reports.filter(r=>match(r.id,r.product,r.family,r.component,r.issue,r.material)).slice(0,8).forEach(r=>add(`${r.id} · ${r.component||'Report'}`,r.issue||failureScopeSummary(r),t('Report'),()=>openDetail(r.id),[r.id,r.product,r.issue].join(' ')));
+      state.operationalFailures.filter(r=>match(r.id,r.issue,r.owner,r.maquina,r.linha,r.estacao)).slice(0,8).forEach(r=>add(`${r.id} · ${r.issue||'Falha'}`,failureScopeSummary(r),t('Falha'),()=>{show('operations');openOperationalDetail(r.id);},[r.id,r.issue,r.maquina,r.linha].join(' ')));
+      state.activities.filter(a=>match(a.id,a.title,a.area,a.description,a.nextAction)).slice(0,8).forEach(a=>add(`${a.id} · ${a.title}`,a.nextAction?`Próxima: ${a.nextAction}`:a.area,t('Atividade'),()=>{show('work');openActivityDetail(a.id);},[a.id,a.title,a.area,a.nextAction].join(' ')));
+      state.flows.filter(f=>match(f.id,f.scope,f.description,f.product)).slice(0,6).forEach(f=>add(`${f.id} · ${f.scope}`,f.description||'',t('Fluxo'),()=>{show('flows');openFlowDetail(f.id);},[f.id,f.scope,f.product].join(' ')));
+      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(currentAccount?.role==='admin')setTimeout(()=>dailyEditAdminItem('routine',r.docId),120);},[r.name,r.description,r.checklistTemplate].join(' ')));
+      return items.slice(0,32);
+    }
+    function renderCommandPalette(query=''){
+      const host=document.querySelector('#commandPaletteResults');if(!host)return;
+      commandPaletteActions=commandPaletteEntries(query);commandPaletteActiveIndex=Math.max(0,Math.min(commandPaletteActiveIndex,Math.max(0,commandPaletteActions.length-1)));
+      host.innerHTML=commandPaletteActions.length?commandPaletteActions.map((item,index)=>`<button type="button" class="command-palette-item ${index===commandPaletteActiveIndex?'active':''}" data-command-index="${index}"><span><strong>${esc(item.title)}</strong><small>${esc(item.sub||'')}</small></span><span class="command-palette-kind">${esc(item.kind||'')}</span></button>`).join(''):`<div class="daily-soft-empty">${esc(currentLanguage==='en-US'?'No results.':'Nenhum resultado.')}</div>`;
+      host.querySelector('.command-palette-item.active')?.scrollIntoView({block:'nearest'});
+    }
+    function openCommandPalette(seed=''){commandPaletteActiveIndex=0;const modal=document.querySelector('#commandPaletteModal'),input=document.querySelector('#commandPaletteInput');if(!modal||!input)return;modal.classList.remove('hidden');input.value=seed;renderCommandPalette(seed);setTimeout(()=>input.focus(),0);}
+    function closeCommandPalette(){document.querySelector('#commandPaletteModal')?.classList.add('hidden');}
+    function runCommandPaletteIndex(index){const item=commandPaletteActions[index];if(!item)return;closeCommandPalette();item.fn?.();}
+
+    function dataHealthIssues(){
+      const issues=[];
+      state.operationalFailures.filter(r=>String(r.classification||'NAO_DEFINIDO').toUpperCase()==='NAO_DEFINIDO').forEach(r=>issues.push({kind:'classification',title:`${r.id} · ${r.issue||'Falha'}`,detail:currentLanguage==='en-US'?'Failure without final classification':'Falha sem classificação final',action:()=>{show('operations');openOperationalDetail(r.id);}}));
+      state.activities.filter(a=>activityEffectiveStatus(a)!=='concluido'&&(a.activityMode==='structured'||(a.steps||[]).length)&&!String(a.nextAction||'').trim()&&(a.steps||[]).some(step=>!step.done)).forEach(a=>issues.push({kind:'nextAction',title:`${a.id} · ${a.title}`,detail:currentLanguage==='en-US'?'Structured activity without next action':'Atividade estruturada sem próxima ação',action:()=>{show('work');openActivityDetail(a.id);}}));
+      state.workAllocations.filter(a=>a.archived!==true).forEach(a=>{const brokenUser=!users.some(u=>u.docId===a.userId),brokenShift=!state.workShifts.some(s=>s.docId===a.shiftId),brokenScopes=(a.scopeIds||[]).filter(id=>!state.operationalScopes.some(s=>s.docId===id));if(brokenUser||brokenShift||brokenScopes.length)issues.push({kind:'allocation',title:a.userName||a.docId,detail:currentLanguage==='en-US'?'Assignment references missing configuration':'Alocação referencia configuração inexistente',action:()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();},80);}});});
+      state.routineTemplates.filter(r=>r.active!==false&&(!r.name||!Array.isArray(r.days)||!r.days.length||!r.scheduleMap||!Object.keys(r.scheduleMap).length)).forEach(r=>issues.push({kind:'routine',title:r.name||r.docId,detail:currentLanguage==='en-US'?'Active routine with incomplete schedule':'Rotina ativa com agenda incompleta',action:()=>{show('daily');setTimeout(()=>dailyEditAdminItem('routine',r.docId),100);}}));
+      state.products.filter(p=>!String(p.family||'').trim()).forEach(p=>issues.push({kind:'product',title:productDisplayCode(p.code),detail:currentLanguage==='en-US'?'Product without family':'Produto sem família',action:()=>{activeProduct=p.code;show('product');}}));
+      return issues;
+    }
+    function renderDataHealth(){
+      const issues=dataHealthIssues(),summary=document.querySelector('#dataHealthSummary'),list=document.querySelector('#dataHealthList');if(!summary||!list)return;
+      const counts={classification:issues.filter(x=>x.kind==='classification').length,nextAction:issues.filter(x=>x.kind==='nextAction').length,allocation:issues.filter(x=>x.kind==='allocation').length,other:issues.filter(x=>!['classification','nextAction','allocation'].includes(x.kind)).length};
+      summary.innerHTML=`<div class="data-health-stat"><span>${esc(currentLanguage==='en-US'?'Unclassified failures':'Falhas sem classificação')}</span><strong>${counts.classification}</strong></div><div class="data-health-stat"><span>${esc(currentLanguage==='en-US'?'No next action':'Sem próxima ação')}</span><strong>${counts.nextAction}</strong></div><div class="data-health-stat"><span>${esc(currentLanguage==='en-US'?'Broken assignments':'Alocações inconsistentes')}</span><strong>${counts.allocation}</strong></div><div class="data-health-stat"><span>${esc(currentLanguage==='en-US'?'Other signals':'Outros sinais')}</span><strong>${counts.other}</strong></div>`;
+      window.__dataHealthActions=issues.map(x=>x.action);
+      list.innerHTML=issues.length?issues.slice(0,80).map((issue,index)=>`<div class="data-health-item"><div><strong>${esc(issue.title)}</strong><span>${esc(issue.detail)}</span></div><button type="button" class="button secondary button-compact" data-health-index="${index}">${esc(t('Abrir'))}</button></div>`).join(''):`<div class="daily-soft-empty">${esc(currentLanguage==='en-US'?'No data-health signals right now.':'Nenhum sinal de inconsistência agora.')}</div>`;
+    }
+    function openDataHealth(){renderDataHealth();document.querySelector('#dataHealthModal')?.classList.remove('hidden');}
+    function closeDataHealth(){document.querySelector('#dataHealthModal')?.classList.add('hidden');}
+
     function renderGlobalResults(q){
       const term=q.toLowerCase().trim(), groups=[], match=(...v)=>v.flat(Infinity).filter(Boolean).join(' ').toLowerCase().includes(term);
       const products=state.products.filter(p=>productMatchesQuery(p, term) || match(p.components?.join(' ')));
