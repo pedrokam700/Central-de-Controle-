@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.28">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.29">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.28';
+  const BUILD='15.1.13.29';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2427,7 +2427,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
 </style>
 
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.28" id="mobile-layout-styles">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.29" id="mobile-layout-styles">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -2525,7 +2525,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
 </div>
 </div></div></section><aside class="home-side"><button class="quick-action daily-home-entry" id="quickDaily"><strong>Central do Dia</strong><span id="homeDailySummary">Veja sua alocação, próximas rotinas e o que precisa ser executado neste turno.</span></button><button class="quick-action" id="quickActivity"><strong>Nova atividade geral</strong><span>Ex.: enviar e-mail, analisar um reparo ou organizar uma reunião.</span></button><button class="quick-action" id="quickFailure"><strong>Registrar Report de Produto</strong><span>Use quando a falha de produto já estiver confirmada para tratamento/cobrança.</span></button><button class="quick-action" id="quickOperationalFailure"><strong>Registrar falha</strong><span>Registre uma ocorrência mesmo quando ainda não souber se é máquina, processo, operacional ou produto.</span></button><button class="quick-action" id="quickFlow"><strong>Novo fluxo</strong><span>Organize formulário, e-mail, folha de rosto e seguimento.</span></button><div class="home-note"><strong>Minha Central</strong><span>Aqui aparecem somente pendências atribuídas a você. Tarefas abertas para toda a equipe ficam fora desta fila pessoal. Solicitações para participar de tarefas compartilhadas aparecem separadamente quando houver autorização pendente.</span></div><section><div class="section-head"><div><h2>Lembretes</h2></div></div><div class="notification-list" id="notificationList"></div></section></aside></div>
         </section>
-        <!-- Central do Dia · V15.1.13.28 -->
+        <!-- Central do Dia · V15.1.13.29 -->
         <section class="overview hidden daily-view" id="dailyView">
           <section class="daily-hero">
             <div class="daily-hero-copy">
@@ -2546,18 +2546,18 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
             <div class="daily-shift-clock"><span id="dailyShiftWindow">—</span><strong id="dailyClock">--:--</strong></div>
           </section>
 
-          <div class="stats daily-stats">
-            <article class="stat"><div class="stat-label">Cobertura do turno</div><div class="stat-value" id="dailyCoverage">0%</div><div class="stat-note">Rotinas previstas × concluídas</div></article>
-            <article class="stat"><div class="stat-label">Concluídas</div><div class="stat-value" id="dailyDone">0</div><div class="stat-note">Execuções finalizadas</div></article>
-            <article class="stat"><div class="stat-label">Pendentes</div><div class="stat-value" id="dailyPending">0</div><div class="stat-note">Ainda precisam de ação</div></article>
-            <article class="stat"><div class="stat-label">Anormalidades</div><div class="stat-value" id="dailyAbnormal">0</div><div class="stat-note">Execuções com resultado NG</div></article>
+          <div class="stats daily-stats" aria-label="Resumo do turno">
+            <article class="stat daily-stat daily-stat-coverage"><div class="stat-label">Cobertura do turno</div><div class="stat-value" id="dailyCoverage">0%</div><div class="stat-note">Rotinas previstas × concluídas</div></article>
+            <article class="stat daily-stat daily-stat-done"><div class="stat-label">Concluídas</div><div class="stat-value" id="dailyDone">0</div><div class="stat-note">Execuções finalizadas</div></article>
+            <article class="stat daily-stat daily-stat-pending"><div class="stat-label">Pendentes</div><div class="stat-value" id="dailyPending">0</div><div class="stat-note">Ainda precisam de ação</div></article>
+            <article class="stat daily-stat daily-stat-alert"><div class="stat-label">Anormalidades</div><div class="stat-value" id="dailyAbnormal">0</div><div class="stat-note">Execuções com resultado NG</div></article>
           </div>
 
           <div class="daily-layout">
             <main class="daily-main-column">
               <section class="daily-focus-card" id="dailyNowCard">
                 <div class="daily-focus-kicker">AGORA</div>
-                <div id="dailyNowContent"><strong>Nenhuma rotina disponível.</strong><span>Configure turnos, alocações e rotinas para começar.</span></div>
+                <div id="dailyNowContent" aria-live="polite"><strong>Nenhuma rotina disponível.</strong><span>Configure turnos, alocações e rotinas para começar.</span></div>
               </section>
               <section class="panel daily-timeline-panel">
                 <div class="section-head compact"><div><h2>Mapa do turno</h2><p>O que já foi feito, o que está acontecendo e o que vem a seguir.</p></div><div class="daily-view-switch"><button type="button" class="daily-filter active" data-daily-filter="all">Todas</button><button type="button" class="daily-filter" data-daily-filter="mine">Minhas</button><button type="button" class="daily-filter" data-daily-filter="pending">Pendentes</button></div></div>
@@ -2566,11 +2566,11 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
               </section>
             </main>
             <aside class="daily-side-column">
-              <section class="panel daily-connected-panel">
+              <section class="panel daily-connected-panel daily-side-panel">
                 <div class="section-head compact"><div><h3>Trabalho conectado</h3><p>Atividades, falhas e reports relevantes para você.</p></div></div>
                 <div class="daily-connected-list" id="dailyLinkedWork"></div>
               </section>
-              <section class="panel">
+              <section class="panel daily-side-panel">
                 <div class="section-head compact"><div><h3>Gerado pelo turno</h3><p>Falhas e atividades abertas a partir das rotinas.</p></div></div>
                 <div class="daily-connected-list" id="dailyGeneratedItems"></div>
               </section>
@@ -2589,7 +2589,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
 
             <div id="dailyAdminConfig">
               <div class="daily-config-grid">
-                <section class="daily-config-card">
+                <section class="daily-config-card daily-config-shifts">
                   <div class="daily-config-title"><div><span>1</span><h3>Turnos</h3></div><p>Horários livres, inclusive virada de dia.</p></div>
                   <form id="dailyShiftForm" class="daily-config-form">
                     <input type="hidden" name="docId">
@@ -2601,7 +2601,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
                   <div class="daily-admin-list" id="dailyShiftList"></div>
                 </section>
 
-                <section class="daily-config-card">
+                <section class="daily-config-card daily-config-scopes">
                   <div class="daily-config-title"><div><span>2</span><h3>Escopos operacionais</h3></div><p>Comece por linhas; depois pode incluir área, estação ou processo.</p></div>
                   <form id="dailyScopeForm" class="daily-config-form">
                     <input type="hidden" name="docId">
@@ -2614,7 +2614,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
                   <div class="daily-admin-list" id="dailyScopeList"></div>
                 </section>
 
-                <section class="daily-config-card">
+                <section class="daily-config-card daily-config-allocations">
                   <div class="daily-config-title"><div><span>3</span><h3>Alocações</h3></div><p>Uma pessoa pode estar em vários escopos e várias pessoas no mesmo escopo.</p></div>
                   <form id="dailyAllocationForm" class="daily-config-form">
                     <input type="hidden" name="docId">
@@ -2627,7 +2627,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
                   <div class="daily-admin-list" id="dailyAllocationList"></div>
                 </section>
 
-                <section class="daily-config-card daily-routine-config-card">
+                <section class="daily-config-card daily-routine-config-card daily-config-routines">
                   <div class="daily-config-title"><div><span>4</span><h3>Rotinas</h3></div><p>Modelos reutilizáveis: patrulha é só o primeiro exemplo.</p></div>
                   <form id="dailyRoutineForm" class="daily-config-form">
                     <input type="hidden" name="docId">
@@ -2647,15 +2647,18 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
             </div>
 
             <div id="dailyAdminDashboard" class="hidden">
-              <div class="daily-dashboard-filters">
-                <label>De<input id="dailyDashFrom" type="date"></label><label>Até<input id="dailyDashTo" type="date"></label><label>Turno<select id="dailyDashShift"><option value="">Todos</option></select></label><label>Escopo<select id="dailyDashScope"><option value="">Todos</option></select></label><label>Pessoa<select id="dailyDashUser"><option value="">Todos</option></select></label>
+              <div class="daily-dashboard-toolbar">
+                <div class="daily-dashboard-toolbar-copy"><span class="daily-mini-label">VISÃO DA OPERAÇÃO</span><strong>Acompanhe cobertura, atrasos e anormalidades</strong><small>Os filtros abaixo atualizam toda a leitura do dashboard.</small></div>
+                <div class="daily-dashboard-filters">
+                  <label>De<input id="dailyDashFrom" type="date"></label><label>Até<input id="dailyDashTo" type="date"></label><label>Turno<select id="dailyDashShift"><option value="">Todos</option></select></label><label>Escopo<select id="dailyDashScope"><option value="">Todos</option></select></label><label>Pessoa<select id="dailyDashUser"><option value="">Todos</option></select></label>
+                </div>
               </div>
-              <div class="stats daily-admin-stats"><article class="stat"><div class="stat-label">Cobertura</div><div class="stat-value" id="dailyDashCoverage">0%</div><div class="stat-note">Previstas × concluídas</div></article><article class="stat"><div class="stat-label">No prazo</div><div class="stat-value" id="dailyDashOnTime">0%</div><div class="stat-note">Conclusões dentro da janela</div></article><article class="stat"><div class="stat-label">Não executadas</div><div class="stat-value" id="dailyDashMissed">0</div><div class="stat-note">Rotinas vencidas sem conclusão</div></article><article class="stat"><div class="stat-label">NG</div><div class="stat-value" id="dailyDashNg">0</div><div class="stat-note">Anormalidades registradas</div></article></div>
+              <div class="stats daily-admin-stats" aria-label="Indicadores operacionais"><article class="stat daily-stat daily-stat-coverage"><div class="stat-label">Cobertura</div><div class="stat-value" id="dailyDashCoverage">0%</div><div class="stat-note">Previstas × concluídas</div></article><article class="stat daily-stat daily-stat-done"><div class="stat-label">No prazo</div><div class="stat-value" id="dailyDashOnTime">0%</div><div class="stat-note">Conclusões dentro da janela</div></article><article class="stat daily-stat daily-stat-pending"><div class="stat-label">Não executadas</div><div class="stat-value" id="dailyDashMissed">0</div><div class="stat-note">Rotinas vencidas sem conclusão</div></article><article class="stat daily-stat daily-stat-alert"><div class="stat-label">NG</div><div class="stat-value" id="dailyDashNg">0</div><div class="stat-note">Anormalidades registradas</div></article></div>
               <div class="daily-dashboard-grid">
-                <section class="panel"><div class="section-head compact"><div><h3>Cobertura por escopo</h3><p>Primeiro a operação; depois o detalhamento por pessoa.</p></div></div><div id="dailyDashScopeRows" class="daily-metric-list"></div></section>
-                <section class="panel"><div class="section-head compact"><div><h3>Execução por pessoa</h3><p>Respeita a política da rotina e não transforma trabalho em equipe em falta individual.</p></div></div><div id="dailyDashUserRows" class="daily-metric-list"></div></section>
+                <section class="panel daily-dashboard-panel"><div class="section-head compact"><div><h3>Cobertura por escopo</h3><p>Primeiro a operação; depois o detalhamento por pessoa.</p></div></div><div id="dailyDashScopeRows" class="daily-metric-list"></div></section>
+                <section class="panel daily-dashboard-panel"><div class="section-head compact"><div><h3>Execução por pessoa</h3><p>Respeita a política da rotina e não transforma trabalho em equipe em falta individual.</p></div></div><div id="dailyDashUserRows" class="daily-metric-list"></div></section>
               </div>
-              <section class="panel"><div class="section-head compact"><div><h3>Execuções</h3><p>Histórico operacional com rotina, turno, escopo e responsáveis daquele momento.</p></div></div><div class="table-wrap"><table><thead><tr><th>Data / turno</th><th>Rotina</th><th>Escopo</th><th>Responsáveis</th><th>Resultado</th><th>Horário</th></tr></thead><tbody id="dailyDashRows"></tbody></table><div class="empty hidden" id="dailyDashEmpty">Nenhuma execução no período.</div></div></section>
+              <section class="panel daily-dashboard-panel daily-execution-panel"><div class="section-head compact"><div><h3>Execuções</h3><p>Histórico operacional com rotina, turno, escopo e responsáveis daquele momento.</p></div></div><div class="table-wrap"><table><thead><tr><th>Data / turno</th><th>Rotina</th><th>Escopo</th><th>Responsáveis</th><th>Resultado</th><th>Horário</th></tr></thead><tbody id="dailyDashRows"></tbody></table><div class="empty hidden" id="dailyDashEmpty">Nenhuma execução no período.</div></div></section>
             </div>
           </section>
         </section>
@@ -3169,7 +3172,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.28"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.29"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */
