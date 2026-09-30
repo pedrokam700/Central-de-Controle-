@@ -37,7 +37,9 @@ const requiredFiles = [
   'app.js',
   'sw.js',
   'mobile.css',
-  'manifest.webmanifest'
+  'manifest.webmanifest',
+  'firestore.rules',
+  'firebase.json'
 ];
 
 for (const name of requiredFiles) {
@@ -57,6 +59,8 @@ if (errors.length) {
 const index = read('index.html');
 const app = read('app.js');
 const sw = read('sw.js');
+const firestoreRules = read('firestore.rules');
+const firebaseConfigFile = read('firebase.json');
 
 syntaxCheck('app.js');
 syntaxCheck('sw.js');
@@ -202,7 +206,28 @@ assertCheck(
   'app.js: diretiva explícita de idioma da CORA ausente'
 );
 
-// 7) Assets operacionais esperados continuam no cache do SW.
+// 7) Firestore versionado: todas as coleções ativas precisam estar cobertas.
+{
+  const activeCollections = [
+    'users','products','reports','operationalFailures','activities','flows',
+    'failureAnalyses','aiKnowledge','aiConversations','workShifts',
+    'operationalScopes','workAllocations','routineTemplates','routineExecutions'
+  ];
+  for (const name of activeCollections) {
+    assertCheck(
+      firestoreRules.includes('match /' + name + '/{documentId}') || firestoreRules.includes('match /' + name + '/{userId}'),
+      'firestore.rules: coleção ' + name + ' coberta',
+      'firestore.rules: coleção ' + name + ' sem regra explícita'
+    );
+  }
+  assertCheck(
+    /"rules"\s*:\s*"firestore\.rules"/.test(firebaseConfigFile),
+    'firebase.json: aponta para firestore.rules',
+    'firebase.json: não aponta para firestore.rules'
+  );
+}
+
+// 8) Assets operacionais esperados continuam no cache do SW.
 for (const asset of [
   "BASE+'index.html'",
   "BASE+'app.js'",

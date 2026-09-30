@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.30">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.31">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.30';
+  const BUILD='15.1.13.31';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2464,7 +2464,7 @@ body.dark .daily-focus-card .button.primary{background:#171716;color:#f1f1ed}
 body.dark .daily-task-card.state-future{background:#222220}
 
 
-/* V15.1.13.30 — acabamento visual da Central do Dia e dashboard */
+/* V15.1.13.31 — acabamento visual da Central do Dia e dashboard */
 .daily-view{
   --daily-radius-lg:18px;
   --daily-radius-md:14px;
@@ -2742,9 +2742,32 @@ body.dark .daily-config-card,
 body.dark .daily-side-panel{
   background:color-mix(in srgb,var(--surface) 92%,#000);
 }
+/* V15.1.13.31 — operação: matriz, chips de horário e contexto de rotina */
+.daily-allocation-matrix-card{grid-column:1/-1}
+.daily-matrix-toolbar{display:flex;align-items:end;gap:12px;justify-content:space-between;margin-bottom:12px}
+.daily-matrix-toolbar label{min-width:min(360px,100%);margin:0}
+.daily-matrix-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.daily-matrix-table{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;font-size:11px}
+.daily-matrix-table th,.daily-matrix-table td{padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;vertical-align:middle;white-space:nowrap}
+.daily-matrix-table th{position:sticky;top:0;background:var(--surface);z-index:2;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.daily-matrix-table th:first-child,.daily-matrix-table td:first-child{position:sticky;left:0;text-align:left;background:var(--surface);z-index:3;min-width:170px}
+.daily-matrix-table tr:last-child td{border-bottom:0}.daily-matrix-table th:last-child,.daily-matrix-table td:last-child{border-right:0}
+.daily-matrix-person strong{display:block;font-size:11px}.daily-matrix-person span{display:block;color:var(--muted);font-size:9px;margin-top:2px}
+.daily-matrix-check{display:inline-grid;place-items:center;width:28px;height:28px;margin:0 auto;border:1px solid var(--line);border-radius:8px;background:var(--soft);cursor:pointer}
+.daily-matrix-check input{width:15px;height:15px;margin:0;accent-color:#111}
+.daily-schedule-time-control{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.daily-schedule-time-control input[type="time"]{width:128px;min-width:128px}
+.daily-time-chips{display:flex;gap:6px;flex-wrap:wrap;min-height:28px;align-items:center}
+.daily-time-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--soft);color:var(--text);border-radius:999px;padding:5px 8px;font-size:10px;font-weight:700}
+.daily-time-chip button{border:0;background:transparent;color:inherit;padding:0;font:inherit;cursor:pointer;line-height:1}
+.daily-time-empty{font-size:10px;color:var(--muted)}
+.routine-context-panel{margin:0 0 14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+.routine-context-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}.routine-context-head strong{font-size:12px}.routine-context-head span{font-size:10px;color:var(--muted)}
+.routine-context-items{display:grid;gap:7px}.routine-context-item{width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:9px;padding:9px 10px;cursor:pointer}.routine-context-item strong{display:block;font-size:11px}.routine-context-item span{display:block;margin-top:3px;font-size:9.5px;color:var(--muted)}
+@media(max-width:860px){.daily-matrix-toolbar{align-items:stretch;flex-direction:column}.daily-matrix-table th:first-child,.daily-matrix-table td:first-child{min-width:140px}.daily-allocation-matrix-card{grid-column:auto}.daily-schedule-time-control input[type="time"]{width:100%;min-width:0}}
   </style>
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.30" id="mobile-layout-styles">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.31" id="mobile-layout-styles">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -2842,7 +2865,7 @@ body.dark .daily-side-panel{
 </div>
 </div></div></section><aside class="home-side"><button class="quick-action daily-home-entry" id="quickDaily"><strong>Central do Dia</strong><span id="homeDailySummary">Veja sua alocação, próximas rotinas e o que precisa ser executado neste turno.</span></button><button class="quick-action" id="quickActivity"><strong>Nova atividade geral</strong><span>Ex.: enviar e-mail, analisar um reparo ou organizar uma reunião.</span></button><button class="quick-action" id="quickFailure"><strong>Registrar Report de Produto</strong><span>Use quando a falha de produto já estiver confirmada para tratamento/cobrança.</span></button><button class="quick-action" id="quickOperationalFailure"><strong>Registrar falha</strong><span>Registre uma ocorrência mesmo quando ainda não souber se é máquina, processo, operacional ou produto.</span></button><button class="quick-action" id="quickFlow"><strong>Novo fluxo</strong><span>Organize formulário, e-mail, folha de rosto e seguimento.</span></button><div class="home-note"><strong>Minha Central</strong><span>Aqui aparecem somente pendências atribuídas a você. Tarefas abertas para toda a equipe ficam fora desta fila pessoal. Solicitações para participar de tarefas compartilhadas aparecem separadamente quando houver autorização pendente.</span></div><section><div class="section-head"><div><h2>Lembretes</h2></div></div><div class="notification-list" id="notificationList"></div></section></aside></div>
         </section>
-        <!-- Central do Dia · V15.1.13.30 -->
+        <!-- Central do Dia · V15.1.13.31 -->
         <section class="overview hidden daily-view" id="dailyView">
           <section class="daily-hero">
             <div class="daily-hero-copy">
@@ -2944,12 +2967,19 @@ body.dark .daily-side-panel{
                   <div class="daily-admin-list" id="dailyAllocationList"></div>
                 </section>
 
+                <section class="daily-config-card daily-allocation-matrix-card">
+                  <div class="daily-config-title"><div><span>3A</span><h3>Matriz de alocação</h3></div><p>Marque rapidamente quem está em cada escopo. Uma pessoa pode estar em vários e um escopo pode ter várias pessoas.</p></div>
+                  <div class="daily-matrix-toolbar"><label>Turno<select id="dailyAllocationMatrixShift"><option value="">Selecione</option></select></label><span class="help">A matriz altera a configuração atual; não cria período de validade.</span></div>
+                  <div id="dailyAllocationMatrix"><div class="daily-soft-empty">Cadastre turno, escopo e pessoas para usar a matriz.</div></div>
+                </section>
+
                 <section class="daily-config-card daily-routine-config-card daily-config-routines">
                   <div class="daily-config-title"><div><span>4</span><h3>Rotinas</h3></div><p>Modelos reutilizáveis: patrulha é só o primeiro exemplo.</p></div>
                   <form id="dailyRoutineForm" class="daily-config-form">
                     <input type="hidden" name="docId">
                     <label>Nome<input name="name" required placeholder="Ex.: Patrulha da linha"></label>
                     <label>Descrição<textarea name="description" rows="2" placeholder="O que deve ser verificado?"></textarea></label>
+                    <label>Contexto automático<select name="contextMode"><option value="none">Sem contexto automático</option><option value="previous_shift_failures">Falhas do turno anterior</option><option value="previous_day_failures">Falhas do dia anterior</option></select><span class="help">Quando a rotina for executada, a Central mostra automaticamente as falhas registradas no período escolhido.</span></label>
                     <label>Aplicar aos escopos<select name="scopeIds" id="dailyRoutineScopes" multiple size="5"></select><span class="help">Sem seleção = todos os escopos em que a pessoa estiver alocada.</span></label>
                     <fieldset class="daily-schedule-fieldset"><legend>Agenda por turno</legend><div id="dailyRoutineSchedules" class="daily-schedule-editor"></div></fieldset>
                     <div class="daily-inline-fields"><label>Regra de execução<select name="executionPolicy"><option value="scope_once">Uma execução por escopo</option><option value="each_user">Cada pessoa alocada executa</option><option value="collaborative">Execução colaborativa</option><option value="min_people">Mínimo de pessoas</option></select></label><label>Mínimo<input name="minParticipants" type="number" min="1" value="1"></label></div>
@@ -3483,13 +3513,13 @@ body.dark .daily-side-panel{
   <div class="modal-backdrop hidden" id="flowDetailModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 id="flowDetailTitle" class="modal-title"></h2><p id="flowDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-flow-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Situação</span><span id="flowDetailDescription" class="detail-value"></span><span class="detail-label">Etapa 1 · Formulário e e-mail</span><div class="artifact-grid"><label>Formulário do fluxo<input id="flowDetailAttachment" type="file" accept="image/*,.pdf,.doc,.docx"></label><label>Link do e-mail<input id="flowDetailEmailLink" type="url" placeholder="https://..."></label></div><span class="detail-label">Etapa 2 · Folha de rosto</span><div class="artifact-grid"><label>Link / arquivo da folha de rosto<input id="flowDetailCoverLink" type="url" placeholder="https://..."></label><label>Responsável pelo seguimento<select id="flowDetailOwnerSelect"><option value="">Selecione</option></select></label></div><span class="detail-label">Etapa 3 · Seguimento no fluxo</span><div class="artifact-grid"><label class="span2">Link ou registro do seguimento<input id="flowDetailFollowUpLink" type="url" placeholder="https://..."></label></div><div class="artifact-actions"><button id="saveFlowChanges" class="button secondary">Salvar etapas</button></div><span class="detail-label">Arquivos e links</span><div id="flowDetailFiles" class="evidence-gallery"></div><span class="detail-label">Histórico</span><div id="flowTimeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" style="margin-top:0">Andamento do fluxo</span><div id="flowSteps" class="task-list"></div><span class="detail-label">Status calculado</span><div id="flowDetailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteFlow" class="button danger">Excluir fluxo</button></div></aside></div></div></div>
 
 
-<div class="modal-backdrop hidden" id="routineExecutionModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 class="modal-title" id="routineExecutionTitle">Executar rotina</h2><p class="modal-subtitle" id="routineExecutionSubtitle"></p></div><button class="close" id="closeRoutineExecution" aria-label="Fechar">×</button></div><form id="routineExecutionForm"><div class="form-grid"><label>Resultado<select name="result" id="routineExecutionResult"><option value="ok">OK</option><option value="ng">NG / Anormalidade</option><option value="done">Concluído</option><option value="na">Não aplicável</option></select></label><label class="span2">Observação<textarea name="note" id="routineExecutionNote" rows="3" placeholder="Registre somente o que agrega contexto."></textarea></label><div class="span2 routine-checklist-box hidden" id="routineExecutionChecklistBox"><span class="detail-label">Checklist</span><div id="routineExecutionChecklist"></div></div><label class="span2">Fotos / evidências <span class="muted">(opcional)</span><input name="evidence" type="file" multiple accept="image/*,.pdf"></label></div><div class="form-actions"><button type="button" class="button secondary" id="cancelRoutineExecution">Cancelar</button><button class="button primary">Salvar execução</button></div></form></div></div>
+<div class="modal-backdrop hidden" id="routineExecutionModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 class="modal-title" id="routineExecutionTitle">Executar rotina</h2><p class="modal-subtitle" id="routineExecutionSubtitle"></p></div><button class="close" id="closeRoutineExecution" aria-label="Fechar">×</button></div><section class="routine-context-panel hidden" id="routineExecutionContextPanel"><div class="routine-context-head"><div><strong id="routineExecutionContextTitle">Contexto automático</strong><span id="routineExecutionContextPeriod"></span></div><span id="routineExecutionContextCount"></span></div><div class="routine-context-items" id="routineExecutionContextItems"></div></section><form id="routineExecutionForm"><div class="form-grid"><label>Resultado<select name="result" id="routineExecutionResult"><option value="ok">OK</option><option value="ng">NG / Anormalidade</option><option value="done">Concluído</option><option value="na">Não aplicável</option></select></label><label class="span2">Observação<textarea name="note" id="routineExecutionNote" rows="3" placeholder="Registre somente o que agrega contexto."></textarea></label><div class="span2 routine-checklist-box hidden" id="routineExecutionChecklistBox"><span class="detail-label">Checklist</span><div id="routineExecutionChecklist"></div></div><label class="span2">Fotos / evidências <span class="muted">(opcional)</span><input name="evidence" type="file" multiple accept="image/*,.pdf"></label></div><div class="form-actions"><button type="button" class="button secondary" id="cancelRoutineExecution">Cancelar</button><button class="button primary">Salvar execução</button></div></form></div></div>
   <div class="modal-backdrop hidden" id="weeklyModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resumo da semana</h2><p class="modal-subtitle">Tudo que foi trabalhado e o que merece atenção.</p></div><button class="close close-weekly" aria-label="Fechar">×</button></div><div id="weeklyContent" class="detail-main"></div><div class="form-actions"><button class="button secondary close-weekly">Fechar</button></div></div></div>
   <div class="modal-backdrop hidden" id="dashboardIndicatorModal" role="dialog" aria-modal="true" aria-labelledby="dashboardIndicatorTitle"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title" id="dashboardIndicatorTitle">Detalhamento do indicador</h2><p class="modal-subtitle" id="dashboardIndicatorSubtitle"></p></div><button class="close close-dashboard-indicator" aria-label="Fechar">×</button></div><div id="dashboardIndicatorContent" class="detail-main"></div><div class="form-actions"><button class="button secondary close-dashboard-indicator">Fechar</button></div></div></div>
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.30"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.31"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */

@@ -1,0 +1,119 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function activeUser() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userProfile().data.disabled != true;
+    }
+
+    function isAdmin() {
+      return activeUser() && userProfile().data.role == 'admin';
+    }
+
+    match /users/{userId} {
+      allow read: if activeUser();
+
+      // Bootstrap do próprio perfil após criar/login no Firebase Auth.
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.disabled == false
+        && (
+          request.resource.data.role == 'user'
+          || (
+            request.resource.data.role == 'admin'
+            && request.auth.token.email == 'pedro.henrique@grupomultilaser.com.br'
+          )
+        );
+
+      // O usuário pode atualizar o próprio perfil, mas não pode se promover
+      // nem alterar o estado disabled. Administração continua com o admin.
+      allow update: if isAdmin() || (
+        activeUser()
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.disabled == resource.data.disabled
+        && request.resource.data.email == resource.data.email
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Dados de trabalho compartilhados pela equipe autenticada.
+    match /products/{documentId} {
+      allow read, create, update, delete: if activeUser();
+    }
+
+    match /reports/{documentId} {
+      allow read, create, update, delete: if activeUser();
+    }
+
+    match /operationalFailures/{documentId} {
+      allow read, create, update, delete: if activeUser();
+    }
+
+    match /activities/{documentId} {
+      allow read, create, update, delete: if activeUser();
+    }
+
+    match /flows/{documentId} {
+      allow read, create, update, delete: if activeUser();
+    }
+
+    match /failureAnalyses/{documentId} {
+      allow read, create, update, delete: if activeUser();
+    }
+
+    match /aiKnowledge/{documentId} {
+      allow read, create, update, delete: if activeUser();
+    }
+
+    match /aiConversations/{documentId} {
+      allow read, create, update, delete: if activeUser();
+    }
+
+    // Configuração da Central do Dia: todos os usuários ativos podem ler,
+    // somente administradores alteram a estrutura operacional.
+    match /workShifts/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /operationalScopes/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /workAllocations/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /routineTemplates/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Execuções são trabalho operacional: usuários autenticados ativos
+    // precisam iniciar e concluir as rotinas às quais têm acesso na interface.
+    match /routineExecutions/{documentId} {
+      allow read, create, update: if activeUser();
+      allow delete: if isAdmin();
+    }
+
+    // Negação explícita para qualquer coleção não prevista.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
