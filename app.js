@@ -922,7 +922,7 @@
             kind:'routine',level:late?'danger':attention?'warning':'normal',attention,
             title:execution.routineName||t('Rotina programada'),
             body:[execution.scopeName,execution.shiftName,execution.plannedTime].filter(Boolean).join(' · '),
-            timeLabel:centralAlertTimeLabel(diff),
+            timeLabel:late?(currentLanguage==='en-US'?`${Math.max(1,Math.abs(diff))} min overdue`:`Atrasada ${Math.max(1,Math.abs(diff))} min`):centralAlertTimeLabel(Math.max(0,diff)),
             minutes:diff,notify:attention,
             executionKey:execution.executionKey,dateKey:current.dateKey,shiftId:current.shift.docId
           });
@@ -1024,8 +1024,8 @@
       state.reports.filter(r=>match(r.id,r.product,r.family,r.component,r.issue,r.material)).slice(0,8).forEach(r=>add(`${r.id} · ${r.component||'Report'}`,r.issue||failureScopeSummary(r),t('Report'),()=>openDetail(r.id),[r.id,r.product,r.issue].join(' ')));
       state.operationalFailures.filter(r=>match(r.id,r.issue,r.owner,r.maquina,r.linha,r.estacao)).slice(0,8).forEach(r=>add(`${r.id} · ${r.issue||'Falha'}`,failureScopeSummary(r),t('Falha'),()=>{show('operations');openOperationalDetail(r.id);},[r.id,r.issue,r.maquina,r.linha].join(' ')));
       state.activities.filter(a=>match(a.id,a.title,a.area,a.description,a.nextAction)).slice(0,8).forEach(a=>add(`${a.id} · ${a.title}`,a.nextAction?`Próxima: ${a.nextAction}`:a.area,t('Atividade'),()=>{show('work');openActivityDetail(a.id);},[a.id,a.title,a.area,a.nextAction].join(' ')));
-      state.flows.filter(f=>match(f.id,f.scope,f.description,f.product)).slice(0,6).forEach(f=>add(`${f.id} · ${f.scope}`,f.description||'',t('Fluxo'),()=>{show('flows');openFlowDetail(f.id);},[f.id,f.scope,f.product].join(' ')));
-      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(currentAccount?.role==='admin')setTimeout(()=>dailyEditAdminItem('routine',r.docId),120);},[r.name,r.description,r.checklistTemplate].join(' ')));
+      state.flows.filter(f=>match(f.id,f.scope,f.description,f.product)).slice(0,6).forEach(f=>add(`${f.id} · ${f.scope}`,f.description||'',t('Fluxo'),()=>{show('flow');openFlowDetail(f.id);},[f.id,f.scope,f.product].join(' ')));
+      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(currentAccount?.role==='admin')setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},120);},[r.name,r.description,r.checklistTemplate].join(' ')));
       return items.slice(0,32);
     }
     function renderCommandPalette(query=''){
@@ -1043,7 +1043,7 @@
       state.operationalFailures.filter(r=>String(r.classification||'NAO_DEFINIDO').toUpperCase()==='NAO_DEFINIDO').forEach(r=>issues.push({kind:'classification',title:`${r.id} · ${r.issue||'Falha'}`,detail:currentLanguage==='en-US'?'Failure without final classification':'Falha sem classificação final',action:()=>{show('operations');openOperationalDetail(r.id);}}));
       state.activities.filter(a=>activityEffectiveStatus(a)!=='concluido'&&(a.activityMode==='structured'||(a.steps||[]).length)&&!String(a.nextAction||'').trim()&&(a.steps||[]).some(step=>!step.done)).forEach(a=>issues.push({kind:'nextAction',title:`${a.id} · ${a.title}`,detail:currentLanguage==='en-US'?'Structured activity without next action':'Atividade estruturada sem próxima ação',action:()=>{show('work');openActivityDetail(a.id);}}));
       activeWorkAllocations().forEach(a=>{const brokenUser=!users.some(u=>u.docId===a.userId),brokenShift=!state.workShifts.some(s=>s.docId===a.shiftId),brokenScopes=(a.scopeIds||[]).filter(id=>!state.operationalScopes.some(s=>s.docId===id));if(brokenUser||brokenShift||brokenScopes.length)issues.push({kind:'allocation',title:a.userName||a.docId,detail:currentLanguage==='en-US'?'Assignment references missing configuration':'Alocação referencia configuração inexistente',action:()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();},80);}});});
-      state.routineTemplates.filter(r=>r.active!==false&&(!r.name||!Array.isArray(r.days)||!r.days.length||!r.scheduleMap||!Object.keys(r.scheduleMap).length)).forEach(r=>issues.push({kind:'routine',title:r.name||r.docId,detail:currentLanguage==='en-US'?'Active routine with incomplete schedule':'Rotina ativa com agenda incompleta',action:()=>{show('daily');setTimeout(()=>dailyEditAdminItem('routine',r.docId),100);}}));
+      state.routineTemplates.filter(r=>r.active!==false&&(!r.name||!Array.isArray(r.days)||!r.days.length||!r.scheduleMap||!Object.keys(r.scheduleMap).length)).forEach(r=>issues.push({kind:'routine',title:r.name||r.docId,detail:currentLanguage==='en-US'?'Active routine with incomplete schedule':'Rotina ativa com agenda incompleta',action:()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},100);}}));
       state.products.filter(p=>!String(p.family||'').trim()).forEach(p=>issues.push({kind:'product',title:productDisplayCode(p.code),detail:currentLanguage==='en-US'?'Product without family':'Produto sem família',action:()=>{activeProduct=p.code;show('product');}}));
       return issues;
     }
@@ -4884,10 +4884,10 @@ ${m.text}`).join('\n\n');
     function activityAutoNextAction(steps=[]){const next=(steps||[]).find(step=>!step.done&&String(step.text||'').trim());return next?.text||'';}
     function activityTemplateDefinition(key){
       const map={
-        validation:{type:'Análise',nextAction:'Definir critério e preparar amostras',steps:['Definir critério de aceitação','Preparar amostras e identificação','Executar validação','Registrar resultados e evidências','Consolidar conclusão']},
-        gage:{type:'Análise',nextAction:'Definir característica e critério do Gage',steps:['Definir característica e critério','Preparar amostras e identificação','Definir operadores e sequência','Executar primeira rodada','Executar repetições planejadas','Consolidar resultados','Registrar conclusão e ação']},
-        study:{type:'Análise',nextAction:'Definir pergunta e dados necessários',steps:['Definir pergunta do estudo','Coletar dados e evidências','Organizar e comparar resultados','Testar hipótese ou relação','Registrar conclusão e próximos passos']},
-        training:{type:'Outro',nextAction:'Definir objetivo e público do treinamento',steps:['Definir objetivo e público','Preparar material e exemplos','Realizar treinamento','Confirmar entendimento','Registrar presença e evidências','Definir reforço ou acompanhamento']}
+        validation:{type:'Análise',nextAction:'Definir critério de aceitação',steps:['Definir critério de aceitação','Preparar amostras e identificação','Executar validação','Registrar resultados e evidências','Consolidar conclusão']},
+        gage:{type:'Análise',nextAction:'Definir característica e critério',steps:['Definir característica e critério','Preparar amostras e identificação','Definir operadores e sequência','Executar primeira rodada','Executar repetições planejadas','Consolidar resultados','Registrar conclusão e ação']},
+        study:{type:'Análise',nextAction:'Definir pergunta do estudo',steps:['Definir pergunta do estudo','Coletar dados e evidências','Organizar e comparar resultados','Testar hipótese ou relação','Registrar conclusão e próximos passos']},
+        training:{type:'Outro',nextAction:'Definir objetivo e público',steps:['Definir objetivo e público','Preparar material e exemplos','Realizar treinamento','Confirmar entendimento','Registrar presença e evidências','Definir reforço ou acompanhamento']}
       };
       return map[key]||null;
     }
@@ -5747,10 +5747,12 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const steps=activityMode==='structured'?String(form.get('initialSteps')||'').split('\n').map(x=>x.trim()).filter(Boolean).map((text,index)=>({id:`step-${Date.now()}-${index}`,text,done:false,doneAt:'',doneBy:''})):[];
       const evidence=activityMode==='structured'?await readAttachments(form.getAll('activityEvidence').filter(Boolean)):[];
       const typedNext=activityMode==='structured'?String(form.get('nextAction')||'').trim():'';
-      const nextAction=typedNext||activityAutoNextAction(steps);
-      const nextActionMode=typedNext?'manual':'auto';
+      const activityTemplate=String(form.get('activityTemplate')||'');
+      const templateDefault=activityTemplateDefinition(activityTemplate)?.nextAction||'';
+      const nextActionMode=!typedNext||activityTemplate&&typedNext===templateDefault?'auto':'manual';
+      const nextAction=nextActionMode==='auto'?activityAutoNextAction(steps):typedNext;
       const origin=pendingOriginContext;
-      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction,nextActionMode,activityTemplate:String(form.get('activityTemplate')||''),steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
+      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction,nextActionMode,activityTemplate,steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
       const ref=await addDoc(collection(db,'activities'),activity);activity.docId=ref.id;
       if(!state.activities.some(x=>x.id===activity.id))state.activities=[...state.activities,activity];
       if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedActivityIds||[]),activity.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedActivityIds:linked,updatedAt:now()},{merge:true});}
