@@ -2054,3 +2054,283 @@ body.dark.cora-route-active #aiAnalysisView #aiChatScroll{padding-bottom:150px!i
 body.dark .daily-focus-card{background:#f1f1ed;color:#171716}
 body.dark .daily-focus-card .button.primary{background:#171716;color:#f1f1ed}
 body.dark .daily-task-card.state-future{background:#222220}
+
+
+/* V15.1.13.29 — acabamento visual da Central do Dia e dashboard */
+.daily-view{
+  --daily-radius-lg:18px;
+  --daily-radius-md:14px;
+  --daily-radius-sm:10px;
+  gap:20px;
+}
+.daily-hero{
+  position:relative;
+  overflow:hidden;
+  align-items:center;
+  padding:28px 30px;
+  border-radius:var(--daily-radius-lg);
+  background:
+    linear-gradient(135deg,color-mix(in srgb,var(--surface) 94%,var(--soft)) 0%,var(--surface) 60%),
+    var(--surface);
+}
+.daily-hero::after{
+  content:"";
+  position:absolute;
+  width:260px;
+  height:260px;
+  right:-110px;
+  top:-150px;
+  border-radius:50%;
+  background:color-mix(in srgb,var(--text) 5%,transparent);
+  pointer-events:none;
+}
+.daily-hero-copy,.daily-controls{position:relative;z-index:1}
+.daily-hero-copy h2{font-size:30px;line-height:1.05}
+.daily-hero-copy p{font-size:12px;line-height:1.55}
+.daily-controls{
+  padding:8px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--surface) 88%,var(--soft));
+}
+.daily-controls label{min-width:138px}
+.daily-controls input,.daily-controls select{
+  min-height:40px;
+  border-radius:9px;
+  background:var(--surface);
+}
+.daily-controls .button{min-height:40px}
+.daily-assignment-bar{
+  padding:15px 18px;
+  border-radius:var(--daily-radius-md);
+  box-shadow:0 4px 14px rgba(0,0,0,.025);
+}
+.daily-chip{
+  min-height:28px;
+  padding:6px 10px;
+  transition:transform .15s ease,border-color .15s ease,background .15s ease;
+}
+.daily-chip:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--text) 18%,var(--line))}
+.daily-shift-clock strong{font-size:24px}
+
+.daily-stats,.daily-admin-stats{gap:12px}
+.daily-stat{
+  position:relative;
+  overflow:hidden;
+  min-height:112px;
+  padding-top:18px;
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
+}
+.daily-stat::before{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:0;
+  height:3px;
+  background:color-mix(in srgb,var(--text) 26%,var(--line));
+}
+.daily-stat-coverage::before{background:var(--text)}
+.daily-stat-done::before{background:color-mix(in srgb,var(--text) 68%,var(--line))}
+.daily-stat-pending::before{background:color-mix(in srgb,var(--text) 38%,var(--line))}
+.daily-stat-alert::before{background:var(--danger)}
+.daily-stat:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.06)}
+.daily-stat .stat-value{font-variant-numeric:tabular-nums;letter-spacing:-.045em}
+.daily-stat-alert .stat-value{color:var(--danger)}
+
+.daily-layout{grid-template-columns:minmax(0,1.75fr) minmax(300px,.75fr);gap:18px}
+.daily-side-column{
+  position:sticky;
+  top:86px;
+  align-self:start;
+}
+.daily-focus-card{
+  position:relative;
+  overflow:hidden;
+  min-height:86px;
+  padding:20px 22px;
+  border-radius:var(--daily-radius-md);
+  box-shadow:0 10px 24px rgba(0,0,0,.08);
+}
+.daily-focus-card::after{
+  content:"";
+  position:absolute;
+  width:150px;
+  height:150px;
+  right:-70px;
+  bottom:-100px;
+  border-radius:50%;
+  background:color-mix(in srgb,var(--surface) 10%,transparent);
+  pointer-events:none;
+}
+.daily-focus-kicker,#dailyNowContent{position:relative;z-index:1}
+.daily-focus-kicker{padding:5px 7px;border:1px solid color-mix(in srgb,var(--surface) 24%,transparent);border-radius:999px}
+.daily-focus-card #dailyNowContent strong{font-size:16px;line-height:1.25}
+.daily-focus-card #dailyNowContent span{font-size:11px;line-height:1.45}
+.daily-focus-card .button.primary{min-height:36px;border-radius:9px}
+
+.daily-timeline-panel{padding:20px;border-radius:var(--daily-radius-md)}
+.daily-timeline-panel>.section-head{margin-bottom:15px;padding-bottom:13px;border-bottom:1px solid var(--line)}
+.daily-view-switch{border-radius:10px}
+.daily-filter{cursor:pointer;transition:background .15s ease,color .15s ease,box-shadow .15s ease}
+.daily-filter:not(.active):hover{color:var(--text);background:color-mix(in srgb,var(--surface) 60%,var(--soft))}
+.daily-task-card{
+  grid-template-columns:90px minmax(0,1fr);
+  gap:16px;
+  padding:15px 16px;
+  border-radius:13px;
+  box-shadow:0 1px 0 rgba(0,0,0,.015);
+}
+.daily-task-card:hover{box-shadow:0 9px 22px rgba(0,0,0,.055);border-color:color-mix(in srgb,var(--text) 16%,var(--line))}
+.daily-task-time{
+  padding:3px 12px 3px 2px;
+  border-right:1px solid var(--line);
+}
+.daily-task-time strong{font-size:15px}
+.daily-task-heading strong{font-size:13px;line-height:1.35}
+.daily-task-status{padding:5px 8px}
+.daily-task-body>p{font-size:11px;line-height:1.55}
+.daily-task-actions{padding-top:8px;border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent)}
+.daily-task-actions .button{transition:transform .15s ease,box-shadow .15s ease}
+.daily-task-actions .button:hover{transform:translateY(-1px)}
+
+.daily-side-panel{
+  border-radius:var(--daily-radius-md);
+  background:linear-gradient(180deg,var(--surface),color-mix(in srgb,var(--surface) 86%,var(--soft)));
+}
+.daily-side-panel .section-head{padding-bottom:10px;border-bottom:1px solid var(--line)}
+.daily-linked-item{
+  position:relative;
+  padding:11px 12px;
+  border-radius:10px;
+  transition:transform .15s ease,border-color .15s ease,background .15s ease;
+}
+.daily-linked-item::after{
+  content:"›";
+  position:absolute;
+  right:10px;
+  top:50%;
+  transform:translateY(-50%);
+  color:var(--muted);
+  font-size:15px;
+}
+.daily-linked-item span,.daily-linked-item small{padding-right:16px}
+.daily-linked-item:hover{transform:translateX(2px);border-color:color-mix(in srgb,var(--text) 16%,var(--line))}
+
+.daily-admin-shell{
+  padding:22px;
+  border-radius:var(--daily-radius-lg);
+  background:linear-gradient(180deg,var(--surface),color-mix(in srgb,var(--surface) 95%,var(--soft)));
+}
+.daily-admin-head{
+  padding-bottom:17px;
+  border-bottom:1px solid var(--line);
+}
+.daily-admin-head h2{font-size:22px}
+.daily-admin-tabs{
+  margin:16px 0 18px;
+  border:1px solid var(--line);
+}
+.daily-admin-tab{cursor:pointer;transition:background .15s ease,color .15s ease,box-shadow .15s ease}
+.daily-admin-tab:not(.active):hover{color:var(--text)}
+.daily-config-grid{gap:16px}
+.daily-config-card{
+  position:relative;
+  padding:17px;
+  border-radius:var(--daily-radius-md);
+  background:color-mix(in srgb,var(--surface) 97%,var(--soft));
+  transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+}
+.daily-config-card:hover{border-color:color-mix(in srgb,var(--text) 14%,var(--line));box-shadow:0 9px 22px rgba(0,0,0,.035)}
+.daily-config-card:focus-within{border-color:color-mix(in srgb,var(--text) 22%,var(--line));box-shadow:0 10px 24px rgba(0,0,0,.045)}
+.daily-config-title{padding-bottom:11px;border-bottom:1px solid var(--line)}
+.daily-config-title>div>span{
+  width:27px;
+  height:27px;
+  border-radius:8px;
+  font-size:11px;
+  box-shadow:0 4px 10px rgba(0,0,0,.08);
+}
+.daily-config-title h3{font-size:14px}
+.daily-config-title p{font-size:9.5px;line-height:1.4}
+.daily-config-form{gap:10px}
+.daily-config-form input,.daily-config-form select,.daily-config-form textarea{border-radius:9px}
+.daily-config-form input,.daily-config-form select{min-height:38px}
+.daily-form-actions{padding-top:9px;border-top:1px solid var(--line)}
+.daily-admin-list{max-height:280px}
+.daily-admin-item{
+  padding:10px 11px;
+  border:1px solid transparent;
+  background:color-mix(in srgb,var(--surface) 50%,var(--soft));
+  transition:background .15s ease,border-color .15s ease;
+}
+.daily-admin-item:hover{background:var(--surface);border-color:var(--line)}
+.daily-admin-item button{cursor:pointer;transition:background .15s ease,transform .15s ease}
+.daily-admin-item button:hover{background:var(--soft);transform:translateY(-1px)}
+.daily-schedule-fieldset,.daily-days{border-radius:10px;background:color-mix(in srgb,var(--surface) 55%,var(--soft))}
+.daily-schedule-row{padding:7px 0;border-bottom:1px solid var(--line)}
+.daily-schedule-row:last-child{border-bottom:0}
+
+.daily-dashboard-toolbar{
+  display:grid;
+  grid-template-columns:minmax(230px,.6fr) minmax(0,1.4fr);
+  gap:18px;
+  align-items:end;
+  margin-bottom:14px;
+  padding:15px 16px;
+  border:1px solid var(--line);
+  border-radius:var(--daily-radius-md);
+  background:color-mix(in srgb,var(--surface) 88%,var(--soft));
+}
+.daily-dashboard-toolbar-copy{display:grid;gap:3px;align-content:center}
+.daily-dashboard-toolbar-copy .daily-mini-label{margin:0 0 2px}
+.daily-dashboard-toolbar-copy strong{font-size:12px}
+.daily-dashboard-toolbar-copy small{color:var(--muted);font-size:9.5px;line-height:1.45}
+.daily-dashboard-filters{margin:0;grid-template-columns:repeat(5,minmax(110px,1fr))}
+.daily-dashboard-filters input,.daily-dashboard-filters select{min-height:38px;border-radius:9px;background:var(--surface)}
+.daily-admin-stats{margin-bottom:16px}
+.daily-dashboard-grid{gap:16px;margin-bottom:16px}
+.daily-dashboard-panel{padding:18px;border-radius:var(--daily-radius-md)}
+.daily-dashboard-panel>.section-head{padding-bottom:11px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.daily-metric-list{gap:7px}
+.daily-metric-row{
+  grid-template-columns:minmax(0,1fr) 170px;
+  gap:14px;
+  padding:11px 12px;
+  border:1px solid transparent;
+  border-radius:10px;
+  background:color-mix(in srgb,var(--surface) 55%,var(--soft));
+  transition:border-color .15s ease,background .15s ease;
+}
+.daily-metric-row:last-child{border-bottom:1px solid transparent}
+.daily-metric-row:hover{background:var(--surface);border-color:var(--line)}
+.daily-metric-row strong{font-size:11px}
+.daily-metric-row span{font-size:9.5px}
+.daily-metric-value>div{height:7px;margin-top:6px}
+.daily-execution-panel .table-wrap{margin-top:4px}
+#dailyAdminDashboard table{margin-top:0}
+#dailyAdminDashboard thead th{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:var(--surface);
+  box-shadow:0 1px 0 var(--line);
+}
+#dailyAdminDashboard tbody tr{transition:background .15s ease}
+#dailyAdminDashboard tbody tr:hover{background:color-mix(in srgb,var(--surface) 50%,var(--soft))}
+
+.daily-view button:focus-visible,
+.daily-view input:focus-visible,
+.daily-view select:focus-visible,
+.daily-view textarea:focus-visible{
+  outline:2px solid color-mix(in srgb,var(--text) 55%,transparent);
+  outline-offset:2px;
+}
+body.dark .daily-hero{
+  background:linear-gradient(135deg,color-mix(in srgb,var(--surface) 88%,#000) 0%,var(--surface) 68%);
+}
+body.dark .daily-dashboard-toolbar,
+body.dark .daily-config-card,
+body.dark .daily-side-panel{
+  background:color-mix(in srgb,var(--surface) 92%,#000);
+}
