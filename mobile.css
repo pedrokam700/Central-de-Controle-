@@ -815,3 +815,155 @@
   .daily-task-card{grid-template-columns:minmax(0,1fr)!important}.daily-task-time{display:flex!important;justify-content:space-between!important}
   .daily-task-actions{grid-template-columns:minmax(0,1fr)!important}
 }
+
+
+/* V15.1.13.29 — acabamento mobile da Central do Dia */
+@media(max-width:860px){
+  .daily-view{gap:15px!important}
+  .daily-hero{
+    padding:18px!important;
+    border-radius:15px!important;
+    box-shadow:0 8px 22px rgba(0,0,0,.045)!important;
+  }
+  .daily-hero-copy h2{font-size:24px!important}
+  .daily-hero-copy p{font-size:11px!important;line-height:1.5!important}
+  .daily-controls{
+    padding:8px!important;
+    border:1px solid var(--line)!important;
+    border-radius:11px!important;
+    background:var(--soft)!important;
+  }
+  .daily-controls label{min-width:0!important}
+  .daily-assignment-bar{
+    padding:13px 14px!important;
+    border-radius:12px!important;
+  }
+  .daily-chip{max-width:100%!important;white-space:normal!important}
+  .daily-shift-clock strong{font-size:21px!important}
+
+  .daily-stat{
+    min-height:98px!important;
+    padding:15px!important;
+  }
+  .daily-stat .stat-value{font-size:27px!important}
+  .daily-stat .stat-note{font-size:9px!important;line-height:1.35!important}
+
+  .daily-side-column{
+    position:static!important;
+    top:auto!important;
+  }
+  .daily-focus-card{
+    min-height:0!important;
+    border-radius:13px!important;
+    box-shadow:0 8px 20px rgba(0,0,0,.065)!important;
+  }
+  .daily-focus-kicker{justify-self:start!important}
+  .daily-timeline-panel{border-radius:13px!important}
+  .daily-timeline-panel>.section-head{
+    margin-bottom:12px!important;
+    padding-bottom:11px!important;
+  }
+  .daily-task-card{
+    border-radius:12px!important;
+    box-shadow:none!important;
+  }
+  .daily-task-time{
+    padding-right:8px!important;
+  }
+  .daily-task-actions{
+    padding-top:7px!important;
+  }
+  .daily-side-panel{
+    border-radius:12px!important;
+  }
+
+  .daily-admin-shell{
+    padding:14px!important;
+    border-radius:14px!important;
+  }
+  .daily-admin-head{
+    padding-bottom:13px!important;
+  }
+  .daily-admin-tabs{
+    margin:13px 0 15px!important;
+  }
+  .daily-config-card{
+    padding:14px!important;
+    border-radius:12px!important;
+    box-shadow:none!important;
+  }
+  .daily-config-card:hover{transform:none!important}
+  .daily-config-title{
+    padding-bottom:9px!important;
+  }
+  .daily-config-title>div>span{
+    width:25px!important;
+    height:25px!important;
+  }
+  .daily-admin-list{max-height:320px!important}
+  .daily-admin-item{
+    border:1px solid var(--line)!important;
+    background:var(--surface)!important;
+  }
+
+  .daily-dashboard-toolbar{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    gap:12px!important;
+    padding:13px!important;
+    border-radius:12px!important;
+  }
+  .daily-dashboard-toolbar-copy{
+    padding-bottom:10px!important;
+    border-bottom:1px solid var(--line)!important;
+  }
+  .daily-dashboard-filters{
+    margin:0!important;
+  }
+  .daily-dashboard-panel{
+    padding:14px!important;
+    border-radius:12px!important;
+  }
+  .daily-metric-row{
+    padding:10px!important;
+    border:1px solid var(--line)!important;
+    background:var(--surface)!important;
+  }
+  .daily-metric-value>div{height:6px!important}
+  .daily-execution-panel .table-wrap{margin-top:0!important}
+  #dailyAdminDashboard tbody tr{
+    border-radius:12px!important;
+    box-shadow:0 3px 12px rgba(0,0,0,.025)!important;
+  }
+}
+@media(max-width:520px){
+  .daily-hero{padding:15px!important}
+  .daily-controls{grid-template-columns:minmax(0,1fr)!important}
+  .daily-controls .button{min-height:42px!important}
+  .daily-assignment-bar{gap:10px!important}
+  .daily-stats{gap:9px!important}
+  .daily-stat{
+    min-height:90px!important;
+    padding:13px!important;
+  }
+  .daily-stat .stat-value{font-size:25px!important}
+  .daily-focus-card{padding:13px!important}
+  .daily-timeline-panel{padding:12px!important}
+  .daily-task-card{
+    padding:12px!important;
+  }
+  .daily-task-time{
+    padding:0 0 8px!important;
+    border-right:0!important;
+    border-bottom:1px solid var(--line)!important;
+  }
+  .daily-config-card{padding:12px!important}
+  .daily-admin-tabs{gap:3px!important;padding:3px!important}
+  .daily-admin-tab{padding:8px 6px!important;font-size:10px!important}
+  .daily-dashboard-toolbar{padding:11px!important}
+  .daily-dashboard-panel{padding:12px!important}
+  .daily-metric-row{padding:9px!important}
+  #dailyAdminDashboard tbody td{
+    grid-template-columns:minmax(82px,32%) minmax(0,1fr)!important;
+  }
+}
