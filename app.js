@@ -4837,6 +4837,23 @@ ${m.text}`).join('\n\n');
 
     function activityLastMovementAt(activity){const dates=[activity?.createdAt,activity?.lastMovedAt,...(activity?.updates||[]).map(x=>x.date),...(activity?.steps||[]).map(x=>x.doneAt)].filter(Boolean).map(x=>new Date(x)).filter(x=>!Number.isNaN(x.getTime()));return dates.length?new Date(Math.max(...dates.map(x=>x.getTime()))):null;}
     function activityMovementText(activity){const date=activityLastMovementAt(activity);if(!date)return 'Sem movimentação registrada.';const days=Math.max(0,Math.floor((Date.now()-date.getTime())/86400000));if(days===0)return `Último avanço hoje · ${date.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;if(days===1)return 'Último avanço há 1 dia';return `Último avanço há ${days} dias`;}
+    function activityAutoNextAction(steps=[]){const next=(steps||[]).find(step=>!step.done&&String(step.text||'').trim());return next?.text||'';}
+    function activityTemplateDefinition(key){
+      const map={
+        validation:{type:'Análise',nextAction:'Definir critério e preparar amostras',steps:['Definir critério de aceitação','Preparar amostras e identificação','Executar validação','Registrar resultados e evidências','Consolidar conclusão']},
+        gage:{type:'Análise',nextAction:'Definir característica e critério do Gage',steps:['Definir característica e critério','Preparar amostras e identificação','Definir operadores e sequência','Executar primeira rodada','Executar repetições planejadas','Consolidar resultados','Registrar conclusão e ação']},
+        study:{type:'Análise',nextAction:'Definir pergunta e dados necessários',steps:['Definir pergunta do estudo','Coletar dados e evidências','Organizar e comparar resultados','Testar hipótese ou relação','Registrar conclusão e próximos passos']},
+        training:{type:'Outro',nextAction:'Definir objetivo e público do treinamento',steps:['Definir objetivo e público','Preparar material e exemplos','Realizar treinamento','Confirmar entendimento','Registrar presença e evidências','Definir reforço ou acompanhamento']}
+      };
+      return map[key]||null;
+    }
+    function applyActivityTemplate(key){
+      const form=document.querySelector('#activityForm'),definition=activityTemplateDefinition(key);if(!form||!definition)return;
+      form.elements.activityMode.value='structured';syncActivityModeUI();
+      if(form.elements.type)form.elements.type.value=definition.type;
+      if(form.elements.nextAction)form.elements.nextAction.value=definition.nextAction;
+      if(form.elements.initialSteps)form.elements.initialSteps.value=definition.steps.join('\n');
+    }
 
     function renderActivityDetail() {
       const activity=selectedActivity();if(!activity)return;
@@ -5190,6 +5207,7 @@ ${m.text}`).join('\n\n');
 
     document.querySelectorAll('#languageSelect,#aiLanguageSelect').forEach(el=>{if(el)el.value=currentLanguage;});
     document.querySelector('#activityModeSelect')?.addEventListener('change',syncActivityModeUI);
+    document.querySelector('#activityTemplateSelect')?.addEventListener('change',e=>{if(e.target.value)applyActivityTemplate(e.target.value);});
     syncActivityModeUI();
     document.querySelector('#closeEvidenceLightbox').addEventListener('click', e => { e.stopPropagation(); closeEvidenceLightbox(); });
     document.querySelector('#evidenceLightbox').addEventListener('click', e => { if(e.target.id==='evidenceLightbox') closeEvidenceLightbox(); });
@@ -5652,8 +5670,11 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const activityMode=String(form.get('activityMode')||'simple');
       const steps=activityMode==='structured'?String(form.get('initialSteps')||'').split('\n').map(x=>x.trim()).filter(Boolean).map((text,index)=>({id:`step-${Date.now()}-${index}`,text,done:false,doneAt:'',doneBy:''})):[];
       const evidence=activityMode==='structured'?await readAttachments(form.getAll('activityEvidence').filter(Boolean)):[];
+      const typedNext=activityMode==='structured'?String(form.get('nextAction')||'').trim():'';
+      const nextAction=typedNext||activityAutoNextAction(steps);
+      const nextActionMode=typedNext?'manual':'auto';
       const origin=pendingOriginContext;
-      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction:activityMode==='structured'?String(form.get('nextAction')||'').trim():'',steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
+      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction,nextActionMode,activityTemplate:String(form.get('activityTemplate')||''),steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
       const ref=await addDoc(collection(db,'activities'),activity);activity.docId=ref.id;
       if(!state.activities.some(x=>x.id===activity.id))state.activities=[...state.activities,activity];
       if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedActivityIds||[]),activity.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedActivityIds:linked,updatedAt:now()},{merge:true});}
@@ -5929,14 +5950,18 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     document.querySelector('#saveActivityChanges').addEventListener('click', async () => {
       const activity=selectedActivity();if(!activity)return;
       const status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value;
-      const nextAction=!document.querySelector('#activityStructuredSection').classList.contains('hidden')?document.querySelector('#activityNextAction').value.trim():(activity.nextAction||'');
+      const structured=!document.querySelector('#activityStructuredSection').classList.contains('hidden');
+      const typedNext=structured?document.querySelector('#activityNextAction').value.trim():(activity.nextAction||'');
+      const autoCandidate=activityAutoNextAction(activity.steps||[]);
+      const nextAction=structured?(typedNext||autoCandidate):(activity.nextAction||'');
+      const nextActionMode=structured?(typedNext&&typedNext!==autoCandidate?'manual':'auto'):(activity.nextActionMode||'manual');
       const changes=[];
       if(status!==activity.status)changes.push(`Status alterado para “${activityStatusName[status]}”.`);
       if(dueDate!==activity.dueDate)changes.push(dueDate?`Prazo atualizado para ${formatDate(dueDate)}.`:'Prazo removido.');
       if(nextAction!==(activity.nextAction||''))changes.push(nextAction?`Próxima ação: ${nextAction}`:'Próxima ação removida.');
-      if(!changes.length)return;
-      const updates=[...(activity.updates||[]),{text:changes.join(' '),date:now()}];
-      await updateDoc(doc(db,'activities',activity.docId),{status,dueDate,nextAction,updates,lastMovedAt:now()});renderActivityDetail();
+      if(!changes.length&&nextActionMode===(activity.nextActionMode||'manual'))return;
+      const updates=[...(activity.updates||[]),...(changes.length?[{text:changes.join(' '),date:now()}]:[])];
+      await updateDoc(doc(db,'activities',activity.docId),{status,dueDate,nextAction,nextActionMode,updates,lastMovedAt:now()});renderActivityDetail();
     });
 
     document.querySelector('#addActivityUpdate').addEventListener('click', async () => {
@@ -5950,9 +5975,9 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     });
 
     document.querySelector('#structureActivity')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const updates=[...(activity.updates||[]),{text:'Atividade transformada em estruturada.',date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',updates,lastMovedAt:now()});renderActivityDetail();});
-    document.querySelector('#addActivityStep')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityNewStep'),text=input.value.trim();if(!text)return input.focus();const steps=[...(activity.steps||[]),{id:`step-${Date.now()}`,text,done:false,doneAt:'',doneBy:''}],updates=[...(activity.updates||[]),{text:`Etapa adicionada: ${text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',steps,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
-    document.querySelector('#activitySteps')?.addEventListener('click',async e=>{const activity=selectedActivity();if(!activity)return;const del=e.target.closest('[data-activity-step-delete]');if(!del)return;const index=Number(del.dataset.activityStepDelete),step=(activity.steps||[])[index];if(!step)return;const steps=(activity.steps||[]).filter((_,i)=>i!==index),updates=[...(activity.updates||[]),{text:`Etapa removida: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,updates,lastMovedAt:now()});renderActivityDetail();});
-    document.querySelector('#activitySteps')?.addEventListener('change',async e=>{const toggle=e.target.closest('[data-activity-step-toggle]');if(!toggle)return;const activity=selectedActivity();if(!activity)return;const index=Number(toggle.dataset.activityStepToggle),steps=(activity.steps||[]).map((step,i)=>i===index?{...step,done:toggle.checked,doneAt:toggle.checked?now():'',doneBy:toggle.checked?(currentAccount?.name||''):''}:step),step=steps[index],updates=[...(activity.updates||[]),{text:`${toggle.checked?'Etapa concluída':'Etapa reaberta'}: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#addActivityStep')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityNewStep'),text=input.value.trim();if(!text)return input.focus();const steps=[...(activity.steps||[]),{id:`step-${Date.now()}`,text,done:false,doneAt:'',doneBy:''}],autoMode=(activity.nextActionMode||(!activity.nextAction?'auto':'manual'))==='auto',nextAction=autoMode?activityAutoNextAction(steps):(activity.nextAction||''),updates=[...(activity.updates||[]),{text:`Etapa adicionada: ${text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',steps,nextAction,nextActionMode:autoMode?'auto':(activity.nextActionMode||'manual'),updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
+    document.querySelector('#activitySteps')?.addEventListener('click',async e=>{const activity=selectedActivity();if(!activity)return;const del=e.target.closest('[data-activity-step-delete]');if(!del)return;const index=Number(del.dataset.activityStepDelete),step=(activity.steps||[])[index];if(!step)return;const steps=(activity.steps||[]).filter((_,i)=>i!==index),autoMode=(activity.nextActionMode||(!activity.nextAction?'auto':'manual'))==='auto',nextAction=autoMode?activityAutoNextAction(steps):(activity.nextAction||''),updates=[...(activity.updates||[]),{text:`Etapa removida: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,nextAction,nextActionMode:autoMode?'auto':(activity.nextActionMode||'manual'),updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#activitySteps')?.addEventListener('change',async e=>{const toggle=e.target.closest('[data-activity-step-toggle]');if(!toggle)return;const activity=selectedActivity();if(!activity)return;const index=Number(toggle.dataset.activityStepToggle),steps=(activity.steps||[]).map((step,i)=>i===index?{...step,done:toggle.checked,doneAt:toggle.checked?now():'',doneBy:toggle.checked?(currentAccount?.name||''):''}:step),step=steps[index],autoMode=(activity.nextActionMode||(!activity.nextAction?'auto':'manual'))==='auto',nextAction=autoMode?activityAutoNextAction(steps):(activity.nextAction||''),updates=[...(activity.updates||[]),{text:`${toggle.checked?'Etapa concluída':'Etapa reaberta'}: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,nextAction,nextActionMode:autoMode?'auto':(activity.nextActionMode||'manual'),updates,lastMovedAt:now()});renderActivityDetail();});
     document.querySelector('#saveActivityEvidence')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityEvidenceInput'),files=await readAttachments([...(input.files||[])]);if(!files.length)return alert('Selecione pelo menos um arquivo.');const evidence=[...evidenceEntries(activity.evidence),...files],updates=[...(activity.updates||[]),{text:`${files.length} arquivo(s)/evidência(s) adicionado(s).`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',evidence,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
 
     document.querySelector('#deleteActivity').addEventListener('click', async () => {
