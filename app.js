@@ -3638,6 +3638,13 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyExecutionDeadline(execution){
+      const shift=state.workShifts.find(s=>s.docId===execution.shiftId)||{startTime:execution.shiftStart,endTime:execution.shiftEnd};
+      if(!execution.plannedTime&&shift?.endTime){
+        let endKey=execution.dateKey||dailySelectedDate||localDateKey();
+        if(dailyShiftCrossesMidnight(shift))endKey=addLocalDays(endKey,1);
+        const [y,m,d]=endKey.split('-').map(Number),[hh,mm]=String(shift.endTime).split(':').map(Number);
+        return new Date(y,m-1,d,hh||0,mm||0,0,0);
+      }
       const planned=dailyPlannedDateTime(execution);
       const mins=Number(execution.windowMinutes||60);
       return new Date(planned.getTime()+Math.max(0,mins)*60000);
@@ -3985,8 +3992,11 @@ ${m.text}`).join('\n\n');
       const userBox=document.querySelector('#dailyDashUserRows');
       if(userBox) userBox.innerHTML=personRows.map(x=>{
         const doneIndividual=x.individual.filter(e=>e.status==='completed').length;
-        const sub=x.shared.length?`${doneIndividual}/${x.individual.length} individuais · participou de ${x.participated}/${x.shared.length} compartilhadas`:`${doneIndividual}/${x.individual.length} individuais`;
-        return dailyMetricBar(x.user.name,doneIndividual,x.individual.length||1,sub);
+        if(!x.individual.length){
+          return `<div class="daily-metric-row"><div><strong>${esc(x.user.name)}</strong><span>Participou de ${x.participated}/${x.shared.length} execuções compartilhadas · não conta como obrigação individual</span></div><div class="daily-metric-value"><strong>Equipe</strong><div><span style="width:${x.shared.length?Math.round(x.participated/x.shared.length*100):0}%"></span></div></div></div>`;
+        }
+        const sub=x.shared.length?`${doneIndividual}/${x.individual.length} individuais · participação em ${x.participated}/${x.shared.length} compartilhadas`:`${doneIndividual}/${x.individual.length} individuais`;
+        return dailyMetricBar(x.user.name,doneIndividual,x.individual.length,sub);
       }).join('')||'<div class="daily-soft-empty">Sem dados por pessoa.</div>';
 
       const body=document.querySelector('#dailyDashRows');
@@ -4556,7 +4566,7 @@ ${m.text}`).join('\n\n');
       form.elements.issue.focus();
       translatePage();
     }
-    function closeOperationalFailureModal(){document.querySelector('#operationalFailureModal').classList.add('hidden');document.querySelector('#operationalFailureForm').reset();document.querySelector('#operationalEvidencePreview').innerHTML='';setOccurrenceMode();}
+    function closeOperationalFailureModal(){document.querySelector('#operationalFailureModal').classList.add('hidden');document.querySelector('#operationalFailureForm').reset();document.querySelector('#operationalEvidencePreview').innerHTML='';pendingOriginContext=null;setOccurrenceMode();}
     function updateOperationalDetailScopeUI(){
       const scope=document.querySelector('#opDetailScopeSelect')?.value||'variant';
       document.querySelector('#opDetailProductScopeLabel')?.classList.toggle('hidden',scope!=='variant');
