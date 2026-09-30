@@ -102,8 +102,34 @@
       'Descrição':'Description','Links do report':'Report links','Atualizar links e evidências':'Update links and evidence','Link do seu report':'Your report link','Link da resposta do fornecedor':'Supplier response link','Adicionar fotos/evidências':'Add photos/evidence','Salvar links e evidências':'Save links and evidence','Evidências registradas':'Recorded evidence','Nenhuma evidência anexada ainda.':'No evidence attached yet.','Atualização da falha':'Failure update','Adicionar atualização':'Add update','Histórico de atualizações':'Update history','Pendências automáticas':'Automatic pending items','Status calculated':'Calculated status','Excluir registro':'Delete record','Contexto':'Context','Salvar alterações':'Save changes','Excluir atividade':'Delete activity','Situação':'Situation','Etapa 1 · Formulário e e-mail':'Step 1 · Form and email','Etapa 2 · Folha de rosto':'Step 2 · Cover sheet','Etapa 3 · Seguimento no fluxo':'Step 3 · Flow follow-up','Folha de rosto':'Cover sheet','Link / arquivo da folha de rosto':'Cover sheet link / file','Link ou registro do seguimento':'Follow-up link or record','Salvar etapas':'Save steps','Selecione':'Select','Arquivos e links':'Files and links','Andamento do fluxo':'Flow progress','Status calculado':'Calculated status','Excluir fluxo':'Delete flow',
       'Cadastre o primeiro produto.':'Register the first product.','Sem pendências':'No pending items','em aberto':'open','Abrir link':'Open link','Abrir link relacionado':'Open related link','E-mail enviado':'Email sent','Folha de rosto':'Cover sheet','Registro de seguimento':'Follow-up record','Meu report':'My report','Resposta':'Response','Sem atualização':'No update','Geral':'General','Operacional':'Operational','Máquina':'Machine','Linha':'Line','Nenhum produto cadastrado':'No product registered','Cadastre uma família e um produto para começar.':'Register a family and a product to get started.','Consulta geral por família, produto e componente.':'General search by family, product, and component.','E-mails, análises, alinhamentos e tarefas que precisam acontecer.':'Emails, analyses, alignments, and tasks that need to happen.','Formulário, e-mail, folha de rosto e seguimento em um processo único.':'Form, email, cover sheet, and follow-up in one process.','Prioridades, reports de produto e atividades gerais em um só lugar.':'Priorities, product reports, and general activities in one place.','Visão executiva e indicadores gerais de falhas de produtos.':'Executive view and general product failure indicators.','E-mails, análises, alinhamentos e outras tarefas que não pertencem a uma falha de produto.':'Emails, analyses, alignments, and other tasks that do not belong to a product failure.'
     };
+    Object.assign(translations, {"Central do Dia":"Daily Center","Rotinas do turno, alocações e execução operacional em tempo real.":"Shift routines, assignments, and operational execution in real time.","Central de Orientação e Raciocínio Assistido.":"Assisted Guidance and Reasoning Center.","registros e pendências deste produto":"records and pending items for this product","Dashboard":"Dashboard","Produtos por família · Reports":"Products by family · Reports","Registro universal de ocorrências: operação, máquina, processo, produto em suspeita ou ainda sem classificação definida.":"Universal occurrence log: operation, machine, process, suspected product, or still unclassified.","◐ Tema":"◐ Theme","Falhas, atividades e fluxos abertos":"Open failures, activities, and flows","Aguardando resposta ou outra ação":"Waiting for a response or another action","O que precisa da sua atenção primeiro.":"What needs your attention first.","Minha Central":"My Work Center","Central da equipe":"Team Work Center","Veja o que está disponível, o que já está em andamento e onde está concentrada a carga de trabalho.":"See what is available, what is already in progress, and where the workload is concentrated.","Disponíveis para assumir":"Available to take","Em andamento pela equipe":"In progress by the team","Visão da carga de trabalho":"Workload view","0 pessoas":"0 people","Solicitações para participar":"Participation requests","Veja sua alocação, próximas rotinas e o que precisa ser executado neste turno.":"See your assignment, upcoming routines, and what must be executed in this shift.","Use quando a falha de produto já estiver confirmada para tratamento/cobrança.":"Use when the product failure is already confirmed for treatment/follow-up.","Registre uma ocorrência mesmo quando ainda não souber se é máquina, processo, operacional ou produto.":"Record an occurrence even when you do not yet know whether it is machine, process, operational, or product related.","Aqui aparecem somente pendências atribuídas a você. Tarefas abertas para toda a equipe ficam fora desta fila pessoal. Solicitações para participar de tarefas compartilhadas aparecem separadamente quando houver autorização pendente.":"Only items assigned to you appear here. Tasks open to the whole team stay outside this personal queue. Requests to join shared tasks appear separately when approval is pending.","Operação do turno":"Shift operation","Rotinas operacionais, alocações e continuidade do trabalho em uma visão única.":"Operational routines, assignments, and work continuity in one view.","Data":"Date","Turno":"Shift","Carregando turnos…":"Loading shifts…","Agora":"Now","⚙ Configurar operação":"⚙ Configure operation","Sua alocação atual":"Your current assignment","Nenhuma alocação configurada":"No assignment configured","Cobertura do turno":"Shift coverage","Rotinas previstas × concluídas":"Planned × completed routines","Concluídas":"Completed","Execuções finalizadas":"Completed executions","Ainda precisam de ação":"Still require action","Anormalidades":"Abnormalities","Execuções com resultado NG":"Executions with NG result","AGORA":"NOW","Nenhuma rotina disponível.":"No routine available.","Configure turnos, alocações e rotinas para começar.":"Configure shifts, assignments, and routines to get started.","Mapa do turno":"Shift map","O que já foi feito, o que está acontecendo e o que vem a seguir.":"What has been done, what is happening, and what comes next.","Minhas":"Mine","Nenhuma rotina prevista para este turno.":"No routine planned for this shift.","Trabalho conectado":"Connected work","Atividades, falhas e reports relevantes para você.":"Activities, failures, and reports relevant to you.","Gerado pelo turno":"Generated by the shift","Falhas e atividades abertas a partir das rotinas.":"Failures and activities created from routines.","ADMINISTRAÇÃO":"ADMINISTRATION","Configuração operacional":"Operational configuration","Sem validade de alocação: a configuração atual permanece até um administrador alterá-la.":"Assignments do not expire: the current configuration remains until an administrator changes it.","Fechar":"Close","Estrutura & rotinas":"Structure & routines","Dashboard operacional":"Operational dashboard","Turnos":"Shifts","Horários livres, inclusive virada de dia.":"Flexible hours, including overnight shifts.","Fim":"End","Turno ativo":"Active shift","Limpar":"Clear","Salvar turno":"Save shift","Escopos operacionais":"Operational scopes","Comece por linhas; depois pode incluir área, estação ou processo.":"Start with lines; later you can include area, station, or process.","Área":"Area","Estação":"Station","Processo":"Process","Outro":"Other","Código curto":"Short code","(opcional)":"(optional)","Escopo ativo":"Active scope","Salvar escopo":"Save scope","Alocações":"Assignments","Uma pessoa pode estar em vários escopos e várias pessoas no mesmo escopo.":"One person can be assigned to multiple scopes and multiple people can share the same scope.","Pessoa":"Person","Escopos":"Scopes","Papel na alocação":"Assignment role","Sem distinção":"No distinction","Principal":"Primary","Apoio":"Support","Salvar alocação":"Save assignment","Rotinas":"Routines","Modelos reutilizáveis: patrulha é só o primeiro exemplo.":"Reusable templates: line patrol is only the first example.","Aplicar aos escopos":"Apply to scopes","Sem seleção = todos os escopos em que a pessoa estiver alocada.":"No selection = all scopes where the person is assigned.","Agenda por turno":"Schedule by shift","Regra de execução":"Execution rule","Uma execução por escopo":"One execution per scope","Cada pessoa alocada executa":"Each assigned person executes","Execução colaborativa":"Collaborative execution","Mínimo de pessoas":"Minimum people","Mínimo":"Minimum","Janela após o horário":"Window after scheduled time","(min)":"(min)","Resultado":"Result","OK / NG":"OK / NG","Concluir":"Complete","Checklist + resultado":"Checklist + result","Checklist":"Checklist","(um item por linha)":"(one item per line)","Dias ativos":"Active days","Seg":"Mon","Ter":"Tue","Qua":"Wed","Qui":"Thu","Sex":"Fri","Sáb":"Sat","Dom":"Sun","Permitir abrir Falha":"Allow creating Failure","Permitir criar Atividade":"Allow creating Activity","Exigir observação em NG":"Require note for NG","Rotina ativa":"Active routine","Salvar rotina":"Save routine","VISÃO DA OPERAÇÃO":"OPERATION VIEW","Acompanhe cobertura, atrasos e anormalidades":"Track coverage, delays, and abnormalities","Os filtros abaixo atualizam toda a leitura do dashboard.":"The filters below update the entire dashboard.","De":"From","Até":"To","Cobertura":"Coverage","Previstas × concluídas":"Planned × completed","No prazo":"On time","Conclusões dentro da janela":"Completions within the allowed window","Não executadas":"Not executed","Rotinas vencidas sem conclusão":"Overdue routines without completion","NG":"NG","Anormalidades registradas":"Recorded abnormalities","Cobertura por escopo":"Coverage by scope","Primeiro a operação; depois o detalhamento por pessoa.":"Operation first; then the person-level detail.","Execução por pessoa":"Execution by person","Respeita a política da rotina e não transforma trabalho em equipe em falta individual.":"Respects the routine policy and does not turn teamwork into an individual miss.","Execuções":"Executions","Histórico operacional com rotina, turno, escopo e responsáveis daquele momento.":"Operational history with routine, shift, scope, and the people responsible at that time.","Data / turno":"Date / shift","Rotina":"Routine","Responsáveis":"Responsible people","Horário":"Time","Nenhuma execução no período.":"No executions in this period.","Nenhum turno configurado ainda.":"No shift configured yet.","Nenhuma alocação neste turno":"No assignment in this shift","Turno não configurado":"Shift not configured","Durante o turno":"During the shift","Concluída":"Completed","Em andamento":"In progress","Atrasada":"Late","Próxima":"Upcoming","Registrar resultado":"Record result","Iniciar":"Start","+ Falha":"+ Failure","+ Atividade":"+ Activity","Participantes":"Participants","Sem responsável":"No responsible person","iniciada por":"started by","vira o dia":"crosses midnight","Escopo":"Scope","Cada pessoa executa":"Each person executes","Colaborativa":"Collaborative","Por escopo":"Per scope","Não aplicável":"Not applicable","Equipe":"Team","Sem dados.":"No data.","Sem dados por pessoa.":"No person-level data.","Nenhum turno.":"No shifts.","Nenhum escopo.":"No scopes.","Nenhuma alocação.":"No assignments.","Nenhuma rotina.":"No routines.","Editar":"Edit","Ativar":"Enable","Desativar":"Disable","Remover":"Remove","1× no turno":"1× per shift","Cadastre um turno primeiro.":"Register a shift first.","Sem agenda":"No schedule","sem escopo":"no scope","sem alocação":"no assignment","Detalhamento do indicador":"Indicator details","Visão geral":"Overview","Resumo da semana":"Weekly summary","Registradas no mês vigente · clique para detalhar":"Recorded this month · click for details","Reports totalmente concluídos · clique para detalhar":"Fully completed reports · click for details","Sem report enviado · clique para detalhar":"No report sent · click for details","Aguardando resposta do fornecedor · clique para detalhar":"Waiting for supplier response · click for details","Orientação e raciocínio":"Guidance and reasoning","Nova conversa":"New conversation","Conversa":"Conversation","Conversas":"Conversations","Memória":"Memory","Saúde da IA":"AI health","Como me usar":"How to use me","1. Conte o problema.":"1. Describe the problem.","Fale do jeito que souber.":"Use your own words.","2. Adicione evidências.":"2. Add evidence.","Fotos, arquivos, números e registros.":"Photos, files, numbers, and records.","3. Converse.":"3. Talk it through.","A CORA escolhe as fontes relevantes.":"CORA selects the relevant sources.","4. Aprofunde.":"4. Go deeper.","Peça comparação, teste, causa, RCA, 8D ou A3.":"Ask for comparison, testing, cause analysis, RCA, 8D, or A3.","Contexto automático":"Automatic context","a CORA escolhe as fontes":"CORA selects the sources","Conversa, memória, Central, evidências, documentos e pesquisa externa ficam disponíveis; somente informações relevantes entram na resposta.":"Conversation, memory, Work Center, evidence, documents, and external research are available; only relevant information is used in the answer.","Como posso ajudar?":"How can I help?","Conte o problema. A CORA investiga com você e adapta a profundidade ao que você perguntar.":"Describe the problem. CORA investigates with you and adapts the depth to your question.","Começar uma investigação":"Start an investigation","Procurar padrões":"Look for patterns","Analisar uma foto":"Analyze a photo","Confrontar hipótese":"Challenge a hypothesis","Lendo anexos…":"Reading attachments…","Limpar anexos":"Clear attachments","Evidências":"Evidence","Fotos e evidências":"Photos and evidence","Adicionar imagem ou evidência visual":"Add image or visual evidence","Arquivo":"File","Excel, CSV ou documento":"Excel, CSV, or document","Registrar falha com a CORA":"Register failure with CORA","Organizar a conversa e as evidências em uma nova falha":"Organize the conversation and evidence into a new failure","Compartilhar":"Share","Compartilhar conversa":"Share conversation","Compartilhar ou copiar o registro atual":"Share or copy the current record","Gerar documentos":"Generate documents","Relatório 8D":"8D report","Investigação estruturada em 8 disciplinas":"Structured investigation in 8 disciplines","Folha A3":"A3 sheet","Solução de problemas estruturada":"Structured problem solving","Diagrama de causa e efeito":"Cause-and-effect diagram","Gerar com IA":"Generate with AI","Apresentação":"Presentation","Gerar slides PowerPoint com a investigação atual":"Generate PowerPoint slides from the current investigation","Criar imagem":"Create image","Gerar ou transformar uma visualização com IA":"Generate or transform a visualization with AI","Fontes adaptativas":"Adaptive sources","Conversa · Central · memória · evidências":"Conversation · Work Center · memory · evidence","Configurações avançadas":"Advanced settings","Perspectiva":"Perspective","Automática / completa":"Automatic / complete","Produto":"Product","Processo / Operação":"Process / Operation","Máquina / Equipamento":"Machine / Equipment","Mão de obra":"Workforce","Material / Fornecedor":"Material / Supplier","Profundidade":"Depth","Investigativa":"Investigative","Rápida":"Quick","RCA completa":"Full RCA","Quando houver dados estruturados":"When structured data is available","Resumo":"Summary","Padrões":"Patterns","Cruzamentos":"Cross-analysis","Hipóteses 6M":"6M hypotheses","Investigação":"Investigation","3. O que você está pensando?":"3. What are you thinking?","3. Dados + contexto":"3. Data + context","Escreva como você falaria com um colega: observação, dúvida, hipótese, teste ou informação incompleta. A IA organiza o raciocínio.":"Write as you would speak to a colleague: observation, question, hypothesis, test, or incomplete information. The AI organizes the reasoning.","Você pode enviar uma planilha, colar uma tabela ou selecionar reports existentes. Use o campo de contexto para explicar o que você já sabe.":"You can upload a spreadsheet, paste a table, or select existing reports. Use the context field to explain what you already know.","registros":"records","quantidade":"quantity","campos":"fields","fonte":"source","Nenhum dado carregado. Você também pode usar apenas o campo de contexto.":"No data loaded. You can also use only the context field.","Analisando com a IA…":"Analyzing with AI…","Cancelar execução":"Cancel execution","Cancelar":"Cancel","Cancelando execução…":"Canceling execution…","Anexos prontos":"Attachments ready","Dados prontos":"Data ready","Imagem":"Image","Segurança da conta":"Account security","Alterar senha":"Change password","Envie um link seguro para criar uma nova senha.":"Send a secure link to create a new password.","Enviar link para trocar senha":"Send password reset link","Registros deste produto":"Records for this product","Registro universal de ocorrências. A classificação inicial pode ser desconhecida e evolui conforme surgem evidências.":"Universal occurrence log. The initial classification may be unknown and evolve as evidence appears.","Total de falhas":"Total failures","Todas as ocorrências registradas":"All recorded occurrences","Em aberto":"Open","Precisam de tratamento ou investigação":"Require treatment or investigation","Postos envolvidos":"Stations involved","Postos / estações conhecidos":"Known posts / stations","Sem classificação":"Unclassified","Aguardando definição da origem":"Awaiting origin definition","Classificação":"Classification","Não definido / Em análise":"Undefined / Under analysis","Produto (suspeita)":"Product (suspected)","Teste / Inspeção":"Test / Inspection","Pronto":"Ready","Produto / componente":"Product / component","Máquina / posto":"Machine / station","Classificação / processo":"Classification / process","Falha":"Failure","Nenhuma falha encontrada.":"No failure found.","Produto / família":"Product / family","Buscar atividade":"Search activity","Atividade":"Activity","Tipo / área":"Type / area","Prazo":"Due date","Link":"Link","Nenhuma atividade encontrada.":"No activity found.","Buscar fluxo":"Search flow","Fluxo / produto":"Flow / product","Criado por":"Created by","Nenhum fluxo encontrado.":"No flow found.","Crie sua nova senha e confirme antes de finalizar.":"Create your new password and confirm it before finishing.","Renomear família":"Rename family","A alteração é permitida apenas para administradores e será aplicada aos produtos e registros vinculados.":"Only administrators can make this change; it will be applied to linked products and records.","Novo nome da família":"New family name","Salvar nome":"Save name","Excluir definitivamente":"Delete permanently","Cadastrar produto":"Register product","Cadastre uma base e crie uma ou várias variantes de cor de uma vez.":"Register a base product and create one or multiple color variants at once.","Família do produto":"Product family","Selecione uma família existente…":"Select an existing family…","+ Criar nova família":"+ Create new family","Nome comercial":"Commercial name","Código base":"Base code","Cores / variantes":"Colors / variants","Separe por vírgula, espaço ou ponto e vírgula. Ex.: V, B, G.":"Separate with commas, spaces, or semicolons. E.g.: V, B, G.","Códigos que serão criados":"Codes to be created","Informe somente o código-base (ex.: CPH2859). Se preencher V, B e G, a Central cria CPH2859V, CPH2859B e CPH2859G de uma vez. Variantes já existentes são ignoradas, sem duplicação.":"Enter only the base code (e.g. CPH2859). If you enter V, B, and G, the Work Center creates CPH2859V, CPH2859B, and CPH2859G at once. Existing variants are skipped without duplication.","Salvar produto(s)":"Save product(s)","Cadastrar componente":"Register component","Nome do componente":"Component name","Adicionar componente":"Add component","Use quando a ocorrência já foi confirmada/tratada como falha de produto.":"Use when the occurrence has already been confirmed/treated as a product failure.","Código do material":"Material code","Responsável pelo report":"Report owner","Distribuição da tarefa":"Task assignment","Privada — uma pessoa":"Private — one person","Pessoas específicas":"Specific people","Aberta para todos":"Open to everyone","Responsável(is)":"Responsible person(s)","Apenas o administrador pode distribuir para outras pessoas. Uma tarefa aberta para todos não fica na sua Central pessoal; ela fica disponível na área da equipe.":"Only an administrator can assign to other people. A task open to everyone does not stay in your personal Work Center; it remains available in the team area.","Descrição da falha":"Failure description","Quando foi identificado":"When identified","Antes da montagem":"Before assembly","Durante a montagem":"During assembly","Após a montagem":"After assembly","No teste":"During test","Na inspeção":"During inspection","Origem confirmada":"Confirmed origin","Não informado":"Not informed","Fornecedor":"Supplier","Ainda não confirmada":"Not confirmed yet","Evidências (opcional)":"Evidence (optional)","Cadastre primeiro o que você sabe. O restante pode ser completado ou investigado depois com a CORA.":"Record what you know first. The rest can be completed or investigated later with CORA.","Não precisa saber a origem para registrar.":"You do not need to know the origin to register.","“Não definido / Em análise” é válido. Máquina, posto, processo e produto são campos independentes.":"“Undefined / Under analysis” is valid. Machine, station, process, and product are independent fields.","Classificação inicial":"Initial classification","Isso descreve o estado atual da ocorrência, não prova a causa.":"This describes the current state of the occurrence; it does not prove the cause.","Nível de certeza":"Confidence level","Baixa":"Low","Média":"Medium","Alta":"High","Identificação":"Identification","Aplicar esta falha a":"Apply this failure to","SKU / cor específica":"Specific SKU / color","Sem produto definido":"No product defined","Produto base · todas as cores":"Base product · all colors","Múltiplos SKUs":"Multiple SKUs","Família inteira":"Entire family","A falha vale somente para o SKU/cor selecionado.":"The failure applies only to the selected SKU/color.","Produto base":"Base product","O produto base inclui todas as cores/variantes cadastradas.":"The base product includes all registered colors/variants.","Selecione pelo menos dois SKUs relacionados à mesma falha.":"Select at least two SKUs related to the same failure.","Componente / peça":"Component / part","O que aconteceu?":"What happened?","Contexto / informações adicionais":"Context / additional information","Onde aconteceu / onde foi encontrado":"Where it happened / where it was found","Máquina / equipamento":"Machine / equipment","Linha / área":"Line / area","Posto / estação":"Station / post","Processo / etapa":"Process / step","Onde foi detectado?":"Where was it detected?","Momento da detecção":"Detection moment","Desconhecido":"Unknown","No retrabalho":"During rework","Na entrada da linha":"At line entry","Data de início":"Start date","Impacto e investigação":"Impact and investigation","Quantidade afetada":"Affected quantity","Tipo da ocorrência":"Occurrence type","Hipótese de causa":"Cause hypothesis","Testes realizados":"Tests performed","Causa confirmada":"Confirmed cause","Ação corretiva / contenção":"Corrective action / containment","Observações":"Notes","Responsável e evidências":"Owner and evidence","Responsável atual":"Current owner","Apenas o administrador pode distribuir para outras pessoas.":"Only an administrator can assign to other people.","Fotos / evidências":"Photos / evidence","Fotos podem ser adicionadas manualmente ou enviadas primeiro à CORA para organizar a ocorrência.":"Photos can be added manually or sent to CORA first to organize the occurrence.","CORA pode organizar esta falha":"CORA can organize this failure","Ela pode usar a conversa/evidências atuais para sugerir os campos que tenham suporte nos dados. Nada fica confirmado sem evidência.":"It can use the current conversation/evidence to suggest fields supported by the data. Nothing is confirmed without evidence.","Organizar com a CORA":"Organize with CORA","Produto(s) afetado(s)":"Affected product(s)","Você pode corrigir o escopo depois do registro: um SKU, produto base, vários SKUs ou a família inteira.":"You can correct the scope after registration: one SKU, base product, multiple SKUs, or the entire family.","Adicione ou remova SKUs antes de salvar.":"Add or remove SKUs before saving.","Ação corretiva":"Corrective action","Adicionar fotos / evidências":"Add photos / evidence","Salvar evidências":"Save evidence","Transformar em Report de Produto":"Convert to Product Report","Análise":"Analysis","Alinhamento":"Alignment","Reunião":"Meeting","Responsável principal":"Primary owner","Apenas o administrador pode distribuir para outras pessoas. “Aberta para todos” significa que qualquer pessoa da equipe pode assumir e executar.":"Only an administrator can assign to other people. “Open to everyone” means anyone on the team can take and execute it.","Formato":"Format","Atividade simples":"Simple activity","Atividade estruturada":"Structured activity","Continuidade do trabalho":"Work continuity","Use para validações, estudos e trabalhos com várias etapas, como o Gage.":"Use for validations, studies, and multi-step work such as the Gage.","Próxima ação":"Next action","Etapas iniciais":"Initial steps","(uma por linha)":"(one per line)","Arquivos / evidências":"Files / evidence","Descrição da situação":"Situation description","Editar descrição":"Edit description","Salvar página":"Save page","Salvar descrição":"Save description","Adicionar link separado da resposta":"Add a link separate from the response","Deixe desativado quando a resposta estiver no mesmo e-mail do seu report.":"Leave disabled when the response is in the same email as your report.","Link da resposta":"Response link","Análise da ocorrência":"Occurrence analysis","Preencha somente o que já estiver disponível. Nada aqui bloqueia o registro.":"Fill in only what is already available. Nothing here blocks the record.","Problema":"Problem","Quando começou":"When it started","Atualize somente quando houver uma nova consolidação. Não é necessário lançar diariamente.":"Update only when there is a new consolidation. Daily entry is not required.","Período considerado":"Period considered","Observações sobre a quantidade":"Quantity notes","Ferramentas":"Tools","Use os dados já registrados para preparar a comunicação ou consultar o histórico.":"Use the recorded data to prepare communication or consult the history.","E-mail de cobrança":"Follow-up email","Estruturar atividade":"Structure activity","Plano & continuidade":"Plan & continuity","Mantenha explícito onde o trabalho está e qual é a próxima ação.":"Keep it explicit where the work stands and what the next action is.","Progresso das etapas":"Step progress","+ Etapa":"+ Step","Adicionar arquivos / evidências":"Add files / evidence","Salvar arquivos":"Save files","Link do e-mail":"Email link","Executar rotina":"Execute routine","Observação":"Note","Salvar execução":"Save execution","Tudo que foi trabalhado e o que merece atenção.":"Everything that was worked on and what deserves attention.","Resultados da pesquisa":"Search results"});
+    Object.assign(translations, {"CORA — Central de Orientação e Raciocínio Assistido":"CORA — Assisted Guidance and Reasoning Center","8D":"8D","A3":"A3","Ishikawa":"Ishikawa","Reports de produto registrados sob a sua autoria.":"Product reports registered under your authorship.","Apenas o administrador pode distribuir para outras pessoas. O responsável pelo seguimento continua separado do acesso à tarefa.":"Only an administrator can assign to other people. The follow-up owner remains separate from task access.","NG / Anormalidade":"NG / Abnormality"});
     const originalTextNodes = new WeakMap();
     const originalAttrs = new WeakMap();
+    const translationPatterns = [
+      [/^(\d+) registro\(s\)$/, '$1 record(s)'],
+      [/^Lendo (\d+) imagem\(ns\)…$/, 'Reading $1 image(s)…'],
+      [/^Imagem (\d+)\/(\d+)$/, 'Image $1/$2'],
+      [/^Lendo (\d+) arquivo\(s\)…$/, 'Reading $1 file(s)…'],
+      [/^Arquivo (\d+)\/(\d+)$/, 'File $1/$2'],
+      [/^Último avanço há 1 dia$/, 'Last progress 1 day ago'],
+      [/^Último avanço há (\d+) dias$/, 'Last progress $1 days ago'],
+      [/^Último avanço hoje · (.+)$/, 'Last progress today · $1'],
+      [/^(\d+) pendência\(s\) de rotina$/, '$1 routine pending item(s)'],
+      [/^Participou de (\d+)\/(\d+) execuções compartilhadas · não conta como obrigação individual$/, 'Participated in $1/$2 shared executions · not counted as an individual obligation'],
+      [/^(\d+)\/(\d+) individuais · participação em (\d+)\/(\d+) compartilhadas$/, '$1/$2 individual · participation in $3/$4 shared'],
+      [/^(\d+)\/(\d+) individuais$/, '$1/$2 individual'],
+      [/^(\d+) em aberto$/, '$1 open']
+    ];
+    const t = value => {
+      const raw=String(value ?? '');
+      if(currentLanguage!=='en-US') return raw;
+      if(translations[raw]) return translations[raw];
+      for(const [pattern,replacement] of translationPatterns){
+        if(pattern.test(raw)) return raw.replace(pattern,replacement);
+      }
+      return raw;
+    };
     function translatePage() {
       const root = document.body;
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -115,9 +141,12 @@
         const original = originalTextNodes.get(node);
         const trimmed = original.trim();
         if (!trimmed) continue;
-        const translated = translations[trimmed];
-        if (currentLanguage === 'en-US' && translated) node.nodeValue = node.nodeValue.replace(trimmed, translated);
-        if (currentLanguage === 'pt-BR') node.nodeValue = original;
+        if (currentLanguage === 'en-US') {
+          const translated=t(trimmed);
+          node.nodeValue = translated===trimmed ? original : original.replace(trimmed,translated);
+        } else {
+          node.nodeValue = original;
+        }
       }
       root.querySelectorAll('input,textarea,select,button,a,[title],[aria-label]').forEach(el => {
         ['placeholder','title','aria-label'].forEach(attr => {
@@ -126,18 +155,31 @@
           const attrs = originalAttrs.get(el);
           if (!(attr in attrs)) attrs[attr] = el.getAttribute(attr);
           const original = attrs[attr];
-          const translated = translations[original];
-          el.setAttribute(attr, currentLanguage === 'en-US' && translated ? translated : original);
+          el.setAttribute(attr, currentLanguage === 'en-US' ? t(original) : original);
         });
       });
       document.documentElement.lang = currentLanguage;
     }
-    const t = value => currentLanguage === 'en-US' ? (translations[value] || value) : value;
 
     const now = () => new Date().toISOString();
     let dateFormat = new Intl.DateTimeFormat(currentLanguage, { dateStyle: 'short', timeStyle: 'short' });
     const esc = value => { const el = document.createElement('div'); el.textContent = value || ''; return el.innerHTML; };
     const formatDate = iso => iso ? dateFormat.format(new Date(iso)) : '—';
+    function setInterfaceLanguage(language,{rerender=true}={}){
+      const next=['pt-BR','en-US'].includes(language)?language:'pt-BR';
+      currentLanguage=next;
+      localStorage.setItem(LANGUAGE_KEY,currentLanguage);
+      dateFormat=new Intl.DateTimeFormat(currentLanguage,{dateStyle:'short',timeStyle:'short'});
+      document.querySelectorAll('#languageSelect,#aiLanguageSelect').forEach(el=>{if(el)el.value=currentLanguage;});
+      if(!rerender){translatePage();return;}
+      render();
+      if(selectedId)renderDetail();
+      if(selectedOperationalId)openOperationalDetail(selectedOperationalId);
+      if(selectedActivityId)renderActivityDetail();
+      if(selectedFlowId)renderFlowDetail();
+      renderAIAnalysis();
+      translatePage();
+    }
 
     const taskName = { photo: 'Fotos', report: 'Report', response: 'Resposta' };
     const statusName = { pendente: 'Pendente', aguardando: 'Aguardando fornecedor', concluido: 'Concluído' };
@@ -1443,20 +1485,20 @@
         document.querySelector('#pageTitle').textContent = t('Minha central de trabalho');
         document.querySelector('#pageSubtitle').textContent = t('Prioridades, reports de produto e atividades gerais em um só lugar.');
       } else if (activeView === 'daily') {
-        document.querySelector('#pageTitle').textContent = 'Central do Dia';
-        document.querySelector('#pageSubtitle').textContent = 'Rotinas do turno, alocações e execução operacional em tempo real.';
+        document.querySelector('#pageTitle').textContent = t('Central do Dia');
+        document.querySelector('#pageSubtitle').textContent = t('Rotinas do turno, alocações e execução operacional em tempo real.');
       } else if (activeView === 'dashboard') {
         document.querySelector('#pageTitle').textContent = t('Dashboard Estratégico');
         document.querySelector('#pageSubtitle').textContent = t('Visão executiva e indicadores gerais de falhas de produtos.');
       } else if (activeView === 'aiAnalysis') {
         document.querySelector('#pageTitle').textContent = 'CORA';
-        document.querySelector('#pageSubtitle').textContent = 'Central de Orientação e Raciocínio Assistido.';
+        document.querySelector('#pageSubtitle').textContent = t('Central de Orientação e Raciocínio Assistido.');
       } else if (activeView === 'profile') {
         document.querySelector('#pageTitle').textContent = t('Meu perfil de usuário');
         document.querySelector('#pageSubtitle').textContent = t('Resumo de suas atividades, reports subidos e configurações de conta.');
       } else if (activeView === 'operations') {
-        document.querySelector('#pageTitle').textContent = 'Falhas';
-        document.querySelector('#pageSubtitle').textContent = 'Ocorrências operacionais separadas das falhas de produto.';
+        document.querySelector('#pageTitle').textContent = t('Falhas');
+        document.querySelector('#pageSubtitle').textContent = t('Ocorrências operacionais separadas das falhas de produto.');
       } else if (activeView === 'work') {
         document.querySelector('#pageTitle').textContent = t('Atividades gerais');
         document.querySelector('#pageSubtitle').textContent = t('E-mails, análises, alinhamentos e tarefas que precisam acontecer.');
@@ -1465,7 +1507,7 @@
         document.querySelector('#pageSubtitle').textContent = t('Formulário, e-mail, folha de rosto e seguimento em um processo único.');
       } else if (activeView === 'product' && p) {
         document.querySelector('#pageTitle').textContent = p.code;
-        document.querySelector('#pageSubtitle').textContent = `${p.family} · registros e pendências deste produto`;
+        document.querySelector('#pageSubtitle').textContent = `${p.family} · ${t('registros e pendências deste produto')}`;
         document.querySelector('#newFailure').disabled = false;
         document.querySelector('#newFailure').style.opacity = '1';
       } else if (activeView === 'all') {
@@ -2278,24 +2320,25 @@ const aiPilot = {
     }
     function renderAIDataPreview(){
       const box=document.querySelector('#aiDataPreview'), rows=aiPilot.rows||[]; const count=document.querySelector('#aiRecordCount');
-      if(count) count.textContent=`${rows.length} registro(s)`;
+      if(count) count.textContent=t(`${rows.length} registro(s)`);
       if(!box)return;
-      if(!rows.length){box.innerHTML='<div class="ai-empty">Nenhum dado carregado. Você também pode usar apenas o campo de contexto.</div>';return;}
+      if(!rows.length){box.innerHTML=`<div class="ai-empty">${esc(t('Nenhum dado carregado. Você também pode usar apenas o campo de contexto.'))}</div>`;return;}
       const cols=aiPilot.columns.length?aiPilot.columns:Object.keys(rows[0]||{}); const sample=rows.slice(0,80);
       box.innerHTML=`<table><thead><tr>${cols.map(c=>`<th>${aiEsc(c)}</th>`).join('')}</tr></thead><tbody>${sample.map(r=>`<tr>${cols.map(c=>`<td>${aiEsc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     }
     function renderAISummary(){
       const el=document.querySelector('#aiDataSummary'); if(!el)return; const rows=aiPilot.rows||[];
       const q=aiQuantityTotal(rows); const cols=aiPilot.columns.length||Object.keys(rows[0]||{}).length;
-      el.innerHTML=`<div class="ai-mini"><strong>${rows.length}</strong><span>registros</span></div><div class="ai-mini"><strong>${q}</strong><span>quantidade</span></div><div class="ai-mini"><strong>${cols}</strong><span>campos</span></div><div class="ai-mini"><strong>${aiEsc(aiPilot.source)}</strong><span>fonte</span></div>`;
+      el.innerHTML=`<div class="ai-mini"><strong>${rows.length}</strong><span>${esc(t('registros'))}</span></div><div class="ai-mini"><strong>${q}</strong><span>${esc(t('quantidade'))}</span></div><div class="ai-mini"><strong>${cols}</strong><span>${esc(t('campos'))}</span></div><div class="ai-mini"><strong>${aiEsc(aiPilot.source)}</strong><span>${esc(t('fonte'))}</span></div>`;
     }
     function renderAIAnalysis(){
       const modeButtons=document.querySelectorAll('[data-ai-mode]'); modeButtons.forEach(b=>b.classList.toggle('active',b.dataset.aiMode===aiPilot.mode));
       document.querySelectorAll('[data-ai-perspective]').forEach(b=>b.classList.toggle('active',b.dataset.aiPerspective===aiPilot.perspective));
       const title=document.querySelector('#aiInputTitle'),help=document.querySelector('#aiInputHelp');
-      if(title) title.textContent=aiPilot.mode==='think'?'3. O que você está pensando?':'3. Dados + contexto';
-      if(help) help.textContent=aiPilot.mode==='think'?'Escreva como você falaria com um colega: observação, dúvida, hipótese, teste ou informação incompleta. A IA organiza o raciocínio.':'Você pode enviar uma planilha, colar uma tabela ou selecionar reports existentes. Use o campo de contexto para explicar o que você já sabe.';
+      if(title) title.textContent=t(aiPilot.mode==='think'?'3. O que você está pensando?':'3. Dados + contexto');
+      if(help) help.textContent=t(aiPilot.mode==='think'?'Escreva como você falaria com um colega: observação, dúvida, hipótese, teste ou informação incompleta. A IA organiza o raciocínio.':'Você pode enviar uma planilha, colar uma tabela ou selecionar reports existentes. Use o campo de contexto para explicar o que você já sabe.');
       renderAISummary(); renderAIDataPreview(); renderAIHistory();
+      document.querySelectorAll('#languageSelect,#aiLanguageSelect').forEach(el=>{if(el)el.value=currentLanguage;});
     }
     async function aiReadFile(file){
       if(!file)return; const name=file.name.toLowerCase();
@@ -2351,7 +2394,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.28'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.28'){localStorage.setItem('cora.sw.loaded','15.1.13.28');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.30'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.30'){localStorage.setItem('cora.sw.loaded','15.1.13.30');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -2944,7 +2987,13 @@ CONDUTA:
       const memoryText=(payload.memory||[]).slice(0,12).map(x=>typeof x==='string'?x:x.text||JSON.stringify(x)).join('\n- ');
       const rowsText=(payload.rows||[]).slice(0,250).map(r=>JSON.stringify(r)).join('\n');
       const central=payload.centralData||{};
+      const responseLanguage=currentLanguage==='en-US'?'English':'Brazilian Portuguese';
       return `${AI_SYSTEM_PROMPT}
+
+RESPONSE LANGUAGE:
+- Respond in ${responseLanguage}.
+- Keep product codes, SKUs, part numbers, machine/station codes, defect codes, and user-provided technical names unchanged.
+- If the user explicitly writes in another language and asks for that language, follow the user's explicit request.
 
 CONTEXTO DA CONVERSA:
 ${payload.context||'(sem texto; há anexos/dados)'}
@@ -3080,16 +3129,17 @@ ${rowsText.slice(0,50000)}`;
     function aiSetThinking(show=true,label='Analisando com a IA…'){
       const box=document.querySelector('#aiConversation');if(!box)return;
       let el=document.querySelector('#aiThinkingIndicator');
+      const translatedLabel=t(label);
       if(show){
         if(!el){
           el=document.createElement('details');el.id='aiThinkingIndicator';el.className='ai-work-status';el.open=true;
-          el.innerHTML=`<summary><span class="ai-work-dot" aria-hidden="true"></span><span class="ai-work-current"></span><span class="ai-work-timer">00:00</span><button type="button" class="ai-work-cancel" title="Cancelar execução">Cancelar</button></summary><div class="ai-work-steps" aria-live="polite"></div>`;
+          el.innerHTML=`<summary><span class="ai-work-dot" aria-hidden="true"></span><span class="ai-work-current"></span><span class="ai-work-timer">00:00</span><button type="button" class="ai-work-cancel" title="${esc(t('Cancelar execução'))}">${esc(t('Cancelar'))}</button></summary><div class="ai-work-steps" aria-live="polite"></div>`;
           const slot=document.querySelector('#aiWorkStatusSlot');(slot||box).appendChild(el);el.dataset.steps='';el.dataset.startedAt=String(Date.now());
           const timerEl=el.querySelector('.ai-work-timer');el._timer=setInterval(()=>{const sec=Math.floor((Date.now()-Number(el.dataset.startedAt||Date.now()))/1000);if(timerEl)timerEl.textContent=`${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;},1000);
-          el.querySelector('.ai-work-cancel')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(aiActiveAbortController){aiActiveAbortController._userCancelled=true;aiActiveAbortController.abort();}const current=el.querySelector('.ai-work-current');if(current)current.textContent='Cancelando execução…';});
+          el.querySelector('.ai-work-cancel')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(aiActiveAbortController){aiActiveAbortController._userCancelled=true;aiActiveAbortController.abort();}const current=el.querySelector('.ai-work-current');if(current)current.textContent=t('Cancelando execução…');});
         }
-        const current=el.querySelector('.ai-work-current');if(current&&label)current.textContent=label;
-        const steps=el.querySelector('.ai-work-steps');if(steps&&label){const seen=(el.dataset.steps||'').split('\n').filter(Boolean);if(!seen.includes(label)){seen.push(label);el.dataset.steps=seen.join('\n');const row=document.createElement('div');row.className='ai-work-step';row.textContent=label;steps.appendChild(row);}}
+        const current=el.querySelector('.ai-work-current');if(current&&translatedLabel)current.textContent=translatedLabel;
+        const steps=el.querySelector('.ai-work-steps');if(steps&&translatedLabel){const seen=(el.dataset.steps||'').split('\n').filter(Boolean);if(!seen.includes(translatedLabel)){seen.push(translatedLabel);el.dataset.steps=seen.join('\n');const row=document.createElement('div');row.className='ai-work-step';row.textContent=translatedLabel;steps.appendChild(row);}}
         aiScrollChat();
       }else if(el){if(el._timer)clearInterval(el._timer);el.remove();}
     }
@@ -3575,7 +3625,7 @@ ${m.text}`).join('\n\n');
     // ======================= FIM V14.0 — IA DE ANÁLISE (legado) =======================
 
 
-    // ======================= CENTRAL DO DIA · V15.1.13.28 =======================
+    // ======================= CENTRAL DO DIA · V15.1.13.30 =======================
     const localDateKey = (date = new Date()) => {
       const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
       return `${y}-${m}-${d}`;
@@ -3592,10 +3642,10 @@ ${m.text}`).join('\n\n');
       return (Number.isFinite(h)?h:0)*60+(Number.isFinite(m)?m:0);
     };
     const dailyShiftCrossesMidnight = shift => dailyTimeMinutes(shift?.endTime) <= dailyTimeMinutes(shift?.startTime);
-    const dailyShiftWindowLabel = shift => shift ? `${shift.startTime||'--:--'}–${shift.endTime||'--:--'}${dailyShiftCrossesMidnight(shift)?' · vira o dia':''}` : 'Turno não configurado';
-    const dailyScopeTypeLabel = type => ({line:'Linha',area:'Área',station:'Estação',process:'Processo',other:'Outro'}[type]||'Escopo');
-    const dailyPolicyLabel = policy => ({scope_once:'Uma execução por escopo',each_user:'Cada pessoa executa',collaborative:'Colaborativa',min_people:'Mínimo de pessoas'}[policy]||'Por escopo');
-    const dailyResultLabel = result => ({ok:'OK',ng:'NG',done:'Concluído',na:'Não aplicável'}[result]||'Pendente');
+    const dailyShiftWindowLabel = shift => shift ? `${shift.startTime||'--:--'}–${shift.endTime||'--:--'}${dailyShiftCrossesMidnight(shift)?` · ${t('vira o dia')}`:''}` : t('Turno não configurado');
+    const dailyScopeTypeLabel = type => t(({line:'Linha',area:'Área',station:'Estação',process:'Processo',other:'Outro'}[type]||'Escopo'));
+    const dailyPolicyLabel = policy => t(({scope_once:'Uma execução por escopo',each_user:'Cada pessoa executa',collaborative:'Colaborativa',min_people:'Mínimo de pessoas'}[policy]||'Por escopo'));
+    const dailyResultLabel = result => t(({ok:'OK',ng:'NG',done:'Concluído',na:'Não aplicável'}[result]||'Pendente'));
 
     function dailyCurrentShiftInfo(nowDate=new Date()){
       const shifts=state.workShifts.filter(s=>s.active!==false).sort((a,b)=>dailyTimeMinutes(a.startTime)-dailyTimeMinutes(b.startTime));
@@ -3769,30 +3819,30 @@ ${m.text}`).join('\n\n');
 
     function dailyExecutionCard(execution){
       const stateName=dailyTaskState(execution);
-      const statusLabel={done:'Concluída',ng:'NG',progress:'Em andamento',late:'Atrasada',due:'Agora',future:'Próxima'}[stateName]||'Pendente';
+      const statusLabel=t(({done:'Concluída',ng:'NG',progress:'Em andamento',late:'Atrasada',due:'Agora',future:'Próxima'}[stateName]||'Pendente'));
       const people=execution.executionPolicy==='each_user' ? execution.assignedUserName : (execution.expectedUserNames||[]).join(', ');
-      const time=execution.plannedTime||'Durante o turno';
+      const time=execution.plannedTime||t('Durante o turno');
       const canAct=dailyExecutionVisibleToCurrent(execution)||currentAccount?.role==='admin';
-      const startedBy=execution.startedByName ? ` · iniciada por ${esc(execution.startedByName)}` : '';
+      const startedBy=execution.startedByName ? ` · ${t('iniciada por')} ${esc(execution.startedByName)}` : '';
       let actions='';
       if(canAct && execution.status!=='completed'){
         actions=execution.status==='in_progress'
-          ? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(execution.executionKey)}">Registrar resultado</button>`
-          : `<button type="button" class="button primary button-compact" data-daily-start="${esc(execution.executionKey)}">Iniciar</button>`;
+          ? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(execution.executionKey)}">${esc(t('Registrar resultado'))}</button>`
+          : `<button type="button" class="button primary button-compact" data-daily-start="${esc(execution.executionKey)}">${esc(t('Iniciar'))}</button>`;
       }
       if(execution.status==='completed'){
         const derived=[];
-        if(execution.allowFailure!==false) derived.push(`<button type="button" class="button secondary button-compact" data-daily-failure="${esc(execution.executionKey)}">+ Falha</button>`);
-        if(execution.allowActivity!==false) derived.push(`<button type="button" class="button secondary button-compact" data-daily-activity="${esc(execution.executionKey)}">+ Atividade</button>`);
+        if(execution.allowFailure!==false) derived.push(`<button type="button" class="button secondary button-compact" data-daily-failure="${esc(execution.executionKey)}">${esc(t('+ Falha'))}</button>`);
+        if(execution.allowActivity!==false) derived.push(`<button type="button" class="button secondary button-compact" data-daily-activity="${esc(execution.executionKey)}">${esc(t('+ Atividade'))}</button>`);
         actions=derived.join('');
       }
       const note=execution.note ? `<p class="daily-task-note">${esc(execution.note)}</p>` : '';
       const participants=(execution.participants||[]).map(p=>p.name).filter(Boolean);
-      const participation=participants.length ? `<span>Participantes: ${esc(participants.join(', '))}</span>` : '';
+      const participation=participants.length ? `<span>${esc(t('Participantes'))}: ${esc(participants.join(', '))}</span>` : '';
       return `<article class="daily-task-card state-${stateName}" data-daily-exec="${esc(execution.executionKey)}">
         <div class="daily-task-time"><strong>${esc(time)}</strong><span>${esc(execution.shiftName||'')}</span></div>
-        <div class="daily-task-body"><div class="daily-task-heading"><div><strong>${esc(execution.routineName)}</strong><span>${esc(execution.scopeName)} · ${esc(dailyPolicyLabel(execution.executionPolicy))}</span></div><span class="daily-task-status">${statusLabel}</span></div>
-        ${execution.routineDescription?`<p>${esc(execution.routineDescription)}</p>`:''}${note}<div class="daily-task-meta"><span>${esc(people||'Sem responsável')}</span>${participation}<span>${startedBy}</span></div>
+        <div class="daily-task-body"><div class="daily-task-heading"><div><strong>${esc(execution.routineName)}</strong><span>${esc(execution.scopeName)} · ${esc(dailyPolicyLabel(execution.executionPolicy))}</span></div><span class="daily-task-status">${esc(statusLabel)}</span></div>
+        ${execution.routineDescription?`<p>${esc(execution.routineDescription)}</p>`:''}${note}<div class="daily-task-meta"><span>${esc(people||t('Sem responsável'))}</span>${participation}<span>${startedBy}</span></div>
         <div class="daily-task-actions">${actions}</div></div>
       </article>`;
     }
@@ -3820,14 +3870,14 @@ ${m.text}`).join('\n\n');
       document.querySelector('#dailyAdminToggle')?.classList.toggle('hidden',!isAdmin);
       if(!isAdmin) document.querySelector('#dailyAdminPanel')?.classList.add('hidden');
 
-      const clock=document.querySelector('#dailyClock'); if(clock) clock.textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-      const shiftWindow=document.querySelector('#dailyShiftWindow'); if(shiftWindow) shiftWindow.textContent=shift ? `${shift.name} · ${dailyShiftWindowLabel(shift)}` : 'Turno não configurado';
+      const clock=document.querySelector('#dailyClock'); if(clock) clock.textContent=new Date().toLocaleTimeString(currentLanguage,{hour:'2-digit',minute:'2-digit'});
+      const shiftWindow=document.querySelector('#dailyShiftWindow'); if(shiftWindow) shiftWindow.textContent=shift ? `${shift.name} · ${dailyShiftWindowLabel(shift)}` : t('Turno não configurado');
 
       const myAllocations=state.workAllocations.filter(a=>a.userId===currentAuthUser?.uid && (!dailySelectedShiftId||a.shiftId===dailySelectedShiftId));
       const myScopeIds=[...new Set(myAllocations.flatMap(a=>a.scopeIds||[]))];
       const chips=myScopeIds.map(id=>state.operationalScopes.find(s=>s.docId===id)).filter(Boolean);
       const chipBox=document.querySelector('#dailyAssignmentChips');
-      if(chipBox) chipBox.innerHTML=chips.length ? chips.map(s=>`<span class="daily-chip"><small>${esc(dailyScopeTypeLabel(s.type))}</small>${esc(s.name)}</span>`).join('') : '<span class="daily-chip muted-chip">Nenhuma alocação neste turno</span>';
+      if(chipBox) chipBox.innerHTML=chips.length ? chips.map(s=>`<span class="daily-chip"><small>${esc(dailyScopeTypeLabel(s.type))}</small>${esc(s.name)}</span>`).join('') : `<span class="daily-chip muted-chip">${esc(t('Nenhuma alocação neste turno'))}</span>`;
 
       if(activeView==='daily') materializeDailyExecutions();
       let executions=dailyMergedExecutions().filter(dailyExecutionVisibleToCurrent);
@@ -3849,7 +3899,7 @@ ${m.text}`).join('\n\n');
       const nowExec=allVisible.find(x=>x.status==='in_progress') || allVisible.find(x=>['due','late'].includes(dailyTaskState(x))) || allVisible.find(x=>x.status!=='completed') || completed.at(-1);
       const nowContent=document.querySelector('#dailyNowContent');
       if(nowContent){
-        nowContent.innerHTML=nowExec ? `<div><strong>${esc(nowExec.routineName)}</strong><span>${esc(nowExec.scopeName)} · ${esc(nowExec.plannedTime||'durante o turno')}</span></div><div class="daily-now-actions">${nowExec.status==='completed'?'<span class="daily-complete-mark">✓ concluída</span>':nowExec.status==='in_progress'? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(nowExec.executionKey)}">Registrar resultado</button>`:`<button type="button" class="button primary button-compact" data-daily-start="${esc(nowExec.executionKey)}">Iniciar</button>`}</div>` : '<strong>Nenhuma rotina prevista para este turno.</strong><span>Se isso não era esperado, confira a configuração ou sua alocação.</span>';
+        nowContent.innerHTML=nowExec ? `<div><strong>${esc(nowExec.routineName)}</strong><span>${esc(nowExec.scopeName)} · ${esc(nowExec.plannedTime||'durante o turno')}</span></div><div class="daily-now-actions">${nowExec.status==='completed'?'<span class="daily-complete-mark">✓ concluída</span>':nowExec.status==='in_progress'? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(nowExec.executionKey)}">${esc(t('Registrar resultado'))}</button>`:`<button type="button" class="button primary button-compact" data-daily-start="${esc(nowExec.executionKey)}">${esc(t('Iniciar'))}</button>`}</div>` : '<strong>Nenhuma rotina prevista para este turno.</strong><span>Se isso não era esperado, confira a configuração ou sua alocação.</span>';
       }
 
       renderDailyConnectedWork(allVisible);
@@ -4211,7 +4261,7 @@ ${m.text}`).join('\n\n');
       openActivityModal({title:`Ação — ${execution.routineName} · ${execution.scopeName}`,area:execution.scopeName||'Operação',description:execution.note||`Atividade originada da rotina ${execution.routineName}, ${execution.shiftName}.`,activityMode:'simple'});
     }
 
-    // ===================== FIM CENTRAL DO DIA · V15.1.13.28 =====================
+    // ===================== FIM CENTRAL DO DIA · V15.1.13.30 =====================
 
     function renderSafely(name, fn) {
       try {
@@ -4715,7 +4765,7 @@ ${m.text}`).join('\n\n');
       return `${prefix}-${new Date().getFullYear()}-${String(max + 1).padStart(3, '0')}`;
     }
 
-    document.querySelector('#languageSelect').value = currentLanguage;
+    document.querySelectorAll('#languageSelect,#aiLanguageSelect').forEach(el=>{if(el)el.value=currentLanguage;});
     document.querySelector('#activityModeSelect')?.addEventListener('change',syncActivityModeUI);
     syncActivityModeUI();
     document.querySelector('#closeEvidenceLightbox').addEventListener('click', e => { e.stopPropagation(); closeEvidenceLightbox(); });
@@ -4728,16 +4778,7 @@ ${m.text}`).join('\n\n');
       if(del){ e.stopPropagation(); del.disabled=true; try{ await deleteEvidenceItem(del.dataset.deleteEvidenceKind,del.dataset.deleteEvidenceId,Number(del.dataset.deleteEvidenceIndex)); } catch(err){ console.error(err); alert('Não foi possível excluir a evidência.'); del.disabled=false; } }
     });
 
-    document.querySelector('#languageSelect').addEventListener('change', e => {
-      currentLanguage = e.target.value;
-      localStorage.setItem(LANGUAGE_KEY, currentLanguage);
-      dateFormat = new Intl.DateTimeFormat(currentLanguage, { dateStyle: 'short', timeStyle: 'short' });
-      render();
-      if (selectedId) renderDetail();
-      if (selectedActivityId) renderActivityDetail();
-      if (selectedFlowId) renderFlowDetail();
-      translatePage();
-    });
+    document.querySelectorAll('#languageSelect,#aiLanguageSelect').forEach(select=>select?.addEventListener('change',e=>setInterfaceLanguage(e.target.value)));
 
     document.querySelector('#globalSearch').addEventListener('input', e => {
       const val = e.target.value.toLowerCase().trim();
@@ -5531,7 +5572,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const wrap=document.querySelector('#aiUploadProgressWrap'),bar=document.querySelector('#aiUploadProgress'),txt=document.querySelector('#aiUploadProgressLabel');
       if(!wrap||!bar)return;
       wrap.classList.toggle('hidden',value>=100||value<=0);
-      bar.value=Math.max(0,Math.min(100,value)); if(txt)txt.textContent=label;
+      bar.value=Math.max(0,Math.min(100,value)); if(txt)txt.textContent=t(label);
       if(value>=100)setTimeout(()=>wrap.classList.add('hidden'),450);
     }
     const _aiReadImagesOriginal=aiReadImages;
@@ -5569,7 +5610,6 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{initV1424Interface();}catch(e){console.warn('Interface V14.22 indisponível:',e);}
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
-try{const aiLang=document.querySelector('#aiLanguageSelect');if(aiLang)aiLang.value=currentLanguage;}catch{}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.28'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.28'){localStorage.setItem('cora.sw.loaded','15.1.13.28');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.30'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.30'){localStorage.setItem('cora.sw.loaded','15.1.13.30');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
