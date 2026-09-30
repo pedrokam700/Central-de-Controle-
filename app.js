@@ -84,6 +84,9 @@
     let dailyMaterializeInFlight = null;
     let dailyTourStep = 0;
     let dailyTourAutoShown = false;
+    let centralNotificationTimer = null;
+    let commandPaletteActions = [];
+    let commandPaletteActiveIndex = 0;
 
     // Internationalization: Portuguese is the source language; English is a UI translation.
     const LANGUAGE_KEY = 'controleFalhas.language.v1';
@@ -109,6 +112,7 @@
     Object.assign(translations, {"Matriz de alocação":"Assignment matrix","Marque rapidamente quem está em cada escopo. Uma pessoa pode estar em vários e um escopo pode ter várias pessoas.":"Quickly mark who is assigned to each scope. A person can be in multiple scopes and a scope can have multiple people.","A matriz altera a configuração atual; não cria período de validade.":"The matrix changes the current configuration; it does not create a validity period.","Contexto automático":"Automatic context","Sem contexto automático":"No automatic context","Falhas do turno anterior":"Previous shift failures","Falhas do dia anterior":"Previous day failures","Quando a rotina for executada, a Central mostra automaticamente as falhas registradas no período escolhido.":"When the routine is executed, the Work Center automatically shows failures recorded in the selected period.","Nenhuma falha registrada no período.":"No failures recorded in the period.","Adicionar horário":"Add time","Uma vez no turno":"Once per shift"});
     Object.assign(translations, {"? Como funciona":"? How it works","Alocação avançada":"Advanced assignment","A matriz é a forma principal. Use esta área apenas para definir papel e fazer ajustes específicos.":"The matrix is the primary method. Use this area only to define roles and make specific adjustments.","Abrir configuração avançada":"Open advanced configuration","Forma principal de distribuir pessoas por escopo. Marque ou desmarque diretamente na grade.":"Primary way to assign people by scope. Check or uncheck directly in the grid.","Itens da rotina":"Routine items","Na execução, cada item terá marcação de concluído e um campo opcional para valor, número ou relato.":"During execution, each item has a completion checkbox and an optional field for a value, number, or note.","Lembrar observação em NG":"Remind about NG note","não bloqueia o salvamento":"does not block saving","Preencha o que fizer sentido. Checklist, valores, observação e evidências são opcionais e podem ser editados depois.":"Fill in what makes sense. Checklist, values, notes, and evidence are optional and can be edited later.","Valor / dado (opcional)":"Value / data (optional)","Editar execução":"Edit execution","Abrir":"Open","Consulta":"Review","GUIA DA CENTRAL DO DIA":"WORK CENTER GUIDE","Como funciona":"How it works","Próximo":"Next","Voltar":"Back","Fechar":"Close","Salvar alterações":"Save changes","Execução atualizada.":"Execution updated.","Rotina atualizada.":"Routine updated.","Configuração e histórico":"Configuration and history","Os dados concluídos ficam preservados; alterações no modelo valem para execuções futuras.":"Completed data stays preserved; template changes apply to future executions.","Sua alocação":"Your assignment","Mapa do turno":"Shift map","Executar e registrar":"Execute and record","Trabalho conectado":"Connected work","Administração":"Administration","Use data e turno para ver exatamente o contexto operacional que você precisa.":"Use date and shift to see the exact operational context you need.","Aqui você vê em quais linhas, áreas ou processos está alocado no turno selecionado.":"Here you see the lines, areas, or processes assigned to you for the selected shift.","O mapa organiza o que já foi concluído, o que está em andamento e o que vem a seguir.":"The map organizes what is completed, in progress, and coming next.","Abra uma rotina, marque o que foi feito e registre valores como FPY diretamente em cada item. Nada é obrigatório para salvar.":"Open a routine, mark what was done, and enter values such as FPY directly in each item. Nothing is required to save.","Falhas, atividades e reports relacionados continuam acessíveis sem sair da Central do Dia.":"Related failures, activities, and reports remain accessible without leaving the Work Center.","Administradores configuram turnos, matriz de alocação, rotinas e consultam o histórico operacional.":"Admins configure shifts, the assignment matrix, routines, and review operational history.","Você pode abrir este guia novamente pelo botão Como funciona.":"You can reopen this guide at any time using the How it works button.","Guia concluído":"Guide completed"});
     Object.assign(translations, {"Editar rotina":"Edit routine","Editada":"Edited","Última edição":"Last edit","edição(ões) anterior(es) preservada(s)":"previous edit(s) preserved","Data e turno":"Date and shift","O botão Agora volta imediatamente para o turno atual.":"The Now button immediately returns to the current shift.","A alocação é configurada pelo administrador e permanece até ser alterada.":"Assignment is configured by an administrator and remains until changed.","Use Todas, Minhas e Pendentes para reduzir a lista.":"Use All, Mine, and Pending to narrow the list.","Uma execução concluída pode ser aberta e editada depois.":"A completed execution can be reopened and edited later.","Itens gerados a partir de uma rotina também ficam vinculados à execução.":"Items generated from a routine remain linked to the execution.","Alterações no modelo não apagam os dados de execuções já concluídas.":"Template changes do not erase completed execution data.","Os dados de rotina ficam no Firestore para consultas futuras.":"Routine data is stored in Firestore for future review.","Salvar execução":"Save execution","O botão Como funciona pode ser aberto novamente a qualquer momento.":"The How it works button can be opened again at any time."});
+    Object.assign(translations, {"Notificações":"Notifications","Rotinas e pendências que pedem atenção.":"Routines and pending work that need attention.","Ativar alertas do navegador":"Enable browser alerts","Antecedência":"Lead time","No horário":"At the scheduled time","Alertas dentro da Central já estão ativos.":"In-app alerts are already active.","Busca rápida":"Quick search","Saúde dos dados":"Data health","Sinais de registros que merecem revisão. Nada é bloqueado automaticamente.":"Signals for records that may need review. Nothing is blocked automatically.","Modelo estruturado":"Structured template","Sem modelo":"No template","Validação":"Validation","Estudo / Investigação":"Study / Investigation","Treinamento":"Training","O modelo só prepara as etapas iniciais. Você pode editar tudo antes de salvar.":"The template only prepares the initial steps. You can edit everything before saving.","Abrir Central do Dia":"Open Work Center Today","Registrar falha":"Register failure","Nova atividade":"New activity","Cadastrar produto":"Register product","Configurar operação":"Configure operation","Abrir saúde dos dados":"Open data health","Em breve":"Soon","Atrasada":"Overdue","Vence hoje":"Due today","Rotina programada":"Scheduled routine","Permissão de notificações concedida.":"Notification permission granted.","Notificações do navegador bloqueadas. Você pode continuar usando os alertas dentro da Central.":"Browser notifications are blocked. You can keep using in-app alerts.","Seu navegador não oferece notificações neste modo.":"Your browser does not support notifications in this mode.","Nenhuma notificação agora.":"No notifications right now.","Histórico administrativo":"Administrative history","Alterações de turno, escopo, alocação e rotina.":"Changes to shifts, scopes, assignments, and routines.","Nenhuma alteração administrativa registrada ainda.":"No administrative changes recorded yet.","Criado":"Created","Atualizado":"Updated","Desativado":"Disabled","Ativado":"Enabled","Removido":"Removed","Alocação atualizada":"Assignment updated","Etapa seguinte definida automaticamente.":"Next step set automatically."});
     const originalTextNodes = new WeakMap();
     const originalAttrs = new WeakMap();
     const translationPatterns = [
@@ -885,6 +889,174 @@
       return parts.join('\n\n');
     }
     function copyText(text){ if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>alert('Texto copiado.')); else { const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('Texto copiado.'); } }
+    // ==================== V15.1.13.33 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
+    function notificationPrefsKey(){return 'central.notifications.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
+    function notificationSentKey(){return 'central.notifications.sent.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
+    function centralNotificationPrefs(){
+      try{return {...{browserEnabled:false,leadMinutes:15},...JSON.parse(localStorage.getItem(notificationPrefsKey())||'{}')};}
+      catch{return {browserEnabled:false,leadMinutes:15};}
+    }
+    function saveCentralNotificationPrefs(next){localStorage.setItem(notificationPrefsKey(),JSON.stringify({...centralNotificationPrefs(),...next}));}
+    function centralAlertTimeLabel(minutes){
+      if(minutes==null)return t('Vence hoje');
+      if(minutes>1)return currentLanguage==='en-US'?`In ${minutes} min`:`Em ${minutes} min`;
+      if(minutes>=0)return t('Agora');
+      const late=Math.abs(minutes);
+      return currentLanguage==='en-US'?`${late} min overdue`:`Atrasada ${late} min`;
+    }
+    function centralAlerts(){
+      if(!currentAccount||!currentAuthUser)return [];
+      const prefs=centralNotificationPrefs(),lead=Math.max(0,Number(prefs.leadMinutes||15)),out=[],nowDate=new Date();
+      const current=dailyCurrentShiftInfo();
+      if(current.shift){
+        const executions=dailyMergedExecutions(current.dateKey,current.shift.docId).filter(dailyExecutionVisibleToCurrent).filter(x=>x.status!=='completed');
+        executions.forEach(execution=>{
+          if(!execution.plannedTime)return;
+          const planned=dailyPlannedDateTime(execution);
+          const diff=Math.ceil((planned-nowDate)/60000);
+          const deadline=dailyExecutionDeadline(execution);
+          const late=nowDate>deadline;
+          const attention=late||diff<=lead;
+          out.push({
+            id:`routine:${execution.executionKey}:${current.dateKey}`,
+            kind:'routine',level:late?'danger':attention?'warning':'normal',attention,
+            title:execution.routineName||t('Rotina programada'),
+            body:[execution.scopeName,execution.shiftName,execution.plannedTime].filter(Boolean).join(' · '),
+            timeLabel:late?(currentLanguage==='en-US'?`${Math.max(1,Math.abs(diff))} min overdue`:`Atrasada ${Math.max(1,Math.abs(diff))} min`):centralAlertTimeLabel(Math.max(0,diff)),
+            minutes:diff,notify:attention,
+            executionKey:execution.executionKey,dateKey:current.dateKey,shiftId:current.shift.docId
+          });
+        });
+      }
+      const today=localDateKey(),accountName=String(currentAccount?.name||'');
+      state.activities.filter(a=>activityEffectiveStatus(a)!=='concluido'&&a.dueDate).forEach(activity=>{
+        const assignment=normalizeAssignment(activity);
+        const mine=activity.owner===accountName||(assignment.assignees||[]).includes(accountName);
+        if(!mine)return;
+        const overdue=activity.dueDate<today,dueToday=activity.dueDate===today;
+        if(!overdue&&!dueToday)return;
+        out.push({
+          id:`activity:${activity.id}:${activity.dueDate}`,
+          kind:'activity',level:overdue?'danger':'warning',attention:true,
+          title:activity.title||activity.id,body:overdue?(currentLanguage==='en-US'?'Activity overdue':'Atividade com prazo vencido'):(currentLanguage==='en-US'?'Activity due today':'Atividade com prazo hoje'),
+          timeLabel:overdue?t('Atrasada'):t('Vence hoje'),minutes:null,notify:true,activityId:activity.id
+        });
+      });
+      return out.sort((a,b)=>{
+        const rank={danger:0,warning:1,normal:2};
+        return (rank[a.level]??3)-(rank[b.level]??3) || (a.minutes??99999)-(b.minutes??99999) || String(a.title).localeCompare(String(b.title));
+      });
+    }
+    function renderCentralNotifications(){
+      const list=document.querySelector('#centralNotificationList'),badge=document.querySelector('#centralNotificationBadge'),lead=document.querySelector('#centralNotificationLead'),permission=document.querySelector('#centralNotificationPermission'),enable=document.querySelector('#enableBrowserNotifications');
+      if(!list||!badge)return;
+      const prefs=centralNotificationPrefs(),alerts=centralAlerts(),attention=alerts.filter(x=>x.attention);
+      if(lead)lead.value=String(prefs.leadMinutes??15);
+      badge.textContent=String(attention.length);
+      badge.classList.toggle('hidden',!attention.length);
+      list.innerHTML=alerts.length?alerts.slice(0,20).map((a,index)=>`<button type="button" class="central-alert-item ${a.level==='danger'?'is-danger':a.level==='warning'?'is-warning':''}" data-central-alert="${index}"><span class="central-alert-dot"></span><span class="central-alert-copy"><strong>${esc(a.title)}</strong><span>${esc(a.body||'')}</span></span><span class="central-alert-time">${esc(a.timeLabel||'')}</span></button>`).join(''):`<div class="daily-soft-empty">${esc(t('Nenhuma notificação agora.'))}</div>`;
+      window.__centralAlerts=alerts;
+      if(permission){
+        if(!('Notification' in window))permission.textContent=t('Seu navegador não oferece notificações neste modo.');
+        else if(Notification.permission==='granted'&&prefs.browserEnabled)permission.textContent=t('Permissão de notificações concedida.');
+        else if(Notification.permission==='denied')permission.textContent=t('Notificações do navegador bloqueadas. Você pode continuar usando os alertas dentro da Central.');
+        else permission.textContent=t('Alertas dentro da Central já estão ativos.');
+      }
+      if(enable){
+        enable.disabled=!('Notification' in window)||Notification.permission==='denied';
+        enable.textContent=('Notification' in window&&Notification.permission==='granted'&&prefs.browserEnabled)?(currentLanguage==='en-US'?'Browser alerts enabled':'Alertas do navegador ativos'):t('Ativar alertas do navegador');
+      }
+    }
+    async function enableCentralBrowserNotifications(){
+      if(!('Notification' in window)){showSaveToast(t('Seu navegador não oferece notificações neste modo.'),'error');return;}
+      const permission=await Notification.requestPermission();
+      saveCentralNotificationPrefs({browserEnabled:permission==='granted'});
+      renderCentralNotifications();
+      if(permission==='granted'){showSaveToast(t('Permissão de notificações concedida.'),'success');await checkCentralBrowserNotifications(true);}
+      else showSaveToast(t('Notificações do navegador bloqueadas. Você pode continuar usando os alertas dentro da Central.'),'error');
+    }
+    function centralNotificationSent(){
+      try{const stored=JSON.parse(localStorage.getItem(notificationSentKey())||'{}');return stored.date===localDateKey()?new Set(stored.ids||[]):new Set();}
+      catch{return new Set();}
+    }
+    function saveCentralNotificationSent(set){localStorage.setItem(notificationSentKey(),JSON.stringify({date:localDateKey(),ids:[...set].slice(-200)}));}
+    async function showCentralSystemNotification(alertItem){
+      const title=`Central · ${alertItem.title}`;
+      const options={body:[alertItem.body,alertItem.timeLabel].filter(Boolean).join(' — '),tag:alertItem.id,renotify:false,data:{kind:alertItem.kind,executionKey:alertItem.executionKey||'',activityId:alertItem.activityId||'',dateKey:alertItem.dateKey||'',shiftId:alertItem.shiftId||''}};
+      if('serviceWorker' in navigator){try{const reg=await navigator.serviceWorker.ready;await reg.showNotification(title,options);return;}catch{}}
+      try{new Notification(title,options);}catch{}
+    }
+    async function checkCentralBrowserNotifications(force=false){
+      renderCentralNotifications();
+      const prefs=centralNotificationPrefs();
+      if(!prefs.browserEnabled||!('Notification' in window)||Notification.permission!=='granted')return;
+      const sent=centralNotificationSent(),alerts=centralAlerts().filter(a=>a.notify);
+      for(const alertItem of alerts){if(sent.has(alertItem.id)&&!force)continue;await showCentralSystemNotification(alertItem);sent.add(alertItem.id);}
+      saveCentralNotificationSent(sent);
+    }
+    function ensureCentralNotificationEngine(){
+      if(centralNotificationTimer)return;
+      centralNotificationTimer=setInterval(()=>checkCentralBrowserNotifications().catch(console.warn),60000);
+      setTimeout(()=>checkCentralBrowserNotifications().catch(()=>{}),1200);
+    }
+    function openCentralAlert(alertItem){
+      if(!alertItem)return;
+      document.querySelector('#centralNotificationPanel')?.classList.add('hidden');
+      document.querySelector('#centralNotificationButton')?.setAttribute('aria-expanded','false');
+      if(alertItem.kind==='activity'&&alertItem.activityId){show('work');openActivityDetail(alertItem.activityId);return;}
+      if(alertItem.kind==='routine'){
+        dailySelectedDate=alertItem.dateKey||dailySelectedDate;dailySelectedShiftId=alertItem.shiftId||dailySelectedShiftId;show('daily');
+        setTimeout(()=>{const card=document.querySelector(`[data-daily-exec="${CSS.escape(alertItem.executionKey||'')}"]`);if(card){card.scrollIntoView({behavior:'smooth',block:'center'});card.classList.add('daily-tour-highlight');setTimeout(()=>card.classList.remove('daily-tour-highlight'),1800);}},120);
+      }
+    }
+
+    function commandPaletteEntries(query=''){
+      const q=String(query||'').trim().toLowerCase(),items=[];
+      const add=(title,sub,kind,fn,searchText='')=>{if(!q||[title,sub,kind,searchText].join(' ').toLowerCase().includes(q))items.push({title,sub,kind,fn});};
+      add(t('Abrir Central do Dia'),currentLanguage==='en-US'?'Current shift, routines and assignments':'Turno atual, rotinas e alocações',t('Ação'),()=>show('daily'),'central rotina turno');
+      add(t('Nova atividade'),currentLanguage==='en-US'?'Create a task or structured activity':'Criar tarefa ou atividade estruturada',t('Ação'),()=>openActivityModal(),'atividade tarefa');
+      add(t('Registrar falha'),currentLanguage==='en-US'?'Register an operational occurrence':'Registrar ocorrência operacional',t('Ação'),()=>openOperationalFailureModal(),'falha ocorrência');
+      add(t('Cadastrar produto'),currentLanguage==='en-US'?'Add product / CPH':'Adicionar produto / CPH',t('Ação'),()=>openProductModal(),'produto cph');
+      add(t('Abrir saúde dos dados'),currentLanguage==='en-US'?'Review incomplete or inconsistent records':'Revisar registros incompletos ou inconsistentes',t('Ação'),()=>openDataHealth(),'saúde dados');
+      if(currentAccount?.role==='admin')add(t('Configurar operação'),currentLanguage==='en-US'?'Shifts, scopes, assignment matrix and routines':'Turnos, escopos, matriz e rotinas',t('Admin'),()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel')?.scrollIntoView({behavior:'smooth',block:'start'});},80);},'admin matriz');
+      const match=(...v)=>!q||v.flat(Infinity).filter(Boolean).join(' ').toLowerCase().includes(q);
+      state.products.filter(p=>match(p.code,p.family,p.name,p.commercialName,p.components)).slice(0,8).forEach(p=>add(productDisplayCode(p.code),`Produto · ${p.family||'—'}`,t('Produto'),()=>{activeProduct=p.code;activeFamily='';show('product');},[p.code,p.family,p.components].join(' ')));
+      state.reports.filter(r=>match(r.id,r.product,r.family,r.component,r.issue,r.material)).slice(0,8).forEach(r=>add(`${r.id} · ${r.component||'Report'}`,r.issue||failureScopeSummary(r),t('Report'),()=>openDetail(r.id),[r.id,r.product,r.issue].join(' ')));
+      state.operationalFailures.filter(r=>match(r.id,r.issue,r.owner,r.maquina,r.linha,r.estacao)).slice(0,8).forEach(r=>add(`${r.id} · ${r.issue||'Falha'}`,failureScopeSummary(r),t('Falha'),()=>{show('operations');openOperationalDetail(r.id);},[r.id,r.issue,r.maquina,r.linha].join(' ')));
+      state.activities.filter(a=>match(a.id,a.title,a.area,a.description,a.nextAction)).slice(0,8).forEach(a=>add(`${a.id} · ${a.title}`,a.nextAction?`Próxima: ${a.nextAction}`:a.area,t('Atividade'),()=>{show('work');openActivityDetail(a.id);},[a.id,a.title,a.area,a.nextAction].join(' ')));
+      state.flows.filter(f=>match(f.id,f.scope,f.description,f.product)).slice(0,6).forEach(f=>add(`${f.id} · ${f.scope}`,f.description||'',t('Fluxo'),()=>{show('flow');openFlowDetail(f.id);},[f.id,f.scope,f.product].join(' ')));
+      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(currentAccount?.role==='admin')setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},120);},[r.name,r.description,r.checklistTemplate].join(' ')));
+      return items.slice(0,32);
+    }
+    function renderCommandPalette(query=''){
+      const host=document.querySelector('#commandPaletteResults');if(!host)return;
+      commandPaletteActions=commandPaletteEntries(query);commandPaletteActiveIndex=Math.max(0,Math.min(commandPaletteActiveIndex,Math.max(0,commandPaletteActions.length-1)));
+      host.innerHTML=commandPaletteActions.length?commandPaletteActions.map((item,index)=>`<button type="button" class="command-palette-item ${index===commandPaletteActiveIndex?'active':''}" data-command-index="${index}"><span><strong>${esc(item.title)}</strong><small>${esc(item.sub||'')}</small></span><span class="command-palette-kind">${esc(item.kind||'')}</span></button>`).join(''):`<div class="daily-soft-empty">${esc(currentLanguage==='en-US'?'No results.':'Nenhum resultado.')}</div>`;
+      host.querySelector('.command-palette-item.active')?.scrollIntoView({block:'nearest'});
+    }
+    function openCommandPalette(seed=''){commandPaletteActiveIndex=0;const modal=document.querySelector('#commandPaletteModal'),input=document.querySelector('#commandPaletteInput');if(!modal||!input)return;modal.classList.remove('hidden');input.value=seed;renderCommandPalette(seed);setTimeout(()=>input.focus(),0);}
+    function closeCommandPalette(){document.querySelector('#commandPaletteModal')?.classList.add('hidden');}
+    function runCommandPaletteIndex(index){const item=commandPaletteActions[index];if(!item)return;closeCommandPalette();item.fn?.();}
+
+    function dataHealthIssues(){
+      const issues=[];
+      state.operationalFailures.filter(r=>String(r.classification||'NAO_DEFINIDO').toUpperCase()==='NAO_DEFINIDO').forEach(r=>issues.push({kind:'classification',title:`${r.id} · ${r.issue||'Falha'}`,detail:currentLanguage==='en-US'?'Failure without final classification':'Falha sem classificação final',action:()=>{show('operations');openOperationalDetail(r.id);}}));
+      state.activities.filter(a=>activityEffectiveStatus(a)!=='concluido'&&(a.activityMode==='structured'||(a.steps||[]).length)&&!String(a.nextAction||'').trim()&&(a.steps||[]).some(step=>!step.done)).forEach(a=>issues.push({kind:'nextAction',title:`${a.id} · ${a.title}`,detail:currentLanguage==='en-US'?'Structured activity without next action':'Atividade estruturada sem próxima ação',action:()=>{show('work');openActivityDetail(a.id);}}));
+      activeWorkAllocations().forEach(a=>{const brokenUser=!users.some(u=>u.docId===a.userId),brokenShift=!state.workShifts.some(s=>s.docId===a.shiftId),brokenScopes=(a.scopeIds||[]).filter(id=>!state.operationalScopes.some(s=>s.docId===id));if(brokenUser||brokenShift||brokenScopes.length)issues.push({kind:'allocation',title:a.userName||a.docId,detail:currentLanguage==='en-US'?'Assignment references missing configuration':'Alocação referencia configuração inexistente',action:()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();},80);}});});
+      state.routineTemplates.filter(r=>r.active!==false&&(!r.name||!Array.isArray(r.days)||!r.days.length||!r.scheduleMap||!Object.keys(r.scheduleMap).length)).forEach(r=>issues.push({kind:'routine',title:r.name||r.docId,detail:currentLanguage==='en-US'?'Active routine with incomplete schedule':'Rotina ativa com agenda incompleta',action:()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},100);}}));
+      state.products.filter(p=>!String(p.family||'').trim()).forEach(p=>issues.push({kind:'product',title:productDisplayCode(p.code),detail:currentLanguage==='en-US'?'Product without family':'Produto sem família',action:()=>{activeProduct=p.code;show('product');}}));
+      return issues;
+    }
+    function renderDataHealth(){
+      const issues=dataHealthIssues(),summary=document.querySelector('#dataHealthSummary'),list=document.querySelector('#dataHealthList');if(!summary||!list)return;
+      const counts={classification:issues.filter(x=>x.kind==='classification').length,nextAction:issues.filter(x=>x.kind==='nextAction').length,allocation:issues.filter(x=>x.kind==='allocation').length,other:issues.filter(x=>!['classification','nextAction','allocation'].includes(x.kind)).length};
+      summary.innerHTML=`<div class="data-health-stat"><span>${esc(currentLanguage==='en-US'?'Unclassified failures':'Falhas sem classificação')}</span><strong>${counts.classification}</strong></div><div class="data-health-stat"><span>${esc(currentLanguage==='en-US'?'No next action':'Sem próxima ação')}</span><strong>${counts.nextAction}</strong></div><div class="data-health-stat"><span>${esc(currentLanguage==='en-US'?'Broken assignments':'Alocações inconsistentes')}</span><strong>${counts.allocation}</strong></div><div class="data-health-stat"><span>${esc(currentLanguage==='en-US'?'Other signals':'Outros sinais')}</span><strong>${counts.other}</strong></div>`;
+      window.__dataHealthActions=issues.map(x=>x.action);
+      list.innerHTML=issues.length?issues.slice(0,80).map((issue,index)=>`<div class="data-health-item"><div><strong>${esc(issue.title)}</strong><span>${esc(issue.detail)}</span></div><button type="button" class="button secondary button-compact" data-health-index="${index}">${esc(t('Abrir'))}</button></div>`).join(''):`<div class="daily-soft-empty">${esc(currentLanguage==='en-US'?'No data-health signals right now.':'Nenhum sinal de inconsistência agora.')}</div>`;
+    }
+    function openDataHealth(){renderDataHealth();document.querySelector('#dataHealthModal')?.classList.remove('hidden');}
+    function closeDataHealth(){document.querySelector('#dataHealthModal')?.classList.add('hidden');}
+
     function renderGlobalResults(q){
       const term=q.toLowerCase().trim(), groups=[], match=(...v)=>v.flat(Infinity).filter(Boolean).join(' ').toLowerCase().includes(term);
       const products=state.products.filter(p=>productMatchesQuery(p, term) || match(p.components?.join(' ')));
@@ -2399,7 +2571,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.32'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.32'){localStorage.setItem('cora.sw.loaded','15.1.13.32');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.33'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.33'){localStorage.setItem('cora.sw.loaded','15.1.13.33');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3630,7 +3802,7 @@ ${m.text}`).join('\n\n');
     // ======================= FIM V14.0 — IA DE ANÁLISE (legado) =======================
 
 
-    // ======================= CENTRAL DO DIA · V15.1.13.32 =======================
+    // ======================= CENTRAL DO DIA · V15.1.13.33 =======================
     const localDateKey = (date = new Date()) => {
       const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
       return `${y}-${m}-${d}`;
@@ -3781,6 +3953,26 @@ ${m.text}`).join('\n\n');
       if(box)box.innerHTML=items.length?items.slice(0,40).map(item=>`<button type="button" class="routine-context-item" data-kind="${esc(item.kind)}" data-ref="${esc(item.id)}"><strong>${esc(item.title)}</strong><span>${esc(item.sub||'')}</span></button>`).join(''):`<div class="daily-soft-empty">${esc(t('Nenhuma falha registrada no período.'))}</div>`;
     }
 
+    function activeWorkAllocations(){return state.workAllocations.filter(a=>a.archived!==true);}
+    function dailyAdminHistoryEntry(action,summary,snapshot={}){
+      return {at:now(),by:currentAccount?.name||currentAccount?.email||'Admin',byEmail:currentAccount?.email||'',action,summary,snapshot};
+    }
+    function dailyAdminHistoryAppend(item,entry){return [...(Array.isArray(item?.history)?item.history:[]),entry].slice(-60);}
+    function dailyAdminHistoryItems(){
+      const rows=[];
+      const add=(kind,label,item)=>{(item?.history||[]).forEach(event=>rows.push({...event,kind,label,docId:item.docId}));};
+      state.workShifts.forEach(x=>add('shift',x.name||'Turno',x));
+      state.operationalScopes.forEach(x=>add('scope',x.name||'Escopo',x));
+      state.workAllocations.forEach(x=>add('allocation',x.userName||'Alocação',x));
+      state.routineTemplates.forEach(x=>add('routine',x.name||'Rotina',x));
+      return rows.sort((a,b)=>new Date(b.at||0)-new Date(a.at||0)).slice(0,80);
+    }
+    function renderDailyAdminHistory(){
+      const host=document.querySelector('#dailyAdminHistoryList');if(!host)return;
+      const rows=dailyAdminHistoryItems();
+      host.innerHTML=rows.length?rows.map(row=>`<div class="daily-admin-history-row"><span class="daily-admin-history-dot"></span><div><strong>${esc(row.summary||row.action||'Alteração')}</strong><span>${esc(row.label||'')} · ${esc(row.by||'Admin')} · ${esc(formatDate(row.at))}</span></div></div>`).join(''):`<div class="daily-soft-empty">${esc(t('Nenhuma alteração administrativa registrada ainda.'))}</div>`;
+    }
+
     function dailyExecutionKey({dateKey,shiftId,routineId,scopeId,plannedTime,assignedUserId,executionPolicy}){
       const owner=executionPolicy==='each_user' ? (assignedUserId||'user') : 'team';
       return [dateKey,shiftId,routineId,scopeId,plannedTime||'shift',owner].join('__').replace(/[^a-zA-Z0-9_-]/g,'-');
@@ -3792,7 +3984,7 @@ ${m.text}`).join('\n\n');
       const scopes=state.operationalScopes.filter(s=>s.active!==false);
       const shift=state.workShifts.find(s=>s.docId===shiftId);
       if(!shift) return [];
-      const allocations=state.workAllocations.filter(a=>a.shiftId===shiftId);
+      const allocations=activeWorkAllocations().filter(a=>a.shiftId===shiftId);
       const expected=[];
 
       state.routineTemplates.filter(r=>r.active!==false).forEach(routine=>{
@@ -3859,7 +4051,7 @@ ${m.text}`).join('\n\n');
       const configVersion=[
         dailySelectedDate,dailySelectedShiftId,
         ...state.routineTemplates.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}:${x.active}`),
-        ...state.workAllocations.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}`),
+        ...activeWorkAllocations().map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}`),
         ...state.operationalScopes.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}:${x.active}`)
       ].join('|');
       if(dailyMaterializeSignature===configVersion || dailyMaterializeInFlight) return;
@@ -3999,7 +4191,7 @@ ${m.text}`).join('\n\n');
       const expected=dailyExpectedExecutions(current.dateKey,current.shift.docId).filter(dailyExecutionVisibleToCurrent);
       const actualMap=new Map(state.routineExecutions.filter(x=>x.dateKey===current.dateKey&&x.shiftId===current.shift.docId).map(x=>[x.executionKey||x.docId,x]));
       const pending=expected.filter(x=>(actualMap.get(x.executionKey)?.status||'planned')!=='completed').length;
-      const allocations=state.workAllocations.filter(a=>a.userId===currentAuthUser?.uid&&a.shiftId===current.shift.docId);
+      const allocations=activeWorkAllocations().filter(a=>a.userId===currentAuthUser?.uid&&a.shiftId===current.shift.docId);
       const scopeNames=[...new Set(allocations.flatMap(a=>a.scopeIds||[]).map(id=>state.operationalScopes.find(s=>s.docId===id)?.name).filter(Boolean))];
       el.textContent=`${current.shift.name||'Turno'} · ${scopeNames.join(', ')||'sem alocação'} · ${pending} pendência(s) de rotina`;
       dailySelectedShiftId=previousShift; dailySelectedDate=previousDate;
@@ -4017,7 +4209,7 @@ ${m.text}`).join('\n\n');
       const clock=document.querySelector('#dailyClock'); if(clock) clock.textContent=new Date().toLocaleTimeString(currentLanguage,{hour:'2-digit',minute:'2-digit'});
       const shiftWindow=document.querySelector('#dailyShiftWindow'); if(shiftWindow) shiftWindow.textContent=shift ? `${shift.name} · ${dailyShiftWindowLabel(shift)}` : t('Turno não configurado');
 
-      const myAllocations=state.workAllocations.filter(a=>a.userId===currentAuthUser?.uid && (!dailySelectedShiftId||a.shiftId===dailySelectedShiftId));
+      const myAllocations=activeWorkAllocations().filter(a=>a.userId===currentAuthUser?.uid && (!dailySelectedShiftId||a.shiftId===dailySelectedShiftId));
       const myScopeIds=[...new Set(myAllocations.flatMap(a=>a.scopeIds||[]))];
       const chips=myScopeIds.map(id=>state.operationalScopes.find(s=>s.docId===id)).filter(Boolean);
       const chipBox=document.querySelector('#dailyAssignmentChips');
@@ -4079,6 +4271,7 @@ ${m.text}`).join('\n\n');
       if(currentAccount?.role!=='admin') return;
       populateDailyAdminControls();
       renderDailyAdminLists();
+      renderDailyAdminHistory();
       document.querySelector('#dailyAdminConfig')?.classList.toggle('hidden',dailyAdminTab!=='config');
       document.querySelector('#dailyAdminDashboard')?.classList.toggle('hidden',dailyAdminTab!=='dashboard');
       document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.classList.toggle('active',btn.dataset.dailyAdminTab===dailyAdminTab));
@@ -4136,7 +4329,7 @@ ${m.text}`).join('\n\n');
       if(!shiftId||!scopes.length||!people.length){host.innerHTML='<div class="daily-soft-empty">Cadastre turno, escopo e pessoas para usar a matriz.</div>';return;}
       const header=scopes.map(scope=>`<th title="${esc(dailyScopeTypeLabel(scope.type))}">${esc(scope.code||scope.name)}</th>`).join('');
       const rows=people.map(user=>{
-        const allocation=state.workAllocations.find(a=>a.userId===user.docId&&a.shiftId===shiftId);
+        const allocation=activeWorkAllocations().find(a=>a.userId===user.docId&&a.shiftId===shiftId);
         const selected=new Set(allocation?.scopeIds||[]);
         const cells=scopes.map(scope=>`<td><label class="daily-matrix-check" title="${esc(user.name)} · ${esc(scope.name)}"><input type="checkbox" data-daily-matrix="1" data-user-id="${esc(user.docId)}" data-scope-id="${esc(scope.docId)}" ${selected.has(scope.docId)?'checked':''}></label></td>`).join('');
         return `<tr><td class="daily-matrix-person"><strong>${esc(user.name||'Pessoa')}</strong><span>${esc(user.role==='admin'?'Admin':'Usuário')}</span></td>${cells}</tr>`;
@@ -4147,15 +4340,18 @@ ${m.text}`).join('\n\n');
     async function dailySetMatrixAllocation(userId,shiftId,scopeId,checked){
       if(currentAccount?.role!=='admin'||!userId||!shiftId||!scopeId)return;
       const user=users.find(x=>x.docId===userId),shift=state.workShifts.find(x=>x.docId===shiftId);
-      const existing=state.workAllocations.find(a=>a.userId===userId&&a.shiftId===shiftId);
+      const existing=activeWorkAllocations().find(a=>a.userId===userId&&a.shiftId===shiftId);
       const scopes=new Set(existing?.scopeIds||[]);
       checked?scopes.add(scopeId):scopes.delete(scopeId);
       const scopeIds=[...scopes];
+      const scopeName=state.operationalScopes.find(x=>x.docId===scopeId)?.name||scopeId;
       if(existing){
-        if(!scopeIds.length) await deleteDoc(doc(db,'workAllocations',existing.docId));
-        else await updateDoc(doc(db,'workAllocations',existing.docId),{scopeIds,updatedAt:now(),updatedBy:currentAccount.email});
+        const event=dailyAdminHistoryEntry(checked?'updated':'removed',`${checked?'Adicionado':'Removido'} ${scopeName} na alocação de ${user?.name||existing.userName||'Pessoa'} pela matriz.`,{scopeId,checked});
+        if(!scopeIds.length) await updateDoc(doc(db,'workAllocations',existing.docId),{archived:true,archivedAt:now(),archivedBy:currentAccount.email,history:dailyAdminHistoryAppend(existing,event),updatedAt:now(),updatedBy:currentAccount.email});
+        else await updateDoc(doc(db,'workAllocations',existing.docId),{scopeIds,history:dailyAdminHistoryAppend(existing,event),updatedAt:now(),updatedBy:currentAccount.email});
       }else if(scopeIds.length){
-        await addDoc(collection(db,'workAllocations'),{userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:'member',createdAt:now(),updatedAt:now(),updatedBy:currentAccount.email});
+        const event=dailyAdminHistoryEntry('created',`Alocação de ${user?.name||'Pessoa'} criada pela matriz em ${scopeName}.`,{scopeId,checked:true});
+        await addDoc(collection(db,'workAllocations'),{userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:'member',archived:false,history:[event],createdAt:now(),updatedAt:now(),updatedBy:currentAccount.email});
       }
       dailyMaterializeSignature='';
       showSaveToast('Alocação atualizada pela matriz.','success');
@@ -4199,7 +4395,7 @@ ${m.text}`).join('\n\n');
       if(scopes) scopes.innerHTML=state.operationalScopes.length?state.operationalScopes.map(s=>`<div class="daily-admin-item ${s.active===false?'is-off':''}"><div><strong>${esc(s.name)}</strong><span>${esc(dailyScopeTypeLabel(s.type))}${s.code?` · ${esc(s.code)}`:''}</span></div><div><button type="button" data-daily-edit="scope" data-id="${esc(s.docId)}">Editar</button><button type="button" data-daily-toggle="scope" data-id="${esc(s.docId)}">${s.active===false?'Ativar':'Desativar'}</button></div></div>`).join(''):'<div class="daily-soft-empty">Nenhum escopo.</div>';
 
       const allocations=document.querySelector('#dailyAllocationList');
-      if(allocations) allocations.innerHTML=state.workAllocations.length?state.workAllocations.map(a=>{
+      if(allocations) allocations.innerHTML=activeWorkAllocations().length?activeWorkAllocations().map(a=>{
         const user=users.find(u=>u.docId===a.userId), shift=state.workShifts.find(s=>s.docId===a.shiftId);
         const scopeNames=(a.scopeIds||[]).map(id=>state.operationalScopes.find(s=>s.docId===id)?.name).filter(Boolean);
         return `<div class="daily-admin-item"><div><strong>${esc(user?.name||a.userName||'Pessoa')}</strong><span>${esc(shift?.name||a.shiftName||'Turno')} · ${esc(scopeNames.join(', ')||'sem escopo')}</span></div><div><button type="button" data-daily-edit="allocation" data-id="${esc(a.docId)}">Editar</button><button type="button" data-daily-delete="allocation" data-id="${esc(a.docId)}">Remover</button></div></div>`;
@@ -4291,7 +4487,7 @@ ${m.text}`).join('\n\n');
         const item=state.operationalScopes.find(x=>x.docId===id); if(!item)return;
         const f=document.querySelector('#dailyScopeForm');f.elements.docId.value=item.docId;f.elements.type.value=item.type||'line';f.elements.name.value=item.name||'';f.elements.code.value=item.code||'';f.elements.active.checked=item.active!==false;f.scrollIntoView({behavior:'smooth',block:'center'});
       }else if(kind==='allocation'){
-        const item=state.workAllocations.find(x=>x.docId===id); if(!item)return;
+        const item=activeWorkAllocations().find(x=>x.docId===id); if(!item)return;
         const advanced=document.querySelector('#dailyAllocationAdvanced');if(advanced)advanced.open=true;
         const f=document.querySelector('#dailyAllocationForm');f.elements.docId.value=item.docId;f.elements.userId.value=item.userId||'';f.elements.shiftId.value=item.shiftId||'';f.elements.position.value=item.position||'member';
         const selected=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=selected.has(o.value));f.scrollIntoView({behavior:'smooth',block:'center'});
@@ -4308,15 +4504,18 @@ ${m.text}`).join('\n\n');
       if(currentAccount?.role!=='admin') return;
       const map={shift:['workShifts',state.workShifts],scope:['operationalScopes',state.operationalScopes],routine:['routineTemplates',state.routineTemplates]};
       const entry=map[kind]; if(!entry)return; const item=entry[1].find(x=>x.docId===id);if(!item)return;
-      await updateDoc(doc(db,entry[0],id),{active:item.active===false,updatedAt:now(),updatedBy:currentAccount.email});
+      const nextActive=item.active===false;
+      const event=dailyAdminHistoryEntry(nextActive?'enabled':'disabled',`${kind==='shift'?'Turno':kind==='scope'?'Escopo':'Rotina'} “${item.name||id}” ${nextActive?'ativado':'desativado'}.`,{active:nextActive});
+      await updateDoc(doc(db,entry[0],id),{active:nextActive,history:dailyAdminHistoryAppend(item,event),updatedAt:now(),updatedBy:currentAccount.email});
       dailyMaterializeSignature='';
     }
 
     async function dailyDeleteAllocation(id){
       if(currentAccount?.role!=='admin')return;
-      const item=state.workAllocations.find(x=>x.docId===id);if(!item)return;
+      const item=activeWorkAllocations().find(x=>x.docId===id);if(!item)return;
       if(!confirm('Remover esta alocação atual? O histórico das execuções já realizadas será preservado.'))return;
-      await deleteDoc(doc(db,'workAllocations',id));dailyMaterializeSignature='';
+      const event=dailyAdminHistoryEntry('removed',`Alocação de ${item.userName||'Pessoa'} removida.`,{userId:item.userId,shiftId:item.shiftId,scopeIds:item.scopeIds||[]});
+      await updateDoc(doc(db,'workAllocations',id),{archived:true,archivedAt:now(),archivedBy:currentAccount.email,history:dailyAdminHistoryAppend(item,event),updatedAt:now(),updatedBy:currentAccount.email});dailyMaterializeSignature='';
     }
 
     function dailyRoutineSchedulePayload(){
@@ -4337,6 +4536,9 @@ ${m.text}`).join('\n\n');
       if(currentAccount?.role!=='admin')return;
       const f=new FormData(form), id=String(f.get('docId')||''), payload={name:String(f.get('name')||'').trim(),startTime:String(f.get('startTime')||''),endTime:String(f.get('endTime')||''),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
       if(!payload.name||!payload.startTime||!payload.endTime)return alert('Preencha nome, início e fim do turno.');
+      const existing=id?state.workShifts.find(x=>x.docId===id):null;
+      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Turno “${payload.name}” atualizado.`:`Turno “${payload.name}” criado.`,{name:payload.name,startTime:payload.startTime,endTime:payload.endTime,active:payload.active});
+      payload.history=dailyAdminHistoryAppend(existing,event);
       if(id) await updateDoc(doc(db,'workShifts',id),payload); else await addDoc(collection(db,'workShifts'),{...payload,createdAt:now()});
       resetDailyAdminForm('shift');dailyMaterializeSignature='';showSaveToast('Turno salvo.','success');
     }
@@ -4345,6 +4547,9 @@ ${m.text}`).join('\n\n');
       if(currentAccount?.role!=='admin')return;
       const f=new FormData(form), id=String(f.get('docId')||''), payload={type:String(f.get('type')||'line'),name:String(f.get('name')||'').trim(),code:String(f.get('code')||'').trim(),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
       if(!payload.name)return alert('Informe o nome do escopo.');
+      const existing=id?state.operationalScopes.find(x=>x.docId===id):null;
+      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Escopo “${payload.name}” atualizado.`:`Escopo “${payload.name}” criado.`,{name:payload.name,type:payload.type,code:payload.code,active:payload.active});
+      payload.history=dailyAdminHistoryAppend(existing,event);
       if(id)await updateDoc(doc(db,'operationalScopes',id),payload);else await addDoc(collection(db,'operationalScopes'),{...payload,createdAt:now()});
       resetDailyAdminForm('scope');dailyMaterializeSignature='';showSaveToast('Escopo salvo.','success');
     }
@@ -4354,9 +4559,13 @@ ${m.text}`).join('\n\n');
       const f=new FormData(form), requestedId=String(f.get('docId')||''), userId=String(f.get('userId')||''), shiftId=String(f.get('shiftId')||''), scopeIds=f.getAll('scopeIds').filter(Boolean);
       if(!userId||!shiftId||!scopeIds.length)return alert('Selecione pessoa, turno e pelo menos um escopo.');
       const user=users.find(u=>u.docId===userId), shift=state.workShifts.find(s=>s.docId===shiftId);
-      const existing=state.workAllocations.find(a=>a.userId===userId&&a.shiftId===shiftId&&a.docId!==requestedId);
+      const existing=activeWorkAllocations().find(a=>a.userId===userId&&a.shiftId===shiftId&&a.docId!==requestedId);
       const id=requestedId||existing?.docId||'';
-      const payload={userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:String(f.get('position')||'member'),updatedAt:now(),updatedBy:currentAccount.email};
+      const current=id?state.workAllocations.find(a=>a.docId===id):null;
+      const payload={userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:String(f.get('position')||'member'),archived:false,updatedAt:now(),updatedBy:currentAccount.email};
+      const scopeNames=scopeIds.map(scopeId=>state.operationalScopes.find(x=>x.docId===scopeId)?.name||scopeId).join(', ');
+      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Alocação de ${payload.userName} atualizada: ${scopeNames}.`:`Alocação de ${payload.userName} criada: ${scopeNames}.`,{userId,shiftId,scopeIds,position:payload.position});
+      payload.history=dailyAdminHistoryAppend(current,event);
       if(id)await updateDoc(doc(db,'workAllocations',id),payload);else await addDoc(collection(db,'workAllocations'),{...payload,createdAt:now()});
       resetDailyAdminForm('allocation');dailyMaterializeSignature='';showSaveToast(existing&&!requestedId?'Alocação atualizada.':'Alocação salva.','success');
     }
@@ -4377,6 +4586,9 @@ ${m.text}`).join('\n\n');
       };
       if(!payload.name)return alert('Informe o nome da rotina.');
       if(!days.length)return alert('Selecione pelo menos um dia ativo.');
+      const existing=id?state.routineTemplates.find(x=>x.docId===id):null;
+      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Rotina “${payload.name}” atualizada.`:`Rotina “${payload.name}” criada.`,{name:payload.name,scopeIds,scheduleMap,days,active:payload.active});
+      payload.history=dailyAdminHistoryAppend(existing,event);
       if(id)await updateDoc(doc(db,'routineTemplates',id),payload);else await addDoc(collection(db,'routineTemplates'),{...payload,createdAt:now()});
       resetDailyAdminForm('routine');dailyMaterializeSignature='';showSaveToast(id?t('Rotina atualizada.'):'Rotina salva.','success');
     }
@@ -4512,7 +4724,7 @@ ${m.text}`).join('\n\n');
       openActivityModal({title:`Ação — ${execution.routineName} · ${execution.scopeName}`,area:execution.scopeName||'Operação',description:execution.note||`Atividade originada da rotina ${execution.routineName}, ${execution.shiftName}.`,activityMode:'simple'});
     }
 
-    // ===================== FIM CENTRAL DO DIA · V15.1.13.32 =====================
+    // ===================== FIM CENTRAL DO DIA · V15.1.13.33 =====================
 
     function renderSafely(name, fn) {
       try {
@@ -4540,6 +4752,10 @@ ${m.text}`).join('\n\n');
       renderSafely('perfil', renderProfile);
       renderSafely('início', renderHome);
       renderSafely('conta', renderAccount);
+      if(currentAccount){
+        renderSafely('notificações', renderCentralNotifications);
+        ensureCentralNotificationEngine();
+      }
       renderSafely('tradução', translatePage);
 
       // Reaplica no final para garantir consistência mesmo se algum módulo
@@ -4665,6 +4881,23 @@ ${m.text}`).join('\n\n');
 
     function activityLastMovementAt(activity){const dates=[activity?.createdAt,activity?.lastMovedAt,...(activity?.updates||[]).map(x=>x.date),...(activity?.steps||[]).map(x=>x.doneAt)].filter(Boolean).map(x=>new Date(x)).filter(x=>!Number.isNaN(x.getTime()));return dates.length?new Date(Math.max(...dates.map(x=>x.getTime()))):null;}
     function activityMovementText(activity){const date=activityLastMovementAt(activity);if(!date)return 'Sem movimentação registrada.';const days=Math.max(0,Math.floor((Date.now()-date.getTime())/86400000));if(days===0)return `Último avanço hoje · ${date.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;if(days===1)return 'Último avanço há 1 dia';return `Último avanço há ${days} dias`;}
+    function activityAutoNextAction(steps=[]){const next=(steps||[]).find(step=>!step.done&&String(step.text||'').trim());return next?.text||'';}
+    function activityTemplateDefinition(key){
+      const map={
+        validation:{type:'Análise',nextAction:'Definir critério de aceitação',steps:['Definir critério de aceitação','Preparar amostras e identificação','Executar validação','Registrar resultados e evidências','Consolidar conclusão']},
+        gage:{type:'Análise',nextAction:'Definir característica e critério',steps:['Definir característica e critério','Preparar amostras e identificação','Definir operadores e sequência','Executar primeira rodada','Executar repetições planejadas','Consolidar resultados','Registrar conclusão e ação']},
+        study:{type:'Análise',nextAction:'Definir pergunta do estudo',steps:['Definir pergunta do estudo','Coletar dados e evidências','Organizar e comparar resultados','Testar hipótese ou relação','Registrar conclusão e próximos passos']},
+        training:{type:'Outro',nextAction:'Definir objetivo e público',steps:['Definir objetivo e público','Preparar material e exemplos','Realizar treinamento','Confirmar entendimento','Registrar presença e evidências','Definir reforço ou acompanhamento']}
+      };
+      return map[key]||null;
+    }
+    function applyActivityTemplate(key){
+      const form=document.querySelector('#activityForm'),definition=activityTemplateDefinition(key);if(!form||!definition)return;
+      form.elements.activityMode.value='structured';syncActivityModeUI();
+      if(form.elements.type)form.elements.type.value=definition.type;
+      if(form.elements.nextAction)form.elements.nextAction.value=definition.nextAction;
+      if(form.elements.initialSteps)form.elements.initialSteps.value=definition.steps.join('\n');
+    }
 
     function renderActivityDetail() {
       const activity=selectedActivity();if(!activity)return;
@@ -5018,6 +5251,7 @@ ${m.text}`).join('\n\n');
 
     document.querySelectorAll('#languageSelect,#aiLanguageSelect').forEach(el=>{if(el)el.value=currentLanguage;});
     document.querySelector('#activityModeSelect')?.addEventListener('change',syncActivityModeUI);
+    document.querySelector('#activityTemplateSelect')?.addEventListener('change',e=>{if(e.target.value)applyActivityTemplate(e.target.value);});
     syncActivityModeUI();
     document.querySelector('#closeEvidenceLightbox').addEventListener('click', e => { e.stopPropagation(); closeEvidenceLightbox(); });
     document.querySelector('#evidenceLightbox').addEventListener('click', e => { if(e.target.id==='evidenceLightbox') closeEvidenceLightbox(); });
@@ -5040,6 +5274,38 @@ ${m.text}`).join('\n\n');
       document.querySelector('#flowSearch').value = val;
       renderProduct(); renderAll(); renderWork(); renderFlows();
     });
+    document.querySelector('#centralNotificationButton')?.addEventListener('click',e=>{
+      e.stopPropagation();
+      const panel=document.querySelector('#centralNotificationPanel');if(!panel)return;
+      const opening=panel.classList.contains('hidden');panel.classList.toggle('hidden',!opening);
+      e.currentTarget.setAttribute('aria-expanded',opening?'true':'false');
+      if(opening)renderCentralNotifications();
+    });
+    document.querySelector('#centralNotificationClose')?.addEventListener('click',()=>{document.querySelector('#centralNotificationPanel')?.classList.add('hidden');document.querySelector('#centralNotificationButton')?.setAttribute('aria-expanded','false');});
+    document.querySelector('#centralNotificationPanel')?.addEventListener('click',e=>e.stopPropagation());
+    document.querySelector('#enableBrowserNotifications')?.addEventListener('click',()=>enableCentralBrowserNotifications().catch(err=>{console.error(err);showSaveToast(err.message||'Falha ao ativar notificações.','error');}));
+    document.querySelector('#centralNotificationLead')?.addEventListener('change',e=>{saveCentralNotificationPrefs({leadMinutes:Number(e.target.value||15)});renderCentralNotifications();checkCentralBrowserNotifications().catch(()=>{});});
+    document.querySelector('#centralNotificationList')?.addEventListener('click',e=>{const item=e.target.closest('[data-central-alert]');if(!item)return;openCentralAlert((window.__centralAlerts||[])[Number(item.dataset.centralAlert)]);});
+    document.addEventListener('click',e=>{if(!e.target.closest('.central-alert-wrap')){document.querySelector('#centralNotificationPanel')?.classList.add('hidden');document.querySelector('#centralNotificationButton')?.setAttribute('aria-expanded','false');}});
+
+    document.querySelector('#commandPaletteButton')?.addEventListener('click',()=>openCommandPalette());
+    document.querySelector('#commandPaletteInput')?.addEventListener('input',e=>{commandPaletteActiveIndex=0;renderCommandPalette(e.target.value);});
+    document.querySelector('#commandPaletteResults')?.addEventListener('click',e=>{const item=e.target.closest('[data-command-index]');if(item)runCommandPaletteIndex(Number(item.dataset.commandIndex));});
+    document.querySelector('#commandPaletteModal')?.addEventListener('click',e=>{if(e.target.id==='commandPaletteModal')closeCommandPalette();});
+    document.addEventListener('keydown',e=>{
+      if((e.ctrlKey||e.metaKey)&&String(e.key).toLowerCase()==='k'){e.preventDefault();document.querySelector('#commandPaletteModal')?.classList.contains('hidden')?openCommandPalette():closeCommandPalette();return;}
+      const open=!document.querySelector('#commandPaletteModal')?.classList.contains('hidden');
+      if(!open)return;
+      if(e.key==='Escape'){e.preventDefault();closeCommandPalette();return;}
+      if(e.key==='ArrowDown'){e.preventDefault();commandPaletteActiveIndex=Math.min(commandPaletteActions.length-1,commandPaletteActiveIndex+1);renderCommandPalette(document.querySelector('#commandPaletteInput')?.value||'');return;}
+      if(e.key==='ArrowUp'){e.preventDefault();commandPaletteActiveIndex=Math.max(0,commandPaletteActiveIndex-1);renderCommandPalette(document.querySelector('#commandPaletteInput')?.value||'');return;}
+      if(e.key==='Enter'){e.preventDefault();runCommandPaletteIndex(commandPaletteActiveIndex);}
+    });
+
+    document.querySelector('#closeDataHealth')?.addEventListener('click',closeDataHealth);
+    document.querySelector('#closeDataHealthBottom')?.addEventListener('click',closeDataHealth);
+    document.querySelector('#dataHealthModal')?.addEventListener('click',e=>{if(e.target.id==='dataHealthModal')closeDataHealth();});
+    document.querySelector('#dataHealthList')?.addEventListener('click',e=>{const item=e.target.closest('[data-health-index]');if(!item)return;closeDataHealth();window.__dataHealthActions?.[Number(item.dataset.healthIndex)]?.();});
 
     document.querySelectorAll('.main-nav > button, .main-nav .nav-group-toggle').forEach(button => button.addEventListener('click', () => {
       const page = button.dataset.page;
@@ -5480,8 +5746,13 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const activityMode=String(form.get('activityMode')||'simple');
       const steps=activityMode==='structured'?String(form.get('initialSteps')||'').split('\n').map(x=>x.trim()).filter(Boolean).map((text,index)=>({id:`step-${Date.now()}-${index}`,text,done:false,doneAt:'',doneBy:''})):[];
       const evidence=activityMode==='structured'?await readAttachments(form.getAll('activityEvidence').filter(Boolean)):[];
+      const typedNext=activityMode==='structured'?String(form.get('nextAction')||'').trim():'';
+      const activityTemplate=String(form.get('activityTemplate')||'');
+      const templateDefault=activityTemplateDefinition(activityTemplate)?.nextAction||'';
+      const nextActionMode=!typedNext||activityTemplate&&typedNext===templateDefault?'auto':'manual';
+      const nextAction=nextActionMode==='auto'?activityAutoNextAction(steps):typedNext;
       const origin=pendingOriginContext;
-      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction:activityMode==='structured'?String(form.get('nextAction')||'').trim():'',steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
+      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction,nextActionMode,activityTemplate,steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
       const ref=await addDoc(collection(db,'activities'),activity);activity.docId=ref.id;
       if(!state.activities.some(x=>x.id===activity.id))state.activities=[...state.activities,activity];
       if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedActivityIds||[]),activity.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedActivityIds:linked,updatedAt:now()},{merge:true});}
@@ -5757,14 +6028,18 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     document.querySelector('#saveActivityChanges').addEventListener('click', async () => {
       const activity=selectedActivity();if(!activity)return;
       const status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value;
-      const nextAction=!document.querySelector('#activityStructuredSection').classList.contains('hidden')?document.querySelector('#activityNextAction').value.trim():(activity.nextAction||'');
+      const structured=!document.querySelector('#activityStructuredSection').classList.contains('hidden');
+      const typedNext=structured?document.querySelector('#activityNextAction').value.trim():(activity.nextAction||'');
+      const autoCandidate=activityAutoNextAction(activity.steps||[]);
+      const nextAction=structured?(typedNext||autoCandidate):(activity.nextAction||'');
+      const nextActionMode=structured?(typedNext&&typedNext!==autoCandidate?'manual':'auto'):(activity.nextActionMode||'manual');
       const changes=[];
       if(status!==activity.status)changes.push(`Status alterado para “${activityStatusName[status]}”.`);
       if(dueDate!==activity.dueDate)changes.push(dueDate?`Prazo atualizado para ${formatDate(dueDate)}.`:'Prazo removido.');
       if(nextAction!==(activity.nextAction||''))changes.push(nextAction?`Próxima ação: ${nextAction}`:'Próxima ação removida.');
-      if(!changes.length)return;
-      const updates=[...(activity.updates||[]),{text:changes.join(' '),date:now()}];
-      await updateDoc(doc(db,'activities',activity.docId),{status,dueDate,nextAction,updates,lastMovedAt:now()});renderActivityDetail();
+      if(!changes.length&&nextActionMode===(activity.nextActionMode||'manual'))return;
+      const updates=[...(activity.updates||[]),...(changes.length?[{text:changes.join(' '),date:now()}]:[])];
+      await updateDoc(doc(db,'activities',activity.docId),{status,dueDate,nextAction,nextActionMode,updates,lastMovedAt:now()});renderActivityDetail();
     });
 
     document.querySelector('#addActivityUpdate').addEventListener('click', async () => {
@@ -5778,9 +6053,9 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     });
 
     document.querySelector('#structureActivity')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const updates=[...(activity.updates||[]),{text:'Atividade transformada em estruturada.',date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',updates,lastMovedAt:now()});renderActivityDetail();});
-    document.querySelector('#addActivityStep')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityNewStep'),text=input.value.trim();if(!text)return input.focus();const steps=[...(activity.steps||[]),{id:`step-${Date.now()}`,text,done:false,doneAt:'',doneBy:''}],updates=[...(activity.updates||[]),{text:`Etapa adicionada: ${text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',steps,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
-    document.querySelector('#activitySteps')?.addEventListener('click',async e=>{const activity=selectedActivity();if(!activity)return;const del=e.target.closest('[data-activity-step-delete]');if(!del)return;const index=Number(del.dataset.activityStepDelete),step=(activity.steps||[])[index];if(!step)return;const steps=(activity.steps||[]).filter((_,i)=>i!==index),updates=[...(activity.updates||[]),{text:`Etapa removida: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,updates,lastMovedAt:now()});renderActivityDetail();});
-    document.querySelector('#activitySteps')?.addEventListener('change',async e=>{const toggle=e.target.closest('[data-activity-step-toggle]');if(!toggle)return;const activity=selectedActivity();if(!activity)return;const index=Number(toggle.dataset.activityStepToggle),steps=(activity.steps||[]).map((step,i)=>i===index?{...step,done:toggle.checked,doneAt:toggle.checked?now():'',doneBy:toggle.checked?(currentAccount?.name||''):''}:step),step=steps[index],updates=[...(activity.updates||[]),{text:`${toggle.checked?'Etapa concluída':'Etapa reaberta'}: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#addActivityStep')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityNewStep'),text=input.value.trim();if(!text)return input.focus();const steps=[...(activity.steps||[]),{id:`step-${Date.now()}`,text,done:false,doneAt:'',doneBy:''}],autoMode=(activity.nextActionMode||(!activity.nextAction?'auto':'manual'))==='auto',nextAction=autoMode?activityAutoNextAction(steps):(activity.nextAction||''),updates=[...(activity.updates||[]),{text:`Etapa adicionada: ${text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',steps,nextAction,nextActionMode:autoMode?'auto':(activity.nextActionMode||'manual'),updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
+    document.querySelector('#activitySteps')?.addEventListener('click',async e=>{const activity=selectedActivity();if(!activity)return;const del=e.target.closest('[data-activity-step-delete]');if(!del)return;const index=Number(del.dataset.activityStepDelete),step=(activity.steps||[])[index];if(!step)return;const steps=(activity.steps||[]).filter((_,i)=>i!==index),autoMode=(activity.nextActionMode||(!activity.nextAction?'auto':'manual'))==='auto',nextAction=autoMode?activityAutoNextAction(steps):(activity.nextAction||''),updates=[...(activity.updates||[]),{text:`Etapa removida: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,nextAction,nextActionMode:autoMode?'auto':(activity.nextActionMode||'manual'),updates,lastMovedAt:now()});renderActivityDetail();});
+    document.querySelector('#activitySteps')?.addEventListener('change',async e=>{const toggle=e.target.closest('[data-activity-step-toggle]');if(!toggle)return;const activity=selectedActivity();if(!activity)return;const index=Number(toggle.dataset.activityStepToggle),steps=(activity.steps||[]).map((step,i)=>i===index?{...step,done:toggle.checked,doneAt:toggle.checked?now():'',doneBy:toggle.checked?(currentAccount?.name||''):''}:step),step=steps[index],autoMode=(activity.nextActionMode||(!activity.nextAction?'auto':'manual'))==='auto',nextAction=autoMode?activityAutoNextAction(steps):(activity.nextAction||''),updates=[...(activity.updates||[]),{text:`${toggle.checked?'Etapa concluída':'Etapa reaberta'}: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,nextAction,nextActionMode:autoMode?'auto':(activity.nextActionMode||'manual'),updates,lastMovedAt:now()});renderActivityDetail();});
     document.querySelector('#saveActivityEvidence')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityEvidenceInput'),files=await readAttachments([...(input.files||[])]);if(!files.length)return alert('Selecione pelo menos um arquivo.');const evidence=[...evidenceEntries(activity.evidence),...files],updates=[...(activity.updates||[]),{text:`${files.length} arquivo(s)/evidência(s) adicionado(s).`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',evidence,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
 
     document.querySelector('#deleteActivity').addEventListener('click', async () => {
@@ -5872,5 +6147,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.32'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.32'){localStorage.setItem('cora.sw.loaded','15.1.13.32');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.33'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.33'){localStorage.setItem('cora.sw.loaded','15.1.13.33');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
