@@ -1042,7 +1042,7 @@
       const issues=[];
       state.operationalFailures.filter(r=>String(r.classification||'NAO_DEFINIDO').toUpperCase()==='NAO_DEFINIDO').forEach(r=>issues.push({kind:'classification',title:`${r.id} · ${r.issue||'Falha'}`,detail:currentLanguage==='en-US'?'Failure without final classification':'Falha sem classificação final',action:()=>{show('operations');openOperationalDetail(r.id);}}));
       state.activities.filter(a=>activityEffectiveStatus(a)!=='concluido'&&(a.activityMode==='structured'||(a.steps||[]).length)&&!String(a.nextAction||'').trim()&&(a.steps||[]).some(step=>!step.done)).forEach(a=>issues.push({kind:'nextAction',title:`${a.id} · ${a.title}`,detail:currentLanguage==='en-US'?'Structured activity without next action':'Atividade estruturada sem próxima ação',action:()=>{show('work');openActivityDetail(a.id);}}));
-      state.workAllocations.filter(a=>a.archived!==true).forEach(a=>{const brokenUser=!users.some(u=>u.docId===a.userId),brokenShift=!state.workShifts.some(s=>s.docId===a.shiftId),brokenScopes=(a.scopeIds||[]).filter(id=>!state.operationalScopes.some(s=>s.docId===id));if(brokenUser||brokenShift||brokenScopes.length)issues.push({kind:'allocation',title:a.userName||a.docId,detail:currentLanguage==='en-US'?'Assignment references missing configuration':'Alocação referencia configuração inexistente',action:()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();},80);}});});
+      activeWorkAllocations().forEach(a=>{const brokenUser=!users.some(u=>u.docId===a.userId),brokenShift=!state.workShifts.some(s=>s.docId===a.shiftId),brokenScopes=(a.scopeIds||[]).filter(id=>!state.operationalScopes.some(s=>s.docId===id));if(brokenUser||brokenShift||brokenScopes.length)issues.push({kind:'allocation',title:a.userName||a.docId,detail:currentLanguage==='en-US'?'Assignment references missing configuration':'Alocação referencia configuração inexistente',action:()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();},80);}});});
       state.routineTemplates.filter(r=>r.active!==false&&(!r.name||!Array.isArray(r.days)||!r.days.length||!r.scheduleMap||!Object.keys(r.scheduleMap).length)).forEach(r=>issues.push({kind:'routine',title:r.name||r.docId,detail:currentLanguage==='en-US'?'Active routine with incomplete schedule':'Rotina ativa com agenda incompleta',action:()=>{show('daily');setTimeout(()=>dailyEditAdminItem('routine',r.docId),100);}}));
       state.products.filter(p=>!String(p.family||'').trim()).forEach(p=>issues.push({kind:'product',title:productDisplayCode(p.code),detail:currentLanguage==='en-US'?'Product without family':'Produto sem família',action:()=>{activeProduct=p.code;show('product');}}));
       return issues;
@@ -3953,6 +3953,26 @@ ${m.text}`).join('\n\n');
       if(box)box.innerHTML=items.length?items.slice(0,40).map(item=>`<button type="button" class="routine-context-item" data-kind="${esc(item.kind)}" data-ref="${esc(item.id)}"><strong>${esc(item.title)}</strong><span>${esc(item.sub||'')}</span></button>`).join(''):`<div class="daily-soft-empty">${esc(t('Nenhuma falha registrada no período.'))}</div>`;
     }
 
+    function activeWorkAllocations(){return state.workAllocations.filter(a=>a.archived!==true);}
+    function dailyAdminHistoryEntry(action,summary,snapshot={}){
+      return {at:now(),by:currentAccount?.name||currentAccount?.email||'Admin',byEmail:currentAccount?.email||'',action,summary,snapshot};
+    }
+    function dailyAdminHistoryAppend(item,entry){return [...(Array.isArray(item?.history)?item.history:[]),entry].slice(-60);}
+    function dailyAdminHistoryItems(){
+      const rows=[];
+      const add=(kind,label,item)=>{(item?.history||[]).forEach(event=>rows.push({...event,kind,label,docId:item.docId}));};
+      state.workShifts.forEach(x=>add('shift',x.name||'Turno',x));
+      state.operationalScopes.forEach(x=>add('scope',x.name||'Escopo',x));
+      state.workAllocations.forEach(x=>add('allocation',x.userName||'Alocação',x));
+      state.routineTemplates.forEach(x=>add('routine',x.name||'Rotina',x));
+      return rows.sort((a,b)=>new Date(b.at||0)-new Date(a.at||0)).slice(0,80);
+    }
+    function renderDailyAdminHistory(){
+      const host=document.querySelector('#dailyAdminHistoryList');if(!host)return;
+      const rows=dailyAdminHistoryItems();
+      host.innerHTML=rows.length?rows.map(row=>`<div class="daily-admin-history-row"><span class="daily-admin-history-dot"></span><div><strong>${esc(row.summary||row.action||'Alteração')}</strong><span>${esc(row.label||'')} · ${esc(row.by||'Admin')} · ${esc(formatDate(row.at))}</span></div></div>`).join(''):`<div class="daily-soft-empty">${esc(t('Nenhuma alteração administrativa registrada ainda.'))}</div>`;
+    }
+
     function dailyExecutionKey({dateKey,shiftId,routineId,scopeId,plannedTime,assignedUserId,executionPolicy}){
       const owner=executionPolicy==='each_user' ? (assignedUserId||'user') : 'team';
       return [dateKey,shiftId,routineId,scopeId,plannedTime||'shift',owner].join('__').replace(/[^a-zA-Z0-9_-]/g,'-');
@@ -3964,7 +3984,7 @@ ${m.text}`).join('\n\n');
       const scopes=state.operationalScopes.filter(s=>s.active!==false);
       const shift=state.workShifts.find(s=>s.docId===shiftId);
       if(!shift) return [];
-      const allocations=state.workAllocations.filter(a=>a.shiftId===shiftId);
+      const allocations=activeWorkAllocations().filter(a=>a.shiftId===shiftId);
       const expected=[];
 
       state.routineTemplates.filter(r=>r.active!==false).forEach(routine=>{
@@ -4031,7 +4051,7 @@ ${m.text}`).join('\n\n');
       const configVersion=[
         dailySelectedDate,dailySelectedShiftId,
         ...state.routineTemplates.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}:${x.active}`),
-        ...state.workAllocations.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}`),
+        ...activeWorkAllocations().map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}`),
         ...state.operationalScopes.map(x=>`${x.docId}:${x.updatedAt||x.createdAt||''}:${x.active}`)
       ].join('|');
       if(dailyMaterializeSignature===configVersion || dailyMaterializeInFlight) return;
@@ -4171,7 +4191,7 @@ ${m.text}`).join('\n\n');
       const expected=dailyExpectedExecutions(current.dateKey,current.shift.docId).filter(dailyExecutionVisibleToCurrent);
       const actualMap=new Map(state.routineExecutions.filter(x=>x.dateKey===current.dateKey&&x.shiftId===current.shift.docId).map(x=>[x.executionKey||x.docId,x]));
       const pending=expected.filter(x=>(actualMap.get(x.executionKey)?.status||'planned')!=='completed').length;
-      const allocations=state.workAllocations.filter(a=>a.userId===currentAuthUser?.uid&&a.shiftId===current.shift.docId);
+      const allocations=activeWorkAllocations().filter(a=>a.userId===currentAuthUser?.uid&&a.shiftId===current.shift.docId);
       const scopeNames=[...new Set(allocations.flatMap(a=>a.scopeIds||[]).map(id=>state.operationalScopes.find(s=>s.docId===id)?.name).filter(Boolean))];
       el.textContent=`${current.shift.name||'Turno'} · ${scopeNames.join(', ')||'sem alocação'} · ${pending} pendência(s) de rotina`;
       dailySelectedShiftId=previousShift; dailySelectedDate=previousDate;
@@ -4189,7 +4209,7 @@ ${m.text}`).join('\n\n');
       const clock=document.querySelector('#dailyClock'); if(clock) clock.textContent=new Date().toLocaleTimeString(currentLanguage,{hour:'2-digit',minute:'2-digit'});
       const shiftWindow=document.querySelector('#dailyShiftWindow'); if(shiftWindow) shiftWindow.textContent=shift ? `${shift.name} · ${dailyShiftWindowLabel(shift)}` : t('Turno não configurado');
 
-      const myAllocations=state.workAllocations.filter(a=>a.userId===currentAuthUser?.uid && (!dailySelectedShiftId||a.shiftId===dailySelectedShiftId));
+      const myAllocations=activeWorkAllocations().filter(a=>a.userId===currentAuthUser?.uid && (!dailySelectedShiftId||a.shiftId===dailySelectedShiftId));
       const myScopeIds=[...new Set(myAllocations.flatMap(a=>a.scopeIds||[]))];
       const chips=myScopeIds.map(id=>state.operationalScopes.find(s=>s.docId===id)).filter(Boolean);
       const chipBox=document.querySelector('#dailyAssignmentChips');
@@ -4251,6 +4271,7 @@ ${m.text}`).join('\n\n');
       if(currentAccount?.role!=='admin') return;
       populateDailyAdminControls();
       renderDailyAdminLists();
+      renderDailyAdminHistory();
       document.querySelector('#dailyAdminConfig')?.classList.toggle('hidden',dailyAdminTab!=='config');
       document.querySelector('#dailyAdminDashboard')?.classList.toggle('hidden',dailyAdminTab!=='dashboard');
       document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.classList.toggle('active',btn.dataset.dailyAdminTab===dailyAdminTab));
@@ -4308,7 +4329,7 @@ ${m.text}`).join('\n\n');
       if(!shiftId||!scopes.length||!people.length){host.innerHTML='<div class="daily-soft-empty">Cadastre turno, escopo e pessoas para usar a matriz.</div>';return;}
       const header=scopes.map(scope=>`<th title="${esc(dailyScopeTypeLabel(scope.type))}">${esc(scope.code||scope.name)}</th>`).join('');
       const rows=people.map(user=>{
-        const allocation=state.workAllocations.find(a=>a.userId===user.docId&&a.shiftId===shiftId);
+        const allocation=activeWorkAllocations().find(a=>a.userId===user.docId&&a.shiftId===shiftId);
         const selected=new Set(allocation?.scopeIds||[]);
         const cells=scopes.map(scope=>`<td><label class="daily-matrix-check" title="${esc(user.name)} · ${esc(scope.name)}"><input type="checkbox" data-daily-matrix="1" data-user-id="${esc(user.docId)}" data-scope-id="${esc(scope.docId)}" ${selected.has(scope.docId)?'checked':''}></label></td>`).join('');
         return `<tr><td class="daily-matrix-person"><strong>${esc(user.name||'Pessoa')}</strong><span>${esc(user.role==='admin'?'Admin':'Usuário')}</span></td>${cells}</tr>`;
@@ -4319,15 +4340,18 @@ ${m.text}`).join('\n\n');
     async function dailySetMatrixAllocation(userId,shiftId,scopeId,checked){
       if(currentAccount?.role!=='admin'||!userId||!shiftId||!scopeId)return;
       const user=users.find(x=>x.docId===userId),shift=state.workShifts.find(x=>x.docId===shiftId);
-      const existing=state.workAllocations.find(a=>a.userId===userId&&a.shiftId===shiftId);
+      const existing=activeWorkAllocations().find(a=>a.userId===userId&&a.shiftId===shiftId);
       const scopes=new Set(existing?.scopeIds||[]);
       checked?scopes.add(scopeId):scopes.delete(scopeId);
       const scopeIds=[...scopes];
+      const scopeName=state.operationalScopes.find(x=>x.docId===scopeId)?.name||scopeId;
       if(existing){
-        if(!scopeIds.length) await deleteDoc(doc(db,'workAllocations',existing.docId));
-        else await updateDoc(doc(db,'workAllocations',existing.docId),{scopeIds,updatedAt:now(),updatedBy:currentAccount.email});
+        const event=dailyAdminHistoryEntry(checked?'updated':'removed',`${checked?'Adicionado':'Removido'} ${scopeName} na alocação de ${user?.name||existing.userName||'Pessoa'} pela matriz.`,{scopeId,checked});
+        if(!scopeIds.length) await updateDoc(doc(db,'workAllocations',existing.docId),{archived:true,archivedAt:now(),archivedBy:currentAccount.email,history:dailyAdminHistoryAppend(existing,event),updatedAt:now(),updatedBy:currentAccount.email});
+        else await updateDoc(doc(db,'workAllocations',existing.docId),{scopeIds,history:dailyAdminHistoryAppend(existing,event),updatedAt:now(),updatedBy:currentAccount.email});
       }else if(scopeIds.length){
-        await addDoc(collection(db,'workAllocations'),{userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:'member',createdAt:now(),updatedAt:now(),updatedBy:currentAccount.email});
+        const event=dailyAdminHistoryEntry('created',`Alocação de ${user?.name||'Pessoa'} criada pela matriz em ${scopeName}.`,{scopeId,checked:true});
+        await addDoc(collection(db,'workAllocations'),{userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:'member',archived:false,history:[event],createdAt:now(),updatedAt:now(),updatedBy:currentAccount.email});
       }
       dailyMaterializeSignature='';
       showSaveToast('Alocação atualizada pela matriz.','success');
@@ -4371,7 +4395,7 @@ ${m.text}`).join('\n\n');
       if(scopes) scopes.innerHTML=state.operationalScopes.length?state.operationalScopes.map(s=>`<div class="daily-admin-item ${s.active===false?'is-off':''}"><div><strong>${esc(s.name)}</strong><span>${esc(dailyScopeTypeLabel(s.type))}${s.code?` · ${esc(s.code)}`:''}</span></div><div><button type="button" data-daily-edit="scope" data-id="${esc(s.docId)}">Editar</button><button type="button" data-daily-toggle="scope" data-id="${esc(s.docId)}">${s.active===false?'Ativar':'Desativar'}</button></div></div>`).join(''):'<div class="daily-soft-empty">Nenhum escopo.</div>';
 
       const allocations=document.querySelector('#dailyAllocationList');
-      if(allocations) allocations.innerHTML=state.workAllocations.length?state.workAllocations.map(a=>{
+      if(allocations) allocations.innerHTML=activeWorkAllocations().length?activeWorkAllocations().map(a=>{
         const user=users.find(u=>u.docId===a.userId), shift=state.workShifts.find(s=>s.docId===a.shiftId);
         const scopeNames=(a.scopeIds||[]).map(id=>state.operationalScopes.find(s=>s.docId===id)?.name).filter(Boolean);
         return `<div class="daily-admin-item"><div><strong>${esc(user?.name||a.userName||'Pessoa')}</strong><span>${esc(shift?.name||a.shiftName||'Turno')} · ${esc(scopeNames.join(', ')||'sem escopo')}</span></div><div><button type="button" data-daily-edit="allocation" data-id="${esc(a.docId)}">Editar</button><button type="button" data-daily-delete="allocation" data-id="${esc(a.docId)}">Remover</button></div></div>`;
@@ -4463,7 +4487,7 @@ ${m.text}`).join('\n\n');
         const item=state.operationalScopes.find(x=>x.docId===id); if(!item)return;
         const f=document.querySelector('#dailyScopeForm');f.elements.docId.value=item.docId;f.elements.type.value=item.type||'line';f.elements.name.value=item.name||'';f.elements.code.value=item.code||'';f.elements.active.checked=item.active!==false;f.scrollIntoView({behavior:'smooth',block:'center'});
       }else if(kind==='allocation'){
-        const item=state.workAllocations.find(x=>x.docId===id); if(!item)return;
+        const item=activeWorkAllocations().find(x=>x.docId===id); if(!item)return;
         const advanced=document.querySelector('#dailyAllocationAdvanced');if(advanced)advanced.open=true;
         const f=document.querySelector('#dailyAllocationForm');f.elements.docId.value=item.docId;f.elements.userId.value=item.userId||'';f.elements.shiftId.value=item.shiftId||'';f.elements.position.value=item.position||'member';
         const selected=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=selected.has(o.value));f.scrollIntoView({behavior:'smooth',block:'center'});
@@ -4480,15 +4504,18 @@ ${m.text}`).join('\n\n');
       if(currentAccount?.role!=='admin') return;
       const map={shift:['workShifts',state.workShifts],scope:['operationalScopes',state.operationalScopes],routine:['routineTemplates',state.routineTemplates]};
       const entry=map[kind]; if(!entry)return; const item=entry[1].find(x=>x.docId===id);if(!item)return;
-      await updateDoc(doc(db,entry[0],id),{active:item.active===false,updatedAt:now(),updatedBy:currentAccount.email});
+      const nextActive=item.active===false;
+      const event=dailyAdminHistoryEntry(nextActive?'enabled':'disabled',`${kind==='shift'?'Turno':kind==='scope'?'Escopo':'Rotina'} “${item.name||id}” ${nextActive?'ativado':'desativado'}.`,{active:nextActive});
+      await updateDoc(doc(db,entry[0],id),{active:nextActive,history:dailyAdminHistoryAppend(item,event),updatedAt:now(),updatedBy:currentAccount.email});
       dailyMaterializeSignature='';
     }
 
     async function dailyDeleteAllocation(id){
       if(currentAccount?.role!=='admin')return;
-      const item=state.workAllocations.find(x=>x.docId===id);if(!item)return;
+      const item=activeWorkAllocations().find(x=>x.docId===id);if(!item)return;
       if(!confirm('Remover esta alocação atual? O histórico das execuções já realizadas será preservado.'))return;
-      await deleteDoc(doc(db,'workAllocations',id));dailyMaterializeSignature='';
+      const event=dailyAdminHistoryEntry('removed',`Alocação de ${item.userName||'Pessoa'} removida.`,{userId:item.userId,shiftId:item.shiftId,scopeIds:item.scopeIds||[]});
+      await updateDoc(doc(db,'workAllocations',id),{archived:true,archivedAt:now(),archivedBy:currentAccount.email,history:dailyAdminHistoryAppend(item,event),updatedAt:now(),updatedBy:currentAccount.email});dailyMaterializeSignature='';
     }
 
     function dailyRoutineSchedulePayload(){
@@ -4509,6 +4536,9 @@ ${m.text}`).join('\n\n');
       if(currentAccount?.role!=='admin')return;
       const f=new FormData(form), id=String(f.get('docId')||''), payload={name:String(f.get('name')||'').trim(),startTime:String(f.get('startTime')||''),endTime:String(f.get('endTime')||''),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
       if(!payload.name||!payload.startTime||!payload.endTime)return alert('Preencha nome, início e fim do turno.');
+      const existing=id?state.workShifts.find(x=>x.docId===id):null;
+      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Turno “${payload.name}” atualizado.`:`Turno “${payload.name}” criado.`,{name:payload.name,startTime:payload.startTime,endTime:payload.endTime,active:payload.active});
+      payload.history=dailyAdminHistoryAppend(existing,event);
       if(id) await updateDoc(doc(db,'workShifts',id),payload); else await addDoc(collection(db,'workShifts'),{...payload,createdAt:now()});
       resetDailyAdminForm('shift');dailyMaterializeSignature='';showSaveToast('Turno salvo.','success');
     }
@@ -4517,6 +4547,9 @@ ${m.text}`).join('\n\n');
       if(currentAccount?.role!=='admin')return;
       const f=new FormData(form), id=String(f.get('docId')||''), payload={type:String(f.get('type')||'line'),name:String(f.get('name')||'').trim(),code:String(f.get('code')||'').trim(),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
       if(!payload.name)return alert('Informe o nome do escopo.');
+      const existing=id?state.operationalScopes.find(x=>x.docId===id):null;
+      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Escopo “${payload.name}” atualizado.`:`Escopo “${payload.name}” criado.`,{name:payload.name,type:payload.type,code:payload.code,active:payload.active});
+      payload.history=dailyAdminHistoryAppend(existing,event);
       if(id)await updateDoc(doc(db,'operationalScopes',id),payload);else await addDoc(collection(db,'operationalScopes'),{...payload,createdAt:now()});
       resetDailyAdminForm('scope');dailyMaterializeSignature='';showSaveToast('Escopo salvo.','success');
     }
@@ -4526,9 +4559,13 @@ ${m.text}`).join('\n\n');
       const f=new FormData(form), requestedId=String(f.get('docId')||''), userId=String(f.get('userId')||''), shiftId=String(f.get('shiftId')||''), scopeIds=f.getAll('scopeIds').filter(Boolean);
       if(!userId||!shiftId||!scopeIds.length)return alert('Selecione pessoa, turno e pelo menos um escopo.');
       const user=users.find(u=>u.docId===userId), shift=state.workShifts.find(s=>s.docId===shiftId);
-      const existing=state.workAllocations.find(a=>a.userId===userId&&a.shiftId===shiftId&&a.docId!==requestedId);
+      const existing=activeWorkAllocations().find(a=>a.userId===userId&&a.shiftId===shiftId&&a.docId!==requestedId);
       const id=requestedId||existing?.docId||'';
-      const payload={userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:String(f.get('position')||'member'),updatedAt:now(),updatedBy:currentAccount.email};
+      const current=id?state.workAllocations.find(a=>a.docId===id):null;
+      const payload={userId,userName:user?.name||'',shiftId,shiftName:shift?.name||'',scopeIds,position:String(f.get('position')||'member'),archived:false,updatedAt:now(),updatedBy:currentAccount.email};
+      const scopeNames=scopeIds.map(scopeId=>state.operationalScopes.find(x=>x.docId===scopeId)?.name||scopeId).join(', ');
+      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Alocação de ${payload.userName} atualizada: ${scopeNames}.`:`Alocação de ${payload.userName} criada: ${scopeNames}.`,{userId,shiftId,scopeIds,position:payload.position});
+      payload.history=dailyAdminHistoryAppend(current,event);
       if(id)await updateDoc(doc(db,'workAllocations',id),payload);else await addDoc(collection(db,'workAllocations'),{...payload,createdAt:now()});
       resetDailyAdminForm('allocation');dailyMaterializeSignature='';showSaveToast(existing&&!requestedId?'Alocação atualizada.':'Alocação salva.','success');
     }
@@ -4549,6 +4586,9 @@ ${m.text}`).join('\n\n');
       };
       if(!payload.name)return alert('Informe o nome da rotina.');
       if(!days.length)return alert('Selecione pelo menos um dia ativo.');
+      const existing=id?state.routineTemplates.find(x=>x.docId===id):null;
+      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Rotina “${payload.name}” atualizada.`:`Rotina “${payload.name}” criada.`,{name:payload.name,scopeIds,scheduleMap,days,active:payload.active});
+      payload.history=dailyAdminHistoryAppend(existing,event);
       if(id)await updateDoc(doc(db,'routineTemplates',id),payload);else await addDoc(collection(db,'routineTemplates'),{...payload,createdAt:now()});
       resetDailyAdminForm('routine');dailyMaterializeSignature='';showSaveToast(id?t('Rotina atualizada.'):'Rotina salva.','success');
     }
