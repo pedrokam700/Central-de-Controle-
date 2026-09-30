@@ -28,7 +28,13 @@ service cloud.firestore {
         && request.auth.uid == userId
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.disabled == false
-        && request.resource.data.role in ['user', 'admin'];
+        && (
+          request.resource.data.role == 'user'
+          || (
+            request.resource.data.role == 'admin'
+            && request.auth.token.email == 'pedro.henrique@grupomultilaser.com.br'
+          )
+        );
 
       // O usuário pode atualizar o próprio perfil, mas não pode se promover
       // nem alterar o estado disabled. Administração continua com o admin.
