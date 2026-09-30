@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.31">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.32">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.31';
+  const BUILD='15.1.13.32';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2464,7 +2464,7 @@ body.dark .daily-focus-card .button.primary{background:#171716;color:#f1f1ed}
 body.dark .daily-task-card.state-future{background:#222220}
 
 
-/* V15.1.13.31 — acabamento visual da Central do Dia e dashboard */
+/* V15.1.13.32 — acabamento visual da Central do Dia e dashboard */
 .daily-view{
   --daily-radius-lg:18px;
   --daily-radius-md:14px;
@@ -2742,7 +2742,7 @@ body.dark .daily-config-card,
 body.dark .daily-side-panel{
   background:color-mix(in srgb,var(--surface) 92%,#000);
 }
-/* V15.1.13.31 — operação: matriz, chips de horário e contexto de rotina */
+/* V15.1.13.32 — operação: matriz, chips de horário e contexto de rotina */
 .daily-allocation-matrix-card{grid-column:1/-1}
 .daily-matrix-toolbar{display:flex;align-items:end;gap:12px;justify-content:space-between;margin-bottom:12px}
 .daily-matrix-toolbar label{min-width:min(360px,100%);margin:0}
@@ -2765,9 +2765,26 @@ body.dark .daily-side-panel{
 .routine-context-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}.routine-context-head strong{font-size:12px}.routine-context-head span{font-size:10px;color:var(--muted)}
 .routine-context-items{display:grid;gap:7px}.routine-context-item{width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:9px;padding:9px 10px;cursor:pointer}.routine-context-item strong{display:block;font-size:11px}.routine-context-item span{display:block;margin-top:3px;font-size:9.5px;color:var(--muted)}
 @media(max-width:860px){.daily-matrix-toolbar{align-items:stretch;flex-direction:column}.daily-matrix-table th:first-child,.daily-matrix-table td:first-child{min-width:140px}.daily-allocation-matrix-card{grid-column:auto}.daily-schedule-time-control input[type="time"]{width:100%;min-width:0}}
+
+/* V15.1.13.32 — rotina editável, dados por item e onboarding */
+.daily-allocation-advanced{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.daily-allocation-advanced>summary{cursor:pointer;padding:10px 12px;font-size:10px;font-weight:750;color:var(--text);list-style:none}
+.daily-allocation-advanced>summary::-webkit-details-marker{display:none}
+.daily-allocation-advanced>summary::after{content:'⌄';float:right;color:var(--muted)}
+.daily-allocation-advanced[open]>summary{border-bottom:1px solid var(--line)}
+.daily-allocation-advanced .daily-config-form,.daily-allocation-advanced .daily-admin-list{margin:12px}
+.routine-optional-banner{margin:0 0 12px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--soft);color:var(--muted);font-size:10px;line-height:1.45}
+.routine-check-item{display:grid!important;grid-template-columns:auto minmax(120px,.8fr) minmax(160px,1.2fr)!important;align-items:center;gap:10px!important}
+.routine-check-item>span{font-size:11px;font-weight:650;color:var(--text)}
+.routine-check-item .routine-check-value{width:100%!important;min-height:34px;padding:7px 9px;font-size:10px}
+.daily-task-data{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}.daily-task-data span{padding:5px 7px;border-radius:7px;background:var(--soft);font-size:9px;color:var(--text)}
+.routine-edit-history{padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--soft);font-size:9px;color:var(--muted);line-height:1.5}
+.daily-history-open{white-space:nowrap}
+.daily-tour-modal{max-width:560px}.daily-tour-content{display:grid;gap:10px;padding:8px 2px 4px}.daily-tour-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--text);color:var(--surface);font-weight:850;font-size:16px}.daily-tour-content h3{margin:2px 0 0;font-size:18px}.daily-tour-content p{margin:0;color:var(--muted);line-height:1.65}.daily-tour-tip{padding:10px 12px;border-radius:10px;background:var(--soft);font-size:10px;color:var(--text);line-height:1.5}.daily-tour-dots{display:flex;justify-content:center;gap:6px;margin:10px 0}.daily-tour-dots span{width:7px;height:7px;border-radius:50%;background:var(--line)}.daily-tour-dots span.active{background:var(--text)}.daily-tour-actions{justify-content:space-between}.daily-tour-highlight{outline:3px solid color-mix(in srgb,var(--text) 45%,transparent)!important;outline-offset:4px!important;position:relative;z-index:3}
+@media(max-width:860px){.routine-check-item{grid-template-columns:auto minmax(0,1fr)!important}.routine-check-item .routine-check-value{grid-column:1/-1}.daily-tour-modal{max-width:calc(100vw - 24px)}}
   </style>
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.31" id="mobile-layout-styles">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.32" id="mobile-layout-styles">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -2865,7 +2882,7 @@ body.dark .daily-side-panel{
 </div>
 </div></div></section><aside class="home-side"><button class="quick-action daily-home-entry" id="quickDaily"><strong>Central do Dia</strong><span id="homeDailySummary">Veja sua alocação, próximas rotinas e o que precisa ser executado neste turno.</span></button><button class="quick-action" id="quickActivity"><strong>Nova atividade geral</strong><span>Ex.: enviar e-mail, analisar um reparo ou organizar uma reunião.</span></button><button class="quick-action" id="quickFailure"><strong>Registrar Report de Produto</strong><span>Use quando a falha de produto já estiver confirmada para tratamento/cobrança.</span></button><button class="quick-action" id="quickOperationalFailure"><strong>Registrar falha</strong><span>Registre uma ocorrência mesmo quando ainda não souber se é máquina, processo, operacional ou produto.</span></button><button class="quick-action" id="quickFlow"><strong>Novo fluxo</strong><span>Organize formulário, e-mail, folha de rosto e seguimento.</span></button><div class="home-note"><strong>Minha Central</strong><span>Aqui aparecem somente pendências atribuídas a você. Tarefas abertas para toda a equipe ficam fora desta fila pessoal. Solicitações para participar de tarefas compartilhadas aparecem separadamente quando houver autorização pendente.</span></div><section><div class="section-head"><div><h2>Lembretes</h2></div></div><div class="notification-list" id="notificationList"></div></section></aside></div>
         </section>
-        <!-- Central do Dia · V15.1.13.31 -->
+        <!-- Central do Dia · V15.1.13.32 -->
         <section class="overview hidden daily-view" id="dailyView">
           <section class="daily-hero">
             <div class="daily-hero-copy">
@@ -2877,6 +2894,7 @@ body.dark .daily-side-panel{
               <label>Data<input id="dailyDate" type="date"></label>
               <label>Turno<select id="dailyShiftSelect"><option value="">Carregando turnos…</option></select></label>
               <button type="button" class="button secondary" id="dailyTodayBtn">Agora</button>
+              <button type="button" class="button secondary" id="dailyTourButton">? Como funciona</button>
               <button type="button" class="button secondary hidden" id="dailyAdminToggle">⚙ Configurar operação</button>
             </div>
           </section>
@@ -2955,20 +2973,23 @@ body.dark .daily-side-panel{
                 </section>
 
                 <section class="daily-config-card daily-config-allocations">
-                  <div class="daily-config-title"><div><span>3</span><h3>Alocações</h3></div><p>Uma pessoa pode estar em vários escopos e várias pessoas no mesmo escopo.</p></div>
-                  <form id="dailyAllocationForm" class="daily-config-form">
-                    <input type="hidden" name="docId">
-                    <label>Pessoa<select name="userId" id="dailyAllocationUser" required><option value="">Selecione</option></select></label>
-                    <label>Turno<select name="shiftId" id="dailyAllocationShift" required><option value="">Selecione</option></select></label>
-                    <label>Escopos<select name="scopeIds" id="dailyAllocationScopes" multiple size="5" required></select></label>
-                    <label>Papel na alocação<select name="position"><option value="member">Sem distinção</option><option value="primary">Principal</option><option value="support">Apoio</option></select></label>
-                    <div class="daily-form-actions"><button type="button" class="button secondary" data-daily-reset="allocation">Limpar</button><button class="button primary">Salvar alocação</button></div>
-                  </form>
-                  <div class="daily-admin-list" id="dailyAllocationList"></div>
+                  <div class="daily-config-title"><div><span>3A</span><h3>Alocação avançada</h3></div><p>A matriz é a forma principal. Use esta área apenas para definir papel e fazer ajustes específicos.</p></div>
+                  <details class="daily-allocation-advanced" id="dailyAllocationAdvanced">
+                    <summary>Abrir configuração avançada</summary>
+                    <form id="dailyAllocationForm" class="daily-config-form">
+                      <input type="hidden" name="docId">
+                      <label>Pessoa<select name="userId" id="dailyAllocationUser" required><option value="">Selecione</option></select></label>
+                      <label>Turno<select name="shiftId" id="dailyAllocationShift" required><option value="">Selecione</option></select></label>
+                      <label>Escopos<select name="scopeIds" id="dailyAllocationScopes" multiple size="5" required></select></label>
+                      <label>Papel na alocação<select name="position"><option value="member">Sem distinção</option><option value="primary">Principal</option><option value="support">Apoio</option></select></label>
+                      <div class="daily-form-actions"><button type="button" class="button secondary" data-daily-reset="allocation">Limpar</button><button class="button primary">Salvar alocação</button></div>
+                    </form>
+                    <div class="daily-admin-list" id="dailyAllocationList"></div>
+                  </details>
                 </section>
 
                 <section class="daily-config-card daily-allocation-matrix-card">
-                  <div class="daily-config-title"><div><span>3A</span><h3>Matriz de alocação</h3></div><p>Marque rapidamente quem está em cada escopo. Uma pessoa pode estar em vários e um escopo pode ter várias pessoas.</p></div>
+                  <div class="daily-config-title"><div><span>3</span><h3>Matriz de alocação</h3></div><p>Forma principal de distribuir pessoas por escopo. Marque ou desmarque diretamente na grade.</p></div>
                   <div class="daily-matrix-toolbar"><label>Turno<select id="dailyAllocationMatrixShift"><option value="">Selecione</option></select></label><span class="help">A matriz altera a configuração atual; não cria período de validade.</span></div>
                   <div id="dailyAllocationMatrix"><div class="daily-soft-empty">Cadastre turno, escopo e pessoas para usar a matriz.</div></div>
                 </section>
@@ -2983,9 +3004,9 @@ body.dark .daily-side-panel{
                     <label>Aplicar aos escopos<select name="scopeIds" id="dailyRoutineScopes" multiple size="5"></select><span class="help">Sem seleção = todos os escopos em que a pessoa estiver alocada.</span></label>
                     <fieldset class="daily-schedule-fieldset"><legend>Agenda por turno</legend><div id="dailyRoutineSchedules" class="daily-schedule-editor"></div></fieldset>
                     <div class="daily-inline-fields"><label>Regra de execução<select name="executionPolicy"><option value="scope_once">Uma execução por escopo</option><option value="each_user">Cada pessoa alocada executa</option><option value="collaborative">Execução colaborativa</option><option value="min_people">Mínimo de pessoas</option></select></label><label>Mínimo<input name="minParticipants" type="number" min="1" value="1"></label></div>
-                    <div class="daily-inline-fields"><label>Janela após o horário <span class="muted">(min)</span><input name="windowMinutes" type="number" min="0" step="5" value="60"></label><label>Resultado<select name="resultMode"><option value="ok_ng">OK / NG</option><option value="simple">Concluir</option><option value="checklist">Checklist + resultado</option></select></label><label>Checklist <span class="muted">(um item por linha)</span><textarea name="checklistTemplate" rows="3" placeholder="Verificar processo&#10;Verificar condição visual"></textarea></label></div>
+                    <div class="daily-inline-fields"><label>Janela após o horário <span class="muted">(min)</span><input name="windowMinutes" type="number" min="0" step="5" value="60"></label><label>Resultado<select name="resultMode"><option value="ok_ng">OK / NG</option><option value="simple">Concluir</option><option value="checklist">Checklist + resultado</option></select></label><label>Itens da rotina <span class="muted">(um por linha)</span><textarea name="checklistTemplate" rows="3" placeholder="Verificar processo&#10;FPY&#10;Inspeção visual"></textarea><span class="help">Na execução, cada item terá marcação de concluído e um campo opcional para valor, número ou relato.</span></label></div>
                     <fieldset class="daily-days"><legend>Dias ativos</legend><label><input type="checkbox" name="routineDays" value="1" checked>Seg</label><label><input type="checkbox" name="routineDays" value="2" checked>Ter</label><label><input type="checkbox" name="routineDays" value="3" checked>Qua</label><label><input type="checkbox" name="routineDays" value="4" checked>Qui</label><label><input type="checkbox" name="routineDays" value="5" checked>Sex</label><label><input type="checkbox" name="routineDays" value="6">Sáb</label><label><input type="checkbox" name="routineDays" value="0">Dom</label></fieldset>
-                    <div class="daily-routine-options"><label class="check"><input name="allowFailure" type="checkbox" checked> Permitir abrir Falha</label><label class="check"><input name="allowActivity" type="checkbox" checked> Permitir criar Atividade</label><label class="check"><input name="requireNgNote" type="checkbox" checked> Exigir observação em NG</label><label class="check"><input name="active" type="checkbox" checked> Rotina ativa</label></div>
+                    <div class="daily-routine-options"><label class="check"><input name="allowFailure" type="checkbox" checked> Permitir abrir Falha</label><label class="check"><input name="allowActivity" type="checkbox" checked> Permitir criar Atividade</label><label class="check"><input name="requireNgNote" type="checkbox" checked> Lembrar observação em NG <span class="muted">(não bloqueia o salvamento)</span></label><label class="check"><input name="active" type="checkbox" checked> Rotina ativa</label></div>
                     <div class="daily-form-actions"><button type="button" class="button secondary" data-daily-reset="routine">Limpar</button><button class="button primary">Salvar rotina</button></div>
                   </form>
                   <div class="daily-admin-list" id="dailyRoutineList"></div>
@@ -3005,7 +3026,7 @@ body.dark .daily-side-panel{
                 <section class="panel daily-dashboard-panel"><div class="section-head compact"><div><h3>Cobertura por escopo</h3><p>Primeiro a operação; depois o detalhamento por pessoa.</p></div></div><div id="dailyDashScopeRows" class="daily-metric-list"></div></section>
                 <section class="panel daily-dashboard-panel"><div class="section-head compact"><div><h3>Execução por pessoa</h3><p>Respeita a política da rotina e não transforma trabalho em equipe em falta individual.</p></div></div><div id="dailyDashUserRows" class="daily-metric-list"></div></section>
               </div>
-              <section class="panel daily-dashboard-panel daily-execution-panel"><div class="section-head compact"><div><h3>Execuções</h3><p>Histórico operacional com rotina, turno, escopo e responsáveis daquele momento.</p></div></div><div class="table-wrap"><table><thead><tr><th>Data / turno</th><th>Rotina</th><th>Escopo</th><th>Responsáveis</th><th>Resultado</th><th>Horário</th></tr></thead><tbody id="dailyDashRows"></tbody></table><div class="empty hidden" id="dailyDashEmpty">Nenhuma execução no período.</div></div></section>
+              <section class="panel daily-dashboard-panel daily-execution-panel"><div class="section-head compact"><div><h3>Execuções</h3><p>Histórico operacional com rotina, turno, escopo e responsáveis daquele momento.</p></div></div><div class="table-wrap"><table><thead><tr><th>Data / turno</th><th>Rotina</th><th>Escopo</th><th>Responsáveis</th><th>Resultado</th><th>Horário</th><th>Consulta</th></tr></thead><tbody id="dailyDashRows"></tbody></table><div class="empty hidden" id="dailyDashEmpty">Nenhuma execução no período.</div></div></section>
             </div>
           </section>
         </section>
@@ -3513,13 +3534,14 @@ body.dark .daily-side-panel{
   <div class="modal-backdrop hidden" id="flowDetailModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 id="flowDetailTitle" class="modal-title"></h2><p id="flowDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-flow-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Situação</span><span id="flowDetailDescription" class="detail-value"></span><span class="detail-label">Etapa 1 · Formulário e e-mail</span><div class="artifact-grid"><label>Formulário do fluxo<input id="flowDetailAttachment" type="file" accept="image/*,.pdf,.doc,.docx"></label><label>Link do e-mail<input id="flowDetailEmailLink" type="url" placeholder="https://..."></label></div><span class="detail-label">Etapa 2 · Folha de rosto</span><div class="artifact-grid"><label>Link / arquivo da folha de rosto<input id="flowDetailCoverLink" type="url" placeholder="https://..."></label><label>Responsável pelo seguimento<select id="flowDetailOwnerSelect"><option value="">Selecione</option></select></label></div><span class="detail-label">Etapa 3 · Seguimento no fluxo</span><div class="artifact-grid"><label class="span2">Link ou registro do seguimento<input id="flowDetailFollowUpLink" type="url" placeholder="https://..."></label></div><div class="artifact-actions"><button id="saveFlowChanges" class="button secondary">Salvar etapas</button></div><span class="detail-label">Arquivos e links</span><div id="flowDetailFiles" class="evidence-gallery"></div><span class="detail-label">Histórico</span><div id="flowTimeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" style="margin-top:0">Andamento do fluxo</span><div id="flowSteps" class="task-list"></div><span class="detail-label">Status calculado</span><div id="flowDetailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteFlow" class="button danger">Excluir fluxo</button></div></aside></div></div></div>
 
 
-<div class="modal-backdrop hidden" id="routineExecutionModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 class="modal-title" id="routineExecutionTitle">Executar rotina</h2><p class="modal-subtitle" id="routineExecutionSubtitle"></p></div><button class="close" id="closeRoutineExecution" aria-label="Fechar">×</button></div><section class="routine-context-panel hidden" id="routineExecutionContextPanel"><div class="routine-context-head"><div><strong id="routineExecutionContextTitle">Contexto automático</strong><span id="routineExecutionContextPeriod"></span></div><span id="routineExecutionContextCount"></span></div><div class="routine-context-items" id="routineExecutionContextItems"></div></section><form id="routineExecutionForm"><div class="form-grid"><label>Resultado<select name="result" id="routineExecutionResult"><option value="ok">OK</option><option value="ng">NG / Anormalidade</option><option value="done">Concluído</option><option value="na">Não aplicável</option></select></label><label class="span2">Observação<textarea name="note" id="routineExecutionNote" rows="3" placeholder="Registre somente o que agrega contexto."></textarea></label><div class="span2 routine-checklist-box hidden" id="routineExecutionChecklistBox"><span class="detail-label">Checklist</span><div id="routineExecutionChecklist"></div></div><label class="span2">Fotos / evidências <span class="muted">(opcional)</span><input name="evidence" type="file" multiple accept="image/*,.pdf"></label></div><div class="form-actions"><button type="button" class="button secondary" id="cancelRoutineExecution">Cancelar</button><button class="button primary">Salvar execução</button></div></form></div></div>
+<div class="modal-backdrop hidden daily-tour-backdrop" id="dailyTourModal" role="dialog" aria-modal="true" aria-labelledby="dailyTourTitle"><div class="modal daily-tour-modal"><div class="modal-head"><div><span class="daily-mini-label">GUIA DA CENTRAL DO DIA</span><h2 class="modal-title" id="dailyTourTitle">Como funciona</h2><p class="modal-subtitle" id="dailyTourCounter"></p></div><button class="close" id="closeDailyTour" aria-label="Fechar">×</button></div><div class="daily-tour-content"><div class="daily-tour-icon" id="dailyTourIcon">1</div><h3 id="dailyTourStepTitle"></h3><p id="dailyTourStepText"></p><div class="daily-tour-tip" id="dailyTourTip"></div></div><div class="daily-tour-dots" id="dailyTourDots"></div><div class="form-actions daily-tour-actions"><button type="button" class="button secondary" id="dailyTourSkip">Fechar</button><button type="button" class="button secondary" id="dailyTourPrev">Voltar</button><button type="button" class="button primary" id="dailyTourNext">Próximo</button></div></div></div>
+<div class="modal-backdrop hidden" id="routineExecutionModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 class="modal-title" id="routineExecutionTitle">Executar rotina</h2><p class="modal-subtitle" id="routineExecutionSubtitle"></p></div><button class="close" id="closeRoutineExecution" aria-label="Fechar">×</button></div><div class="routine-optional-banner">Preencha o que fizer sentido. Checklist, valores, observação e evidências são opcionais e podem ser editados depois.</div><section class="routine-context-panel hidden" id="routineExecutionContextPanel"><div class="routine-context-head"><div><strong id="routineExecutionContextTitle">Contexto automático</strong><span id="routineExecutionContextPeriod"></span></div><span id="routineExecutionContextCount"></span></div><div class="routine-context-items" id="routineExecutionContextItems"></div></section><form id="routineExecutionForm"><div class="form-grid"><label>Resultado<select name="result" id="routineExecutionResult"><option value="ok">OK</option><option value="ng">NG / Anormalidade</option><option value="done">Concluído</option><option value="na">Não aplicável</option></select></label><label class="span2">Observação <span class="muted">(opcional)</span><textarea name="note" id="routineExecutionNote" rows="3" placeholder="Registre somente o que agrega contexto."></textarea></label><div class="span2 routine-checklist-box hidden" id="routineExecutionChecklistBox"><span class="detail-label">Itens da rotina</span><div id="routineExecutionChecklist"></div></div><label class="span2">Fotos / evidências <span class="muted">(opcional)</span><input name="evidence" type="file" multiple accept="image/*,.pdf"></label><div class="span2 routine-edit-history hidden" id="routineExecutionHistory"></div></div><div class="form-actions"><button type="button" class="button secondary" id="cancelRoutineExecution">Cancelar</button><button class="button primary" id="saveRoutineExecutionButton">Salvar execução</button></div></form></div></div>
   <div class="modal-backdrop hidden" id="weeklyModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resumo da semana</h2><p class="modal-subtitle">Tudo que foi trabalhado e o que merece atenção.</p></div><button class="close close-weekly" aria-label="Fechar">×</button></div><div id="weeklyContent" class="detail-main"></div><div class="form-actions"><button class="button secondary close-weekly">Fechar</button></div></div></div>
   <div class="modal-backdrop hidden" id="dashboardIndicatorModal" role="dialog" aria-modal="true" aria-labelledby="dashboardIndicatorTitle"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title" id="dashboardIndicatorTitle">Detalhamento do indicador</h2><p class="modal-subtitle" id="dashboardIndicatorSubtitle"></p></div><button class="close close-dashboard-indicator" aria-label="Fechar">×</button></div><div id="dashboardIndicatorContent" class="detail-main"></div><div class="form-actions"><button class="button secondary close-dashboard-indicator">Fechar</button></div></div></div>
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.31"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.32"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */
