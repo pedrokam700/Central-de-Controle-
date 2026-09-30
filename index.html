@@ -3072,7 +3072,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
         <div class="form-section"><h3 class="form-section-title">Identificação</h3></div>
         <label class="span2">Aplicar esta falha a
           <select id="operationalScopeSelect" name="scope_type">
-            <option value="variant" selected>SKU / cor específica</option>
+            <option value="variant" selected>SKU / cor específica</option><option value="none">Sem produto definido</option>
             <option value="base_product">Produto base · todas as cores</option>
             <option value="multi_sku">Múltiplos SKUs</option>
             <option value="family">Família inteira</option>
@@ -3117,7 +3117,7 @@ body.dark.cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f
       <div class="analysis-section" id="opDetailProductScopeSection">
         <div class="section-head compact"><div><h3>Produto(s) afetado(s)</h3><p>Você pode corrigir o escopo depois do registro: um SKU, produto base, vários SKUs ou a família inteira.</p></div></div>
         <div class="form-grid">
-          <label class="span2">Aplicar esta falha a<select id="opDetailScopeSelect"><option value="variant">SKU / cor específica</option><option value="base_product">Produto base · todas as cores</option><option value="multi_sku">Múltiplos SKUs</option><option value="family">Família inteira</option></select><span class="help" id="opDetailScopeHelp"></span></label>
+          <label class="span2">Aplicar esta falha a<select id="opDetailScopeSelect"><option value="variant">SKU / cor específica</option><option value="none">Sem produto definido</option><option value="base_product">Produto base · todas as cores</option><option value="multi_sku">Múltiplos SKUs</option><option value="family">Família inteira</option></select><span class="help" id="opDetailScopeHelp"></span></label>
           <label>Família<select id="opDetailFamilySelect"><option value="">Não informado</option></select></label>
           <label id="opDetailProductScopeLabel">SKU / cor específica<select id="opDetailProductSelect"><option value="">Selecione</option></select></label>
           <label id="opDetailBaseScopeLabel" class="hidden">Produto base<select id="opDetailBaseSelect"><option value="">Selecione</option></select></label>
