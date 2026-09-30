@@ -2571,7 +2571,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.33'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.33'){localStorage.setItem('cora.sw.loaded','15.1.13.33');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.33'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.33'){localStorage.setItem('cora.sw.loaded','15.1.13.33');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -4752,6 +4752,10 @@ ${m.text}`).join('\n\n');
       renderSafely('perfil', renderProfile);
       renderSafely('início', renderHome);
       renderSafely('conta', renderAccount);
+      if(currentAccount){
+        renderSafely('notificações', renderCentralNotifications);
+        ensureCentralNotificationEngine();
+      }
       renderSafely('tradução', translatePage);
 
       // Reaplica no final para garantir consistência mesmo se algum módulo
@@ -5270,6 +5274,38 @@ ${m.text}`).join('\n\n');
       document.querySelector('#flowSearch').value = val;
       renderProduct(); renderAll(); renderWork(); renderFlows();
     });
+    document.querySelector('#centralNotificationButton')?.addEventListener('click',e=>{
+      e.stopPropagation();
+      const panel=document.querySelector('#centralNotificationPanel');if(!panel)return;
+      const opening=panel.classList.contains('hidden');panel.classList.toggle('hidden',!opening);
+      e.currentTarget.setAttribute('aria-expanded',opening?'true':'false');
+      if(opening)renderCentralNotifications();
+    });
+    document.querySelector('#centralNotificationClose')?.addEventListener('click',()=>{document.querySelector('#centralNotificationPanel')?.classList.add('hidden');document.querySelector('#centralNotificationButton')?.setAttribute('aria-expanded','false');});
+    document.querySelector('#centralNotificationPanel')?.addEventListener('click',e=>e.stopPropagation());
+    document.querySelector('#enableBrowserNotifications')?.addEventListener('click',()=>enableCentralBrowserNotifications().catch(err=>{console.error(err);showSaveToast(err.message||'Falha ao ativar notificações.','error');}));
+    document.querySelector('#centralNotificationLead')?.addEventListener('change',e=>{saveCentralNotificationPrefs({leadMinutes:Number(e.target.value||15)});renderCentralNotifications();checkCentralBrowserNotifications().catch(()=>{});});
+    document.querySelector('#centralNotificationList')?.addEventListener('click',e=>{const item=e.target.closest('[data-central-alert]');if(!item)return;openCentralAlert((window.__centralAlerts||[])[Number(item.dataset.centralAlert)]);});
+    document.addEventListener('click',e=>{if(!e.target.closest('.central-alert-wrap')){document.querySelector('#centralNotificationPanel')?.classList.add('hidden');document.querySelector('#centralNotificationButton')?.setAttribute('aria-expanded','false');}});
+
+    document.querySelector('#commandPaletteButton')?.addEventListener('click',()=>openCommandPalette());
+    document.querySelector('#commandPaletteInput')?.addEventListener('input',e=>{commandPaletteActiveIndex=0;renderCommandPalette(e.target.value);});
+    document.querySelector('#commandPaletteResults')?.addEventListener('click',e=>{const item=e.target.closest('[data-command-index]');if(item)runCommandPaletteIndex(Number(item.dataset.commandIndex));});
+    document.querySelector('#commandPaletteModal')?.addEventListener('click',e=>{if(e.target.id==='commandPaletteModal')closeCommandPalette();});
+    document.addEventListener('keydown',e=>{
+      if((e.ctrlKey||e.metaKey)&&String(e.key).toLowerCase()==='k'){e.preventDefault();document.querySelector('#commandPaletteModal')?.classList.contains('hidden')?openCommandPalette():closeCommandPalette();return;}
+      const open=!document.querySelector('#commandPaletteModal')?.classList.contains('hidden');
+      if(!open)return;
+      if(e.key==='Escape'){e.preventDefault();closeCommandPalette();return;}
+      if(e.key==='ArrowDown'){e.preventDefault();commandPaletteActiveIndex=Math.min(commandPaletteActions.length-1,commandPaletteActiveIndex+1);renderCommandPalette(document.querySelector('#commandPaletteInput')?.value||'');return;}
+      if(e.key==='ArrowUp'){e.preventDefault();commandPaletteActiveIndex=Math.max(0,commandPaletteActiveIndex-1);renderCommandPalette(document.querySelector('#commandPaletteInput')?.value||'');return;}
+      if(e.key==='Enter'){e.preventDefault();runCommandPaletteIndex(commandPaletteActiveIndex);}
+    });
+
+    document.querySelector('#closeDataHealth')?.addEventListener('click',closeDataHealth);
+    document.querySelector('#closeDataHealthBottom')?.addEventListener('click',closeDataHealth);
+    document.querySelector('#dataHealthModal')?.addEventListener('click',e=>{if(e.target.id==='dataHealthModal')closeDataHealth();});
+    document.querySelector('#dataHealthList')?.addEventListener('click',e=>{const item=e.target.closest('[data-health-index]');if(!item)return;closeDataHealth();window.__dataHealthActions?.[Number(item.dataset.healthIndex)]?.();});
 
     document.querySelectorAll('.main-nav > button, .main-nav .nav-group-toggle').forEach(button => button.addEventListener('click', () => {
       const page = button.dataset.page;
