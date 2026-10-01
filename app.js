@@ -1838,20 +1838,23 @@
       return same/(A.size+B.size-same);
     }
     function recurrenceRecord(record,kind){
-      const codes=[...new Set([...failureProductCodes(record),...(record.productionProductCodes||[])].filter(Boolean).map(code=>state.products.find(p=>sameProductCode(p.code,code))?.code||code))];
+      const source=kind==='report'?(state.operationalFailures.find(x=>x.id===record.sourceOperationalFailureId||x.convertedToReportId===record.id)||null):null;
+      const codes=[...new Set([...failureProductCodes(record),...(record.productionProductCodes||[]),...failureProductCodes(source||{})].filter(Boolean).map(code=>state.products.find(p=>sameProductCode(p.code,code))?.code||code))];
       const products=state.products.filter(p=>codes.some(code=>sameProductCode(code,p.code)));
-      const date=new Date(record.createdAt||record.openedAt||record.updatedAt||0);
+      const date=new Date(record.sourceCreatedAt||source?.createdAt||record.createdAt||record.openedAt||record.updatedAt||0);
+      const originLine=record.originScopeType==='line'?record.originScopeName:'';
+      const sourceOriginLine=source?.originScopeType==='line'?source.originScopeName:'';
       return {
         kind,id:record.id||record.docId,raw:record,date,
-        issue:String(record.issue||record.title||record.description||'').trim(),
-        component:String(record.component||record.peca_danificada||'').trim(),
-        material:String(record.material||'').trim(),
-        line:String(record.linha||record.line||record.originScopeName||'').trim(),
-        station:String(record.estacao||record.station||'').trim(),
-        machine:String(record.maquina||record.machine||'').trim(),
-        process:String(record.processo||record.process||'').trim(),
-        codes,families:[...new Set([record.family,...products.map(productFamily)].filter(Boolean))],
-        bases:[...new Set([record.baseCode,...products.map(productBaseCode)].filter(Boolean))]
+        issue:String(record.issue||source?.issue||record.title||record.description||'').trim(),
+        component:String(record.component||source?.component||record.peca_danificada||source?.peca_danificada||'').trim(),
+        material:String(record.material||source?.material||'').trim(),
+        line:String(record.linha||record.line||source?.linha||originLine||sourceOriginLine||'').trim(),
+        station:String(record.estacao||record.station||source?.estacao||'').trim(),
+        machine:String(record.maquina||record.machine||source?.maquina||'').trim(),
+        process:String(record.processo||record.process||source?.processo||'').trim(),
+        codes,families:[...new Set([record.family,source?.family,...products.map(productFamily)].filter(Boolean))],
+        bases:[...new Set([record.baseCode,source?.baseCode,...products.map(productBaseCode)].filter(Boolean))]
       };
     }
     function recurrencePair(a,b){
@@ -1880,12 +1883,14 @@
     }
     function recurrenceRadarClusters(){
       const source=[
-        ...state.operationalFailures.map(x=>recurrenceRecord(x,'operational')),
+        ...state.operationalFailures.filter(x=>!x.convertedToReportId).map(x=>recurrenceRecord(x,'operational')),
         ...dashboardProductReports().map(x=>recurrenceRecord(x,'report'))
       ].filter(x=>!Number.isNaN(x.date.getTime()));
       const cutoff=Date.now()-45*86400000;
       const records=source.filter(x=>x.date.getTime()>=cutoff).sort((a,b)=>b.date-a.date).slice(0,320);
-      const signature=records.map(x=>`${x.kind}:${x.id}:${x.raw.updatedAt||x.raw.createdAt||''}`).join('|');
+      const signature=records.map(x=>[
+        x.kind,x.id,x.raw.updatedAt||x.raw.createdAt||'',x.issue,x.component,x.material,x.line,x.station,x.machine,x.process,x.codes.join(',')
+      ].join(':')).join('|');
       if(signature===recurrenceRadarSignature)return recurrenceRadarCache;
       recurrenceRadarSignature=signature;
       const parent=records.map((_,i)=>i),rank=records.map(()=>0),edges=[];
@@ -1938,7 +1943,8 @@
     function dailyRelevantRecurrences(){
       const shiftId=dailySelectedShiftId,uid=currentAuthUser?.uid||'';
       const allocations=currentAccount?.role==='admin'?activeWorkAllocations().filter(a=>a.shiftId===shiftId):activeWorkAllocations().filter(a=>a.shiftId===shiftId&&a.userId===uid);
-      const scopeIds=[...new Set(allocations.flatMap(a=>a.scopeIds||[]))];
+      const productionScopeIds=currentAccount?.role==='admin'?state.operationalScopes.filter(scope=>dailyProductionCodes(scope.docId,shiftId).length).map(scope=>scope.docId):[];
+      const scopeIds=[...new Set([...allocations.flatMap(a=>a.scopeIds||[]),...productionScopeIds])];
       const lines=new Set(scopeIds.map(id=>recurrenceNorm(state.operationalScopes.find(s=>s.docId===id)?.name||'')).filter(Boolean));
       const codes=new Set(scopeIds.flatMap(id=>dailyProductionCodes(id,shiftId)).map(productCodeKey).filter(Boolean));
       return recurrenceRadarClusters().filter(cluster=>{
@@ -4782,7 +4788,8 @@ ${m.text}`).join('\n\n');
       const nowExec=allVisible.find(x=>x.status==='in_progress') || allVisible.find(x=>['due','late'].includes(dailyTaskState(x))) || allVisible.find(x=>x.status!=='completed') || completed.at(-1);
       const nowContent=document.querySelector('#dailyNowContent');
       if(nowContent){
-        nowContent.innerHTML=nowExec ? `<div><strong>${esc(nowExec.routineName)}</strong><span>${esc(nowExec.scopeName)} · ${esc(nowExec.plannedTime||'durante o turno')}</span></div><div class="daily-now-actions">${nowExec.status==='completed'?'<span class="daily-complete-mark">✓ concluída</span>':nowExec.status==='in_progress'? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(nowExec.executionKey)}">${esc(t('Registrar resultado'))}</button>`:`<button type="button" class="button primary button-compact" data-daily-start="${esc(nowExec.executionKey)}">${esc(t('Iniciar'))}</button>`}</div>` : '<strong>Nenhuma rotina prevista para este turno.</strong><span>Se isso não era esperado, confira a configuração ou sua alocação.</span>';
+        const nowProduction=(nowExec?.productionProductLabels||nowExec?.productionProductCodes?.map(productDisplayCode)||[]).join(' · ');
+        nowContent.innerHTML=nowExec ? `<div><strong>${esc(nowExec.routineName)}</strong><span>${esc(nowExec.scopeName)}${nowProduction?` · ${esc(nowProduction)}`:''} · ${esc(nowExec.plannedTime||'durante o turno')}</span></div><div class="daily-now-actions">${nowExec.status==='completed'?'<span class="daily-complete-mark">✓ concluída</span>':nowExec.status==='in_progress'? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(nowExec.executionKey)}">${esc(t('Registrar resultado'))}</button>`:`<button type="button" class="button primary button-compact" data-daily-start="${esc(nowExec.executionKey)}">${esc(t('Iniciar'))}</button>`}</div>` : '<strong>Nenhuma rotina prevista para este turno.</strong><span>Se isso não era esperado, confira a configuração ou sua alocação.</span>';
       }
 
       renderDailyConnectedWork(allVisible);
@@ -4842,6 +4849,13 @@ ${m.text}`).join('\n\n');
       if(matrixShift&&!matrixShift.value&&shifts.length) matrixShift.value=dailySelectedShiftId&&shifts.some(x=>x.docId===dailySelectedShiftId)?dailySelectedShiftId:shifts[0].docId;
       setSelect('#dailyDashShift',shifts,s=>s.name,'Todos');
       setSelect('#dailyDashScope',scopes,s=>s.name,'Todos');
+      const dashProduct=document.querySelector('#dailyDashProduct');
+      if(dashProduct){
+        const old=dashProduct.value;
+        dashProduct.innerHTML='<option value="">Todos</option>'+state.products.slice().sort((a,b)=>productDisplayCode(a.code).localeCompare(productDisplayCode(b.code))).map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))} · ${esc(productFamily(p)||'sem família')}</option>`).join('');
+        const match=state.products.find(p=>sameProductCode(p.code,old));
+        if(match)dashProduct.value=match.code;
+      }
       setSelect('#dailyProductionShift',shifts,s=>`${s.name} · ${dailyShiftWindowLabel(s)}`);
       setSelect('#dailyProductionScope',scopes,s=>`${s.name} · ${dailyScopeTypeLabel(s.type)}`);
       const productionProducts=document.querySelector('#dailyProductionProducts');
@@ -4975,11 +4989,13 @@ ${m.text}`).join('\n\n');
       const to=document.querySelector('#dailyDashTo')?.value||from;
       const shiftId=document.querySelector('#dailyDashShift')?.value||'';
       const scopeId=document.querySelector('#dailyDashScope')?.value||'';
+      const productCode=document.querySelector('#dailyDashProduct')?.value||'';
       const userId=document.querySelector('#dailyDashUser')?.value||'';
       const rows=state.routineExecutions.filter(x=>
         x.recordType!=='shift_handover' &&
         (x.dateKey||'')>=from && (x.dateKey||'')<=to &&
         (!shiftId||x.shiftId===shiftId) && (!scopeId||x.scopeId===scopeId) &&
+        (!productCode||(x.productionProductCodes||[]).some(code=>sameProductCode(code,productCode))) &&
         (!userId||x.assignedUserId===userId||(x.expectedUserIds||[]).includes(userId)||(x.participants||[]).some(p=>p.userId===userId))
       ).sort((a,b)=>String(b.dateKey||'').localeCompare(String(a.dateKey||'')) || dailyPlannedDateTime(a)-dailyPlannedDateTime(b));
       const done=rows.filter(x=>x.status==='completed');
@@ -5319,7 +5335,8 @@ ${m.text}`).join('\n\n');
       selectedRoutineExecutionId=key;
       const editing=execution.status==='completed';
       document.querySelector('#routineExecutionTitle').textContent=editing?t('Editar execução'):(execution.routineName||'Executar rotina');
-      document.querySelector('#routineExecutionSubtitle').textContent=`${execution.routineName||''}${execution.scopeName?` · ${execution.scopeName}`:''} · ${execution.shiftName||''}${execution.plannedTime?` · ${execution.plannedTime}`:''}`;
+      const production=(execution.productionProductLabels||execution.productionProductCodes?.map(productDisplayCode)||[]).join(' · ');
+      document.querySelector('#routineExecutionSubtitle').textContent=`${execution.routineName||''}${execution.scopeName?` · ${execution.scopeName}`:''}${production?` · ${production}`:''} · ${execution.shiftName||''}${execution.plannedTime?` · ${execution.plannedTime}`:''}`;
       const result=document.querySelector('#routineExecutionResult');
       result.innerHTML=execution.resultMode==='simple'
         ? '<option value="done">Concluído</option><option value="na">Não aplicável</option>'
@@ -5966,7 +5983,7 @@ ${m.text}`).join('\n\n');
         baseCode:source.baseCode||'',scopeType:failureScopeType(source),
         component:source.component||source.peca_danificada||'',material:source.material||'',issue:source.issue||'',
         maquina:source.maquina||'',linha:source.linha||'',estacao:source.estacao||'',processo:source.processo||'',onde_detectado:source.onde_detectado||'',
-        originType:source.originType||'',originRoutineExecutionId:source.originRoutineExecutionId||'',originRoutineId:source.originRoutineId||'',originRoutineName:source.originRoutineName||'',originScopeId:source.originScopeId||'',originScopeName:source.originScopeName||'',originShiftId:source.originShiftId||'',originShiftName:source.originShiftName||'',originDateKey:source.originDateKey||'',productionProductCodes:source.productionProductCodes||failureProductCodes(source),productionProductLabels:source.productionProductLabels||failureProductCodes(source).map(productDisplayCode),
+        sourceOperationalFailureId:source.id||'',sourceCreatedAt:source.createdAt||'',originType:source.originType||'',originRoutineExecutionId:source.originRoutineExecutionId||'',originRoutineId:source.originRoutineId||'',originRoutineName:source.originRoutineName||'',originScopeId:source.originScopeId||'',originScopeName:source.originScopeName||'',originScopeType:source.originScopeType||'',originShiftId:source.originShiftId||'',originShiftName:source.originShiftName||'',originDateKey:source.originDateKey||'',productionProductCodes:source.productionProductCodes||failureProductCodes(source),productionProductLabels:source.productionProductLabels||failureProductCodes(source).map(productDisplayCode),
         owner:source.owner||currentAccount?.name||'',assignees:source.assignees||[],assignmentMode:source.assignmentMode||'private',
         teamShared:source.teamShared,evidence:source.evidence||[],status:'pendente',createdAt:now(),
         updates:[{text:`Convertido da Falha ${source.id}.`,date:now()}],
@@ -6136,7 +6153,7 @@ ${m.text}`).join('\n\n');
     document.querySelector('#dailyAdminClose')?.addEventListener('click',()=>document.querySelector('#dailyAdminPanel').classList.add('hidden'));
     document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.addEventListener('click',()=>{dailyAdminTab=btn.dataset.dailyAdminTab||'config';renderDailyAdmin();}));
     document.querySelectorAll('.daily-filter').forEach(btn=>btn.addEventListener('click',()=>{dailyFilter=btn.dataset.dailyFilter||'all';document.querySelectorAll('.daily-filter').forEach(x=>x.classList.toggle('active',x===btn));renderDaily();}));
-    ['dailyDashFrom','dailyDashTo','dailyDashShift','dailyDashScope','dailyDashUser'].forEach(id=>document.querySelector('#'+id)?.addEventListener('change',renderDailyAdminDashboard));
+    ['dailyDashFrom','dailyDashTo','dailyDashShift','dailyDashScope','dailyDashProduct','dailyDashUser'].forEach(id=>document.querySelector('#'+id)?.addEventListener('change',renderDailyAdminDashboard));
     document.querySelector('#dailyShiftForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyShift(e.currentTarget).catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar o turno'),'error');});});
     document.querySelector('#dailyScopeForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyScope(e.currentTarget).catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar o escopo'),'error');});});
     document.querySelector('#dailyProductionContextForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyProductionContext(e.currentTarget).catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar o contexto de produção'),'error');});});
@@ -6492,7 +6509,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         detectionMoment,detection_moment_label:detectionLabels[detectionMoment]||detectionMoment,quando_inicio:f.get('quando_inicio')||'',onde_detectado:String(f.get('onde_detectado')||'').trim(),quantity:rawQty===''?null:Number(rawQty),
         issue,descriptionContext:String(f.get('description_context')||'').trim(),hypothesis:String(f.get('hipotese_causa')||'').trim(),tests:String(f.get('testes_realizados')||'').trim(),cause:String(f.get('causa_confirmada')||'').trim(),correctiveAction:String(f.get('acao_corretiva')||'').trim(),notes:String(f.get('observacoes')||'').trim(),
         owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[],
-        originType:pendingOriginContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:pendingOriginContext?.scopeId||'',originScopeName:pendingOriginContext?.scopeName||'',originShiftId:pendingOriginContext?.shiftId||'',originShiftName:pendingOriginContext?.shiftName||'',originDateKey:pendingOriginContext?.dateKey||'',productionProductCodes:pendingOriginContext?.productionProductCodes||productCodes,productionProductLabels:pendingOriginContext?.productionProductLabels||productCodes.map(productDisplayCode)
+        originType:pendingOriginContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:pendingOriginContext?.scopeId||'',originScopeName:pendingOriginContext?.scopeName||'',originScopeType:pendingOriginContext?.scopeType||'',originShiftId:pendingOriginContext?.shiftId||'',originShiftName:pendingOriginContext?.shiftName||'',originDateKey:pendingOriginContext?.dateKey||'',productionProductCodes:pendingOriginContext?.productionProductCodes||productCodes,productionProductLabels:pendingOriginContext?.productionProductLabels||productCodes.map(productDisplayCode)
       };
       if(!navigator.onLine){item.docId=`offline-${Date.now()}`;await queueOfflineWrite('operationalFailures',item);state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
       const origin=pendingOriginContext;
