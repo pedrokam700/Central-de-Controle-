@@ -113,6 +113,7 @@
     Object.assign(translations, {"? Como funciona":"? How it works","Alocação avançada":"Advanced assignment","A matriz é a forma principal. Use esta área apenas para definir papel e fazer ajustes específicos.":"The matrix is the primary method. Use this area only to define roles and make specific adjustments.","Abrir configuração avançada":"Open advanced configuration","Forma principal de distribuir pessoas por escopo. Marque ou desmarque diretamente na grade.":"Primary way to assign people by scope. Check or uncheck directly in the grid.","Itens da rotina":"Routine items","Na execução, cada item terá marcação de concluído e um campo opcional para valor, número ou relato.":"During execution, each item has a completion checkbox and an optional field for a value, number, or note.","Lembrar observação em NG":"Remind about NG note","não bloqueia o salvamento":"does not block saving","Preencha o que fizer sentido. Checklist, valores, observação e evidências são opcionais e podem ser editados depois.":"Fill in what makes sense. Checklist, values, notes, and evidence are optional and can be edited later.","Valor / dado (opcional)":"Value / data (optional)","Editar execução":"Edit execution","Abrir":"Open","Consulta":"Review","GUIA DA CENTRAL DO DIA":"WORK CENTER GUIDE","Como funciona":"How it works","Próximo":"Next","Voltar":"Back","Fechar":"Close","Salvar alterações":"Save changes","Execução atualizada.":"Execution updated.","Rotina atualizada.":"Routine updated.","Configuração e histórico":"Configuration and history","Os dados concluídos ficam preservados; alterações no modelo valem para execuções futuras.":"Completed data stays preserved; template changes apply to future executions.","Sua alocação":"Your assignment","Mapa do turno":"Shift map","Executar e registrar":"Execute and record","Trabalho conectado":"Connected work","Administração":"Administration","Use data e turno para ver exatamente o contexto operacional que você precisa.":"Use date and shift to see the exact operational context you need.","Aqui você vê em quais linhas, áreas ou processos está alocado no turno selecionado.":"Here you see the lines, areas, or processes assigned to you for the selected shift.","O mapa organiza o que já foi concluído, o que está em andamento e o que vem a seguir.":"The map organizes what is completed, in progress, and coming next.","Abra uma rotina, marque o que foi feito e registre valores como FPY diretamente em cada item. Nada é obrigatório para salvar.":"Open a routine, mark what was done, and enter values such as FPY directly in each item. Nothing is required to save.","Falhas, atividades e reports relacionados continuam acessíveis sem sair da Central do Dia.":"Related failures, activities, and reports remain accessible without leaving the Work Center.","Administradores configuram turnos, matriz de alocação, rotinas e consultam o histórico operacional.":"Admins configure shifts, the assignment matrix, routines, and review operational history.","Você pode abrir este guia novamente pelo botão Como funciona.":"You can reopen this guide at any time using the How it works button.","Guia concluído":"Guide completed"});
     Object.assign(translations, {"Editar rotina":"Edit routine","Editada":"Edited","Última edição":"Last edit","edição(ões) anterior(es) preservada(s)":"previous edit(s) preserved","Data e turno":"Date and shift","O botão Agora volta imediatamente para o turno atual.":"The Now button immediately returns to the current shift.","A alocação é configurada pelo administrador e permanece até ser alterada.":"Assignment is configured by an administrator and remains until changed.","Use Todas, Minhas e Pendentes para reduzir a lista.":"Use All, Mine, and Pending to narrow the list.","Uma execução concluída pode ser aberta e editada depois.":"A completed execution can be reopened and edited later.","Itens gerados a partir de uma rotina também ficam vinculados à execução.":"Items generated from a routine remain linked to the execution.","Alterações no modelo não apagam os dados de execuções já concluídas.":"Template changes do not erase completed execution data.","Os dados de rotina ficam no Firestore para consultas futuras.":"Routine data is stored in Firestore for future review.","Salvar execução":"Save execution","O botão Como funciona pode ser aberto novamente a qualquer momento.":"The How it works button can be opened again at any time."});
     Object.assign(translations, {"Notificações":"Notifications","Rotinas e pendências que pedem atenção.":"Routines and pending work that need attention.","Ativar alertas do navegador":"Enable browser alerts","Antecedência":"Lead time","No horário":"At the scheduled time","Alertas dentro da Central já estão ativos.":"In-app alerts are already active.","Busca rápida":"Quick search","Saúde dos dados":"Data health","Sinais de registros que merecem revisão. Nada é bloqueado automaticamente.":"Signals for records that may need review. Nothing is blocked automatically.","Modelo estruturado":"Structured template","Sem modelo":"No template","Validação":"Validation","Estudo / Investigação":"Study / Investigation","Treinamento":"Training","O modelo só prepara as etapas iniciais. Você pode editar tudo antes de salvar.":"The template only prepares the initial steps. You can edit everything before saving.","Abrir Central do Dia":"Open Work Center Today","Registrar falha":"Register failure","Nova atividade":"New activity","Cadastrar produto":"Register product","Configurar operação":"Configure operation","Abrir saúde dos dados":"Open data health","Em breve":"Soon","Atrasada":"Overdue","Vence hoje":"Due today","Rotina programada":"Scheduled routine","Permissão de notificações concedida.":"Notification permission granted.","Notificações do navegador bloqueadas. Você pode continuar usando os alertas dentro da Central.":"Browser notifications are blocked. You can keep using in-app alerts.","Seu navegador não oferece notificações neste modo.":"Your browser does not support notifications in this mode.","Nenhuma notificação agora.":"No notifications right now.","Histórico administrativo":"Administrative history","Alterações de turno, escopo, alocação e rotina.":"Changes to shifts, scopes, assignments, and routines.","Nenhuma alteração administrativa registrada ainda.":"No administrative changes recorded yet.","Criado":"Created","Atualizado":"Updated","Desativado":"Disabled","Ativado":"Enabled","Removido":"Removed","Alocação atualizada":"Assignment updated","Etapa seguinte definida automaticamente.":"Next step set automatically."});
+    Object.assign(translations, {"Ver guia da Central do Dia":"Open Work Center guide","Pular tour":"Skip tour","Não mostrar automaticamente novamente":"Do not show automatically again","Etapa":"Step","Escolha a data":"Choose the date","Troque o dia para consultar o contexto operacional e as execuções daquele período.":"Change the day to review the operational context and executions for that period.","A data controla tudo o que aparece na Central do Dia.":"The date controls everything shown in the Work Center.","Escolha o turno":"Choose the shift","Alterne entre os turnos cadastrados sem sair da mesma visão.":"Switch between configured shifts without leaving this view.","Agora leva você de volta ao turno corrente.":"Now returns you to the current shift.","Resumo do turno":"Shift summary","Cobertura, concluídas, pendentes e anormalidades mostram rapidamente a situação do turno selecionado.":"Coverage, completed, pending, and abnormalities quickly show the status of the selected shift.","Esses números são formados pelas execuções previstas e registradas.":"These numbers are built from planned and recorded executions.","O que exige ação agora":"What needs action now","Este cartão destaca a rotina mais urgente ou a que já está em andamento.":"This card highlights the most urgent routine or the one already in progress.","Use Iniciar e Registrar resultado para conduzir a execução.":"Use Start and Record result to drive the execution.","Acompanhe o mapa do turno":"Follow the shift map","Aqui você vê cada rotina em ordem, com status, horário e ações disponíveis.":"Here you see each routine in order, with status, time, and available actions.","Os filtros ajudam a focar em todas, somente suas ou apenas pendentes.":"Filters help you focus on all, yours only, or pending items.","Conecte o trabalho":"Connect the work","Atividades, falhas, reports e itens gerados pelas rotinas continuam ligados ao turno.":"Activities, failures, reports, and items generated by routines stay connected to the shift.","Você pode abrir esses registros sem perder o contexto da Central do Dia.":"You can open these records without losing the Work Center context.","Alertas do turno":"Shift alerts","O sino reúne rotinas próximas do horário, atrasos e atividades com prazo.":"The bell brings together routines near their scheduled time, delays, and due activities.","Você pode ativar alertas do navegador e escolher a antecedência.":"You can enable browser alerts and choose the lead time.","Configuração administrativa":"Administrative setup","Administradores usam esta área para turnos, escopos, matriz de alocação, rotinas e histórico.":"Administrators use this area for shifts, scopes, assignment matrix, routines, and history.","O usuário comum não vê esta etapa.":"Regular users do not see this step.","Ajuda sempre disponível":"Help always available","O guia não precisa ocupar a tela no uso diário. Use este ícone quando quiser rever o passo a passo.":"The guide does not need to occupy the screen during daily use. Use this icon whenever you want to review it.","Você também pode pular etapas clicando nos indicadores do tour.":"You can also jump between steps by clicking the tour indicators."});
     const originalTextNodes = new WeakMap();
     const originalAttrs = new WeakMap();
     const translationPatterns = [
@@ -901,7 +902,7 @@
       return parts.join('\n\n');
     }
     function copyText(text){ if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>alert('Texto copiado.')); else { const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('Texto copiado.'); } }
-    // ==================== V15.1.13.34 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
+    // ==================== V15.1.13.35 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
     function notificationPrefsKey(){return 'central.notifications.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function notificationSentKey(){return 'central.notifications.sent.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function centralNotificationPrefs(){
@@ -964,7 +965,7 @@
       if(!list||!badge)return;
       const prefs=centralNotificationPrefs(),alerts=centralAlerts(),attention=alerts.filter(x=>x.attention);
       if(lead)lead.value=String(prefs.leadMinutes??15);
-      badge.textContent=String(attention.length);
+      badge.textContent=attention.length>99?'99+':String(attention.length);
       badge.classList.toggle('hidden',!attention.length);
       list.innerHTML=alerts.length?alerts.slice(0,20).map((a,index)=>`<button type="button" class="central-alert-item ${a.level==='danger'?'is-danger':a.level==='warning'?'is-warning':''}" data-central-alert="${index}"><span class="central-alert-dot"></span><span class="central-alert-copy"><strong>${esc(a.title)}</strong><span>${esc(a.body||'')}</span></span><span class="central-alert-time">${esc(a.timeLabel||'')}</span></button>`).join(''):`<div class="daily-soft-empty">${esc(t('Nenhuma notificação agora.'))}</div>`;
       window.__centralAlerts=alerts;
@@ -2587,7 +2588,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.34'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.34'){localStorage.setItem('cora.sw.loaded','15.1.13.34');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.35'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.35'){localStorage.setItem('cora.sw.loaded','15.1.13.35');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3818,7 +3819,7 @@ ${m.text}`).join('\n\n');
     // ======================= FIM V14.0 — IA DE ANÁLISE (legado) =======================
 
 
-    // ======================= CENTRAL DO DIA · V15.1.13.34 =======================
+    // ======================= CENTRAL DO DIA · V15.1.13.35 =======================
     const localDateKey = (date = new Date()) => {
       const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
       return `${y}-${m}-${d}`;
@@ -4148,56 +4149,139 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyTourStorageKey(){
-      return 'central.daily.tour.v2.'+(currentAuthUser?.uid||currentAccount?.email||'user');
+      return 'central.daily.tour.v3.'+(currentAuthUser?.uid||currentAccount?.email||'user');
+    }
+    function dailyTourDisableKey(){
+      return 'central.daily.tour.disabled.'+(currentAuthUser?.uid||currentAccount?.email||'user');
     }
 
     function dailyTourSteps(){
       const steps=[
-        {selector:'#dailyView .daily-hero',title:t('Data e turno'),text:t('Use data e turno para ver exatamente o contexto operacional que você precisa.'),tip:t('O botão Agora volta imediatamente para o turno atual.')},
+        {selector:'#dailyDate',title:t('Escolha a data'),text:t('Troque o dia para consultar o contexto operacional e as execuções daquele período.'),tip:t('A data controla tudo o que aparece na Central do Dia.')},
+        {selector:'#dailyShiftSelect',title:t('Escolha o turno'),text:t('Alterne entre os turnos cadastrados sem sair da mesma visão.'),tip:t('Agora leva você de volta ao turno corrente.')},
         {selector:'.daily-assignment-bar',title:t('Sua alocação'),text:t('Aqui você vê em quais linhas, áreas ou processos está alocado no turno selecionado.'),tip:t('A alocação é configurada pelo administrador e permanece até ser alterada.')},
-        {selector:'.daily-timeline-panel',title:t('Mapa do turno'),text:t('O mapa organiza o que já foi concluído, o que está em andamento e o que vem a seguir.'),tip:t('Use Todas, Minhas e Pendentes para reduzir a lista.')},
-        {selector:'.daily-focus-card',title:t('Executar e registrar'),text:t('Abra uma rotina, marque o que foi feito e registre valores como FPY diretamente em cada item. Nada é obrigatório para salvar.'),tip:t('Uma execução concluída pode ser aberta e editada depois.')},
-        {selector:'.daily-side-column',title:t('Trabalho conectado'),text:t('Falhas, atividades e reports relacionados continuam acessíveis sem sair da Central do Dia.'),tip:t('Itens gerados a partir de uma rotina também ficam vinculados à execução.')},
+        {selector:'.daily-stats',title:t('Resumo do turno'),text:t('Cobertura, concluídas, pendentes e anormalidades mostram rapidamente a situação do turno selecionado.'),tip:t('Esses números são formados pelas execuções previstas e registradas.')},
+        {selector:'#dailyNowCard',title:t('O que exige ação agora'),text:t('Este cartão destaca a rotina mais urgente ou a que já está em andamento.'),tip:t('Use Iniciar e Registrar resultado para conduzir a execução.')},
+        {selector:'.daily-timeline-panel',title:t('Acompanhe o mapa do turno'),text:t('Aqui você vê cada rotina em ordem, com status, horário e ações disponíveis.'),tip:t('Os filtros ajudam a focar em todas, somente suas ou apenas pendentes.')},
+        {selector:'.daily-side-column',title:t('Conecte o trabalho'),text:t('Atividades, falhas, reports e itens gerados pelas rotinas continuam ligados ao turno.'),tip:t('Você pode abrir esses registros sem perder o contexto da Central do Dia.')},
+        {selector:'#centralNotificationButton',title:t('Alertas do turno'),text:t('O sino reúne rotinas próximas do horário, atrasos e atividades com prazo.'),tip:t('Você pode ativar alertas do navegador e escolher a antecedência.')}
       ];
-      if(currentAccount?.role==='admin')steps.push({selector:'#dailyAdminToggle',title:t('Administração'),text:t('Administradores configuram turnos, matriz de alocação, rotinas e consultam o histórico operacional.'),tip:t('Alterações no modelo não apagam os dados de execuções já concluídas.')});
-      steps.push({selector:'#dailyTourButton',title:t('Guia concluído'),text:t('Você pode abrir este guia novamente pelo botão Como funciona.'),tip:t('Os dados de rotina ficam no Firestore para consultas futuras.')});
+      if(currentAccount?.role==='admin'){
+        steps.push({selector:'#dailyAdminToggle',title:t('Configuração administrativa'),text:t('Administradores usam esta área para turnos, escopos, matriz de alocação, rotinas e histórico.'),tip:t('O usuário comum não vê esta etapa.')});
+      }
+      steps.push({selector:'#dailyTourButton',title:t('Ajuda sempre disponível'),text:t('O guia não precisa ocupar a tela no uso diário. Use este ícone quando quiser rever o passo a passo.'),tip:t('Você também pode pular etapas clicando nos indicadores do tour.')});
       return steps;
     }
 
     function clearDailyTourHighlight(){
-      document.querySelectorAll('.daily-tour-highlight').forEach(el=>el.classList.remove('daily-tour-highlight'));
+      document.querySelectorAll('.daily-tour-highlight,.daily-tour-pulse').forEach(el=>el.classList.remove('daily-tour-highlight','daily-tour-pulse'));
+    }
+
+    function dailyTourIsOpen(){
+      return !document.querySelector('#dailyTourModal')?.classList.contains('hidden');
+    }
+
+    function dailyTourTarget(){
+      const step=dailyTourSteps()[dailyTourStep];
+      return step?document.querySelector(step.selector):null;
+    }
+
+    function setTourRect(el,left,top,width,height){
+      if(!el)return;
+      el.style.left=Math.max(0,left)+'px';
+      el.style.top=Math.max(0,top)+'px';
+      el.style.width=Math.max(0,width)+'px';
+      el.style.height=Math.max(0,height)+'px';
+    }
+
+    function positionDailyTour(){
+      if(!dailyTourIsOpen())return;
+      const target=dailyTourTarget(),coach=document.querySelector('#dailyTourCoach');
+      if(!target||!coach)return;
+      const rect=target.getBoundingClientRect(),vw=window.innerWidth,vh=window.innerHeight,pad=7,gap=14,margin=10;
+      const left=Math.max(0,rect.left-pad),top=Math.max(0,rect.top-pad),right=Math.min(vw,rect.right+pad),bottom=Math.min(vh,rect.bottom+pad);
+      const shades={
+        top:document.querySelector('[data-tour-shade="top"]'),
+        right:document.querySelector('[data-tour-shade="right"]'),
+        bottom:document.querySelector('[data-tour-shade="bottom"]'),
+        left:document.querySelector('[data-tour-shade="left"]')
+      };
+      setTourRect(shades.top,0,0,vw,top);
+      setTourRect(shades.bottom,0,bottom,vw,vh-bottom);
+      setTourRect(shades.left,0,top,left,bottom-top);
+      setTourRect(shades.right,right,top,vw-right,bottom-top);
+
+      const cw=coach.offsetWidth||350,ch=coach.offsetHeight||240;
+      let placement='bottom',x=left,y=bottom+gap;
+      const roomRight=vw-right,roomLeft=left,roomBottom=vh-bottom,roomTop=top;
+      if(roomRight>=cw+gap+margin){placement='right';x=right+gap;y=top+(bottom-top-ch)/2;}
+      else if(roomLeft>=cw+gap+margin){placement='left';x=left-cw-gap;y=top+(bottom-top-ch)/2;}
+      else if(roomBottom>=ch+gap+margin){placement='bottom';x=left+(right-left-cw)/2;y=bottom+gap;}
+      else {placement='top';x=left+(right-left-cw)/2;y=top-ch-gap;}
+
+      x=Math.min(Math.max(margin,x),Math.max(margin,vw-cw-margin));
+      y=Math.min(Math.max(margin,y),Math.max(margin,vh-ch-margin));
+      coach.style.left=x+'px';coach.style.top=y+'px';coach.dataset.placement=placement;
+
+      if(placement==='top'||placement==='bottom'){
+        const arrow=Math.min(cw-24,Math.max(22,(left+right)/2-x));
+        coach.style.setProperty('--tour-arrow-left',arrow+'px');
+      }else{
+        const arrow=Math.min(ch-24,Math.max(22,(top+bottom)/2-y));
+        coach.style.setProperty('--tour-arrow-top',arrow+'px');
+      }
     }
 
     function renderDailyTour(){
       const steps=dailyTourSteps();
       dailyTourStep=Math.max(0,Math.min(dailyTourStep,steps.length-1));
       const step=steps[dailyTourStep];
-      document.querySelector('#dailyTourIcon').textContent=String(dailyTourStep+1);
       document.querySelector('#dailyTourStepTitle').textContent=step.title;
       document.querySelector('#dailyTourStepText').textContent=step.text;
       document.querySelector('#dailyTourTip').textContent=step.tip||'';
-      document.querySelector('#dailyTourCounter').textContent=`${dailyTourStep+1} / ${steps.length}`;
-      document.querySelector('#dailyTourDots').innerHTML=steps.map((_,i)=>`<span class="${i===dailyTourStep?'active':''}"></span>`).join('');
+      document.querySelector('#dailyTourCounter').textContent=`${t('Etapa')} ${dailyTourStep+1} / ${steps.length}`;
+      document.querySelector('#dailyTourDots').innerHTML=steps.map((_,i)=>`<button type="button" class="${i===dailyTourStep?'active':''}" data-daily-tour-step="${i}" aria-label="${t('Etapa')} ${i+1}"></button>`).join('');
       document.querySelector('#dailyTourPrev').disabled=dailyTourStep===0;
       document.querySelector('#dailyTourNext').textContent=dailyTourStep===steps.length-1?t('Fechar'):t('Próximo');
+
       clearDailyTourHighlight();
-      const target=document.querySelector(step.selector);
-      if(target){target.classList.add('daily-tour-highlight');target.scrollIntoView({behavior:'smooth',block:'center'});}
+      const target=dailyTourTarget();
+      if(!target){dailyTourStep=Math.min(dailyTourStep+1,steps.length-1);return renderDailyTour();}
+      target.scrollIntoView({behavior:'smooth',block:'center',inline:'nearest'});
+      setTimeout(()=>{
+        if(!dailyTourIsOpen())return;
+        target.classList.add('daily-tour-highlight','daily-tour-pulse');
+        positionDailyTour();
+      },220);
       translatePage();
     }
 
     function openDailyTour({firstAccess=false}={}){
       dailyTourStep=0;
-      document.querySelector('#dailyTourModal')?.classList.remove('hidden');
-      if(firstAccess) localStorage.setItem(dailyTourStorageKey(),'seen');
+      const modal=document.querySelector('#dailyTourModal');
+      if(!modal)return;
+      modal.classList.remove('hidden');
+      const disable=document.querySelector('#dailyTourDisableAuto');
+      if(disable)disable.checked=localStorage.getItem(dailyTourDisableKey())==='1';
+      if(firstAccess)modal.dataset.firstAccess='true';else delete modal.dataset.firstAccess;
       renderDailyTour();
     }
 
-    function closeDailyTour(){
-      document.querySelector('#dailyTourModal')?.classList.add('hidden');
+    function closeDailyTour({markSeen=true}={}){
+      const modal=document.querySelector('#dailyTourModal');
+      modal?.classList.add('hidden');
       clearDailyTourHighlight();
-      localStorage.setItem(dailyTourStorageKey(),'seen');
+      if(markSeen)localStorage.setItem(dailyTourStorageKey(),'seen');
+      if(document.querySelector('#dailyTourDisableAuto')?.checked)localStorage.setItem(dailyTourDisableKey(),'1');
+      else localStorage.removeItem(dailyTourDisableKey());
     }
+
+    function nextDailyTourStep(){
+      const steps=dailyTourSteps();
+      if(dailyTourStep>=steps.length-1){closeDailyTour();return;}
+      dailyTourStep++;renderDailyTour();
+    }
+
 
     function renderDailyHomeSummary(){
       const el=document.querySelector('#homeDailySummary'); if(!el) return;
@@ -4256,9 +4340,9 @@ ${m.text}`).join('\n\n');
 
       renderDailyConnectedWork(allVisible);
       renderDailyAdmin();
-      if(activeView==='daily'&&!dailyTourAutoShown&&!localStorage.getItem(dailyTourStorageKey())){
+      if(activeView==='daily'&&!dailyTourAutoShown&&!localStorage.getItem(dailyTourStorageKey())&&!localStorage.getItem(dailyTourDisableKey())){
         dailyTourAutoShown=true;
-        setTimeout(()=>{if(activeView==='daily'&&document.querySelector('#dailyTourModal')?.classList.contains('hidden'))openDailyTour({firstAccess:true});},350);
+        setTimeout(()=>{if(activeView==='daily'&&document.querySelector('#dailyTourModal')?.classList.contains('hidden'))openDailyTour({firstAccess:true});},500);
       }
     }
 
@@ -4740,7 +4824,7 @@ ${m.text}`).join('\n\n');
       openActivityModal({title:`Ação — ${execution.routineName} · ${execution.scopeName}`,area:execution.scopeName||'Operação',description:execution.note||`Atividade originada da rotina ${execution.routineName}, ${execution.shiftName}.`,activityMode:'simple'});
     }
 
-    // ===================== FIM CENTRAL DO DIA · V15.1.13.34 =====================
+    // ===================== FIM CENTRAL DO DIA · V15.1.13.35 =====================
 
     function renderSafely(name, fn) {
       try {
@@ -5309,6 +5393,7 @@ ${m.text}`).join('\n\n');
     document.querySelector('#commandPaletteResults')?.addEventListener('click',e=>{const item=e.target.closest('[data-command-index]');if(item)runCommandPaletteIndex(Number(item.dataset.commandIndex));});
     document.querySelector('#commandPaletteModal')?.addEventListener('click',e=>{if(e.target.id==='commandPaletteModal')closeCommandPalette();});
     document.addEventListener('keydown',e=>{
+      if(e.key==='Escape'&&dailyTourIsOpen()){e.preventDefault();closeDailyTour();return;}
       if((e.ctrlKey||e.metaKey)&&String(e.key).toLowerCase()==='k'){e.preventDefault();document.querySelector('#commandPaletteModal')?.classList.contains('hidden')?openCommandPalette():closeCommandPalette();return;}
       const open=!document.querySelector('#commandPaletteModal')?.classList.contains('hidden');
       if(!open)return;
@@ -5398,11 +5483,14 @@ ${m.text}`).join('\n\n');
     document.querySelector('#dailyShiftSelect')?.addEventListener('change',e=>{dailySelectedShiftId=e.target.value||'';localStorage.setItem('central.daily.shift.v1',dailySelectedShiftId);dailyMaterializeSignature='';renderDaily();});
     document.querySelector('#dailyTodayBtn')?.addEventListener('click',()=>{const current=dailyCurrentShiftInfo();dailySelectedShiftId=current.shift?.docId||dailySelectedShiftId;dailySelectedDate=current.dateKey;dailyMaterializeSignature='';renderDaily();});
     document.querySelector('#dailyTourButton')?.addEventListener('click',()=>openDailyTour());
-    document.querySelector('#closeDailyTour')?.addEventListener('click',closeDailyTour);
-    document.querySelector('#dailyTourSkip')?.addEventListener('click',closeDailyTour);
+    document.querySelector('#closeDailyTour')?.addEventListener('click',()=>closeDailyTour());
+    document.querySelector('#dailyTourSkip')?.addEventListener('click',()=>closeDailyTour());
     document.querySelector('#dailyTourPrev')?.addEventListener('click',()=>{dailyTourStep=Math.max(0,dailyTourStep-1);renderDailyTour();});
-    document.querySelector('#dailyTourNext')?.addEventListener('click',()=>{const steps=dailyTourSteps();if(dailyTourStep>=steps.length-1){closeDailyTour();return;}dailyTourStep++;renderDailyTour();});
-    document.querySelector('#dailyTourModal')?.addEventListener('click',e=>{if(e.target.id==='dailyTourModal')closeDailyTour();});
+    document.querySelector('#dailyTourNext')?.addEventListener('click',nextDailyTourStep);
+    document.querySelector('#dailyTourDots')?.addEventListener('click',e=>{const dot=e.target.closest('[data-daily-tour-step]');if(!dot)return;dailyTourStep=Number(dot.dataset.dailyTourStep||0);renderDailyTour();});
+    document.querySelector('#dailyTourDisableAuto')?.addEventListener('change',e=>{if(e.target.checked)localStorage.setItem(dailyTourDisableKey(),'1');else localStorage.removeItem(dailyTourDisableKey());});
+    window.addEventListener('resize',()=>{if(dailyTourIsOpen())positionDailyTour();});
+    window.addEventListener('scroll',()=>{if(dailyTourIsOpen())positionDailyTour();},{capture:true,passive:true});
     document.querySelector('#dailyAdminToggle')?.addEventListener('click',()=>{if(currentAccount?.role!=='admin')return;document.querySelector('#dailyAdminPanel').classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel').scrollIntoView({behavior:'smooth',block:'start'});});
     document.querySelector('#dailyAdminClose')?.addEventListener('click',()=>document.querySelector('#dailyAdminPanel').classList.add('hidden'));
     document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.addEventListener('click',()=>{dailyAdminTab=btn.dataset.dailyAdminTab||'config';renderDailyAdmin();}));
@@ -6163,5 +6251,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.34'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.34'){localStorage.setItem('cora.sw.loaded','15.1.13.34');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.35'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.35'){localStorage.setItem('cora.sw.loaded','15.1.13.35');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
