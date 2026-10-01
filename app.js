@@ -1945,8 +1945,8 @@
       const allocations=currentAccount?.role==='admin'?activeWorkAllocations().filter(a=>a.shiftId===shiftId):activeWorkAllocations().filter(a=>a.shiftId===shiftId&&a.userId===uid);
       const productionScopeIds=currentAccount?.role==='admin'?state.operationalScopes.filter(scope=>dailyProductionCodes(scope.docId,shiftId).length).map(scope=>scope.docId):[];
       const scopeIds=[...new Set([...allocations.flatMap(a=>a.scopeIds||[]),...productionScopeIds])];
-      const lines=new Set(scopeIds.map(id=>recurrenceNorm(state.operationalScopes.find(s=>s.docId===id)?.name||'')).filter(Boolean));
-      const codes=new Set(scopeIds.flatMap(id=>dailyProductionCodes(id,shiftId)).map(productCodeKey).filter(Boolean));
+      const lines=new Set(scopeIds.flatMap(id=>{const scope=state.operationalScopes.find(s=>s.docId===id);return [recurrenceNorm(scope?.name||''),recurrenceNorm(scope?.code||'')];}).filter(Boolean));
+      const codes=new Set(scopeIds.flatMap(id=>dailyProductionCodes(id,shiftId,dailySelectedDate)).map(productCodeKey).filter(Boolean));
       return recurrenceRadarClusters().filter(cluster=>{
         const lineMatch=cluster.items.some(item=>lines.has(recurrenceNorm(item.line)));
         const productMatch=cluster.items.some(item=>item.codes.some(code=>codes.has(productCodeKey(code))));
@@ -4108,8 +4108,8 @@ ${m.text}`).join('\n\n');
         if(execution.scopeId&&item?.originScopeId===execution.scopeId)score+=5;
         if(execution.scopeType==='line'){
           const line=compact(item?.linha||item?.line||'');
-          const target=compact(execution.scopeName);
-          if(line&&target&&line===target)score+=4;
+          const targets=[compact(execution.scopeName),compact(execution.scopeCode)].filter(Boolean);
+          if(line&&targets.includes(line))score+=4;
         }
         if(productionKeys.size){
           const recordKeys=new Set([...failureProductCodes(item),...(item?.productionProductCodes||[])].map(productCodeKey).filter(Boolean));
@@ -4157,24 +4157,35 @@ ${m.text}`).join('\n\n');
       const rows=dailyAdminHistoryItems();
       host.innerHTML=rows.length?rows.map(row=>`<div class="daily-admin-history-row"><span class="daily-admin-history-dot"></span><div><strong>${esc(row.summary||row.action||'Alteração')}</strong><span>${esc(row.label||'')} · ${esc(row.by||'Admin')} · ${esc(formatDate(row.at))}</span></div></div>`).join(''):`<div class="daily-soft-empty">${esc(t('Nenhuma alteração administrativa registrada ainda.'))}</div>`;
     }
-    function dailyProductionCodes(scopeId,shiftId){
+    function dailyProductionCodes(scopeId,shiftId,dateKey=''){
       const scope=state.operationalScopes.find(x=>x.docId===scopeId);
-      const raw=scope?.productionByShift?.[shiftId];
+      let raw=scope?.productionByShift?.[shiftId];
+      if(scope&&shiftId&&dateKey){
+        const shift=state.workShifts.find(x=>x.docId===shiftId),bounds=shift?dailyShiftBounds(dateKey,shift):null;
+        if(bounds){
+          const events=(scope.history||[]).filter(event=>['production_updated','production_cleared'].includes(event.action)&&event.snapshot?.shiftId===shiftId&&event.at&&new Date(event.at)<=bounds.end).sort((a,b)=>new Date(b.at)-new Date(a.at));
+          if(events.length)raw=events[0].snapshot?.productCodes||[];
+          else{
+            const first=(scope.history||[]).filter(event=>['production_updated','production_cleared'].includes(event.action)&&event.snapshot?.shiftId===shiftId&&event.at).sort((a,b)=>new Date(a.at)-new Date(b.at))[0];
+            if(first&&new Date(first.at)>bounds.end)raw=[];
+          }
+        }
+      }
       const values=Array.isArray(raw)?raw:(raw?[raw]:[]);
       const seen=new Set();
       return values.filter(Boolean).filter(code=>{const key=productCodeKey(code);if(!key||seen.has(key))return false;seen.add(key);return true;});
     }
-    function dailyProductionProducts(scopeId,shiftId){
-      const keys=new Set(dailyProductionCodes(scopeId,shiftId).map(productCodeKey));
+    function dailyProductionProducts(scopeId,shiftId,dateKey=''){
+      const keys=new Set(dailyProductionCodes(scopeId,shiftId,dateKey).map(productCodeKey));
       return state.products.filter(p=>keys.has(productCodeKey(p.code)));
     }
-    function dailyProductionLabel(scopeId,shiftId){
-      const products=dailyProductionProducts(scopeId,shiftId);
+    function dailyProductionLabel(scopeId,shiftId,dateKey=''){
+      const products=dailyProductionProducts(scopeId,shiftId,dateKey);
       if(!products.length)return '';
       return products.map(p=>productDisplayCode(p.code)).join(' · ');
     }
-    function dailyProductionContext(scopeId,shiftId){
-      const products=dailyProductionProducts(scopeId,shiftId);
+    function dailyProductionContext(scopeId,shiftId,dateKey=''){
+      const products=dailyProductionProducts(scopeId,shiftId,dateKey);
       const codes=products.map(p=>p.code);
       const families=[...new Set(products.map(productFamily).filter(Boolean))];
       const bases=[...new Set(products.map(productBaseCode).filter(Boolean))];
@@ -4214,6 +4225,7 @@ ${m.text}`).join('\n\n');
       const scope=state.operationalScopes.find(x=>x.docId===scopeId),shift=state.workShifts.find(x=>x.docId===shiftId);
       if(!scope||!shift)return;
       const productCodes=clear?[]:f.getAll('productCodes').map(String).filter(Boolean);
+      if(!clear&&!productCodes.length)return alert('Selecione pelo menos um CPH ou use “Limpar vínculo”.');
       const productionByShift={...(scope.productionByShift||{})};
       if(productCodes.length)productionByShift[shiftId]=productCodes;else delete productionByShift[shiftId];
       const labels=productCodes.map(productDisplayCode).join(', ');
@@ -4254,12 +4266,12 @@ ${m.text}`).join('\n\n');
           const userNames=userIds.map(uid=>users.find(u=>u.docId===uid)?.name||scopeAllocations.find(a=>a.userId===uid)?.userName||uid);
           if(!userIds.length) return;
 
-          const production=dailyProductionContext(scopeId,shiftId);
+          const production=dailyProductionContext(scopeId,shiftId,dateKey);
           times.forEach(plannedTime=>{
             const common={
               dateKey,shiftId,shiftName:shift.name||'Turno',shiftStart:shift.startTime||'',shiftEnd:shift.endTime||'',
               routineId:routine.docId,routineName:routine.name||'Rotina',routineDescription:routine.description||'',
-              scopeId,scopeName:scope.name||'Escopo',scopeType:scope.type||'other',
+              scopeId,scopeName:scope.name||'Escopo',scopeCode:scope.code||'',scopeType:scope.type||'other',
               productionProductCodes:production.productCodes,productionProductLabels:production.productLabels,productionFamilies:production.families,productionBaseCodes:production.baseCodes,
               plannedTime,windowMinutes:Number(routine.windowMinutes||60),
               executionPolicy:routine.executionPolicy||'scope_once',
@@ -4319,7 +4331,7 @@ ${m.text}`).join('\n\n');
           executionKey:item.executionKey,dateKey:item.dateKey,
           shiftId:item.shiftId,shiftName:item.shiftName,shiftStart:item.shiftStart,shiftEnd:item.shiftEnd,
           routineId:item.routineId,routineName:item.routineName,routineDescription:item.routineDescription,
-          scopeId:item.scopeId,scopeName:item.scopeName,scopeType:item.scopeType,
+          scopeId:item.scopeId,scopeName:item.scopeName,scopeCode:item.scopeCode||'',scopeType:item.scopeType,
           productionProductCodes:item.productionProductCodes||[],productionProductLabels:item.productionProductLabels||[],productionFamilies:item.productionFamilies||[],productionBaseCodes:item.productionBaseCodes||[],
           plannedTime:item.plannedTime,
           windowMinutes:item.windowMinutes,executionPolicy:item.executionPolicy,resultMode:item.resultMode,contextMode:item.contextMode||'none',
@@ -4766,7 +4778,7 @@ ${m.text}`).join('\n\n');
       const myScopeIds=[...new Set(myAllocations.flatMap(a=>a.scopeIds||[]))];
       const chips=myScopeIds.map(id=>state.operationalScopes.find(s=>s.docId===id)).filter(Boolean);
       const chipBox=document.querySelector('#dailyAssignmentChips');
-      if(chipBox) chipBox.innerHTML=chips.length ? chips.map(scope=>{const production=dailyProductionLabel(scope.docId,dailySelectedShiftId);return `<span class="daily-chip"><small>${esc(dailyScopeTypeLabel(scope.type))}</small>${esc(scope.name)}${production?`<span class="daily-production-chip">${esc(production)}</span>`:''}</span>`;}).join('') : `<span class="daily-chip muted-chip">${esc(t('Nenhuma alocação neste turno'))}</span>`;
+      if(chipBox) chipBox.innerHTML=chips.length ? chips.map(scope=>{const production=dailyProductionLabel(scope.docId,dailySelectedShiftId,dailySelectedDate);return `<span class="daily-chip"><small>${esc(dailyScopeTypeLabel(scope.type))}</small>${esc(scope.name)}${production?`<span class="daily-production-chip">${esc(production)}</span>`:''}</span>`;}).join('') : `<span class="daily-chip muted-chip">${esc(t('Nenhuma alocação neste turno'))}</span>`;
 
       if(activeView==='daily') materializeDailyExecutions();
       let executions=dailyMergedExecutions().filter(dailyExecutionVisibleToCurrent);
@@ -5442,14 +5454,14 @@ ${m.text}`).join('\n\n');
     }
 
     function dailySetOrigin(execution){
-      pendingOriginContext={type:'routineExecution',executionKey:execution.executionKey,routineId:execution.routineId||'',routineName:execution.routineName||'Rotina',scopeId:execution.scopeId||'',scopeName:execution.scopeName||'',scopeType:execution.scopeType||'',shiftId:execution.shiftId||'',shiftName:execution.shiftName||'',dateKey:execution.dateKey||'',productionProductCodes:execution.productionProductCodes||[],productionProductLabels:execution.productionProductLabels||[]};
+      pendingOriginContext={type:'routineExecution',executionKey:execution.executionKey,routineId:execution.routineId||'',routineName:execution.routineName||'Rotina',scopeId:execution.scopeId||'',scopeName:execution.scopeName||'',scopeCode:execution.scopeCode||'',scopeType:execution.scopeType||'',shiftId:execution.shiftId||'',shiftName:execution.shiftName||'',dateKey:execution.dateKey||'',productionProductCodes:execution.productionProductCodes||[],productionProductLabels:execution.productionProductLabels||[]};
     }
 
     function dailyCreateFailureFromExecution(key){
       const execution=dailyFindExecution(key);if(!execution)return;
       dailySetOrigin(execution);
       const codes=execution.productionProductCodes||[];
-      openOperationalFailureModal({text:execution.note||`Anormalidade identificada durante ${execution.routineName}.`,context:`Origem: ${execution.routineName} · ${execution.scopeName} · ${execution.shiftName}${codes.length?` · ${codes.map(productDisplayCode).join(', ')}`:''}.`,line:execution.scopeType==='line'?execution.scopeName:'',scopeType:codes.length>1?'multi_sku':codes.length===1?'variant':'none',productCodes:codes,unscoped:!codes.length});
+      openOperationalFailureModal({text:execution.note||`Anormalidade identificada durante ${execution.routineName}.`,context:`Origem: ${execution.routineName} · ${execution.scopeName} · ${execution.shiftName}${codes.length?` · ${codes.map(productDisplayCode).join(', ')}`:''}.`,line:execution.scopeType==='line'?(execution.scopeCode||execution.scopeName):'',scopeType:codes.length>1?'multi_sku':codes.length===1?'variant':'none',productCodes:codes,unscoped:!codes.length});
     }
 
     function dailyCreateActivityFromExecution(key){
@@ -5805,14 +5817,14 @@ ${m.text}`).join('\n\n');
       form.elements.classification.value='NAO_DEFINIDO';
       form.elements.classification_confidence.value='MEDIA';
 
-      const preferredFamily=prefill.family||activeData()?.family||'';
+      const prefillCodes=(prefill.productCodes||[]).filter(Boolean);
+      const preferredFamily=prefill.family||(prefillCodes.length?'':(activeData()?.family||''));
       const familySelect=document.querySelector('#operationalFamilySelect');
       fillOperationalProducts();
       if(preferredFamily && [...familySelect.options].some(o=>o.value===preferredFamily)){
         familySelect.value=preferredFamily;
         fillOperationalProducts();
       }
-      const prefillCodes=(prefill.productCodes||[]).filter(Boolean);
       if(prefillCodes.length){
         const products=state.products.filter(p=>prefillCodes.some(code=>sameProductCode(code,p.code)));
         const families=[...new Set(products.map(productFamily).filter(Boolean))];
@@ -6509,7 +6521,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         detectionMoment,detection_moment_label:detectionLabels[detectionMoment]||detectionMoment,quando_inicio:f.get('quando_inicio')||'',onde_detectado:String(f.get('onde_detectado')||'').trim(),quantity:rawQty===''?null:Number(rawQty),
         issue,descriptionContext:String(f.get('description_context')||'').trim(),hypothesis:String(f.get('hipotese_causa')||'').trim(),tests:String(f.get('testes_realizados')||'').trim(),cause:String(f.get('causa_confirmada')||'').trim(),correctiveAction:String(f.get('acao_corretiva')||'').trim(),notes:String(f.get('observacoes')||'').trim(),
         owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[],
-        originType:pendingOriginContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:pendingOriginContext?.scopeId||'',originScopeName:pendingOriginContext?.scopeName||'',originScopeType:pendingOriginContext?.scopeType||'',originShiftId:pendingOriginContext?.shiftId||'',originShiftName:pendingOriginContext?.shiftName||'',originDateKey:pendingOriginContext?.dateKey||'',productionProductCodes:pendingOriginContext?.productionProductCodes||productCodes,productionProductLabels:pendingOriginContext?.productionProductLabels||productCodes.map(productDisplayCode)
+        originType:pendingOriginContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:pendingOriginContext?.scopeId||'',originScopeName:pendingOriginContext?.scopeName||'',originScopeCode:pendingOriginContext?.scopeCode||'',originScopeType:pendingOriginContext?.scopeType||'',originShiftId:pendingOriginContext?.shiftId||'',originShiftName:pendingOriginContext?.shiftName||'',originDateKey:pendingOriginContext?.dateKey||'',productionProductCodes:pendingOriginContext?.productionProductCodes||productCodes,productionProductLabels:pendingOriginContext?.productionProductLabels||productCodes.map(productDisplayCode)
       };
       if(!navigator.onLine){item.docId=`offline-${Date.now()}`;await queueOfflineWrite('operationalFailures',item);state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
       const origin=pendingOriginContext;
