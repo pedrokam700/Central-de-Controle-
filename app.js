@@ -4295,6 +4295,170 @@ ${m.text}`).join('\n\n');
     }
 
 
+    function dailyAdjacentShift(dateKey,shiftId,direction=-1){
+      const shifts=state.workShifts.filter(x=>x.active!==false).sort((a,b)=>dailyTimeMinutes(a.startTime)-dailyTimeMinutes(b.startTime));
+      const index=shifts.findIndex(x=>x.docId===shiftId);
+      if(index<0||!shifts.length)return null;
+      if(direction<0){
+        if(index>0)return {dateKey,shift:shifts[index-1]};
+        return {dateKey:addLocalDays(dateKey,-1),shift:shifts[shifts.length-1]};
+      }
+      if(index<shifts.length-1)return {dateKey,shift:shifts[index+1]};
+      return {dateKey:addLocalDays(dateKey,1),shift:shifts[0]};
+    }
+
+    function shiftHandoverKey(dateKey,shiftId){
+      return (`handover__${dateKey}__${shiftId}`).replace(/[^a-zA-Z0-9_-]/g,'-');
+    }
+
+    function dailyHandoverDoc(dateKey,shiftId){
+      return state.routineExecutions.find(x=>x.recordType==='shift_handover'&&x.sourceDateKey===dateKey&&x.sourceShiftId===shiftId)||null;
+    }
+
+    function dailyHandoverSummaryData(dateKey,shiftId){
+      const shift=state.workShifts.find(x=>x.docId===shiftId);
+      if(!shift)return null;
+      const executions=dailyMergedExecutions(dateKey,shiftId);
+      const completed=executions.filter(x=>x.status==='completed');
+      const pending=executions.filter(x=>x.status!=='completed');
+      const ng=completed.filter(x=>x.result==='ng');
+      const coverage=executions.length?Math.round(completed.length/executions.length*100):0;
+      const bounds=dailyShiftBounds(dateKey,shift);
+      const inPeriod=item=>{
+        if(!bounds)return false;
+        const d=new Date(item?.createdAt||item?.openedAt||0);
+        return !Number.isNaN(d.getTime())&&d>=bounds.start&&d<bounds.end;
+      };
+      const failures=[
+        ...state.operationalFailures.filter(inPeriod).map(x=>({kind:'Falha',id:x.id,title:x.issue||x.id,scope:[x.linha,x.estacao].filter(Boolean).join(' · ')})),
+        ...state.reports.filter(inPeriod).map(x=>({kind:'Report',id:x.id,title:x.issue||x.id,scope:[x.product,x.component].filter(Boolean).join(' · ')}))
+      ].slice(0,30);
+      const executionIds=new Set(executions.map(x=>x.executionKey).filter(Boolean));
+      const openActivities=state.activities
+        .filter(a=>activityEffectiveStatus(a)!=='concluido'&&(executionIds.has(a.originRoutineExecutionId)||inPeriod(a)))
+        .map(a=>({id:a.id,title:a.title||a.id,nextAction:a.nextAction||'',owner:a.owner||''}))
+        .slice(0,30);
+      const dataPoints=[];
+      completed.forEach(execution=>{
+        const schema=normalizeRoutineSchema(execution.checklistSchema,execution.checklistTemplate);
+        (execution.checklist||[]).forEach((saved,index)=>{
+          const item=schema.find(x=>x.id===saved.itemId)||schema[index]||{label:saved.text||'Item',type:saved.type||'text',unit:saved.unit||''};
+          const value=routineItemDisplayValue(item,saved);
+          if(!value)return;
+          dataPoints.push({routine:execution.routineName||'Rotina',scope:execution.scopeName||'',label:item.label,value,assessment:saved.assessment||routineTargetAssessment(item,saved.value)});
+        });
+      });
+      return {dateKey,shiftId,shiftName:shift.name||'Turno',window:dailyShiftWindowLabel(shift),total:executions.length,completed:completed.length,pending:pending.length,ng:ng.length,coverage,failures,openActivities,dataPoints:dataPoints.slice(0,40),generatedAt:now()};
+    }
+
+    function renderShiftHandoverSummary(summary){
+      if(!summary)return '<div class="daily-soft-empty">Sem dados para este turno.</div>';
+      const data=summary.dataPoints||[],failures=summary.failures||[],activities=summary.openActivities||[];
+      const dataHtml=data.length?data.slice(0,18).map(x=>{
+        const flag=x.assessment==='fail'?(' · '+t('Fora da meta')):'';
+        const cls=x.assessment==='fail'?'danger-text':'';
+        return `<div class="shift-handover-item"><div><strong>${esc(x.label)}</strong><span>${esc([x.routine,x.scope].filter(Boolean).join(' · '))}</span></div><strong class="${cls}">${esc(x.value+flag)}</strong></div>`;
+      }).join(''):'<div class="daily-soft-empty">Nenhum dado estruturado registrado.</div>';
+      const failureHtml=failures.length?failures.slice(0,15).map(x=>`<div class="shift-handover-item"><div><strong>${esc(x.title)}</strong><span>${esc([x.kind,x.id,x.scope].filter(Boolean).join(' · '))}</span></div></div>`).join(''):'<div class="daily-soft-empty">Nenhuma falha registrada no turno.</div>';
+      const activityHtml=activities.length?activities.slice(0,15).map(x=>`<div class="shift-handover-item"><div><strong>${esc(x.title)}</strong><span>${esc([x.id,x.owner,x.nextAction].filter(Boolean).join(' · '))}</span></div></div>`).join(''):'<div class="daily-soft-empty">Nenhuma atividade aberta ligada ao turno.</div>';
+      return `<div class="shift-handover-kpis">
+        <div class="shift-handover-kpi"><span>${esc(t('Cobertura'))}</span><strong>${summary.coverage||0}%</strong></div>
+        <div class="shift-handover-kpi"><span>${esc(t('Concluídas'))}</span><strong>${summary.completed||0}</strong></div>
+        <div class="shift-handover-kpi"><span>${esc(t('Pendentes'))}</span><strong>${summary.pending||0}</strong></div>
+        <div class="shift-handover-kpi"><span>NG</span><strong>${summary.ng||0}</strong></div>
+      </div>
+      <section class="shift-handover-section"><h4>${esc(t('Dados coletados'))}</h4>${dataHtml}</section>
+      <section class="shift-handover-section"><h4>${esc(t('Falhas registradas'))} · ${failures.length}</h4>${failureHtml}</section>
+      <section class="shift-handover-section"><h4>${esc(t('Atividades abertas'))} · ${activities.length}</h4>${activityHtml}</section>`;
+    }
+
+    function renderDailyHandover(){
+      const host=document.querySelector('#dailyHandoverContent');
+      if(!host||!dailySelectedDate||!dailySelectedShiftId)return;
+      const uid=currentAuthUser?.uid||'';
+      const currentShift=state.workShifts.find(x=>x.docId===dailySelectedShiftId);
+      if(!currentShift){host.innerHTML='<div class="daily-soft-empty">Turno não configurado.</div>';return;}
+      const previous=dailyAdjacentShift(dailySelectedDate,dailySelectedShiftId,-1);
+      const previousDoc=previous?dailyHandoverDoc(previous.dateKey,previous.shift.docId):null;
+      const currentDoc=dailyHandoverDoc(dailySelectedDate,dailySelectedShiftId);
+      const allocated=activeWorkAllocations().some(a=>a.userId===uid&&a.shiftId===dailySelectedShiftId);
+      const canPrepare=currentAccount?.role==='admin'||allocated;
+      const received=Boolean(previousDoc?.receivedBy?.some(x=>x.userId===uid));
+      const receivedNames=(previousDoc?.receivedBy||[]).map(x=>x.name).filter(Boolean);
+      let previousCard='';
+      if(previousDoc){
+        previousCard=`<div class="daily-handover-card"><span class="daily-mini-label">${esc(t('Turno anterior'))}</span><strong>${esc(previousDoc.sourceShiftName||previous?.shift.name||'Turno')} · ${esc(previousDoc.sourceDateKey||previous?.dateKey||'')}</strong><span>${esc(previousDoc.note||t('A passagem usa os dados já registrados no turno e preserva um snapshot para consulta futura.'))}</span><span class="daily-handover-status ${received?'received':''}">${esc(t(received?'Passagem recebida':'Passagem enviada'))}</span><div class="daily-handover-actions"><button type="button" class="button secondary button-compact" data-handover-action="receive" data-date="${esc(previousDoc.sourceDateKey)}" data-shift="${esc(previousDoc.sourceShiftId)}">${esc(t(received?'Abrir':'Receber passagem'))}</button></div>${receivedNames.length?'<span>'+esc(t('Recebido por'))+': '+esc(receivedNames.join(', '))+'</span>':''}</div>`;
+      }else{
+        previousCard=`<div class="daily-handover-card"><span class="daily-mini-label">${esc(t('Turno anterior'))}</span><strong>${esc(previous?.shift.name||'—')}</strong><span>${esc(t('Nenhuma passagem do turno anterior.'))}</span></div>`;
+      }
+      const currentStatus=currentDoc?`<span class="daily-handover-status">${esc(t('Passagem enviada'))}</span>`:'';
+      const currentAction=canPrepare?`<button type="button" class="button primary button-compact" data-handover-action="prepare" data-date="${esc(dailySelectedDate)}" data-shift="${esc(dailySelectedShiftId)}">${esc(t(currentDoc?'Editar passagem':'Preparar passagem'))}</button>`:'';
+      const currentCard=`<div class="daily-handover-card"><span class="daily-mini-label">${esc(t('Este turno'))}</span><strong>${esc(currentShift.name)} · ${esc(dailySelectedDate)}</strong><span>${esc(currentDoc?.note||t('A passagem usa os dados já registrados no turno e preserva um snapshot para consulta futura.'))}</span>${currentStatus}<div class="daily-handover-actions">${currentAction}</div></div>`;
+      host.innerHTML=previousCard+currentCard;
+    }
+
+    function openShiftHandover(mode,dateKey,shiftId){
+      const existing=dailyHandoverDoc(dateKey,shiftId);
+      const shift=state.workShifts.find(x=>x.docId===shiftId);
+      if(!shift)return;
+      const summary=mode==='prepare'?dailyHandoverSummaryData(dateKey,shiftId):(existing?.summary||dailyHandoverSummaryData(dateKey,shiftId));
+      selectedShiftHandover={mode,dateKey,shiftId,existing,summary};
+      const modal=document.querySelector('#shiftHandoverModal');
+      const title=document.querySelector('#shiftHandoverTitle');
+      const subtitle=document.querySelector('#shiftHandoverSubtitle');
+      const note=document.querySelector('#shiftHandoverNote');
+      const save=document.querySelector('#saveShiftHandover');
+      const receipt=document.querySelector('#shiftHandoverReceipt');
+      if(!modal)return;
+      title.textContent=mode==='receive'?t('Receber passagem'):t(existing?'Editar passagem':'Preparar passagem');
+      subtitle.textContent=`${shift.name||'Turno'} · ${dateKey} · ${dailyShiftWindowLabel(shift)}`;
+      document.querySelector('#shiftHandoverSummary').innerHTML=renderShiftHandoverSummary(summary);
+      note.value=existing?.note||'';
+      note.readOnly=mode==='receive';
+      const already=mode==='receive'&&existing?.receivedBy?.some(x=>x.userId===currentAuthUser?.uid);
+      receipt.classList.toggle('hidden',!already);
+      receipt.textContent=already?(t('Passagem recebida')+' · '+(existing.receivedBy.find(x=>x.userId===currentAuthUser?.uid)?.name||currentAccount?.name||'')):'';
+      save.classList.toggle('hidden',Boolean(already));
+      save.textContent=mode==='receive'?t('Confirmar recebimento'):t('Salvar passagem');
+      modal.classList.remove('hidden');
+      translatePage();
+    }
+
+    function closeShiftHandover(){
+      document.querySelector('#shiftHandoverModal')?.classList.add('hidden');
+      selectedShiftHandover=null;
+    }
+
+    async function saveShiftHandover(){
+      const context=selectedShiftHandover;
+      if(!context)return;
+      const {mode,dateKey,shiftId,existing,summary}=context;
+      const key=shiftHandoverKey(dateKey,shiftId);
+      const ref=doc(db,'routineExecutions',key);
+      if(mode==='receive'){
+        if(!existing)return;
+        const receivedBy=[...(existing.receivedBy||[]).filter(x=>x.userId!==currentAuthUser?.uid),{userId:currentAuthUser?.uid||'',name:currentAccount?.name||currentAccount?.email||'',at:now()}];
+        await setDoc(ref,{receivedBy,lastReceivedAt:now(),updatedAt:now()},{merge:true});
+        showSaveToast(t('Passagem recebida'),'success');
+        closeShiftHandover();
+        return;
+      }
+      const shift=state.workShifts.find(x=>x.docId===shiftId);
+      const next=dailyAdjacentShift(dateKey,shiftId,1);
+      const note=String(document.querySelector('#shiftHandoverNote')?.value||'').trim();
+      await setDoc(ref,{
+        recordType:'shift_handover',executionKey:key,status:'completed',
+        dateKey,shiftId,shiftName:shift?.name||'Turno',
+        sourceDateKey:dateKey,sourceShiftId:shiftId,sourceShiftName:shift?.name||'Turno',
+        targetDateKey:next?.dateKey||'',targetShiftId:next?.shift.docId||'',targetShiftName:next?.shift.name||'',
+        summary,note,receivedBy:existing?.receivedBy||[],
+        createdAt:existing?.createdAt||now(),createdById:existing?.createdById||currentAuthUser?.uid||'',createdByName:existing?.createdByName||currentAccount?.name||'',
+        updatedAt:now(),updatedById:currentAuthUser?.uid||'',updatedByName:currentAccount?.name||''
+      },{merge:true});
+      showSaveToast(t('Passagem enviada'),'success');
+      closeShiftHandover();
+    }
+
     function renderDailyHomeSummary(){
       const el=document.querySelector('#homeDailySummary'); if(!el) return;
       const current=dailyCurrentShiftInfo();
@@ -4351,6 +4515,7 @@ ${m.text}`).join('\n\n');
       }
 
       renderDailyConnectedWork(allVisible);
+      renderDailyHandover();
       renderDailyAdmin();
       if(activeView==='daily'&&!dailyTourAutoShown&&!localStorage.getItem(dailyTourStorageKey())&&!localStorage.getItem(dailyTourDisableKey())){
         dailyTourAutoShown=true;
@@ -4530,6 +4695,7 @@ ${m.text}`).join('\n\n');
       const scopeId=document.querySelector('#dailyDashScope')?.value||'';
       const userId=document.querySelector('#dailyDashUser')?.value||'';
       const rows=state.routineExecutions.filter(x=>
+        x.recordType!=='shift_handover' &&
         (x.dateKey||'')>=from && (x.dateKey||'')<=to &&
         (!shiftId||x.shiftId===shiftId) && (!scopeId||x.scopeId===scopeId) &&
         (!userId||x.assignedUserId===userId||(x.expectedUserIds||[]).includes(userId)||(x.participants||[]).some(p=>p.userId===userId))
