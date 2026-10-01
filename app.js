@@ -123,6 +123,29 @@
     Object.assign(translations, {"Entregue a continuidade":"Hand over continuity","A passagem reúne automaticamente o que foi registrado no turno e o próximo time pode confirmar o recebimento.":"The handover automatically gathers what was recorded in the shift and the next team can confirm receipt.","Use a observação somente para o contexto que os dados não conseguem mostrar sozinhos.":"Use the note only for context the data cannot show on its own."});
     Object.assign(translations, {"Contexto de produção":"Production context","Ligue cada linha/escopo ao CPH que está rodando em cada turno.":"Link each line/scope to the CPH running in each shift.","CPH em produção":"CPH in production","Sem CPH configurado":"No CPH configured","Salvar contexto":"Save context","Limpar vínculo":"Clear link","Contexto de produção salvo.":"Production context saved.","Vínculo de produção removido.":"Production link removed.","Radar de recorrência":"Recurrence radar","Padrões relacionados às linhas e CPHs deste turno.":"Patterns related to this shift's lines and CPHs.","Padrões ativos":"Active patterns","Ocorrências agrupadas":"Grouped occurrences","Em crescimento":"Growing","Possível recorrência":"Possible recurrence","Ver padrão":"View pattern","Por que foi agrupado":"Why it was grouped","Registros relacionados":"Related records","Cruza Falhas + Reports por componente, CPH, linha, máquina, posto, processo e descrição.":"Crosses Failures + Reports by component, CPH, line, machine, station, process, and description.","Recalcular":"Recalculate","Sem recorrências relevantes agora.":"No relevant recurrences right now.","Configure o que cada linha produz":"Configure what each line produces","Este vínculo conecta turno + linha/escopo + CPH e passa a alimentar rotinas, falhas, reports, passagem de turno e o Radar.":"This link connects shift + line/scope + CPH and feeds routines, failures, reports, handover, and the Radar.","Estruture os turnos":"Structure the shifts","Defina início e fim reais; a Central usa isso para saber qual período pertence a cada turno, inclusive quando atravessa a meia-noite.":"Define actual start and end times; the Work Center uses them to know which period belongs to each shift, including overnight shifts.","Modele os escopos":"Model the scopes","Linhas são o ponto principal, mas você também pode representar área, estação ou processo quando isso ajudar a operação.":"Lines are the main point, but you can also represent area, station, or process when useful.","Distribua pela matriz":"Assign through the matrix","A matriz é a forma mais rápida de dizer quem trabalha em qual escopo naquele turno.":"The matrix is the fastest way to define who works in each scope for that shift.","Use a alocação avançada só quando precisar":"Use advanced assignment only when needed","Aqui você ajusta papel principal/apoio e casos específicos sem substituir a matriz como fluxo principal.":"Here you adjust primary/support roles and specific cases without replacing the matrix as the main flow.","Construa as rotinas":"Build the routines","Defina agenda, escopos, regra de execução e os dados que serão coletados em cada item.":"Define schedule, scopes, execution policy, and the data collected in each item.","Acompanhe o histórico administrativo":"Review administrative history","Mudanças de turno, escopo, alocação, produção e rotina ficam registradas para auditoria.":"Changes to shifts, scopes, assignments, production, and routines are recorded for audit.","Leia o dashboard operacional":"Read the operational dashboard","Use os filtros para conferir cobertura, prazo, NG e execuções sem misturar políticas colaborativas com cobrança individual.":"Use filters to review coverage, timing, NG, and executions without mixing collaborative policies with individual accountability."});
     Object.assign(translations, {"O Radar cruza Falhas e Reports com o contexto real da operação para destacar padrões repetidos.":"The Radar crosses Failures and Reports with real operational context to highlight repeated patterns.","Linha + CPH + componente + máquina + posto + processo + descrição ajudam a explicar por que os registros foram agrupados.":"Line + CPH + component + machine + station + process + description help explain why records were grouped."});
+    Object.assign(translations, {
+      "Após o prazo":"After the deadline",
+      "Pode concluir depois — registra atraso":"Can be completed later — records delay",
+      "Janela fixa — bloqueia nova execução":"Fixed window — blocks a new execution",
+      "Use janela fixa para patrulhas/inspeções que perdem o sentido depois do horário. Use recuperável para coletas e entregas que ainda podem ser feitas com atraso.":"Use a fixed window for patrols/inspections that lose meaning after the scheduled time. Use recoverable for data collection and deliverables that can still be completed late.",
+      "Concluída com atraso":"Completed late",
+      "Atrasada em aberto":"Overdue and open",
+      "Não executada":"Not executed",
+      "Janela encerrada":"Window closed",
+      "Cancelada":"Cancelled",
+      "Cancelar atividade":"Cancel activity",
+      "Excluir definitivamente":"Delete permanently",
+      "Atribuída por":"Assigned by",
+      "Pontualidade":"Timeliness",
+      "No prazo":"On time",
+      "Recuperável":"Recoverable",
+      "Janela fixa":"Fixed window",
+      "Rotina arquivada. O histórico foi preservado.":"Routine archived. History was preserved.",
+      "Concluídas com atraso":"Completed late",
+      "Tarefas recuperáveis ainda pendentes":"Recoverable tasks still pending",
+      "Janelas fixas encerradas sem início":"Fixed windows closed without a start",
+      "Pendências herdáveis":"Carry-over pending work"
+    });
     const originalTextNodes = new WeakMap();
     const originalAttrs = new WeakMap();
     const translationPatterns = [
@@ -205,9 +228,9 @@
     const statusClass = { pendente: 'pending', aguardando: 'waiting', concluido: 'done' };
     const chip = status => `<span class="status ${statusClass[status] || 'pending'}">${esc(t(statusName[status] || 'Pendente'))}</span>`;
     
-    const activityStatusName = { pendente: 'Pendente', andamento: 'Em andamento', aguardando: 'Aguardando', concluido: 'Concluída' };
-    const activityStatusClass = { pendente: 'pending', andamento: 'andamento', aguardando: 'waiting', concluido: 'done' };
-    const activityChip = status => { const normalized = status === 'concluido' ? 'concluido' : (status === 'aguardando' ? 'aguardando' : (status === 'andamento' ? 'andamento' : 'pendente')); return `<span class="status ${activityStatusClass[normalized] || 'pending'}">${esc(t(activityStatusName[normalized] || 'Pendente'))}</span>`; };
+    const activityStatusName = { pendente: 'Pendente', andamento: 'Em andamento', aguardando: 'Aguardando', concluido: 'Concluída', cancelado:'Cancelada' };
+    const activityStatusClass = { pendente: 'pending', andamento: 'andamento', aguardando: 'waiting', concluido: 'done', cancelado:'cancelled' };
+    const activityChip = status => { const normalized = ['concluido','aguardando','andamento','cancelado'].includes(status)?status:'pendente'; return `<span class="status ${activityStatusClass[normalized] || 'pending'}">${esc(t(activityStatusName[normalized] || 'Pendente'))}</span>`; };
 
     const evidenceEntries = evidence => (evidence || []).map(item => typeof item === 'string' ? { name: item, type: '' } : item).filter(item => item?.name);
     const completedTasks = report => ({ photo: Boolean(evidenceEntries(report.evidence).length), report: Boolean(report.reportLink), response: Boolean(report.responseLink) });
@@ -848,13 +871,48 @@
     const normalizeActivityStatus = status => status === 'andamento' ? 'pendente' : (status || 'pendente');
     // Compatibility with older V7 data where activities used "andamento".
     const activityEffectiveStatus = a => normalizeActivityStatus(a.status);
+    const activityIsClosed = a => ['concluido','cancelado'].includes(activityEffectiveStatus(a));
     const todayKey = () => { const d = new Date(); return d.toISOString().slice(0,10); };
     const daysLate = due => { if (!due) return 0; const end = new Date(`${due}T23:59:59`); return Math.max(0, Math.floor((Date.now()-end.getTime())/86400000)); };
+    function activityDueDeadline(due){
+      if(!due)return null;
+      const [y,m,d]=String(due).split('-').map(Number);
+      if(!y||!m||!d)return null;
+      return new Date(y,m-1,d,23,59,59,999);
+    }
+    function activityTiming(activity,atDate=new Date()){
+      const status=activityEffectiveStatus(activity);
+      if(status==='cancelado')return {state:'cancelled',timeliness:'cancelled',lateByMinutes:0};
+      const deadline=activityDueDeadline(activity?.dueDate);
+      if(status==='concluido'){
+        const completedAt=activity?.completedAt?new Date(activity.completedAt):null;
+        const inferred=activity?.timeliness || (deadline&&completedAt&&!Number.isNaN(completedAt.getTime())?(completedAt>deadline?'late':'on_time'):'unknown');
+        const lateByMinutes=inferred==='late'&&deadline&&completedAt?Math.max(1,Math.ceil((completedAt-deadline)/60000)):Math.max(0,Number(activity?.lateByMinutes||0));
+        return {state:'completed',timeliness:inferred,lateByMinutes,deadline,completedAt};
+      }
+      if(deadline&&atDate>deadline)return {state:'overdue',timeliness:'late',lateByMinutes:Math.max(1,Math.ceil((atDate-deadline)/60000)),deadline};
+      return {state:'open',timeliness:'on_time',lateByMinutes:0,deadline};
+    }
+    function activityTimingText(activity){
+      const timing=activityTiming(activity);
+      if(timing.state==='cancelled')return t('Cancelada');
+      if(timing.state==='overdue')return `${t('Atrasada')} · ${timing.lateByMinutes} min`;
+      if(timing.state==='completed'&&timing.timeliness==='late')return `${t('Concluída com atraso')} · ${timing.lateByMinutes} min`;
+      if(timing.state==='completed'&&timing.timeliness==='on_time')return t('Concluída')+' · '+t('No prazo');
+      return activity?.dueDate?`${t('Prazo')}: ${activity.dueDate}`:'';
+    }
+    function activityCanHardDelete(activity){
+      if(!activity||currentAccount?.role!=='admin')return false;
+      const assignment=normalizeAssignment(activity);
+      const assignedOthers=(assignment.assignees||[]).some(name=>name&&name!==activity.openedBy&&name!==currentAccount?.name);
+      const hasOperationalHistory=(activity.updates||[]).length>0||(activity.steps||[]).some(step=>step.done)||evidenceEntries(activity.evidence).length>0||Boolean(activity.originRoutineExecutionId)||activityEffectiveStatus(activity)!=='pendente';
+      return !assignedOthers&&!hasOperationalHistory;
+    }
     const operationalStatus = r => r.status || 'pendente';
     const priorityFor = item => {
       if (item.kind === 'activity') {
         const a=item.item, d=a.dueDate;
-        if (activityEffectiveStatus(a)==='concluido') return 'done';
+        if (activityIsClosed(a)) return 'done';
         if (activityEffectiveStatus(a)==='aguardando') return 'waiting';
         if (d && daysLate(d)>0) return 'overdue';
         if (d===todayKey()) return 'today';
@@ -911,7 +969,7 @@
       return parts.join('\n\n');
     }
     function copyText(text){ if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>alert('Texto copiado.')); else { const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('Texto copiado.'); } }
-    // ==================== V15.1.13.38 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
+    // ==================== V15.1.13.39 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
     function notificationPrefsKey(){return 'central.notifications.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function notificationSentKey(){return 'central.notifications.sent.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function centralNotificationPrefs(){
@@ -931,7 +989,7 @@
       const prefs=centralNotificationPrefs(),lead=Math.max(0,Number(prefs.leadMinutes||15)),out=[],nowDate=new Date();
       const current=dailyCurrentShiftInfo();
       if(current.shift){
-        const executions=dailyMergedExecutions(current.dateKey,current.shift.docId).filter(dailyExecutionVisibleToCurrent).filter(x=>x.status!=='completed');
+        const executions=dailyMergedExecutions(current.dateKey,current.shift.docId).filter(dailyExecutionVisibleToCurrent).filter(x=>!['completed','missed','cancelled'].includes(x.status)&&dailyTaskState(x)!=='missed');
         executions.forEach(execution=>{
           if(!execution.plannedTime)return;
           const planned=dailyPlannedDateTime(execution);
@@ -951,7 +1009,7 @@
         });
       }
       const today=localDateKey(),accountName=String(currentAccount?.name||'');
-      state.activities.filter(a=>activityEffectiveStatus(a)!=='concluido'&&a.dueDate).forEach(activity=>{
+      state.activities.filter(a=>!activityIsClosed(a)&&a.dueDate).forEach(activity=>{
         const assignment=normalizeAssignment(activity);
         const mine=activity.owner===accountName||(assignment.assignees||[]).includes(accountName);
         if(!mine)return;
@@ -1063,7 +1121,7 @@
     function dataHealthIssues(){
       const issues=[];
       state.operationalFailures.filter(r=>String(r.classification||'NAO_DEFINIDO').toUpperCase()==='NAO_DEFINIDO').forEach(r=>issues.push({kind:'classification',title:`${r.id} · ${r.issue||'Falha'}`,detail:currentLanguage==='en-US'?'Failure without final classification':'Falha sem classificação final',action:()=>{show('operations');openOperationalDetail(r.id);}}));
-      state.activities.filter(a=>activityEffectiveStatus(a)!=='concluido'&&(a.activityMode==='structured'||(a.steps||[]).length)&&!String(a.nextAction||'').trim()&&(a.steps||[]).some(step=>!step.done)).forEach(a=>issues.push({kind:'nextAction',title:`${a.id} · ${a.title}`,detail:currentLanguage==='en-US'?'Structured activity without next action':'Atividade estruturada sem próxima ação',action:()=>{show('work');openActivityDetail(a.id);}}));
+      state.activities.filter(a=>!activityIsClosed(a)&&(a.activityMode==='structured'||(a.steps||[]).length)&&!String(a.nextAction||'').trim()&&(a.steps||[]).some(step=>!step.done)).forEach(a=>issues.push({kind:'nextAction',title:`${a.id} · ${a.title}`,detail:currentLanguage==='en-US'?'Structured activity without next action':'Atividade estruturada sem próxima ação',action:()=>{show('work');openActivityDetail(a.id);}}));
       activeWorkAllocations().forEach(a=>{const brokenUser=!users.some(u=>u.docId===a.userId),brokenShift=!state.workShifts.some(s=>s.docId===a.shiftId),brokenScopes=(a.scopeIds||[]).filter(id=>!state.operationalScopes.some(s=>s.docId===id));if(brokenUser||brokenShift||brokenScopes.length)issues.push({kind:'allocation',title:a.userName||a.docId,detail:currentLanguage==='en-US'?'Assignment references missing configuration':'Alocação referencia configuração inexistente',action:()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();},80);}});});
       state.routineTemplates.filter(r=>r.active!==false&&(!r.name||!Array.isArray(r.days)||!r.days.length||!r.scheduleMap||!Object.keys(r.scheduleMap).length)).forEach(r=>issues.push({kind:'routine',title:r.name||r.docId,detail:currentLanguage==='en-US'?'Active routine with incomplete schedule':'Rotina ativa com agenda incompleta',action:()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},100);}}));
       state.products.filter(p=>!String(p.family||'').trim()).forEach(p=>issues.push({kind:'product',title:productDisplayCode(p.code),detail:currentLanguage==='en-US'?'Product without family':'Produto sem família',action:()=>{activeProduct=p.code;show('product');}}));
@@ -1101,7 +1159,7 @@
       const inWeek=x=>new Date(x.createdAt||0).getTime()>=startMs;
       const prod=state.reports.filter(inWeek).filter(r=>(r.tipo_falha||'PRODUTO')==='PRODUTO');
       const ops=state.operationalFailures.filter(inWeek); const acts=state.activities.filter(inWeek), flows=state.flows.filter(inWeek);
-      const overdue=state.activities.filter(a=>activityEffectiveStatus(a)!=='concluido'&&daysLate(a.dueDate)>0);
+      const overdue=state.activities.filter(a=>!activityIsClosed(a)&&daysLate(a.dueDate)>0);
       const waiting=state.reports.filter(r=>calculatedStatus(r)==='aguardando').length+ops.filter(r=>operationalStatus(r)==='aguardando').length+state.activities.filter(a=>activityEffectiveStatus(a)==='aguardando').length;
       const comp={}; [...prod,...ops].forEach(r=>{const c=r.component||r.maquina||'Geral';comp[c]=(comp[c]||0)+1});
       const top=Object.entries(comp).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -2747,7 +2805,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.38'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.38'){localStorage.setItem('cora.sw.loaded','15.1.13.38');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.39'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.39'){localStorage.setItem('cora.sw.loaded','15.1.13.39');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3978,7 +4036,7 @@ ${m.text}`).join('\n\n');
     // ======================= FIM V14.0 — IA DE ANÁLISE (legado) =======================
 
 
-    // ======================= CENTRAL DO DIA · V15.1.13.38 =======================
+    // ======================= CENTRAL DO DIA · V15.1.13.39 =======================
     const localDateKey = (date = new Date()) => {
       const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
       return `${y}-${m}-${d}`;
@@ -4065,6 +4123,55 @@ ${m.text}`).join('\n\n');
       const planned=dailyPlannedDateTime(execution);
       const mins=Number(execution.windowMinutes||60);
       return new Date(planned.getTime()+Math.max(0,mins)*60000);
+    }
+
+    function dailyLatePolicy(execution){return execution?.latePolicy==='expire'?'expire':'carry';}
+    function dailyLatePolicyLabel(value){return value==='expire'?t('Janela fixa'):t('Recuperável');}
+    function dailyExecutionTiming(execution,atDate=new Date()){
+      if(!execution)return {state:'unknown',timeliness:'unknown',lateByMinutes:0};
+      if(execution.status==='cancelled')return {state:'cancelled',timeliness:'cancelled',lateByMinutes:0};
+      const deadline=dailyExecutionDeadline(execution);
+      if(execution.status==='completed'){
+        const onTime=execution.timeliness?execution.timeliness==='on_time':execution.onTime!==false;
+        const point=dailyLatePolicy(execution)==='expire'
+          ? new Date(execution.startedAt||execution.completedAt||0)
+          : new Date(execution.completedAt||0);
+        const lateByMinutes=onTime?0:(Number(execution.lateByMinutes||0)||(!Number.isNaN(point.getTime())?Math.max(1,Math.ceil((point-deadline)/60000)):0));
+        return {state:'completed',timeliness:onTime?'on_time':'late',lateByMinutes,deadline};
+      }
+      if(execution.status==='missed')return {state:'missed',timeliness:'missed',lateByMinutes:0,deadline};
+      if(execution.status==='in_progress')return {state:'progress',timeliness:(execution.startedAt&&new Date(execution.startedAt)>deadline)?'late':'on_time',lateByMinutes:0,deadline};
+      if(atDate>deadline){
+        if(dailyLatePolicy(execution)==='expire'&&!execution.startedAt)return {state:'missed',timeliness:'missed',lateByMinutes:0,deadline};
+        return {state:'overdue',timeliness:'late',lateByMinutes:Math.max(1,Math.ceil((atDate-deadline)/60000)),deadline};
+      }
+      const planned=dailyPlannedDateTime(execution);
+      return {state:atDate>=planned?'due':'future',timeliness:'on_time',lateByMinutes:0,deadline};
+    }
+    function dailyExecutionHistoryLabel(execution){
+      const timing=dailyExecutionTiming(execution);
+      if(timing.state==='cancelled')return t('Cancelada');
+      if(timing.state==='missed')return t('Não executada');
+      if(execution.status==='completed'&&timing.timeliness==='late')return t('Concluída com atraso');
+      if(execution.status==='completed')return t('Concluída');
+      if(timing.state==='overdue')return t('Atrasada em aberto');
+      if(execution.status==='in_progress')return t('Em andamento');
+      return timing.state==='due'?t('Agora'):t('Próxima');
+    }
+    const dailyMissedFinalizeKeys=new Set();
+    function finalizeExpiredFixedExecutions(executions=[]){
+      const atDate=new Date();
+      executions.forEach(execution=>{
+        const timing=dailyExecutionTiming(execution,atDate);
+        const key=execution.executionKey||execution.docId;
+        if(!key||timing.state!=='missed'||execution.status==='missed'||execution.status==='completed'||execution.status==='cancelled'||execution.startedAt||dailyMissedFinalizeKeys.has(key))return;
+        dailyMissedFinalizeKeys.add(key);
+        setDoc(doc(db,'routineExecutions',key),{
+          status:'missed',timeliness:'missed',latePolicy:'expire',
+          missedAt:timing.deadline?.toISOString?.()||now(),missedDetectedAt:now(),
+          missedReason:'window_expired_without_start',updatedAt:now()
+        },{merge:true}).catch(error=>console.warn('[Central do Dia] Falha ao registrar não execução:',error)).finally(()=>dailyMissedFinalizeKeys.delete(key));
+      });
     }
 
     function dailyShiftBounds(dateKey,shift){
@@ -4274,7 +4381,8 @@ ${m.text}`).join('\n\n');
               routineId:routine.docId,routineName:routine.name||'Rotina',routineDescription:routine.description||'',
               scopeId,scopeName:scope.name||'Escopo',scopeCode:scope.code||'',scopeType:scope.type||'other',
               productionProductCodes:production.productCodes,productionProductLabels:production.productLabels,productionFamilies:production.families,productionBaseCodes:production.baseCodes,
-              plannedTime,windowMinutes:Number(routine.windowMinutes||60),
+              plannedTime,windowMinutes:Number(routine.windowMinutes||60),latePolicy:routine.latePolicy||'carry',
+              assignmentSnapshot:scopeAllocations.map(a=>({allocationId:a.docId||'',userId:a.userId||'',userName:a.userName||users.find(u=>u.docId===a.userId)?.name||'',position:a.position||'member',configuredBy:a.updatedBy||a.createdBy||''})),
               executionPolicy:routine.executionPolicy||'scope_once',
               resultMode:routine.resultMode||'ok_ng',
               contextMode:routine.contextMode||'none',
@@ -4326,7 +4434,7 @@ ${m.text}`).join('\n\n');
       const expected=dailyExpectedExecutions();
       dailyMaterializeInFlight=Promise.all(expected.map(item=>{
         const existing=state.routineExecutions.find(x=>(x.executionKey||x.docId)===item.executionKey);
-        if(existing&&['in_progress','completed'].includes(existing.status)) return Promise.resolve();
+        if(existing&&['in_progress','completed','missed','cancelled'].includes(existing.status)) return Promise.resolve();
         const ref=doc(db,'routineExecutions',item.executionKey);
         const snapshot={
           executionKey:item.executionKey,dateKey:item.dateKey,
@@ -4335,7 +4443,7 @@ ${m.text}`).join('\n\n');
           scopeId:item.scopeId,scopeName:item.scopeName,scopeCode:item.scopeCode||'',scopeType:item.scopeType,
           productionProductCodes:item.productionProductCodes||[],productionProductLabels:item.productionProductLabels||[],productionFamilies:item.productionFamilies||[],productionBaseCodes:item.productionBaseCodes||[],
           plannedTime:item.plannedTime,
-          windowMinutes:item.windowMinutes,executionPolicy:item.executionPolicy,resultMode:item.resultMode,contextMode:item.contextMode||'none',
+          windowMinutes:item.windowMinutes,latePolicy:item.latePolicy||'carry',assignmentSnapshot:item.assignmentSnapshot||[],executionPolicy:item.executionPolicy,resultMode:item.resultMode,contextMode:item.contextMode||'none',
           requireNgNote:item.requireNgNote,allowFailure:item.allowFailure,allowActivity:item.allowActivity,
           checklistSchema:item.checklistSchema,checklistTemplate:item.checklistTemplate,requiredParticipants:item.requiredParticipants,
           expectedUserIds:item.expectedUserIds,expectedUserNames:item.expectedUserNames,
@@ -4351,12 +4459,13 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyTaskState(execution,nowDate=new Date()){
+      const timing=dailyExecutionTiming(execution,nowDate);
+      if(timing.state==='cancelled')return 'cancelled';
+      if(timing.state==='missed')return 'missed';
       if(execution.status==='completed') return execution.result==='ng'?'ng':'done';
       if(execution.status==='in_progress') return 'progress';
-      const planned=dailyPlannedDateTime(execution);
-      const deadline=dailyExecutionDeadline(execution);
-      if(nowDate>deadline) return 'late';
-      if(nowDate>=planned) return 'due';
+      if(timing.state==='overdue')return 'late';
+      if(timing.state==='due')return 'due';
       return 'future';
     }
 
@@ -4377,17 +4486,19 @@ ${m.text}`).join('\n\n');
 
 
     function dailyExecutionCard(execution){
-      const stateName=dailyTaskState(execution);
-      const statusLabel=t(({done:'Concluída',ng:'NG',progress:'Em andamento',late:'Atrasada',due:'Agora',future:'Próxima'}[stateName]||'Pendente'));
+      const stateName=dailyTaskState(execution),timing=dailyExecutionTiming(execution);
+      const statusLabel=dailyExecutionHistoryLabel(execution);
       const people=execution.executionPolicy==='each_user' ? execution.assignedUserName : (execution.expectedUserNames||[]).join(', ');
       const time=execution.plannedTime||t('Durante o turno');
       const canAct=dailyExecutionVisibleToCurrent(execution)||currentAccount?.role==='admin';
       const startedBy=execution.startedByName ? ` · ${t('iniciada por')} ${esc(execution.startedByName)}` : '';
       let actions='';
-      if(canAct && execution.status!=='completed'){
+      if(canAct && !['completed','missed','cancelled'].includes(execution.status) && stateName!=='missed'){
         actions=execution.status==='in_progress'
           ? `<button type="button" class="button primary button-compact" data-daily-complete="${esc(execution.executionKey)}">${esc(t('Registrar resultado'))}</button>`
           : `<button type="button" class="button primary button-compact" data-daily-start="${esc(execution.executionKey)}">${esc(t('Iniciar'))}</button>`;
+      }else if(stateName==='missed'){
+        actions=`<span class="daily-task-closed-note">${esc(t('Janela encerrada'))}</span>`;
       }
       if(execution.status==='completed'){
         const derived=[];
@@ -4401,11 +4512,12 @@ ${m.text}`).join('\n\n');
       const participants=(execution.participants||[]).map(p=>p.name).filter(Boolean);
       const participation=participants.length ? `<span>${esc(t('Participantes'))}: ${esc(participants.join(', '))}</span>` : '';
       const edited=execution.lastEditedAt?`<span>${esc(t('Editada'))}: ${esc(formatDate(execution.lastEditedAt))}</span>`:'';
+      const punctuality=execution.status==='completed'&&timing.timeliness==='late'?`<span>${esc(t('Pontualidade'))}: ${esc(t('Concluída com atraso'))} · ${timing.lateByMinutes} min</span>`:timing.state==='overdue'?`<span>${esc(t('Atrasada'))}: ${timing.lateByMinutes} min</span>`:timing.state==='missed'?`<span>${esc(t('Não executada'))} · ${esc(t('Janela encerrada'))}</span>`:'';
       const productionLabel=(execution.productionProductLabels||execution.productionProductCodes?.map(productDisplayCode)||[]).join(' · ');
       return `<article class="daily-task-card state-${stateName}" data-daily-exec="${esc(execution.executionKey)}">
         <div class="daily-task-time"><strong>${esc(time)}</strong><span>${esc(execution.shiftName||'')}</span></div>
-        <div class="daily-task-body"><div class="daily-task-heading"><div><strong>${esc(execution.routineName)}</strong><span>${esc(execution.scopeName)}${productionLabel?` · ${esc(productionLabel)}`:''} · ${esc(dailyPolicyLabel(execution.executionPolicy))}</span></div><span class="daily-task-status">${esc(statusLabel)}</span></div>
-        ${execution.routineDescription?`<p>${esc(execution.routineDescription)}</p>`:''}${note}${checklistData}<div class="daily-task-meta"><span>${esc(people||t('Sem responsável'))}</span>${participation}<span>${startedBy}</span>${edited}</div>
+        <div class="daily-task-body"><div class="daily-task-heading"><div><strong>${esc(execution.routineName)}</strong><span>${esc(execution.scopeName)}${productionLabel?` · ${esc(productionLabel)}`:''} · ${esc(dailyPolicyLabel(execution.executionPolicy))} · ${esc(dailyLatePolicyLabel(dailyLatePolicy(execution)))}</span></div><span class="daily-task-status">${esc(statusLabel)}</span></div>
+        ${execution.routineDescription?`<p>${esc(execution.routineDescription)}</p>`:''}${note}${checklistData}<div class="daily-task-meta"><span>${esc(people||t('Sem responsável'))}</span>${participation}<span>${startedBy}</span>${punctuality}${edited}</div>
         <div class="daily-task-actions">${actions}</div></div>
       </article>`;
     }
@@ -4607,9 +4719,13 @@ ${m.text}`).join('\n\n');
       if(!shift)return null;
       const executions=dailyMergedExecutions(dateKey,shiftId);
       const completed=executions.filter(x=>x.status==='completed');
-      const pending=executions.filter(x=>x.status!=='completed');
+      const missed=executions.filter(x=>dailyExecutionTiming(x).state==='missed');
+      const overdue=executions.filter(x=>dailyExecutionTiming(x).state==='overdue');
+      const pending=executions.filter(x=>x.status!=='completed'&&dailyExecutionTiming(x).state!=='missed'&&x.status!=='cancelled');
+      const lateCompleted=completed.filter(x=>dailyExecutionTiming(x).timeliness==='late');
       const ng=completed.filter(x=>x.result==='ng');
-      const coverage=executions.length?Math.round(completed.length/executions.length*100):0;
+      const measurable=executions.filter(x=>x.status!=='cancelled');
+      const coverage=measurable.length?Math.round(completed.length/measurable.length*100):0;
       const bounds=dailyShiftBounds(dateKey,shift);
       const inPeriod=item=>{
         if(!bounds)return false;
@@ -4622,7 +4738,7 @@ ${m.text}`).join('\n\n');
       ].slice(0,30);
       const executionIds=new Set(executions.map(x=>x.executionKey).filter(Boolean));
       const openActivities=state.activities
-        .filter(a=>activityEffectiveStatus(a)!=='concluido'&&(executionIds.has(a.originRoutineExecutionId)||inPeriod(a)))
+        .filter(a=>!activityIsClosed(a)&&(executionIds.has(a.originRoutineExecutionId)||inPeriod(a)))
         .map(a=>({id:a.id,title:a.title||a.id,nextAction:a.nextAction||'',owner:a.owner||''}))
         .slice(0,30);
       const dataPoints=[];
@@ -4638,7 +4754,9 @@ ${m.text}`).join('\n\n');
       const contextLines=new Set(executions.filter(x=>x.scopeType==='line').map(x=>recurrenceNorm(x.scopeName)).filter(Boolean));
       const contextProducts=new Set(executions.flatMap(x=>x.productionProductCodes||[]).map(productCodeKey).filter(Boolean));
       const recurrences=recurrenceRadarClusters().filter(cluster=>cluster.items.some(item=>contextLines.has(recurrenceNorm(item.line))||item.codes.some(code=>contextProducts.has(productCodeKey(code))))).slice(0,5).map(cluster=>({key:cluster.key,title:cluster.title,count:cluster.count,sub:recurrenceClusterSub(cluster),growing:cluster.growing}));
-      return {dateKey,shiftId,shiftName:shift.name||'Turno',window:dailyShiftWindowLabel(shift),total:executions.length,completed:completed.length,pending:pending.length,ng:ng.length,coverage,failures,openActivities,dataPoints:dataPoints.slice(0,40),recurrences,generatedAt:now()};
+      const missedItems=missed.map(x=>({routine:x.routineName||'Rotina',scope:x.scopeName||'',owner:(x.expectedUserNames||[]).join(', ')||x.assignedUserName||'',plannedTime:x.plannedTime||''}));
+      const carryOver=overdue.map(x=>({routine:x.routineName||'Rotina',scope:x.scopeName||'',owner:(x.expectedUserNames||[]).join(', ')||x.assignedUserName||'',plannedTime:x.plannedTime||'',lateByMinutes:dailyExecutionTiming(x).lateByMinutes}));
+      return {dateKey,shiftId,shiftName:shift.name||'Turno',window:dailyShiftWindowLabel(shift),total:measurable.length,completed:completed.length,lateCompleted:lateCompleted.length,pending:pending.length,missed:missed.length,overdue:overdue.length,ng:ng.length,coverage,missedItems,carryOver,failures,openActivities,dataPoints:dataPoints.slice(0,40),recurrences,generatedAt:now()};
     }
 
     function renderShiftHandoverSummary(summary){
@@ -4655,8 +4773,13 @@ ${m.text}`).join('\n\n');
         <div class="shift-handover-kpi"><span>${esc(t('Cobertura'))}</span><strong>${summary.coverage||0}%</strong></div>
         <div class="shift-handover-kpi"><span>${esc(t('Concluídas'))}</span><strong>${summary.completed||0}</strong></div>
         <div class="shift-handover-kpi"><span>${esc(t('Pendentes'))}</span><strong>${summary.pending||0}</strong></div>
+        <div class="shift-handover-kpi"><span>${esc(t('Concluídas com atraso'))}</span><strong>${summary.lateCompleted||0}</strong></div>
+        <div class="shift-handover-kpi"><span>${esc(t('Não executadas'))}</span><strong>${summary.missed||0}</strong></div>
+        <div class="shift-handover-kpi"><span>${esc(t('Atrasada em aberto'))}</span><strong>${summary.overdue||0}</strong></div>
         <div class="shift-handover-kpi"><span>NG</span><strong>${summary.ng||0}</strong></div>
       </div>
+      ${(summary.carryOver||[]).length?`<section class="shift-handover-section"><h4>${esc(t('Pendências herdáveis'))} · ${summary.carryOver.length}</h4><div class="shift-handover-list">${summary.carryOver.map(x=>`<div class="shift-handover-item"><div><strong>${esc(x.routine)}</strong><span>${esc([x.scope,x.owner,x.plannedTime].filter(Boolean).join(' · '))}</span></div><strong>${x.lateByMinutes} min</strong></div>`).join('')}</div></section>`:''}
+      ${(summary.missedItems||[]).length?`<section class="shift-handover-section"><h4>${esc(t('Não executadas'))} · ${summary.missedItems.length}</h4><div class="shift-handover-list">${summary.missedItems.map(x=>`<div class="shift-handover-item"><div><strong>${esc(x.routine)}</strong><span>${esc([x.scope,x.owner,x.plannedTime].filter(Boolean).join(' · '))}</span></div><strong>${esc(t('Janela encerrada'))}</strong></div>`).join('')}</div></section>`:''}
       <section class="shift-handover-section"><h4>${esc(t('Dados coletados'))}</h4>${dataHtml}</section>
       <section class="shift-handover-section"><h4>${esc(t('Falhas registradas'))} · ${failures.length}</h4>${failureHtml}</section>
       <section class="shift-handover-section"><h4>${esc(t('Atividades abertas'))} · ${activities.length}</h4>${activityHtml}</section>
@@ -4757,7 +4880,7 @@ ${m.text}`).join('\n\n');
       const previousShift=dailySelectedShiftId, previousDate=dailySelectedDate;
       const expected=dailyExpectedExecutions(current.dateKey,current.shift.docId).filter(dailyExecutionVisibleToCurrent);
       const actualMap=new Map(state.routineExecutions.filter(x=>x.dateKey===current.dateKey&&x.shiftId===current.shift.docId).map(x=>[x.executionKey||x.docId,x]));
-      const pending=expected.filter(x=>(actualMap.get(x.executionKey)?.status||'planned')!=='completed').length;
+      const pending=expected.filter(x=>{const actual=actualMap.get(x.executionKey);const merged={...x,...(actual||{}),status:actual?.status||'planned'};return !['completed','missed','cancelled'].includes(merged.status)&&dailyTaskState(merged)!=='missed';}).length;
       const allocations=activeWorkAllocations().filter(a=>a.userId===currentAuthUser?.uid&&a.shiftId===current.shift.docId);
       const scopeNames=[...new Set(allocations.flatMap(a=>a.scopeIds||[]).map(id=>state.operationalScopes.find(s=>s.docId===id)?.name).filter(Boolean))];
       el.textContent=`${current.shift.name||'Turno'} · ${scopeNames.join(', ')||'sem alocação'} · ${pending} pendência(s) de rotina`;
@@ -4788,6 +4911,7 @@ ${m.text}`).join('\n\n');
       if(dailyFilter==='pending') executions=executions.filter(x=>x.status!=='completed');
 
       const allVisible=dailyMergedExecutions().filter(dailyExecutionVisibleToCurrent);
+      finalizeExpiredFixedExecutions(allVisible);
       const completed=allVisible.filter(x=>x.status==='completed'), abnormal=completed.filter(x=>x.result==='ng');
       const coverage=allVisible.length?Math.round(completed.length/allVisible.length*100):0;
       document.querySelector('#dailyCoverage').textContent=`${coverage}%`;
@@ -4799,7 +4923,7 @@ ${m.text}`).join('\n\n');
       if(timeline) timeline.innerHTML=executions.map(dailyExecutionCard).join('');
       document.querySelector('#dailyRoutineEmpty')?.classList.toggle('hidden',executions.length>0);
 
-      const nowExec=allVisible.find(x=>x.status==='in_progress') || allVisible.find(x=>['due','late'].includes(dailyTaskState(x))) || allVisible.find(x=>x.status!=='completed') || completed.at(-1);
+      const nowExec=allVisible.find(x=>x.status==='in_progress') || allVisible.find(x=>['due','late'].includes(dailyTaskState(x))) || allVisible.find(x=>!['completed','missed','cancelled'].includes(x.status)&&dailyTaskState(x)!=='missed') || completed.at(-1);
       const nowContent=document.querySelector('#dailyNowContent');
       if(nowContent){
         const nowProduction=(nowExec?.productionProductLabels||nowExec?.productionProductCodes?.map(productDisplayCode)||[]).join(' · ');
@@ -4990,12 +5114,12 @@ ${m.text}`).join('\n\n');
       renderDailyProductionList();
 
       const routines=document.querySelector('#dailyRoutineList');
-      if(routines) routines.innerHTML=state.routineTemplates.length?state.routineTemplates.map(r=>{
+      if(routines){const visibleRoutines=state.routineTemplates.filter(r=>r.archived!==true);routines.innerHTML=visibleRoutines.length?visibleRoutines.map(r=>{
         const schedules=Object.entries(r.scheduleMap||{}).map(([sid,times])=>{const sh=state.workShifts.find(s=>s.docId===sid);return sh?`${sh.name}: ${(times||[]).filter(Boolean).join(', ')||'1× no turno'}`:'';}).filter(Boolean);
         const context=r.contextMode&&r.contextMode!=='none'?` · ${dailyContextModeLabel(r.contextMode)}`:'';
         const itemCount=normalizeRoutineSchema(r.checklistSchema,r.checklistTemplate).length;
-        return `<div class="daily-admin-item ${r.active===false?'is-off':''}"><div><strong>${esc(r.name)}</strong><span>${esc(schedules.join(' · ')||'Sem agenda')} · ${esc(dailyPolicyLabel(r.executionPolicy))}${esc(context)} · ${itemCount} item(ns)</span></div><div><button type="button" data-daily-edit="routine" data-id="${esc(r.docId)}">${esc(t('Editar rotina'))}</button><button type="button" data-daily-toggle="routine" data-id="${esc(r.docId)}">${r.active===false?'Ativar':'Desativar'}</button></div></div>`;
-      }).join(''):'<div class="daily-soft-empty">Nenhuma rotina.</div>';
+        return `<div class="daily-admin-item ${r.active===false?'is-off':''}"><div><strong>${esc(r.name)}</strong><span>${esc(schedules.join(' · ')||'Sem agenda')} · ${esc(dailyPolicyLabel(r.executionPolicy))} · ${esc(dailyLatePolicyLabel(r.latePolicy||'carry'))}${esc(context)} · ${itemCount} item(ns)</span></div><div><button type="button" data-daily-edit="routine" data-id="${esc(r.docId)}">${esc(t('Editar rotina'))}</button><button type="button" data-daily-toggle="routine" data-id="${esc(r.docId)}">${r.active===false?'Ativar':'Desativar'}</button><button type="button" data-daily-delete="routine" data-id="${esc(r.docId)}">${esc(t('Excluir'))}</button></div></div>`;
+      }).join(''):'<div class="daily-soft-empty">Nenhuma rotina.</div>';} 
     }
 
     function renderDailyAdminDashboard(){
@@ -5012,14 +5136,19 @@ ${m.text}`).join('\n\n');
         (!productCode||(x.productionProductCodes||[]).some(code=>sameProductCode(code,productCode))) &&
         (!userId||x.assignedUserId===userId||(x.expectedUserIds||[]).includes(userId)||(x.participants||[]).some(p=>p.userId===userId))
       ).sort((a,b)=>String(b.dateKey||'').localeCompare(String(a.dateKey||'')) || dailyPlannedDateTime(a)-dailyPlannedDateTime(b));
-      const done=rows.filter(x=>x.status==='completed');
-      const coverage=rows.length?Math.round(done.length/rows.length*100):0;
-      const onTime=done.filter(x=>x.onTime!==false).length;
-      const missed=rows.filter(x=>x.status!=='completed' && new Date()>dailyExecutionDeadline(x)).length;
+      const metricRows=rows.filter(x=>x.status!=='cancelled');
+      const done=metricRows.filter(x=>x.status==='completed');
+      const coverage=metricRows.length?Math.round(done.length/metricRows.length*100):0;
+      const onTime=done.filter(x=>dailyExecutionTiming(x).timeliness!=='late').length;
+      const lateCompleted=done.filter(x=>dailyExecutionTiming(x).timeliness==='late').length;
+      const missed=metricRows.filter(x=>dailyExecutionTiming(x).state==='missed').length;
+      const overdue=metricRows.filter(x=>dailyExecutionTiming(x).state==='overdue').length;
       const ng=done.filter(x=>x.result==='ng').length;
       document.querySelector('#dailyDashCoverage').textContent=`${coverage}%`;
       document.querySelector('#dailyDashOnTime').textContent=done.length?`${Math.round(onTime/done.length*100)}%`:'0%';
+      document.querySelector('#dailyDashLateCompleted').textContent=lateCompleted;
       document.querySelector('#dailyDashMissed').textContent=missed;
+      document.querySelector('#dailyDashOverdue').textContent=overdue;
       document.querySelector('#dailyDashNg').textContent=ng;
 
       const byScope=new Map();
@@ -5028,8 +5157,8 @@ ${m.text}`).join('\n\n');
       if(scopeBox) scopeBox.innerHTML=[...byScope.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(r=>dailyMetricBar(r.label,r.done,r.total)).join('')||'<div class="daily-soft-empty">Sem dados.</div>';
 
       const personRows=users.filter(u=>!u.disabled).map(user=>{
-        const individual=rows.filter(x=>x.executionPolicy==='each_user'&&x.assignedUserId===user.docId);
-        const shared=rows.filter(x=>x.executionPolicy!=='each_user'&&(x.expectedUserIds||[]).includes(user.docId));
+        const individual=metricRows.filter(x=>x.executionPolicy==='each_user'&&x.assignedUserId===user.docId);
+        const shared=metricRows.filter(x=>x.executionPolicy!=='each_user'&&(x.expectedUserIds||[]).includes(user.docId));
         const participated=shared.filter(x=>(x.participants||[]).some(p=>p.userId===user.docId)).length;
         return {user,individual,shared,participated};
       }).filter(x=>x.individual.length||x.shared.length);
@@ -5044,7 +5173,7 @@ ${m.text}`).join('\n\n');
       }).join('')||'<div class="daily-soft-empty">Sem dados por pessoa.</div>';
 
       const body=document.querySelector('#dailyDashRows');
-      if(body) body.innerHTML=rows.map(x=>{const production=(x.productionProductLabels||x.productionProductCodes?.map(productDisplayCode)||[]).join(', ')||'—';return `<tr><td><span class="identifier">${esc(x.dateKey||'')}</span><span class="secondary-text">${esc(x.shiftName||'')}</span></td><td>${esc(x.routineName||'Rotina')}</td><td>${esc(x.scopeName||'—')}</td><td>${esc(production)}</td><td>${esc((x.expectedUserNames||[]).join(', ')||x.assignedUserName||'—')}</td><td>${esc(dailyResultLabel(x.result))}</td><td>${esc(x.plannedTime||'Turno')}${x.completedAt?` · ${esc(new Date(x.completedAt).toLocaleTimeString(currentLanguage,{hour:'2-digit',minute:'2-digit'}))}`:''}</td><td><button type="button" class="button secondary button-compact daily-history-open" data-daily-edit-exec="${esc(x.executionKey||x.docId)}">${esc(t('Abrir'))}</button></td></tr>`;}).join('');
+      if(body) body.innerHTML=rows.map(x=>{const production=(x.productionProductLabels||x.productionProductCodes?.map(productDisplayCode)||[]).join(', ')||'—';const historyLabel=dailyExecutionHistoryLabel(x);return `<tr><td><span class="identifier">${esc(x.dateKey||'')}</span><span class="secondary-text">${esc(x.shiftName||'')}</span></td><td>${esc(x.routineName||'Rotina')}</td><td>${esc(x.scopeName||'—')}</td><td>${esc(production)}</td><td>${esc((x.expectedUserNames||[]).join(', ')||x.assignedUserName||'—')}</td><td>${esc(historyLabel)}${x.result?` · ${esc(dailyResultLabel(x.result))}`:''}</td><td>${esc(x.plannedTime||'Turno')}${x.completedAt?` · ${esc(new Date(x.completedAt).toLocaleTimeString(currentLanguage,{hour:'2-digit',minute:'2-digit'}))}`:''}</td><td><button type="button" class="button secondary button-compact daily-history-open" data-daily-edit-exec="${esc(x.executionKey||x.docId)}">${esc(t('Abrir'))}</button></td></tr>`;}).join('');
       document.querySelector('#dailyDashEmpty')?.classList.toggle('hidden',rows.length>0);
     }
 
@@ -5062,6 +5191,7 @@ ${m.text}`).join('\n\n');
         form.elements.requireNgNote.checked=true;
         form.elements.minParticipants.value=1;
         form.elements.windowMinutes.value=60;
+        if(form.elements.latePolicy)form.elements.latePolicy.value='carry';
         if(form.elements.contextMode) form.elements.contextMode.value='none';
         renderDailyRoutineSchemaBuilder([]);
         const weekdays=new Set(['1','2','3','4','5']);
@@ -5085,7 +5215,7 @@ ${m.text}`).join('\n\n');
         const selected=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=selected.has(o.value));f.scrollIntoView({behavior:'smooth',block:'center'});
       }else if(kind==='routine'){
         const item=state.routineTemplates.find(x=>x.docId===id); if(!item)return;
-        const f=document.querySelector('#dailyRoutineForm');f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.description.value=item.description||'';if(f.elements.contextMode)f.elements.contextMode.value=item.contextMode||'none';f.elements.executionPolicy.value=item.executionPolicy||'scope_once';f.elements.minParticipants.value=item.minParticipants||1;f.elements.windowMinutes.value=item.windowMinutes??60;f.elements.resultMode.value=item.resultMode||'ok_ng';renderDailyRoutineSchemaBuilder(normalizeRoutineSchema(item.checklistSchema,item.checklistTemplate));f.elements.allowFailure.checked=item.allowFailure!==false;f.elements.allowActivity.checked=item.allowActivity!==false;f.elements.requireNgNote.checked=item.requireNgNote!==false;f.elements.active.checked=item.active!==false;
+        const f=document.querySelector('#dailyRoutineForm');f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.description.value=item.description||'';if(f.elements.contextMode)f.elements.contextMode.value=item.contextMode||'none';f.elements.executionPolicy.value=item.executionPolicy||'scope_once';f.elements.minParticipants.value=item.minParticipants||1;f.elements.windowMinutes.value=item.windowMinutes??60;if(f.elements.latePolicy)f.elements.latePolicy.value=item.latePolicy||'carry';f.elements.resultMode.value=item.resultMode||'ok_ng';renderDailyRoutineSchemaBuilder(normalizeRoutineSchema(item.checklistSchema,item.checklistTemplate));f.elements.allowFailure.checked=item.allowFailure!==false;f.elements.allowActivity.checked=item.allowActivity!==false;f.elements.requireNgNote.checked=item.requireNgNote!==false;f.elements.active.checked=item.active!==false;
         const scopes=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=scopes.has(o.value));
         const days=new Set((item.days||[1,2,3,4,5]).map(String));[...f.elements.routineDays].forEach(o=>o.checked=days.has(o.value));
         renderDailyRoutineScheduleEditor(item);f.scrollIntoView({behavior:'smooth',block:'start'});showSaveToast(t('Os dados concluídos ficam preservados; alterações no modelo valem para execuções futuras.'),'success');
@@ -5108,6 +5238,31 @@ ${m.text}`).join('\n\n');
       if(!confirm('Remover esta alocação atual? O histórico das execuções já realizadas será preservado.'))return;
       const event=dailyAdminHistoryEntry('removed',`Alocação de ${item.userName||'Pessoa'} removida.`,{userId:item.userId,shiftId:item.shiftId,scopeIds:item.scopeIds||[]});
       await updateDoc(doc(db,'workAllocations',id),{archived:true,archivedAt:now(),archivedBy:currentAccount.email,history:dailyAdminHistoryAppend(item,event),updatedAt:now(),updatedBy:currentAccount.email});dailyMaterializeSignature='';
+    }
+
+    async function dailyDeleteRoutine(id){
+      if(currentAccount?.role!=='admin')return;
+      const item=state.routineTemplates.find(x=>x.docId===id);if(!item)return;
+      const executions=state.routineExecutions.filter(x=>x.routineId===id&&x.recordType!=='shift_handover');
+      const inProgress=executions.some(x=>x.status==='in_progress');
+      if(inProgress)return alert('Esta rotina possui execução em andamento. Conclua ou encerre essa execução antes de arquivar a rotina.');
+      const meaningful=executions.some(x=>['completed','missed'].includes(x.status)||x.startedAt||x.completedAt||(x.linkedFailureIds||[]).length||(x.linkedActivityIds||[]).length);
+      const message=meaningful
+        ? 'Esta rotina já possui histórico operacional. Ela será arquivada/desativada e desaparecerá da configuração ativa, mas as execuções e evidências serão preservadas. Continuar?'
+        : 'Excluir esta rotina de teste? Ela será arquivada para preservar a auditoria e deixará de aparecer na configuração ativa.';
+      if(!confirm(message))return;
+      const event=dailyAdminHistoryEntry('archived',`Rotina “${item.name||id}” arquivada${meaningful?' com histórico preservado':' como configuração de teste/engano'}.`,{routineId:id,meaningful});
+      await updateDoc(doc(db,'routineTemplates',id),{active:false,archived:true,archivedAt:now(),archivedBy:currentAccount.email,history:dailyAdminHistoryAppend(item,event),updatedAt:now(),updatedBy:currentAccount.email});
+      const pending=executions.filter(x=>!['completed','missed','cancelled'].includes(x.status)&&!x.startedAt);
+      if(pending.length){
+        const batch=writeBatch(db);
+        pending.forEach(execution=>batch.set(doc(db,'routineExecutions',execution.docId||execution.executionKey),{status:'cancelled',timeliness:'cancelled',cancelledAt:now(),cancelledByName:currentAccount?.name||'',cancelledById:currentAuthUser?.uid||'',cancellationReason:'routine_archived_before_execution',updatedAt:now()},{merge:true}));
+        await batch.commit();
+      }
+      const editing=document.querySelector('#dailyRoutineForm [name="docId"]');
+      if(editing?.value===id)resetDailyAdminForm('routine');
+      dailyMaterializeSignature='';
+      showSaveToast(t('Rotina arquivada. O histórico foi preservado.'),'success');
     }
 
     function dailyRoutineSchedulePayload(){
@@ -5274,7 +5429,7 @@ ${m.text}`).join('\n\n');
       const payload={
         name:String(f.get('name')||'').trim(),description:String(f.get('description')||'').trim(),contextMode:String(f.get('contextMode')||'none'),scopeIds,scheduleMap,days,
         executionPolicy:String(f.get('executionPolicy')||'scope_once'),minParticipants:Math.max(1,Number(f.get('minParticipants')||1)),
-        windowMinutes:Math.max(0,Number(f.get('windowMinutes')||60)),resultMode:String(f.get('resultMode')||'ok_ng'),
+        windowMinutes:Math.max(0,Number(f.get('windowMinutes')||60)),latePolicy:String(f.get('latePolicy')||'carry')==='expire'?'expire':'carry',resultMode:String(f.get('resultMode')||'ok_ng'),
         checklistSchema,checklistTemplate:checklistSchema.map(x=>x.label),
         allowFailure:f.get('allowFailure')==='on',allowActivity:f.get('allowActivity')==='on',requireNgNote:f.get('requireNgNote')==='on',active:f.get('active')==='on',
         updatedAt:now(),updatedBy:currentAccount.email
@@ -5282,7 +5437,7 @@ ${m.text}`).join('\n\n');
       if(!payload.name)return alert('Informe o nome da rotina.');
       if(!days.length)return alert('Selecione pelo menos um dia ativo.');
       const existing=id?state.routineTemplates.find(x=>x.docId===id):null;
-      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Rotina “${payload.name}” atualizada.`:`Rotina “${payload.name}” criada.`,{name:payload.name,scopeIds,scheduleMap,days,active:payload.active});
+      const event=dailyAdminHistoryEntry(id?'updated':'created',id?`Rotina “${payload.name}” atualizada.`:`Rotina “${payload.name}” criada.`,{name:payload.name,scopeIds,scheduleMap,days,active:payload.active,latePolicy:payload.latePolicy});
       payload.history=dailyAdminHistoryAppend(existing,event);
       if(id)await updateDoc(doc(db,'routineTemplates',id),payload);else await addDoc(collection(db,'routineTemplates'),{...payload,createdAt:now()});
       resetDailyAdminForm('routine');dailyMaterializeSignature='';showSaveToast(id?t('Rotina atualizada.'):'Rotina salva.','success');
@@ -5304,8 +5459,15 @@ ${m.text}`).join('\n\n');
     async function startDailyExecution(key){
       const execution=dailyFindExecution(key);if(!execution)return;
       if(!dailyExecutionVisibleToCurrent(execution)&&currentAccount?.role!=='admin')return alert('Esta rotina não está atribuída a você.');
+      const timing=dailyExecutionTiming(execution);
+      if(timing.state==='missed'){
+        await setDoc(doc(db,'routineExecutions',key),{status:'missed',timeliness:'missed',latePolicy:'expire',missedAt:timing.deadline?.toISOString?.()||now(),missedDetectedAt:now(),missedReason:'window_expired_without_start',updatedAt:now()},{merge:true});
+        showSaveToast(t('Janela encerrada')+' · '+t('Não executada'),'error');
+        return;
+      }
+      if(execution.status==='cancelled')return showSaveToast(t('Cancelada'),'error');
       const participants=dailyParticipantList(execution,true);
-      await setDoc(doc(db,'routineExecutions',key),{status:'in_progress',startedAt:execution.startedAt||now(),startedById:execution.startedById||currentAuthUser?.uid||'',startedByName:execution.startedByName||currentAccount?.name||'',participants,updatedAt:now()},{merge:true});
+      await setDoc(doc(db,'routineExecutions',key),{status:'in_progress',latePolicy:dailyLatePolicy(execution),startedAt:execution.startedAt||now(),startedById:execution.startedById||currentAuthUser?.uid||'',startedByName:execution.startedByName||currentAccount?.name||'',participants,updatedAt:now()},{merge:true});
       showSaveToast('Rotina iniciada.','success');
     }
 
@@ -5346,6 +5508,8 @@ ${m.text}`).join('\n\n');
 
     function openRoutineExecution(key){
       const execution=dailyFindExecution(key);if(!execution)return;
+      const executionTiming=dailyExecutionTiming(execution);
+      if(executionTiming.state==='missed'||executionTiming.state==='cancelled'){showSaveToast(dailyExecutionHistoryLabel(execution),'error');return;}
       selectedRoutineExecutionId=key;
       const editing=execution.status==='completed';
       document.querySelector('#routineExecutionTitle').textContent=editing?t('Editar execução'):(execution.routineName||'Executar rotina');
@@ -5414,7 +5578,11 @@ ${m.text}`).join('\n\n');
       const outOfTargetCount=checklist.filter(x=>x.assessment==='fail').length;
       const savedAt=now();
       const completedAt=execution.completedAt||savedAt;
-      const onTime=execution.completedAt?execution.onTime!==false:new Date(completedAt)<=dailyExecutionDeadline(execution);
+      const deadline=dailyExecutionDeadline(execution);
+      const timingPoint=dailyLatePolicy(execution)==='expire'?new Date(execution.startedAt||completedAt):new Date(completedAt);
+      const onTime=execution.completedAt?execution.onTime!==false:timingPoint<=deadline;
+      const timeliness=execution.completedAt?(execution.timeliness||(onTime?'on_time':'late')):(onTime?'on_time':'late');
+      const lateByMinutes=timeliness==='late'?Math.max(1,Number(execution.lateByMinutes||0)||Math.ceil((timingPoint-deadline)/60000)):0;
       const requiredParticipants=Math.max(1,Number(execution.requiredParticipants||1));
       const participantRequirementMet=execution.executionPolicy!=='min_people'||participants.length>=requiredParticipants;
       const previousHistory=Array.isArray(execution.editHistory)?execution.editHistory:[];
@@ -5430,6 +5598,7 @@ ${m.text}`).join('\n\n');
       }].slice(-20):previousHistory;
       await setDoc(doc(db,'routineExecutions',key),{
         status:'completed',result,note,checklist,evidence,participants,participantRequirementMet,outOfTargetCount,hasOutOfTarget:outOfTargetCount>0,
+        latePolicy:dailyLatePolicy(execution),timeliness,lateByMinutes,
         startedAt:execution.startedAt||completedAt,
         startedById:execution.startedById||currentAuthUser?.uid||'',
         startedByName:execution.startedByName||currentAccount?.name||'',
@@ -5472,7 +5641,7 @@ ${m.text}`).join('\n\n');
       openActivityModal({title:`Ação — ${execution.routineName} · ${execution.scopeName}`,area:execution.scopeName||'Operação',description:execution.note||`Atividade originada da rotina ${execution.routineName}, ${execution.shiftName}.`,activityMode:'simple'});
     }
 
-    // ===================== FIM CENTRAL DO DIA · V15.1.13.38 =====================
+    // ===================== FIM CENTRAL DO DIA · V15.1.13.39 =====================
 
     function renderSafely(name, fn) {
       try {
@@ -5652,12 +5821,23 @@ ${m.text}`).join('\n\n');
       const structured=activity.activityMode==='structured'||Boolean(activity.nextAction)||(activity.steps||[]).length>0||evidenceEntries(activity.evidence).length>0;
       document.querySelector('#activityDetailTitle').textContent=activity.title;
       const origin=activity.originRoutineName?` · Origem: ${activity.originRoutineName}`:'';
-      document.querySelector('#activityDetailSubtitle').textContent=`${activity.type} · ${activity.area} · Responsável: ${activity.owner}${origin}`;
+      const assignedBy=activity.assignedByName||activity.openedBy||'';
+      document.querySelector('#activityDetailSubtitle').textContent=`${activity.type} · ${activity.area} · Responsável: ${activity.owner}${assignedBy?` · ${t('Atribuída por')}: ${assignedBy}`:''}${origin}`;
       document.querySelector('#activityDetailDescription').textContent=activity.description;
       document.querySelector('#activityDetailDescriptionInput').value=activity.description||'';
       document.querySelector('#activityDescriptionEditor').classList.add('hidden');document.querySelector('#activityDetailDescription').classList.remove('hidden');
       document.querySelector('#activityDetailLink').innerHTML=safeLink(activity.link,'Abrir link relacionado')||'Nenhum link informado.';
       document.querySelector('#activityDetailStatus').value=activity.status;document.querySelector('#activityDetailDue').value=activity.dueDate||'';
+      const timing=activityTiming(activity),timingBox=document.querySelector('#activityTimingBanner');
+      if(timingBox){
+        const timingText=activityTimingText(activity);
+        timingBox.className=`activity-timing-banner ${timing.state==='overdue'||timing.timeliness==='late'?'is-late':timing.state==='cancelled'?'is-cancelled':'is-ok'} ${timingText?'':'hidden'}`;
+        timingBox.textContent=timingText;
+      }
+      const deleteBtn=document.querySelector('#deleteActivity');
+      if(deleteBtn){deleteBtn.classList.toggle('hidden',currentAccount?.role!=='admin');deleteBtn.textContent=activityCanHardDelete(activity)?t('Excluir definitivamente'):t('Excluir');}
+      const cancelBtn=document.querySelector('#cancelActivity');
+      if(cancelBtn)cancelBtn.classList.toggle('hidden',currentAccount?.role!=='admin'||activityIsClosed(activity));
       document.querySelector('#structureActivity')?.classList.toggle('hidden',structured);
       document.querySelector('#activityStructuredSection')?.classList.toggle('hidden',!structured);
       if(structured){
@@ -5669,7 +5849,8 @@ ${m.text}`).join('\n\n');
         document.querySelector('#activitySteps').innerHTML=steps.length?steps.map((step,index)=>`<div class="activity-step-row ${step.done?'done':''}"><label><input type="checkbox" data-activity-step-toggle="${index}" ${step.done?'checked':''}><span>${esc(step.text)}</span></label><button type="button" data-activity-step-delete="${index}" aria-label="Excluir etapa">×</button></div>`).join(''):'<div class="daily-soft-empty">Nenhuma etapa ainda.</div>';
         document.querySelector('#activityEvidenceGallery').innerHTML=evidenceGallery(activity.evidence,{allowDelete:true,kind:'activity',id:activity.id});
       }
-      const events=[{text:'Atividade criada.',date:activity.createdAt},...(activity.updates||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
+      const initialAssignment=(activity.assignedByName||activity.openedBy)?`Atividade criada por ${activity.assignedByName||activity.openedBy}${activity.owner?` e atribuída a ${activity.owner}`:''}.`:'Atividade criada.';
+      const events=[{text:initialAssignment,date:activity.createdAt},...(activity.updates||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
       document.querySelector('#activityTimeline').innerHTML=events.map(event=>`<div class="event"><time>${formatDate(event.date)}</time><p>${esc(event.text)}</p></div>`).join('');
       translatePage();
     }
@@ -6192,7 +6373,7 @@ ${m.text}`).join('\n\n');
     document.querySelector('#cancelShiftHandover')?.addEventListener('click',closeShiftHandover);
     document.querySelector('#shiftHandoverModal')?.addEventListener('click',e=>{if(e.target.id==='shiftHandoverModal')closeShiftHandover();});
     document.querySelector('#saveShiftHandover')?.addEventListener('click',()=>saveShiftHandover().catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar a passagem de turno'),'error');}));
-    document.querySelector('#dailyAdminPanel')?.addEventListener('click',e=>{const edit=e.target.closest('[data-daily-edit]');if(edit){dailyEditAdminItem(edit.dataset.dailyEdit,edit.dataset.id);return;}const toggle=e.target.closest('[data-daily-toggle]');if(toggle){dailyToggleAdminItem(toggle.dataset.dailyToggle,toggle.dataset.id).catch(console.error);return;}const del=e.target.closest('[data-daily-delete="allocation"]');if(del)dailyDeleteAllocation(del.dataset.id).catch(console.error);});
+    document.querySelector('#dailyAdminPanel')?.addEventListener('click',e=>{const edit=e.target.closest('[data-daily-edit]');if(edit){dailyEditAdminItem(edit.dataset.dailyEdit,edit.dataset.id);return;}const toggle=e.target.closest('[data-daily-toggle]');if(toggle){dailyToggleAdminItem(toggle.dataset.dailyToggle,toggle.dataset.id).catch(console.error);return;}const delAllocation=e.target.closest('[data-daily-delete="allocation"]');if(delAllocation){dailyDeleteAllocation(delAllocation.dataset.id).catch(console.error);return;}const delRoutine=e.target.closest('[data-daily-delete="routine"]');if(delRoutine)dailyDeleteRoutine(delRoutine.dataset.id).catch(console.error);});
     document.querySelector('#dailyView')?.addEventListener('click',e=>{const start=e.target.closest('[data-daily-start]');if(start){startDailyExecution(start.dataset.dailyStart).catch(err=>{console.error(err);showSaveToast('Não foi possível iniciar.','error');});return;}const complete=e.target.closest('[data-daily-complete]');if(complete){openRoutineExecution(complete.dataset.dailyComplete);return;}const editExec=e.target.closest('[data-daily-edit-exec]');if(editExec){openRoutineExecution(editExec.dataset.dailyEditExec);return;}const fail=e.target.closest('[data-daily-failure]');if(fail){dailyCreateFailureFromExecution(fail.dataset.dailyFailure);return;}const activity=e.target.closest('[data-daily-activity]');if(activity){dailyCreateActivityFromExecution(activity.dataset.dailyActivity);return;}const linked=e.target.closest('[data-kind][data-ref]');if(linked)dailyOpenLinkedItem(linked.dataset.kind,linked.dataset.ref);});
     document.querySelector('#closeRoutineExecution')?.addEventListener('click',closeRoutineExecution);
     document.querySelector('#cancelRoutineExecution')?.addEventListener('click',closeRoutineExecution);
@@ -6574,7 +6755,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const nextActionMode=!typedNext||activityTemplate&&typedNext===templateDefault?'auto':'manual';
       const nextAction=nextActionMode==='auto'?activityAutoNextAction(steps):typedNext;
       const origin=pendingOriginContext;
-      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction,nextActionMode,activityTemplate,steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
+      const activity={id:nextId('A'),title:form.get('title').trim(),type:form.get('type'),area:form.get('area').trim(),owner:assignment.owner,assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,openedBy:currentAccount?.name||form.get('owner'),assignedById:currentAuthUser?.uid||'',assignedByName:currentAccount?.name||'',assignedAt:now(),dueDate:form.get('dueDate'),description:form.get('description').trim(),link:form.get('link').trim(),status:'pendente',product:form.get('product')||activeProduct||'',activityMode,nextAction,nextActionMode,activityTemplate,steps,evidence,createdAt:now(),lastMovedAt:now(),updates:[],originType:origin?.type||'',originRoutineExecutionId:origin?.executionKey||'',originRoutineId:origin?.routineId||'',originRoutineName:origin?.routineName||'',originScopeId:origin?.scopeId||'',originScopeName:origin?.scopeName||'',originShiftId:origin?.shiftId||'',originShiftName:origin?.shiftName||''};
       const ref=await addDoc(collection(db,'activities'),activity);activity.docId=ref.id;
       if(!state.activities.some(x=>x.id===activity.id))state.activities=[...state.activities,activity];
       if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedActivityIds||[]),activity.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedActivityIds:linked,updatedAt:now()},{merge:true});}
@@ -6850,18 +7031,40 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     document.querySelector('#saveActivityChanges').addEventListener('click', async () => {
       const activity=selectedActivity();if(!activity)return;
       const status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value;
+      if(status==='cancelado'&&currentAccount?.role!=='admin')return alert('Apenas administradores podem cancelar atividades atribuídas.');
       const structured=!document.querySelector('#activityStructuredSection').classList.contains('hidden');
       const typedNext=structured?document.querySelector('#activityNextAction').value.trim():(activity.nextAction||'');
       const autoCandidate=activityAutoNextAction(activity.steps||[]);
       const nextAction=structured?(typedNext||autoCandidate):(activity.nextAction||'');
       const nextActionMode=structured?(typedNext&&typedNext!==autoCandidate?'manual':'auto'):(activity.nextActionMode||'manual');
       const changes=[];
-      if(status!==activity.status)changes.push(`Status alterado para “${activityStatusName[status]}”.`);
+      if(status!==activity.status)changes.push(`Status alterado para “${activityStatusName[status]||status}”.`);
       if(dueDate!==activity.dueDate)changes.push(dueDate?`Prazo atualizado para ${formatDate(dueDate)}.`:'Prazo removido.');
       if(nextAction!==(activity.nextAction||''))changes.push(nextAction?`Próxima ação: ${nextAction}`:'Próxima ação removida.');
+      let completedAt=activity.completedAt||'',timeliness=activity.timeliness||'',lateByMinutes=Number(activity.lateByMinutes||0),completedById=activity.completedById||'',completedByName=activity.completedByName||'';
+      let cancelledAt=activity.cancelledAt||'',cancelledById=activity.cancelledById||'',cancelledByName=activity.cancelledByName||'',cancellationReason=activity.cancellationReason||'';
+      if(status==='concluido'&&activityEffectiveStatus(activity)!=='concluido'){
+        completedAt=now();completedById=currentAuthUser?.uid||'';completedByName=currentAccount?.name||'';
+        const deadline=activityDueDeadline(dueDate);
+        const late=deadline&&new Date(completedAt)>deadline;
+        timeliness=late?'late':'on_time';
+        lateByMinutes=late?Math.max(1,Math.ceil((new Date(completedAt)-deadline)/60000)):0;
+        changes.push(late?`Concluída com atraso de ${lateByMinutes} min.`:'Concluída dentro do prazo.');
+      }else if(status!=='concluido'&&activityEffectiveStatus(activity)==='concluido'){
+        completedAt='';timeliness='';lateByMinutes=0;completedById='';completedByName='';
+        changes.push('Atividade reaberta; a conclusão anterior permanece registrada no histórico textual.');
+      }
+      if(status==='cancelado'&&activityEffectiveStatus(activity)!=='cancelado'){
+        cancellationReason=prompt('Motivo do cancelamento:')?.trim()||'';
+        if(!cancellationReason)return;
+        cancelledAt=now();cancelledById=currentAuthUser?.uid||'';cancelledByName=currentAccount?.name||'';
+        changes.push(`Cancelada por ${cancelledByName||'Admin'}: ${cancellationReason}.`);
+      }else if(status!=='cancelado'&&activityEffectiveStatus(activity)==='cancelado'){
+        cancelledAt='';cancelledById='';cancelledByName='';cancellationReason='';
+      }
       if(!changes.length&&nextActionMode===(activity.nextActionMode||'manual'))return;
       const updates=[...(activity.updates||[]),...(changes.length?[{text:changes.join(' '),date:now()}]:[])];
-      await updateDoc(doc(db,'activities',activity.docId),{status,dueDate,nextAction,nextActionMode,updates,lastMovedAt:now()});renderActivityDetail();
+      await updateDoc(doc(db,'activities',activity.docId),{status,dueDate,nextAction,nextActionMode,completedAt,timeliness,lateByMinutes,completedById,completedByName,cancelledAt,cancelledById,cancelledByName,cancellationReason,updates,lastMovedAt:now()});renderActivityDetail();
     });
 
     document.querySelector('#addActivityUpdate').addEventListener('click', async () => {
@@ -6880,10 +7083,20 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     document.querySelector('#activitySteps')?.addEventListener('change',async e=>{const toggle=e.target.closest('[data-activity-step-toggle]');if(!toggle)return;const activity=selectedActivity();if(!activity)return;const index=Number(toggle.dataset.activityStepToggle),steps=(activity.steps||[]).map((step,i)=>i===index?{...step,done:toggle.checked,doneAt:toggle.checked?now():'',doneBy:toggle.checked?(currentAccount?.name||''):''}:step),step=steps[index],autoMode=(activity.nextActionMode||(!activity.nextAction?'auto':'manual'))==='auto',nextAction=autoMode?activityAutoNextAction(steps):(activity.nextAction||''),updates=[...(activity.updates||[]),{text:`${toggle.checked?'Etapa concluída':'Etapa reaberta'}: ${step.text}`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{steps,nextAction,nextActionMode:autoMode?'auto':(activity.nextActionMode||'manual'),updates,lastMovedAt:now()});renderActivityDetail();});
     document.querySelector('#saveActivityEvidence')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityEvidenceInput'),files=await readAttachments([...(input.files||[])]);if(!files.length)return alert('Selecione pelo menos um arquivo.');const evidence=[...evidenceEntries(activity.evidence),...files],updates=[...(activity.updates||[]),{text:`${files.length} arquivo(s)/evidência(s) adicionado(s).`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',evidence,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
 
+    document.querySelector('#cancelActivity')?.addEventListener('click',()=>{
+      if(currentAccount?.role!=='admin')return alert('Apenas administradores podem cancelar atividades atribuídas.');
+      const select=document.querySelector('#activityDetailStatus');if(!select)return;select.value='cancelado';document.querySelector('#saveActivityChanges')?.click();
+    });
+
     document.querySelector('#deleteActivity').addEventListener('click', async () => {
       if (currentAccount?.role !== 'admin') { alert('Apenas administradores podem excluir atividades.'); return; }
       const activity = selectedActivity();
-      if (!activity || !confirm(`Excluir ${activity.id}? Essa ação não pode ser desfeita.`)) return;
+      if (!activity) return;
+      if(!activityCanHardDelete(activity)){
+        alert('Esta atividade já possui atribuição a outra pessoa, histórico, evidência ou vínculo operacional. Para preservar a rastreabilidade, cancele a atividade em vez de apagá-la.');
+        return;
+      }
+      if (!confirm(`Excluir definitivamente ${activity.id}? Use esta opção apenas para testes ou registros criados por engano. Esta ação não pode ser desfeita.`)) return;
       await deleteDoc(doc(db, "activities", activity.docId));
       closeActivityDetail();
     });
@@ -6969,5 +7182,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.38'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.38'){localStorage.setItem('cora.sw.loaded','15.1.13.38');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.39'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.39'){localStorage.setItem('cora.sw.loaded','15.1.13.39');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
