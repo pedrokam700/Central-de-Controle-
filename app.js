@@ -4034,6 +4034,7 @@ ${m.text}`).join('\n\n');
               requireNgNote:routine.requireNgNote!==false,
               allowFailure:routine.allowFailure!==false,
               allowActivity:routine.allowActivity!==false,
+              checklistSchema:normalizeRoutineSchema(routine.checklistSchema,routine.checklistTemplate),
               checklistTemplate:Array.isArray(routine.checklistTemplate)?routine.checklistTemplate:[],
               requiredParticipants:Math.max(1,Number(routine.minParticipants||1)),
               expectedUserIds:userIds,expectedUserNames:userNames
@@ -4087,7 +4088,7 @@ ${m.text}`).join('\n\n');
           scopeId:item.scopeId,scopeName:item.scopeName,scopeType:item.scopeType,plannedTime:item.plannedTime,
           windowMinutes:item.windowMinutes,executionPolicy:item.executionPolicy,resultMode:item.resultMode,contextMode:item.contextMode||'none',
           requireNgNote:item.requireNgNote,allowFailure:item.allowFailure,allowActivity:item.allowActivity,
-          checklistTemplate:item.checklistTemplate,requiredParticipants:item.requiredParticipants,
+          checklistSchema:item.checklistSchema,checklistTemplate:item.checklistTemplate,requiredParticipants:item.requiredParticipants,
           expectedUserIds:item.expectedUserIds,expectedUserNames:item.expectedUserNames,
           assignedUserId:item.assignedUserId||'',assignedUserName:item.assignedUserName||'',
           snapshotAt:now()
@@ -4508,7 +4509,8 @@ ${m.text}`).join('\n\n');
       if(routines) routines.innerHTML=state.routineTemplates.length?state.routineTemplates.map(r=>{
         const schedules=Object.entries(r.scheduleMap||{}).map(([sid,times])=>{const sh=state.workShifts.find(s=>s.docId===sid);return sh?`${sh.name}: ${(times||[]).filter(Boolean).join(', ')||'1× no turno'}`:'';}).filter(Boolean);
         const context=r.contextMode&&r.contextMode!=='none'?` · ${dailyContextModeLabel(r.contextMode)}`:'';
-        return `<div class="daily-admin-item ${r.active===false?'is-off':''}"><div><strong>${esc(r.name)}</strong><span>${esc(schedules.join(' · ')||'Sem agenda')} · ${esc(dailyPolicyLabel(r.executionPolicy))}${esc(context)}</span></div><div><button type="button" data-daily-edit="routine" data-id="${esc(r.docId)}">${esc(t('Editar rotina'))}</button><button type="button" data-daily-toggle="routine" data-id="${esc(r.docId)}">${r.active===false?'Ativar':'Desativar'}</button></div></div>`;
+        const itemCount=normalizeRoutineSchema(r.checklistSchema,r.checklistTemplate).length;
+        return `<div class="daily-admin-item ${r.active===false?'is-off':''}"><div><strong>${esc(r.name)}</strong><span>${esc(schedules.join(' · ')||'Sem agenda')} · ${esc(dailyPolicyLabel(r.executionPolicy))}${esc(context)} · ${itemCount} item(ns)</span></div><div><button type="button" data-daily-edit="routine" data-id="${esc(r.docId)}">${esc(t('Editar rotina'))}</button><button type="button" data-daily-toggle="routine" data-id="${esc(r.docId)}">${r.active===false?'Ativar':'Desativar'}</button></div></div>`;
       }).join(''):'<div class="daily-soft-empty">Nenhuma rotina.</div>';
     }
 
@@ -4574,6 +4576,7 @@ ${m.text}`).join('\n\n');
         form.elements.minParticipants.value=1;
         form.elements.windowMinutes.value=60;
         if(form.elements.contextMode) form.elements.contextMode.value='none';
+        renderDailyRoutineSchemaBuilder([]);
         const weekdays=new Set(['1','2','3','4','5']);
         [...form.elements.routineDays].forEach(x=>x.checked=weekdays.has(x.value));
         renderDailyRoutineScheduleEditor();
@@ -4595,7 +4598,7 @@ ${m.text}`).join('\n\n');
         const selected=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=selected.has(o.value));f.scrollIntoView({behavior:'smooth',block:'center'});
       }else if(kind==='routine'){
         const item=state.routineTemplates.find(x=>x.docId===id); if(!item)return;
-        const f=document.querySelector('#dailyRoutineForm');f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.description.value=item.description||'';if(f.elements.contextMode)f.elements.contextMode.value=item.contextMode||'none';f.elements.executionPolicy.value=item.executionPolicy||'scope_once';f.elements.minParticipants.value=item.minParticipants||1;f.elements.windowMinutes.value=item.windowMinutes??60;f.elements.resultMode.value=item.resultMode||'ok_ng';f.elements.checklistTemplate.value=(item.checklistTemplate||[]).join('\n');f.elements.allowFailure.checked=item.allowFailure!==false;f.elements.allowActivity.checked=item.allowActivity!==false;f.elements.requireNgNote.checked=item.requireNgNote!==false;f.elements.active.checked=item.active!==false;
+        const f=document.querySelector('#dailyRoutineForm');f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.description.value=item.description||'';if(f.elements.contextMode)f.elements.contextMode.value=item.contextMode||'none';f.elements.executionPolicy.value=item.executionPolicy||'scope_once';f.elements.minParticipants.value=item.minParticipants||1;f.elements.windowMinutes.value=item.windowMinutes??60;f.elements.resultMode.value=item.resultMode||'ok_ng';renderDailyRoutineSchemaBuilder(normalizeRoutineSchema(item.checklistSchema,item.checklistTemplate));f.elements.allowFailure.checked=item.allowFailure!==false;f.elements.allowActivity.checked=item.allowActivity!==false;f.elements.requireNgNote.checked=item.requireNgNote!==false;f.elements.active.checked=item.active!==false;
         const scopes=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=scopes.has(o.value));
         const days=new Set((item.days||[1,2,3,4,5]).map(String));[...f.elements.routineDays].forEach(o=>o.checked=days.has(o.value));
         renderDailyRoutineScheduleEditor(item);f.scrollIntoView({behavior:'smooth',block:'start'});showSaveToast(t('Os dados concluídos ficam preservados; alterações no modelo valem para execuções futuras.'),'success');
@@ -4780,11 +4783,12 @@ ${m.text}`).join('\n\n');
       let scheduleMap;try{scheduleMap=dailyRoutineSchedulePayload();}catch(error){return alert(error.message);}
       if(!Object.keys(scheduleMap).length)return alert('Selecione pelo menos um turno na agenda da rotina.');
       const days=f.getAll('routineDays').map(Number), scopeIds=f.getAll('scopeIds').filter(Boolean);
+      const checklistSchema=dailyRoutineSchemaPayload();
       const payload={
         name:String(f.get('name')||'').trim(),description:String(f.get('description')||'').trim(),contextMode:String(f.get('contextMode')||'none'),scopeIds,scheduleMap,days,
         executionPolicy:String(f.get('executionPolicy')||'scope_once'),minParticipants:Math.max(1,Number(f.get('minParticipants')||1)),
         windowMinutes:Math.max(0,Number(f.get('windowMinutes')||60)),resultMode:String(f.get('resultMode')||'ok_ng'),
-        checklistTemplate:String(f.get('checklistTemplate')||'').split('\n').map(x=>x.trim()).filter(Boolean),
+        checklistSchema,checklistTemplate:checklistSchema.map(x=>x.label),
         allowFailure:f.get('allowFailure')==='on',allowActivity:f.get('allowActivity')==='on',requireNgNote:f.get('requireNgNote')==='on',active:f.get('active')==='on',
         updatedAt:now(),updatedBy:currentAccount.email
       };
