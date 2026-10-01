@@ -4237,7 +4237,7 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyTourStorageKey(){
-      return 'central.daily.tour.v3.'+(currentAuthUser?.uid||currentAccount?.email||'user');
+      return 'central.daily.tour.v4.'+(currentAuthUser?.uid||currentAccount?.email||'user');
     }
     function dailyTourDisableKey(){
       return 'central.daily.tour.disabled.'+(currentAuthUser?.uid||currentAccount?.email||'user');
@@ -4256,9 +4256,20 @@ ${m.text}`).join('\n\n');
         {selector:'#centralNotificationButton',title:t('Alertas do turno'),text:t('O sino reúne rotinas próximas do horário, atrasos e atividades com prazo.'),tip:t('Você pode ativar alertas do navegador e escolher a antecedência.')}
       ];
       if(currentAccount?.role==='admin'){
-        steps.push({selector:'#dailyAdminToggle',title:t('Configuração administrativa'),text:t('Administradores usam esta área para turnos, escopos, matriz de alocação, rotinas e histórico.'),tip:t('O usuário comum não vê esta etapa.')});
+        steps.push(
+          {selector:'#dailyAdminToggle',title:t('Configuração administrativa'),text:t('Administradores usam esta área para turnos, escopos, matriz de alocação, rotinas e histórico.'),tip:t('O usuário comum não vê esta etapa.')},
+          {selector:'#dailyConfigShiftsCard',adminPanel:true,adminTab:'config',title:t('Estruture os turnos'),text:t('Defina início e fim reais; a Central usa isso para saber qual período pertence a cada turno, inclusive quando atravessa a meia-noite.'),tip:'Ex.: 1º turno · 07:30 → 17:30.'},
+          {selector:'#dailyConfigScopesCard',adminPanel:true,adminTab:'config',title:t('Modele os escopos'),text:t('Linhas são o ponto principal, mas você também pode representar área, estação ou processo quando isso ajudar a operação.'),tip:'O código curto facilita a leitura da matriz e dos painéis.'},
+          {selector:'#dailyProductionContextCard',adminPanel:true,adminTab:'config',title:t('Configure o que cada linha produz'),text:t('Este vínculo conecta turno + linha/escopo + CPH e passa a alimentar rotinas, falhas, reports, passagem de turno e o Radar.'),tip:'Quando o CPH mudar, altere o vínculo; execuções já materializadas preservam o contexto anterior.'},
+          {selector:'#dailyAllocationMatrixCard',adminPanel:true,adminTab:'config',title:t('Distribua pela matriz'),text:t('A matriz é a forma mais rápida de dizer quem trabalha em qual escopo naquele turno.'),tip:'Marcar e desmarcar altera a configuração atual sem apagar o histórico operacional.'},
+          {selector:'#dailyAllocationAdvancedCard',adminPanel:true,adminTab:'config',title:t('Use a alocação avançada só quando precisar'),text:t('Aqui você ajusta papel principal/apoio e casos específicos sem substituir a matriz como fluxo principal.'),tip:'Para a maioria das mudanças, use a matriz.'},
+          {selector:'#dailyRoutineConfigCard',adminPanel:true,adminTab:'config',title:t('Construa as rotinas'),text:t('Defina agenda, escopos, regra de execução e os dados que serão coletados em cada item.'),tip:'Percentuais e números podem ter meta; todos os campos continuam opcionais na execução.'},
+          {selector:'#dailyAdminHistoryPanel',adminPanel:true,adminTab:'config',title:t('Acompanhe o histórico administrativo'),text:t('Mudanças de turno, escopo, alocação, produção e rotina ficam registradas para auditoria.'),tip:'O histórico administrativo não substitui o histórico das execuções; os dois são preservados.'},
+          {selector:'#dailyAdminDashboardTab',adminPanel:true,adminTab:'config',title:t('Dashboard operacional'),text:t('Esta aba transforma as execuções em cobertura, prazo, NG e detalhamento por escopo ou pessoa.'),tip:'Abra a aba para investigar os números, não apenas olhar o indicador.'},
+          {selector:'#dailyAdminDashboard',adminPanel:true,adminTab:'dashboard',title:t('Leia o dashboard operacional'),text:t('Use os filtros para conferir cobertura, prazo, NG e execuções sem misturar políticas colaborativas com cobrança individual.'),tip:'Os filtros atualizam toda a leitura do dashboard.'}
+        );
       }
-      steps.push({selector:'#dailyTourButton',title:t('Ajuda sempre disponível'),text:t('O guia não precisa ocupar a tela no uso diário. Use este ícone quando quiser rever o passo a passo.'),tip:t('Você também pode pular etapas clicando nos indicadores do tour.')});
+      steps.push({selector:'#dailyTourButton',restoreAdmin:true,title:t('Ajuda sempre disponível'),text:t('O guia não precisa ocupar a tela no uso diário. Use este ícone quando quiser rever o passo a passo.'),tip:t('Você também pode pular etapas clicando nos indicadores do tour.')});
       return steps;
     }
 
@@ -4268,6 +4279,20 @@ ${m.text}`).join('\n\n');
 
     function dailyTourIsOpen(){
       return !document.querySelector('#dailyTourModal')?.classList.contains('hidden');
+    }
+
+    function dailyPrepareTourStep(step){
+      if(!step)return;
+      const panel=document.querySelector('#dailyAdminPanel');
+      if(step.adminPanel&&currentAccount?.role==='admin'&&panel){
+        panel.classList.remove('hidden');
+        dailyAdminTab=step.adminTab||'config';
+        renderDailyAdmin();
+      }else if(step.restoreAdmin&&dailyTourRestoreAdminState&&panel){
+        panel.classList.toggle('hidden',dailyTourRestoreAdminState.hidden);
+        dailyAdminTab=dailyTourRestoreAdminState.tab||'config';
+        renderDailyAdmin();
+      }
     }
 
     function dailyTourTarget(){
@@ -4325,6 +4350,7 @@ ${m.text}`).join('\n\n');
       const steps=dailyTourSteps();
       dailyTourStep=Math.max(0,Math.min(dailyTourStep,steps.length-1));
       const step=steps[dailyTourStep];
+      dailyPrepareTourStep(step);
       document.querySelector('#dailyTourStepTitle').textContent=step.title;
       document.querySelector('#dailyTourStepText').textContent=step.text;
       document.querySelector('#dailyTourTip').textContent=step.tip||'';
@@ -4347,6 +4373,8 @@ ${m.text}`).join('\n\n');
 
     function openDailyTour({firstAccess=false}={}){
       dailyTourStep=0;
+      const adminPanel=document.querySelector('#dailyAdminPanel');
+      dailyTourRestoreAdminState={hidden:adminPanel?.classList.contains('hidden')??true,tab:dailyAdminTab};
       const modal=document.querySelector('#dailyTourModal');
       if(!modal)return;
       modal.classList.remove('hidden');
@@ -4363,6 +4391,13 @@ ${m.text}`).join('\n\n');
       if(markSeen)localStorage.setItem(dailyTourStorageKey(),'seen');
       if(document.querySelector('#dailyTourDisableAuto')?.checked)localStorage.setItem(dailyTourDisableKey(),'1');
       else localStorage.removeItem(dailyTourDisableKey());
+      const panel=document.querySelector('#dailyAdminPanel');
+      if(panel&&dailyTourRestoreAdminState){
+        panel.classList.toggle('hidden',dailyTourRestoreAdminState.hidden);
+        dailyAdminTab=dailyTourRestoreAdminState.tab||'config';
+        renderDailyAdmin();
+      }
+      dailyTourRestoreAdminState=null;
     }
 
     function nextDailyTourStep(){
@@ -5936,6 +5971,10 @@ ${m.text}`).join('\n\n');
     ['dailyDashFrom','dailyDashTo','dailyDashShift','dailyDashScope','dailyDashUser'].forEach(id=>document.querySelector('#'+id)?.addEventListener('change',renderDailyAdminDashboard));
     document.querySelector('#dailyShiftForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyShift(e.currentTarget).catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar o turno'),'error');});});
     document.querySelector('#dailyScopeForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyScope(e.currentTarget).catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar o escopo'),'error');});});
+    document.querySelector('#dailyProductionContextForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyProductionContext(e.currentTarget).catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar o contexto de produção'),'error');});});
+    ['dailyProductionShift','dailyProductionScope'].forEach(id=>document.querySelector('#'+id)?.addEventListener('change',renderDailyProductionSelection));
+    document.querySelector('#dailyProductionClear')?.addEventListener('click',()=>{const form=document.querySelector('#dailyProductionContextForm');if(form)saveDailyProductionContext(form,{clear:true}).catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'limpar o contexto de produção'),'error');});});
+    document.querySelector('#dailyProductionList')?.addEventListener('click',e=>{const btn=e.target.closest('[data-production-edit]');if(!btn)return;const shift=document.querySelector('#dailyProductionShift'),scope=document.querySelector('#dailyProductionScope');if(shift)shift.value=btn.dataset.shiftId||'';if(scope)scope.value=btn.dataset.scopeId||'';renderDailyProductionSelection();document.querySelector('#dailyProductionContextForm')?.scrollIntoView({behavior:'smooth',block:'center'});});
     document.querySelector('#dailyAllocationForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyAllocation(e.currentTarget).catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar a alocação'),'error');});});
     document.querySelector('#dailyRoutineForm')?.addEventListener('submit',e=>{e.preventDefault();saveDailyRoutine(e.currentTarget).catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar a rotina'),'error');});});
     document.querySelectorAll('[data-daily-reset]').forEach(btn=>btn.addEventListener('click',()=>resetDailyAdminForm(btn.dataset.dailyReset)));
