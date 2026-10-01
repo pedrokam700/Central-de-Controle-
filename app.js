@@ -122,6 +122,7 @@
     Object.assign(translations, {"Itens da rotina":"Routine items","Defina o tipo de dado de cada item. Nenhum campo será obrigatório durante a execução.":"Define the data type for each item. No field will be required during execution.","Adicionar item":"Add item","Verificação":"Check","Verificação + campo":"Check + field","Percentual":"Percentage","Número":"Number","Texto":"Text","OK / NG":"OK / NG","Seleção":"Selection","Evidência":"Evidence","Unidade":"Unit","Meta":"Target","Opções":"Options","Passagem de turno":"Shift handover","Resumo automático para entregar e receber continuidade.":"Automatic summary to hand over and receive continuity.","Preparar passagem":"Prepare handover","Editar passagem":"Edit handover","Receber passagem":"Receive handover","Passagem enviada":"Handover sent","Passagem recebida":"Handover received","Nenhuma passagem do turno anterior.":"No handover from the previous shift.","Turno anterior":"Previous shift","Este turno":"This shift","Cobertura":"Coverage","Falhas registradas":"Recorded failures","Atividades abertas":"Open activities","Dados coletados":"Collected data","Observação da passagem":"Handover note","Salvar passagem":"Save handover","Confirmar recebimento":"Confirm receipt","Recebido por":"Received by","Fora da meta":"Outside target","Dentro da meta":"Within target","Sem meta":"No target","Nenhum item configurado.":"No item configured.","Selecione ou digite um valor":"Select or enter a value","Clique em adicionar item para estruturar a coleta da rotina.":"Click Add item to structure routine data collection.","A passagem usa os dados já registrados no turno e preserva um snapshot para consulta futura.":"The handover uses data already recorded in the shift and preserves a snapshot for future review."});
     Object.assign(translations, {"Entregue a continuidade":"Hand over continuity","A passagem reúne automaticamente o que foi registrado no turno e o próximo time pode confirmar o recebimento.":"The handover automatically gathers what was recorded in the shift and the next team can confirm receipt.","Use a observação somente para o contexto que os dados não conseguem mostrar sozinhos.":"Use the note only for context the data cannot show on its own."});
     Object.assign(translations, {"Contexto de produção":"Production context","Ligue cada linha/escopo ao CPH que está rodando em cada turno.":"Link each line/scope to the CPH running in each shift.","CPH em produção":"CPH in production","Sem CPH configurado":"No CPH configured","Salvar contexto":"Save context","Limpar vínculo":"Clear link","Contexto de produção salvo.":"Production context saved.","Vínculo de produção removido.":"Production link removed.","Radar de recorrência":"Recurrence radar","Padrões relacionados às linhas e CPHs deste turno.":"Patterns related to this shift's lines and CPHs.","Padrões ativos":"Active patterns","Ocorrências agrupadas":"Grouped occurrences","Em crescimento":"Growing","Possível recorrência":"Possible recurrence","Ver padrão":"View pattern","Por que foi agrupado":"Why it was grouped","Registros relacionados":"Related records","Cruza Falhas + Reports por componente, CPH, linha, máquina, posto, processo e descrição.":"Crosses Failures + Reports by component, CPH, line, machine, station, process, and description.","Recalcular":"Recalculate","Sem recorrências relevantes agora.":"No relevant recurrences right now.","Configure o que cada linha produz":"Configure what each line produces","Este vínculo conecta turno + linha/escopo + CPH e passa a alimentar rotinas, falhas, reports, passagem de turno e o Radar.":"This link connects shift + line/scope + CPH and feeds routines, failures, reports, handover, and the Radar.","Estruture os turnos":"Structure the shifts","Defina início e fim reais; a Central usa isso para saber qual período pertence a cada turno, inclusive quando atravessa a meia-noite.":"Define actual start and end times; the Work Center uses them to know which period belongs to each shift, including overnight shifts.","Modele os escopos":"Model the scopes","Linhas são o ponto principal, mas você também pode representar área, estação ou processo quando isso ajudar a operação.":"Lines are the main point, but you can also represent area, station, or process when useful.","Distribua pela matriz":"Assign through the matrix","A matriz é a forma mais rápida de dizer quem trabalha em qual escopo naquele turno.":"The matrix is the fastest way to define who works in each scope for that shift.","Use a alocação avançada só quando precisar":"Use advanced assignment only when needed","Aqui você ajusta papel principal/apoio e casos específicos sem substituir a matriz como fluxo principal.":"Here you adjust primary/support roles and specific cases without replacing the matrix as the main flow.","Construa as rotinas":"Build the routines","Defina agenda, escopos, regra de execução e os dados que serão coletados em cada item.":"Define schedule, scopes, execution policy, and the data collected in each item.","Acompanhe o histórico administrativo":"Review administrative history","Mudanças de turno, escopo, alocação, produção e rotina ficam registradas para auditoria.":"Changes to shifts, scopes, assignments, production, and routines are recorded for audit.","Leia o dashboard operacional":"Read the operational dashboard","Use os filtros para conferir cobertura, prazo, NG e execuções sem misturar políticas colaborativas com cobrança individual.":"Use filters to review coverage, timing, NG, and executions without mixing collaborative policies with individual accountability."});
+    Object.assign(translations, {"O Radar cruza Falhas e Reports com o contexto real da operação para destacar padrões repetidos.":"The Radar crosses Failures and Reports with real operational context to highlight repeated patterns.","Linha + CPH + componente + máquina + posto + processo + descrição ajudam a explicar por que os registros foram agrupados.":"Line + CPH + component + machine + station + process + description help explain why records were grouped."});
     const originalTextNodes = new WeakMap();
     const originalAttrs = new WeakMap();
     const translationPatterns = [
@@ -910,7 +911,7 @@
       return parts.join('\n\n');
     }
     function copyText(text){ if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>alert('Texto copiado.')); else { const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('Texto copiado.'); } }
-    // ==================== V15.1.13.37 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
+    // ==================== V15.1.13.38 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
     function notificationPrefsKey(){return 'central.notifications.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function notificationSentKey(){return 'central.notifications.sent.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function centralNotificationPrefs(){
@@ -1979,7 +1980,7 @@
       const status=document.querySelector('#opStatus')?.value||'';
       const category=document.querySelector('#opCategory')?.value||'';
       const filtered=ordered(state.operationalFailures.filter(r=>{
-        const text=[r.id,r.family,failureScopeSummary(r),r.baseCode,...failureProductCodes(r),r.component,r.category,r.classification,r.maquina,r.linha,r.estacao,r.processo,r.onde_detectado,r.issue,r.owner,r.hypothesis,r.cause,r.correctiveAction].join(' ').toLowerCase();
+        const text=[r.id,r.family,failureScopeSummary(r),r.baseCode,...failureProductCodes(r),...(r.productionProductCodes||[]).map(productDisplayCode),r.component,r.category,r.classification,r.maquina,r.linha,r.estacao,r.processo,r.onde_detectado,r.issue,r.owner,r.hypothesis,r.cause,r.correctiveAction].join(' ').toLowerCase();
         const cls=String(r.classification||'NAO_DEFINIDO').toUpperCase();
         return (!search||text.includes(search))&&(!status||operationalStatus(r)===status)&&(!category||cls===category);
       }));
@@ -2746,7 +2747,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.37'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.37'){localStorage.setItem('cora.sw.loaded','15.1.13.37');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.38'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.38'){localStorage.setItem('cora.sw.loaded','15.1.13.38');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3977,7 +3978,7 @@ ${m.text}`).join('\n\n');
     // ======================= FIM V14.0 — IA DE ANÁLISE (legado) =======================
 
 
-    // ======================= CENTRAL DO DIA · V15.1.13.37 =======================
+    // ======================= CENTRAL DO DIA · V15.1.13.38 =======================
     const localDateKey = (date = new Date()) => {
       const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
       return `${y}-${m}-${d}`;
@@ -4425,6 +4426,7 @@ ${m.text}`).join('\n\n');
         {selector:'#dailyNowCard',title:t('O que exige ação agora'),text:t('Este cartão destaca a rotina mais urgente ou a que já está em andamento.'),tip:t('Use Iniciar e Registrar resultado para conduzir a execução.')},
         {selector:'.daily-timeline-panel',title:t('Acompanhe o mapa do turno'),text:t('Aqui você vê cada rotina em ordem, com status, horário e ações disponíveis.'),tip:t('Os filtros ajudam a focar em todas, somente suas ou apenas pendentes.')},
         {selector:'.daily-side-column',title:t('Conecte o trabalho'),text:t('Atividades, falhas, reports e itens gerados pelas rotinas continuam ligados ao turno.'),tip:t('Você pode abrir esses registros sem perder o contexto da Central do Dia.')},
+        {selector:'#dailyRecurrencePanel',title:t('Radar de recorrência'),text:t('O Radar cruza Falhas e Reports com o contexto real da operação para destacar padrões repetidos.'),tip:t('Linha + CPH + componente + máquina + posto + processo + descrição ajudam a explicar por que os registros foram agrupados.')},
         {selector:'#dailyHandoverPanel',title:t('Entregue a continuidade'),text:t('A passagem reúne automaticamente o que foi registrado no turno e o próximo time pode confirmar o recebimento.'),tip:t('Use a observação somente para o contexto que os dados não conseguem mostrar sozinhos.')},
         {selector:'#centralNotificationButton',title:t('Alertas do turno'),text:t('O sino reúne rotinas próximas do horário, atrasos e atividades com prazo.'),tip:t('Você pode ativar alertas do navegador e escolher a antecedência.')}
       ];
@@ -5470,7 +5472,7 @@ ${m.text}`).join('\n\n');
       openActivityModal({title:`Ação — ${execution.routineName} · ${execution.scopeName}`,area:execution.scopeName||'Operação',description:execution.note||`Atividade originada da rotina ${execution.routineName}, ${execution.shiftName}.`,activityMode:'simple'});
     }
 
-    // ===================== FIM CENTRAL DO DIA · V15.1.13.37 =====================
+    // ===================== FIM CENTRAL DO DIA · V15.1.13.38 =====================
 
     function renderSafely(name, fn) {
       try {
@@ -6466,6 +6468,33 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       }
     });
 
+    function operationalLineKeys(value){
+      const normalized=recurrenceNorm(value);
+      const digits=(normalized.match(/\d+/g)||[]).join('');
+      const compact=normalized.replace(/\b(linha|line)\b/g,'').replace(/\s+/g,'');
+      return new Set([normalized,compact,digits,digits?('l'+digits):''].filter(Boolean));
+    }
+    function inferOperationalProductionContext(lineValue,atDate=new Date()){
+      const targetKeys=operationalLineKeys(lineValue);
+      if(!targetKeys.size)return null;
+      const scope=state.operationalScopes.find(scope=>{
+        if(scope.active===false||scope.type!=='line')return false;
+        const keys=new Set([...operationalLineKeys(scope.name),...operationalLineKeys(scope.code)]);
+        return [...targetKeys].some(key=>keys.has(key));
+      });
+      if(!scope)return null;
+      const current=dailyCurrentShiftInfo(atDate);
+      if(!current.shift)return null;
+      const production=dailyProductionContext(scope.docId,current.shift.docId,current.dateKey);
+      return {
+        type:'production_context',
+        scopeId:scope.docId,scopeName:scope.name||'',scopeCode:scope.code||'',scopeType:scope.type||'line',
+        shiftId:current.shift.docId,shiftName:current.shift.name||'Turno',dateKey:current.dateKey,
+        productionProductCodes:production.productCodes||[],productionProductLabels:production.productLabels||[],
+        productionFamilies:production.families||[],productionBaseCodes:production.baseCodes||[]
+      };
+    }
+
     document.querySelector('#operationalFailureForm').addEventListener('submit', async e => {
       e.preventDefault();
       const form=e.currentTarget;
@@ -6513,15 +6542,18 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const detectionMoment=String(f.get('detection_moment')||'DESCONHECIDO');
       const detectionLabels={DESCONHECIDO:'Desconhecido',ANTES_MONTAGEM:'Antes da montagem',DURANTE_MONTAGEM:'Durante a montagem',APOS_MONTAGEM:'Após a montagem',TESTE:'No teste',INSPECAO:'Na inspeção',RETRABALHO:'No retrabalho',ENTRADA_LINHA:'Na entrada da linha',OUTRO:'Outro'};
       const issue=String(f.get('issue')||'').trim();if(!issue)return alert('Descreva a falha antes de salvar.');
+      const lineValue=String(f.get('linha')||'').trim();
+      const inferredProduction=pendingOriginContext?null:inferOperationalProductionContext(lineValue,new Date());
+      const operationalContext=pendingOriginContext||inferredProduction||null;
       const item={
         id:nextId('FO'),family,product:productCode,productCodes,baseCode,scopeType,
         component:String(f.get('component')||'').trim(),material:String(f.get('material')||'').trim(),
         occurrenceMode:'UNIFICADA',classification,classificationConfidence:String(f.get('classification_confidence')||'MEDIA'),category:classification,categoryLabel:String(f.get('category_label')||'').trim(),
-        maquina:String(f.get('maquina')||'').trim(),linha:String(f.get('linha')||'').trim(),estacao:String(f.get('estacao')||'').trim(),processo:String(f.get('processo')||'').trim(),peca_danificada:String(f.get('component')||'').trim(),
+        maquina:String(f.get('maquina')||'').trim(),linha:lineValue,estacao:String(f.get('estacao')||'').trim(),processo:String(f.get('processo')||'').trim(),peca_danificada:String(f.get('component')||'').trim(),
         detectionMoment,detection_moment_label:detectionLabels[detectionMoment]||detectionMoment,quando_inicio:f.get('quando_inicio')||'',onde_detectado:String(f.get('onde_detectado')||'').trim(),quantity:rawQty===''?null:Number(rawQty),
         issue,descriptionContext:String(f.get('description_context')||'').trim(),hypothesis:String(f.get('hipotese_causa')||'').trim(),tests:String(f.get('testes_realizados')||'').trim(),cause:String(f.get('causa_confirmada')||'').trim(),correctiveAction:String(f.get('acao_corretiva')||'').trim(),notes:String(f.get('observacoes')||'').trim(),
         owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[],
-        originType:pendingOriginContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:pendingOriginContext?.scopeId||'',originScopeName:pendingOriginContext?.scopeName||'',originScopeCode:pendingOriginContext?.scopeCode||'',originScopeType:pendingOriginContext?.scopeType||'',originShiftId:pendingOriginContext?.shiftId||'',originShiftName:pendingOriginContext?.shiftName||'',originDateKey:pendingOriginContext?.dateKey||'',productionProductCodes:pendingOriginContext?.productionProductCodes||productCodes,productionProductLabels:pendingOriginContext?.productionProductLabels||productCodes.map(productDisplayCode)
+        originType:operationalContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:operationalContext?.scopeId||'',originScopeName:operationalContext?.scopeName||'',originScopeCode:operationalContext?.scopeCode||'',originScopeType:operationalContext?.scopeType||'',originShiftId:operationalContext?.shiftId||'',originShiftName:operationalContext?.shiftName||'',originDateKey:operationalContext?.dateKey||'',productionProductCodes:operationalContext?.productionProductCodes?.length?operationalContext.productionProductCodes:productCodes,productionProductLabels:operationalContext?.productionProductLabels?.length?operationalContext.productionProductLabels:productCodes.map(productDisplayCode),productionFamilies:operationalContext?.productionFamilies||[],productionBaseCodes:operationalContext?.productionBaseCodes||[],autoContextLinked:Boolean(inferredProduction)
       };
       if(!navigator.onLine){item.docId=`offline-${Date.now()}`;await queueOfflineWrite('operationalFailures',item);state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
       const origin=pendingOriginContext;
@@ -6937,5 +6969,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.37'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.37'){localStorage.setItem('cora.sw.loaded','15.1.13.37');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.38'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.38'){localStorage.setItem('cora.sw.loaded','15.1.13.38');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
