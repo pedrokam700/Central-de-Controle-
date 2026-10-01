@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.33">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.34">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.33';
+  const BUILD='15.1.13.34';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2464,7 +2464,7 @@ body.dark .daily-focus-card .button.primary{background:#171716;color:#f1f1ed}
 body.dark .daily-task-card.state-future{background:#222220}
 
 
-/* V15.1.13.33 — acabamento visual da Central do Dia e dashboard */
+/* V15.1.13.34 — acabamento visual da Central do Dia e dashboard */
 .daily-view{
   --daily-radius-lg:18px;
   --daily-radius-md:14px;
@@ -2742,7 +2742,7 @@ body.dark .daily-config-card,
 body.dark .daily-side-panel{
   background:color-mix(in srgb,var(--surface) 92%,#000);
 }
-/* V15.1.13.33 — operação: matriz, chips de horário e contexto de rotina */
+/* V15.1.13.34 — operação: matriz, chips de horário e contexto de rotina */
 .daily-allocation-matrix-card{grid-column:1/-1}
 .daily-matrix-toolbar{display:flex;align-items:end;gap:12px;justify-content:space-between;margin-bottom:12px}
 .daily-matrix-toolbar label{min-width:min(360px,100%);margin:0}
@@ -2766,7 +2766,7 @@ body.dark .daily-side-panel{
 .routine-context-items{display:grid;gap:7px}.routine-context-item{width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:9px;padding:9px 10px;cursor:pointer}.routine-context-item strong{display:block;font-size:11px}.routine-context-item span{display:block;margin-top:3px;font-size:9.5px;color:var(--muted)}
 @media(max-width:860px){.daily-matrix-toolbar{align-items:stretch;flex-direction:column}.daily-matrix-table th:first-child,.daily-matrix-table td:first-child{min-width:140px}.daily-allocation-matrix-card{grid-column:auto}.daily-schedule-time-control input[type="time"]{width:100%;min-width:0}}
 
-/* V15.1.13.33 — rotina editável, dados por item e onboarding */
+/* V15.1.13.34 — rotina editável, dados por item e onboarding */
 .daily-allocation-advanced{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 .daily-allocation-advanced>summary{cursor:pointer;padding:10px 12px;font-size:10px;font-weight:750;color:var(--text);list-style:none}
 .daily-allocation-advanced>summary::-webkit-details-marker{display:none}
@@ -2782,7 +2782,7 @@ body.dark .daily-side-panel{
 .daily-history-open{white-space:nowrap}
 .daily-tour-modal{max-width:560px}.daily-tour-content{display:grid;gap:10px;padding:8px 2px 4px}.daily-tour-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--text);color:var(--surface);font-weight:850;font-size:16px}.daily-tour-content h3{margin:2px 0 0;font-size:18px}.daily-tour-content p{margin:0;color:var(--muted);line-height:1.65}.daily-tour-tip{padding:10px 12px;border-radius:10px;background:var(--soft);font-size:10px;color:var(--text);line-height:1.5}.daily-tour-dots{display:flex;justify-content:center;gap:6px;margin:10px 0}.daily-tour-dots span{width:7px;height:7px;border-radius:50%;background:var(--line)}.daily-tour-dots span.active{background:var(--text)}.daily-tour-actions{justify-content:space-between}.daily-tour-highlight{outline:3px solid color-mix(in srgb,var(--text) 45%,transparent)!important;outline-offset:4px!important;position:relative;z-index:3}
 @media(max-width:860px){.routine-check-item{grid-template-columns:auto minmax(0,1fr)!important}.routine-check-item .routine-check-value{grid-column:1/-1}.daily-tour-modal{max-width:calc(100vw - 24px)}}
-/* V15.1.13.33 — alertas, command palette, templates e saúde dos dados */
+/* V15.1.13.34 — alertas, command palette, templates e saúde dos dados */
 .topbar-icon-button{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:38px;height:38px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);font:inherit;font-size:14px;cursor:pointer}
 .topbar-icon-button:hover{background:var(--soft)}.central-command-trigger span{font-size:9px;color:var(--muted);font-weight:700}
 .central-alert-wrap{position:relative}.central-alert-badge{position:absolute;right:-5px;top:-5px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--danger);color:#fff;font-size:9px;font-weight:800;border:2px solid var(--surface)}
@@ -2798,7 +2798,7 @@ body.dark .daily-side-panel{
 
   </style>
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.33" id="mobile-layout-styles">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.34" id="mobile-layout-styles">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -2909,7 +2909,7 @@ body.dark .daily-side-panel{
 </div>
 </div></div></section><aside class="home-side"><button class="quick-action daily-home-entry" id="quickDaily"><strong>Central do Dia</strong><span id="homeDailySummary">Veja sua alocação, próximas rotinas e o que precisa ser executado neste turno.</span></button><button class="quick-action" id="quickActivity"><strong>Nova atividade geral</strong><span>Ex.: enviar e-mail, analisar um reparo ou organizar uma reunião.</span></button><button class="quick-action" id="quickFailure"><strong>Registrar Report de Produto</strong><span>Use quando a falha de produto já estiver confirmada para tratamento/cobrança.</span></button><button class="quick-action" id="quickOperationalFailure"><strong>Registrar falha</strong><span>Registre uma ocorrência mesmo quando ainda não souber se é máquina, processo, operacional ou produto.</span></button><button class="quick-action" id="quickFlow"><strong>Novo fluxo</strong><span>Organize formulário, e-mail, folha de rosto e seguimento.</span></button><div class="home-note"><strong>Minha Central</strong><span>Aqui aparecem somente pendências atribuídas a você. Tarefas abertas para toda a equipe ficam fora desta fila pessoal. Solicitações para participar de tarefas compartilhadas aparecem separadamente quando houver autorização pendente.</span></div><section><div class="section-head"><div><h2>Lembretes</h2></div></div><div class="notification-list" id="notificationList"></div></section></aside></div>
         </section>
-        <!-- Central do Dia · V15.1.13.33 -->
+        <!-- Central do Dia · V15.1.13.34 -->
         <section class="overview hidden daily-view" id="dailyView">
           <section class="daily-hero">
             <div class="daily-hero-copy">
@@ -3574,7 +3574,7 @@ body.dark .daily-side-panel{
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.33"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.34"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */
