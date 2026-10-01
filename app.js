@@ -4112,11 +4112,20 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyChecklistDisplay(execution){
+      const schema=normalizeRoutineSchema(execution?.checklistSchema,execution?.checklistTemplate);
       const items=Array.isArray(execution?.checklist)?execution.checklist:[];
-      const useful=items.filter(x=>x?.done||String(x?.value||'').trim());
+      const useful=items.map((saved,index)=>{
+        const item=schema.find(x=>x.id===saved.itemId)||schema[index]||{label:saved.text||'Item',type:saved.type||'text',unit:saved.unit||''};
+        return {item,saved};
+      }).filter(({item,saved})=>saved?.done||String(saved?.value??'').trim()||(saved?.evidence||[]).length);
       if(!useful.length)return '';
-      return `<div class="daily-task-data">${useful.slice(0,8).map(x=>`<span>${esc(x.text||'Item')}${String(x.value||'').trim()?`: <strong>${esc(String(x.value).trim())}</strong>`:x.done?' ✓':''}</span>`).join('')}</div>`;
+      return `<div class="daily-task-data">${useful.slice(0,10).map(({item,saved})=>{
+        const value=routineItemDisplayValue(item,saved);
+        const fail=(saved.assessment||routineTargetAssessment(item,saved.value))==='fail';
+        return `<span class="${fail?'target-fail':''}">${esc(item.label||saved.text||'Item')}${value?`: <strong>${esc(value)}</strong>`:''}${fail?` · ${esc(t('Fora da meta'))}`:''}</span>`;
+      }).join('')}</div>`;
     }
+
 
     function dailyExecutionCard(execution){
       const stateName=dailyTaskState(execution);
@@ -4822,6 +4831,41 @@ ${m.text}`).join('\n\n');
       showSaveToast('Rotina iniciada.','success');
     }
 
+    function routineExecutionItemHtml(item,index,previous={}){
+      const value=String(previous.value??''),assessment=previous.assessment||routineTargetAssessment(item,value);
+      const targetText=['percent','number'].includes(item.type)&&item.targetOp&&item.targetValue!==''?`${item.targetOp} ${item.targetValue}${item.unit?` ${item.unit}`:''}`:'';
+      let control='';
+      if(item.type==='check'){
+        control=`<label class="check routine-typed-control"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}> <span>${esc(t('Concluído'))}</span></label>`;
+      }else if(item.type==='check_text'){
+        control=`<div class="routine-typed-control"><label class="check"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}></label><input type="text" data-routine-value="${index}" value="${esc(value).replace(/"/g,'&quot;')}" placeholder="${esc(t('Valor / dado (opcional)'))}"></div>`;
+      }else if(item.type==='percent'||item.type==='number'){
+        control=`<div class="routine-typed-control"><input type="number" step="any" data-routine-value="${index}" value="${esc(value)}" placeholder="${esc(t('Valor / dado (opcional)'))}"><span class="routine-typed-unit">${esc(item.unit||(item.type==='percent'?'%':''))}</span></div>`;
+      }else if(item.type==='ok_ng'){
+        control=`<div class="routine-typed-control"><select data-routine-value="${index}"><option value="">${esc(t('Selecione ou digite um valor'))}</option><option value="ok" ${value==='ok'?'selected':''}>OK</option><option value="ng" ${value==='ng'?'selected':''}>NG</option><option value="na" ${value==='na'?'selected':''}>N/A</option></select></div>`;
+      }else if(item.type==='select'){
+        control=`<div class="routine-typed-control"><select data-routine-value="${index}"><option value="">${esc(t('Selecione ou digite um valor'))}</option>${(item.options||[]).map(option=>`<option value="${esc(option).replace(/"/g,'&quot;')}" ${value===option?'selected':''}>${esc(option)}</option>`).join('')}</select></div>`;
+      }else if(item.type==='evidence'){
+        const previousEvidence=evidenceEntries(previous.evidence);
+        control=`<div class="routine-typed-control" style="display:grid"><input type="file" data-routine-file="${index}" multiple accept="image/*,.pdf">${previousEvidence.length?`<span class="routine-typed-meta">${previousEvidence.map(x=>esc(x.name)).join(' · ')}</span>`:''}</div>`;
+      }else{
+        control=`<div class="routine-typed-control"><input type="text" data-routine-value="${index}" value="${esc(value).replace(/"/g,'&quot;')}" placeholder="${esc(t('Valor / dado (opcional)'))}"></div>`;
+      }
+      const status=assessment?`<span class="routine-target-status ${assessment}">${esc(t(assessment==='pass'?'Dentro da meta':'Fora da meta'))}</span>`:'';
+      return `<div class="routine-typed-item" data-routine-item="${index}" data-item-id="${esc(item.id)}"><div class="routine-typed-head"><div><strong>${esc(item.label)}</strong><span class="routine-typed-meta">${esc(t(routineItemTypes[item.type]?.label||'Texto'))}${targetText?` · ${esc(t('Meta'))} ${esc(targetText)}`:''}</span></div><span data-routine-target-status="${index}">${status}</span></div>${control}</div>`;
+    }
+
+    function updateRoutineExecutionTargetStatuses(execution){
+      const schema=normalizeRoutineSchema(execution?.checklistSchema,execution?.checklistTemplate);
+      schema.forEach((item,index)=>{
+        const input=document.querySelector(`[data-routine-value="${index}"]`);
+        const host=document.querySelector(`[data-routine-target-status="${index}"]`);
+        if(!host)return;
+        const assessment=routineTargetAssessment(item,String(input?.value??'').trim());
+        host.innerHTML=assessment?`<span class="routine-target-status ${assessment}">${esc(t(assessment==='pass'?'Dentro da meta':'Fora da meta'))}</span>`:'';
+      });
+    }
+
     function openRoutineExecution(key){
       const execution=dailyFindExecution(key);if(!execution)return;
       selectedRoutineExecutionId=key;
@@ -4835,13 +4879,13 @@ ${m.text}`).join('\n\n');
       result.value=execution.result|| (execution.resultMode==='simple'?'done':'ok');
       document.querySelector('#routineExecutionNote').value=execution.note||'';
       renderRoutineExecutionContext(execution);
-      const template=execution.checklistTemplate||[];
+      const schema=normalizeRoutineSchema(execution.checklistSchema,execution.checklistTemplate);
       const saved=Array.isArray(execution.checklist)?execution.checklist:[];
       const box=document.querySelector('#routineExecutionChecklistBox'),list=document.querySelector('#routineExecutionChecklist');
-      box.classList.toggle('hidden',!template.length);
-      list.innerHTML=template.map((text,index)=>{
-        const previous=saved.find(x=>x.text===text)||saved[index]||{};
-        return `<div class="routine-check-item"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}><span>${esc(text)}</span><input class="routine-check-value" data-routine-value="${index}" value="${esc(previous.value||'').replace(/"/g,'&quot;')}" placeholder="${esc(t('Valor / dado (opcional)'))}"></div>`;
+      box.classList.toggle('hidden',!schema.length);
+      list.innerHTML=schema.map((item,index)=>{
+        const previous=saved.find(x=>x.itemId===item.id)||saved.find(x=>x.text===item.label)||saved[index]||{};
+        return routineExecutionItemHtml(item,index,previous);
       }).join('');
       const history=document.querySelector('#routineExecutionHistory');
       const revisions=Array.isArray(execution.editHistory)?execution.editHistory:[];
@@ -4852,8 +4896,10 @@ ${m.text}`).join('\n\n');
       const saveBtn=document.querySelector('#saveRoutineExecutionButton');if(saveBtn)saveBtn.textContent=editing?t('Salvar alterações'):t('Salvar execução');
       document.querySelector('#routineExecutionForm').elements.evidence.value='';
       document.querySelector('#routineExecutionModal').classList.remove('hidden');
+      updateRoutineExecutionTargetStatuses(execution);
       translatePage();
     }
+
 
     function closeRoutineExecution(){
       document.querySelector('#routineExecutionModal')?.classList.add('hidden');
@@ -4866,14 +4912,27 @@ ${m.text}`).join('\n\n');
       const wasCompleted=execution.status==='completed';
       const f=new FormData(form), result=String(f.get('result')||execution.result||'done'), note=String(f.get('note')||'').trim();
       const participants=dailyParticipantList(execution,true);
-      const template=execution.checklistTemplate||[];
-      const checklist=template.map((text,index)=>({
-        text,
-        done:Boolean(document.querySelector(`[data-routine-check="${index}"]`)?.checked),
-        value:String(document.querySelector(`[data-routine-value="${index}"]`)?.value||'').trim()
+      const schema=normalizeRoutineSchema(execution.checklistSchema,execution.checklistTemplate);
+      const previousItems=Array.isArray(execution.checklist)?execution.checklist:[];
+      const checklist=await Promise.all(schema.map(async(item,index)=>{
+        const previous=previousItems.find(x=>x.itemId===item.id)||previousItems.find(x=>x.text===item.label)||previousItems[index]||{};
+        const checkbox=document.querySelector(`[data-routine-check="${index}"]`);
+        const input=document.querySelector(`[data-routine-value="${index}"]`);
+        let value=String(input?.value??previous.value??'').trim();
+        let itemEvidence=evidenceEntries(previous.evidence);
+        if(item.type==='evidence'){
+          const fileInput=document.querySelector(`[data-routine-file="${index}"]`);
+          const added=await readAttachments([...(fileInput?.files||[])]);
+          itemEvidence=[...itemEvidence,...added];
+          value=itemEvidence.length?String(itemEvidence.length):'';
+        }
+        const done=item.type==='check'||item.type==='check_text'?Boolean(checkbox?.checked):Boolean(value||itemEvidence.length);
+        const assessment=routineTargetAssessment(item,value);
+        return {itemId:item.id,text:item.label,type:item.type,unit:item.unit||'',targetOp:item.targetOp||'',targetValue:item.targetValue??'',options:item.options||[],done,value,assessment,evidence:itemEvidence};
       }));
       const newEvidence=await readAttachments(f.getAll('evidence').filter(Boolean));
       const evidence=[...evidenceEntries(execution.evidence),...newEvidence];
+      const outOfTargetCount=checklist.filter(x=>x.assessment==='fail').length;
       const savedAt=now();
       const completedAt=execution.completedAt||savedAt;
       const onTime=execution.completedAt?execution.onTime!==false:new Date(completedAt)<=dailyExecutionDeadline(execution);
@@ -4891,7 +4950,7 @@ ${m.text}`).join('\n\n');
         evidenceCount:evidenceEntries(execution.evidence).length
       }].slice(-20):previousHistory;
       await setDoc(doc(db,'routineExecutions',key),{
-        status:'completed',result,note,checklist,evidence,participants,participantRequirementMet,
+        status:'completed',result,note,checklist,evidence,participants,participantRequirementMet,outOfTargetCount,hasOutOfTarget:outOfTargetCount>0,
         startedAt:execution.startedAt||completedAt,
         startedById:execution.startedById||currentAuthUser?.uid||'',
         startedByName:execution.startedByName||currentAccount?.name||'',
@@ -4906,8 +4965,9 @@ ${m.text}`).join('\n\n');
         updatedAt:savedAt
       },{merge:true});
       closeRoutineExecution();
-      showSaveToast(wasCompleted?t('Execução atualizada.'):(result==='ng'?'NG registrado. A rotina pode gerar uma Falha ou Atividade.':'Execução salva.'),'success');
+      showSaveToast(wasCompleted?t('Execução atualizada.'):(result==='ng'?'NG registrado. A rotina pode gerar uma Falha ou Atividade.':outOfTargetCount?`${outOfTargetCount} item(ns) fora da meta. Execução salva.`:'Execução salva.'),'success');
     }
+
 
     function dailyOpenLinkedItem(kind,id){
       if(kind==='activity')return openActivityDetail(id);
