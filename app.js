@@ -4850,7 +4850,7 @@ ${m.text}`).join('\n\n');
         <label class="schema-label">${esc(t('Item'))}<input data-schema-label value="${esc(item.label).replace(/"/g,'&quot;')}" placeholder="Ex.: FPY Linha 1"></label>
         <label class="schema-type">${esc(t('Tipo'))}<select data-schema-type>${routineSchemaTypeOptions(item.type)}</select></label>
         <label class="schema-unit ${numeric?'':'hidden'}">${esc(t('Unidade'))}<input data-schema-unit value="${esc(item.unit||'').replace(/"/g,'&quot;')}" placeholder="${item.type==='percent'?'%':'Ex.: pcs'}"></label>
-        <label class="schema-target ${numeric?'':'hidden'}">${esc(t('Meta'))}<div style="display:grid;grid-template-columns:62px 1fr;gap:5px"><select data-schema-target-op><option value="">—</option>${['>=','<=','>','<','='].map(op=>`<option value="${op}" ${item.targetOp===op?'selected':''}>${op}</option>`).join('')}</select><input data-schema-target-value type="number" step="any" value="${esc(item.targetValue||'')}"></div></label>
+        <label class="schema-target ${numeric?'':'hidden'}">${esc(t('Meta'))}<div style="display:grid;grid-template-columns:62px 1fr;gap:5px"><select data-schema-target-op><option value="">—</option>${['>=','<=','>','<','='].map(op=>`<option value="${op}" ${item.targetOp===op?'selected':''}>${op}</option>`).join('')}</select><input data-schema-target-value type="number" step="any" value="${esc(item.targetValue??'')}"></div></label>
         <button type="button" class="daily-routine-schema-remove" data-schema-remove="${index}" aria-label="Remover item">×</button>
         <div class="schema-extra ${select?'':'hidden'}"><label>${esc(t('Opções'))}<input data-schema-options value="${esc((item.options||[]).join(', ')).replace(/"/g,'&quot;')}" placeholder="OK, Ajustar, N/A"></label></div>
       </div>`;
@@ -4881,10 +4881,10 @@ ${m.text}`).join('\n\n');
 
     function addDailyRoutineSchemaItem(type='check'){
       const current=dailyRoutineSchemaPayload();
-      current.push({id:`item-${Date.now()}-${current.length}`,label:'',type,unit:type==='percent'?'%':'',targetOp:'',targetValue:'',options:[]});
+      current.push({id:`item-${Date.now()}-${current.length}`,label:currentLanguage==='en-US'?'New item':'Novo item',type,unit:type==='percent'?'%':'',targetOp:'',targetValue:'',options:[]});
       renderDailyRoutineSchemaBuilder(current);
-      const last=document.querySelector('#dailyRoutineSchemaBuilder [data-schema-index]:last-of-type [data-schema-label]');
-      last?.focus();
+      const last=[...document.querySelectorAll('#dailyRoutineSchemaBuilder [data-schema-label]')].at(-1);
+      last?.focus();last?.select();
     }
 
     function updateRoutineSchemaRow(row){
