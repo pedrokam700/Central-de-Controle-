@@ -4615,7 +4615,10 @@ ${m.text}`).join('\n\n');
           dataPoints.push({routine:execution.routineName||'Rotina',scope:execution.scopeName||'',label:item.label,value,assessment:saved.assessment||routineTargetAssessment(item,saved.value)});
         });
       });
-      return {dateKey,shiftId,shiftName:shift.name||'Turno',window:dailyShiftWindowLabel(shift),total:executions.length,completed:completed.length,pending:pending.length,ng:ng.length,coverage,failures,openActivities,dataPoints:dataPoints.slice(0,40),generatedAt:now()};
+      const contextLines=new Set(executions.filter(x=>x.scopeType==='line').map(x=>recurrenceNorm(x.scopeName)).filter(Boolean));
+      const contextProducts=new Set(executions.flatMap(x=>x.productionProductCodes||[]).map(productCodeKey).filter(Boolean));
+      const recurrences=recurrenceRadarClusters().filter(cluster=>cluster.items.some(item=>contextLines.has(recurrenceNorm(item.line))||item.codes.some(code=>contextProducts.has(productCodeKey(code))))).slice(0,5).map(cluster=>({key:cluster.key,title:cluster.title,count:cluster.count,sub:recurrenceClusterSub(cluster),growing:cluster.growing}));
+      return {dateKey,shiftId,shiftName:shift.name||'Turno',window:dailyShiftWindowLabel(shift),total:executions.length,completed:completed.length,pending:pending.length,ng:ng.length,coverage,failures,openActivities,dataPoints:dataPoints.slice(0,40),recurrences,generatedAt:now()};
     }
 
     function renderShiftHandoverSummary(summary){
@@ -4636,7 +4639,8 @@ ${m.text}`).join('\n\n');
       </div>
       <section class="shift-handover-section"><h4>${esc(t('Dados coletados'))}</h4>${dataHtml}</section>
       <section class="shift-handover-section"><h4>${esc(t('Falhas registradas'))} · ${failures.length}</h4>${failureHtml}</section>
-      <section class="shift-handover-section"><h4>${esc(t('Atividades abertas'))} · ${activities.length}</h4>${activityHtml}</section>`;
+      <section class="shift-handover-section"><h4>${esc(t('Atividades abertas'))} · ${activities.length}</h4>${activityHtml}</section>
+      ${(summary.recurrences||[]).length?`<section class="shift-handover-section"><h4>${esc(t('Radar de recorrência'))} · ${summary.recurrences.length}</h4><div class="shift-handover-list">${summary.recurrences.map(x=>`<div class="shift-handover-item"><div><strong>${esc(x.title)}</strong><span>${esc(x.sub||'')}</span></div><strong>${x.count}</strong></div>`).join('')}</div></section>`:''}`;
     }
 
     function renderDailyHandover(){
@@ -5010,7 +5014,7 @@ ${m.text}`).join('\n\n');
       }).join('')||'<div class="daily-soft-empty">Sem dados por pessoa.</div>';
 
       const body=document.querySelector('#dailyDashRows');
-      if(body) body.innerHTML=rows.map(x=>`<tr><td><span class="identifier">${esc(x.dateKey||'')}</span><span class="secondary-text">${esc(x.shiftName||'')}</span></td><td>${esc(x.routineName||'Rotina')}</td><td>${esc(x.scopeName||'—')}</td><td>${esc((x.expectedUserNames||[]).join(', ')||x.assignedUserName||'—')}</td><td>${esc(dailyResultLabel(x.result))}</td><td>${esc(x.plannedTime||'Turno')}${x.completedAt?` · ${esc(new Date(x.completedAt).toLocaleTimeString(currentLanguage,{hour:'2-digit',minute:'2-digit'}))}`:''}</td><td><button type="button" class="button secondary button-compact daily-history-open" data-daily-edit-exec="${esc(x.executionKey||x.docId)}">${esc(t('Abrir'))}</button></td></tr>`).join('');
+      if(body) body.innerHTML=rows.map(x=>{const production=(x.productionProductLabels||x.productionProductCodes?.map(productDisplayCode)||[]).join(', ')||'—';return `<tr><td><span class="identifier">${esc(x.dateKey||'')}</span><span class="secondary-text">${esc(x.shiftName||'')}</span></td><td>${esc(x.routineName||'Rotina')}</td><td>${esc(x.scopeName||'—')}</td><td>${esc(production)}</td><td>${esc((x.expectedUserNames||[]).join(', ')||x.assignedUserName||'—')}</td><td>${esc(dailyResultLabel(x.result))}</td><td>${esc(x.plannedTime||'Turno')}${x.completedAt?` · ${esc(new Date(x.completedAt).toLocaleTimeString(currentLanguage,{hour:'2-digit',minute:'2-digit'}))}`:''}</td><td><button type="button" class="button secondary button-compact daily-history-open" data-daily-edit-exec="${esc(x.executionKey||x.docId)}">${esc(t('Abrir'))}</button></td></tr>`;}).join('');
       document.querySelector('#dailyDashEmpty')?.classList.toggle('hidden',rows.length>0);
     }
 
