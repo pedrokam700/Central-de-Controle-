@@ -87,6 +87,7 @@
     let centralNotificationTimer = null;
     let commandPaletteActions = [];
     let commandPaletteActiveIndex = 0;
+    let selectedShiftHandover = null;
 
     // Internationalization: Portuguese is the source language; English is a UI translation.
     const LANGUAGE_KEY = 'controleFalhas.language.v1';
@@ -114,6 +115,7 @@
     Object.assign(translations, {"Editar rotina":"Edit routine","Editada":"Edited","Última edição":"Last edit","edição(ões) anterior(es) preservada(s)":"previous edit(s) preserved","Data e turno":"Date and shift","O botão Agora volta imediatamente para o turno atual.":"The Now button immediately returns to the current shift.","A alocação é configurada pelo administrador e permanece até ser alterada.":"Assignment is configured by an administrator and remains until changed.","Use Todas, Minhas e Pendentes para reduzir a lista.":"Use All, Mine, and Pending to narrow the list.","Uma execução concluída pode ser aberta e editada depois.":"A completed execution can be reopened and edited later.","Itens gerados a partir de uma rotina também ficam vinculados à execução.":"Items generated from a routine remain linked to the execution.","Alterações no modelo não apagam os dados de execuções já concluídas.":"Template changes do not erase completed execution data.","Os dados de rotina ficam no Firestore para consultas futuras.":"Routine data is stored in Firestore for future review.","Salvar execução":"Save execution","O botão Como funciona pode ser aberto novamente a qualquer momento.":"The How it works button can be opened again at any time."});
     Object.assign(translations, {"Notificações":"Notifications","Rotinas e pendências que pedem atenção.":"Routines and pending work that need attention.","Ativar alertas do navegador":"Enable browser alerts","Antecedência":"Lead time","No horário":"At the scheduled time","Alertas dentro da Central já estão ativos.":"In-app alerts are already active.","Busca rápida":"Quick search","Saúde dos dados":"Data health","Sinais de registros que merecem revisão. Nada é bloqueado automaticamente.":"Signals for records that may need review. Nothing is blocked automatically.","Modelo estruturado":"Structured template","Sem modelo":"No template","Validação":"Validation","Estudo / Investigação":"Study / Investigation","Treinamento":"Training","O modelo só prepara as etapas iniciais. Você pode editar tudo antes de salvar.":"The template only prepares the initial steps. You can edit everything before saving.","Abrir Central do Dia":"Open Work Center Today","Registrar falha":"Register failure","Nova atividade":"New activity","Cadastrar produto":"Register product","Configurar operação":"Configure operation","Abrir saúde dos dados":"Open data health","Em breve":"Soon","Atrasada":"Overdue","Vence hoje":"Due today","Rotina programada":"Scheduled routine","Permissão de notificações concedida.":"Notification permission granted.","Notificações do navegador bloqueadas. Você pode continuar usando os alertas dentro da Central.":"Browser notifications are blocked. You can keep using in-app alerts.","Seu navegador não oferece notificações neste modo.":"Your browser does not support notifications in this mode.","Nenhuma notificação agora.":"No notifications right now.","Histórico administrativo":"Administrative history","Alterações de turno, escopo, alocação e rotina.":"Changes to shifts, scopes, assignments, and routines.","Nenhuma alteração administrativa registrada ainda.":"No administrative changes recorded yet.","Criado":"Created","Atualizado":"Updated","Desativado":"Disabled","Ativado":"Enabled","Removido":"Removed","Alocação atualizada":"Assignment updated","Etapa seguinte definida automaticamente.":"Next step set automatically."});
     Object.assign(translations, {"Ver guia da Central do Dia":"Open Work Center guide","Pular tour":"Skip tour","Não mostrar automaticamente novamente":"Do not show automatically again","Etapa":"Step","Escolha a data":"Choose the date","Troque o dia para consultar o contexto operacional e as execuções daquele período.":"Change the day to review the operational context and executions for that period.","A data controla tudo o que aparece na Central do Dia.":"The date controls everything shown in the Work Center.","Escolha o turno":"Choose the shift","Alterne entre os turnos cadastrados sem sair da mesma visão.":"Switch between configured shifts without leaving this view.","Agora leva você de volta ao turno corrente.":"Now returns you to the current shift.","Resumo do turno":"Shift summary","Cobertura, concluídas, pendentes e anormalidades mostram rapidamente a situação do turno selecionado.":"Coverage, completed, pending, and abnormalities quickly show the status of the selected shift.","Esses números são formados pelas execuções previstas e registradas.":"These numbers are built from planned and recorded executions.","O que exige ação agora":"What needs action now","Este cartão destaca a rotina mais urgente ou a que já está em andamento.":"This card highlights the most urgent routine or the one already in progress.","Use Iniciar e Registrar resultado para conduzir a execução.":"Use Start and Record result to drive the execution.","Acompanhe o mapa do turno":"Follow the shift map","Aqui você vê cada rotina em ordem, com status, horário e ações disponíveis.":"Here you see each routine in order, with status, time, and available actions.","Os filtros ajudam a focar em todas, somente suas ou apenas pendentes.":"Filters help you focus on all, yours only, or pending items.","Conecte o trabalho":"Connect the work","Atividades, falhas, reports e itens gerados pelas rotinas continuam ligados ao turno.":"Activities, failures, reports, and items generated by routines stay connected to the shift.","Você pode abrir esses registros sem perder o contexto da Central do Dia.":"You can open these records without losing the Work Center context.","Alertas do turno":"Shift alerts","O sino reúne rotinas próximas do horário, atrasos e atividades com prazo.":"The bell brings together routines near their scheduled time, delays, and due activities.","Você pode ativar alertas do navegador e escolher a antecedência.":"You can enable browser alerts and choose the lead time.","Configuração administrativa":"Administrative setup","Administradores usam esta área para turnos, escopos, matriz de alocação, rotinas e histórico.":"Administrators use this area for shifts, scopes, assignment matrix, routines, and history.","O usuário comum não vê esta etapa.":"Regular users do not see this step.","Ajuda sempre disponível":"Help always available","O guia não precisa ocupar a tela no uso diário. Use este ícone quando quiser rever o passo a passo.":"The guide does not need to occupy the screen during daily use. Use this icon whenever you want to review it.","Você também pode pular etapas clicando nos indicadores do tour.":"You can also jump between steps by clicking the tour indicators."});
+    Object.assign(translations, {"Itens da rotina":"Routine items","Defina o tipo de dado de cada item. Nenhum campo será obrigatório durante a execução.":"Define the data type for each item. No field will be required during execution.","Adicionar item":"Add item","Verificação":"Check","Verificação + campo":"Check + field","Percentual":"Percentage","Número":"Number","Texto":"Text","OK / NG":"OK / NG","Seleção":"Selection","Evidência":"Evidence","Unidade":"Unit","Meta":"Target","Opções":"Options","Passagem de turno":"Shift handover","Resumo automático para entregar e receber continuidade.":"Automatic summary to hand over and receive continuity.","Preparar passagem":"Prepare handover","Editar passagem":"Edit handover","Receber passagem":"Receive handover","Passagem enviada":"Handover sent","Passagem recebida":"Handover received","Nenhuma passagem do turno anterior.":"No handover from the previous shift.","Turno anterior":"Previous shift","Este turno":"This shift","Cobertura":"Coverage","Falhas registradas":"Recorded failures","Atividades abertas":"Open activities","Dados coletados":"Collected data","Observação da passagem":"Handover note","Salvar passagem":"Save handover","Confirmar recebimento":"Confirm receipt","Recebido por":"Received by","Fora da meta":"Outside target","Dentro da meta":"Within target","Sem meta":"No target","Nenhum item configurado.":"No item configured.","Selecione ou digite um valor":"Select or enter a value","Clique em adicionar item para estruturar a coleta da rotina.":"Click Add item to structure routine data collection.","A passagem usa os dados já registrados no turno e preserva um snapshot para consulta futura.":"The handover uses data already recorded in the shift and preserves a snapshot for future review."});
     const originalTextNodes = new WeakMap();
     const originalAttrs = new WeakMap();
     const translationPatterns = [
@@ -902,7 +904,7 @@
       return parts.join('\n\n');
     }
     function copyText(text){ if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>alert('Texto copiado.')); else { const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('Texto copiado.'); } }
-    // ==================== V15.1.13.35 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
+    // ==================== V15.1.13.36 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
     function notificationPrefsKey(){return 'central.notifications.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function notificationSentKey(){return 'central.notifications.sent.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function centralNotificationPrefs(){
@@ -2588,7 +2590,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.35'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.35'){localStorage.setItem('cora.sw.loaded','15.1.13.35');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.36'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.36'){localStorage.setItem('cora.sw.loaded','15.1.13.36');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3819,7 +3821,7 @@ ${m.text}`).join('\n\n');
     // ======================= FIM V14.0 — IA DE ANÁLISE (legado) =======================
 
 
-    // ======================= CENTRAL DO DIA · V15.1.13.35 =======================
+    // ======================= CENTRAL DO DIA · V15.1.13.36 =======================
     const localDateKey = (date = new Date()) => {
       const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
       return `${y}-${m}-${d}`;
@@ -4632,6 +4634,108 @@ ${m.text}`).join('\n\n');
       return map;
     }
 
+    const routineItemTypes={
+      check:{label:'Verificação'},
+      check_text:{label:'Verificação + campo'},
+      percent:{label:'Percentual'},
+      number:{label:'Número'},
+      text:{label:'Texto'},
+      ok_ng:{label:'OK / NG'},
+      select:{label:'Seleção'},
+      evidence:{label:'Evidência'}
+    };
+
+    function normalizeRoutineSchema(schema=[],legacy=[]){
+      if(Array.isArray(schema)&&schema.length){
+        return schema.map((item,index)=>({
+          id:String(item?.id||`item-${index+1}`),
+          label:String(item?.label||item?.text||`Item ${index+1}`).trim(),
+          type:routineItemTypes[item?.type]?item.type:'text',
+          unit:String(item?.unit||'').trim(),
+          targetOp:String(item?.targetOp||'').trim(),
+          targetValue:item?.targetValue==null?'':String(item.targetValue),
+          options:Array.isArray(item?.options)?item.options.map(x=>String(x).trim()).filter(Boolean):String(item?.options||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean)
+        })).filter(x=>x.label);
+      }
+      return (Array.isArray(legacy)?legacy:[]).map((text,index)=>({id:`legacy-${index+1}`,label:String(text||'').trim(),type:'check_text',unit:'',targetOp:'',targetValue:'',options:[]})).filter(x=>x.label);
+    }
+
+    function routineSchemaTypeOptions(selected=''){
+      return Object.entries(routineItemTypes).map(([value,meta])=>`<option value="${value}" ${value===selected?'selected':''}>${esc(t(meta.label))}</option>`).join('');
+    }
+
+    function routineSchemaRowHtml(item,index){
+      const numeric=['percent','number'].includes(item.type),select=item.type==='select';
+      return `<div class="daily-routine-schema-row" data-schema-index="${index}" data-schema-id="${esc(item.id)}">
+        <label class="schema-label">${esc(t('Item'))}<input data-schema-label value="${esc(item.label).replace(/"/g,'&quot;')}" placeholder="Ex.: FPY Linha 1"></label>
+        <label class="schema-type">${esc(t('Tipo'))}<select data-schema-type>${routineSchemaTypeOptions(item.type)}</select></label>
+        <label class="schema-unit ${numeric?'':'hidden'}">${esc(t('Unidade'))}<input data-schema-unit value="${esc(item.unit||'').replace(/"/g,'&quot;')}" placeholder="${item.type==='percent'?'%':'Ex.: pcs'}"></label>
+        <label class="schema-target ${numeric?'':'hidden'}">${esc(t('Meta'))}<div style="display:grid;grid-template-columns:62px 1fr;gap:5px"><select data-schema-target-op><option value="">—</option>${['>=','<=','>','<','='].map(op=>`<option value="${op}" ${item.targetOp===op?'selected':''}>${op}</option>`).join('')}</select><input data-schema-target-value type="number" step="any" value="${esc(item.targetValue||'')}"></div></label>
+        <button type="button" class="daily-routine-schema-remove" data-schema-remove="${index}" aria-label="Remover item">×</button>
+        <div class="schema-extra ${select?'':'hidden'}"><label>${esc(t('Opções'))}<input data-schema-options value="${esc((item.options||[]).join(', ')).replace(/"/g,'&quot;')}" placeholder="OK, Ajustar, N/A"></label></div>
+      </div>`;
+    }
+
+    function renderDailyRoutineSchemaBuilder(schema=[]){
+      const host=document.querySelector('#dailyRoutineSchemaBuilder');if(!host)return;
+      const normalized=normalizeRoutineSchema(schema);
+      host.innerHTML=normalized.length?normalized.map(routineSchemaRowHtml).join(''):`<div class="daily-routine-schema-empty">${esc(t('Clique em adicionar item para estruturar a coleta da rotina.'))}</div>`;
+      const legacy=document.querySelector('#dailyRoutineForm [name="checklistTemplate"]');
+      if(legacy)legacy.value=normalized.map(x=>x.label).join('\n');
+    }
+
+    function dailyRoutineSchemaPayload(){
+      const rows=[...document.querySelectorAll('#dailyRoutineSchemaBuilder [data-schema-index]')];
+      const schema=rows.map((row,index)=>{
+        const label=String(row.querySelector('[data-schema-label]')?.value||'').trim();
+        const type=String(row.querySelector('[data-schema-type]')?.value||'text');
+        const unit=String(row.querySelector('[data-schema-unit]')?.value||'').trim();
+        const targetOp=String(row.querySelector('[data-schema-target-op]')?.value||'').trim();
+        const targetValue=String(row.querySelector('[data-schema-target-value]')?.value||'').trim();
+        const options=String(row.querySelector('[data-schema-options]')?.value||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);
+        return {id:String(row.dataset.schemaId||`item-${Date.now()}-${index}`),label,type,unit,targetOp,targetValue,options};
+      }).filter(x=>x.label);
+      const legacy=document.querySelector('#dailyRoutineForm [name="checklistTemplate"]');if(legacy)legacy.value=schema.map(x=>x.label).join('\n');
+      return schema;
+    }
+
+    function addDailyRoutineSchemaItem(type='check'){
+      const current=dailyRoutineSchemaPayload();
+      current.push({id:`item-${Date.now()}-${current.length}`,label:'',type,unit:type==='percent'?'%':'',targetOp:'',targetValue:'',options:[]});
+      renderDailyRoutineSchemaBuilder(current);
+      const last=document.querySelector('#dailyRoutineSchemaBuilder [data-schema-index]:last-of-type [data-schema-label]');
+      last?.focus();
+    }
+
+    function updateRoutineSchemaRow(row){
+      if(!row)return;
+      const type=String(row.querySelector('[data-schema-type]')?.value||'text'),numeric=['percent','number'].includes(type),select=type==='select';
+      row.querySelector('.schema-unit')?.classList.toggle('hidden',!numeric);
+      row.querySelector('.schema-target')?.classList.toggle('hidden',!numeric);
+      row.querySelector('.schema-extra')?.classList.toggle('hidden',!select);
+      if(type==='percent'&&!row.querySelector('[data-schema-unit]')?.value)row.querySelector('[data-schema-unit]').value='%';
+    }
+
+    function routineTargetAssessment(item,value){
+      if(!['percent','number'].includes(item?.type)||!item?.targetOp||item?.targetValue===''||value==='')return '';
+      const actual=Number(String(value).replace(',','.')),target=Number(String(item.targetValue).replace(',','.'));
+      if(!Number.isFinite(actual)||!Number.isFinite(target))return '';
+      const pass={'>=':actual>=target,'<=':actual<=target,'>':actual>target,'<':actual<target,'=':actual===target}[item.targetOp];
+      return pass?'pass':'fail';
+    }
+
+    function routineItemDisplayValue(item,saved){
+      if(item.type==='check')return saved.done?'✓':'';
+      if(item.type==='evidence')return (saved.evidence||[]).length?`${(saved.evidence||[]).length} evidência(s)`:'';
+      let value=String(saved.value??'').trim();
+      if(!value)return saved.done?'✓':'';
+      if(item.type==='percent'&&!value.includes('%'))value+=item.unit||'%';
+      else if(item.type==='number'&&item.unit)value+=` ${item.unit}`;
+      else if(item.type==='ok_ng')value=({ok:'OK',ng:'NG',na:'N/A'}[value]||value);
+      return value;
+    }
+
+
     async function saveDailyShift(form){
       if(currentAccount?.role!=='admin')return;
       const f=new FormData(form), id=String(f.get('docId')||''), payload={name:String(f.get('name')||'').trim(),startTime:String(f.get('startTime')||''),endTime:String(f.get('endTime')||''),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
@@ -4824,7 +4928,7 @@ ${m.text}`).join('\n\n');
       openActivityModal({title:`Ação — ${execution.routineName} · ${execution.scopeName}`,area:execution.scopeName||'Operação',description:execution.note||`Atividade originada da rotina ${execution.routineName}, ${execution.shiftName}.`,activityMode:'simple'});
     }
 
-    // ===================== FIM CENTRAL DO DIA · V15.1.13.35 =====================
+    // ===================== FIM CENTRAL DO DIA · V15.1.13.36 =====================
 
     function renderSafely(name, fn) {
       try {
@@ -6251,5 +6355,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.35'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.35'){localStorage.setItem('cora.sw.loaded','15.1.13.35');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.36'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.36'){localStorage.setItem('cora.sw.loaded','15.1.13.36');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
