@@ -87,6 +87,7 @@
     let centralNotificationTimer = null;
     let commandPaletteActions = [];
     let commandPaletteActiveIndex = 0;
+    let selectedShiftHandover = null;
 
     // Internationalization: Portuguese is the source language; English is a UI translation.
     const LANGUAGE_KEY = 'controleFalhas.language.v1';
@@ -114,6 +115,8 @@
     Object.assign(translations, {"Editar rotina":"Edit routine","Editada":"Edited","Última edição":"Last edit","edição(ões) anterior(es) preservada(s)":"previous edit(s) preserved","Data e turno":"Date and shift","O botão Agora volta imediatamente para o turno atual.":"The Now button immediately returns to the current shift.","A alocação é configurada pelo administrador e permanece até ser alterada.":"Assignment is configured by an administrator and remains until changed.","Use Todas, Minhas e Pendentes para reduzir a lista.":"Use All, Mine, and Pending to narrow the list.","Uma execução concluída pode ser aberta e editada depois.":"A completed execution can be reopened and edited later.","Itens gerados a partir de uma rotina também ficam vinculados à execução.":"Items generated from a routine remain linked to the execution.","Alterações no modelo não apagam os dados de execuções já concluídas.":"Template changes do not erase completed execution data.","Os dados de rotina ficam no Firestore para consultas futuras.":"Routine data is stored in Firestore for future review.","Salvar execução":"Save execution","O botão Como funciona pode ser aberto novamente a qualquer momento.":"The How it works button can be opened again at any time."});
     Object.assign(translations, {"Notificações":"Notifications","Rotinas e pendências que pedem atenção.":"Routines and pending work that need attention.","Ativar alertas do navegador":"Enable browser alerts","Antecedência":"Lead time","No horário":"At the scheduled time","Alertas dentro da Central já estão ativos.":"In-app alerts are already active.","Busca rápida":"Quick search","Saúde dos dados":"Data health","Sinais de registros que merecem revisão. Nada é bloqueado automaticamente.":"Signals for records that may need review. Nothing is blocked automatically.","Modelo estruturado":"Structured template","Sem modelo":"No template","Validação":"Validation","Estudo / Investigação":"Study / Investigation","Treinamento":"Training","O modelo só prepara as etapas iniciais. Você pode editar tudo antes de salvar.":"The template only prepares the initial steps. You can edit everything before saving.","Abrir Central do Dia":"Open Work Center Today","Registrar falha":"Register failure","Nova atividade":"New activity","Cadastrar produto":"Register product","Configurar operação":"Configure operation","Abrir saúde dos dados":"Open data health","Em breve":"Soon","Atrasada":"Overdue","Vence hoje":"Due today","Rotina programada":"Scheduled routine","Permissão de notificações concedida.":"Notification permission granted.","Notificações do navegador bloqueadas. Você pode continuar usando os alertas dentro da Central.":"Browser notifications are blocked. You can keep using in-app alerts.","Seu navegador não oferece notificações neste modo.":"Your browser does not support notifications in this mode.","Nenhuma notificação agora.":"No notifications right now.","Histórico administrativo":"Administrative history","Alterações de turno, escopo, alocação e rotina.":"Changes to shifts, scopes, assignments, and routines.","Nenhuma alteração administrativa registrada ainda.":"No administrative changes recorded yet.","Criado":"Created","Atualizado":"Updated","Desativado":"Disabled","Ativado":"Enabled","Removido":"Removed","Alocação atualizada":"Assignment updated","Etapa seguinte definida automaticamente.":"Next step set automatically."});
     Object.assign(translations, {"Ver guia da Central do Dia":"Open Work Center guide","Pular tour":"Skip tour","Não mostrar automaticamente novamente":"Do not show automatically again","Etapa":"Step","Escolha a data":"Choose the date","Troque o dia para consultar o contexto operacional e as execuções daquele período.":"Change the day to review the operational context and executions for that period.","A data controla tudo o que aparece na Central do Dia.":"The date controls everything shown in the Work Center.","Escolha o turno":"Choose the shift","Alterne entre os turnos cadastrados sem sair da mesma visão.":"Switch between configured shifts without leaving this view.","Agora leva você de volta ao turno corrente.":"Now returns you to the current shift.","Resumo do turno":"Shift summary","Cobertura, concluídas, pendentes e anormalidades mostram rapidamente a situação do turno selecionado.":"Coverage, completed, pending, and abnormalities quickly show the status of the selected shift.","Esses números são formados pelas execuções previstas e registradas.":"These numbers are built from planned and recorded executions.","O que exige ação agora":"What needs action now","Este cartão destaca a rotina mais urgente ou a que já está em andamento.":"This card highlights the most urgent routine or the one already in progress.","Use Iniciar e Registrar resultado para conduzir a execução.":"Use Start and Record result to drive the execution.","Acompanhe o mapa do turno":"Follow the shift map","Aqui você vê cada rotina em ordem, com status, horário e ações disponíveis.":"Here you see each routine in order, with status, time, and available actions.","Os filtros ajudam a focar em todas, somente suas ou apenas pendentes.":"Filters help you focus on all, yours only, or pending items.","Conecte o trabalho":"Connect the work","Atividades, falhas, reports e itens gerados pelas rotinas continuam ligados ao turno.":"Activities, failures, reports, and items generated by routines stay connected to the shift.","Você pode abrir esses registros sem perder o contexto da Central do Dia.":"You can open these records without losing the Work Center context.","Alertas do turno":"Shift alerts","O sino reúne rotinas próximas do horário, atrasos e atividades com prazo.":"The bell brings together routines near their scheduled time, delays, and due activities.","Você pode ativar alertas do navegador e escolher a antecedência.":"You can enable browser alerts and choose the lead time.","Configuração administrativa":"Administrative setup","Administradores usam esta área para turnos, escopos, matriz de alocação, rotinas e histórico.":"Administrators use this area for shifts, scopes, assignment matrix, routines, and history.","O usuário comum não vê esta etapa.":"Regular users do not see this step.","Ajuda sempre disponível":"Help always available","O guia não precisa ocupar a tela no uso diário. Use este ícone quando quiser rever o passo a passo.":"The guide does not need to occupy the screen during daily use. Use this icon whenever you want to review it.","Você também pode pular etapas clicando nos indicadores do tour.":"You can also jump between steps by clicking the tour indicators."});
+    Object.assign(translations, {"Itens da rotina":"Routine items","Defina o tipo de dado de cada item. Nenhum campo será obrigatório durante a execução.":"Define the data type for each item. No field will be required during execution.","Adicionar item":"Add item","Verificação":"Check","Verificação + campo":"Check + field","Percentual":"Percentage","Número":"Number","Texto":"Text","OK / NG":"OK / NG","Seleção":"Selection","Evidência":"Evidence","Unidade":"Unit","Meta":"Target","Opções":"Options","Passagem de turno":"Shift handover","Resumo automático para entregar e receber continuidade.":"Automatic summary to hand over and receive continuity.","Preparar passagem":"Prepare handover","Editar passagem":"Edit handover","Receber passagem":"Receive handover","Passagem enviada":"Handover sent","Passagem recebida":"Handover received","Nenhuma passagem do turno anterior.":"No handover from the previous shift.","Turno anterior":"Previous shift","Este turno":"This shift","Cobertura":"Coverage","Falhas registradas":"Recorded failures","Atividades abertas":"Open activities","Dados coletados":"Collected data","Observação da passagem":"Handover note","Salvar passagem":"Save handover","Confirmar recebimento":"Confirm receipt","Recebido por":"Received by","Fora da meta":"Outside target","Dentro da meta":"Within target","Sem meta":"No target","Nenhum item configurado.":"No item configured.","Selecione ou digite um valor":"Select or enter a value","Clique em adicionar item para estruturar a coleta da rotina.":"Click Add item to structure routine data collection.","A passagem usa os dados já registrados no turno e preserva um snapshot para consulta futura.":"The handover uses data already recorded in the shift and preserves a snapshot for future review."});
+    Object.assign(translations, {"Entregue a continuidade":"Hand over continuity","A passagem reúne automaticamente o que foi registrado no turno e o próximo time pode confirmar o recebimento.":"The handover automatically gathers what was recorded in the shift and the next team can confirm receipt.","Use a observação somente para o contexto que os dados não conseguem mostrar sozinhos.":"Use the note only for context the data cannot show on its own."});
     const originalTextNodes = new WeakMap();
     const originalAttrs = new WeakMap();
     const translationPatterns = [
@@ -902,7 +905,7 @@
       return parts.join('\n\n');
     }
     function copyText(text){ if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>alert('Texto copiado.')); else { const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('Texto copiado.'); } }
-    // ==================== V15.1.13.35 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
+    // ==================== V15.1.13.36 — ALERTAS / COMMAND PALETTE / DATA HEALTH ====================
     function notificationPrefsKey(){return 'central.notifications.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function notificationSentKey(){return 'central.notifications.sent.v1.'+(currentAuthUser?.uid||currentAccount?.email||'guest');}
     function centralNotificationPrefs(){
@@ -2588,7 +2591,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.35'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.35'){localStorage.setItem('cora.sw.loaded','15.1.13.35');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.36'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.36'){localStorage.setItem('cora.sw.loaded','15.1.13.36');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -3819,7 +3822,7 @@ ${m.text}`).join('\n\n');
     // ======================= FIM V14.0 — IA DE ANÁLISE (legado) =======================
 
 
-    // ======================= CENTRAL DO DIA · V15.1.13.35 =======================
+    // ======================= CENTRAL DO DIA · V15.1.13.36 =======================
     const localDateKey = (date = new Date()) => {
       const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
       return `${y}-${m}-${d}`;
@@ -4032,6 +4035,7 @@ ${m.text}`).join('\n\n');
               requireNgNote:routine.requireNgNote!==false,
               allowFailure:routine.allowFailure!==false,
               allowActivity:routine.allowActivity!==false,
+              checklistSchema:normalizeRoutineSchema(routine.checklistSchema,routine.checklistTemplate),
               checklistTemplate:Array.isArray(routine.checklistTemplate)?routine.checklistTemplate:[],
               requiredParticipants:Math.max(1,Number(routine.minParticipants||1)),
               expectedUserIds:userIds,expectedUserNames:userNames
@@ -4085,7 +4089,7 @@ ${m.text}`).join('\n\n');
           scopeId:item.scopeId,scopeName:item.scopeName,scopeType:item.scopeType,plannedTime:item.plannedTime,
           windowMinutes:item.windowMinutes,executionPolicy:item.executionPolicy,resultMode:item.resultMode,contextMode:item.contextMode||'none',
           requireNgNote:item.requireNgNote,allowFailure:item.allowFailure,allowActivity:item.allowActivity,
-          checklistTemplate:item.checklistTemplate,requiredParticipants:item.requiredParticipants,
+          checklistSchema:item.checklistSchema,checklistTemplate:item.checklistTemplate,requiredParticipants:item.requiredParticipants,
           expectedUserIds:item.expectedUserIds,expectedUserNames:item.expectedUserNames,
           assignedUserId:item.assignedUserId||'',assignedUserName:item.assignedUserName||'',
           snapshotAt:now()
@@ -4109,11 +4113,20 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyChecklistDisplay(execution){
+      const schema=normalizeRoutineSchema(execution?.checklistSchema,execution?.checklistTemplate);
       const items=Array.isArray(execution?.checklist)?execution.checklist:[];
-      const useful=items.filter(x=>x?.done||String(x?.value||'').trim());
+      const useful=items.map((saved,index)=>{
+        const item=schema.find(x=>x.id===saved.itemId)||schema[index]||{label:saved.text||'Item',type:saved.type||'text',unit:saved.unit||''};
+        return {item,saved};
+      }).filter(({item,saved})=>saved?.done||String(saved?.value??'').trim()||(saved?.evidence||[]).length);
       if(!useful.length)return '';
-      return `<div class="daily-task-data">${useful.slice(0,8).map(x=>`<span>${esc(x.text||'Item')}${String(x.value||'').trim()?`: <strong>${esc(String(x.value).trim())}</strong>`:x.done?' ✓':''}</span>`).join('')}</div>`;
+      return `<div class="daily-task-data">${useful.slice(0,10).map(({item,saved})=>{
+        const value=routineItemDisplayValue(item,saved);
+        const fail=(saved.assessment||routineTargetAssessment(item,saved.value))==='fail';
+        return `<span class="${fail?'target-fail':''}">${esc(item.label||saved.text||'Item')}${value?`: <strong>${esc(value)}</strong>`:''}${fail?` · ${esc(t('Fora da meta'))}`:''}</span>`;
+      }).join('')}</div>`;
     }
+
 
     function dailyExecutionCard(execution){
       const stateName=dailyTaskState(execution);
@@ -4164,6 +4177,7 @@ ${m.text}`).join('\n\n');
         {selector:'#dailyNowCard',title:t('O que exige ação agora'),text:t('Este cartão destaca a rotina mais urgente ou a que já está em andamento.'),tip:t('Use Iniciar e Registrar resultado para conduzir a execução.')},
         {selector:'.daily-timeline-panel',title:t('Acompanhe o mapa do turno'),text:t('Aqui você vê cada rotina em ordem, com status, horário e ações disponíveis.'),tip:t('Os filtros ajudam a focar em todas, somente suas ou apenas pendentes.')},
         {selector:'.daily-side-column',title:t('Conecte o trabalho'),text:t('Atividades, falhas, reports e itens gerados pelas rotinas continuam ligados ao turno.'),tip:t('Você pode abrir esses registros sem perder o contexto da Central do Dia.')},
+        {selector:'#dailyHandoverPanel',title:t('Entregue a continuidade'),text:t('A passagem reúne automaticamente o que foi registrado no turno e o próximo time pode confirmar o recebimento.'),tip:t('Use a observação somente para o contexto que os dados não conseguem mostrar sozinhos.')},
         {selector:'#centralNotificationButton',title:t('Alertas do turno'),text:t('O sino reúne rotinas próximas do horário, atrasos e atividades com prazo.'),tip:t('Você pode ativar alertas do navegador e escolher a antecedência.')}
       ];
       if(currentAccount?.role==='admin'){
@@ -4283,6 +4297,170 @@ ${m.text}`).join('\n\n');
     }
 
 
+    function dailyAdjacentShift(dateKey,shiftId,direction=-1){
+      const shifts=state.workShifts.filter(x=>x.active!==false).sort((a,b)=>dailyTimeMinutes(a.startTime)-dailyTimeMinutes(b.startTime));
+      const index=shifts.findIndex(x=>x.docId===shiftId);
+      if(index<0||!shifts.length)return null;
+      if(direction<0){
+        if(index>0)return {dateKey,shift:shifts[index-1]};
+        return {dateKey:addLocalDays(dateKey,-1),shift:shifts[shifts.length-1]};
+      }
+      if(index<shifts.length-1)return {dateKey,shift:shifts[index+1]};
+      return {dateKey:addLocalDays(dateKey,1),shift:shifts[0]};
+    }
+
+    function shiftHandoverKey(dateKey,shiftId){
+      return (`handover__${dateKey}__${shiftId}`).replace(/[^a-zA-Z0-9_-]/g,'-');
+    }
+
+    function dailyHandoverDoc(dateKey,shiftId){
+      return state.routineExecutions.find(x=>x.recordType==='shift_handover'&&x.sourceDateKey===dateKey&&x.sourceShiftId===shiftId)||null;
+    }
+
+    function dailyHandoverSummaryData(dateKey,shiftId){
+      const shift=state.workShifts.find(x=>x.docId===shiftId);
+      if(!shift)return null;
+      const executions=dailyMergedExecutions(dateKey,shiftId);
+      const completed=executions.filter(x=>x.status==='completed');
+      const pending=executions.filter(x=>x.status!=='completed');
+      const ng=completed.filter(x=>x.result==='ng');
+      const coverage=executions.length?Math.round(completed.length/executions.length*100):0;
+      const bounds=dailyShiftBounds(dateKey,shift);
+      const inPeriod=item=>{
+        if(!bounds)return false;
+        const d=new Date(item?.createdAt||item?.openedAt||0);
+        return !Number.isNaN(d.getTime())&&d>=bounds.start&&d<bounds.end;
+      };
+      const failures=[
+        ...state.operationalFailures.filter(inPeriod).map(x=>({kind:'Falha',id:x.id,title:x.issue||x.id,scope:[x.linha,x.estacao].filter(Boolean).join(' · ')})),
+        ...state.reports.filter(inPeriod).map(x=>({kind:'Report',id:x.id,title:x.issue||x.id,scope:[x.product,x.component].filter(Boolean).join(' · ')}))
+      ].slice(0,30);
+      const executionIds=new Set(executions.map(x=>x.executionKey).filter(Boolean));
+      const openActivities=state.activities
+        .filter(a=>activityEffectiveStatus(a)!=='concluido'&&(executionIds.has(a.originRoutineExecutionId)||inPeriod(a)))
+        .map(a=>({id:a.id,title:a.title||a.id,nextAction:a.nextAction||'',owner:a.owner||''}))
+        .slice(0,30);
+      const dataPoints=[];
+      completed.forEach(execution=>{
+        const schema=normalizeRoutineSchema(execution.checklistSchema,execution.checklistTemplate);
+        (execution.checklist||[]).forEach((saved,index)=>{
+          const item=schema.find(x=>x.id===saved.itemId)||schema[index]||{label:saved.text||'Item',type:saved.type||'text',unit:saved.unit||''};
+          const value=routineItemDisplayValue(item,saved);
+          if(!value)return;
+          dataPoints.push({routine:execution.routineName||'Rotina',scope:execution.scopeName||'',label:item.label,value,assessment:saved.assessment||routineTargetAssessment(item,saved.value)});
+        });
+      });
+      return {dateKey,shiftId,shiftName:shift.name||'Turno',window:dailyShiftWindowLabel(shift),total:executions.length,completed:completed.length,pending:pending.length,ng:ng.length,coverage,failures,openActivities,dataPoints:dataPoints.slice(0,40),generatedAt:now()};
+    }
+
+    function renderShiftHandoverSummary(summary){
+      if(!summary)return '<div class="daily-soft-empty">Sem dados para este turno.</div>';
+      const data=summary.dataPoints||[],failures=summary.failures||[],activities=summary.openActivities||[];
+      const dataHtml=data.length?data.slice(0,18).map(x=>{
+        const flag=x.assessment==='fail'?(' · '+t('Fora da meta')):'';
+        const cls=x.assessment==='fail'?'danger-text':'';
+        return `<div class="shift-handover-item"><div><strong>${esc(x.label)}</strong><span>${esc([x.routine,x.scope].filter(Boolean).join(' · '))}</span></div><strong class="${cls}">${esc(x.value+flag)}</strong></div>`;
+      }).join(''):'<div class="daily-soft-empty">Nenhum dado estruturado registrado.</div>';
+      const failureHtml=failures.length?failures.slice(0,15).map(x=>`<div class="shift-handover-item"><div><strong>${esc(x.title)}</strong><span>${esc([x.kind,x.id,x.scope].filter(Boolean).join(' · '))}</span></div></div>`).join(''):'<div class="daily-soft-empty">Nenhuma falha registrada no turno.</div>';
+      const activityHtml=activities.length?activities.slice(0,15).map(x=>`<div class="shift-handover-item"><div><strong>${esc(x.title)}</strong><span>${esc([x.id,x.owner,x.nextAction].filter(Boolean).join(' · '))}</span></div></div>`).join(''):'<div class="daily-soft-empty">Nenhuma atividade aberta ligada ao turno.</div>';
+      return `<div class="shift-handover-kpis">
+        <div class="shift-handover-kpi"><span>${esc(t('Cobertura'))}</span><strong>${summary.coverage||0}%</strong></div>
+        <div class="shift-handover-kpi"><span>${esc(t('Concluídas'))}</span><strong>${summary.completed||0}</strong></div>
+        <div class="shift-handover-kpi"><span>${esc(t('Pendentes'))}</span><strong>${summary.pending||0}</strong></div>
+        <div class="shift-handover-kpi"><span>NG</span><strong>${summary.ng||0}</strong></div>
+      </div>
+      <section class="shift-handover-section"><h4>${esc(t('Dados coletados'))}</h4>${dataHtml}</section>
+      <section class="shift-handover-section"><h4>${esc(t('Falhas registradas'))} · ${failures.length}</h4>${failureHtml}</section>
+      <section class="shift-handover-section"><h4>${esc(t('Atividades abertas'))} · ${activities.length}</h4>${activityHtml}</section>`;
+    }
+
+    function renderDailyHandover(){
+      const host=document.querySelector('#dailyHandoverContent');
+      if(!host||!dailySelectedDate||!dailySelectedShiftId)return;
+      const uid=currentAuthUser?.uid||'';
+      const currentShift=state.workShifts.find(x=>x.docId===dailySelectedShiftId);
+      if(!currentShift){host.innerHTML='<div class="daily-soft-empty">Turno não configurado.</div>';return;}
+      const previous=dailyAdjacentShift(dailySelectedDate,dailySelectedShiftId,-1);
+      const previousDoc=previous?dailyHandoverDoc(previous.dateKey,previous.shift.docId):null;
+      const currentDoc=dailyHandoverDoc(dailySelectedDate,dailySelectedShiftId);
+      const allocated=activeWorkAllocations().some(a=>a.userId===uid&&a.shiftId===dailySelectedShiftId);
+      const canPrepare=currentAccount?.role==='admin'||allocated;
+      const received=Boolean(previousDoc?.receivedBy?.some(x=>x.userId===uid));
+      const receivedNames=(previousDoc?.receivedBy||[]).map(x=>x.name).filter(Boolean);
+      let previousCard='';
+      if(previousDoc){
+        previousCard=`<div class="daily-handover-card"><span class="daily-mini-label">${esc(t('Turno anterior'))}</span><strong>${esc(previousDoc.sourceShiftName||previous?.shift.name||'Turno')} · ${esc(previousDoc.sourceDateKey||previous?.dateKey||'')}</strong><span>${esc(previousDoc.note||t('A passagem usa os dados já registrados no turno e preserva um snapshot para consulta futura.'))}</span><span class="daily-handover-status ${received?'received':''}">${esc(t(received?'Passagem recebida':'Passagem enviada'))}</span><div class="daily-handover-actions"><button type="button" class="button secondary button-compact" data-handover-action="receive" data-date="${esc(previousDoc.sourceDateKey)}" data-shift="${esc(previousDoc.sourceShiftId)}">${esc(t(received?'Abrir':'Receber passagem'))}</button></div>${receivedNames.length?'<span>'+esc(t('Recebido por'))+': '+esc(receivedNames.join(', '))+'</span>':''}</div>`;
+      }else{
+        previousCard=`<div class="daily-handover-card"><span class="daily-mini-label">${esc(t('Turno anterior'))}</span><strong>${esc(previous?.shift.name||'—')}</strong><span>${esc(t('Nenhuma passagem do turno anterior.'))}</span></div>`;
+      }
+      const currentStatus=currentDoc?`<span class="daily-handover-status">${esc(t('Passagem enviada'))}</span>`:'';
+      const currentAction=canPrepare?`<button type="button" class="button primary button-compact" data-handover-action="prepare" data-date="${esc(dailySelectedDate)}" data-shift="${esc(dailySelectedShiftId)}">${esc(t(currentDoc?'Editar passagem':'Preparar passagem'))}</button>`:'';
+      const currentCard=`<div class="daily-handover-card"><span class="daily-mini-label">${esc(t('Este turno'))}</span><strong>${esc(currentShift.name)} · ${esc(dailySelectedDate)}</strong><span>${esc(currentDoc?.note||t('A passagem usa os dados já registrados no turno e preserva um snapshot para consulta futura.'))}</span>${currentStatus}<div class="daily-handover-actions">${currentAction}</div></div>`;
+      host.innerHTML=previousCard+currentCard;
+    }
+
+    function openShiftHandover(mode,dateKey,shiftId){
+      const existing=dailyHandoverDoc(dateKey,shiftId);
+      const shift=state.workShifts.find(x=>x.docId===shiftId);
+      if(!shift)return;
+      const summary=mode==='prepare'?dailyHandoverSummaryData(dateKey,shiftId):(existing?.summary||dailyHandoverSummaryData(dateKey,shiftId));
+      selectedShiftHandover={mode,dateKey,shiftId,existing,summary};
+      const modal=document.querySelector('#shiftHandoverModal');
+      const title=document.querySelector('#shiftHandoverTitle');
+      const subtitle=document.querySelector('#shiftHandoverSubtitle');
+      const note=document.querySelector('#shiftHandoverNote');
+      const save=document.querySelector('#saveShiftHandover');
+      const receipt=document.querySelector('#shiftHandoverReceipt');
+      if(!modal)return;
+      title.textContent=mode==='receive'?t('Receber passagem'):t(existing?'Editar passagem':'Preparar passagem');
+      subtitle.textContent=`${shift.name||'Turno'} · ${dateKey} · ${dailyShiftWindowLabel(shift)}`;
+      document.querySelector('#shiftHandoverSummary').innerHTML=renderShiftHandoverSummary(summary);
+      note.value=existing?.note||'';
+      note.readOnly=mode==='receive';
+      const already=mode==='receive'&&existing?.receivedBy?.some(x=>x.userId===currentAuthUser?.uid);
+      receipt.classList.toggle('hidden',!already);
+      receipt.textContent=already?(t('Passagem recebida')+' · '+(existing.receivedBy.find(x=>x.userId===currentAuthUser?.uid)?.name||currentAccount?.name||'')):'';
+      save.classList.toggle('hidden',Boolean(already));
+      save.textContent=mode==='receive'?t('Confirmar recebimento'):t('Salvar passagem');
+      modal.classList.remove('hidden');
+      translatePage();
+    }
+
+    function closeShiftHandover(){
+      document.querySelector('#shiftHandoverModal')?.classList.add('hidden');
+      selectedShiftHandover=null;
+    }
+
+    async function saveShiftHandover(){
+      const context=selectedShiftHandover;
+      if(!context)return;
+      const {mode,dateKey,shiftId,existing,summary}=context;
+      const key=shiftHandoverKey(dateKey,shiftId);
+      const ref=doc(db,'routineExecutions',key);
+      if(mode==='receive'){
+        if(!existing)return;
+        const receivedBy=[...(existing.receivedBy||[]).filter(x=>x.userId!==currentAuthUser?.uid),{userId:currentAuthUser?.uid||'',name:currentAccount?.name||currentAccount?.email||'',at:now()}];
+        await setDoc(ref,{receivedBy,lastReceivedAt:now(),updatedAt:now()},{merge:true});
+        showSaveToast(t('Passagem recebida'),'success');
+        closeShiftHandover();
+        return;
+      }
+      const shift=state.workShifts.find(x=>x.docId===shiftId);
+      const next=dailyAdjacentShift(dateKey,shiftId,1);
+      const note=String(document.querySelector('#shiftHandoverNote')?.value||'').trim();
+      await setDoc(ref,{
+        recordType:'shift_handover',executionKey:key,status:'completed',
+        dateKey,shiftId,shiftName:shift?.name||'Turno',
+        sourceDateKey:dateKey,sourceShiftId:shiftId,sourceShiftName:shift?.name||'Turno',
+        targetDateKey:next?.dateKey||'',targetShiftId:next?.shift.docId||'',targetShiftName:next?.shift.name||'',
+        summary,note,receivedBy:existing?.receivedBy||[],
+        createdAt:existing?.createdAt||now(),createdById:existing?.createdById||currentAuthUser?.uid||'',createdByName:existing?.createdByName||currentAccount?.name||'',
+        updatedAt:now(),updatedById:currentAuthUser?.uid||'',updatedByName:currentAccount?.name||''
+      },{merge:true});
+      showSaveToast(t('Passagem enviada'),'success');
+      closeShiftHandover();
+    }
+
     function renderDailyHomeSummary(){
       const el=document.querySelector('#homeDailySummary'); if(!el) return;
       const current=dailyCurrentShiftInfo();
@@ -4339,6 +4517,7 @@ ${m.text}`).join('\n\n');
       }
 
       renderDailyConnectedWork(allVisible);
+      renderDailyHandover();
       renderDailyAdmin();
       if(activeView==='daily'&&!dailyTourAutoShown&&!localStorage.getItem(dailyTourStorageKey())&&!localStorage.getItem(dailyTourDisableKey())){
         dailyTourAutoShown=true;
@@ -4506,7 +4685,8 @@ ${m.text}`).join('\n\n');
       if(routines) routines.innerHTML=state.routineTemplates.length?state.routineTemplates.map(r=>{
         const schedules=Object.entries(r.scheduleMap||{}).map(([sid,times])=>{const sh=state.workShifts.find(s=>s.docId===sid);return sh?`${sh.name}: ${(times||[]).filter(Boolean).join(', ')||'1× no turno'}`:'';}).filter(Boolean);
         const context=r.contextMode&&r.contextMode!=='none'?` · ${dailyContextModeLabel(r.contextMode)}`:'';
-        return `<div class="daily-admin-item ${r.active===false?'is-off':''}"><div><strong>${esc(r.name)}</strong><span>${esc(schedules.join(' · ')||'Sem agenda')} · ${esc(dailyPolicyLabel(r.executionPolicy))}${esc(context)}</span></div><div><button type="button" data-daily-edit="routine" data-id="${esc(r.docId)}">${esc(t('Editar rotina'))}</button><button type="button" data-daily-toggle="routine" data-id="${esc(r.docId)}">${r.active===false?'Ativar':'Desativar'}</button></div></div>`;
+        const itemCount=normalizeRoutineSchema(r.checklistSchema,r.checklistTemplate).length;
+        return `<div class="daily-admin-item ${r.active===false?'is-off':''}"><div><strong>${esc(r.name)}</strong><span>${esc(schedules.join(' · ')||'Sem agenda')} · ${esc(dailyPolicyLabel(r.executionPolicy))}${esc(context)} · ${itemCount} item(ns)</span></div><div><button type="button" data-daily-edit="routine" data-id="${esc(r.docId)}">${esc(t('Editar rotina'))}</button><button type="button" data-daily-toggle="routine" data-id="${esc(r.docId)}">${r.active===false?'Ativar':'Desativar'}</button></div></div>`;
       }).join(''):'<div class="daily-soft-empty">Nenhuma rotina.</div>';
     }
 
@@ -4517,6 +4697,7 @@ ${m.text}`).join('\n\n');
       const scopeId=document.querySelector('#dailyDashScope')?.value||'';
       const userId=document.querySelector('#dailyDashUser')?.value||'';
       const rows=state.routineExecutions.filter(x=>
+        x.recordType!=='shift_handover' &&
         (x.dateKey||'')>=from && (x.dateKey||'')<=to &&
         (!shiftId||x.shiftId===shiftId) && (!scopeId||x.scopeId===scopeId) &&
         (!userId||x.assignedUserId===userId||(x.expectedUserIds||[]).includes(userId)||(x.participants||[]).some(p=>p.userId===userId))
@@ -4572,6 +4753,7 @@ ${m.text}`).join('\n\n');
         form.elements.minParticipants.value=1;
         form.elements.windowMinutes.value=60;
         if(form.elements.contextMode) form.elements.contextMode.value='none';
+        renderDailyRoutineSchemaBuilder([]);
         const weekdays=new Set(['1','2','3','4','5']);
         [...form.elements.routineDays].forEach(x=>x.checked=weekdays.has(x.value));
         renderDailyRoutineScheduleEditor();
@@ -4593,7 +4775,7 @@ ${m.text}`).join('\n\n');
         const selected=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=selected.has(o.value));f.scrollIntoView({behavior:'smooth',block:'center'});
       }else if(kind==='routine'){
         const item=state.routineTemplates.find(x=>x.docId===id); if(!item)return;
-        const f=document.querySelector('#dailyRoutineForm');f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.description.value=item.description||'';if(f.elements.contextMode)f.elements.contextMode.value=item.contextMode||'none';f.elements.executionPolicy.value=item.executionPolicy||'scope_once';f.elements.minParticipants.value=item.minParticipants||1;f.elements.windowMinutes.value=item.windowMinutes??60;f.elements.resultMode.value=item.resultMode||'ok_ng';f.elements.checklistTemplate.value=(item.checklistTemplate||[]).join('\n');f.elements.allowFailure.checked=item.allowFailure!==false;f.elements.allowActivity.checked=item.allowActivity!==false;f.elements.requireNgNote.checked=item.requireNgNote!==false;f.elements.active.checked=item.active!==false;
+        const f=document.querySelector('#dailyRoutineForm');f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.description.value=item.description||'';if(f.elements.contextMode)f.elements.contextMode.value=item.contextMode||'none';f.elements.executionPolicy.value=item.executionPolicy||'scope_once';f.elements.minParticipants.value=item.minParticipants||1;f.elements.windowMinutes.value=item.windowMinutes??60;f.elements.resultMode.value=item.resultMode||'ok_ng';renderDailyRoutineSchemaBuilder(normalizeRoutineSchema(item.checklistSchema,item.checklistTemplate));f.elements.allowFailure.checked=item.allowFailure!==false;f.elements.allowActivity.checked=item.allowActivity!==false;f.elements.requireNgNote.checked=item.requireNgNote!==false;f.elements.active.checked=item.active!==false;
         const scopes=new Set(item.scopeIds||[]);[...f.elements.scopeIds.options].forEach(o=>o.selected=scopes.has(o.value));
         const days=new Set((item.days||[1,2,3,4,5]).map(String));[...f.elements.routineDays].forEach(o=>o.checked=days.has(o.value));
         renderDailyRoutineScheduleEditor(item);f.scrollIntoView({behavior:'smooth',block:'start'});showSaveToast(t('Os dados concluídos ficam preservados; alterações no modelo valem para execuções futuras.'),'success');
@@ -4631,6 +4813,108 @@ ${m.text}`).join('\n\n');
       });
       return map;
     }
+
+    const routineItemTypes={
+      check:{label:'Verificação'},
+      check_text:{label:'Verificação + campo'},
+      percent:{label:'Percentual'},
+      number:{label:'Número'},
+      text:{label:'Texto'},
+      ok_ng:{label:'OK / NG'},
+      select:{label:'Seleção'},
+      evidence:{label:'Evidência'}
+    };
+
+    function normalizeRoutineSchema(schema=[],legacy=[]){
+      if(Array.isArray(schema)&&schema.length){
+        return schema.map((item,index)=>({
+          id:String(item?.id||`item-${index+1}`),
+          label:String(item?.label||item?.text||`Item ${index+1}`).trim(),
+          type:routineItemTypes[item?.type]?item.type:'text',
+          unit:String(item?.unit||'').trim(),
+          targetOp:String(item?.targetOp||'').trim(),
+          targetValue:item?.targetValue==null?'':String(item.targetValue),
+          options:Array.isArray(item?.options)?item.options.map(x=>String(x).trim()).filter(Boolean):String(item?.options||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean)
+        })).filter(x=>x.label);
+      }
+      return (Array.isArray(legacy)?legacy:[]).map((text,index)=>({id:`legacy-${index+1}`,label:String(text||'').trim(),type:'check_text',unit:'',targetOp:'',targetValue:'',options:[]})).filter(x=>x.label);
+    }
+
+    function routineSchemaTypeOptions(selected=''){
+      return Object.entries(routineItemTypes).map(([value,meta])=>`<option value="${value}" ${value===selected?'selected':''}>${esc(t(meta.label))}</option>`).join('');
+    }
+
+    function routineSchemaRowHtml(item,index){
+      const numeric=['percent','number'].includes(item.type),select=item.type==='select';
+      return `<div class="daily-routine-schema-row" data-schema-index="${index}" data-schema-id="${esc(item.id)}">
+        <label class="schema-label">${esc(t('Item'))}<input data-schema-label value="${esc(item.label).replace(/"/g,'&quot;')}" placeholder="Ex.: FPY Linha 1"></label>
+        <label class="schema-type">${esc(t('Tipo'))}<select data-schema-type>${routineSchemaTypeOptions(item.type)}</select></label>
+        <label class="schema-unit ${numeric?'':'hidden'}">${esc(t('Unidade'))}<input data-schema-unit value="${esc(item.unit||'').replace(/"/g,'&quot;')}" placeholder="${item.type==='percent'?'%':'Ex.: pcs'}"></label>
+        <label class="schema-target ${numeric?'':'hidden'}">${esc(t('Meta'))}<div style="display:grid;grid-template-columns:62px 1fr;gap:5px"><select data-schema-target-op><option value="">—</option>${['>=','<=','>','<','='].map(op=>`<option value="${op}" ${item.targetOp===op?'selected':''}>${op}</option>`).join('')}</select><input data-schema-target-value type="number" step="any" value="${esc(item.targetValue??'')}"></div></label>
+        <button type="button" class="daily-routine-schema-remove" data-schema-remove="${index}" aria-label="Remover item">×</button>
+        <div class="schema-extra ${select?'':'hidden'}"><label>${esc(t('Opções'))}<input data-schema-options value="${esc((item.options||[]).join(', ')).replace(/"/g,'&quot;')}" placeholder="OK, Ajustar, N/A"></label></div>
+      </div>`;
+    }
+
+    function renderDailyRoutineSchemaBuilder(schema=[]){
+      const host=document.querySelector('#dailyRoutineSchemaBuilder');if(!host)return;
+      const normalized=normalizeRoutineSchema(schema);
+      host.innerHTML=normalized.length?normalized.map(routineSchemaRowHtml).join(''):`<div class="daily-routine-schema-empty">${esc(t('Clique em adicionar item para estruturar a coleta da rotina.'))}</div>`;
+      const legacy=document.querySelector('#dailyRoutineForm [name="checklistTemplate"]');
+      if(legacy)legacy.value=normalized.map(x=>x.label).join('\n');
+    }
+
+    function dailyRoutineSchemaPayload(){
+      const rows=[...document.querySelectorAll('#dailyRoutineSchemaBuilder [data-schema-index]')];
+      const schema=rows.map((row,index)=>{
+        const label=String(row.querySelector('[data-schema-label]')?.value||'').trim();
+        const type=String(row.querySelector('[data-schema-type]')?.value||'text');
+        const unit=String(row.querySelector('[data-schema-unit]')?.value||'').trim();
+        const targetOp=String(row.querySelector('[data-schema-target-op]')?.value||'').trim();
+        const targetValue=String(row.querySelector('[data-schema-target-value]')?.value||'').trim();
+        const options=String(row.querySelector('[data-schema-options]')?.value||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);
+        return {id:String(row.dataset.schemaId||`item-${Date.now()}-${index}`),label,type,unit,targetOp,targetValue,options};
+      }).filter(x=>x.label);
+      const legacy=document.querySelector('#dailyRoutineForm [name="checklistTemplate"]');if(legacy)legacy.value=schema.map(x=>x.label).join('\n');
+      return schema;
+    }
+
+    function addDailyRoutineSchemaItem(type='check'){
+      const current=dailyRoutineSchemaPayload();
+      current.push({id:`item-${Date.now()}-${current.length}`,label:currentLanguage==='en-US'?'New item':'Novo item',type,unit:type==='percent'?'%':'',targetOp:'',targetValue:'',options:[]});
+      renderDailyRoutineSchemaBuilder(current);
+      const last=[...document.querySelectorAll('#dailyRoutineSchemaBuilder [data-schema-label]')].at(-1);
+      last?.focus();last?.select();
+    }
+
+    function updateRoutineSchemaRow(row){
+      if(!row)return;
+      const type=String(row.querySelector('[data-schema-type]')?.value||'text'),numeric=['percent','number'].includes(type),select=type==='select';
+      row.querySelector('.schema-unit')?.classList.toggle('hidden',!numeric);
+      row.querySelector('.schema-target')?.classList.toggle('hidden',!numeric);
+      row.querySelector('.schema-extra')?.classList.toggle('hidden',!select);
+      if(type==='percent'&&!row.querySelector('[data-schema-unit]')?.value)row.querySelector('[data-schema-unit]').value='%';
+    }
+
+    function routineTargetAssessment(item,value){
+      if(!['percent','number'].includes(item?.type)||!item?.targetOp||item?.targetValue===''||value==='')return '';
+      const actual=Number(String(value).replace(',','.')),target=Number(String(item.targetValue).replace(',','.'));
+      if(!Number.isFinite(actual)||!Number.isFinite(target))return '';
+      const pass={'>=':actual>=target,'<=':actual<=target,'>':actual>target,'<':actual<target,'=':actual===target}[item.targetOp];
+      return pass?'pass':'fail';
+    }
+
+    function routineItemDisplayValue(item,saved){
+      if(item.type==='check')return saved.done?'✓':'';
+      if(item.type==='evidence')return (saved.evidence||[]).length?`${(saved.evidence||[]).length} evidência(s)`:'';
+      let value=String(saved.value??'').trim();
+      if(!value)return saved.done?'✓':'';
+      if(item.type==='percent'&&!value.includes('%'))value+=item.unit||'%';
+      else if(item.type==='number'&&item.unit)value+=` ${item.unit}`;
+      else if(item.type==='ok_ng')value=({ok:'OK',ng:'NG',na:'N/A'}[value]||value);
+      return value;
+    }
+
 
     async function saveDailyShift(form){
       if(currentAccount?.role!=='admin')return;
@@ -4676,11 +4960,12 @@ ${m.text}`).join('\n\n');
       let scheduleMap;try{scheduleMap=dailyRoutineSchedulePayload();}catch(error){return alert(error.message);}
       if(!Object.keys(scheduleMap).length)return alert('Selecione pelo menos um turno na agenda da rotina.');
       const days=f.getAll('routineDays').map(Number), scopeIds=f.getAll('scopeIds').filter(Boolean);
+      const checklistSchema=dailyRoutineSchemaPayload();
       const payload={
         name:String(f.get('name')||'').trim(),description:String(f.get('description')||'').trim(),contextMode:String(f.get('contextMode')||'none'),scopeIds,scheduleMap,days,
         executionPolicy:String(f.get('executionPolicy')||'scope_once'),minParticipants:Math.max(1,Number(f.get('minParticipants')||1)),
         windowMinutes:Math.max(0,Number(f.get('windowMinutes')||60)),resultMode:String(f.get('resultMode')||'ok_ng'),
-        checklistTemplate:String(f.get('checklistTemplate')||'').split('\n').map(x=>x.trim()).filter(Boolean),
+        checklistSchema,checklistTemplate:checklistSchema.map(x=>x.label),
         allowFailure:f.get('allowFailure')==='on',allowActivity:f.get('allowActivity')==='on',requireNgNote:f.get('requireNgNote')==='on',active:f.get('active')==='on',
         updatedAt:now(),updatedBy:currentAccount.email
       };
@@ -4714,6 +4999,41 @@ ${m.text}`).join('\n\n');
       showSaveToast('Rotina iniciada.','success');
     }
 
+    function routineExecutionItemHtml(item,index,previous={}){
+      const value=String(previous.value??''),assessment=previous.assessment||routineTargetAssessment(item,value);
+      const targetText=['percent','number'].includes(item.type)&&item.targetOp&&item.targetValue!==''?`${item.targetOp} ${item.targetValue}${item.unit?` ${item.unit}`:''}`:'';
+      let control='';
+      if(item.type==='check'){
+        control=`<label class="check routine-typed-control"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}> <span>${esc(t('Concluído'))}</span></label>`;
+      }else if(item.type==='check_text'){
+        control=`<div class="routine-typed-control"><label class="check"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}></label><input type="text" data-routine-value="${index}" value="${esc(value).replace(/"/g,'&quot;')}" placeholder="${esc(t('Valor / dado (opcional)'))}"></div>`;
+      }else if(item.type==='percent'||item.type==='number'){
+        control=`<div class="routine-typed-control"><input type="number" step="any" data-routine-value="${index}" value="${esc(value)}" placeholder="${esc(t('Valor / dado (opcional)'))}"><span class="routine-typed-unit">${esc(item.unit||(item.type==='percent'?'%':''))}</span></div>`;
+      }else if(item.type==='ok_ng'){
+        control=`<div class="routine-typed-control"><select data-routine-value="${index}"><option value="">${esc(t('Selecione ou digite um valor'))}</option><option value="ok" ${value==='ok'?'selected':''}>OK</option><option value="ng" ${value==='ng'?'selected':''}>NG</option><option value="na" ${value==='na'?'selected':''}>N/A</option></select></div>`;
+      }else if(item.type==='select'){
+        control=`<div class="routine-typed-control"><select data-routine-value="${index}"><option value="">${esc(t('Selecione ou digite um valor'))}</option>${(item.options||[]).map(option=>`<option value="${esc(option).replace(/"/g,'&quot;')}" ${value===option?'selected':''}>${esc(option)}</option>`).join('')}</select></div>`;
+      }else if(item.type==='evidence'){
+        const previousEvidence=evidenceEntries(previous.evidence);
+        control=`<div class="routine-typed-control" style="display:grid"><input type="file" data-routine-file="${index}" multiple accept="image/*,.pdf">${previousEvidence.length?`<span class="routine-typed-meta">${previousEvidence.map(x=>esc(x.name)).join(' · ')}</span>`:''}</div>`;
+      }else{
+        control=`<div class="routine-typed-control"><input type="text" data-routine-value="${index}" value="${esc(value).replace(/"/g,'&quot;')}" placeholder="${esc(t('Valor / dado (opcional)'))}"></div>`;
+      }
+      const status=assessment?`<span class="routine-target-status ${assessment}">${esc(t(assessment==='pass'?'Dentro da meta':'Fora da meta'))}</span>`:'';
+      return `<div class="routine-typed-item" data-routine-item="${index}" data-item-id="${esc(item.id)}"><div class="routine-typed-head"><div><strong>${esc(item.label)}</strong><span class="routine-typed-meta">${esc(t(routineItemTypes[item.type]?.label||'Texto'))}${targetText?` · ${esc(t('Meta'))} ${esc(targetText)}`:''}</span></div><span data-routine-target-status="${index}">${status}</span></div>${control}</div>`;
+    }
+
+    function updateRoutineExecutionTargetStatuses(execution){
+      const schema=normalizeRoutineSchema(execution?.checklistSchema,execution?.checklistTemplate);
+      schema.forEach((item,index)=>{
+        const input=document.querySelector(`[data-routine-value="${index}"]`);
+        const host=document.querySelector(`[data-routine-target-status="${index}"]`);
+        if(!host)return;
+        const assessment=routineTargetAssessment(item,String(input?.value??'').trim());
+        host.innerHTML=assessment?`<span class="routine-target-status ${assessment}">${esc(t(assessment==='pass'?'Dentro da meta':'Fora da meta'))}</span>`:'';
+      });
+    }
+
     function openRoutineExecution(key){
       const execution=dailyFindExecution(key);if(!execution)return;
       selectedRoutineExecutionId=key;
@@ -4727,13 +5047,13 @@ ${m.text}`).join('\n\n');
       result.value=execution.result|| (execution.resultMode==='simple'?'done':'ok');
       document.querySelector('#routineExecutionNote').value=execution.note||'';
       renderRoutineExecutionContext(execution);
-      const template=execution.checklistTemplate||[];
+      const schema=normalizeRoutineSchema(execution.checklistSchema,execution.checklistTemplate);
       const saved=Array.isArray(execution.checklist)?execution.checklist:[];
       const box=document.querySelector('#routineExecutionChecklistBox'),list=document.querySelector('#routineExecutionChecklist');
-      box.classList.toggle('hidden',!template.length);
-      list.innerHTML=template.map((text,index)=>{
-        const previous=saved.find(x=>x.text===text)||saved[index]||{};
-        return `<div class="routine-check-item"><input type="checkbox" data-routine-check="${index}" ${previous.done?'checked':''}><span>${esc(text)}</span><input class="routine-check-value" data-routine-value="${index}" value="${esc(previous.value||'').replace(/"/g,'&quot;')}" placeholder="${esc(t('Valor / dado (opcional)'))}"></div>`;
+      box.classList.toggle('hidden',!schema.length);
+      list.innerHTML=schema.map((item,index)=>{
+        const previous=saved.find(x=>x.itemId===item.id)||saved.find(x=>x.text===item.label)||saved[index]||{};
+        return routineExecutionItemHtml(item,index,previous);
       }).join('');
       const history=document.querySelector('#routineExecutionHistory');
       const revisions=Array.isArray(execution.editHistory)?execution.editHistory:[];
@@ -4744,8 +5064,10 @@ ${m.text}`).join('\n\n');
       const saveBtn=document.querySelector('#saveRoutineExecutionButton');if(saveBtn)saveBtn.textContent=editing?t('Salvar alterações'):t('Salvar execução');
       document.querySelector('#routineExecutionForm').elements.evidence.value='';
       document.querySelector('#routineExecutionModal').classList.remove('hidden');
+      updateRoutineExecutionTargetStatuses(execution);
       translatePage();
     }
+
 
     function closeRoutineExecution(){
       document.querySelector('#routineExecutionModal')?.classList.add('hidden');
@@ -4758,14 +5080,27 @@ ${m.text}`).join('\n\n');
       const wasCompleted=execution.status==='completed';
       const f=new FormData(form), result=String(f.get('result')||execution.result||'done'), note=String(f.get('note')||'').trim();
       const participants=dailyParticipantList(execution,true);
-      const template=execution.checklistTemplate||[];
-      const checklist=template.map((text,index)=>({
-        text,
-        done:Boolean(document.querySelector(`[data-routine-check="${index}"]`)?.checked),
-        value:String(document.querySelector(`[data-routine-value="${index}"]`)?.value||'').trim()
+      const schema=normalizeRoutineSchema(execution.checklistSchema,execution.checklistTemplate);
+      const previousItems=Array.isArray(execution.checklist)?execution.checklist:[];
+      const checklist=await Promise.all(schema.map(async(item,index)=>{
+        const previous=previousItems.find(x=>x.itemId===item.id)||previousItems.find(x=>x.text===item.label)||previousItems[index]||{};
+        const checkbox=document.querySelector(`[data-routine-check="${index}"]`);
+        const input=document.querySelector(`[data-routine-value="${index}"]`);
+        let value=String(input?.value??previous.value??'').trim();
+        let itemEvidence=evidenceEntries(previous.evidence);
+        if(item.type==='evidence'){
+          const fileInput=document.querySelector(`[data-routine-file="${index}"]`);
+          const added=await readAttachments([...(fileInput?.files||[])]);
+          itemEvidence=[...itemEvidence,...added];
+          value=itemEvidence.length?String(itemEvidence.length):'';
+        }
+        const done=item.type==='check'||item.type==='check_text'?Boolean(checkbox?.checked):Boolean(value||itemEvidence.length);
+        const assessment=routineTargetAssessment(item,value);
+        return {itemId:item.id,text:item.label,type:item.type,unit:item.unit||'',targetOp:item.targetOp||'',targetValue:item.targetValue??'',options:item.options||[],done,value,assessment,evidence:itemEvidence};
       }));
       const newEvidence=await readAttachments(f.getAll('evidence').filter(Boolean));
       const evidence=[...evidenceEntries(execution.evidence),...newEvidence];
+      const outOfTargetCount=checklist.filter(x=>x.assessment==='fail').length;
       const savedAt=now();
       const completedAt=execution.completedAt||savedAt;
       const onTime=execution.completedAt?execution.onTime!==false:new Date(completedAt)<=dailyExecutionDeadline(execution);
@@ -4783,7 +5118,7 @@ ${m.text}`).join('\n\n');
         evidenceCount:evidenceEntries(execution.evidence).length
       }].slice(-20):previousHistory;
       await setDoc(doc(db,'routineExecutions',key),{
-        status:'completed',result,note,checklist,evidence,participants,participantRequirementMet,
+        status:'completed',result,note,checklist,evidence,participants,participantRequirementMet,outOfTargetCount,hasOutOfTarget:outOfTargetCount>0,
         startedAt:execution.startedAt||completedAt,
         startedById:execution.startedById||currentAuthUser?.uid||'',
         startedByName:execution.startedByName||currentAccount?.name||'',
@@ -4798,8 +5133,9 @@ ${m.text}`).join('\n\n');
         updatedAt:savedAt
       },{merge:true});
       closeRoutineExecution();
-      showSaveToast(wasCompleted?t('Execução atualizada.'):(result==='ng'?'NG registrado. A rotina pode gerar uma Falha ou Atividade.':'Execução salva.'),'success');
+      showSaveToast(wasCompleted?t('Execução atualizada.'):(result==='ng'?'NG registrado. A rotina pode gerar uma Falha ou Atividade.':outOfTargetCount?`${outOfTargetCount} item(ns) fora da meta. Execução salva.`:'Execução salva.'),'success');
     }
+
 
     function dailyOpenLinkedItem(kind,id){
       if(kind==='activity')return openActivityDetail(id);
@@ -4824,7 +5160,7 @@ ${m.text}`).join('\n\n');
       openActivityModal({title:`Ação — ${execution.routineName} · ${execution.scopeName}`,area:execution.scopeName||'Operação',description:execution.note||`Atividade originada da rotina ${execution.routineName}, ${execution.shiftName}.`,activityMode:'simple'});
     }
 
-    // ===================== FIM CENTRAL DO DIA · V15.1.13.35 =====================
+    // ===================== FIM CENTRAL DO DIA · V15.1.13.36 =====================
 
     function renderSafely(name, fn) {
       try {
@@ -5503,14 +5839,26 @@ ${m.text}`).join('\n\n');
     document.querySelectorAll('[data-daily-reset]').forEach(btn=>btn.addEventListener('click',()=>resetDailyAdminForm(btn.dataset.dailyReset)));
     document.querySelector('#dailyAllocationMatrixShift')?.addEventListener('change',renderDailyAllocationMatrix);
     document.querySelector('#dailyRoutineSchedules')?.addEventListener('click',e=>{const add=e.target.closest('[data-routine-add-time]');if(add){dailyAddRoutineTime(add.dataset.routineAddTime);return;}const remove=e.target.closest('[data-routine-remove-time]');if(remove){dailyRemoveRoutineTime(remove.dataset.routineRemoveTime,remove.dataset.time);}});
+    document.querySelector('#dailyRoutineAddItem')?.addEventListener('click',()=>addDailyRoutineSchemaItem('check'));
+    document.querySelector('#dailyRoutineSchemaBuilder')?.addEventListener('click',e=>{const remove=e.target.closest('[data-schema-remove]');if(!remove)return;const index=Number(remove.dataset.schemaRemove);const current=dailyRoutineSchemaPayload();current.splice(index,1);renderDailyRoutineSchemaBuilder(current);});
+    document.querySelector('#dailyRoutineSchemaBuilder')?.addEventListener('change',e=>{const row=e.target.closest('[data-schema-index]');if(!row)return;if(e.target.matches('[data-schema-type]'))updateRoutineSchemaRow(row);dailyRoutineSchemaPayload();});
     document.querySelector('#dailyAllocationMatrix')?.addEventListener('change',e=>{const input=e.target.closest('[data-daily-matrix]');if(!input)return;const shiftId=document.querySelector('#dailyAllocationMatrixShift')?.value||'';input.disabled=true;dailySetMatrixAllocation(input.dataset.userId,shiftId,input.dataset.scopeId,input.checked).catch(err=>{console.error(err);input.checked=!input.checked;showSaveToast(dailyFirestoreErrorMessage(err,'atualizar a alocação'),'error');}).finally(()=>{input.disabled=false;});});
     document.querySelector('#routineExecutionContextItems')?.addEventListener('click',e=>{const item=e.target.closest('[data-kind][data-ref]');if(item)dailyOpenLinkedItem(item.dataset.kind,item.dataset.ref);});
+    const refreshRoutineTargets=()=>{const execution=dailyFindExecution(selectedRoutineExecutionId);if(execution)updateRoutineExecutionTargetStatuses(execution);};
+    document.querySelector('#routineExecutionChecklist')?.addEventListener('input',refreshRoutineTargets);
+    document.querySelector('#routineExecutionChecklist')?.addEventListener('change',refreshRoutineTargets);
+    document.querySelector('#dailyHandoverContent')?.addEventListener('click',e=>{const btn=e.target.closest('[data-handover-action]');if(!btn)return;openShiftHandover(btn.dataset.handoverAction,btn.dataset.date,btn.dataset.shift);});
+    document.querySelector('#closeShiftHandover')?.addEventListener('click',closeShiftHandover);
+    document.querySelector('#cancelShiftHandover')?.addEventListener('click',closeShiftHandover);
+    document.querySelector('#shiftHandoverModal')?.addEventListener('click',e=>{if(e.target.id==='shiftHandoverModal')closeShiftHandover();});
+    document.querySelector('#saveShiftHandover')?.addEventListener('click',()=>saveShiftHandover().catch(err=>{console.error(err);showSaveToast(dailyFirestoreErrorMessage(err,'salvar a passagem de turno'),'error');}));
     document.querySelector('#dailyAdminPanel')?.addEventListener('click',e=>{const edit=e.target.closest('[data-daily-edit]');if(edit){dailyEditAdminItem(edit.dataset.dailyEdit,edit.dataset.id);return;}const toggle=e.target.closest('[data-daily-toggle]');if(toggle){dailyToggleAdminItem(toggle.dataset.dailyToggle,toggle.dataset.id).catch(console.error);return;}const del=e.target.closest('[data-daily-delete="allocation"]');if(del)dailyDeleteAllocation(del.dataset.id).catch(console.error);});
     document.querySelector('#dailyView')?.addEventListener('click',e=>{const start=e.target.closest('[data-daily-start]');if(start){startDailyExecution(start.dataset.dailyStart).catch(err=>{console.error(err);showSaveToast('Não foi possível iniciar.','error');});return;}const complete=e.target.closest('[data-daily-complete]');if(complete){openRoutineExecution(complete.dataset.dailyComplete);return;}const editExec=e.target.closest('[data-daily-edit-exec]');if(editExec){openRoutineExecution(editExec.dataset.dailyEditExec);return;}const fail=e.target.closest('[data-daily-failure]');if(fail){dailyCreateFailureFromExecution(fail.dataset.dailyFailure);return;}const activity=e.target.closest('[data-daily-activity]');if(activity){dailyCreateActivityFromExecution(activity.dataset.dailyActivity);return;}const linked=e.target.closest('[data-kind][data-ref]');if(linked)dailyOpenLinkedItem(linked.dataset.kind,linked.dataset.ref);});
     document.querySelector('#closeRoutineExecution')?.addEventListener('click',closeRoutineExecution);
     document.querySelector('#cancelRoutineExecution')?.addEventListener('click',closeRoutineExecution);
     document.querySelector('#routineExecutionModal')?.addEventListener('click',e=>{if(e.target.id==='routineExecutionModal')closeRoutineExecution();});
     document.querySelector('#routineExecutionForm')?.addEventListener('submit',e=>{e.preventDefault();saveRoutineExecution(e.currentTarget).catch(err=>{console.error(err);showSaveToast('Não foi possível salvar a execução.','error');});});
+    if(document.querySelector('#dailyRoutineSchemaBuilder')&&!document.querySelector('#dailyRoutineSchemaBuilder').children.length)renderDailyRoutineSchemaBuilder([]);
     setInterval(()=>{if(activeView==='daily')renderDaily();},60000);
 
     document.querySelector('#newProduct')?.addEventListener('click', openProductModal);
@@ -6251,5 +6599,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.35'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.35'){localStorage.setItem('cora.sw.loaded','15.1.13.35');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.36'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.36'){localStorage.setItem('cora.sw.loaded','15.1.13.36');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
