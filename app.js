@@ -89,6 +89,7 @@
     let commandPaletteActiveIndex = 0;
     let selectedShiftHandover = null;
     let recurrenceRadarCache = [];
+    let recurrenceRadarSignature = '';
     let selectedRecurrenceKey = '';
     let dailyTourRestoreAdminState = null;
 
@@ -1824,6 +1825,149 @@
       const classification=r.classification || (r.occurrenceMode==='MAQUINA'?'MAQUINA':(r.category==='Processo'?'PROCESSO':'NAO_DEFINIDO'));
       return `<tr data-op-id="${esc(r.id)}" role="button" tabindex="0" title="Abrir falha"><td><span class="identifier">${esc(r.id)}</span><span class="secondary-text">${formatDate(r.createdAt)}</span></td><td><span class="identifier">${esc(failureScopeSummary(r))}</span><span class="secondary-text">${esc(r.component||r.peca_danificada||'Sem componente')}</span></td><td><span class="identifier">${esc(r.maquina||'—')}</span><span class="secondary-text">${esc(r.estacao||'Sem posto')} · ${esc(r.linha||'Sem linha')}</span></td><td><span class="identifier">${esc(failureClassificationLabel(classification))}</span><span class="secondary-text">${esc(r.processo||r.category||'Processo não informado')}</span></td><td><span class="wrap">${esc(r.issue||'')}</span><span class="secondary-text">${esc(r.detection_moment_label||r.detectionMoment||r.onde_detectado||'Momento/local não informado')}</span></td><td>${chip(operationalStatus(r))}</td></tr>`;
     }
+    const recurrenceStopWords=new Set(['a','o','as','os','um','uma','de','da','do','das','dos','e','em','no','na','nos','nas','para','por','com','sem','foi','esta','está','esse','essa','este','que','ao','aos','the','and','of','in','on','to','with','is','was','were','from','not']);
+    function recurrenceNorm(value){
+      return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+    }
+    function recurrenceTokens(value){
+      return new Set(recurrenceNorm(value).split(/\s+/).filter(token=>token.length>2&&!recurrenceStopWords.has(token)));
+    }
+    function recurrenceJaccard(a,b){
+      const A=recurrenceTokens(a),B=recurrenceTokens(b);if(!A.size||!B.size)return 0;
+      let same=0;A.forEach(x=>{if(B.has(x))same++;});
+      return same/(A.size+B.size-same);
+    }
+    function recurrenceRecord(record,kind){
+      const codes=[...new Set([...failureProductCodes(record),...(record.productionProductCodes||[])].filter(Boolean).map(code=>state.products.find(p=>sameProductCode(p.code,code))?.code||code))];
+      const products=state.products.filter(p=>codes.some(code=>sameProductCode(code,p.code)));
+      const date=new Date(record.createdAt||record.openedAt||record.updatedAt||0);
+      return {
+        kind,id:record.id||record.docId,raw:record,date,
+        issue:String(record.issue||record.title||record.description||'').trim(),
+        component:String(record.component||record.peca_danificada||'').trim(),
+        material:String(record.material||'').trim(),
+        line:String(record.linha||record.line||record.originScopeName||'').trim(),
+        station:String(record.estacao||record.station||'').trim(),
+        machine:String(record.maquina||record.machine||'').trim(),
+        process:String(record.processo||record.process||'').trim(),
+        codes,families:[...new Set([record.family,...products.map(productFamily)].filter(Boolean))],
+        bases:[...new Set([record.baseCode,...products.map(productBaseCode)].filter(Boolean))]
+      };
+    }
+    function recurrencePair(a,b){
+      const same=(x,y)=>Boolean(recurrenceNorm(x)&&recurrenceNorm(x)===recurrenceNorm(y));
+      const issueSim=recurrenceJaccard(a.issue,b.issue);
+      const productOverlap=a.codes.some(x=>b.codes.some(y=>sameProductCode(x,y)))||a.bases.some(x=>b.bases.some(y=>productCodeKey(x)===productCodeKey(y)))||a.families.some(x=>b.families.some(y=>recurrenceNorm(x)===recurrenceNorm(y)));
+      const sameComponent=same(a.component,b.component),sameMaterial=same(a.material,b.material),sameLine=same(a.line,b.line),sameStation=same(a.station,b.station),sameMachine=same(a.machine,b.machine),sameProcess=same(a.process,b.process);
+      let score=0;const reasons=[];
+      if(sameComponent){score+=4;reasons.push('mesmo componente');}
+      if(sameMaterial){score+=3;reasons.push('mesmo material');}
+      if(productOverlap){score+=3;reasons.push('mesmo CPH/família');}
+      if(sameLine){score+=2;reasons.push('mesma linha');}
+      if(sameMachine){score+=2;reasons.push('mesma máquina');}
+      if(sameStation){score+=1;reasons.push('mesmo posto');}
+      if(sameProcess){score+=1;reasons.push('mesmo processo');}
+      if(issueSim>=.62){score+=5;reasons.push('descrição muito semelhante');}
+      else if(issueSim>=.38){score+=3;reasons.push('descrição semelhante');}
+      else if(issueSim>=.22){score+=1;}
+      const semanticAnchor=sameMaterial||issueSim>=.38||(sameComponent&&(issueSim>=.18||sameLine||sameMachine||sameStation||sameProcess));
+      const contextAnchor=productOverlap||sameLine||sameMachine||sameStation||sameProcess||issueSim>=.62;
+      return semanticAnchor&&contextAnchor&&score>=6?{score,reasons,issueSim}:null;
+    }
+    function recurrenceDominant(records,getter){
+      const counts=new Map();records.forEach(r=>{const v=String(getter(r)||'').trim();if(v)counts.set(v,(counts.get(v)||0)+1);});
+      return [...counts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0]||['',0];
+    }
+    function recurrenceRadarClusters(){
+      const source=[
+        ...state.operationalFailures.map(x=>recurrenceRecord(x,'operational')),
+        ...dashboardProductReports().map(x=>recurrenceRecord(x,'report'))
+      ].filter(x=>!Number.isNaN(x.date.getTime()));
+      const cutoff=Date.now()-45*86400000;
+      const records=source.filter(x=>x.date.getTime()>=cutoff).sort((a,b)=>b.date-a.date).slice(0,320);
+      const signature=records.map(x=>`${x.kind}:${x.id}:${x.raw.updatedAt||x.raw.createdAt||''}`).join('|');
+      if(signature===recurrenceRadarSignature)return recurrenceRadarCache;
+      recurrenceRadarSignature=signature;
+      const parent=records.map((_,i)=>i),rank=records.map(()=>0),edges=[];
+      const find=i=>parent[i]===i?i:(parent[i]=find(parent[i]));
+      const union=(a,b)=>{a=find(a);b=find(b);if(a===b)return;if(rank[a]<rank[b])[a,b]=[b,a];parent[b]=a;if(rank[a]===rank[b])rank[a]++;};
+      for(let i=0;i<records.length;i++){
+        for(let j=i+1;j<records.length;j++){
+          const dayGap=Math.abs(records[i].date-records[j].date)/86400000;if(dayGap>30)continue;
+          const pair=recurrencePair(records[i],records[j]);if(!pair)continue;
+          union(i,j);edges.push({a:i,b:j,...pair});
+        }
+      }
+      const groups=new Map();records.forEach((record,index)=>{const root=find(index);if(!groups.has(root))groups.set(root,[]);groups.get(root).push({record,index});});
+      const nowMs=Date.now(),seven=7*86400000,fourteen=14*86400000;
+      const clusters=[...groups.values()].filter(g=>g.length>=2).map(group=>{
+        const groupIndexes=new Set(group.map(x=>x.index)),items=group.map(x=>x.record).sort((a,b)=>b.date-a.date);
+        const groupEdges=edges.filter(e=>groupIndexes.has(e.a)&&groupIndexes.has(e.b));
+        const reasons=[...new Set(groupEdges.flatMap(e=>e.reasons))];
+        const [component,componentCount]=recurrenceDominant(items,x=>x.component);
+        const [line,lineCount]=recurrenceDominant(items,x=>x.line);
+        const [machine,machineCount]=recurrenceDominant(items,x=>x.machine);
+        const allCodes=[...new Set(items.flatMap(x=>x.codes))],families=[...new Set(items.flatMap(x=>x.families))];
+        const last7=items.filter(x=>nowMs-x.date.getTime()<=seven).length;
+        const prev7=items.filter(x=>{const age=nowMs-x.date.getTime();return age>seven&&age<=fourteen;}).length;
+        const growing=last7>=2&&last7>prev7;
+        const title=component&&componentCount>=Math.ceil(items.length/2)?component:(items[0].issue||'Possível recorrência').slice(0,80);
+        return {key:'rec-'+items.map(x=>x.kind[0]+x.id).sort().join('-'),title,count:items.length,items,reasons,component,line:lineCount>=2?line:'',machine:machineCount>=2?machine:'',codes:allCodes,families,last7,prev7,growing,hot:growing||items.length>=4,lastAt:items[0].date.toISOString()};
+      }).sort((a,b)=>(Number(b.hot)-Number(a.hot))||b.count-a.count||new Date(b.lastAt)-new Date(a.lastAt));
+      recurrenceRadarCache=clusters;
+      return clusters;
+    }
+    function recurrenceClusterSub(cluster){
+      const parts=[];
+      if(cluster.codes.length)parts.push(cluster.codes.slice(0,4).map(productDisplayCode).join(', '));
+      else if(cluster.families.length)parts.push(cluster.families.slice(0,3).join(', '));
+      if(cluster.line)parts.push(cluster.line);
+      if(cluster.machine)parts.push(cluster.machine);
+      parts.push(cluster.growing?`${cluster.last7} nos últimos 7 dias · tendência crescente`:`última ${formatDate(cluster.lastAt)}`);
+      return parts.filter(Boolean).join(' · ');
+    }
+    function recurrenceRadarItemHtml(cluster){
+      return `<button type="button" class="recurrence-radar-item ${cluster.hot?'is-hot':''}" data-recurrence-key="${esc(cluster.key)}"><div><strong>${esc(cluster.title)}</strong><span>${esc(recurrenceClusterSub(cluster))}</span></div><span class="recurrence-radar-count">${cluster.count}</span></button>`;
+    }
+    function renderRecurrenceRadar(){
+      const summary=document.querySelector('#recurrenceRadarSummary'),list=document.querySelector('#recurrenceRadarList');if(!summary||!list)return;
+      const clusters=recurrenceRadarClusters(),active=clusters.length,total=clusters.reduce((sum,x)=>sum+x.count,0),growing=clusters.filter(x=>x.growing).length;
+      summary.innerHTML=`<div class="recurrence-radar-stat"><span>${esc(t('Padrões ativos'))}</span><strong>${active}</strong></div><div class="recurrence-radar-stat"><span>${esc(t('Ocorrências agrupadas'))}</span><strong>${total}</strong></div><div class="recurrence-radar-stat"><span>${esc(t('Em crescimento'))}</span><strong>${growing}</strong></div>`;
+      list.innerHTML=clusters.length?clusters.slice(0,8).map(recurrenceRadarItemHtml).join(''):`<div class="daily-soft-empty">${esc(t('Sem recorrências relevantes agora.'))}</div>`;
+    }
+    function dailyRelevantRecurrences(){
+      const shiftId=dailySelectedShiftId,uid=currentAuthUser?.uid||'';
+      const allocations=currentAccount?.role==='admin'?activeWorkAllocations().filter(a=>a.shiftId===shiftId):activeWorkAllocations().filter(a=>a.shiftId===shiftId&&a.userId===uid);
+      const scopeIds=[...new Set(allocations.flatMap(a=>a.scopeIds||[]))];
+      const lines=new Set(scopeIds.map(id=>recurrenceNorm(state.operationalScopes.find(s=>s.docId===id)?.name||'')).filter(Boolean));
+      const codes=new Set(scopeIds.flatMap(id=>dailyProductionCodes(id,shiftId)).map(productCodeKey).filter(Boolean));
+      return recurrenceRadarClusters().filter(cluster=>{
+        const lineMatch=cluster.items.some(item=>lines.has(recurrenceNorm(item.line)));
+        const productMatch=cluster.items.some(item=>item.codes.some(code=>codes.has(productCodeKey(code))));
+        return lineMatch||productMatch;
+      }).slice(0,4);
+    }
+    function renderDailyRecurrence(){
+      const host=document.querySelector('#dailyRecurrenceContent');if(!host)return;
+      const clusters=dailyRelevantRecurrences();
+      host.innerHTML=clusters.length?clusters.map(recurrenceRadarItemHtml).join(''):`<div class="daily-soft-empty">${esc(t('Sem recorrências relevantes agora.'))}</div>`;
+    }
+    function openRecurrenceRadar(key){
+      const cluster=recurrenceRadarClusters().find(x=>x.key===key);if(!cluster)return;
+      selectedRecurrenceKey=key;
+      document.querySelector('#recurrenceRadarTitle').textContent=cluster.title||t('Possível recorrência');
+      document.querySelector('#recurrenceRadarSubtitle').textContent=`${cluster.count} registros · ${recurrenceClusterSub(cluster)}`;
+      const detail=document.querySelector('#recurrenceRadarDetail');
+      const dims=[
+        ['CPH / família',cluster.codes.length?cluster.codes.map(productDisplayCode).join(', '):cluster.families.join(', ')||'—'],
+        ['Linha',cluster.line||[...new Set(cluster.items.map(x=>x.line).filter(Boolean))].join(', ')||'—'],
+        ['Componente',cluster.component||[...new Set(cluster.items.map(x=>x.component).filter(Boolean))].join(', ')||'—']
+      ];
+      detail.innerHTML=`<div class="recurrence-evidence-grid">${dims.map(([label,value])=>`<div class="recurrence-evidence-card"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div><div class="recurrence-reason"><strong>${esc(t('Por que foi agrupado'))}:</strong> ${esc(cluster.reasons.join(', ')||'combinação de contexto e descrição semelhante')}.</div><section><h3 style="font-size:12px;margin:0 0 8px">${esc(t('Registros relacionados'))}</h3><div class="recurrence-records">${cluster.items.map(item=>`<button type="button" class="recurrence-record" data-kind="${esc(item.kind)}" data-ref="${esc(item.id)}"><div><strong>${esc(item.id)} · ${esc(item.issue||item.component||'Registro')}</strong><span>${esc([item.kind==='report'?'Report':'Falha',item.component,item.line,item.codes.map(productDisplayCode).join(', '),formatDate(item.date)].filter(Boolean).join(' · '))}</span></div><span>›</span></button>`).join('')}</div></section>`;
+      document.querySelector('#recurrenceRadarModal')?.classList.remove('hidden');translatePage();
+    }
+    function closeRecurrenceRadar(){document.querySelector('#recurrenceRadarModal')?.classList.add('hidden');selectedRecurrenceKey='';}
+
     function renderOperations() {
       const search=document.querySelector('#opSearch')?.value.toLowerCase().trim()||'';
       const status=document.querySelector('#opStatus')?.value||'';
@@ -1839,6 +1983,7 @@
       document.querySelector('#opOpenCount').textContent=state.operationalFailures.filter(r=>operationalStatus(r)!=='concluido').length;
       document.querySelector('#opStationCount').textContent=new Set(state.operationalFailures.map(r=>r.estacao).filter(Boolean)).size;
       document.querySelector('#opWaitingCount').textContent=state.operationalFailures.filter(r=>String(r.classification||'NAO_DEFINIDO').toUpperCase()==='NAO_DEFINIDO').length;
+      renderRecurrenceRadar();
     }
 
     function activityRow(activity) {
@@ -3948,18 +4093,28 @@ ${m.text}`).join('\n\n');
 
     function dailyFailureContextItems(execution){
       const period=dailyPreviousPeriod(execution); if(!period)return {period:null,items:[]};
-      const normalize=value=>String(value||'').trim().toLocaleLowerCase('pt-BR');
+      const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+      const compact=value=>normalize(value).replace(/[^a-z0-9]/g,'');
+      const productionKeys=new Set((execution.productionProductCodes||[]).map(productCodeKey).filter(Boolean));
       const inPeriod=item=>{const d=new Date(item?.createdAt||0);return !Number.isNaN(d.getTime())&&d>=period.start&&d<period.end;};
-      const matchesScope=item=>{
-        if(execution.scopeType!=='line')return true;
-        const line=normalize(item?.linha||item?.line||'');
-        if(!line)return true;
-        const target=normalize(execution.scopeName);
-        return line===target || line.replace(/\s+/g,'')===target.replace(/\s+/g,'');
+      const relevance=item=>{
+        let score=0;
+        if(execution.scopeId&&item?.originScopeId===execution.scopeId)score+=5;
+        if(execution.scopeType==='line'){
+          const line=compact(item?.linha||item?.line||'');
+          const target=compact(execution.scopeName);
+          if(line&&target&&line===target)score+=4;
+        }
+        if(productionKeys.size){
+          const recordKeys=new Set([...failureProductCodes(item),...(item?.productionProductCodes||[])].map(productCodeKey).filter(Boolean));
+          if([...productionKeys].some(key=>recordKeys.has(key)))score+=4;
+        }
+        return score;
       };
-      const operational=state.operationalFailures.filter(x=>inPeriod(x)&&matchesScope(x)).map(x=>({kind:'operational',id:x.id,title:x.issue||x.id||'Falha',sub:[x.linha,x.estacao,x.classification||x.category,formatDate(x.createdAt)].filter(Boolean).join(' · '),createdAt:x.createdAt}));
-      const product=dashboardProductReports().filter(x=>inPeriod(x)&&matchesScope(x)).map(x=>({kind:'report',id:x.id,title:x.issue||x.id||'Report',sub:[failureScopeSummary(x),x.component,formatDate(x.createdAt)].filter(Boolean).join(' · '),createdAt:x.createdAt}));
-      const items=[...operational,...product].sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+      const hasContext=execution.scopeType==='line'||productionKeys.size||execution.scopeId;
+      const operational=state.operationalFailures.filter(inPeriod).map(x=>({raw:x,score:relevance(x)})).filter(x=>!hasContext||x.score>0).map(({raw:x,score})=>({kind:'operational',id:x.id,title:x.issue||x.id||'Falha',sub:[x.linha,x.estacao,failureScopeSummary(x),x.classification||x.category,score?`relevância ${score}`:'',formatDate(x.createdAt)].filter(Boolean).join(' · '),createdAt:x.createdAt,score}));
+      const product=dashboardProductReports().filter(inPeriod).map(x=>({raw:x,score:relevance(x)})).filter(x=>!hasContext||x.score>0).map(({raw:x,score})=>({kind:'report',id:x.id,title:x.issue||x.id||'Report',sub:[failureScopeSummary(x),x.component,x.linha,score?`relevância ${score}`:'',formatDate(x.createdAt)].filter(Boolean).join(' · '),createdAt:x.createdAt,score}));
+      const items=[...operational,...product].sort((a,b)=>(b.score||0)-(a.score||0)||new Date(b.createdAt||0)-new Date(a.createdAt||0));
       return {period,items};
     }
 
@@ -4628,6 +4783,7 @@ ${m.text}`).join('\n\n');
 
       renderDailyConnectedWork(allVisible);
       renderDailyHandover();
+      renderDailyRecurrence();
       renderDailyAdmin();
       if(activeView==='daily'&&!dailyTourAutoShown&&!localStorage.getItem(dailyTourStorageKey())&&!localStorage.getItem(dailyTourDisableKey())){
         dailyTourAutoShown=true;
@@ -5880,6 +6036,14 @@ ${m.text}`).join('\n\n');
     document.querySelector('#closeDataHealthBottom')?.addEventListener('click',closeDataHealth);
     document.querySelector('#dataHealthModal')?.addEventListener('click',e=>{if(e.target.id==='dataHealthModal')closeDataHealth();});
     document.querySelector('#dataHealthList')?.addEventListener('click',e=>{const item=e.target.closest('[data-health-index]');if(!item)return;closeDataHealth();window.__dataHealthActions?.[Number(item.dataset.healthIndex)]?.();});
+    const recurrenceClick=e=>{const item=e.target.closest('[data-recurrence-key]');if(item)openRecurrenceRadar(item.dataset.recurrenceKey);};
+    document.querySelector('#recurrenceRadarList')?.addEventListener('click',recurrenceClick);
+    document.querySelector('#dailyRecurrenceContent')?.addEventListener('click',recurrenceClick);
+    document.querySelector('#recurrenceRadarRefresh')?.addEventListener('click',()=>{recurrenceRadarSignature='';renderRecurrenceRadar();renderDailyRecurrence();});
+    document.querySelector('#closeRecurrenceRadar')?.addEventListener('click',closeRecurrenceRadar);
+    document.querySelector('#closeRecurrenceRadarBottom')?.addEventListener('click',closeRecurrenceRadar);
+    document.querySelector('#recurrenceRadarModal')?.addEventListener('click',e=>{if(e.target.id==='recurrenceRadarModal')closeRecurrenceRadar();});
+    document.querySelector('#recurrenceRadarDetail')?.addEventListener('click',e=>{const row=e.target.closest('[data-kind][data-ref]');if(!row)return;closeRecurrenceRadar();dailyOpenLinkedItem(row.dataset.kind,row.dataset.ref);});
 
     document.querySelectorAll('.main-nav > button, .main-nav .nav-group-toggle').forEach(button => button.addEventListener('click', () => {
       const page = button.dataset.page;
