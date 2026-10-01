@@ -1,4 +1,4 @@
-const CACHE='central-cora-v15v-15-1-13-38';
+const CACHE='central-cora-v15v-15-1-13-39';
 const BASE='/Central-de-Controle-/';
 const ASSETS=[BASE,BASE+'index.html',BASE+'app.js',BASE+'styles.css',BASE+'mobile.css',BASE+'manifest.webmanifest',BASE+'icons/cora-192.svg',BASE+'icons/cora-512.svg'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS).catch(()=>{})).then(()=>self.skipWaiting()));});
