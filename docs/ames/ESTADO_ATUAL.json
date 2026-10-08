@@ -1,18 +1,29 @@
 {
-  "updated_at": "2026-10-08T18:22:00-03:00",
-  "project": "Central de Trabalho / A-MES Offline",
-  "working_version": "0.5.22",
+  "updated_at": "2026-10-08T22:20:00-03:00",
+  "project": "Central de Trabalho V2 + A-MES",
+  "central_major_version": "2.0-preview",
+  "ames_working_version": "0.5.23",
   "validated_baseline": "0.5.20",
   "validated_baseline_sha256": "8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6",
-  "current_package": "AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip",
-  "current_package_sha256": "e5cf91879d057a28eca6de4ba2364c0bc056f32c6a46dd086e7ddb600c4abf9e",
-  "current_package_size_bytes": 456905,
+  "current_package": "AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip",
+  "current_package_sha256": "1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167",
+  "current_package_size_bytes": 707613,
   "github_release_index": "ames/releases/latest/README.md",
-  "github_release_version": "ames/releases/v0.5.22/README.md",
-  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip",
-  "drive_package_id": "15dJrhHPYDDDe7_C9wyj7vG4z1gaav6BU",
+  "github_release_version": "ames/releases/v0.5.23/README.md",
+  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip",
+  "drive_package_id": "1C_yuDdIUs3rDHAcmJD23_9Ey-UnVDrry",
+  "central_v2": {
+    "url": "https://central-cora-v2.vercel.app/",
+    "project_id": "prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI",
+    "deployment_id": "dpl_5vGxUBs99S51aUUf8p8eSwTzL1bg",
+    "deployment_state": "READY",
+    "strategy": "migration preview that keeps the original Central UI and injects the A-MES data layer; after validation the integration should become native in the canonical Central source",
+    "data_bus": "Firestore aiKnowledge documents kind=ames_shared_snapshot status=validado_sistema",
+    "local_agent": "http://127.0.0.1:8765",
+    "remote_behavior": "read sanitized last synchronized snapshots only; no remote MES command"
+  },
   "overall_green": false,
-  "factory_gate": "Validate V0.5.22 dashboards/drilldown/performance/bootstrap on the real A-MES; 3022 remains next stage",
+  "factory_gate": "Validate V0.5.23 + Central V2 integrated preview on the real factory notebook; V0.5.20 remains validated baseline",
   "lines": {
     "Linha 1": "TAN10101",
     "Linha 2": "TAN10102",
@@ -23,59 +34,54 @@
     "dual network + dedicated Chrome",
     "3028 direct collection engine",
     "multi-line independent snapshots",
-    "V0.5.18 one-line-in-focus UI",
     "V0.5.20 3074 navigation/query and persisted material/reuse data",
     "V0.5.20 2114 navigation/query and persisted PCBA history with manual Shift fallback when needed",
     "V0.16 correlation/report rules"
   ],
-  "factory_evidence_2026_10_08": {
-    "v0520_validated_by_user": true,
-    "3074_navigation_and_query": "confirmed with real returned rows and Central material/reuse table populated",
-    "2114_navigation_and_query": "confirmed with real AWIP2114 history rows and Central counters/history populated",
-    "2114_shift": "automatic selection failed once; manual 1st Shift fallback succeeded",
-    "top3_fpy": "preserved and displayed by line"
-  },
-  "v0522_features": [
-    "clickable reuse dashboards and exact drilldowns",
-    "PCBA 2nd/3plus use, prior failure, same failure and same family visibility",
-    "material 2nd/3plus use, prior failure, same failure and same family visibility",
-    "detached PCBA lists attached to reused materials",
-    "line-scoped reuse/recurrence rates and component-type matrix",
-    "persist-to-SQLite-before-visual-refresh rule",
-    "expanded team Excel with 11 sheets and RAW_3028 audit",
-    "XLSX structural integrity verification before delivery",
-    "V0.5.21 scope/progress/performance controls preserved",
-    "new workstation bootstrap and previous-version data migration",
-    "GitHub canonical release index with exact package SHA"
+  "v0522_inherited_features": [
+    "reuse dashboards and exact drilldowns",
+    "PCBA/material 2nd/3plus use visibility",
+    "same failure and same family correlation",
+    "line-scoped rates and component-type matrix",
+    "persist before grouped visual refresh",
+    "11-sheet Excel with RAW_3028 audit",
+    "scope/progress/performance controls",
+    "new workstation bootstrap"
   ],
-  "local_validation_v0522": {
-    "python": "OK",
-    "javascript": "OK",
-    "v016_tests": "51/51",
-    "ames_3028_live_transform": "OK",
-    "team_lines": "OK",
-    "agent_runtime": "OK",
-    "insights_drilldown_synthetic": "OK",
-    "team_excel_11_sheets_and_integrity": "OK",
-    "zip_integrity": "OK",
-    "3028_collectors_bit_identical_to_v0520": true
-  },
+  "v0523_changes": [
+    "allow Central V2 production aliases in local-agent CORS",
+    "prefer opening Central V2 after local agent startup",
+    "automatic local UI fallback if online Central is unavailable",
+    "preserve validated MES collectors and serial access",
+    "make Central V2 read local data in factory and Firebase-synced data remotely"
+  ],
+  "central_v2_first_cut": [
+    "A-MES integrated navigation inside the same Central experience",
+    "A-MES global operation/reuse view",
+    "Dashboard enrichment by line",
+    "product/CPH enrichment with MES occurrences",
+    "Central do Dia enrichment with line health",
+    "CORA enrichment through existing aiKnowledge contextual search",
+    "sanitized asynchronous factory-to-remote sharing"
+  ],
   "hard_rules": [
     "never merge operational KPIs across lines",
     "MES access remains serialized",
-    "persist each completed result before grouped UI refresh",
-    "preserve raw MES evidence in SQLite",
-    "do not mark V0.5.22 GREEN without factory evidence",
-    "login/Wi-Fi credentials are never stored or synchronized",
+    "local collection never depends on cloud",
+    "never synchronize A-MES password/cookies/session/CDP/Wi-Fi credentials",
+    "persist completed MES result before visual refresh",
+    "do not auto-confirm root cause from correlation",
+    "do not mark V0.5.23 or Central V2 GREEN without factory evidence",
     "3028 validated collector remains frozen"
   ],
   "pending_modules": [
-    "V0.5.22 factory validation with small controlled scope",
-    "2114 automatic Shift hardening validation",
+    "factory validation of Central V2 detecting agent 8765",
+    "factory-to-Firebase-to-remote synchronization validation",
+    "V0.5.22/V0.5.23 dashboard drilldown validation",
+    "2114 automatic Shift hardening",
     "individual SN factory validation",
-    "bridge real login/sync validation if remote sharing is used",
-    "3022 real adapter",
-    "end-to-end correlation with 3022 timeline"
+    "3022 real adapter and process timeline",
+    "native merge of validated V2 module into canonical Central root after preview validation"
   ],
-  "next_action": "Test V0.5.22 on one line with max 3 PCBAs in Balanced mode; click second-use/same-failure material and PCBA counters and verify exact records; export the 11-sheet Excel. Do not mark GREEN before the real test."
+  "next_action": "Open https://central-cora-v2.vercel.app/ on the factory notebook with V0.5.23 agent running. Validate login, A-MES integrated navigation, local detection, per-line data, Dashboard/product/Central do Dia/CORA enrichment, sync, then open the same URL away from the OPPO network and verify synchronized data. Do not mark GREEN before evidence."
 }
