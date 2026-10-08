@@ -25,3 +25,8 @@
 23. **Nunca sincronizar credenciais/sessão MES.** Podem ser compartilhados snapshots e dados derivados permitidos; senha, cookies, token de sessão ou acesso direto à rede OPPO ficam exclusivamente no coletor local.
 24. **Leitura remota ≠ comando remoto.** Usuários fora da rede OPPO podem consultar dados já sincronizados. Qualquer futuro comando remoto que provoque nova consulta A-MES deve ser uma camada separada, auditável e explicitamente controlada.
 25. **Checkpoint funcional não é GREEN automático.** Uma versão pode ser preservada como ponto seguro de retomada mesmo com um gate ainda parcial, desde que a documentação registre exatamente o que foi e o que não foi provado.
+26. **Resultado incremental é preferível a tela vazia até o fim.** PCBA/material/histórico que já terminou pode entrar no SQLite e aparecer na UI enquanto o restante do lote continua.
+27. **Refresh da UI não pode virar carga de backend.** Polling de progresso pode ser frequente, mas recarga de datasets pesados só ocorre quando um novo bloco de dados é persistido.
+28. **Perfis de desempenho não removem integridade.** `Rápido`, `Equilibrado` e `Seguro` podem reduzir/alongar waits, mas todos devem confirmar a SN esperada antes de aceitar o grid retornado.
+29. **3028 validado fica congelado durante otimização 3074/2114.** A V0.5.21 não altera o coletor 3028; qualquer regressão de 3028 deve ser investigada separadamente com medição e evidência.
+30. **Bridge da Central é somente de dados coletados.** O endpoint local de compartilhamento expõe resumo sanitizado do SQLite e nunca oferece uma API remota para dirigir o A-MES.
