@@ -1,173 +1,122 @@
-# HANDOFF MESTRE — CENTRAL A-MES
+# HANDOFF MESTRE — CENTRAL DE TRABALHO V2 + A-MES
 
 Atualizado em: 08/10/2026
-Versão de trabalho: **V0.5.22**
-Baseline validada em fábrica: **V0.5.20** (`SHA-256 8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6`)
 
-## Regra de continuidade
+## Estado seguro
 
-Antes de alterar o projeto, ler este arquivo, `ESTADO_ATUAL.json`, `DECISOES_ARQUITETURAIS.md` e `ames/releases/latest/README.md`.
+Baseline funcional validada em fábrica: **V0.5.20** (`8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6`).
 
-Modo obrigatório: **teste real → causa exata → correção → pacote completo → teste do usuário → GREEN somente com evidência**.
+Ela confirmou o núcleo real:
+- 3028 direto, multi-linha serial e snapshots independentes;
+- 3074 com vínculos, materiais, reuso e PCBAs desvinculadas;
+- 2114 com histórico real de PCBA;
+- Linha 1=`TAN10101`, Linha 2=`TAN10102`, Linha 3=`TAN10103` sempre isoladas operacionalmente.
 
-Nunca reescrever um motor já validado para resolver problema adjacente. Acesso MES permanece serial. Toda análise operacional exige filtro de linha.
+Regra de trabalho continua: **teste real → causa exata → correção → pacote completo → teste do usuário → GREEN somente com evidência**.
 
-## Ambiente preservado
+## Candidata local atual — V0.5.23
 
-- Ethernet = rede/internet normal.
-- Wi-Fi OPPO = `TAXXX_5G`.
-- Rota específica para `172.29.185.215`.
-- Chrome dedicado + CDP `127.0.0.1:9222`.
-- Agente local `127.0.0.1:8765`.
-- SQLite local e offline-first.
-- Login A-MES manual; senha/cookie/sessão não são persistidos.
-- Linhas: Linha 1=`TAN10101`, Linha 2=`TAN10102`, Linha 3=`TAN10103`.
-- FPY, Check FPY, Top 3, falhas, reuso, históricos e correlações permanecem separados por linha.
+Pacote: `AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`
+SHA-256: `1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167`
+Drive: `1C_yuDdIUs3rDHAcmJD23_9Ey-UnVDrry`
+Library: `/Central de trabalho/AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`
 
-## Estado validado — V0.5.20
+V0.5.23 herda V0.5.22 e adiciona a ponte necessária para a Central V2:
+- CORS do agente permite `https://central-cora-v2.vercel.app` e aliases controlados;
+- `00_INICIAR_AQUI.bat` continua preparando rede, rota, Chrome, Python e agente;
+- após o agente ficar pronto, prefere abrir a Central V2;
+- se a Central V2 online estiver indisponível, abre `127.0.0.1:8765` como contingência;
+- credenciais/sessão MES nunca são sincronizadas.
 
-### 3028 — GREEN
+Os coletores 3028 validados permanecem congelados.
 
-Coleta direta ExtJS/backend, multi-linha serial, snapshots independentes e UI de uma linha em foco estão validados. O coletor `ames_3028.py` e `ames_3028_live.py` da V0.5.22 foi verificado bit-a-bit contra a V0.5.20 e permanece igual.
+## Central de Trabalho V2 — candidata integrada
 
-### 3074 — VALIDADA FUNCIONALMENTE
+URL: `https://central-cora-v2.vercel.app/`
+Vercel project: `central-cora-v2` (`prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI`)
+Deployment: `dpl_5vGxUBs99S51aUUf8p8eSwTzL1bg` — READY.
 
-View real: `AWIP3074-Vw Auto Scan Sn` / `UAWIP.form.VwAutoScanSnView`.
+A V2 é uma etapa de migração segura: mantém a experiência da Central original e injeta a camada A-MES sem substituir a produção anterior durante o gate.
 
-Regras duras:
-- `Batch Count` não é quantidade de usos.
-- Uso é reconstruído por vínculos/associações distintos e Bind/Unbind Time.
-- Distinguir uso na falha, reusos antes da falha, usos conhecidos hoje e PCBAs desvinculadas.
-- Um Material SN deve permitir rastrear as PCBAs por onde passou.
+### Funcionamento
 
-A V0.5.20 retornou dados reais da 3074 e a Central exibiu materiais, usos conhecidos e PCBAs desvinculadas.
+Na fábrica:
+`Central V2 → agente local 127.0.0.1:8765 → SQLite/A-MES`.
 
-### 2114 — VALIDADA FUNCIONALMENTE
+Fora da rede OPPO:
+`Central V2 → Firebase → último snapshot sanitizado sincronizado`.
 
-View real no OPC: `AWIP2114-Tr Defect Lot By Hand` / `UAWIP.form.TrDefectLotByHandView`.
+A coleta A-MES continua local-first, serial e independente de cloud.
 
-- Shift 1 = `07:30-17:30`.
-- Shift 2 = `17:30-07:30`.
-- Preservar todas as linhas históricas.
-- Estado atual vem da ocorrência relevante mais recente; Y antigo não apaga N atual.
-- Consultar PCBA atual e também PCBAs desvinculadas descobertas na 3074 quando o cruzamento exigir.
+Nunca sincronizar:
+- senha A-MES;
+- cookies/token/sessão;
+- CDP;
+- senha Wi-Fi/TAXXX_5G;
+- capacidade de comandar o MES remotamente.
 
-A V0.5.20 retornou histórico real 2114 e a Central exibiu contagens/histórico. A seleção automática de Shift falhou uma vez e o fallback manual `1st Shift` funcionou; isso continua como hardening, não invalida a baseline.
+### Barramento de dados
 
-## V0.5.22 — candidata atual
+A primeira fase reaproveita a coleção Firestore `aiKnowledge`, já suportada pela Central/CORA.
 
-Pacote: `AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip`
-SHA-256: `e5cf91879d057a28eca6de4ba2364c0bc056f32c6a46dd086e7ddb600c4abf9e`
-Tamanho: `456905` bytes
-GitHub canônico: `ames/releases/latest/README.md`
-Library: `/Central de trabalho/AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip`
-Drive file ID: `15dJrhHPYDDDe7_C9wyj7vG4z1gaav6BU`
+Um documento por linha usa:
+- `kind=ames_shared_snapshot`;
+- `type=ames_snapshot`;
+- `status=validado_sistema`;
+- `line=TAN10101/TAN10102/TAN10103`;
+- `payload` sanitizado;
+- `text` compacto para busca contextual.
 
-### Integridade / refresh
+Assim o A-MES entra na CORA como evidência estruturada sem criar uma segunda memória paralela.
 
-A frase “evitar recarregar toda a interface a cada componente” significa somente reduzir refresh pesado do navegador. **Não significa descartar informação.** A regra V0.5.22 é:
+### Páginas alimentadas no primeiro corte
 
-`MES retorna bloco concluído → persistir no SQLite → atualizar checkpoint/progresso → liberar refresh visual agrupado`.
+- **Dashboard:** FPY/Check FPY/falhas por linha e contexto operacional.
+- **Produto/CPH:** ocorrências A-MES reais associadas ao modelo em foco.
+- **Central do Dia:** saúde da linha e histórico 2114 no contexto do turno.
+- **CORA:** snapshots A-MES entram na busca contextual existente.
+- **A-MES integrado:** visão global de operação, reuso e recorrência.
 
-`raw_json` e `snapshot_payloads` continuam preservando evidência bruta. A tela pode atualizar em blocos; a base não depende desse refresh.
+A V2 não transforma correlação em causa confirmada e não cria Report automaticamente só porque o MES encontrou recorrência.
 
-### Dashboards e drill-down
+## Recursos herdados da V0.5.22
 
-Nova página `Dashboards de reuso`, sempre com uma linha em foco. Todo contador relevante deve abrir os registros exatos que o formam.
+- dashboards de reuso com drill-down;
+- PCBA/material em 2º e 3º+ uso;
+- mesma falha e mesma família histórica;
+- lista de PCBAs desvinculadas por Material SN;
+- taxas por linha e matriz de tipo de componente;
+- escopo por linha/falha/quantidade;
+- perfis Equilibrado/Rápido/Seguro;
+- progresso real 3074/2114;
+- persistência incremental no SQLite antes do refresh visual;
+- Excel de 11 abas com `RAW_3028`.
 
-PCBA:
-- 2º uso;
-- 3º+ uso;
-- reutilizada com falha anterior;
-- mesma falha histórica da atual;
-- mesma família histórica;
-- 2º uso + mesma falha;
-- 2º uso + mesma família.
+Evitar refresh pesado da UI **não descarta dados**: resultado concluído é persistido no SQLite antes de liberar atualização visual.
 
-Material/componente:
-- 2º uso;
-- 3º+ uso;
-- reutilizado com falha antiga;
-- mesma falha;
-- mesma família;
-- lista exata de PCBAs desvinculadas;
-- lista exata de PCBAs desvinculadas com mesma falha e com mesma família.
+## 3022 — próxima grande camada
 
-Também existem taxas por linha e matriz por tipo de componente para mostrar concentração de reuso/recorrência.
+View: `AWIP3022-Vw View Lot History` / `UAWIP.form.VwViewLotHistoryView`.
 
-### Excel V0.5.22
+Regra: para cada falha, usar o último evento relevante anterior ou igual ao `Defect Time`, nunca simplesmente o registro mais recente absoluto.
 
-O Excel de equipe passa a ter 11 abas:
-
-1. `TOP3_FPY`
-2. `BASE_DADOS`
-3. `RAW_3028`
-4. `HIST_PCBA`
-5. `HIST_MATERIAL`
-6. `PROCESSO_3022`
-7. `DASH_REUSO`
-8. `PCBAS_REUSO`
-9. `MATERIAIS_REUSO`
-10. `CORRELACOES`
-11. `TIPOS_COMPONENTE`
-
-`BASE_DADOS` expõe mais campos já preservados da 3028. `RAW_3028` oferece trilha de auditoria. O XLSX é validado como ZIP/estrutura antes de ser devolvido ao usuário; falha de integridade bloqueia a entrega em vez de gerar planilha silenciosamente corrompida.
-
-### Performance e escopo
-
-V0.5.22 preserva os controles introduzidos na V0.5.21:
-- selecionar uma, duas ou três linhas;
-- todas as falhas ou Defect Codes escolhidos;
-- limite de ocorrências;
-- limite de PCBAs por linha;
-- modos Equilibrado/Rápido/Seguro;
-- progresso 3074/2114 com atual/total/%/item;
-- persistência incremental;
-- memo/cache 3074 e deduplicação;
-- waits reduzidos sem remover a confirmação da SN esperada.
-
-### Novo PC / instalação
-
-`00_INICIAR_AQUI.bat` é a entrada principal. No primeiro uso ele chama `01_INSTALAR_UMA_VEZ.bat`.
-
-- Python 3.12/dependências/Chrome: usa `vendor/` se existir; caso contrário usa fontes oficiais pela Ethernet/internet no primeiro setup.
-- Se `TAXXX_5G` já for um perfil salvo do Windows, tenta reconectar automaticamente; nunca guarda senha Wi-Fi.
-- A rota A-MES /32 é aplicada quando necessária com elevação UAC.
-- Chrome dedicado/CDP 9222 e agente 8765 sobem no fluxo normal.
-- `suporte/MIGRAR_DADOS_DE_VERSAO_ANTERIOR.bat` pode migrar `config.json`, SQLite e backups de instalação anterior.
-- Se o PC nunca conectou ao `TAXXX_5G`, o usuário precisa conectar uma vez manualmente para criar o perfil Windows.
-
-## GitHub como fonte de verdade
-
-O GitHub é a fonte canônica de versão, manifesto, hashes, decisões e instruções. O ZIP binário exato fica no Drive/Library e é identificado pelo SHA-256 publicado no GitHub. Vercel/bridge é integração opcional de compartilhamento; não substitui a versão canônica do pacote.
-
-## Compartilhamento remoto
-
-Arquitetura aprovada: notebook da fábrica → coleta local → SQLite → dados sanitizados já coletados → sincronização assíncrona → Central/Firebase → usuários autorizados fora da rede OPPO.
-
-Nunca sincronizar senha, cookie/sessão A-MES, CDP ou acesso direto à rede OPPO. Cloud nunca é pré-requisito para coleta local.
-
-## 3022 — próxima etapa
-
-View identificada: `AWIP3022-Vw View Lot History` / `UAWIP.form.VwViewLotHistoryView`, entrada `SN / IMEI / A-S`.
-
-Regra temporal: usar o último evento/processo válido anterior ou igual ao `Defect Time`, nunca simplesmente o evento mais recente absoluto.
+Quando a 3022 entrar, a V2 poderá cruzar:
+`linha → CPH → falha → PCBA → material/reuso → falha histórica → processo/posto/hora`.
 
 **3022 NÃO GREEN.**
 
-## Validação local V0.5.22
+## Gate atual
 
-- Python: OK.
-- JavaScript: OK.
-- V0.16: **51/51**.
-- `AMES_3028_LIVE_TRANSFORM_OK`.
-- `TEAM_LINES_OK`.
-- `AGENT_RUNTIME_OK`.
-- Insights/drill-down sintético: OK.
-- Excel: 11 abas + integridade ZIP/XLSX: OK.
-- ZIP final: íntegro.
-- Banco do pacote final: sem dados sintéticos de teste.
+V0.5.20 continua baseline GREEN do núcleo já provado.
 
-## Próximo gate
+**V0.5.23 + Central V2 NÃO são GREEN ainda.**
 
-Testar a V0.5.22 na fábrica com uma linha, máximo 3 PCBAs e modo Equilibrado. Conferir progresso, dados incrementais, clique em PCBA/material de segundo uso, mesma falha/mesma família e Excel. **Não marcar V0.5.22 GREEN antes dessa evidência real.**
+Teste seguinte:
+1. iniciar V0.5.23 no notebook da fábrica;
+2. abrir `https://central-cora-v2.vercel.app/`;
+3. confirmar login e `A-MES integrado`;
+4. confirmar detecção do agente local;
+5. validar dados separados das três linhas;
+6. conferir enriquecimento em Dashboard, produto/CPH, Central do Dia e CORA;
+7. sincronizar;
+8. abrir a mesma Central V2 fora da rede OPPO e confirmar leitura dos dados já sincronizados.
