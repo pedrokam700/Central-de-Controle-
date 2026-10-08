@@ -59,6 +59,13 @@ Regras preservadas:
 
 Evidência visual recebida confirma `AWIP3074-Vw Auto Scan Sn`, rota `UAWIP.form.VwAutoScanSnView`, consulta por Barcode/SN e grid com Barcode, Sn Type, Batch Id, Sn Seq, Batch Count, Mat Gear, Order Id, Line Id, Operation, Product Model, Product Id, Whether to use, Prod Time, SN Name, Material Code etc.
 
+### Evidência real V0.5.20 — 08/10
+
+- A navegação automática chegou à 3074.
+- A consulta está realmente rodando e o grid retornou linhas reais.
+- Portanto **abertura/navegação e leitura 3074 têm evidência positiva**.
+- O lote usado pelo usuário tinha muitas PCBAs e está demorando bastante; não usar esse tempo isoladamente como prova de regressão antes de medir quantidade de consultas e tempo por consulta.
+
 ## 2114
 
 Fonte principal de histórico de falhas da PCBA.
@@ -74,9 +81,17 @@ Fonte principal de histórico de falhas da PCBA.
 
 Evidência visual confirma OPC separado, `AWIP2114-Tr Defect Lot By Hand`, rota `UAWIP.form.TrDefectLotByHandView`, Shift 1 `07:30-17:30`, Shift 2 `17:30-07:30`, campo `SN/IMEI` e grid de `Lot Id`, `Defect Hist Seq`, `Defect Location`, `Defect Material ID`, `Defect Code`, `Defect Description`, `Defect Oper`, `Repair Status`, `TestTools Auto Defect Or Defect By Hand`, `Defect Type`.
 
+### Evidência real V0.5.20 — 08/10
+
+- A navegação automática abriu a 2114 no OPC.
+- A seleção automática de Shift falhou na primeira tentativa e a Central mostrou corretamente a mensagem pedindo seleção manual.
+- O usuário selecionou `1st Shift` manualmente.
+- Ainda **não existe evidência de coleta de histórico 2114 concluída nesta rodada**.
+- Importante: na implementação atual, o deep trace termina TODO o estágio 3074 antes de iniciar o estágio 2114. Portanto ver a 2114 vazia enquanto a 3074 ainda está processando muitas PCBAs é comportamento esperado; não significa por si só falha da 2114.
+
 ## 3022
 
-Evidência nova recebida do usuário:
+Evidência recebida do usuário:
 - view: `AWIP3022-Vw View Lot History`;
 - rota observada: `UAWIP.form.VwViewLotHistoryView`;
 - entrada: `SN / IMEI / A-S`;
@@ -87,47 +102,74 @@ Regra temporal continua: usar o último evento de processo válido **anterior ao
 
 Referências conhecidas: A5100, A5150, A5162, A5202, A5265.
 
-Status 3022: **adapter candidato; NÃO GREEN até teste real**.
+Status 3022: **próxima etapa; NÃO GREEN até teste real**.
 
-## V0.5.19
-
-Foi criada como primeiro candidato 3074 + 2114 sobre snapshots 3028, mas o usuário informou que **não chegou a testá-la**. Portanto não é GREEN e foi incorporada/supersedida pelo candidato V0.5.20.
-
-## V0.5.20 — candidato atual
-
-Mantém integralmente a baseline V0.5.18 e incorpora a integração 3074/2114 da V0.5.19 com estas melhorias:
-
-- ação `Coletar 3074 + 2114 agora` visível dentro da própria página Rastreabilidade;
-- preparação automática da `AWIP3074-Vw Auto Scan Sn` dentro da aba principal A-MES;
-- reutilização/abertura do OPC e preparação da `AWIP2114-Tr Defect Lot By Hand`;
-- login continua manual; senha nunca é armazenada;
-- tentativa segura de selecionar o Shift 2114 pelo turno atual; se o MES não aceitar, o erro pede seleção manual explícita;
-- Rastreabilidade ganhou resumo por Linha 1/2/3 e uma linha em foco, seguindo o padrão visual aprovado da 3028;
-- histórico 2114 mostra também Defect Location e Defect Material ID;
-- nova página `Consulta por SN`: bipar/digitar uma única PCBA ou Material SN e cruzar 3074 + 2114;
-- consulta individual tenta ainda enriquecer com 3022, sem bloquear 3074/2114 se o adapter 3022 falhar;
-- 3028, snapshots, SQLite, Top 3, FPY, fila serial e Excel V0.16 não foram redesenhados.
+## V0.5.20 — checkpoint funcional preservado
 
 Pacote atual: `AMES_Central_Offline_V0_5_20_CONSOLIDADA_FABRICA.zip`
 SHA-256: `8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6`
 Library: `/Central de trabalho/AMES_Central_Offline_V0_5_20_CONSOLIDADA_FABRICA.zip`
 
-Validação local do build:
-- Python: OK;
-- JavaScript: OK;
-- V0.16: 48/48 testes;
-- TEAM_LINES_OK;
-- AGENT_RUNTIME_OK;
-- UI HTTP: OK.
+Esta versão deve permanecer disponível como checkpoint funcional do dia. Ela **não é GREEN como pipeline 3074+2114 completo**, mas já tem evidência de que a navegação/consulta 3074 funciona e de que a navegação até 2114 funciona.
 
-## Gate atual
+## Requisitos aprovados para o próximo candidato
 
-1. Abrir V0.5.20 na fábrica.
-2. Em Rastreabilidade, clicar `Coletar 3074 + 2114 agora`.
-3. Confirmar abertura/preparação automática 3074 e OPC/2114.
-4. Validar uma PCBA atual e, se disponível, um material reutilizado com PCBA desvinculada conhecida.
-5. Abrir `Consulta por SN`, bipar uma PCBA e validar Resumo / 3074 / 2114.
-6. Repetir com Material SN reutilizado.
-7. Observar se 3022 retorna View Lot History; se não, registrar print/erro para o próximo hotfix.
+### Controle do escopo da coleta
 
-Status: **V0.5.20 EM VALIDAÇÃO DE FÁBRICA — NÃO GREEN.**
+A tela deve permitir escolher explicitamente o que será aprofundado, sem obrigar sempre um lote enorme:
+- uma, duas ou três linhas;
+- todas as falhas do snapshot;
+- uma falha específica;
+- múltiplos códigos/falhas selecionados;
+- quantidade limitada/amostra (ex.: 1, 5, 10 PCBAs) para validação rápida;
+- modo completo para fechamento/relatório.
+
+### Progresso real
+
+3074 e 2114 devem mostrar progresso separado, com **percentual + atual/total + item atual**, por exemplo:
+- `3074 · 18/72 PCBAs · 25%`;
+- `2114 · 4/31 histórias · 13%`.
+
+Não usar porcentagem decorativa fixa; o número deve vir do plano real/checkpoint.
+
+### Performance
+
+Antes de “acelerar” removendo segurança, medir:
+- tempo médio de consulta 3028 por linha;
+- tempo de consulta PCBA na 3074;
+- quantidade de componentes que geram novas consultas 3074;
+- tempo de consulta 2114 por PCBA;
+- quantas consultas foram reaproveitadas por checkpoint/memo.
+
+Priorizar cache/dedup/checkpoint e eliminação de esperas fixas desnecessárias. Continuar serial contra o MES até prova de que concorrência é segura.
+
+### Shift 2114
+
+Tornar a seleção automática de Shift robusta. Enquanto isso, seleção manual é fallback explícito e seguro.
+
+### Pacote de instalação para outros usuários
+
+A Central principal terá um acesso discreto/administrativo, idealmente em **Configurar posto → Instalação A-MES**, para baixar o pacote completo uma única vez. Não deve ocupar a navegação operacional diária.
+
+### Compartilhamento entre computadores/usuários
+
+Objetivo aprovado: um notebook dentro da fábrica continua sendo o coletor local do A-MES, enquanto usuários fora da rede OPPO podem ver **dados já coletados** pela Central.
+
+Regra técnica:
+- SQLite/local continua fonte operacional para coleta MES;
+- sincronização para a Central deve ser assíncrona e não bloquear a operação local;
+- usar fila/outbox persistente: sem internet/cloud, dados ficam aguardando e a coleta continua;
+- compartilhar snapshots, indicadores, falhas, rastreabilidade e dados derivados permitidos;
+- **nunca sincronizar senha, cookie/sessão A-MES ou acesso direto à rede OPPO**;
+- cloud não deve ser requisito para a automação funcionar;
+- comandos remotos que disparem nova consulta MES, se existirem no futuro, devem ser uma camada separada e explicitamente controlada.
+
+## Próxima ordem
+
+1. Deixar o deep trace V0.5.20 atual terminar sem interromper.
+2. Confirmar se, depois de 3074, ele realmente entra em 2114 e coleta histórico.
+3. Próximo candidato: filtros de escopo + progresso real + hardening de Shift + medições de performance.
+4. Depois integrar/validar 3022 real.
+5. Depois correlação final e sincronização controlada com a Central.
+
+**Status geral: V0.5.20 é checkpoint funcional preservado, mas 3074+2114 ainda NÃO estão GREEN como gate completo.**
