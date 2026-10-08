@@ -45,6 +45,10 @@ Não houve login na aplicação, leitura de dados industriais reais, teste de di
 | A21 | P2 | HANDOFF/ESTADO_ATUAL/V2_* markers/release README | Handoff atual sugere Vercel e markers citam outra branch; conflita com Issue #21. Preservar histórico, apontar continuidade para arquitetura canônica e auditoria, atualizar estado sem alterar baseline validada. |
 | A22 | P2 | árvore raiz + SOURCE_HASHES.txt v0.5.22 | Backups HTML grandes publicados junto do produto; não há build reproduzível do pacote 0.5.23 neste repo. Arquivar após identificar dependências; exigir origem revisável do agente e validação do ZIP/hash, migração e rollback antes de trocar pacote. |
 
+### Achado adicional após revisão do corte seguro
+
+**A23 — P1: fila offline compartilhada entre contas, sem idempotência.** Na baseline `app.js:2824-2827`, queueOfflineWrite não guarda UID proprietário, e syncOfflineQueue usa addDoc sob a conta atual. Uma gravação confirmada seguida de falha antes da remoção pode duplicar o documento; chamadas concorrentes também. O fallback conserva apenas os últimos 50 itens e o toast informa sucesso mesmo após interrupção. A limpeza de state em RAM não corrige IndexedDB/localStorage. Recomenda-se outbox por UID, IDs determinísticos, exclusão apenas após ack, trava de replay e migração que preserve pendências legadas sem atribuir autor por suposição. Não alterar essa fila sem teste de migração de dados existentes.
+
 ## Arquitetura recomendada
 
 ```mermaid

@@ -1,4 +1,5 @@
 
+    import { createAmesStore, clearSessionData } from './ames/data/store.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch
@@ -33,6 +34,7 @@
     const ADMIN_EMAIL = 'pedro.henrique@grupomultilaser.com.br';
 
     let state = {
+      ames: createAmesStore(),
       products: [],
       reports: [],
       operationalFailures: [],
@@ -52,6 +54,7 @@
     let currentAccount = null;
     let currentAuthUser = null;
     let unsubscribeData = [];
+    let dataSessionGeneration = 0;
     // Controle de concorrência da autenticação: criação/login e onAuthStateChanged
     // podem disparar juntos. Mantemos uma única inicialização por UID.
     let finishLoginPromise = null;
@@ -343,6 +346,7 @@
     }
 
     function clearDataListeners() {
+      dataSessionGeneration++;
       unsubscribeData.forEach(unsubscribe => { try { unsubscribe(); } catch {} });
       unsubscribeData = [];
     }
@@ -438,8 +442,14 @@
     function syncFirestore() {
       clearDataListeners();
       if (!currentAuthUser) return;
+      const sessionGeneration = dataSessionGeneration;
+      const sessionUid = currentAuthUser.uid;
+      const sessionIsCurrent = () => sessionGeneration === dataSessionGeneration && currentAuthUser?.uid === sessionUid;
+      const subscribeToSession = (reference, onData, onError) => onSnapshot(reference,
+        snapshot => { if (sessionIsCurrent()) return onData(snapshot); },
+        error => { if (sessionIsCurrent()) return onError(error); });
 
-      unsubscribeData.push(onSnapshot(collection(db, 'users'), async snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'users'), async snapshot => {
         users = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         const me = currentAuthUser ? users.find(u => u.docId === currentAuthUser.uid) : null;
         if (me && currentAccount) {
@@ -455,43 +465,49 @@
         renderAccount();
       }, error => console.error('Falha ao sincronizar usuários:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'products'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'products'), snapshot => {
         state.products = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         if (!activeProduct && state.products.length > 0) activeProduct = state.products[0].code;
         fillActivityProducts();
         render();
       }, error => console.error('Falha ao sincronizar produtos:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'reports'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'reports'), snapshot => {
         state.reports = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         render();
       }, error => console.error('Falha ao sincronizar reports:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'activities'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'activities'), snapshot => {
         state.activities = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         render();
       }, error => console.error('Falha ao sincronizar atividades:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'flows'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'flows'), snapshot => {
         state.flows = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         render();
       }, error => console.error('Falha ao sincronizar fluxos:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'operationalFailures'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'operationalFailures'), snapshot => {
         state.operationalFailures = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         render();
       }, error => console.error('Falha ao sincronizar ocorrências operacionais:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'failureAnalyses'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'failureAnalyses'), snapshot => {
         state.failureAnalyses = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         renderAIHistory();
       }, error => console.error('Falha ao sincronizar análises de falhas:', error)));
-      unsubscribeData.push(onSnapshot(collection(db, 'aiKnowledge'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'aiKnowledge'), snapshot => {
+        if (sessionGeneration !== dataSessionGeneration || !currentAuthUser) return;
         state.aiKnowledge = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
+        state.ames.replaceRemoteDocuments(state.aiKnowledge);
         aiUpdateAIState();
         renderAIMemoryPanel();
-      }, error => console.error('Falha ao sincronizar memória da IA:', error)));
-      unsubscribeData.push(onSnapshot(collection(db, 'aiConversations'), snapshot => {
+      }, error => {
+        if (sessionGeneration !== dataSessionGeneration) return;
+        state.ames.replaceRemoteDocuments([]);
+        console.error('Falha ao sincronizar memória da IA:', error);
+      }));
+      unsubscribeData.push(subscribeToSession(collection(db, 'aiConversations'), snapshot => {
         state.aiConversations = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         renderAIHistory();
       }, error => console.error('Falha ao sincronizar conversas da IA:', error)));
@@ -504,7 +520,7 @@
         ['routineExecutions','routineExecutions','execuções de rotina']
       ];
       dailyCollections.forEach(([collectionName,stateKey,label]) => {
-        unsubscribeData.push(onSnapshot(collection(db, collectionName), snapshot => {
+        unsubscribeData.push(subscribeToSession(collection(db, collectionName), snapshot => {
           state[stateKey] = snapshot.docs.map(item => ({ docId:item.id, ...item.data() }));
           dailyMaterializeSignature = '';
           render();
@@ -1511,11 +1527,7 @@
         currentAuthUser = null;
         currentAccount = null;
         users = [];
-        state.products = [];
-        state.reports = [];
-        state.operationalFailures = [];
-        state.activities = [];
-        state.flows = [];
+        clearSessionData(state);
         render();
         return;
       }
@@ -2829,7 +2841,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.40'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.40'){localStorage.setItem('cora.sw.loaded','15.1.13.40');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.41'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.41'){localStorage.setItem('cora.sw.loaded','15.1.13.41');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -7265,5 +7277,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.40'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.40'){localStorage.setItem('cora.sw.loaded','15.1.13.40');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.41'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.41'){localStorage.setItem('cora.sw.loaded','15.1.13.41');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}

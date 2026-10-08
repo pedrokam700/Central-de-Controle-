@@ -39,7 +39,10 @@ const requiredFiles = [
   'mobile.css',
   'manifest.webmanifest',
   'firestore.rules',
-  'firebase.json'
+  'firebase.json',
+  'ames/data/contract.mjs',
+  'ames/data/store.mjs',
+  'scripts/ames-data.test.mjs'
 ];
 
 for (const name of requiredFiles) {
@@ -64,6 +67,18 @@ const firebaseConfigFile = read('firebase.json');
 
 syntaxCheck('app.js');
 syntaxCheck('sw.js');
+syntaxCheck('ames/data/contract.mjs');
+syntaxCheck('ames/data/store.mjs');
+
+// Native data invariants are behavioral tests, not just source-string checks.
+{
+  const result = spawnSync(process.execPath, ['--test', '--test-isolation=none', 'scripts/ames-data.test.mjs'], {
+    cwd: root, encoding: 'utf8'
+  });
+  assertCheck(result.status === 0,
+    'A-MES: testes de contrato/store/sessão passaram',
+    'A-MES: falha nos testes\n' + (result.stdout || '') + (result.stderr || ''));
+}
 
 // 1) IDs duplicados no HTML ativo.
 {
@@ -231,6 +246,8 @@ assertCheck(
 for (const asset of [
   "BASE+'index.html'",
   "BASE+'app.js'",
+  "BASE+'ames/data/store.mjs'",
+  "BASE+'ames/data/contract.mjs'",
   "BASE+'styles.css'",
   "BASE+'mobile.css'",
   "BASE+'manifest.webmanifest'"
@@ -272,4 +289,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('\nResultado: GREEN');
+console.log('\nResultado: PASS (checks estáticos e contratos). V2/V0.5.23/3022 dependem de validação real em fábrica.');

@@ -91,6 +91,17 @@
     "issue": 21,
     "pr": 22,
     "branch": "v2/native-fusion",
-    "status": "code_audit_complete_factory_validation_pending"
+    "status": "code_audit_complete_factory_validation_pending",
+    "findings": 23
+  },
+  "native_fusion_checkpoint": {
+    "stage": "phase_1_partial_read_only_foundation",
+    "shell_build": "15.1.13.41",
+    "local_contract_tests": 18,
+    "local_quality_checks": 62,
+    "ci_status": "pending_exact_commit",
+    "factory_validated": false,
+    "local_transport_enabled": false,
+    "new_cloud_publication_enabled": false
   }
 }
