@@ -1,5 +1,11 @@
 # Handoff de execução ao Codex
 
+## Continuidade após o primeiro consumidor nativo
+
+O checkpoint Dashboard do shell `15.1.13.42` implementa somente a primeira view sobre `state.ames`; ver `V2_IMPLEMENTACAO_STATUS.md` para alcance e testes. Reconciliado a partir de `b76b8b40eceb15d51d7b9383d8c62944adb734d7`. O usuário determinou **parar aqui para revisão, sem avançar para Produto/CPH**. Próximo passo seguro: revisar o Dashboard e validar leitura autenticada com snapshots reais, sem promover V2/V0.5.23/3022 nem fazer merge na main. O SHA publicado e o CI ficam registrados no PR #22/Issue #21.
+
+O restante deste handoff descreve a missão ampla e não autoriza pular essa revisão.
+
 Auditoria entregue antes do código no commit `c352693`; relatório atual: `V2_AUDITORIA_ARQUITETURA.md` (23 achados). Ver `V2_IMPLEMENTACAO_STATUS.md` para o corte seguro já implementado e os limites. Estado de aceite: V2/V0.5.23/3022 NÃO GREEN.
 
 ## Missão solicitada pelo usuário

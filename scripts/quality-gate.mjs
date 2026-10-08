@@ -42,6 +42,12 @@ const requiredFiles = [
   'firebase.json',
   'ames/data/contract.mjs',
   'ames/data/store.mjs',
+  'ames/data/dashboard.mjs',
+  'ames/dashboard-view.mjs',
+  'ames/dashboard.css',
+  'scripts/ames-dashboard.test.mjs',
+  'scripts/ames-dashboard.browser.mjs',
+  'scripts/ames-fixtures.mjs',
   'scripts/ames-data.test.mjs'
 ];
 
@@ -69,14 +75,17 @@ syntaxCheck('app.js');
 syntaxCheck('sw.js');
 syntaxCheck('ames/data/contract.mjs');
 syntaxCheck('ames/data/store.mjs');
+syntaxCheck('ames/data/dashboard.mjs');
+syntaxCheck('ames/dashboard-view.mjs');
+syntaxCheck('scripts/ames-dashboard.browser.mjs');
 
 // Native data invariants are behavioral tests, not just source-string checks.
 {
-  const result = spawnSync(process.execPath, ['--test', '--test-isolation=none', 'scripts/ames-data.test.mjs'], {
+  const result = spawnSync(process.execPath, ['--test', '--test-isolation=none', 'scripts/ames-data.test.mjs', 'scripts/ames-dashboard.test.mjs'], {
     cwd: root, encoding: 'utf8'
   });
   assertCheck(result.status === 0,
-    'A-MES: testes de contrato/store/sessão passaram',
+    'A-MES: testes de contrato/store/sessão/Dashboard passaram',
     'A-MES: falha nos testes\n' + (result.stdout || '') + (result.stderr || ''));
 }
 
@@ -119,6 +128,7 @@ if (build) {
   const assetChecks = [
     ['manifest.webmanifest', new RegExp('manifest\\.webmanifest\\?v=' + escaped)],
     ['mobile.css', new RegExp('mobile\\.css\\?v=' + escaped)],
+    ['ames/dashboard.css', new RegExp('ames/dashboard\\.css\\?v=' + escaped)],
     ['app.js', new RegExp('app\\.js\\?v=' + escaped)]
   ];
 
@@ -248,6 +258,9 @@ for (const asset of [
   "BASE+'app.js'",
   "BASE+'ames/data/store.mjs'",
   "BASE+'ames/data/contract.mjs'",
+  "BASE+'ames/data/dashboard.mjs'",
+  "BASE+'ames/dashboard-view.mjs'",
+  "BASE+'ames/dashboard.css'",
   "BASE+'styles.css'",
   "BASE+'mobile.css'",
   "BASE+'manifest.webmanifest'"

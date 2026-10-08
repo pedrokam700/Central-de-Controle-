@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.41">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.42">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.41';
+  const BUILD='15.1.13.42';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2846,7 +2846,8 @@ body.dark .daily-side-panel{
 
   </style>
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.41" id="mobile-layout-styles">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.42" id="mobile-layout-styles">
+<link rel="stylesheet" href="./ames/dashboard.css?v=15.1.13.42">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -3143,8 +3144,10 @@ body.dark .daily-side-panel{
         </section>
         <!-- Dashboard Estratégico -->
         <section class="overview hidden" id="dashboardView">
+          <section id="dashboardMes" aria-label="Operação por linha"></section>
+          <div class="section-head"><div><h2>Ações e reports de produto</h2><p>Registros manuais da Central · todos os produtos e linhas · filtros MES não se aplicam</p></div></div>
           <div class="stats">
-            <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="month" aria-label="Ver falhas registradas no mês atual"><div class="stat-label">Total de Falhas (Mês Atual)</div><div class="stat-value" id="dashTotalMonth">0</div><div class="stat-note" id="dashTotalNote">Registradas no mês vigente · clique para detalhar</div></article>
+            <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="month" aria-label="Ver falhas registradas no mês atual"><div class="stat-label">Reports de Produto (Mês Atual)</div><div class="stat-value" id="dashTotalMonth">0</div><div class="stat-note" id="dashTotalNote">Registradas no mês vigente · clique para detalhar</div></article>
             <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="resolution" aria-label="Ver reports resolvidos"><div class="stat-label">Taxa de Resolução</div><div class="stat-value" id="dashResolutionRate">0%</div><div class="stat-note">Reports totalmente concluídos · clique para detalhar</div></article>
             <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="open" aria-label="Ver falhas abertas"><div class="stat-label">Falhas Críticas / Abertas</div><div class="stat-value" id="dashOpenCount">0</div><div class="stat-note">Sem report enviado · clique para detalhar</div></article>
             <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="waiting" aria-label="Ver falhas aguardando resposta"><div class="stat-label">Pendência de Resposta</div><div class="stat-value" id="dashAwaitingCount">0</div><div class="stat-note">Aguardando resposta do fornecedor · clique para detalhar</div></article>
@@ -3165,7 +3168,7 @@ body.dark .daily-side-panel{
 
           <div class="dashboard-grid">
             <section>
-              <div class="section-head"><div><h2>Top Componentes Ofensores (Mês Atual)</h2><p>Componentes com o maior número de falhas registradas este mês.</p></div></div>
+              <div class="section-head"><div><h2>Top Componentes Ofensores (Mês Atual)</h2><p>Componentes com o maior número de reports manuais neste mês.</p></div></div>
               <div class="panel">
                 <div id="dashTopComponents" class="home-list"></div>
                 <div class="empty hidden" id="dashTopEmpty">Nenhuma falha registrada neste mês.</div>
@@ -3671,7 +3674,7 @@ body.dark .daily-side-panel{
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.41"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.42"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */

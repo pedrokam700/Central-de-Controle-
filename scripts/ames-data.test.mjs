@@ -157,20 +157,23 @@ test('actual shell listeners ignore late data/errors after logout and session re
   const listeners = [];
   const store = createAmesStore();
   const state = { ames: store, products: [], aiKnowledge: [] };
+  let mesRenders = 0;
   const context = vm.createContext({
     state, db: {}, console, collection: (_, name) => name,
     onSnapshot: (name, data, error) => { listeners.push({ name, data, error }); return () => {}; },
-    aiUpdateAIState() {}, renderAIMemoryPanel() {}, render() {}, fillActivityProducts() {}
+    aiUpdateAIState() {}, renderAIMemoryPanel() {}, renderDashboardMes() { mesRenders++; }, render() {}, fillActivityProducts() {}
   });
   vm.runInContext('let unsubscribeData=[]; let dataSessionGeneration=0; let currentAuthUser={uid:"first"}; let activeProduct=null;\n' + clear + sync + '\nsyncFirestore();', context);
   const first = listeners.find(l => l.name === 'aiKnowledge');
   const snapshot = { docs: [{ id: 'ames', data: () => document(payload()) }] };
   first.data(snapshot);
   assert.equal(store.read(LINE_IDS[0]).source, 'remote');
+  assert.equal(mesRenders, 1);
   vm.runInContext('clearDataListeners(); currentAuthUser=null;', context);
   clearSessionData(state);
   first.data(snapshot);
   assert.equal(store.read(LINE_IDS[0]).source, 'none');
+  assert.equal(mesRenders, 1);
   listeners.find(l => l.name === 'products').data({ docs: [{ id: 'old', data: () => ({ code: 'OLD' }) }] });
   assert.deepEqual(state.products, []);
   vm.runInContext('currentAuthUser={uid:"second"}; syncFirestore();', context);
@@ -180,6 +183,10 @@ test('actual shell listeners ignore late data/errors after logout and session re
   assert.equal(store.read(LINE_IDS[0]).source, 'remote');
   first.data({ docs: [] });
   assert.equal(store.read(LINE_IDS[0]).source, 'remote');
+  assert.equal(mesRenders, 2);
+  second.error(new Error('current session permission error'));
+  assert.equal(store.read(LINE_IDS[0]).source, 'none');
+  assert.equal(mesRenders, 3);
 });
 
 test('time parser rejects ambiguous timezone, impossible dates, and invalid clock', () => {

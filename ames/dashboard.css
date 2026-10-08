@@ -1,0 +1,29 @@
+#dashboardMes { min-width: 0; margin-bottom: 24px; }
+#dashboardMes .mes-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+#dashboardMes label { display: grid; gap: 6px; font-size: 12px; }
+#dashboardMes select { width: 100%; min-width: 0; min-height: 44px; }
+#dashboardMes .mes-context { font-size: 12px; color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
+#dashboardMes .mes-coverage { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); font-size: 13px; line-height: 1.6; }
+#dashboardMes .mes-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+#dashboardMes .stat { min-width: 0; overflow-wrap: anywhere; }
+#dashboardMes .mes-records-toggle { display: grid; text-align: left; color: var(--text); cursor: pointer; font: inherit; }
+#dashboardMes button:disabled { cursor: default; opacity: .6; }
+#dashboardMes button:focus-visible, #dashboardMes select:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+#dashboardMes .mes-pareto { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+#dashboardMes h3 { flex-basis: 100%; margin: 8px 0; font-size: 14px; }
+#dashboardMes .button { min-height: 44px; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+#dashboardMes .mes-evidence { margin-top: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; font-size: 12px; overflow-wrap: anywhere; }
+#dashboardMes .mes-evidence[hidden] { display: none; }
+#dashboardMes .mes-record-list { margin: 16px 0; padding-left: 22px; }
+#dashboardMes li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+#dashboardMes dl { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 3fr); gap: 6px 12px; }
+#dashboardMes dt { color: var(--muted); }
+#dashboardMes dd { margin: 0; }
+#dashboardMes .mes-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+@media (max-width: 600px) {
+  #dashboardMes .mes-filters { grid-template-columns: minmax(0, 1fr); }
+  #dashboardMes .mes-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #dashboardMes .stat { padding: 12px; }
+  #dashboardMes .stat-value { font-size: 24px; }
+  #dashboardMes dl { grid-template-columns: minmax(0, 1fr); }
+}

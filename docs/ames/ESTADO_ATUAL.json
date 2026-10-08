@@ -83,7 +83,7 @@
     "3022 real adapter and process timeline",
     "phased native fusion and evidence drilldowns per V2_AUDITORIA_ARQUITETURA.md"
   ],
-  "next_action": "Implement phase 1 read-only native contract/store on v2/native-fusion, then the audit gates. Obtain real agent source/API and evidence contracts before enabling new cloud publication. No main merge or GREEN promotion.",
+  "next_action": "Review the native Dashboard checkpoint and run authenticated desktop/mobile smoke with real snapshots. Stop before Produto/CPH pending review. No main merge or GREEN promotion.",
   "architecture_audit": {
     "date": "2026-10-08",
     "baseline_sha": "8cbd5fee9558e5e60e312faea583a85435915dda",
@@ -105,5 +105,18 @@
     "new_cloud_publication_enabled": false,
     "tested_code_sha": "dbeb3a679af9e14e62afb3664d0e6f90916f0535",
     "ci_run": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37857100470"
+  },
+  "native_dashboard_checkpoint": {
+    "stage": "dashboard_read_only_review_required",
+    "base_sha": "b76b8b40eceb15d51d7b9383d8c62944adb734d7",
+    "shell_build": "15.1.13.42",
+    "local_contract_tests": 24,
+    "local_quality_checks": 75,
+    "browser_smoke": "passed_synthetic_edge_headless_360_390_768_1280_css_zoom_200",
+    "authenticated_test": false,
+    "factory_validated": false,
+    "local_transport_enabled": false,
+    "new_cloud_publication_enabled": false,
+    "ci_evidence": "See PR #22 and Issue #21 for exact checkpoint SHA and CI run"
   }
 }
