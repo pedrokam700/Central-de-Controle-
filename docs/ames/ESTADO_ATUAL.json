@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-08T17:25:00-03:00",
+  "updated_at": "2026-10-08T17:40:00-03:00",
   "project": "Central de Trabalho / A-MES Offline",
   "working_version": "0.5.21",
   "validated_baseline": "0.5.18",
@@ -8,6 +8,15 @@
   "current_package": "AMES_Central_Offline_V0_5_21_CONSOLIDADA_FABRICA.zip",
   "current_package_sha256": "c0e078a49e5e7ab1674dc30a7e30a2127bd29b2e07b5825113d41d7cfc2667fa",
   "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_21_CONSOLIDADA_FABRICA.zip",
+  "drive_package_id": "1YP5YkwLbmHLyE4H4x5BvLNata3yRao5M",
+  "bridge": {
+    "project": "central-ames-bridge",
+    "production_alias": "https://central-ames-bridge.vercel.app",
+    "deployment_id": "dpl_DPCm1m9Dqx7uPu33Rk9AADHJJJ35",
+    "deployment_state": "READY",
+    "end_to_end_sync_validated": false,
+    "note": "Bridge deployment exists and points to authenticated Firebase sharing, but real login + factory-notebook synchronization still requires user validation."
+  },
   "overall_green": false,
   "factory_gate": "V0.5.21 scoped/progressive/optimized 3074+2114 validation; 3022 remains next-stage candidate",
   "lines": {
@@ -53,9 +62,10 @@
     "V0.5.21 factory validation with small controlled scope",
     "2114 Shift hardening",
     "individual SN factory validation",
+    "bridge real login/sync validation",
     "3022 real adapter",
     "correlation engine",
-    "main Central UI integration for one-time installer and synchronized A-MES summaries"
+    "merge installer/shared A-MES entry into main Central UI after bridge validation"
   ],
-  "next_action": "Factory-test V0.5.21 with one line and max 3 PCBAs using Balanced mode. Validate progress, incremental data and speed. Do not mark GREEN before evidence."
+  "next_action": "Factory-test V0.5.21 with one line and max 3 PCBAs using Balanced mode. Validate progress, incremental data and speed; then validate bridge sync. Do not mark GREEN before evidence."
 }
