@@ -6,10 +6,14 @@ Para continuar o módulo A-MES sem perder contexto, leia primeiro:
 - `docs/ames/ESTADO_ATUAL.json`
 - `docs/ames/DECISOES_ARQUITETURAIS.md`
 
-Pacote atual: `AMES_Central_Offline_V0_5_19_CONSOLIDADA_FABRICA.zip`
+Baseline validada em fábrica: **V0.5.18** (`aad6cdca35fe0c493e2febfca78b02c0abd5adcd335647d7b97eedc79da85e75`).
 
-SHA-256: `7018cf0d476d031709a2a2a6d1ec0f1a81a7646d9c4c333764d3625373e1f35c`
+Pacote candidato atual: `AMES_Central_Offline_V0_5_20_CONSOLIDADA_FABRICA.zip`
 
-Status: **V0.5.18 foi validada pelo usuário; V0.5.19 está em validação de fábrica — NÃO GREEN.**
+SHA-256: `8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6`
 
-Gate atual: validar a integração automática dos snapshots 3028 com o motor V0.16 de 3074 + 2114, preservando isolamento por linha, checkpoints e histórico. 3022 permanece pendente.
+Library: `/Central de trabalho/AMES_Central_Offline_V0_5_20_CONSOLIDADA_FABRICA.zip`
+
+Status: **V0.5.20 em validação de fábrica — NÃO GREEN.** A V0.5.19 não chegou a ser testada e foi incorporada/supersedida por este candidato.
+
+Gate atual: validar navegação/coleta 3074 + OPC/2114 sobre os snapshots 3028 preservados e a nova `Consulta por SN`. A view real `AWIP3022-Vw View Lot History` foi identificada e entrou como enriquecimento candidato, mas 3022 também só vira GREEN após evidência real.
