@@ -1,14 +1,15 @@
 {
-  "updated_at": "2026-10-08T15:45:00-03:00",
+  "updated_at": "2026-10-08T16:20:00-03:00",
   "project": "Central de Trabalho / A-MES Offline",
-  "working_version": "0.5.19",
-  "base_version": "0.5.18",
-  "base_package_sha256": "aad6cdca35fe0c493e2febfca78b02c0abd5adcd335647d7b97eedc79da85e75",
-  "current_package": "AMES_Central_Offline_V0_5_19_CONSOLIDADA_FABRICA.zip",
-  "current_package_sha256": "7018cf0d476d031709a2a2a6d1ec0f1a81a7646d9c4c333764d3625373e1f35c",
-  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_19_CONSOLIDADA_FABRICA.zip",
+  "working_version": "0.5.20",
+  "validated_baseline": "0.5.18",
+  "validated_baseline_sha256": "aad6cdca35fe0c493e2febfca78b02c0abd5adcd335647d7b97eedc79da85e75",
+  "supersedes_unvalidated_candidate": "0.5.19",
+  "current_package": "AMES_Central_Offline_V0_5_20_CONSOLIDADA_FABRICA.zip",
+  "current_package_sha256": "8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6",
+  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_20_CONSOLIDADA_FABRICA.zip",
   "overall_green": false,
-  "factory_gate": "V0.5.19 automatic 3074 + 2114 enrichment over validated 3028 multi-line snapshots",
+  "factory_gate": "V0.5.20 automatic 3074 + 2114 navigation/collection plus individual SN lookup; 3022 adapter candidate",
   "lines": {
     "Linha 1": "TAN10101",
     "Linha 2": "TAN10102",
@@ -16,25 +17,25 @@
   },
   "hard_rules": [
     "never merge operational KPIs across lines",
-    "MES access must remain serialized",
-    "do not mark GREEN without factory evidence when the gate depends on real A-MES",
-    "do not store A-MES login credentials",
-    "preserve validated V0.5.18 multi-line/UI behavior while integrating 3074/2114"
+    "MES access serialized",
+    "do not mark GREEN without factory evidence",
+    "login credentials not stored",
+    "preserve validated 3028 multi-line engine and one-line-in-focus UI"
   ],
   "green_modules": [
-    "local agent and SQLite",
-    "dual network and dedicated Chrome previously validated in factory",
+    "local agent/SQLite",
+    "dual network + dedicated Chrome previously validated",
     "3028 direct collection engine",
-    "independent multi-line snapshot engine",
+    "multi-line independent snapshots engine",
     "V0.5.18 selector / one-line-in-focus UI",
-    "V0.16 Excel report standard"
+    "V0.16 report standard"
   ],
   "pending_modules": [
-    "V0.5.19 factory validation of automatic 3074 over live 3028 snapshots",
-    "V0.5.19 factory validation of 2114 current + historical PCBAs",
-    "automatic opening/reuse of 3074 and OPC/2114 when those screens are not already available",
-    "3022 real adapter",
-    "end-to-end correlation engine"
+    "V0.5.20 factory validation of automatic AWIP3074 preparation and collection",
+    "V0.5.20 factory validation of OPC/AWIP2114 preparation, Shift and history collection",
+    "V0.5.20 individual SN lookup in factory",
+    "3022 AWIP3022-Vw View Lot History adapter real validation",
+    "correlation engine end-to-end"
   ],
-  "next_action": "User validates V0.5.19 Rastrear 3074 + 2114 on the factory A-MES and sends the real result/screenshots/log if any prerequisite screen or shift is missing."
+  "next_action": "Test V0.5.20 in factory: Rastreabilidade > Coletar 3074 + 2114 agora, then Consulta por SN with one PCBA and one reused Material SN. Do not mark GREEN until evidence is returned."
 }
