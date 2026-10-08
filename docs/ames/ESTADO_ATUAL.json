@@ -1,0 +1,39 @@
+{
+  "updated_at": "2026-10-08T14:00:00-03:00",
+  "project": "Central de Trabalho / A-MES Offline",
+  "working_version": "0.5.18",
+  "base_version": "0.5.17",
+  "base_package_sha256": "7105b70eb081ff9d468d3b8e5d866932d1891a6b664211171a292d8b4ff83ab8",
+  "current_package": "AMES_Central_Offline_V0_5_18_CONSOLIDADA_FABRICA.zip",
+  "current_package_sha256": "aad6cdca35fe0c493e2febfca78b02c0abd5adcd335647d7b97eedc79da85e75",
+  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_18_CONSOLIDADA_FABRICA.zip",
+  "overall_green": false,
+  "factory_gate": "V0.5.18 one-line-in-focus UI + regression of serial multi-line collection",
+  "lines": {
+    "Linha 1": "TAN10101",
+    "Linha 2": "TAN10102",
+    "Linha 3": "TAN10103"
+  },
+  "hard_rules": [
+    "never merge operational KPIs across lines",
+    "MES access must remain serialized",
+    "do not mark GREEN without factory evidence when the gate depends on real A-MES",
+    "do not store A-MES login credentials",
+    "do not redesign the V0.5.17 multi-line engine while validating V0.5.18 UI"
+  ],
+  "green_modules": [
+    "local agent and SQLite",
+    "dual network and dedicated Chrome previously validated in factory",
+    "3028 direct collection engine",
+    "independent multi-line snapshot engine",
+    "V0.16 Excel report standard"
+  ],
+  "pending_modules": [
+    "V0.5.18 factory UI validation",
+    "3074 automatic post-3028 collection",
+    "2114 automatic OPC/session flow",
+    "3022 real adapter",
+    "end-to-end correlation engine"
+  ],
+  "next_action": "User validates V0.5.18 selector/focus UI and confirms individual/all-lines collection stays isolated."
+}
