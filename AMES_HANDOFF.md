@@ -1,26 +1,29 @@
-# Central A-MES — ponto de retomada
+# Central V2 + A-MES — ponto de retomada
 
-Para continuar o módulo A-MES sem perder contexto, leia primeiro:
-
-- `docs/ames/HANDOFF_MESTRE.md`
+Leia primeiro:
 - `docs/ames/ESTADO_ATUAL.json`
+- `docs/ames/HANDOFF_MESTRE.md`
 - `docs/ames/DECISOES_ARQUITETURAIS.md`
+- `docs/ames/V2_INTEGRACAO_PLANO.md`
 - `ames/releases/latest/README.md`
 
-Baseline funcional validada em fábrica: **V0.5.20** (`8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6`).
+Baseline funcional validada em fábrica: **V0.5.20** (`8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6`). Ela confirmou o núcleo 3028 + 3074 + 2114.
 
-A validação real de 08/10/2026 confirmou 3028, 3074 e 2114: vínculos/reuso 3074 retornando e persistindo, histórico real 2114 retornando e alimentando a Central, e KPIs 3028 preservados por linha. O fallback manual de Shift 2114 funcionou quando a seleção automática falhou uma vez.
+Candidata local atual: **V0.5.23**
+- ZIP: `AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`
+- SHA-256: `1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167`
+- Drive: `1C_yuDdIUs3rDHAcmJD23_9Ey-UnVDrry`
+- Library: `/Central de trabalho/AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`
 
-Pacote candidato atual: **V0.5.22**
+Central V2 candidata:
+- URL: `https://central-cora-v2.vercel.app/`
+- Vercel project: `central-cora-v2`
+- deployment: `dpl_5vGxUBs99S51aUUf8p8eSwTzL1bg` — READY
 
-- Arquivo: `AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip`
-- SHA-256: `e5cf91879d057a28eca6de4ba2364c0bc056f32c6a46dd086e7ddb600c4abf9e`
-- GitHub canônico: `ames/releases/latest/README.md`
-- Library: `/Central de trabalho/AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip`
-- Drive file ID: `15dJrhHPYDDDe7_C9wyj7vG4z1gaav6BU`
+A V2 mantém a experiência da Central original e injeta a camada A-MES. Na fábrica usa o agente local 8765; fora da rede OPPO usa somente snapshots sanitizados sincronizados no Firebase. Esses snapshots entram em `aiKnowledge` com `kind=ames_shared_snapshot` e `status=validado_sistema`, portanto ficam disponíveis à busca contextual já existente da CORA.
 
-A V0.5.22 adiciona dashboards de reuso auditáveis, drill-down exato dos contadores, mesma falha/mesma família, PCBAs antigas por material reutilizado, taxas por linha, Excel de 11 abas com RAW_3028 e teste estrutural, refresh visual agrupado somente depois da persistência em SQLite, controles de escopo/performance/progresso e bootstrap/migração para novo posto.
+Primeiro corte da integração alimenta: Dashboard, páginas de produto/CPH, Central do Dia, CORA e uma área global A-MES com operação/reuso/recorrência. Linhas permanecem isoladas.
 
-O coletor 3028 permanece bit-a-bit igual ao da V0.5.20 validada.
+Nunca sincronizar senha, cookies, sessão A-MES, CDP ou credenciais Wi-Fi. Cloud nunca é pré-requisito da coleta local. Não existe comando remoto do MES nesta etapa.
 
-**V0.5.22 NÃO GREEN até teste de fábrica.** 3022 continua a próxima etapa e também não está GREEN.
+**V0.5.23 e Central V2 NÃO estão GREEN até teste real.** Próximo grande módulo depois da integração: 3022/timeline de processo.
