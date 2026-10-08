@@ -1,0 +1,21 @@
+{
+  "version": "0.5.23",
+  "status": "v2_integration_candidate_not_green",
+  "validated_baseline": "0.5.20",
+  "inherits": "0.5.22",
+  "package": "AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip",
+  "sha256": "1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167",
+  "size_bytes": 707613,
+  "drive_file_id": "1C_yuDdIUs3rDHAcmJD23_9Ey-UnVDrry",
+  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip",
+  "central_v2_url": "https://central-cora-v2.vercel.app/",
+  "central_v2_deployment": "dpl_5vGxUBs99S51aUUf8p8eSwTzL1bg",
+  "hard_rules": [
+    "never_mix_lines_for_operational_kpi",
+    "mes_access_serial",
+    "never_sync_ames_credentials_or_session",
+    "cloud_failure_never_blocks_local_collection",
+    "3028_validated_collector_frozen",
+    "no_green_without_factory_test"
+  ]
+}
