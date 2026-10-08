@@ -1,23 +1,18 @@
 {
-  "updated_at": "2026-10-08T17:55:00-03:00",
+  "updated_at": "2026-10-08T18:22:00-03:00",
   "project": "Central de Trabalho / A-MES Offline",
-  "working_version": "0.5.21",
+  "working_version": "0.5.22",
   "validated_baseline": "0.5.20",
   "validated_baseline_sha256": "8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6",
-  "current_package": "AMES_Central_Offline_V0_5_21_CONSOLIDADA_FABRICA.zip",
-  "current_package_sha256": "c0e078a49e5e7ab1674dc30a7e30a2127bd29b2e07b5825113d41d7cfc2667fa",
-  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_21_CONSOLIDADA_FABRICA.zip",
-  "drive_package_id": "1YP5YkwLbmHLyE4H4x5BvLNata3yRao5M",
-  "bridge": {
-    "project": "central-ames-bridge",
-    "production_alias": "https://central-ames-bridge.vercel.app",
-    "deployment_id": "dpl_DPCm1m9Dqx7uPu33Rk9AADHJJJ35",
-    "deployment_state": "READY",
-    "end_to_end_sync_validated": false,
-    "note": "Bridge deployment exists with authenticated Firebase sharing and the one-time installer hidden in a collapsed section; real factory-to-remote synchronization still requires user validation."
-  },
+  "current_package": "AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip",
+  "current_package_sha256": "e5cf91879d057a28eca6de4ba2364c0bc056f32c6a46dd086e7ddb600c4abf9e",
+  "current_package_size_bytes": 456905,
+  "github_release_index": "ames/releases/latest/README.md",
+  "github_release_version": "ames/releases/v0.5.22/README.md",
+  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip",
+  "drive_package_id": "15dJrhHPYDDDe7_C9wyj7vG4z1gaav6BU",
   "overall_green": false,
-  "factory_gate": "V0.5.21 scoped/progressive/optimized 3074+2114 validation; V0.5.20 core 3028+3074+2114 is factory-validated; 3022 remains next-stage candidate",
+  "factory_gate": "Validate V0.5.22 dashboards/drilldown/performance/bootstrap on the real A-MES; 3022 remains next stage",
   "lines": {
     "Linha 1": "TAN10101",
     "Linha 2": "TAN10102",
@@ -31,46 +26,56 @@
     "V0.5.18 one-line-in-focus UI",
     "V0.5.20 3074 navigation/query and persisted material/reuse data",
     "V0.5.20 2114 navigation/query and persisted PCBA history with manual Shift fallback when needed",
-    "V0.16 report standard"
+    "V0.16 correlation/report rules"
   ],
   "factory_evidence_2026_10_08": {
     "v0520_validated_by_user": true,
     "3074_navigation_and_query": "confirmed with real returned rows and Central material/reuse table populated",
-    "2114_navigation_and_query": "confirmed with real AWIP2114 history rows and Central 2114 counters/history populated",
+    "2114_navigation_and_query": "confirmed with real AWIP2114 history rows and Central counters/history populated",
     "2114_shift": "automatic selection failed once; manual 1st Shift fallback succeeded",
-    "top3_fpy": "preserved and displayed by line",
-    "important_note": "V0.5.20 is accepted as the validated functional baseline for the current 3028+3074+2114 core. V0.5.21 adds scope/progress/performance/sharing changes and remains the current candidate until tested."
+    "top3_fpy": "preserved and displayed by line"
   },
-  "v0521_features": [
-    "line scope: one, two or three lines",
-    "all failures or selected Defect Codes",
-    "maximum occurrences",
-    "maximum PCBAs per line",
-    "balanced/fast/safe performance profiles",
-    "real 3074 and 2114 progress with current/total/percent/item",
-    "incremental SQLite/UI refresh while collection is running",
-    "shared 3074 query memo across lines",
-    "reduced unnecessary waits while preserving SN confirmation",
-    "sanitized share export endpoint",
-    "authenticated Firebase bridge for remote viewing",
-    "collapsed one-time installer area on the bridge"
+  "v0522_features": [
+    "clickable reuse dashboards and exact drilldowns",
+    "PCBA 2nd/3plus use, prior failure, same failure and same family visibility",
+    "material 2nd/3plus use, prior failure, same failure and same family visibility",
+    "detached PCBA lists attached to reused materials",
+    "line-scoped reuse/recurrence rates and component-type matrix",
+    "persist-to-SQLite-before-visual-refresh rule",
+    "expanded team Excel with 11 sheets and RAW_3028 audit",
+    "XLSX structural integrity verification before delivery",
+    "V0.5.21 scope/progress/performance controls preserved",
+    "new workstation bootstrap and previous-version data migration",
+    "GitHub canonical release index with exact package SHA"
   ],
+  "local_validation_v0522": {
+    "python": "OK",
+    "javascript": "OK",
+    "v016_tests": "51/51",
+    "ames_3028_live_transform": "OK",
+    "team_lines": "OK",
+    "agent_runtime": "OK",
+    "insights_drilldown_synthetic": "OK",
+    "team_excel_11_sheets_and_integrity": "OK",
+    "zip_integrity": "OK",
+    "3028_collectors_bit_identical_to_v0520": true
+  },
   "hard_rules": [
     "never merge operational KPIs across lines",
     "MES access remains serialized",
-    "do not mark a new candidate GREEN without factory evidence",
-    "login credentials are never stored or synchronized",
-    "cloud failure must never block local MES collection",
-    "3028 validated collector is preserved"
+    "persist each completed result before grouped UI refresh",
+    "preserve raw MES evidence in SQLite",
+    "do not mark V0.5.22 GREEN without factory evidence",
+    "login/Wi-Fi credentials are never stored or synchronized",
+    "3028 validated collector remains frozen"
   ],
   "pending_modules": [
-    "V0.5.21 factory validation with small controlled scope",
+    "V0.5.22 factory validation with small controlled scope",
     "2114 automatic Shift hardening validation",
     "individual SN factory validation",
-    "bridge real login/sync validation",
+    "bridge real login/sync validation if remote sharing is used",
     "3022 real adapter",
-    "correlation engine",
-    "optional merge of the bridge entry into the main Central UI after validation"
+    "end-to-end correlation with 3022 timeline"
   ],
-  "next_action": "User will request the next set of changes. Preserve V0.5.20 as validated baseline and V0.5.21 as current unvalidated candidate; do not regress the validated core."
+  "next_action": "Test V0.5.22 on one line with max 3 PCBAs in Balanced mode; click second-use/same-failure material and PCBA counters and verify exact records; export the 11-sheet Excel. Do not mark GREEN before the real test."
 }
