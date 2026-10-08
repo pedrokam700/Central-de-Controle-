@@ -1,0 +1,41 @@
+{
+  "version": "0.5.22",
+  "status": "factory_candidate_not_green",
+  "validated_baseline": "0.5.20",
+  "validated_baseline_sha256": "8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6",
+  "package": "AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip",
+  "package_sha256": "e5cf91879d057a28eca6de4ba2364c0bc056f32c6a46dd086e7ddb600c4abf9e",
+  "package_size_bytes": 456905,
+  "drive_file_id": "15dJrhHPYDDDe7_C9wyj7vG4z1gaav6BU",
+  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA.zip",
+  "validated_modules": ["3028", "3074", "2114"],
+  "candidate_features": [
+    "reuse_dashboards_with_drilldown",
+    "second_use_pcba_and_material_visibility",
+    "same_failure_and_same_family_correlation",
+    "line_scoped_rate_dashboard",
+    "expanded_team_excel_11_sheets",
+    "raw_3028_audit_sheet",
+    "xlsx_integrity_check",
+    "incremental_sqlite_visual_refresh",
+    "previous_version_data_migration",
+    "new_workstation_bootstrap"
+  ],
+  "tests": {
+    "v016": "51/51",
+    "team_lines": "OK",
+    "runtime": "OK",
+    "3028_transform": "OK",
+    "insights_synthetic": "OK",
+    "team_excel_integrity": "OK",
+    "zip_integrity": "OK"
+  },
+  "hard_rules": [
+    "never_mix_lines_for_operational_kpi",
+    "mes_access_serial",
+    "persist_before_visual_refresh",
+    "keep_raw_evidence",
+    "no_green_without_factory_test",
+    "never_store_wifi_or_ames_password"
+  ]
+}
