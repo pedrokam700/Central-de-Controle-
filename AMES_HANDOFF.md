@@ -6,9 +6,9 @@ Para continuar o módulo A-MES sem perder contexto, leia primeiro:
 - `docs/ames/ESTADO_ATUAL.json`
 - `docs/ames/DECISOES_ARQUITETURAIS.md`
 
-Baseline validada em fábrica: **V0.5.18** (`aad6cdca35fe0c493e2febfca78b02c0abd5adcd335647d7b97eedc79da85e75`).
+Baseline validada em fábrica: **V0.5.20** (`8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6`).
 
-Evidência funcional intermediária: **V0.5.20** provou navegação/consulta 3074 e entrada posterior no estágio 2114, mas o lote usado era grande e não fechou o gate completo antes do fim do turno.
+A validação real de 08/10/2026 confirmou o núcleo atual: 3028 preservada, 3074 retornando vínculos/reuso e alimentando a Rastreabilidade, e 2114 retornando histórico real de PCBA e alimentando contadores/histórico na Central. Houve uma falha de seleção automática do Shift 2114 em uma tentativa, com fallback manual `1st Shift` funcionando; isso permanece como hardening do candidato seguinte, não invalida a evidência funcional do núcleo V0.5.20.
 
 Pacote candidato atual: `AMES_Central_Offline_V0_5_21_CONSOLIDADA_FABRICA.zip`
 
@@ -18,8 +18,8 @@ Library: `/Central de trabalho/AMES_Central_Offline_V0_5_21_CONSOLIDADA_FABRICA.
 
 Status: **V0.5.21 pronta para validação de fábrica — NÃO GREEN.**
 
-O que a V0.5.21 acrescenta sem reescrever a 3028 validada: escopo por linha/falha/quantidade, limite de PCBAs, perfis Equilibrado/Rápido/Seguro, progresso real 3074/2114, persistência incremental conforme as PCBAs terminam e cache/memo de consultas 3074 no mesmo job. `ames_3028_live.py` e `ames_3028.py` permanecem bit-a-bit iguais à V0.5.18 validada.
+A V0.5.21 acrescenta sem reescrever a 3028 validada: escopo por uma/duas/três linhas, todas as falhas ou Defect Codes selecionados, limite de ocorrências/PCBAs, perfis Equilibrado/Rápido/Seguro, progresso real 3074/2114, persistência incremental durante a coleta, feed ao vivo, cache/memo 3074 e redução de esperas fixas preservando a confirmação do SN.
 
-Existe também uma ponte de compartilhamento candidata: o agente expõe somente `/api/v1/share/export`, com resumo sanitizado de dados já coletados. Nunca expor senha, cookies, sessão A-MES, CDP ou rede OPPO. A coleta MES continua local e independente de cloud.
+Compartilhamento candidato: `/api/v1/share/export` expõe somente dados sanitizados já persistidos. A ponte `https://central-ames-bridge.vercel.app` usa autenticação Firebase, pode sincronizar esses dados e tem uma área recolhida `Instalação do posto · uso único` para baixar o pacote. Nunca compartilhar senha, cookie/sessão A-MES, CDP ou acesso à rede OPPO. A coleta local não depende da nuvem.
 
-Próximo teste recomendado: uma linha + no máximo 3 PCBAs em modo Equilibrado. Depois ampliar o escopo. 3022 continua a próxima grande etapa após fechar este gate.
+3022 continua a próxima grande etapa e permanece NÃO GREEN até o teste real.
