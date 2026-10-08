@@ -1,0 +1,10 @@
+{
+  "version": "0.5.23",
+  "package_name": "AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip",
+  "sha256": "1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167",
+  "download_url": "https://drive.google.com/file/d/1C_yuDdIUs3rDHAcmJD23_9Ey-UnVDrry/view?usp=drivesdk",
+  "validated_baseline": "0.5.20",
+  "candidate_status": "factory_validation_required",
+  "published_at": "2026-10-08T22:20:00-03:00",
+  "minimum_central_version": "2.0.0"
+}
