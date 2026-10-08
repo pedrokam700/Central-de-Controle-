@@ -75,6 +75,7 @@ Portanto 2114 não é mais “não executada”; existe evidência de entrada no
 Pacote: `AMES_Central_Offline_V0_5_21_CONSOLIDADA_FABRICA.zip`
 SHA-256: `c0e078a49e5e7ab1674dc30a7e30a2127bd29b2e07b5825113d41d7cfc2667fa`
 Library: `/Central de trabalho/AMES_Central_Offline_V0_5_21_CONSOLIDADA_FABRICA.zip`
+Drive ID do pacote: `1YP5YkwLbmHLyE4H4x5BvLNata3yRao5M`
 
 Mudanças:
 - seleção de uma, duas ou três linhas;
@@ -111,11 +112,22 @@ Pode compartilhar: snapshots/resumos, FPY, Top 3, falhas, contagens/resultado pe
 
 Nunca compartilhar: senha, cookies, sessão A-MES, CDP, credenciais ou capacidade direta de entrar na rede OPPO.
 
-A V0.5.21 já expõe o endpoint local sanitizado, mas a integração visual definitiva desse bridge dentro da Central online ainda é pendente. Não declarar essa parte como publicada/live antes do deploy real.
+### Bridge V0.1 publicado como candidato
+
+- Vercel project: `central-ames-bridge`
+- production alias: `https://central-ames-bridge.vercel.app`
+- deployment: `dpl_DPCm1m9Dqx7uPu33Rk9AADHJJJ35`
+- estado Vercel: `READY`
+- autenticação: Firebase Auth do projeto `central-de-controle-88962`
+- persistência candidata: coleção já existente `aiKnowledge`, documentos `kind=ames_shared_snapshot`
+- upload do notebook lê apenas `/api/v1/share/export`; não executa consulta MES remota.
+- seção discreta `Instalação do posto · uso único` contém o download do pacote V0.5.21.
+
+A existência/deploy do bridge está confirmada, mas **login + gravação/leitura real + sincronização a partir do notebook da fábrica ainda NÃO foram validados end-to-end pelo usuário**. Não declarar essa parte GREEN.
 
 ## Instalador
 
-O pacote de novo posto deve ficar discreto, fora do fluxo diário: **Configurar posto → Instalação A-MES** (ou área administrativa equivalente). Normalmente será usado uma vez.
+O pacote de novo posto deve ficar discreto, fora do fluxo diário: **Configurar posto → Instalação A-MES** (ou área administrativa equivalente). A bridge candidata já implementa esse acesso em um bloco recolhido; depois de validar, essa entrada pode ser incorporada à Central principal.
 
 ## 3022 — próxima etapa
 
@@ -134,6 +146,7 @@ Regra temporal: usar o último evento/processo válido anterior ao Defect Time, 
 5. Validar progresso real 3074 e 2114.
 6. Confirmar que dados começam a aparecer antes do lote inteiro terminar.
 7. Comparar velocidade percebida com V0.5.20 para o mesmo escopo pequeno.
-8. Somente depois ampliar escopo ou testar `Rápido`.
+8. Validar bridge com login e `Sincronizar deste PC` no notebook da fábrica; depois abrir a mesma bridge fora da rede OPPO e conferir os dados.
+9. Somente depois ampliar escopo ou testar `Rápido`.
 
-Depois: fechar 3022 real e integração final com a Central online.
+Depois: fechar 3022 real e integrar a entrada A-MES/instalador na Central principal.
