@@ -54,6 +54,7 @@ A rota de `172.29.185.215` pertence ao Windows. A arquitetura aceita coexistênc
 - perfil Chrome separado;
 - sem senha no código;
 - agente apenas em loopback por padrão;
+- CORS não fica aberto para qualquer site; futuras origens da Central precisam ser explicitamente autorizadas;
 - pacote de suporte não inclui SQLite, SNs ou exports;
 - histórico de auditoria local registra ações estruturais (start, config, monitor, backup, refresh).
 
