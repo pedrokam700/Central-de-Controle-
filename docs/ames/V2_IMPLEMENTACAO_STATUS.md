@@ -24,3 +24,7 @@ Não inferir normalização completa 3074/2114 a partir de contagens: os respect
 Próximo passo seguro: obter fontes/API reais do agente referenciado pelo GitHub e fixar export coerente/paginado, IDs e evidências sanitizadas; em paralelo conceitual, desenhar regras e testes em emulador. Depois migrar views por etapas com smoke autenticado, desktop/mobile e gate de cada checkpoint.
 
 Sem teste autenticado/mobile/fábrica neste checkpoint. V2/V0.5.23/3022 NÃO GREEN. V0.5.20 permanece baseline documentada. Não fazer merge na main.
+
+## Evidência de CI do código
+
+Checkpoint `dbeb3a679af9e14e62afb3664d0e6f90916f0535`: [Central Quality Gate, run 37857100470](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37857100470), concluído com sucesso. CI não substitui E2E autenticado, emulador de regras nem validação de fábrica.

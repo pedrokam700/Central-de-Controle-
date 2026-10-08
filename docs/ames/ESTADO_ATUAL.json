@@ -99,9 +99,11 @@
     "shell_build": "15.1.13.41",
     "local_contract_tests": 18,
     "local_quality_checks": 62,
-    "ci_status": "pending_exact_commit",
+    "ci_status": "passed_on_code_checkpoint",
     "factory_validated": false,
     "local_transport_enabled": false,
-    "new_cloud_publication_enabled": false
+    "new_cloud_publication_enabled": false,
+    "tested_code_sha": "dbeb3a679af9e14e62afb3664d0e6f90916f0535",
+    "ci_run": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37857100470"
   }
 }
