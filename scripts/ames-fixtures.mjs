@@ -9,3 +9,9 @@ export function fixture(line = LINE_IDS[0], count = 60) {
       defect_code: i % 3 ? 'D1' : 'D2', defect_desc: 'Synthetic defect', defect_time: at })) };
   return { kind: 'ames_shared_snapshot', line, schema: LEGACY_SCHEMA, payload };
 }
+
+export function productFixture(line = LINE_IDS[0], count = 60) {
+  const doc = fixture(line, count);
+  doc.payload.defects.forEach((row, index) => { row.product_model = index % 2 ? 'CPH2859' : 'CPH2859V'; });
+  return doc;
+}

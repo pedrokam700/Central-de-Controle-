@@ -48,6 +48,12 @@ const requiredFiles = [
   'scripts/ames-dashboard.test.mjs',
   'scripts/ames-dashboard.browser.mjs',
   'scripts/ames-fixtures.mjs',
+  'ames/data/product.mjs',
+  'ames/product-view.mjs',
+  'ames/evidence-view.mjs',
+  'ames/product.css',
+  'scripts/ames-product.test.mjs',
+  'scripts/ames-product.browser.mjs',
   'scripts/ames-data.test.mjs'
 ];
 
@@ -78,14 +84,18 @@ syntaxCheck('ames/data/store.mjs');
 syntaxCheck('ames/data/dashboard.mjs');
 syntaxCheck('ames/dashboard-view.mjs');
 syntaxCheck('scripts/ames-dashboard.browser.mjs');
+syntaxCheck('ames/data/product.mjs');
+syntaxCheck('ames/product-view.mjs');
+syntaxCheck('ames/evidence-view.mjs');
+syntaxCheck('scripts/ames-product.browser.mjs');
 
 // Native data invariants are behavioral tests, not just source-string checks.
 {
-  const result = spawnSync(process.execPath, ['--test', '--test-isolation=none', 'scripts/ames-data.test.mjs', 'scripts/ames-dashboard.test.mjs'], {
+  const result = spawnSync(process.execPath, ['--test', '--test-isolation=none', 'scripts/ames-data.test.mjs', 'scripts/ames-dashboard.test.mjs', 'scripts/ames-product.test.mjs'], {
     cwd: root, encoding: 'utf8'
   });
   assertCheck(result.status === 0,
-    'A-MES: testes de contrato/store/sessão/Dashboard passaram',
+    'A-MES: testes de contrato/store/sessão/Dashboard/Produto passaram',
     'A-MES: falha nos testes\n' + (result.stdout || '') + (result.stderr || ''));
 }
 
@@ -129,6 +139,7 @@ if (build) {
     ['manifest.webmanifest', new RegExp('manifest\\.webmanifest\\?v=' + escaped)],
     ['mobile.css', new RegExp('mobile\\.css\\?v=' + escaped)],
     ['ames/dashboard.css', new RegExp('ames/dashboard\\.css\\?v=' + escaped)],
+    ['ames/product.css', new RegExp('ames/product\\.css\\?v=' + escaped)],
     ['app.js', new RegExp('app\\.js\\?v=' + escaped)]
   ];
 
@@ -261,6 +272,10 @@ for (const asset of [
   "BASE+'ames/data/dashboard.mjs'",
   "BASE+'ames/dashboard-view.mjs'",
   "BASE+'ames/dashboard.css'",
+  "BASE+'ames/data/product.mjs'",
+  "BASE+'ames/product-view.mjs'",
+  "BASE+'ames/evidence-view.mjs'",
+  "BASE+'ames/product.css'",
   "BASE+'styles.css'",
   "BASE+'mobile.css'",
   "BASE+'manifest.webmanifest'"

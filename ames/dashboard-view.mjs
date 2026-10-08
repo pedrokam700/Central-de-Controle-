@@ -1,8 +1,8 @@
 import { LINE_IDS } from './data/contract.mjs';
 import { selectDashboard } from './data/dashboard.mjs';
 
-const PAGE_SIZE = 25;
-const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+import { escapeHtml as esc, occurrenceList, EVIDENCE_PAGE_SIZE as PAGE_SIZE } from './evidence-view.mjs';
+
 const labels = { fpy: 'FPY', check_fpy: 'Check FPY', quantity: 'Quantidade', defect_count: 'Falhas informadas' };
 
 // Owns only transient view controls. Evidence remains in state.ames.
@@ -52,7 +52,7 @@ export function createDashboardView(root, store, { locale = () => 'pt-BR' } = {}
       <section id="dashMesEvidence" class="mes-evidence"${expanded ? '' : ' hidden'} aria-label="Registros do indicador">
         ${expanded ? `<h3 tabindex="-1" id="dashMesEvidenceTitle">Registros disponíveis · ${esc(line)} · snapshot ${esc(snapshot?.snapshot_id)}</h3>
         <p>${number(model.rows.length)} ocorrência(s) na lista parcial${product !== undefined ? ` · CPH exato: ${esc(product)}` : ''}${defect !== undefined ? ` · defeito: ${esc(defect || 'não informado')}` : ''}. Referências válidas somente nesta leitura; IDs duráveis, revisão e evidência bruta indisponíveis.</p>
-        <ol class="mes-record-list" start="${page * PAGE_SIZE + 1}">${rows.map(row => `<li><strong>${esc(row.pcba_sn)}</strong><dl><dt>CPH</dt><dd>${esc(row.product_model || 'Não informado')}</dd><dt>Defeito</dt><dd>${esc(row.defect_code || 'Não informado')} · ${esc(row.defect_desc)}</dd><dt>Defect Time</dt><dd>${esc(row.defect_time || 'Não informado')}${row.defect_time_ms === null ? ' · instante não verificável' : ''}</dd><dt>Reparo na fonte</dt><dd>${esc(row.repair_status || 'Não informado')}</dd><dt>Origem / referência</dt><dd>3028 · ${esc(row.evidence_ref)}</dd></dl></li>`).join('')}</ol>
+        ${occurrenceList(rows, page * PAGE_SIZE + 1)}
         ${rows.length ? '' : '<p>Nenhum registro neste filtro; a cobertura continua parcial.</p>'}
         <div class="mes-pagination"><button type="button" class="button secondary" id="dashMesPrev"${page === 0 ? ' disabled' : ''}>Anterior</button><span>Página ${page + 1} de ${pages}</span><button type="button" class="button secondary" id="dashMesNext"${page + 1 >= pages ? ' disabled' : ''}>Próxima</button></div>` : ''}
       </section>`;

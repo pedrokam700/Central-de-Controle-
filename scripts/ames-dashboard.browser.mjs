@@ -33,7 +33,7 @@ renderDashboardMes();
 `;
 const html = fs.readFileSync('index.html', 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
   .replace('</html>', '<script type="module" src="./test-harness.mjs"></script></html>');
-const allowed = new Set(['mobile.css', 'ames/dashboard.css', 'ames/dashboard-view.mjs', 'ames/data/dashboard.mjs', 'ames/data/contract.mjs', 'ames/data/store.mjs', 'icons/cora-192.svg', 'icons/cora-512.svg', 'manifest.webmanifest']);
+const allowed = new Set(['mobile.css', 'ames/dashboard.css', 'ames/dashboard-view.mjs', 'ames/evidence-view.mjs', 'ames/product.css', 'ames/data/dashboard.mjs', 'ames/data/contract.mjs', 'ames/data/store.mjs', 'icons/cora-192.svg', 'icons/cora-512.svg', 'manifest.webmanifest']);
 const server = http.createServer((req, res) => {
   const name = new URL(req.url, 'http://localhost').pathname.replace(/^\/Central-de-Controle-\//, '');
   if (name === 'index.html') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(html); }

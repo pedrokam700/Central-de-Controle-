@@ -2,7 +2,33 @@
 
 Continuidade: Issue #21, PR draft #22, branch `v2/native-fusion`.
 
-## Checkpoint atual — somente Dashboard nativo
+## Checkpoint atual — somente Produto/CPH nativo
+
+Dashboard `2820bc17858d45b777cf5554c94f1df6d31e4d36` revisado e aprovado pelo usuário **para continuidade de desenvolvimento**. HEAD local/remoto e PR #22 reconciliados nesse SHA antes deste corte. Essa aprovação não é validação fabril. Novo shell: `15.1.13.43`.
+
+- `ames/data/product.mjs` consulta o store existente com a chave canônica exata de `activeData().code`. `CPH2859`, `CPH2859V`, prefixos e valores vazios não se confundem. A consulta retorna partições por linha, sem KPI total entre linhas.
+- `ames/product-view.mjs` incorpora ocorrências na Visão Geral da página Produto, sem nova aba MES/página/overlay. Cada linha apresenta origem, coleta, snapshot e cobertura parcial; contagens do snapshot inteiro são explicitamente da linha, não do CPH. FPY/quantidade da linha não são atribuídos ao produto.
+- O contador disponível de cada linha abre exatamente seus registros do CPH, 25 por página. Sem snapshot difere de nenhum registro na lista parcial; nenhum desses casos prova ausência de falhas/produção. Troca de produto limpa detalhes; correção/substituição do snapshot, mesmo com ID igual, fecha o detalhe antigo e restaura foco. Clique sobre leitura substituída não abre evidência nova silenciosamente.
+- Reports, escopos manuais configurados (inclusive família/base) e histórico preservados. Rótulos distinguem reports manuais, com atalho de consulta; abas cabem no mobile. A correspondência MES continua estritamente exata, independentemente do escopo manual.
+- Disponibilidade de histórico PCBA/2114, materiais/reuso/3074 e processo/3022 organizada em detalhe de cobertura por linha. Sem calcular reuso/recorrência, sem novo adaptador 3022 ou confirmação de causa.
+- `ames/evidence-view.mjs` compartilha somente a apresentação dos registros com Dashboard. Não é store. Mesmo Auth/listener/`state.ames`; nenhum novo fetch Firebase/MES. Render MES somente na página Produto com sessão; partições com mesma referência, origem, freshness e controles evitam reconstrução. Paginação limita DOM; logout limpa referências/controles e conteúdo.
+- Assets de Produto e apresentação compartilhada incluídos no SW e no gate. Não houve mudança de `main`, Firebase rules, pacote ou funcionalidades de Falhas/Rastreabilidade/Dia/CORA.
+
+### Validação do Produto
+
+- `node --test --test-isolation=none scripts/ames-data.test.mjs scripts/ames-dashboard.test.mjs scripts/ames-product.test.mjs`: **30 testes passaram** (6 novos de Produto). Inclui variantes CPH2859/CPH2859V, vazio/prefixo/contém, separação de linhas/SN, referências exatas, cobertura parcial e limites dos agregados, origem/logout, função real do shell e callbacks da sessão.
+- `node scripts/quality-gate.mjs`: **90 checks passaram**; aviso preexistente de um locale hardcoded permanece.
+- `node scripts/ames-product.browser.mjs`: smoke Edge headless isolado com HTML/CSS, funções de Produto/escopo manual/abas reais, store real e fixtures sintéticas. Helpers auxiliares de formatação/status são substitutos de teste; Auth/Firebase não são carregados e rede de produção é bloqueada. Verifica 2 reports manuais (CPH + família) preservados, histórico, CPH base vs variante, duas linhas, ausência, paginação, escape de campos, foco/teclado, atualização e corrida antes de clique, deleção/logout e nenhuma exceção JS.
+- Desktop/mobile: 360/390/768/1280 px, rotação entre larguras, labels/abas sem corte e conteúdo MES sem overflow, incluindo SN longo; zoom CSS 200%. Screenshots sintéticos locais revisados. Regressão `scripts/ames-dashboard.browser.mjs` também passou após extrair a apresentação compartilhada.
+- Scripts de browser requerem Playwright/navegador e aceitam `PLAYWRIGHT_MODULE`, `BROWSER_CHANNEL=msedge`, `PRODUCT_SCREENSHOTS` ou `DASHBOARD_SCREENSHOTS`. Não fazem parte do job estático do CI. O SHA final e o resultado CI ficam registrados no PR #22/Issue #21.
+
+### Limites e próximo passo seguro do Produto
+
+**Parar antes de Falhas.** Revisar este Produto/CPH e executar smoke autenticado com snapshots reais de CPH2859V em uma e em mais de uma linha, conferindo o conjunto de registros com a fonte. Ainda não houve login/CRUD E2E, dispositivo físico, prova de cache offline completo, emulador de regras, pacote ou validação fábrica → Firebase → remoto. Não há benchmark de carga fabril; os checks de performance cobrem paginação e ausência de reconstrução em leituras inalteradas.
+
+Export completo/coerente, IDs duráveis/revisão/evidência bruta, transporte local, publicação autorizada, onboarding, demais views e retirada do protótipo permanecem pendentes. **V2/V0.5.23/3022 NÃO GREEN. V0.5.20 permanece baseline documentada.**
+
+## Histórico — Dashboard nativo (aprovado para continuidade de desenvolvimento)
 
 Base reconciliada: `b76b8b40eceb15d51d7b9383d8c62944adb734d7`, igual ao HEAD do PR #22 no início. A solicitação desta fase limita a execução ao Dashboard; recomendações anteriores de começar pelo transporte não bloqueiam este consumidor conservador de leitura. **Parar para revisão antes de Produto/CPH.**
 
