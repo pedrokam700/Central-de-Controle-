@@ -1,0 +1,1 @@
+Use commit 2171901b81bb955bc5da4964c2b8b85ab8656e25 or later as the V2 integration base.
