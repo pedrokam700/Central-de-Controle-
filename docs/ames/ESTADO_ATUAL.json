@@ -1,14 +1,14 @@
 {
-  "updated_at": "2026-10-08T14:00:00-03:00",
+  "updated_at": "2026-10-08T15:45:00-03:00",
   "project": "Central de Trabalho / A-MES Offline",
-  "working_version": "0.5.18",
-  "base_version": "0.5.17",
-  "base_package_sha256": "7105b70eb081ff9d468d3b8e5d866932d1891a6b664211171a292d8b4ff83ab8",
-  "current_package": "AMES_Central_Offline_V0_5_18_CONSOLIDADA_FABRICA.zip",
-  "current_package_sha256": "aad6cdca35fe0c493e2febfca78b02c0abd5adcd335647d7b97eedc79da85e75",
-  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_18_CONSOLIDADA_FABRICA.zip",
+  "working_version": "0.5.19",
+  "base_version": "0.5.18",
+  "base_package_sha256": "aad6cdca35fe0c493e2febfca78b02c0abd5adcd335647d7b97eedc79da85e75",
+  "current_package": "AMES_Central_Offline_V0_5_19_CONSOLIDADA_FABRICA.zip",
+  "current_package_sha256": "7018cf0d476d031709a2a2a6d1ec0f1a81a7646d9c4c333764d3625373e1f35c",
+  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_19_CONSOLIDADA_FABRICA.zip",
   "overall_green": false,
-  "factory_gate": "V0.5.18 one-line-in-focus UI + regression of serial multi-line collection",
+  "factory_gate": "V0.5.19 automatic 3074 + 2114 enrichment over validated 3028 multi-line snapshots",
   "lines": {
     "Linha 1": "TAN10101",
     "Linha 2": "TAN10102",
@@ -19,21 +19,22 @@
     "MES access must remain serialized",
     "do not mark GREEN without factory evidence when the gate depends on real A-MES",
     "do not store A-MES login credentials",
-    "do not redesign the V0.5.17 multi-line engine while validating V0.5.18 UI"
+    "preserve validated V0.5.18 multi-line/UI behavior while integrating 3074/2114"
   ],
   "green_modules": [
     "local agent and SQLite",
     "dual network and dedicated Chrome previously validated in factory",
     "3028 direct collection engine",
     "independent multi-line snapshot engine",
+    "V0.5.18 selector / one-line-in-focus UI",
     "V0.16 Excel report standard"
   ],
   "pending_modules": [
-    "V0.5.18 factory UI validation",
-    "3074 automatic post-3028 collection",
-    "2114 automatic OPC/session flow",
+    "V0.5.19 factory validation of automatic 3074 over live 3028 snapshots",
+    "V0.5.19 factory validation of 2114 current + historical PCBAs",
+    "automatic opening/reuse of 3074 and OPC/2114 when those screens are not already available",
     "3022 real adapter",
     "end-to-end correlation engine"
   ],
-  "next_action": "User validates V0.5.18 selector/focus UI and confirms individual/all-lines collection stays isolated."
+  "next_action": "User validates V0.5.19 Rastrear 3074 + 2114 on the factory A-MES and sends the real result/screenshots/log if any prerequisite screen or shift is missing."
 }
