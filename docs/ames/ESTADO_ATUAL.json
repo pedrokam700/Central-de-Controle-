@@ -1,15 +1,15 @@
 {
-  "updated_at": "2026-10-08T16:20:00-03:00",
+  "updated_at": "2026-10-08T16:55:00-03:00",
   "project": "Central de Trabalho / A-MES Offline",
   "working_version": "0.5.20",
   "validated_baseline": "0.5.18",
   "validated_baseline_sha256": "aad6cdca35fe0c493e2febfca78b02c0abd5adcd335647d7b97eedc79da85e75",
-  "supersedes_unvalidated_candidate": "0.5.19",
   "current_package": "AMES_Central_Offline_V0_5_20_CONSOLIDADA_FABRICA.zip",
   "current_package_sha256": "8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6",
   "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_20_CONSOLIDADA_FABRICA.zip",
+  "functional_checkpoint": true,
   "overall_green": false,
-  "factory_gate": "V0.5.20 automatic 3074 + 2114 navigation/collection plus individual SN lookup; 3022 adapter candidate",
+  "factory_gate": "Finish and validate 3074 + 2114 deep trace; 3022 remains for the next stage",
   "lines": {
     "Linha 1": "TAN10101",
     "Linha 2": "TAN10102",
@@ -17,11 +17,22 @@
   },
   "hard_rules": [
     "never merge operational KPIs across lines",
-    "MES access serialized",
+    "MES access remains serialized",
     "do not mark GREEN without factory evidence",
-    "login credentials not stored",
-    "preserve validated 3028 multi-line engine and one-line-in-focus UI"
+    "login credentials are never stored",
+    "preserve validated 3028 multi-line engine and one-line-in-focus UI",
+    "local SQLite remains usable even if cloud sync is unavailable",
+    "future sharing must replicate collected data only; never expose the A-MES session or credentials"
   ],
+  "factory_evidence_2026_10_08": {
+    "3074_navigation": "confirmed visually",
+    "3074_query": "confirmed visually; rows returned in AWIP3074-Vw Auto Scan Sn",
+    "2114_navigation": "confirmed visually; AWIP2114-Tr Defect Lot By Hand opened in OPC",
+    "2114_shift_auto_selection": "failed on first attempt; manual 1st Shift selection succeeded",
+    "2114_history_collection": "not yet proven in this run",
+    "important_runtime_note": "current V0.5.20 executes the complete 3074 stage before beginning the 2114 stage; therefore an empty 2114 grid while 3074 is still processing is expected and is not proof of 2114 failure",
+    "run_scope": "large number of PCBAs selected, making the live run long"
+  },
   "green_modules": [
     "local agent/SQLite",
     "dual network + dedicated Chrome previously validated",
@@ -31,11 +42,15 @@
     "V0.16 report standard"
   ],
   "pending_modules": [
-    "V0.5.20 factory validation of automatic AWIP3074 preparation and collection",
-    "V0.5.20 factory validation of OPC/AWIP2114 preparation, Shift and history collection",
-    "V0.5.20 individual SN lookup in factory",
-    "3022 AWIP3022-Vw View Lot History adapter real validation",
+    "complete V0.5.20 live 3074 run and prove 2114 history collection",
+    "make 2114 Shift auto-selection robust",
+    "add real stage progress for 3074 and 2114 (current/total and percentage)",
+    "add collection scope controls: selected lines, selected defect codes/failures, sample/top-N/all",
+    "performance review based on measured per-query timings; remove unnecessary fixed waits only where safe",
+    "one-time installer/package access hidden under workstation setup/admin area",
+    "asynchronous sharing of already-collected snapshots to the main Central without making cloud a prerequisite for MES collection",
+    "3022 AWIP3022-Vw View Lot History real integration",
     "correlation engine end-to-end"
   ],
-  "next_action": "Test V0.5.20 in factory: Rastreabilidade > Coletar 3074 + 2114 agora, then Consulta por SN with one PCBA and one reused Material SN. Do not mark GREEN until evidence is returned."
+  "next_action": "Do not interrupt the active V0.5.20 deep trace. Let 3074 finish and observe whether the job enters 2114. Preserve V0.5.20 as today's functional checkpoint. Next candidate should add scope/progress/Shift hardening before or together with the 3022 stage."
 }
