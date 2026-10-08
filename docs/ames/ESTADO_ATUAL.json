@@ -17,13 +17,13 @@
     "project_id": "prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI",
     "deployment_id": "dpl_5vGxUBs99S51aUUf8p8eSwTzL1bg",
     "deployment_state": "READY",
-    "strategy": "migration preview that keeps the original Central UI and injects the A-MES data layer; after validation the integration should become native in the canonical Central source",
-    "data_bus": "Firestore aiKnowledge documents kind=ames_shared_snapshot status=validado_sistema",
+    "strategy": "Native fusion into the canonical Central. Existing Vercel URL/deployment are historical preview only; see Issue #21 and V2_AUDITORIA_ARQUITETURA.md.",
+    "data_bus": "Legacy aiKnowledge snapshots are partial compatibility input; structured versioned evidence and publication authorization still pending.",
     "local_agent": "http://127.0.0.1:8765",
     "remote_behavior": "read sanitized last synchronized snapshots only; no remote MES command"
   },
   "overall_green": false,
-  "factory_gate": "Validate V0.5.23 + Central V2 integrated preview on the real factory notebook; V0.5.20 remains validated baseline",
+  "factory_gate": "CI at candidate SHA plus real factory-to-Firebase-to-remote validation of the native Central; V0.5.20 remains documented validated baseline.",
   "lines": {
     "Linha 1": "TAN10101",
     "Linha 2": "TAN10102",
@@ -81,7 +81,16 @@
     "2114 automatic Shift hardening",
     "individual SN factory validation",
     "3022 real adapter and process timeline",
-    "native merge of validated V2 module into canonical Central root after preview validation"
+    "phased native fusion and evidence drilldowns per V2_AUDITORIA_ARQUITETURA.md"
   ],
-  "next_action": "Open https://central-cora-v2.vercel.app/ on the factory notebook with V0.5.23 agent running. Validate login, A-MES integrated navigation, local detection, per-line data, Dashboard/product/Central do Dia/CORA enrichment, sync, then open the same URL away from the OPPO network and verify synchronized data. Do not mark GREEN before evidence."
+  "next_action": "Implement phase 1 read-only native contract/store on v2/native-fusion, then the audit gates. Obtain real agent source/API and evidence contracts before enabling new cloud publication. No main merge or GREEN promotion.",
+  "architecture_audit": {
+    "date": "2026-10-08",
+    "baseline_sha": "8cbd5fee9558e5e60e312faea583a85435915dda",
+    "document": "docs/ames/V2_AUDITORIA_ARQUITETURA.md",
+    "issue": 21,
+    "pr": 22,
+    "branch": "v2/native-fusion",
+    "status": "code_audit_complete_factory_validation_pending"
+  }
 }
