@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "node scripts/build-static.mjs",
+  "installCommand": "",
+  "outputDirectory": "dist",
+  "git": { "deploymentEnabled": { "main": false } },
+  "redirects": [
+    { "source": "/", "destination": "/Central-de-Controle-/", "permanent": false },
+    { "source": "/Central-de-Controle-", "destination": "/Central-de-Controle-/", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/Central-de-Controle-/", "destination": "/Central-de-Controle-/index.html" }
+  ],
+  "headers": [
+    { "source": "/Central-de-Controle-/:path*.mjs", "headers": [{ "key": "Content-Type", "value": "text/javascript; charset=utf-8" }] },
+    { "source": "/Central-de-Controle-/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+  ]
+}

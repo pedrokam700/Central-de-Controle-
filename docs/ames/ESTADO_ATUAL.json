@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-08T22:20:00-03:00",
+  "updated_at": "2026-10-09T00:48:42Z",
   "project": "Central de Trabalho V2 + A-MES",
   "central_major_version": "2.0-preview",
   "ames_working_version": "0.5.23",
@@ -17,13 +17,13 @@
     "project_id": "prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI",
     "deployment_id": "dpl_5vGxUBs99S51aUUf8p8eSwTzL1bg",
     "deployment_state": "READY",
-    "strategy": "migration preview that keeps the original Central UI and injects the A-MES data layer; after validation the integration should become native in the canonical Central source",
-    "data_bus": "Firestore aiKnowledge documents kind=ames_shared_snapshot status=validado_sistema",
+    "strategy": "Native fusion into the canonical Central. Existing Vercel URL/deployment are historical preview only; see Issue #21 and V2_AUDITORIA_ARQUITETURA.md.",
+    "data_bus": "Legacy aiKnowledge snapshots are partial compatibility input; structured versioned evidence and publication authorization still pending.",
     "local_agent": "http://127.0.0.1:8765",
     "remote_behavior": "read sanitized last synchronized snapshots only; no remote MES command"
   },
   "overall_green": false,
-  "factory_gate": "Validate V0.5.23 + Central V2 integrated preview on the real factory notebook; V0.5.20 remains validated baseline",
+  "factory_gate": "CI at candidate SHA plus real factory-to-Firebase-to-remote validation of the native Central; V0.5.20 remains documented validated baseline.",
   "lines": {
     "Linha 1": "TAN10101",
     "Linha 2": "TAN10102",
@@ -81,7 +81,91 @@
     "2114 automatic Shift hardening",
     "individual SN factory validation",
     "3022 real adapter and process timeline",
-    "native merge of validated V2 module into canonical Central root after preview validation"
+    "phased native fusion and evidence drilldowns per V2_AUDITORIA_ARQUITETURA.md"
   ],
-  "next_action": "Open https://central-cora-v2.vercel.app/ on the factory notebook with V0.5.23 agent running. Validate login, A-MES integrated navigation, local detection, per-line data, Dashboard/product/Central do Dia/CORA enrichment, sync, then open the same URL away from the OPPO network and verify synchronized data. Do not mark GREEN before evidence."
+  "next_action": "Review consolidated native sprint; validate authenticated real snapshots/manual workflows and existing CORA backend. Obtain real agent contract before transport. Stop before publication, Rules, real 3022, main/merge or deploy; not GREEN.",
+  "architecture_audit": {
+    "date": "2026-10-08",
+    "baseline_sha": "8cbd5fee9558e5e60e312faea583a85435915dda",
+    "document": "docs/ames/V2_AUDITORIA_ARQUITETURA.md",
+    "issue": 21,
+    "pr": 22,
+    "branch": "v2/native-fusion",
+    "status": "code_audit_complete_factory_validation_pending",
+    "findings": 23
+  },
+  "native_fusion_checkpoint": {
+    "stage": "phase_1_partial_read_only_foundation",
+    "shell_build": "15.1.13.41",
+    "local_contract_tests": 18,
+    "local_quality_checks": 62,
+    "ci_status": "passed_on_code_checkpoint",
+    "factory_validated": false,
+    "local_transport_enabled": false,
+    "new_cloud_publication_enabled": false,
+    "tested_code_sha": "dbeb3a679af9e14e62afb3664d0e6f90916f0535",
+    "ci_run": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37857100470"
+  },
+  "native_dashboard_checkpoint": {
+    "stage": "dashboard_approved_for_development_continuation",
+    "base_sha": "b76b8b40eceb15d51d7b9383d8c62944adb734d7",
+    "shell_build": "15.1.13.42",
+    "local_contract_tests": 24,
+    "local_quality_checks": 75,
+    "browser_smoke": "passed_synthetic_edge_headless_360_390_768_1280_css_zoom_200",
+    "authenticated_test": false,
+    "factory_validated": false,
+    "local_transport_enabled": false,
+    "new_cloud_publication_enabled": false,
+    "ci_evidence": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37858870952",
+    "tested_code_sha": "2820bc17858d45b777cf5554c94f1df6d31e4d36"
+  },
+  "native_product_checkpoint": {
+    "stage": "product_cph_approved_for_development_continuation",
+    "base_sha": "2820bc17858d45b777cf5554c94f1df6d31e4d36",
+    "shell_build": "15.1.13.43",
+    "local_contract_tests": 30,
+    "local_quality_checks": 90,
+    "browser_smoke": "passed_synthetic_edge_headless_product_and_dashboard_360_390_768_1280_css_zoom_200",
+    "authenticated_test": false,
+    "factory_validated": false,
+    "local_transport_enabled": false,
+    "new_cloud_publication_enabled": false,
+    "ci_evidence": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37862679559",
+    "tested_code_sha": "d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df"
+  },
+  "native_failures_checkpoint": {
+    "stage": "failures_accepted_for_development_continuation",
+    "base_sha": "d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df",
+    "shell_build": "15.1.13.44",
+    "local_contract_tests": 37,
+    "local_quality_checks": 99,
+    "browser_smoke": "passed_synthetic_edge_headless_failures_dashboard_product_360_390_768_1280_css_zoom_200",
+    "persistent_manual_mes_links": false,
+    "historical_occurrence_deduplication": false,
+    "authenticated_test": false,
+    "factory_validated": false,
+    "local_transport_enabled": false,
+    "new_cloud_publication_enabled": false,
+    "ci_evidence": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37863934049"
+  },
+  "native_sprint_checkpoint": {
+    "stage": "trace_daily_cora_onboarding_review_required",
+    "base_sha": "43672774db194031bf6050a5c3a3a73191bc1392",
+    "trace_sha": "05728949f1fe9dd17fe2efc24d919651f8545e09",
+    "daily_sha": "97d7bb3da044701bfe39528b31f6ff762e021e83",
+    "cora_sha": "5fe83c2d41a7f3a603906b127eea7cdf231bac46",
+    "onboarding_sha": "7d5b4b417ea23af73f9870b398db4ddb51bf32e9",
+    "shell_build": "15.1.13.45",
+    "local_contract_tests": 46,
+    "local_quality_checks": 130,
+    "browser_smoke": "synthetic_edge_headless_all_native_consumers_360_390_768_1280_css_zoom_200_passed",
+    "authenticated_test": false,
+    "factory_validated": false,
+    "local_transport_enabled": false,
+    "new_cloud_publication_enabled": false,
+    "cora_backend_verified": false,
+    "agent_package_modified": false,
+    "ci_evidence": "See PR #22 / Issue #21 for final SHA and CI"
+  }
 }

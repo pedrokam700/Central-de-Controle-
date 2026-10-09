@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.40">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.48">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.40';
+  const BUILD='15.1.13.48';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2846,7 +2846,9 @@ body.dark .daily-side-panel{
 
   </style>
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.40" id="mobile-layout-styles">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.48" id="mobile-layout-styles">
+<link rel="stylesheet" href="./ames/dashboard.css?v=15.1.13.48">
+<link rel="stylesheet" href="./ames/product.css?v=15.1.13.48">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -2886,6 +2888,7 @@ body.dark .daily-side-panel{
         <button data-page="work"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="nav-label">Atividades gerais</span></button>
         <button data-page="flow"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 7h12M6 12h12M6 17h12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="6" cy="7" r="1" fill="currentColor"/><circle cx="18" cy="12" r="1" fill="currentColor"/><circle cx="6" cy="17" r="1" fill="currentColor"/></svg></span><span class="nav-label">Fluxos</span></button>
         <button data-page="aiAnalysis"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 10h6M9 14h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span class="nav-label">CORA</span></button>
+        <button data-page="mesConsole"><span class="nav-icon" aria-hidden="true">⌁</span><span class="nav-label">Console MES</span></button>
         <button data-page="profile"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 19c.8-3 3-4.5 6.5-4.5s5.7 1.5 6.5 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span class="nav-label">Meu perfil</span></button>
       </nav>
       <div class="sidebar-foot"><div class="account-info" id="accountInfo"></div><button class="all-reports" id="changeAccount">Sair / Trocar conta</button></div>
@@ -2916,6 +2919,7 @@ body.dark .daily-side-panel{
       <div class="content">
         <!-- Início -->
         <section class="overview" id="homeView">
+          <section id="amesSetupWelcome" class="mes-context-panel hidden"><h2>Este computador coleta A-MES?</h2><p>Defina se deseja configurar este computador ou somente visualizar os snapshots. A escolha fica disponível novamente no Perfil.</p><button type="button" class="button secondary" data-open-integration>Configurar integração A-MES</button></section>
           <div class="stats"><article class="stat"><div class="stat-label">Pendências totais</div><div class="stat-value" id="homePending">0</div><div class="stat-note">Falhas, atividades e fluxos abertos</div></article><article class="stat"><div class="stat-label">Reports de produto</div><div class="stat-value" id="homeProductOpen">0</div><div class="stat-note">Com ação necessária</div></article><article class="stat"><div class="stat-label">Atividades gerais</div><div class="stat-value" id="homeActivities">0</div><div class="stat-note">E-mails, análises e alinhamentos</div></article><article class="stat"><div class="stat-label">Aguardando</div><div class="stat-value" id="homeWaiting">0</div><div class="stat-note">Aguardando resposta ou outra ação</div></article></div>
           <div class="home-layout"><section>
 <div class="section-head central-head"><div><h2 id="centralSectionTitle">Minha Central Hoje</h2><p id="centralSectionSubtitle">O que precisa da sua atenção primeiro.</p></div>
@@ -3016,6 +3020,8 @@ body.dark .daily-side-panel{
               </section>
             </aside>
           </div>
+
+          <section id="dailyMes" class="ames-occurrence-view" aria-label="Contexto MES da Central do Dia"></section>
 
           <section class="daily-admin-shell hidden" id="dailyAdminPanel">
             <div class="daily-admin-head">
@@ -3143,8 +3149,10 @@ body.dark .daily-side-panel{
         </section>
         <!-- Dashboard Estratégico -->
         <section class="overview hidden" id="dashboardView">
+          <section id="dashboardMes" class="ames-occurrence-view" aria-label="Operação por linha"></section>
+          <div class="section-head"><div><h2>Ações e reports de produto</h2><p>Registros manuais da Central · todos os produtos e linhas · filtros MES não se aplicam</p></div></div>
           <div class="stats">
-            <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="month" aria-label="Ver falhas registradas no mês atual"><div class="stat-label">Total de Falhas (Mês Atual)</div><div class="stat-value" id="dashTotalMonth">0</div><div class="stat-note" id="dashTotalNote">Registradas no mês vigente · clique para detalhar</div></article>
+            <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="month" aria-label="Ver falhas registradas no mês atual"><div class="stat-label">Reports de Produto (Mês Atual)</div><div class="stat-value" id="dashTotalMonth">0</div><div class="stat-note" id="dashTotalNote">Registradas no mês vigente · clique para detalhar</div></article>
             <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="resolution" aria-label="Ver reports resolvidos"><div class="stat-label">Taxa de Resolução</div><div class="stat-value" id="dashResolutionRate">0%</div><div class="stat-note">Reports totalmente concluídos · clique para detalhar</div></article>
             <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="open" aria-label="Ver falhas abertas"><div class="stat-label">Falhas Críticas / Abertas</div><div class="stat-value" id="dashOpenCount">0</div><div class="stat-note">Sem report enviado · clique para detalhar</div></article>
             <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="waiting" aria-label="Ver falhas aguardando resposta"><div class="stat-label">Pendência de Resposta</div><div class="stat-value" id="dashAwaitingCount">0</div><div class="stat-note">Aguardando resposta do fornecedor · clique para detalhar</div></article>
@@ -3165,7 +3173,7 @@ body.dark .daily-side-panel{
 
           <div class="dashboard-grid">
             <section>
-              <div class="section-head"><div><h2>Top Componentes Ofensores (Mês Atual)</h2><p>Componentes com o maior número de falhas registradas este mês.</p></div></div>
+              <div class="section-head"><div><h2>Top Componentes Ofensores (Mês Atual)</h2><p>Componentes com o maior número de reports manuais neste mês.</p></div></div>
               <div class="panel">
                 <div id="dashTopComponents" class="home-list"></div>
                 <div class="empty hidden" id="dashTopEmpty">Nenhuma falha registrada neste mês.</div>
@@ -3239,6 +3247,7 @@ body.dark .daily-side-panel{
               </details>
 
               <div class="ai-chat-scroll" id="aiChatScroll">
+                <section id="coraMes" class="mes-context-panel" aria-label="Contexto MES da CORA"></section>
                 <div id="aiWelcome" class="ai-welcome"><div class="ai-welcome-mark">C</div><h2>Como posso ajudar?</h2><p>Conte o problema. A CORA investiga com você e adapta a profundidade ao que você perguntar.</p><div class="ai-suggestions"><button type="button" data-ai-suggestion="Tenho uma falha e quero pensar por onde começar.">Começar uma investigação</button><button type="button" data-ai-suggestion="Procure padrões e relações que eu talvez não esteja vendo.">Procurar padrões</button><button type="button" data-ai-action="image" data-ai-suggestion="Quero analisar uma evidência visual comigo.">Analisar uma foto</button><button type="button" data-ai-suggestion="Tenho uma hipótese. Confronte-a com fatos e evidências.">Confrontar hipótese</button></div></div>
                 <div id="aiConversation"></div><div id="aiResult" class="ai-result-stack"></div>
                 <div id="aiHistoryPanel" class="ai-hidden-panel hidden"></div><div id="aiMemoryPanel" class="ai-hidden-panel hidden"></div>
@@ -3279,7 +3288,9 @@ body.dark .daily-side-panel{
         </section>
 
         <!-- Tela de Perfil do Usuário / Administração -->
+        <section class="overview hidden" id="mesConsoleView"><div id="mesConsole"></div></section>
         <section class="overview hidden" id="profileView">
+          <section id="amesIntegration" class="mes-context-panel" aria-label="Configuração da integração A-MES"></section>
           <div class="stats">
             <article class="stat"><div class="stat-label">Reports subidos</div><div class="stat-value" id="userReportCount">0</div><div class="stat-note">Registrados por você</div></article>
             <article class="stat"><div class="stat-label">Reports concluídos</div><div class="stat-value" id="userDoneCount">0</div><div class="stat-note">Finalizados com sucesso</div></article>
@@ -3332,23 +3343,25 @@ body.dark .daily-side-panel{
           <div class="section-head">
             <div>
               <h2 id="activeProductTitle">Visão Geral do Produto</h2>
-              <p>Todas as informações conectadas a este único produto.</p>
+              <p>Reports da Central e evidência de produção do CPH exato, por linha.</p>
             </div>
           </div>
           
           <div class="product-tabs">
              <button class="button secondary product-tab active" data-tab="geral">Visão Geral</button>
-             <button class="button secondary product-tab" data-tab="falhas">Falhas</button>
-             <button class="button secondary product-tab" data-tab="historico">Histórico</button>
+             <button class="button secondary product-tab" data-tab="falhas">Reports manuais</button>
+             <button class="button secondary product-tab" data-tab="historico">Histórico de reports</button>
            </div>
 
            <div id="tab-geral" class="tab-content">
              <div class="stats">
-               <article class="stat"><div class="stat-label">Falhas de Produto</div><div class="stat-value" id="prodTotalCount">0</div><div class="stat-note">Registros deste produto</div></article>
+               <article class="stat"><div class="stat-label">Reports manuais</div><div class="stat-value" id="prodTotalCount">0</div><div class="stat-note">Aplicáveis ao produto conforme o escopo cadastrado</div><button type="button" class="button secondary" id="productManualReports">Consultar reports</button></article>
              </div>
+             <section id="productMes" aria-label="Evidência de produção do produto"></section>
           </div>
 
           <div id="tab-falhas" class="tab-content hidden">
+            <p class="muted">Reports manuais aplicáveis ao produto. Os registros MES podem ser consultados na Visão Geral, por linha.</p>
             <div class="panel">
               <div class="filters"><label>Buscar falha<input id="productSearch" type="search" placeholder="Material ou descrição"></label><label>Componente<select id="componentFilter"><option value="">Todos</option></select></label><label>Status<select id="productStatus"><option value="">Todos</option><option value="pendente">Pendente</option><option value="aguardando">Aguardando fornecedor</option><option value="concluido">Concluído</option></select></label></div>
               <div class="table-wrap">
@@ -3370,16 +3383,19 @@ body.dark .daily-side-panel{
         </section>
 
         <section class="overview hidden" id="operationsView">
-          <section>
-            <div class="section-head"><div><h2>Falhas</h2><p>Registro universal de ocorrências. A classificação inicial pode ser desconhecida e evolui conforme surgem evidências.</p></div></div>
+          <div class="section-head"><div><h2>Falhas</h2><p>Registros manuais e observações MES. As contagens são independentes; não representam um total de falhas únicas.</p></div></div>
+          <label class="failure-origin-filter">Origem<select id="failureOrigin"><option value="all">Manual e MES</option><option value="manual">Manual</option><option value="mes">MES</option></select></label>
+          <section id="failuresMes" class="ames-occurrence-view" aria-label="Ocorrências MES"></section>
+          <section id="failureManual" aria-label="Registros manuais">
+            <div class="section-head"><div><h2>Manual · falhas registradas</h2><p>Casos manuais existentes, de todas as linhas. Filtros MES não se aplicam a estes registros.</p></div></div>
             <div class="stats">
-              <article class="stat"><div class="stat-label">Total de falhas</div><div class="stat-value" id="opTotalCount">0</div><div class="stat-note">Todas as ocorrências registradas</div></article>
+              <article class="stat"><div class="stat-label">Casos manuais</div><div class="stat-value" id="opTotalCount">0</div><div class="stat-note">Registros manuais · sem somar MES ou reports</div></article>
               <article class="stat"><div class="stat-label">Em aberto</div><div class="stat-value" id="opOpenCount">0</div><div class="stat-note">Precisam de tratamento ou investigação</div></article>
               <article class="stat"><div class="stat-label">Postos envolvidos</div><div class="stat-value" id="opStationCount">0</div><div class="stat-note">Postos / estações conhecidos</div></article>
               <article class="stat"><div class="stat-label">Sem classificação</div><div class="stat-value" id="opWaitingCount">0</div><div class="stat-note">Aguardando definição da origem</div></article>
             </div>
             <section class="panel recurrence-radar-shell" id="recurrenceRadarPanel" style="margin-top:14px">
-              <div class="section-head compact"><div><h3>Radar de recorrência</h3><p>Cruza Falhas + Reports por componente, CPH, linha, máquina, posto, processo e descrição.</p></div><button type="button" class="button secondary button-compact" id="recurrenceRadarRefresh">Recalcular</button></div>
+              <div class="section-head compact"><div><h3>Radar de recorrência</h3><p>Possíveis correlações entre Falhas e Reports manuais. Não inclui MES, não vincula ocorrências e não confirma causa.</p></div><button type="button" class="button secondary button-compact" id="recurrenceRadarRefresh">Recalcular</button></div>
               <div class="recurrence-radar-summary" id="recurrenceRadarSummary"></div>
               <div class="recurrence-radar-list" id="recurrenceRadarList"></div>
             </section>
@@ -3389,8 +3405,9 @@ body.dark .daily-side-panel{
                 <label>Classificação<select id="opCategory"><option value="">Todas</option><option value="NAO_DEFINIDO">Não definido / Em análise</option><option value="OPERACIONAL">Operacional</option><option value="MAQUINA">Máquina</option><option value="PROCESSO">Processo</option><option value="PRODUTO">Produto (suspeita)</option><option value="TESTE_INSPECAO">Teste / Inspeção</option><option value="OUTRO">Outro</option></select></label>
                 <label>Status<select id="opStatus"><option value="">Todos</option><option value="pendente">Pendente</option><option value="aguardando">Aguardando</option><option value="andamento">Em andamento</option><option value="concluido">Pronto</option><option value="cancelado">Cancelada</option></select></label>
               </div>
-              <div class="table-wrap"><table><thead><tr><th>Registro</th><th>Produto / componente</th><th>Máquina / posto</th><th>Classificação / processo</th><th>Falha</th><th>Status</th></tr></thead><tbody id="opRows"></tbody></table><div class="empty hidden" id="opEmpty">Nenhuma falha encontrada.</div></div>
+              <div class="table-wrap"><table><thead><tr><th>Registro Manual</th><th>Produto / componente</th><th>Máquina / posto</th><th>Classificação / processo</th><th>Falha</th><th>Status</th></tr></thead><tbody id="opRows"></tbody></table><div class="empty hidden" id="opEmpty">Nenhuma falha encontrada.</div></div>
             </div>
+            <details class="failure-manual-reports"><summary>Manual · Reports existentes</summary><p>Reports preservados, inclusive quando relacionados a um caso manual. Não somar reports, casos e ocorrências MES como falhas únicas.</p><div id="failureManualReports" class="dashboard-detail-list" tabindex="-1"></div><div class="failure-report-pagination"><button type="button" class="button secondary" id="failureReportPrev">Anterior</button><span id="failureReportPage"></span><button type="button" class="button secondary" id="failureReportNext">Próxima</button></div></details>
           </section>
         </section>
 
@@ -3671,7 +3688,7 @@ body.dark .daily-side-panel{
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.40"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.48"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */

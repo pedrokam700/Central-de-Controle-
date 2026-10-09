@@ -1,3 +1,9 @@
+# Continuidade canônica — auditoria de 08/10/2026
+
+A Issue #21 e a branch `v2/native-fusion` (PR draft #22) são a continuidade atual. Leia `V2_AUDITORIA_ARQUITETURA.md` e `V2_ARQUITETURA_CANONICA.md`. O preview Vercel e o roteiro abaixo são histórico da prova de conceito, não arquitetura final nem URL de aceite da fusão. Próximo passo: camada de dados nativa de leitura com contratos e testes, seguida das fases da auditoria. V2/V0.5.23/3022 permanecem NÃO GREEN; V0.5.20 permanece baseline documentada.
+
+---
+
 # HANDOFF MESTRE — CENTRAL DE TRABALHO V2 + A-MES
 
 Atualizado em: 08/10/2026

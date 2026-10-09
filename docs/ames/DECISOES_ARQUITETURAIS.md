@@ -41,3 +41,8 @@
 39. **Vercel não define versão do agente.** Bridge/web é integração opcional e nunca substitui a release canônica do GitHub.
 40. **Novo posto deve ser reproduzível sem segredo embutido.** O pacote pode automatizar Python, dependências, Chrome, rota, agente e perfil dedicado; Wi-Fi/A-MES exigem credenciais do próprio usuário e nunca são embalados.
 41. **Migração explícita preserva continuidade.** Novo pacote deve oferecer migração controlada de SQLite/config/backups da instalação anterior, sem sobrescrever silenciosamente.
+
+42. **Fusão nativa é a continuidade.** Issue #21, PR #22 e `v2/native-fusion` prevalecem sobre markers e roteiros antigos de preview; seguir `V2_AUDITORIA_ARQUITETURA.md`.
+43. **Cobertura explícita.** Snapshot legado truncado é parcial. Ausência de evidência não é zero, e lista parcial não comprova KPI agregado.
+44. **Publicação não bloqueia render local.** Persistir e derivar antes de renderizar; enviar à cloud por caminho assíncrono independente.
+45. **Fonte e autoridade distintas.** Dado MES observado e status `validado_sistema` não equivalem a causa confirmada por uma pessoa.

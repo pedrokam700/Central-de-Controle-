@@ -1,0 +1,15 @@
+{
+  "version": "0.5.24-rc1",
+  "package_name": "AMES_Central_0.5.24-rc1_CANDIDATO.zip",
+  "sha256": "f6c320010a503c2702df411355029c5327d2e09334d9f738625c060e40be3679",
+  "download_url": "https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.24-rc1/AMES_Central_0.5.24-rc1_CANDIDATO.zip",
+  "validated_baseline": "0.5.20",
+  "candidate_status": "factory_validation_required",
+  "published_at": "2026-10-09T10:00:00-03:00",
+  "minimum_central_version": "2.0.0",
+  "local_runtime": {
+    "console_url": "http://127.0.0.1:8765/",
+    "start_file": "00_INICIAR_AQUI.bat",
+    "fallback_file": "03_ABRIR_CENTRAL_LOCAL_FALLBACK.bat"
+  }
+}

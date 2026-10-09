@@ -1,0 +1,8 @@
+firestore-debug.log
+firebase-debug.log
+ui-debug.log
+**/__pycache__/
+ames/agent/data/
+ames/agent/config.json
+.vercel/
+dist/

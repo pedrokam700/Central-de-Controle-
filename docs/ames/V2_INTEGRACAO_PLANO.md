@@ -2,53 +2,79 @@
 
 A V2 deixa de tratar a Central online e o coletor A-MES como produtos separados.
 
+Documento canônico de arquitetura: `V2_ARQUITETURA_CANONICA.md`.
+Missão de implementação/revisão: `V2_WORK_CODEX_MISSION.md`.
+
 ## Princípios
-- A Central continua sendo a interface principal do usuário.
+- A Central oficial derivada do GitHub continua sendo a única interface principal do usuário.
 - Na fábrica, a Central detecta `127.0.0.1:8765` e usa dados A-MES locais em tempo real.
 - Fora da rede OPPO, a mesma Central usa apenas snapshots sanitizados sincronizados no Firebase.
 - A coleta A-MES permanece local-first, serial e independente de cloud.
 - Senha, cookie, sessão, CDP, senha Wi-Fi e acesso TAXXX_5G nunca são enviados ao Firebase.
-- Dados A-MES alimentam Dashboard, produto/CPH, Central do Dia, recorrência e CORA.
-- `aiKnowledge` é o barramento inicial para snapshots A-MES porque a Central e a CORA já o consomem e as regras existentes já suportam usuários ativos.
-- Linhas nunca são somadas para KPI operacional.
+- Dados A-MES alimentam nativamente Dashboard, Produto/CPH, Falhas, Rastreabilidade, Central do Dia e CORA.
+- Linhas nunca são somadas silenciosamente para KPI operacional.
 - Correlação é evidência; não prova causa automaticamente.
+- 3022 já faz parte do contrato arquitetural, mesmo antes do adaptador real ficar pronto.
 
-## Preview implantado
+## Sobre o preview Vercel
 
-URL: `https://central-cora-v2.vercel.app/`
+O preview `https://central-cora-v2.vercel.app/` foi útil para provar a comunicação Central ↔ agente local ↔ Firebase, mas **não é a fusão final**.
 
-Project: `central-cora-v2`
-Deployment: `dpl_5vGxUBs99S51aUUf8p8eSwTzL1bg` — READY.
+Ele não deve virar uma segunda Central nem substituir o fluxo GitHub que já é usado pela equipe.
 
-O preview usa uma estratégia de migração: mantém a experiência da Central original e injeta a camada V2. Depois de validar o comportamento real, o módulo deve ser absorvido nativamente pelo código canônico da Central, eliminando a necessidade da camada de migração/proxy.
+A arquitetura final deve eliminar a dependência funcional do iframe/proxy/overlay V2 e incorporar a camada A-MES diretamente às views nativas da Central.
 
-## Primeiro corte implementado
-1. A-MES integrado no mesmo fluxo visual da Central;
-2. detecção automática do agente local;
-3. sincronização de snapshot por linha para Firebase quando autenticado;
-4. leitura remota do último snapshot sincronizado;
-5. painel A-MES global com operação/reuso/recorrência;
-6. enriquecimento do Dashboard;
-7. enriquecimento de produto/CPH;
-8. enriquecimento da Central do Dia;
-9. snapshots A-MES entram em `aiKnowledge` com `status=validado_sistema`, permitindo uso contextual pela CORA;
-10. sem comando remoto do MES.
+## Estado atual
 
-## Pacote local correspondente
+Já existe prova de conceito para:
+1. detectar agente local;
+2. sincronizar snapshot sanitizado por linha;
+3. ler o snapshot remoto;
+4. enriquecer Dashboard/Produto/Central do Dia/CORA;
+5. manter coleta local independente da nuvem.
 
-V0.5.23: `AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`
+Isso é base técnica, não Definition of Done da fusão.
+
+## Pacote do posto
+
+Release candidata atual: V0.5.23 `AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`.
+
 SHA-256: `1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167`.
 
-O bootstrap prefere abrir a Central V2 quando ela estiver disponível e usa a interface local como contingência.
+A Central não deve hard-codear uma release. O onboarding deve ler `ames/releases/latest/release.json`, permitindo trocar o pacote sem refazer a UI.
 
-## Depois do gate
+## Nova experiência de primeiro acesso
 
-Após a integração V2 ser validada em fábrica e remotamente:
-- absorver a camada V2 no shell canônico da Central;
-- transformar evidências A-MES em links/ações dentro de Reports e Falhas sem criação automática indevida;
-- adicionar 3022/timeline de processo;
-- alimentar Radar de recorrência com PCBA/material/processo;
-- permitir que CORA cite claramente a origem A-MES e o snapshot usado;
-- criar dashboards históricos por linha/CPH/falha/reuso/processo, sempre com drill-down até a evidência.
+Ao entrar na Central:
+- se o agente local existir, reconhecer o posto automaticamente;
+- se não existir, perguntar uma vez se este computador será usado para coletar A-MES;
+- `Configurar este computador` mostra release, SHA e pacote atual;
+- `Somente visualizar` mantém a Central sem instalação e não insiste;
+- a configuração continua acessível pelo perfil/área administrativa.
 
-**V2 preview e V0.5.23 ainda NÃO estão GREEN.**
+Usuários remotos não precisam instalar o coletor para consultar dados sincronizados.
+
+## Views finais
+
+Não deve existir uma segunda navegação que replique a Central.
+
+- Dashboard: operação + reuso + recorrência + processo.
+- Produto/CPH: cadastro + reports + ocorrências MES + reuso + processo.
+- Falhas: manual/MES/ambos + evidências 3028/3074/2114/3022.
+- Rastreabilidade: timeline reutilizada pelas outras views.
+- Central do Dia: contexto MES do escopo/turno.
+- CORA: dados estruturados com origem e nível de evidência.
+
+## 3022
+
+A UI e o modelo de dados já devem reservar `ProcessTimeline` e `event_before_failure`.
+
+Regra temporal: `event_before_failure = último evento válido com event_time <= defect_time`.
+
+Não usar o último evento absoluto da unidade.
+
+## Critério de conclusão
+
+Só chamar a fusão de completa quando a Central oficial baseada no GitHub abrir uma única experiência sem depender de `v2/index.html`, iframe, proxy ou overlay “Central V2” para as funções principais.
+
+**V2, V0.5.23 e 3022 continuam NÃO GREEN até validação real.**

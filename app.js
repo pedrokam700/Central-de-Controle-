@@ -1,7 +1,18 @@
 
+    import { createAmesStore, clearSessionData } from './ames/data/store.mjs';
+    import {createMesSync} from './ames/sync.mjs';
+    import {firestoreTransport} from './ames/firebase-sync.mjs';
+    import { createConsoleView } from './ames/console-view.mjs';
+    import { createDashboardView } from './ames/dashboard-view.mjs';
+    import { createProductView } from './ames/product-view.mjs';
+    import { createOccurrenceView } from './ames/occurrence-view.mjs';
+    import { createDailyView } from './ames/daily-view.mjs';
+    import { createCoraView } from './ames/cora-view.mjs';
+    import { MES_REASONING_RULES } from './ames/data/cora.mjs';
+    import { createOnboardingView, savedIntegrationMode } from './ames/onboarding-view.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch
+      getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import {
       getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -33,6 +44,7 @@
     const ADMIN_EMAIL = 'pedro.henrique@grupomultilaser.com.br';
 
     let state = {
+      ames: createAmesStore(),
       products: [],
       reports: [],
       operationalFailures: [],
@@ -52,6 +64,7 @@
     let currentAccount = null;
     let currentAuthUser = null;
     let unsubscribeData = [];
+    let dataSessionGeneration = 0;
     // Controle de concorrência da autenticação: criação/login e onAuthStateChanged
     // podem disparar juntos. Mantemos uma única inicialização por UID.
     let finishLoginPromise = null;
@@ -343,6 +356,7 @@
     }
 
     function clearDataListeners() {
+      dataSessionGeneration++;
       unsubscribeData.forEach(unsubscribe => { try { unsubscribe(); } catch {} });
       unsubscribeData = [];
     }
@@ -438,8 +452,14 @@
     function syncFirestore() {
       clearDataListeners();
       if (!currentAuthUser) return;
+      const sessionGeneration = dataSessionGeneration;
+      const sessionUid = currentAuthUser.uid;
+      const sessionIsCurrent = () => sessionGeneration === dataSessionGeneration && currentAuthUser?.uid === sessionUid;
+      const subscribeToSession = (reference, onData, onError) => onSnapshot(reference,
+        snapshot => { if (sessionIsCurrent()) return onData(snapshot); },
+        error => { if (sessionIsCurrent()) return onError(error); });
 
-      unsubscribeData.push(onSnapshot(collection(db, 'users'), async snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'users'), async snapshot => {
         users = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         const me = currentAuthUser ? users.find(u => u.docId === currentAuthUser.uid) : null;
         if (me && currentAccount) {
@@ -455,43 +475,61 @@
         renderAccount();
       }, error => console.error('Falha ao sincronizar usuários:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'products'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'products'), snapshot => {
         state.products = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         if (!activeProduct && state.products.length > 0) activeProduct = state.products[0].code;
         fillActivityProducts();
         render();
       }, error => console.error('Falha ao sincronizar produtos:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'reports'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'reports'), snapshot => {
         state.reports = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         render();
       }, error => console.error('Falha ao sincronizar reports:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'activities'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'activities'), snapshot => {
         state.activities = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         render();
       }, error => console.error('Falha ao sincronizar atividades:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'flows'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'flows'), snapshot => {
         state.flows = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         render();
       }, error => console.error('Falha ao sincronizar fluxos:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'operationalFailures'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'operationalFailures'), snapshot => {
         state.operationalFailures = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         render();
       }, error => console.error('Falha ao sincronizar ocorrências operacionais:', error)));
 
-      unsubscribeData.push(onSnapshot(collection(db, 'failureAnalyses'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'failureAnalyses'), snapshot => {
         state.failureAnalyses = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         renderAIHistory();
       }, error => console.error('Falha ao sincronizar análises de falhas:', error)));
-      unsubscribeData.push(onSnapshot(collection(db, 'aiKnowledge'), snapshot => {
+      unsubscribeData.push(subscribeToSession(collection(db, 'aiKnowledge'), snapshot => {
+        if (sessionGeneration !== dataSessionGeneration || !currentAuthUser) return;
         state.aiKnowledge = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
+        state.ames.replaceRemoteDocuments(state.aiKnowledge);
+        renderConsoleMes();
+        renderDashboardMes();
+        renderProductMes();
+        renderFailuresMes();
+        renderDailyMes();
+        renderCoraMes();
         aiUpdateAIState();
         renderAIMemoryPanel();
-      }, error => console.error('Falha ao sincronizar memória da IA:', error)));
-      unsubscribeData.push(onSnapshot(collection(db, 'aiConversations'), snapshot => {
+      }, error => {
+        if (sessionGeneration !== dataSessionGeneration) return;
+        state.ames.replaceRemoteDocuments([]);
+        renderConsoleMes();
+        renderDashboardMes();
+        renderProductMes();
+        renderFailuresMes();
+        renderDailyMes();
+        renderCoraMes();
+        console.error('Falha ao sincronizar memória da IA:', error);
+      }));
+      unsubscribeData.push(subscribeToSession(collection(db, 'aiConversations'), snapshot => {
         state.aiConversations = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         renderAIHistory();
       }, error => console.error('Falha ao sincronizar conversas da IA:', error)));
@@ -504,7 +542,7 @@
         ['routineExecutions','routineExecutions','execuções de rotina']
       ];
       dailyCollections.forEach(([collectionName,stateKey,label]) => {
-        unsubscribeData.push(onSnapshot(collection(db, collectionName), snapshot => {
+        unsubscribeData.push(subscribeToSession(collection(db, collectionName), snapshot => {
           state[stateKey] = snapshot.docs.map(item => ({ docId:item.id, ...item.data() }));
           dailyMaterializeSignature = '';
           render();
@@ -1313,6 +1351,7 @@
           return null;
         }
 
+        if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();consoleMesView?.clear();clearSessionData(state);}
         currentAuthUser = firebaseUser;
         currentAccount = { uid: firebaseUser.uid, name: profile.name, email: profile.email, role: profile.role };
 
@@ -1320,6 +1359,7 @@
         // Migrações e sincronizações secundárias nunca podem prender a tela de login.
         authReady = true;
         syncFirestore();
+        startMesSync(firebaseUser.uid);
         renderAccount();
         render();
 
@@ -1511,11 +1551,18 @@
         currentAuthUser = null;
         currentAccount = null;
         users = [];
-        state.products = [];
-        state.reports = [];
-        state.operationalFailures = [];
-        state.activities = [];
-        state.flows = [];
+        mesSync?.stop();
+        clearSessionData(state);
+        consoleMesView?.clear();
+        dashboardMesView?.clear();
+        productMesView?.clear();
+        failuresMesView?.clear();
+        dailyMesView?.clear();
+        coraMesView?.clear();
+        integrationView?.clear();
+        manualReportPage = 0;
+        const failureOrigin = document.querySelector('#failureOrigin');
+        if (failureOrigin) failureOrigin.value = 'all';
         render();
         return;
       }
@@ -1772,6 +1819,9 @@
       } else if (activeView === 'daily') {
         document.querySelector('#pageTitle').textContent = t('Central do Dia');
         document.querySelector('#pageSubtitle').textContent = t('Rotinas do turno, alocações e execução operacional em tempo real.');
+      } else if (activeView === 'mesConsole') {
+        document.querySelector('#pageTitle').textContent = 'Console MES';
+        document.querySelector('#pageSubtitle').textContent = 'Automação A-MES · operação e investigação por linha';
       } else if (activeView === 'dashboard') {
         document.querySelector('#pageTitle').textContent = t('Dashboard Estratégico');
         document.querySelector('#pageSubtitle').textContent = t('Visão executiva e indicadores gerais de falhas de produtos.');
@@ -1851,12 +1901,22 @@
       return `<tr data-id="${r.id}"><td><span class="identifier">${esc(failureScopeSummary(r))}</span><span class="secondary-text">${esc(r.family)}</span></td><td><span class="identifier">${esc(r.component || r.maquina || 'Geral')}</span><span class="secondary-text wrap">${esc(r.issue)}</span></td><td>${esc(r.material || '—')}</td><td>${esc(r.owner)}</td><td>${linksCell(r)}</td><td>${chip(calculatedStatus(r))}</td><td><span class="secondary-text wrap" style="margin:0">${r.updates?.length ? esc(r.updates[r.updates.length - 1].text) : 'Sem atualização'}</span></td></tr>`;
     }
 
+    let productMesView;
+    function renderProductMes() {
+      if (!currentAuthUser || activeView !== 'product') return;
+      productMesView ||= createProductView(document.querySelector('#productMes'), state.ames, { locale: () => currentLanguage });
+      productMesView.render(activeData()?.code);
+    }
+
     function renderProduct() {
+      renderProductMes();
       const product = activeData();
       const titleEl = document.querySelector('#activeProductTitle');
       if (titleEl && product) {
         const extraColor = productColor(product) && !productColorIsEncoded(product) ? ` · ${productColor(product)}` : '';
         titleEl.textContent = `${productDisplayCode(product.code)} (${product.family}${extraColor})`;
+      } else if (titleEl) {
+        titleEl.textContent = t('Selecione um produto');
       }
 
       const selected = product ? state.reports.filter(r => failureAppliesToProduct(r, product)) : [];
@@ -2057,7 +2117,39 @@
     }
     function closeRecurrenceRadar(){document.querySelector('#recurrenceRadarModal')?.classList.add('hidden');selectedRecurrenceKey='';}
 
+    let failuresMesView;
+    let manualReportPage = 0;
+    function renderFailuresMes() {
+      if (!currentAuthUser || activeView !== 'operations') return;
+      failuresMesView ||= createOccurrenceView(document.querySelector('#failuresMes'), state.ames, { locale: () => currentLanguage, mode: 'failures' });
+      // Keep hidden detail current too, so switching origin cannot expose stale evidence.
+      failuresMesView.render();
+    }
+
+    function applyFailureOrigin() {
+      const origin = document.querySelector('#failureOrigin')?.value || 'all';
+      document.querySelector('#failureManual')?.classList.toggle('hidden', origin === 'mes');
+      document.querySelector('#failuresMes')?.classList.toggle('hidden', origin === 'manual');
+    }
+
+    function renderFailureReports() {
+      const root = document.querySelector('#failureManualReports');
+      if (!root) return;
+      // Preserve every manual Report, including those related to an existing case.
+      // No sum with operational cases or MES and no inferred deduplication.
+      const reports = ordered(state.reports);
+      const pages = Math.max(1, Math.ceil(reports.length / 25));
+      manualReportPage = Math.min(manualReportPage, pages - 1);
+      root.innerHTML = reports.slice(manualReportPage * 25, (manualReportPage + 1) * 25).map(r => `<button type="button" class="dashboard-detail-item" data-id="${esc(r.id)}"><span><strong>Manual · ${esc(r.id)}</strong><span class="secondary-text">${esc(failureScopeSummary(r))} · ${esc(r.linha || 'Linha não informada')}</span><span class="secondary-text">${esc(r.issue || r.component || 'Report')}</span></span></button>`).join('') || '<p>Nenhum report manual disponível.</p>';
+      document.querySelector('#failureReportPage').textContent = `Página ${manualReportPage + 1} de ${pages} · ${reports.length} report(s) manual(is)`;
+      document.querySelector('#failureReportPrev').disabled = manualReportPage === 0;
+      document.querySelector('#failureReportNext').disabled = manualReportPage + 1 >= pages;
+    }
+
     function renderOperations() {
+      applyFailureOrigin();
+      renderFailuresMes();
+      renderFailureReports();
       const search=document.querySelector('#opSearch')?.value.toLowerCase().trim()||'';
       const status=document.querySelector('#opStatus')?.value||'';
       const category=document.querySelector('#opCategory')?.value||'';
@@ -2245,7 +2337,34 @@
       document.querySelectorAll('[data-dashboard-indicator]').forEach(card => card.classList.remove('dashboard-indicator-selected'));
     }
 
+    let consoleMesView;
+    let mesSync;
+    function startMesSync(uid){
+      mesSync ||= createMesSync(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,setDoc,onSnapshot,runTransaction}),{changed(){
+        if(!currentAuthUser)return;
+        renderDashboardMes();renderProductMes();renderFailuresMes();renderDailyMes();renderCoraMes();renderConsoleMes();
+      }});
+      mesSync.start(uid);
+    }
+    function renderConsoleMes() {
+      if (!currentAuthUser || activeView !== 'mesConsole') return;
+      consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, { locale: () => currentLanguage, onChange() {
+        if (!currentAuthUser) return;
+        renderDashboardMes(); renderProductMes(); renderFailuresMes(); renderDailyMes(); renderCoraMes();
+        mesSync?.capture().catch(error=>{state.ames.updateAgent({sync:{status:'error',error:error.message}});});
+      } });
+      consoleMesView.render();
+    }
+
+    let dashboardMesView;
+    function renderDashboardMes() {
+      if (!currentAuthUser || activeView !== 'dashboard') return;
+      dashboardMesView ||= createDashboardView(document.querySelector('#dashboardMes'), state.ames, { locale: () => currentLanguage });
+      dashboardMesView.render();
+    }
+
     function renderDashboard() {
+      renderDashboardMes();
       const dNow = new Date();
       const currentYear = dNow.getFullYear();
       const currentMonth = dNow.getMonth();
@@ -2314,7 +2433,18 @@
       // A seleção do indicador é controlada exclusivamente por openDashboardIndicator().
     }
 
+    let integrationView;
+    function renderIntegration() {
+      const banner = document.querySelector('#amesSetupWelcome');
+      banner?.classList.toggle('hidden', !currentAuthUser || Boolean(savedIntegrationMode()));
+      if (!currentAuthUser || activeView !== 'profile') return;
+      integrationView ||= createOnboardingView(document.querySelector('#amesIntegration'), { onChoice: () => {
+        banner?.classList.toggle('hidden', Boolean(savedIntegrationMode()));
+      } });
+      integrationView.render();
+    }
     function renderProfile() {
+      renderIntegration();
       if (!currentAccount) return;
       const userName = currentAccount.name;
       const userReports = state.reports.filter(r => isAssignedToCurrentUser(r));
@@ -2533,6 +2663,7 @@ function applyActiveView() {
         home: '#homeView',
         daily: '#dailyView',
         dashboard: '#dashboardView',
+        mesConsole: '#mesConsoleView',
         profile: '#profileView',
         product: '#productView',
         operations: '#operationsView',
@@ -2766,7 +2897,17 @@ const aiPilot = {
       const q=aiQuantityTotal(rows); const cols=aiPilot.columns.length||Object.keys(rows[0]||{}).length;
       el.innerHTML=`<div class="ai-mini"><strong>${rows.length}</strong><span>${esc(t('registros'))}</span></div><div class="ai-mini"><strong>${q}</strong><span>${esc(t('quantidade'))}</span></div><div class="ai-mini"><strong>${cols}</strong><span>${esc(t('campos'))}</span></div><div class="ai-mini"><strong>${aiEsc(aiPilot.source)}</strong><span>${esc(t('fonte'))}</span></div>`;
     }
+    let coraMesView;
+    function renderCoraMes() {
+      if (!currentAuthUser || activeView !== 'aiAnalysis') return;
+      coraMesView ||= createCoraView(document.querySelector('#coraMes'), state.ames, { locale: () => currentLanguage });
+      coraMesView.render();
+    }
+    function currentCoraMesContext() {
+      return currentAuthUser ? coraMesView?.context() || { status: 'not_selected' } : { status: 'signed_out' };
+    }
     function renderAIAnalysis(){
+      renderCoraMes();
       const modeButtons=document.querySelectorAll('[data-ai-mode]'); modeButtons.forEach(b=>b.classList.toggle('active',b.dataset.aiMode===aiPilot.mode));
       document.querySelectorAll('[data-ai-perspective]').forEach(b=>b.classList.toggle('active',b.dataset.aiPerspective===aiPilot.perspective));
       const title=document.querySelector('#aiInputTitle'),help=document.querySelector('#aiInputHelp');
@@ -2829,7 +2970,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.40'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.40'){localStorage.setItem('cora.sw.loaded','15.1.13.40');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>{mesSync?.retry();syncOfflineQueue().catch(()=>{});});window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.48'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.48'){localStorage.setItem('cora.sw.loaded','15.1.13.48');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -2943,6 +3084,7 @@ function registerOfflineSupport(){
         if(score>0) pool.push({score,kind:'central',text:aiRelevantText(x).slice(0,700),id:x.id||x.docId});
       });
       (state.aiKnowledge||[]).forEach(x=>{
+        if (x.kind === 'ames_shared_snapshot') return; // MES enters only via the scoped structured projection.
         const score=aiScoreText(x.text||'',q)+2;
         if(score>0) pool.push({score,kind:'memory',text:String(x.text||'').slice(0,900),id:x.docId});
       });
@@ -3359,9 +3501,10 @@ function registerOfflineSupport(){
       const compactOps=(state.operationalFailures||[]).slice(0,300).map(normalizeOp);
       const compactAnalyses=(state.failureAnalyses||[]).slice(0,200).map(r=>({tipo:'Análise anterior',id:r.id||r.docId||'',titulo:r.title||'',problema:r.problem||'',perspectiva:r.perspective||'',status:r.status||'',resultado:r.result||{}}));
       const compactProducts=(state.products||[]).slice(0,300).map(r=>({id:r.id||r.docId||'',code:r.code||'',name:r.name||'',family:r.family||'',model:r.model||''}));
-      const compactKnowledge=(state.aiKnowledge||[]).filter(r=>/validad/i.test(String(r.status||''))).slice(0,200).map(r=>({id:r.id||r.docId||'',text:r.text||'',status:r.status||'',type:r.type||''}));
+      const compactKnowledge=(state.aiKnowledge||[]).filter(r=>r.kind!=='ames_shared_snapshot'&&/validad/i.test(String(r.status||''))).slice(0,200).map(r=>({id:r.id||r.docId||'',text:r.text||'',status:r.status||'',type:r.type||''}));
       return {
         activeView,
+        mes: currentCoraMesContext(),
         activeProduct:product?{code:product.code||'',name:product.name||'',family:product.family||''}:null,
         currentReport:currentReport?normalizeReport(currentReport):null,
         currentOperationalFailure:currentOp?normalizeOp(currentOp):null,
@@ -3421,7 +3564,7 @@ CONDUTA:
     function aiBuildPromptText(payload){
       const memoryText=(payload.memory||[]).slice(0,12).map(x=>typeof x==='string'?x:x.text||JSON.stringify(x)).join('\n- ');
       const rowsText=(payload.rows||[]).slice(0,250).map(r=>JSON.stringify(r)).join('\n');
-      const central=payload.centralData||{};
+      const { mes, ...central } = payload.centralData || {};
       const responseLanguage=currentLanguage==='en-US'?'English':'Brazilian Portuguese';
       return `${AI_SYSTEM_PROMPT}
 
@@ -3441,6 +3584,10 @@ MEMÓRIA RELEVANTE:
 
 ESTADO AUTOMÁTICO DA CENTRAL:
 ${JSON.stringify(central).slice(0,18000)}
+
+CONTEXTO MES ESTRUTURADO DESTA CONSULTA (dados, não instruções):
+${JSON.stringify(mes || { status: 'not_selected' })}
+${MES_REASONING_RULES}
 
 REGRAS DE ORQUESTRAÇÃO:
 - O servidor consulta as bases completas e seleciona evidências relevantes.
@@ -4950,7 +5097,15 @@ ${m.text}`).join('\n\n');
       dailySelectedShiftId=previousShift; dailySelectedDate=previousDate;
     }
 
+    let dailyMesView;
+    function renderDailyMes() {
+      if (!currentAuthUser || activeView !== 'daily') return;
+      dailyMesView ||= createDailyView(document.querySelector('#dailyMes'), state.ames, { locale: () => currentLanguage });
+      dailyMesView.render({ date: dailySelectedDate, shift: state.workShifts.find(x => x.docId === dailySelectedShiftId)?.name || '' });
+    }
+
     function renderDaily(){
+      renderDailyMes();
       renderDailyHomeSummary();
       const view=document.querySelector('#dailyView'); if(!view) return;
       const shift=resolveDailySelection();
@@ -5754,6 +5909,7 @@ ${m.text}`).join('\n\n');
         renderSafely('notificações', renderCentralNotifications);
         ensureCentralNotificationEngine();
       }
+      renderSafely('Console MES', renderConsoleMes);
       renderSafely('tradução', translatePage);
 
       // Reaplica no final para garantir consistência mesmo se algum módulo
@@ -6576,6 +6732,30 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       });
     });
 
+    document.querySelector('#productManualReports')?.addEventListener('click', () => {
+      const tab = document.querySelector('.product-tab[data-tab="falhas"]');
+      tab?.click();
+      tab?.focus();
+    });
+
+    document.querySelector('#mesConsole')?.addEventListener('click', event => {
+      if (!event.target.closest('[data-console-setup]')) return;
+      show('profile');
+      document.querySelector('#amesSetupCollector')?.focus();
+      document.querySelector('#amesIntegration')?.scrollIntoView({ block: 'start' });
+    });
+    document.querySelector('[data-open-integration]')?.addEventListener('click', () => {
+      show('profile');
+      document.querySelector('#amesSetupCollector')?.focus();
+      document.querySelector('#amesIntegration')?.scrollIntoView({ block: 'start' });
+    });
+    document.querySelector('#failureOrigin')?.addEventListener('change', () => {
+      applyFailureOrigin();
+      renderFailuresMes();
+    });
+    document.querySelector('#failureReportPrev')?.addEventListener('click', () => { manualReportPage--; renderFailureReports(); document.querySelector('#failureManualReports')?.focus(); });
+    document.querySelector('#failureReportNext')?.addEventListener('click', () => { manualReportPage++; renderFailureReports(); document.querySelector('#failureManualReports')?.focus(); });
+
     document.querySelectorAll('.close-confirm').forEach(b => b.addEventListener('click', closeConfirmModal));
     document.querySelector('#btnConfirmDelete').addEventListener('click', confirmDeleteFamily);
     document.querySelectorAll('.close-product').forEach(b => b.addEventListener('click', closeProductModal));
@@ -7265,5 +7445,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.40'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.40'){localStorage.setItem('cora.sw.loaded','15.1.13.40');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.48'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.48'){localStorage.setItem('cora.sw.loaded','15.1.13.48');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}

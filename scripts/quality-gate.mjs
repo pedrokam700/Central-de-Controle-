@@ -33,13 +33,57 @@ function syntaxCheck(name) {
 }
 
 const requiredFiles = [
+  'ames/data/agent-contract.mjs',
+  'ames/agent-client.mjs',
+  'ames/automation-view.mjs',
+  'ames/agent-evidence-view.mjs',
+  'scripts/ames-agent.test.mjs',
+  'scripts/agent-scheduler.test.py',
   'index.html',
   'app.js',
   'sw.js',
   'mobile.css',
   'manifest.webmanifest',
   'firestore.rules',
-  'firebase.json'
+  'firebase.json',
+  'ames/console-view.mjs',
+  'ames/capability-view.mjs',
+  'ames/data/capabilities.mjs',
+  'scripts/ames-console.test.mjs',
+  'scripts/ames-capabilities.test.mjs',
+  'scripts/ames-cache.test.mjs',
+  'ames/data/contract.mjs',
+  'ames/data/store.mjs',
+  'ames/data/dashboard.mjs',
+  'ames/dashboard-view.mjs',
+  'ames/occurrence-view.mjs',
+  'ames/data/failures.mjs',
+  'ames/data/trace.mjs',
+  'ames/trace-view.mjs',
+  'ames/data/daily.mjs',
+  'ames/daily-view.mjs',
+  'ames/data/cora.mjs',
+  'ames/cora-view.mjs',
+  'ames/data/onboarding.mjs',
+  'ames/onboarding-view.mjs',
+  'scripts/ames-trace.test.mjs',
+  'scripts/ames-daily.test.mjs',
+  'scripts/ames-cora.test.mjs',
+  'scripts/ames-onboarding.test.mjs',
+  'scripts/ames-sprint.browser.mjs',
+  'scripts/ames-failures.test.mjs',
+  'scripts/ames-failures.browser.mjs',
+  'ames/dashboard.css',
+  'scripts/ames-dashboard.test.mjs',
+  'scripts/ames-dashboard.browser.mjs',
+  'scripts/ames-fixtures.mjs',
+  'ames/data/product.mjs',
+  'ames/product-view.mjs',
+  'ames/evidence-view.mjs',
+  'ames/product.css',
+  'scripts/ames-product.test.mjs',
+  'scripts/ames-product.browser.mjs',
+  'scripts/ames-data.test.mjs'
 ];
 
 for (const name of requiredFiles) {
@@ -63,7 +107,39 @@ const firestoreRules = read('firestore.rules');
 const firebaseConfigFile = read('firebase.json');
 
 syntaxCheck('app.js');
+for (const name of ['ames/data/agent-contract.mjs','ames/agent-client.mjs','ames/automation-view.mjs','ames/agent-evidence-view.mjs','ames/data/canonical.mjs','ames/data/process-timeline.mjs','ames/advanced-view.mjs','ames/sync.mjs','ames/firebase-sync.mjs']) syntaxCheck(name);
+for(const suite of ['scripts/agent-scheduler.test.py','scripts/agent-canonical.test.py','scripts/agent-update.test.py']){
+  const result = spawnSync(process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3'), [suite], {cwd:root,encoding:'utf8'});
+  assertCheck(result.status === 0, 'Agente: concorrência, endpoints, Excel original e hashes 3028', 'Agente: testes falharam\n'+(result.stderr||result.error||result.stdout));
+  if(result.status===0) console.log(result.stderr);
+}
 syntaxCheck('sw.js');
+syntaxCheck('ames/console-view.mjs');
+syntaxCheck('ames/capability-view.mjs');
+syntaxCheck('ames/data/capabilities.mjs');
+syntaxCheck('ames/data/contract.mjs');
+syntaxCheck('ames/data/store.mjs');
+syntaxCheck('ames/data/dashboard.mjs');
+syntaxCheck('ames/dashboard-view.mjs');
+syntaxCheck('ames/occurrence-view.mjs');
+syntaxCheck('ames/data/failures.mjs');
+for (const name of ['ames/data/trace.mjs', 'ames/trace-view.mjs', 'ames/data/daily.mjs', 'ames/daily-view.mjs', 'ames/data/cora.mjs', 'ames/cora-view.mjs', 'ames/data/onboarding.mjs', 'ames/onboarding-view.mjs', 'scripts/ames-sprint.browser.mjs']) syntaxCheck(name);
+syntaxCheck('scripts/ames-failures.browser.mjs');
+syntaxCheck('scripts/ames-dashboard.browser.mjs');
+syntaxCheck('ames/data/product.mjs');
+syntaxCheck('ames/product-view.mjs');
+syntaxCheck('ames/evidence-view.mjs');
+syntaxCheck('scripts/ames-product.browser.mjs');
+
+// Native data invariants are behavioral tests, not just source-string checks.
+{
+  const result = spawnSync(process.execPath, ['--test', '--test-isolation=none', ...fs.readdirSync(filePath('scripts')).filter(name => /^ames-.*\.test\.mjs$/.test(name)).sort().map(name => 'scripts/' + name)], {
+    cwd: root, encoding: 'utf8'
+  });
+  assertCheck(result.status === 0,
+    'A-MES: testes de contrato/store/sessão/Dashboard/Produto/Falhas passaram',
+    'A-MES: falha nos testes\n' + (result.stdout || '') + (result.stderr || ''));
+}
 
 // 1) IDs duplicados no HTML ativo.
 {
@@ -104,6 +180,8 @@ if (build) {
   const assetChecks = [
     ['manifest.webmanifest', new RegExp('manifest\\.webmanifest\\?v=' + escaped)],
     ['mobile.css', new RegExp('mobile\\.css\\?v=' + escaped)],
+    ['ames/dashboard.css', new RegExp('ames/dashboard\\.css\\?v=' + escaped)],
+    ['ames/product.css', new RegExp('ames/product\\.css\\?v=' + escaped)],
     ['app.js', new RegExp('app\\.js\\?v=' + escaped)]
   ];
 
@@ -166,6 +244,7 @@ assertCheck(
     'workView',
     'flowView',
     'aiAnalysisView',
+    'mesConsoleView',
     'profileView'
   ];
 
@@ -229,8 +308,35 @@ assertCheck(
 
 // 8) Assets operacionais esperados continuam no cache do SW.
 for (const asset of [
+  "BASE+'ames/data/agent-contract.mjs'",
+  "BASE+'ames/agent-client.mjs'",
+  "BASE+'ames/automation-view.mjs'",
+  "BASE+'ames/agent-evidence-view.mjs'",
   "BASE+'index.html'",
   "BASE+'app.js'",
+  "BASE+'ames/console-view.mjs'",
+  "BASE+'ames/capability-view.mjs'",
+  "BASE+'ames/data/capabilities.mjs'",
+  "BASE+'ames/data/store.mjs'",
+  "BASE+'ames/data/contract.mjs'",
+  "BASE+'ames/data/dashboard.mjs'",
+  "BASE+'ames/dashboard-view.mjs'",
+  "BASE+'ames/occurrence-view.mjs'",
+  "BASE+'ames/data/failures.mjs'",
+  "BASE+'ames/data/trace.mjs'",
+  "BASE+'ames/trace-view.mjs'",
+  "BASE+'ames/data/daily.mjs'",
+  "BASE+'ames/daily-view.mjs'",
+  "BASE+'ames/data/cora.mjs'",
+  "BASE+'ames/cora-view.mjs'",
+  "BASE+'ames/data/onboarding.mjs'",
+  "BASE+'ames/onboarding-view.mjs'",
+  "BASE+'ames/releases/latest/release.json'",
+  "BASE+'ames/dashboard.css'",
+  "BASE+'ames/data/product.mjs'",
+  "BASE+'ames/product-view.mjs'",
+  "BASE+'ames/evidence-view.mjs'",
+  "BASE+'ames/product.css'",
   "BASE+'styles.css'",
   "BASE+'mobile.css'",
   "BASE+'manifest.webmanifest'"
@@ -272,4 +378,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('\nResultado: GREEN');
+console.log('\nResultado: PASS (checks estáticos e contratos). V2/V0.5.23/3022 dependem de validação real em fábrica.');
