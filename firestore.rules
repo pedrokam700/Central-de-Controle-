@@ -82,6 +82,47 @@ service cloud.firestore {
       allow read, create, update, delete: if activeUser();
     }
 
+    // MES v2: private publication namespace per authenticated owner and line.
+    // A second PC signs into the same account; no cross-user wildcard access.
+    match /amesUsers/{ownerId}/lines/{lineId} {
+      function owner() {
+        return activeUser() && request.auth.uid == ownerId
+          && lineId in ['TAN10101', 'TAN10102', 'TAN10103'];
+      }
+      function validHead() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['schema','owner_uid','line_id','source_id','snapshot_id','snapshot_num','snapshot_revision','key','hash','parts','collected_at'])
+          && d.schema == 'central-ames-v2' && d.owner_uid == ownerId && d.line_id == lineId
+          && d.source_id is string && d.source_id.size() <= 64
+          && d.snapshot_id is string && d.snapshot_num is int && d.snapshot_num > 0
+          && d.snapshot_revision is int && d.snapshot_revision > 0
+          && d.key is string && d.key.matches('[a-f0-9]{64}')
+          && d.hash is string && d.hash.matches('[a-f0-9]{64}')
+          && d.parts is int && d.parts > 0 && d.parts <= 5000 && d.collected_at is string;
+      }
+      allow read: if owner();
+      allow create: if owner() && validHead();
+      allow update: if owner() && validHead()
+        && request.resource.data.source_id == resource.data.source_id
+        && (request.resource.data.snapshot_num > resource.data.snapshot_num
+          || (request.resource.data.snapshot_num == resource.data.snapshot_num
+            && (request.resource.data.snapshot_revision > resource.data.snapshot_revision
+              || request.resource.data == resource.data)));
+      allow delete: if false;
+      match /snapshots/{snapshotKey}/parts/{partId} {
+        allow read: if owner();
+        allow create: if owner()
+          && request.resource.data.keys().hasOnly(['owner_uid','line_id','key','index','data'])
+          && request.resource.data.owner_uid == ownerId && request.resource.data.line_id == lineId
+          && request.resource.data.key == snapshotKey && snapshotKey.matches('[a-f0-9]{64}')
+          && request.resource.data.index is int && request.resource.data.index >= 0
+          && request.resource.data.index < 5000
+          && request.resource.data.data is string && request.resource.data.data.size() <= 600000;
+        allow update: if owner() && request.resource.data == resource.data;
+        allow delete: if false;
+      }
+    }
+
     // Configuração da Central do Dia: todos os usuários ativos podem ler,
     // somente administradores alteram a estrutura operacional.
     match /workShifts/{documentId} {

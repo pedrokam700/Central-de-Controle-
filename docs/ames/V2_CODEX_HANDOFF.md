@@ -1,4 +1,11 @@
 # Handoff de execução ao Codex
+## Fechamento autorizado — 2026-10-09, build 15.1.13.48
+
+Retomado de ef7d43ebd19e31e8b01ae785ca5cb5c306e0af25 sem descartar alterações. Contrato canônico v2, revisão/cursor/IDs locais/proveniência, controles auxiliares nativos, sync Firebase por usuário/linha e ProcessTimeline futuro implementados. Rules mínimas testadas e publicadas; sem dados de produção alterados. Candidato 0.5.24-rc1 com backup/rollback reproduzível.
+
+O usuário autorizou merge após gates e publicação somente em https://central-cora-v2.vercel.app. Restrições antigas a main/Rules/produção abaixo são histórico. Fallback preservado. Consulte [paridade atual](V2_CONSOLE_PARIDADE.md) e [release/rollback](V2_RELEASE_15_1_13_48.md). Testes de código não substituem fábrica; 3022 READY FOR ADAPTER, NÃO GREEN.
+
+
 
 ## Atualização — scheduler global e Console conectado (2026-10-09)
 

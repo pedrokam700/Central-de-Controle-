@@ -29,8 +29,11 @@ collect_live_3028 = mes_call(_collect_live_3028)
 from engine_bridge import (choose_current_history, discover_engine, refresh_2114, repair_state,
                            run_full_v016, run_deep_v016_records, run_individual_lookup, regenerate_v016_excel, build_trace_insights)
 from store import Store, stable_json, utc_now
+import canonical
+import process_timeline
 
 AGENT_VERSION = "0.5.23"
+CANDIDATE_VERSION = "0.5.24-rc1"
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "ames_local.sqlite3"
@@ -109,8 +112,13 @@ JOBS_LOCK = threading.Lock()
 MONITOR_STOP = threading.Event()
 MONITOR_THREAD = None
 JOB_CANCEL = {}
-
-
+REQUEST_LOCK = threading.Lock()
+def recover_jobs():
+    """Run only after binding the agent port; a second startup must not cancel jobs."""
+    with STORE.connect() as con:
+        con.execute("UPDATE jobs SET status='error',stage='interrupted',error='Agent restarted',message='Agente reiniciado; confira o snapshot antes de repetir' WHERE status IN ('queued','running')")
+        for saved in con.execute('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 100'):
+            item=dict(saved);item['config']=json.loads(item.pop('config_json') or '{}');item['result']=json.loads(item.pop('result_json') or 'null');JOBS[item['id']]=item
 
 
 def _tcp_probe(host, port, timeout=1.2):
@@ -200,7 +208,7 @@ def _job_update(job_id, **fields):
         return dict(job)
 
 
-def _job_create(kind, config):
+def _job_create(kind, config, admission=None):
     job_id = uuid.uuid4().hex[:12]
     now = utc_now()
     job = {
@@ -213,14 +221,16 @@ def _job_create(kind, config):
         "created_at": now,
         "config": config,
     }
-    with JOBS_LOCK:
-        JOBS[job_id] = job
-        JOB_CANCEL[job_id] = threading.Event()
     with STORE.connect() as con:
         con.execute(
             "INSERT OR REPLACE INTO jobs(id,kind,mode,status,created_at,progress,stage,message,config_json) VALUES(?,?,?,?,?,?,?,?,?)",
             (job_id, kind, config.get("mode"), "queued", now, 0, "queued", "Na fila", stable_json(config)),
         )
+        if admission:
+            con.execute('INSERT INTO mes_requests VALUES(?,?,?,?)',(*admission,job_id))
+    with JOBS_LOCK:
+        JOBS[job_id] = job
+        JOB_CANCEL[job_id] = threading.Event()
     return job
 
 
@@ -516,11 +526,35 @@ def _run_full_pipeline_job(job_id, cfg):
 
 
 def _launch_mes_job(kind, cfg, worker, monitor=False):
+    request_id=cfg.get('request_id')
+    if request_id and not monitor:
+        if not re.fullmatch(r'[A-Za-z0-9-]{8,100}',str(request_id)):raise ValueError('Invalid request_id')
+        ignored={'request_id'}|({'start_at','end_at','mode'} if cfg.get('preset') in ('today','previous_day') else set())
+        fingerprint=canonical.digest({k:v for k,v in cfg.items() if k not in ignored})
+        # Admission is brief; this lock is never held by a worker awaiting MES.
+        with REQUEST_LOCK:
+            with STORE.connect() as con:
+                saved=con.execute('SELECT * FROM mes_requests WHERE request_id=?',(request_id,)).fetchone()
+            if saved:
+                if saved['kind']!=kind or saved['config_hash']!=fingerprint:raise ValueError('request_id reused with different configuration')
+                with JOBS_LOCK:previous=JOBS.get(saved['job_id'])
+                if previous:return dict(previous)
+                with STORE.connect() as con:
+                    previous=dict(con.execute('SELECT * FROM jobs WHERE id=?',(saved['job_id'],)).fetchone())
+                previous['config']=json.loads(previous.pop('config_json') or '{}')
+                previous['result']=json.loads(previous.pop('result_json') or 'null')
+                return previous
+            config=dict(cfg);config.pop('request_id')
+            return _launch_new_mes_job(kind,config,worker,admission=(request_id,kind,fingerprint))
+    return _launch_new_mes_job(kind,cfg,worker,monitor=monitor)
+
+
+def _launch_new_mes_job(kind, cfg, worker, monitor=False, admission=None):
     reservation = MES.reserve_monitor() if monitor else None
     if monitor and reservation is None:
         return None  # No job/status row or queued thread for a skipped tick.
     try:
-        job = _job_create(kind, cfg)
+        job = _job_create(kind, cfg, admission)
         def state_change(state):
             _job_update(job["id"], mes_state=state)
         def run():
@@ -532,6 +566,8 @@ def _launch_mes_job(kind, cfg, worker, monitor=False):
                 status = "cancelled" if isinstance(exc, Cancelled) else "skipped"
                 _persist_job(_job_update(job["id"], status=status, stage=status,
                     finished_at=utc_now(), message=status, mes_state="idle"))
+            except Exception as exc:
+                _persist_job(_job_update(job['id'],status='error',stage='error',finished_at=utc_now(),message=str(exc),error=type(exc).__name__))
             finally:
                 _job_update(job["id"], mes_state="idle")
                 with JOBS_LOCK:
@@ -849,7 +885,7 @@ def start_sn_lookup_job(cfg):
     sn = str(cfg.get("sn") or "").strip()
     if not sn:
         raise RuntimeError("Informe ou bipe uma SN")
-    return _launch_mes_job("sn_lookup", {"sn": sn, "include_3022": bool(cfg.get("include_3022", True))}, _run_sn_lookup_job)
+    return _launch_mes_job("sn_lookup", {"sn": sn, "include_3022": bool(cfg.get("include_3022", True)),"request_id":cfg.get('request_id')}, _run_sn_lookup_job)
 
 def start_deep_trace_job(cfg):
     return _launch_mes_job("deep_trace", cfg, _run_deep_trace_job)
@@ -990,7 +1026,7 @@ def export_team_excel(lines=None):
     datasets = [
         ("HIST_PCBA", "pcba_history", ["line","pcba_sn","hist_seq","defect_code","defect_desc","defect_oper","defect_location","defect_material_id","repair_status","manual_or_auto","defect_type","defect_type_class","snapshot_id"]),
         ("HIST_MATERIAL", "material_reuse", ["line","current_pcba_sn","current_defect_key","item_sn","item_type","usage_status","previous_pcba_count","total_pcba_count_known_now","previous_pcbas_json","active_now_pcbas_json","inactive_now_pcbas_json","bind_time_utc","unbind_time_utc","snapshot_id"]),
-        ("PROCESSO_3022", "process_events", ["line","pcba_sn","station","operation_code","operation_name","event_time","event_group","source","snapshot_id"]),
+        ("PROCESSO_3022", "process_timeline", ["line","product","pcba_sn","process","station","event_time","source_view","snapshot_id","event_id","provenance_json","raw_ref","valid"]),
     ]
     for sheet_name, dataset, cols in datasets:
         sh = wb.create_sheet(sheet_name); sh.append(cols)
@@ -1193,6 +1229,17 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         try:
+            if u.path == '/api/v1/v2/capabilities':
+                self._send({'schema':canonical.SCHEMA,'candidate_version':CANDIDATE_VERSION,'source_id':canonical.source_id(STORE),'scheduler':MES.snapshot(),'process_timeline':process_timeline.ADAPTER is not None,'cursor':True,'revision':True,'durable_local_ids':True,'native_console':True})
+                return
+            if u.path == '/api/v1/v2/snapshots':
+                heads=[]
+                for line,sid in STORE.latest_snapshot_ids_by_line(CONFIG['configured_lines']).items():
+                    heads.append(canonical.manifest(canonical.export_revision(STORE,sid,line,trace_insights)))
+                self._send({'schema':canonical.SCHEMA,'snapshots':heads});return
+            if u.path == '/api/v1/v2/records':
+                one=lambda name,default=None:(q.get(name) or [default])[0]
+                self._send(canonical.page(STORE,one('snapshot_id'),one('line'),one('revision'),one('dataset'),one('cursor'),one('limit',250)));return
             ui_root = BASE_DIR.parent
             static_map = {
                 "/": "ames-offline-v2.html",
@@ -1209,6 +1256,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({
                     "ok": True,
                     "agent_version": AGENT_VERSION,
+                    "candidate_version": CANDIDATE_VERSION,
                     "mes_scheduler": MES.snapshot(),
                     "db": str(DB_PATH),
                     "engine_found": bool(engine),
@@ -1357,10 +1405,11 @@ class Handler(BaseHTTPRequestHandler):
                             "lines": parsed.get("lines") or []})
                 return
             if u.path == "/api/v1/sn-lookup":
-                self._send(start_sn_lookup_job({"sn": body.get("sn"), "include_3022": body.get("include_3022", True)}), 202)
+                self._send(start_sn_lookup_job({"sn": body.get("sn"), "include_3022": body.get("include_3022", True),"request_id":body.get('request_id')}), 202)
                 return
             if u.path == "/api/v1/deep-trace":
                 self._send(start_deep_trace_job({
+                    "request_id":body.get('request_id'),
                     "lines": body.get("lines") or CONFIG.get("configured_lines") or [],
                     "defect_codes": body.get("defect_codes") or [],
                     "max_failures": body.get("max_failures") or 0,
@@ -1437,8 +1486,9 @@ def main():
     ap.add_argument("--host", default=CONFIG.get("host", "127.0.0.1"))
     ap.add_argument("--port", type=int, default=int(CONFIG.get("port", 8765)))
     args = ap.parse_args()
-    ensure_monitor_thread()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
+    recover_jobs()
+    ensure_monitor_thread()
     print(f"A-MES Local Agent v{AGENT_VERSION}")
     print(f"Tela: http://{args.host}:{args.port}/")
     print(f"API: http://{args.host}:{args.port}/api/v1/health")

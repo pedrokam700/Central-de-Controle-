@@ -38,7 +38,7 @@ renderProduct();
 `;
 const html = fs.readFileSync('index.html', 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
   .replace('</html>', '<script type="module" src="./product-test-harness.mjs"></script></html>');
-const allowed = new Set(['ames/capability-view.mjs','ames/data/capabilities.mjs','mobile.css', 'ames/dashboard.css', 'ames/product.css', 'ames/product-view.mjs', 'ames/trace-view.mjs','ames/data/trace.mjs','ames/evidence-view.mjs', 'ames/occurrence-view.mjs', 'ames/data/daily.mjs','ames/data/failures.mjs', 'ames/data/product.mjs', 'ames/data/contract.mjs', 'ames/data/store.mjs','ames/data/agent-contract.mjs', 'manifest.webmanifest']);
+const allowed = new Set(['ames/capability-view.mjs','ames/data/capabilities.mjs','mobile.css', 'ames/dashboard.css', 'ames/product.css', 'ames/product-view.mjs', 'ames/trace-view.mjs','ames/data/trace.mjs','ames/evidence-view.mjs', 'ames/occurrence-view.mjs', 'ames/data/daily.mjs','ames/data/failures.mjs', 'ames/data/product.mjs', 'ames/data/contract.mjs', 'ames/data/store.mjs','ames/data/canonical.mjs','ames/data/agent-contract.mjs','ames/data/process-timeline.mjs','ames/data/agent-contract.mjs', 'manifest.webmanifest']);
 const server = http.createServer((req, res) => {
   const name = new URL(req.url, 'http://localhost').pathname.replace(/^\/Central-de-Controle-\//, '');
   if (name === 'index.html') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(html); }

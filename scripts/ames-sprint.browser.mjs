@@ -5,7 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
-import { productFixture } from './ames-fixtures.mjs';
+import { productFixture,canonicalAgentFixture,canonicalResponse } from './ames-fixtures.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
 const app=fs.readFileSync('app.js','utf8');
 const extract=(a,b)=>{assert(app.includes(a)&&app.includes(b));return app.slice(app.indexOf(a),app.indexOf(b));};
@@ -147,6 +147,11 @@ try{
     const summaries=[a,b].map((d,i)=>({...d.payload.summary,snapshot_id:i+1}));
     let json={};
     if(key==='health')json={agent_version:'0.5.23',mes_scheduler:{policy:'fifo-monitor-skip-v1'},engine_found:true,chrome_cdp_reachable:true,ames_reachable:true};
+    else if(key==='v2/capabilities')json={schema:'central-ames-v2',native_console:true,revision:true,cursor:true};
+    else if(key==='v2/snapshots'||key==='v2/records'){
+      const payloads=[a,b].map((d,i)=>{const legacy={...d.payload,summary:{...d.payload.summary,snapshot_id:i+1}};return canonicalAgentFixture({legacy,datasets:{pcba_history:[{pcba_sn:'SYNTHETIC-PCBA-0'}],material_reuse:[{item_sn:'MATERIAL-ONLY'}]},insights:{schema:'ames-insights-v1',ready:true,line:d.line,snapshot_id:i+1,pcba_kpis:[['PCBA em 2º uso',1]],component_types:[{'Tipo material':'RAM'}],drilldowns:{pcba_second_use:[{PCBA:'SYNTHETIC-PCBA-0'}]}}});});
+      json=key==='v2/snapshots'?{snapshots:payloads}:canonicalResponse(payloads.find(p=>p.line_id===u.searchParams.get('line')),u);
+    }
     else if(key==='config')json={configured_lines:['TAN10101','TAN10102'],performance:'balanced'};
     else if(key==='monitor')json={enabled:0};
     else if(key==='team-dashboard')json={snapshot_ids:{TAN10101:1,TAN10102:2},lines:summaries.map(s=>({...s,metrics:s}))};
@@ -171,7 +176,7 @@ try{
   await page.locator('[name=defectMode]').selectOption('selected');await page.locator('[name=codes]').fill('D1, D2');
   await page.locator('[data-agent-action=deep]').click();
   await page.waitForFunction(()=>document.querySelector('[data-agent-status]').textContent.includes('2 / 4'));
-  assert.deepEqual(apiCalls.find(c=>c.key==='deep-trace').body,{lines:['TAN10101','TAN10102'],defect_codes:['D1','D2'],max_failures:0,max_pcbas:0,performance:'fast'});
+  assert.deepEqual(apiCalls.find(c=>c.key==='deep-trace').body,{lines:['TAN10101','TAN10102'],defect_codes:['D1','D2'],max_failures:0,max_pcbas:0,performance:'fast',request_id:apiCalls.find(c=>c.key==='deep-trace').body.request_id});
   await page.waitForFunction(()=>document.querySelector('[data-agent-status]').textContent.includes('done'));
   await page.locator('[data-console-evidence] details details summary').first().click();
   // The PCBA group is the second original KPI group.
@@ -193,14 +198,14 @@ try{
         await page.locator('#dailyMesLine').selectOption('TAN10101');await page.locator('#dailyMesRecords').click();
         await page.locator('#dailyMes [data-mes-trace]').first().click();
       }
-      const overflow=await page.locator(selector).evaluate(root=>[root,...root.querySelectorAll('*')].filter(el=>el.getClientRects().length&&(el.getBoundingClientRect().left< -1||el.getBoundingClientRect().right>innerWidth+1||el.scrollWidth>el.clientWidth+2)).map(el=>el.id||el.tagName));
+      const overflow=await page.locator(selector).evaluate(root=>[root,...root.querySelectorAll('*')].filter(el=>el.getClientRects().length&&(el.getBoundingClientRect().left< -1||el.getBoundingClientRect().right>innerWidth+1||el.scrollWidth>el.clientWidth+2)).map(el=>[el.id||el.outerHTML.slice(0,240),el.clientWidth,el.scrollWidth,el.getBoundingClientRect().right,getComputedStyle(el).fontSize,getComputedStyle(el).minWidth]));
       assert.deepEqual(overflow,[],view+' overflow '+width);
       if(process.env.SPRINT_SCREENSHOTS){fs.mkdirSync(process.env.SPRINT_SCREENSHOTS,{recursive:true});await page.locator(selector).scrollIntoViewIfNeeded();await page.screenshot({path:path.join(process.env.SPRINT_SCREENSHOTS,view+'-'+width+'.png')});}
     }
   }
   await page.setViewportSize({width:390,height:900});await page.evaluate(()=>document.documentElement.style.zoom='2');
   for(const [view,selector] of [['mesConsole','#mesConsole'],['daily','#dailyMes'],['aiAnalysis','#coraMes'],['profile','#amesIntegration']]){
-    await show(view);assert.deepEqual(await page.locator(selector).evaluate(root=>[root,...root.querySelectorAll('*')].filter(el=>el.getClientRects().length&&(el.getBoundingClientRect().right>innerWidth+1||el.scrollWidth>el.clientWidth+2)).map(el=>el.id||el.tagName)),[],view+' zoom 200%');
+    await show(view);assert.deepEqual(await page.locator(selector).evaluate(root=>[root,...root.querySelectorAll('*')].filter(el=>el.getClientRects().length&&(el.getBoundingClientRect().right>innerWidth+1||el.scrollWidth>el.clientWidth+2)).map(el=>[el.id||el.outerHTML.slice(0,240),el.clientWidth,el.scrollWidth,el.getBoundingClientRect().right,getComputedStyle(el).fontSize,getComputedStyle(el).minWidth])),[],view+' zoom 200%');
   }
   await page.evaluate(()=>document.documentElement.style.zoom='');
   await page.evaluate(()=>sprint.logout());assert.equal((await page.evaluate(()=>sprint.context())).status,'signed_out');

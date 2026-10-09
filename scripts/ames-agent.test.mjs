@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createAgentClient} from '../ames/agent-client.mjs';
 import {createAmesStore} from '../ames/data/store.mjs';
 import {collectionScope,normalizeAgentRead,SCHEDULER_POLICY} from '../ames/data/agent-contract.mjs';
-import {productFixture} from './ames-fixtures.mjs';
+import {productFixture,canonicalAgentFixture,canonicalResponse} from './ames-fixtures.mjs';
 
 const line='TAN10101',scope={lines:[line],performance:'fast',max_failures:0,max_pcbas:0,defect_codes:[]};
 function fixture(){
@@ -13,9 +13,10 @@ function fixture(){
 }
 export function harness(){
   const store=createAmesStore(),f=fixture(),calls=[],pending=[];let clock=10000;
-  const routes={health:{agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY},engine_found:true},config:{configured_lines:[line],performance:'fast'},monitor:{enabled:0},'team-dashboard':{snapshot_ids:{[line]:f.legacy.summary.snapshot_id},lines:[{...f.legacy.summary,metrics:f.legacy.summary}]},insights:f.insights,'deep-trace':{id:'J',status:'queued'},runs:{id:'J',status:'queued'},'jobs/J':{id:'J',status:'running',stage_progress:{'3074':{line,current:1,total:3,line_percent:33}},partial_refresh:0},'jobs/J/cancel':{ok:true},'monitor/start':{enabled:true,interval_minutes:5},'monitor/stop':{enabled:false}};
+  const routes={'v2/capabilities':{schema:'central-ames-v2',native_console:true,revision:true,cursor:true},'v2/snapshots':()=>({ok:true,json:async()=>({snapshots:[canonicalAgentFixture(f)]})}),health:{agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY},engine_found:true},config:{configured_lines:[line],performance:'fast'},monitor:{enabled:0},'team-dashboard':{snapshot_ids:{[line]:f.legacy.summary.snapshot_id},lines:[{...f.legacy.summary,metrics:f.legacy.summary}]},insights:f.insights,'deep-trace':{id:'J',status:'queued'},runs:{id:'J',status:'queued'},'jobs/J':{id:'J',status:'running',stage_progress:{'3074':{line,current:1,total:3,line_percent:33}},partial_refresh:0},'jobs/J/cancel':{ok:true},'monitor/start':{enabled:true,interval_minutes:5},'monitor/stop':{enabled:false}};
   const fetcher=async(url,options)=>{
     const u=new URL(url),key=u.pathname.replace('/api/v1/','');calls.push({key,body:options.body&&JSON.parse(options.body),options,url});
+    if(key==='v2/records')return {ok:true,json:async()=>canonicalResponse(canonicalAgentFixture(f),u)};
     if(key==='base')return {ok:true,json:async()=>({rows:u.searchParams.get('dataset')==='defects'?f.legacy.defects:(f.datasets[u.searchParams.get('dataset')]||[])})};
     if(key==='export/excel/download')return {ok:true,blob:async()=>new Blob(['PKoriginal'])};
     const value=routes[key];if(value instanceof Function)return value(options);
@@ -46,11 +47,11 @@ test('old agent blocked before commands; real scheduler health required',async()
 test('real payloads, persistent config, 850ms progress and >2200ms changed partial refresh',async()=>{
   const h=harness();await h.client.connect();assert.equal(h.store.read(line).source,'local');
   await h.client.saveConfig({...scope,lines:[line,'TAN10102']});assert.deepEqual(h.calls.find(c=>c.key==='config'&&c.body).body,{configured_lines:[line,'TAN10102'],performance:'fast'});
-  await h.client.collect('deep',{...scope,defect_codes:['D1','D2']});assert.deepEqual(h.calls.find(c=>c.key==='deep-trace').body,{...scope,defect_codes:['D1','D2']});assert.equal(h.pending[0].ms,850);
-  const count=()=>h.calls.filter(c=>c.key==='team-dashboard').length,before=count();await h.tick();assert.equal(count(),before);assert.equal(h.store.agent().job.stage_progress['3074'].current,1);
-  h.routes['jobs/J'].partial_refresh=1;await h.tick(2300);assert.equal(count(),before+2);await h.tick(3000);assert.equal(count(),before+2);
+  await h.client.collect('deep',{...scope,defect_codes:['D1','D2']});assert.deepEqual(h.calls.find(c=>c.key==='deep-trace').body,{...scope,defect_codes:['D1','D2'],request_id:h.calls.find(c=>c.key==='deep-trace').body.request_id});assert.equal(h.pending[0].ms,850);
+  const count=()=>h.calls.filter(c=>c.key==='v2/snapshots').length,before=count();await h.tick();assert.equal(count(),before);assert.equal(h.store.agent().job.stage_progress['3074'].current,1);
+  h.routes['jobs/J'].partial_refresh=1;await h.tick(2300);assert.equal(count(),before+1);await h.tick(3000);assert.equal(count(),before+1);
   h.routes['jobs/J'].status='done';await h.tick();assert.equal(h.pending.length,0);
-  await h.client.collect('today',scope);assert.deepEqual(h.calls.find(c=>c.key==='runs').body,{preset:'today',lines:[line],performance:'fast'});
+  await h.client.collect('today',scope);assert.deepEqual(h.calls.find(c=>c.key==='runs').body,{preset:'today',lines:[line],performance:'fast',request_id:h.calls.find(c=>c.key==='runs').body.request_id});
   await h.client.cancel();assert(h.calls.some(c=>c.key==='jobs/J/cancel'));h.client.clear();assert.equal(h.pending.length,0);
 });
 test('monitor is explicit; original Excel bytes pass through without regenerating',async()=>{
@@ -60,9 +61,17 @@ test('monitor is explicit; original Excel bytes pass through without regeneratin
 });
 test('snapshot replacement while reading is rejected, old read remains intact',async()=>{
   const h=harness();await h.client.connect();const old=h.store.read(line).snapshot;let n=0;
-  h.routes['team-dashboard']=()=>({ok:true,json:async()=>({snapshot_ids:{},lines:[{...h.f.legacy.summary,snapshot_id:++n}]})});
-  await assert.rejects(h.client.refresh(),/Snapshot mudou/);assert.equal(h.store.read(line).snapshot,old);
+  h.routes['v2/snapshots']=()=>({ok:true,json:async()=>({snapshots:[{...canonicalAgentFixture(h.f),snapshot_revision:2}]})});
+  await assert.rejects(h.client.refresh(),/Revisão misturada/);assert.equal(h.store.read(line).snapshot,old);
 });
 test('logout aborts pending request, no late data or errors enter next session',async()=>{
   const h=harness();let finish;h.routes.health=()=>new Promise(resolve=>finish=resolve);const pending=h.client.connect();h.client.clear();h.store.clear();finish({ok:true,json:async()=>({agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY}})});await assert.rejects(pending,{name:'AbortError'});assert.equal(h.store.agent().status,'disconnected');assert.equal(h.store.agent().error,'');assert.equal(h.store.read(line).snapshot,null);
+});
+
+test('timeout retry retains request identity and unchanged revisions avoid dataset requests',async()=>{
+  const h=harness();await h.client.connect();const old=h.store.read(line).snapshot;
+  const before=h.calls.filter(c=>c.key==='v2/records').length;await h.client.refresh();assert.equal(h.calls.filter(c=>c.key==='v2/records').length,before);assert.equal(h.store.read(line).snapshot,old);
+  h.routes['deep-trace']=()=>{throw new DOMException('Timeout','TimeoutError');};
+  await assert.rejects(h.client.collect('deep',scope),{name:'TimeoutError'});const id=h.calls.find(c=>c.key==='deep-trace').body.request_id;
+  h.routes['deep-trace']={id:'J',status:'queued'};await h.client.collect('deep',scope);assert.equal(h.calls.filter(c=>c.key==='deep-trace').at(-1).body.request_id,id);h.client.clear();
 });

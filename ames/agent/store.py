@@ -340,6 +340,8 @@ class Store:
                 "INSERT OR IGNORE INTO monitor_profiles(id,enabled,interval_minutes,mode,config_json,updated_at) VALUES(1,0,30,'today','{}',?)",
                 (utc_now(),),
             )
+        from canonical import initialize
+        initialize(self)
 
     def record_audit(self, event_type: str, *, workstation: str | None = None, snapshot_id: int | None = None,
                      line: str | None = None, details: Any = None) -> int:
@@ -502,6 +504,12 @@ class Store:
             window_id = snapshot["window_id"] if snapshot else None
             for rec in records:
                 key = defect_key(rec)
+                # Keep historical keys, but never overwrite a different CPH variant
+                # with the same legacy line/PCBA/time/defect tuple.
+                from canonical import cph
+                previous=con.execute('SELECT product_model FROM defect_entities WHERE defect_key=?',(key,)).fetchone()
+                if previous and cph(previous['product_model'])!=cph(rec.get('product_model')):
+                    key=hashlib.sha256((key+'|'+cph(rec.get('product_model'))).encode()).hexdigest()[:20]
                 keys_seen.add(key)
                 count += 1
                 existing = con.execute("SELECT defect_key FROM defect_entities WHERE defect_key=?", (key,)).fetchone()
@@ -1031,6 +1039,15 @@ class Store:
             return []
         dataset = str(dataset or "defects")
         limit = max(1, min(int(limit), 100000))
+        if dataset in ('pcba_history','material_reuse','process_events','repair_refreshes'):
+            from canonical import legacy_context_rows
+            return legacy_context_rows(self,dataset,snapshot_id,line,limit)
+        if dataset == 'process_timeline':
+            with self.connect() as con:
+                sql='SELECT *,line_id AS line,process AS operation_name FROM mes_process_timeline WHERE snapshot_id=?'
+                params=[snapshot_id]
+                if line:sql+=' AND line_id=?';params.append(line)
+                return [dict(r) for r in con.execute(sql+' ORDER BY event_time LIMIT ?',params+[limit])]
         with self.connect() as con:
             if dataset == "removed_defects":
                 snap = con.execute("SELECT window_id FROM snapshots WHERE id=?", (snapshot_id,)).fetchone()
@@ -1066,46 +1083,11 @@ class Store:
                     sql += " AND line=?"; params.append(line)
                 sql += " ORDER BY line,product_model LIMIT ?"; params.append(limit)
                 return [dict(r) for r in con.execute(sql, params).fetchall()]
-            if dataset == "pcba_history":
-                # Derive line from the current-PCBA record whenever possible.
-                sql = """SELECT h.*, COALESCE(
-                           (SELECT o.line FROM defect_observations o WHERE o.snapshot_id=h.snapshot_id AND o.pcba_sn=h.pcba_sn AND o.line IS NOT NULL LIMIT 1),
-                           (SELECT c.line FROM history_contexts c WHERE c.snapshot_id=h.snapshot_id AND c.historical_pcba=h.pcba_sn AND c.line IS NOT NULL LIMIT 1)
-                         ) AS line
-                         FROM pcba_history h WHERE h.snapshot_id=?"""; params = [snapshot_id]
-                if line:
-                    sql += " AND (EXISTS(SELECT 1 FROM defect_observations o WHERE o.snapshot_id=h.snapshot_id AND o.pcba_sn=h.pcba_sn AND o.line=?) OR EXISTS(SELECT 1 FROM history_contexts c WHERE c.snapshot_id=h.snapshot_id AND c.historical_pcba=h.pcba_sn AND c.line=?))"; params.extend([line,line])
-                sql += " ORDER BY h.pcba_sn,h.hist_seq LIMIT ?"; params.append(limit)
-                return [dict(r) for r in con.execute(sql, params).fetchall()]
             if dataset == "history_contexts":
                 sql = "SELECT * FROM history_contexts WHERE snapshot_id=?"; params = [snapshot_id]
                 if line:
                     sql += " AND line=?"; params.append(line)
                 sql += " ORDER BY line,current_pcba,historical_pcba LIMIT ?"; params.append(limit)
-                return [dict(r) for r in con.execute(sql, params).fetchall()]
-            if dataset == "material_reuse":
-                sql = """SELECT m.*, (SELECT o.line FROM defect_observations o
-                           WHERE o.snapshot_id=m.snapshot_id AND o.pcba_sn=m.current_pcba_sn AND o.line IS NOT NULL LIMIT 1) AS line
-                         FROM material_reuse m WHERE m.snapshot_id=?"""; params = [snapshot_id]
-                if line:
-                    sql += " AND EXISTS(SELECT 1 FROM defect_observations o WHERE o.snapshot_id=m.snapshot_id AND o.pcba_sn=m.current_pcba_sn AND o.line=?)"; params.append(line)
-                sql += " ORDER BY m.current_pcba_sn,m.item_type,m.item_sn LIMIT ?"; params.append(limit)
-                return [dict(r) for r in con.execute(sql, params).fetchall()]
-            if dataset == "process_events":
-                sql = """SELECT p.*, (SELECT o.line FROM defect_observations o
-                           WHERE o.snapshot_id=p.snapshot_id AND o.pcba_sn=p.pcba_sn AND o.line IS NOT NULL LIMIT 1) AS line
-                         FROM process_events p WHERE p.snapshot_id=?"""; params = [snapshot_id]
-                if line:
-                    sql += " AND EXISTS(SELECT 1 FROM defect_observations o WHERE o.snapshot_id=p.snapshot_id AND o.pcba_sn=p.pcba_sn AND o.line=?)"; params.append(line)
-                sql += " ORDER BY p.pcba_sn,p.event_time LIMIT ?"; params.append(limit)
-                return [dict(r) for r in con.execute(sql, params).fetchall()]
-            if dataset == "repair_refreshes":
-                sql = """SELECT rr.*, (SELECT o.line FROM defect_observations o
-                           WHERE o.snapshot_id=rr.snapshot_id AND o.pcba_sn=rr.pcba_sn AND o.line IS NOT NULL LIMIT 1) AS line
-                         FROM repair_refreshes rr WHERE rr.snapshot_id=?"""; params = [snapshot_id]
-                if line:
-                    sql += " AND EXISTS(SELECT 1 FROM defect_observations o WHERE o.snapshot_id=rr.snapshot_id AND o.pcba_sn=rr.pcba_sn AND o.line=?)"; params.append(line)
-                sql += " ORDER BY rr.refreshed_at DESC LIMIT ?"; params.append(limit)
                 return [dict(r) for r in con.execute(sql, params).fetchall()]
             if dataset == "audit_events":
                 sql = "SELECT * FROM audit_events WHERE snapshot_id=? OR snapshot_id IS NULL"; params = [snapshot_id]

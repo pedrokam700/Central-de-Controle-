@@ -12,7 +12,7 @@ function readRuntime(value) {
   return { console_url: url.href, start_file: value.start_file, fallback_file: value.fallback_file };
 }
 export function readRelease(value) {
-  if (!value || typeof value.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(value.version) ||
+  if (!value || typeof value.version !== 'string' || !/^\d+\.\d+\.\d+(?:-rc\d+)?$/.test(value.version) ||
       typeof value.package_name !== 'string' || !value.package_name.endsWith('.zip') ||
       typeof value.sha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(value.sha256)) throw new TypeError('Manifesto de release inválido');
   const url = new URL(value.download_url);

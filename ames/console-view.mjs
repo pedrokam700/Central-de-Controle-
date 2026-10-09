@@ -2,17 +2,19 @@ import { traceDimensions } from './data/capabilities.mjs';
 import { createAgentClient } from './agent-client.mjs';
 import { createAutomationView } from './automation-view.mjs';
 import { createAgentEvidenceView } from './agent-evidence-view.mjs';
+import {createAdvancedView} from './advanced-view.mjs';
 import { dimensionList } from './capability-view.mjs';
 import { createOccurrenceView } from './occurrence-view.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 
 // A native technical view of the session store. No transport or separate state.
 export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {} } = {}) {
-  let operation, technical, automation, evidence, lastSnapshot, lastKey;
-  const client = createAgentClient(store, {...transport, changed() { automation?.render(); operation?.render(); onChange(); }});
+  let operation, technical, automation, advanced, evidence, lastSnapshot, lastKey;
+  const client = createAgentClient(store, {...transport, changed() { automation?.render(); advanced?.render(); operation?.render(); onChange(); }});
   function mount() {
     root.innerHTML = `<p>Automação A-MES · dados da mesma Central, separados por linha. Filtros de investigação não alteram o escopo da coleta.</p><section data-console-agent></section><section data-console-operation class="ames-occurrence-view"></section><section data-console-evidence></section><section data-console-technical class="mes-context-panel" aria-label="Coleta e disponibilidade técnica"></section>`;
     automation = createAutomationView(root.querySelector('[data-console-agent]'), store, client);
+    const tools=root.ownerDocument.createElement('section');tools.dataset.consoleAdvanced='';root.querySelector('[data-console-agent]').after(tools);advanced=createAdvancedView(tools,store,client);
     evidence = createAgentEvidenceView(root.querySelector('[data-console-evidence]'), store);
     technical = root.querySelector('[data-console-technical]');
     operation = createOccurrenceView(root.querySelector('[data-console-operation]'), store, { locale, mode: 'console', onRender: renderTechnical });
@@ -31,7 +33,8 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       <p>Sem ID durável, as referências valem somente nesta leitura. Correlação não confirma causa e não cria vínculo Manual ↔ MES.</p>
       <button type="button" class="button secondary" data-console-setup>Configurar este computador no Perfil</button>`;
   }
-  return Object.freeze({ render() { if (!root) return; if (!operation) mount(); automation.render(); operation.render(); }, clear() {
+  return Object.freeze({ render() { if (!root) return; if (!operation) mount(); automation.render(); advanced.render(); operation.render(); }, clear() {
+    advanced?.clear();advanced=undefined;
     automation?.clear(); client.clear(); operation?.clear(); operation = undefined; automation = undefined; evidence = undefined; lastSnapshot = undefined; lastKey = undefined; root?.replaceChildren();
   } });
 }
