@@ -1,11 +1,13 @@
 import { LINE_IDS, productKey } from './data/contract.mjs';
 import { selectProductLine } from './data/product.mjs';
+import { attachTraceability } from './trace-view.mjs';
 import { escapeHtml as esc, occurrenceList, EVIDENCE_PAGE_SIZE as PAGE_SIZE } from './evidence-view.mjs';
 
 // Transient controls and immutable references only; state.ames owns the data.
 export function createProductView(root, store, { locale = () => 'pt-BR' } = {}) {
   let currentProduct = null;
   const controls = new Map();
+  attachTraceability(root, store, { prefix: 'productMes', snapshotForLine: line => controls.get(line)?.snapshot, onInvalidated: () => render(currentProduct) });
   const number = value => value === null ? '—' : value.toLocaleString(locale());
 
   function render(product) {

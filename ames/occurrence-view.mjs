@@ -1,6 +1,7 @@
 import { LINE_IDS } from './data/contract.mjs';
 import { selectDashboard } from './data/dashboard.mjs';
 import { selectFailures } from './data/failures.mjs';
+import { attachTraceability } from './trace-view.mjs';
 
 import { escapeHtml as esc, occurrenceList, EVIDENCE_PAGE_SIZE as PAGE_SIZE } from './evidence-view.mjs';
 
@@ -13,6 +14,7 @@ export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode
   let line = LINE_IDS[0], product, defect;
   let page = 0, expanded = false, previousSnapshot;
   let lastRenderKey = '';
+  attachTraceability(root, store, { prefix, snapshotForLine: () => previousSnapshot, onInvalidated: () => render() });
   const number = value => value === null ? '—' : value.toLocaleString(locale());
   const options = (values, selected) => values.map(value => `<option value="${esc(value)}"${value === selected ? ' selected' : ''}>${esc(value)}</option>`).join('');
 
