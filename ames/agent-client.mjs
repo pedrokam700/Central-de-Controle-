@@ -55,7 +55,6 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         catch(error){if(error.name==='AbortError')throw error;publish({error:'Indicadores de reuso indisponíveis: '+error.message});}
         payloads.push({schema:'central-agent-read-v1',legacy:{schema:LEGACY_SCHEMA,line:summary.line,summary,generated_at:before.generated_at,defects:datasets.defects||[]},datasets,insights});
       }
-      // Pin IDs across the multi-request read; same-ID enrichment remains partial.
       const after=await request('/team-dashboard');
       const signature=x=>JSON.stringify((x.lines||[]).map(r=>[r.line,r.snapshot_id,r.collected_at]));
       if(signature(before)!==signature(after))throw new Error('Snapshot mudou durante a leitura. Atualize novamente.');
@@ -85,7 +84,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
   return Object.freeze({
     connect:()=>action(async()=>{
       const health=await request('/health');
-      if(health.agent_version!=='0.5.23'||health.mes_scheduler?.policy!==SCHEDULER_POLICY)throw new Error('Instale o agente com scheduler FIFO antes de conectar o Console.');
+      if(health.agent_version!=='0.5.23'||health.mes_scheduler?.policy!==SCHEDULER_POLICY)throw new Error('Instale o patch de serialização com scheduler FIFO antes de conectar o Console.');
       let capabilities=null;
       try {
         const candidate=await request('/v2/capabilities');
@@ -109,8 +108,8 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       check();if(store.agent().job&&!['done','error','cancelled','skipped'].includes(store.agent().job.status))throw new Error('Aguarde ou cancele o job atual.');
       const scope=collectionScope(value);let path,body;
       if(type==='deep'){
-        const trace_mode=['full','process_only','reuse_only'].includes(value.trace_mode)?value.trace_mode:'full';
-        path='/deep-trace';body={...scope,trace_mode};
+        path='/deep-trace';body={...scope};
+        if(value.trace_mode!==undefined){if(!['full','process_only','reuse_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');body.trace_mode=value.trace_mode;}
       }
       else if(type==='today'||type==='previous_day'){path='/runs';body={preset:type,lines:scope.lines,performance:scope.performance};}
       else if(type==='custom'){path='/runs';body={preset:'custom',mode:'custom',lines:scope.lines,performance:scope.performance,start_at:value.start_at,end_at:value.end_at,shift:value.shift||null};if(!body.start_at||!body.end_at||body.start_at>=body.end_at)throw Error('Informe período válido.');}
