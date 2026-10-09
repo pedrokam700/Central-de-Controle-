@@ -11,7 +11,7 @@ test('documented package location never grants transport or collection capabilit
   assert.equal(m.local_runtime.console_url,'http://127.0.0.1:8765/');
   assert.equal(m.local_runtime.start_file,'00_INICIAR_AQUI.bat');
   assert.equal(AGENT_CAPABILITIES.reference_version,'0.5.23');
-  assert.equal(AGENT_CAPABILITIES.collection_blocker,'agent_has_no_shared_mes_lock_across_job_kinds');
+  assert.equal(AGENT_CAPABILITIES.collection_blocker,'requires_fifo_monitor_skip_v1_agent');
   for(const key of ['can_detect','can_collect','can_configure','can_read_progress'])assert.equal(AGENT_CAPABILITIES[key],false);
   for(const console_url of ['https://example.com/','http://127.0.0.1:8765/api/v1','http://user:pw@127.0.0.1:8765/','http://127.0.0.1:8765/?secret=x'])assert.throws(()=>readRelease({...release,local_runtime:{...release.local_runtime,console_url}}));
   assert.equal(readRelease({...release,local_runtime:undefined}).local_runtime,null);

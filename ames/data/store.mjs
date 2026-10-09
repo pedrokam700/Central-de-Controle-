@@ -1,4 +1,5 @@
 import { immutable, instant, normalizeLegacySnapshot, productKey, requireLine } from './contract.mjs';
+import { normalizeAgentRead } from './agent-contract.mjs';
 
 // One store belongs to one Central session. Transport/auth stay in the shell.
 export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
@@ -6,14 +7,15 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
   let remote = new Map();
   let localConnected = false;
   let issues = [];
+  let agent = immutable({status:'disconnected',config:null,job:null,error:''});
 
-  function normalizeBatch(payloads) {
+  function normalizeBatch(payloads, localRead = false) {
     const next = new Map();
     const seen = new Set();
     const errors = [];
     for (const payload of payloads) {
       try {
-        const snapshot = normalizeLegacySnapshot(payload);
+        const snapshot = localRead && payload?.schema === 'central-agent-read-v1' ? normalizeAgentRead(payload) : normalizeLegacySnapshot(payload);
         if (seen.has(snapshot.line_id)) {
           next.delete(snapshot.line_id);
           errors.push({ line_id: snapshot.line_id, reason: 'ambiguous_snapshots_for_line' });
@@ -46,11 +48,13 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
       return issues;
     },
     replaceLocalSnapshots(payloads) {
-      const result = normalizeBatch(payloads);
+      const result = normalizeBatch(payloads, true);
       local = result.next;
       return immutable(result.errors);
     },
     setLocalConnected(value) { localConnected = value === true; },
+    agent() { return agent; },
+    updateAgent(patch) { agent = immutable({...agent,...patch}); },
     read(line) {
       requireLine(line);
       const snapshot = (localConnected && local.get(line)) || remote.get(line) || local.get(line) || null;
@@ -79,6 +83,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
     diagnostics() { return issues; },
     clear() {
       local = new Map(); remote = new Map(); localConnected = false; issues = [];
+      agent = immutable({status:'disconnected',config:null,job:null,error:''});
     }
   });
 }

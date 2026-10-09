@@ -22,6 +22,7 @@ ${extract('    let consoleMesView;','    let dashboardMesView;')}
 ${extract('    let dailyMesView;','    function renderDaily(){')}
 ${extract('    let coraMesView;','    function renderAIAnalysis(){')}
 ${extract('    let integrationView;','    function renderProfile()')}
+function renderDashboardMes(){} function renderProductMes(){} function renderFailuresMes(){}
 const AI_SYSTEM_PROMPT='Test existing transport';
 ${extract('    function aiBuildPromptText(', '    function aiPageState(')}
 ${extract('let coraRoutePlaceholder = null;','function applyActiveView()')}
@@ -98,7 +99,7 @@ try{
   assert.equal(await page.locator('.mes-release a').getAttribute('href'),release.download_url);
   assert.match(await page.locator('.mes-release').innerText(),new RegExp(release.sha256));
   await page.locator('#amesSetupCollector').click();assert.match(await page.locator('#amesIntegration').innerText(),/Coleta ainda não conectada/);
-  assert.match(await page.locator('#amesIntegration').innerText(),/contrato de transporte/);
+  assert.match(await page.locator('#amesIntegration').innerText(),/patch FIFO/);
   await page.locator('#amesSetupViewer').click();await show('daily');await show('profile');
   assert.equal(await page.locator('#amesSetupViewer').getAttribute('aria-pressed'),'true');
   assert.equal(await page.evaluate(()=>localStorage.getItem('central.ames.integration-mode.v1')),'viewer');
@@ -123,7 +124,7 @@ try{
   assert.match(await page.locator('#consoleMesEvidence').innerText(),/Defect Type na fonte/);
   await page.locator('#mesConsole [data-mes-trace]').first().focus();await page.keyboard.press('Enter');
   assert.equal(await page.locator('#consoleMesTraceTitle').evaluate(el=>el===document.activeElement),true);
-  assert.match(await page.locator('[data-console-technical]').innerText(),/Progresso real da coleta/);
+  assert.match(await page.locator('[data-console-technical]').innerText(),/Estado e progresso do agente/);
   assert.match(await page.locator('[data-console-technical]').innerText(),/Registros detalhados indisponíveis/);
   await replace([states,b]);assert.equal(await page.locator('#mesConsole [data-trace-slot]:not([hidden])').count(),0);
   assert.equal(await page.locator('#consoleMesRecords').evaluate(el=>el===document.activeElement),true);
@@ -137,6 +138,51 @@ try{
   assert.match(await page.locator('#amesIntegration').innerText(),/127.0.0.1:8765/);
   assert.match(await page.locator('#amesIntegration').innerText(),/03_ABRIR_CENTRAL_LOCAL_FALLBACK.bat/);
   console.log('PASS: Console native navigation, exact CPH/PCBA, line/state filters, partial pagination, keyboard/focus, snapshot correction/race, onboarding location');
+
+  // Real native view/transport with synthetic responses in the original agent shape.
+  const apiCalls=[];let polls=0;
+  await page.route('http://127.0.0.1:8765/api/v1/**',async route=>{
+    const req=route.request(),u=new URL(req.url()),key=u.pathname.replace('/api/v1/','');
+    apiCalls.push({key,body:req.postDataJSON()});
+    const summaries=[a,b].map((d,i)=>({...d.payload.summary,snapshot_id:i+1}));
+    let json={};
+    if(key==='health')json={agent_version:'0.5.23',mes_scheduler:{policy:'fifo-monitor-skip-v1'},engine_found:true,chrome_cdp_reachable:true,ames_reachable:true};
+    else if(key==='config')json={configured_lines:['TAN10101','TAN10102'],performance:'balanced'};
+    else if(key==='monitor')json={enabled:0};
+    else if(key==='team-dashboard')json={snapshot_ids:{TAN10101:1,TAN10102:2},lines:summaries.map(s=>({...s,metrics:s}))};
+    else if(key==='base'){
+      const line=u.searchParams.get('line'),sid=Number(u.searchParams.get('snapshot_id')),doc=line==='TAN10101'?a:b;
+      json={rows:u.searchParams.get('dataset')==='defects'?doc.payload.defects.map(r=>({...r,snapshot_id:sid})):[{line,snapshot_id:sid,pcba_sn:'SYNTHETIC-PCBA-0',item_sn:'MATERIAL-ONLY',defect_code:'D1'}]};
+    }else if(key==='insights')json={schema:'ames-insights-v1',ready:true,line:u.searchParams.get('line'),snapshot_id:Number(u.searchParams.get('snapshot_id')),pcba_kpis:[['PCBA em 2º uso',1]],component_types:[{'Tipo material':'RAM','Reutilizados únicos':1}],drilldowns:{pcba_second_use:[{PCBA:'SYNTHETIC-PCBA-0'}]}};
+    else if(key==='deep-trace')json={id:'SYNTHETIC-JOB',status:'queued'};
+    else if(key==='jobs/SYNTHETIC-JOB')json={id:'SYNTHETIC-JOB',status:++polls>1?'done':'running',stage:'2114',stage_progress:{'2114':{line:'TAN10101',current:2,total:4,line_percent:50}},partial_refresh:0};
+    else if(key==='export/excel/download')return route.fulfill({contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',body:Buffer.from('PKsynthetic-download')});
+    else throw Error('Unexpected native API '+key);
+    await route.fulfill({json});
+  });
+  await show('mesConsole');await page.locator('[data-console-agent] > details > summary').click();
+  await page.locator('[data-agent-action=connect]').focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.querySelector('#agentEvidenceDataset'));
+  assert.match(await page.locator('[data-agent-status]').innerText(),/conectado · scheduler FIFO verificado/);
+  await page.locator('[data-agent-lines=all]').click();assert.equal(await page.locator('[name=lines]:checked').count(),3);
+  await page.locator('[name=lines][value=TAN10103]').uncheck();
+  await page.locator('[name=performance]').selectOption('fast');await page.locator('[data-agent-action=save]').click();
+  await page.waitForFunction(()=>!document.querySelector('[data-agent-action=save]').disabled);
+  await page.locator('[name=defectMode]').selectOption('selected');await page.locator('[name=codes]').fill('D1, D2');
+  await page.locator('[data-agent-action=deep]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-agent-status]').textContent.includes('2 / 4'));
+  assert.deepEqual(apiCalls.find(c=>c.key==='deep-trace').body,{lines:['TAN10101','TAN10102'],defect_codes:['D1','D2'],max_failures:0,max_pcbas:0,performance:'fast'});
+  await page.waitForFunction(()=>document.querySelector('[data-agent-status]').textContent.includes('done'));
+  await page.locator('[data-console-evidence] details details summary').first().click();
+  // The PCBA group is the second original KPI group.
+  await page.locator('[data-agent-drill=pcba_second_use]').evaluate(el=>el.closest('details').open=true);
+  await page.locator('[data-agent-drill=pcba_second_use]').click();
+  assert.equal(await page.locator('#agentEvidenceDataset').inputValue(),'insight:pcba_second_use');
+  assert.match(await page.locator('[data-console-evidence]').innerText(),/SYNTHETIC-PCBA-0/);
+  await page.locator('#agentEvidenceDataset').selectOption('component_types');assert.match(await page.locator('[data-console-evidence]').innerText(),/RAM/);
+  const downloadPromise=page.waitForEvent('download');await page.locator('[data-agent-action=excel]').click();
+  assert.equal((await downloadPromise).suggestedFilename(),'AMES_EQUIPE_LINHAS.xlsx');
+  console.log('PASS: native agent controls, exact request bodies, real-shaped progress, history/matrix/drill-down and original download path');
 
   for(const width of [360,390,768,1280]){
     await page.setViewportSize({width,height:900});

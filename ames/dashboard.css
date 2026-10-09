@@ -50,3 +50,9 @@ body.cora-route-active #aiAnalysisView #aiChatScroll { scroll-padding-top: 70px;
 #mesConsole { min-width: 0; overflow-wrap: anywhere; }
 #mesConsole .mes-context-panel dl { display: grid; gap: 8px; }
 #mesConsole .mes-context-panel dd { margin: 0 0 12px; }
+#mesConsole [data-console-agent] label { display: grid; gap: 6px; margin: 10px 0; }
+#mesConsole [data-console-agent] .mes-opt-in { display: flex; }
+#mesConsole fieldset { min-width: 0; margin: 12px 0; }
+#mesConsole input:not([type=checkbox]), #mesConsole select { min-width: 0; width: 100%; max-width: 100%; min-height: 44px; }
+#mesConsole input:focus-visible, #mesConsole button:focus-visible, #mesConsole summary:focus-visible, #mesConsole select:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+#mesConsole [data-console-evidence] .mes-record-list { padding-left: 20px; }
