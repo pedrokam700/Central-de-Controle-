@@ -1,4 +1,4 @@
-import { AGENT_URL, SCHEDULER_POLICY, collectionScope } from './data/agent-contract.mjs';
+import { AGENT_URL, SCHEDULER_POLICY, collectionScope, r12CompatibleBuild } from './data/agent-contract.mjs';
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
 import {CANONICAL_SCHEMA,DATASETS} from './data/canonical.mjs';
 
@@ -39,15 +39,16 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         const errors=store.replaceLocalSnapshots(payloads);if(errors.length)throw Error(errors.map(e=>e.reason).join('; '));
         store.setLocalConnected(true);lastRefresh=now();changed();return;
       }
-      // team-dashboard reads SQLite only; share/export would rebuild all reuse
-      // insights twice just to pin snapshot IDs. Compute each insight once below.
+      // Compatibilidade explícita com a automação local 3022-R12+.
+      // O transporte legado permanece somente local e continua marcado como cobertura parcial.
       const before=await request('/team-dashboard'), payloads=[];
       if(!Array.isArray(before.lines)||!Object.hasOwn(before,'snapshot_ids'))throw new Error('Dashboard do agente incompatível.');
       for(const entry of before.lines) {
         const summary={line:entry.line,snapshot_id:entry.snapshot_id,collected_at:entry.collected_at,defect_rows:entry.defect_rows,fpy:entry.metrics?.fpy,check_fpy:entry.metrics?.check_fpy,quantity:entry.metrics?.quantity};
         if(!LINE_IDS.includes(summary.line)||!summary.snapshot_id)continue;
         const q=`&line=${encodeURIComponent(summary.line)}&snapshot_id=${encodeURIComponent(summary.snapshot_id)}&limit=100000`;
-        const data=await Promise.all(['defects','pcba_history','material_reuse','history_contexts'].map(async name=>[name,(await request('/base?dataset='+name+q)).rows]));
+        const names=['defects','pcba_history','material_reuse','history_contexts','process_events','process_defect_contexts'];
+        const data=await Promise.all(names.map(async name=>[name,(await request('/base?dataset='+name+q)).rows]));
         const datasets=Object.fromEntries(data);
         let insights;
         try {insights=await request(`/insights?line=${encodeURIComponent(summary.line)}&snapshot_id=${encodeURIComponent(summary.snapshot_id)}`);}
@@ -58,7 +59,8 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const after=await request('/team-dashboard');
       const signature=x=>JSON.stringify((x.lines||[]).map(r=>[r.line,r.snapshot_id,r.collected_at]));
       if(signature(before)!==signature(after))throw new Error('Snapshot mudou durante a leitura. Atualize novamente.');
-      store.replaceLocalSnapshots(payloads);store.setLocalConnected(true);lastRefresh=now();changed();
+      const errors=store.replaceLocalSnapshots(payloads);if(errors.length)publish({error:errors.map(e=>e.reason).join('; ')});
+      store.setLocalConnected(true);lastRefresh=now();changed();
     }finally{if(token===generation)refreshing=false;}
   }
   async function poll(id,token) {
@@ -83,12 +85,21 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
   return Object.freeze({
     connect:()=>action(async()=>{
       const health=await request('/health');
-      if(health.agent_version!=='0.5.23'||health.mes_scheduler?.policy!==SCHEDULER_POLICY)throw new Error('Instale o patch de serialização antes de conectar o Console.');
-      const capabilities=await request('/v2/capabilities');
-      if(capabilities.schema!==CANONICAL_SCHEMA||!capabilities.native_console||!capabilities.cursor||!capabilities.revision)throw Error('Atualize o agente para 0.5.24-rc1 antes de usar comandos.');
+      if(health.agent_version!=='0.5.23'||health.mes_scheduler?.policy!==SCHEDULER_POLICY)throw new Error('Instale o agente com scheduler FIFO antes de conectar o Console.');
+      let capabilities=null;
+      try {
+        const candidate=await request('/v2/capabilities');
+        if(candidate.schema===CANONICAL_SCHEMA&&candidate.native_console&&candidate.cursor&&candidate.revision)capabilities=candidate;
+      } catch(error) {
+        if(error.name==='AbortError')throw error;
+      }
+      if(!capabilities){
+        if(!r12CompatibleBuild(health))throw Error('Use o agente canônico 0.5.24-rc1 ou a automação local 3022-R12+ validada.');
+        capabilities={schema:'central-r12-local',native_console:true,cursor:false,revision:false,process_timeline:true,legacy_r12:true,agent_build:health.agent_build};
+      }
       const cfg=await request('/config');
       const config={...Object.fromEntries(['ames_host','ames_port','ames_start_url','chrome_profile_dir'].map(k=>[k,cfg[k]||''])),configured_lines:(cfg.configured_lines||[]).filter(l=>LINE_IDS.includes(l)),performance:['fast','balanced','safe'].includes(cfg.performance)?cfg.performance:'balanced',day_start:cfg.day_start,monitor_interval_minutes:cfg.monitor_interval_minutes};
-      publish({status:'connected',config,capabilities,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable},error:''});
+      publish({status:'connected',config,capabilities,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.playwright_ready!==false},agent_build:health.agent_build||'',error:''});
       const monitor=await request('/monitor');publish({monitor:{enabled:!!monitor.enabled,interval_minutes:monitor.interval_minutes,next_run_at:monitor.next_run_at}});
       await refresh();
     }),
@@ -97,10 +108,13 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     collect:(type,value)=>action(async()=>{
       check();if(store.agent().job&&!['done','error','cancelled','skipped'].includes(store.agent().job.status))throw new Error('Aguarde ou cancele o job atual.');
       const scope=collectionScope(value);let path,body;
-      if(type==='deep'){path='/deep-trace';body=scope;}
+      if(type==='deep'){
+        const trace_mode=['full','process_only','reuse_only'].includes(value.trace_mode)?value.trace_mode:'full';
+        path='/deep-trace';body={...scope,trace_mode};
+      }
       else if(type==='today'||type==='previous_day'){path='/runs';body={preset:type,lines:scope.lines,performance:scope.performance};}
       else if(type==='custom'){path='/runs';body={preset:'custom',mode:'custom',lines:scope.lines,performance:scope.performance,start_at:value.start_at,end_at:value.end_at,shift:value.shift||null};if(!body.start_at||!body.end_at||body.start_at>=body.end_at)throw Error('Informe período válido.');}
-      else if(type==='sn'){path='/sn-lookup';body={sn:String(value.sn||'').trim(),include_3022:false};if(!body.sn)throw Error('Informe o SN.');}
+      else if(type==='sn'){path='/sn-lookup';body={sn:String(value.sn||'').trim(),include_3022:true};if(!body.sn)throw Error('Informe o SN.');}
       else if(type==='imported'){path='/runs';body={mode:'manual',source_path:value.source_path,lines:scope.lines,shift:value.shift||null};if(!body.source_path)throw Error('Envie o arquivo antes de iniciar.');}
       else throw new Error('Coleta inválida.');
       const signature=JSON.stringify([path,body]);
@@ -125,10 +139,11 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       else if(name==='setup')result=await request('/config',value.config);
       else if(name==='jobs')result=await request('/jobs');
       else if(name==='monitor')result=await request('/monitor');
+      else if(name==='preflight')result=await request('/preflight');
       else throw Error('Operação desconhecida');
       publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(name==='setup'?{config:{...store.agent().config,...value.config}}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
-    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',config:null,job:null,readiness:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,error:''});}
+    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',config:null,job:null,readiness:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
   });
 }
