@@ -1,6 +1,7 @@
 import { LINE_IDS } from './data/contract.mjs';
 import { selectDashboard } from './data/dashboard.mjs';
 import { selectFailures } from './data/failures.mjs';
+import { selectDaily } from './data/daily.mjs';
 import { attachTraceability } from './trace-view.mjs';
 
 import { escapeHtml as esc, occurrenceList, EVIDENCE_PAGE_SIZE as PAGE_SIZE } from './evidence-view.mjs';
@@ -10,7 +11,9 @@ const labels = { fpy: 'FPY', check_fpy: 'Check FPY', quantity: 'Quantidade', def
 // Owns only transient view controls. Evidence remains in state.ames.
 export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode = 'dashboard' } = {}) {
   const failures = mode === 'failures';
-  const prefix = failures ? 'failureMes' : 'dashMes';
+  const daily = mode === 'daily';
+  const compact = failures || daily;
+  const prefix = daily ? 'dailyMes' : failures ? 'failureMes' : 'dashMes';
   let line = LINE_IDS[0], product, defect;
   let page = 0, expanded = false, previousSnapshot;
   let lastRenderKey = '';
@@ -28,7 +31,7 @@ export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode
     const focusId = root.contains(focused) ? focused.id : '';
     if (snapshotChanged) { expanded = false; page = 0; }
     previousSnapshot = read.snapshot;
-    const model = (failures ? selectFailures : selectDashboard)(store, { line_id: line, product, defect_code: defect });
+    const model = (daily ? selectDaily : failures ? selectFailures : selectDashboard)(store, { line_id: line, product, defect_code: defect });
     const snapshot = model.snapshot;
     const source = { remote: 'Último snapshot sincronizado', local: 'Snapshot local', local_cache: 'Cache local desconectado', none: 'Sem snapshot disponível' }[model.source];
     const freshness = { fresh: 'coleta recente', stale: 'coleta antiga', unknown: 'idade não verificável' }[model.freshness];
@@ -38,7 +41,7 @@ export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode
     page = Math.min(page, pages - 1);
     const rows = model.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
     root.innerHTML = `
-      <div class="section-head"><div><h2>${failures ? 'MES · ocorrências disponíveis' : 'Operação por linha'}</h2><p>Origem: MES · uma linha por consulta</p></div></div>
+      <div class="section-head"><div><h2>${daily ? 'Contexto MES da operação' : failures ? 'MES · ocorrências disponíveis' : 'Operação por linha'}</h2><p>Origem: MES · uma linha por consulta</p></div></div>
       <div class="mes-filters">
         <label>Linha<select id="${prefix}Line">${LINE_IDS.map((id, i) => `<option value="${id}"${id === line ? ' selected' : ''}>Linha ${i + 1} · ${id}</option>`).join('')}</select></label>
         <label>CPH exato<select id="${prefix}Product"><option value="">Todos os modelos</option>${options(products, product)}</select></label>
@@ -49,11 +52,11 @@ export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode
         ? `Cobertura parcial · ${number(model.coverage.loaded_count)} registros disponíveis · ${number(model.coverage.reported_count)} falhas informadas pela fonte · ${number(model.coverage.rejected_rows)} registros rejeitados. A lista disponível não comprova os totais ou taxas MES.`
         : 'Dados indisponíveis para esta linha. Ausência de snapshot não significa zero falhas.'}</p>
       ${failures ? '<p class="mes-context">Somente leitura. Sem ID durável: não é permitido vincular permanentemente a um registro Manual, salvar esta referência como relação ou criar Report automaticamente. Registros podem reaparecer em snapshots distintos; não há deduplicação histórica. Ausência na lista parcial não significa ausência de falha.</p>' : ''}
-      <p class="mes-context">Período e turno não informados pela fonte. ${failures ? 'Consulte apenas os registros carregados desta linha.' : model.filtered ? 'Agregados indisponíveis para o filtro selecionado.' : 'Agregados do snapshot da linha; definição, numeradores, denominadores e evidência detalhada indisponíveis.'}</p>
+      <p class="mes-context">Período e turno não informados pela fonte. ${compact ? 'Consulte apenas os registros carregados desta linha. Ausência na lista parcial não significa ausência de falha.' : model.filtered ? 'Agregados indisponíveis para o filtro selecionado.' : 'Agregados do snapshot da linha; definição, numeradores, denominadores e evidência detalhada indisponíveis.'}</p>
       <div class="mes-metrics">${model.aggregates.map(metric => `<article class="stat"><div class="stat-label">${labels[metric.name]}</div><div class="stat-value">${number(metric.value)}${metric.value !== null && metric.name.includes('fpy') ? '%' : ''}</div><div class="stat-note">${metric.evidence === 'aggregate_only' ? 'Agregado da fonte · sem drill-down' : 'Indisponível neste escopo'}</div></article>`).join('')}
         <button type="button" id="${prefix}Records" class="stat mes-records-toggle" aria-expanded="${expanded}" aria-controls="${prefix}Evidence"${snapshot ? '' : ' disabled'}><span class="stat-label">Ocorrências disponíveis${model.filtered ? ' no filtro' : ''}</span><span class="stat-value">${number(model.sample_metric.value)}</span><span class="stat-note">${snapshot ? 'Abrir registros desta lista parcial' : 'Sem dados disponíveis'}</span></button>
       </div>
-      ${failures ? '' : `<div class="mes-pareto"><h3>Top 3 defeitos · lista parcial${model.filtered ? ' filtrada' : ''}</h3>${model.pareto.length ? model.pareto.map(item => `<button type="button" class="button secondary" data-mes-code="${esc(item.code)}">${esc(item.code || 'Código não informado')} · ${number(item.count)} ocorrência(s)</button>`).join('') : '<p>Nenhuma ocorrência disponível neste escopo.</p>'}</div>`}
+      ${compact ? '' : `<div class="mes-pareto"><h3>Top 3 defeitos · lista parcial${model.filtered ? ' filtrada' : ''}</h3>${model.pareto.length ? model.pareto.map(item => `<button type="button" class="button secondary" data-mes-code="${esc(item.code)}">${esc(item.code || 'Código não informado')} · ${number(item.count)} ocorrência(s)</button>`).join('') : '<p>Nenhuma ocorrência disponível neste escopo.</p>'}</div>`}
       <p class="mes-context">Repair agregado, reuso, recorrência, histórico 2114/3074 e processo 3022: evidência detalhada indisponível neste snapshot. Observação MES não confirma causa.</p>
       <section id="${prefix}Evidence" class="mes-evidence"${expanded ? '' : ' hidden'} aria-label="Registros do indicador">
         ${expanded ? `<h3 tabindex="-1" id="${prefix}EvidenceTitle">Registros disponíveis · ${esc(line)} · snapshot ${esc(snapshot?.snapshot_id)}</h3>

@@ -3,6 +3,7 @@
     import { createDashboardView } from './ames/dashboard-view.mjs';
     import { createProductView } from './ames/product-view.mjs';
     import { createOccurrenceView } from './ames/occurrence-view.mjs';
+    import { createDailyView } from './ames/daily-view.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch
@@ -506,6 +507,7 @@
         renderDashboardMes();
         renderProductMes();
         renderFailuresMes();
+        renderDailyMes();
         aiUpdateAIState();
         renderAIMemoryPanel();
       }, error => {
@@ -514,6 +516,7 @@
         renderDashboardMes();
         renderProductMes();
         renderFailuresMes();
+        renderDailyMes();
         console.error('Falha ao sincronizar memória da IA:', error);
       }));
       unsubscribeData.push(subscribeToSession(collection(db, 'aiConversations'), snapshot => {
@@ -1540,6 +1543,7 @@
         dashboardMesView?.clear();
         productMesView?.clear();
         failuresMesView?.clear();
+        dailyMesView?.clear();
         manualReportPage = 0;
         const failureOrigin = document.querySelector('#failureOrigin');
         if (failureOrigin) failureOrigin.value = 'all';
@@ -5027,7 +5031,15 @@ ${m.text}`).join('\n\n');
       dailySelectedShiftId=previousShift; dailySelectedDate=previousDate;
     }
 
+    let dailyMesView;
+    function renderDailyMes() {
+      if (!currentAuthUser || activeView !== 'daily') return;
+      dailyMesView ||= createDailyView(document.querySelector('#dailyMes'), state.ames, { locale: () => currentLanguage });
+      dailyMesView.render({ date: dailySelectedDate, shift: state.workShifts.find(x => x.docId === dailySelectedShiftId)?.name || '' });
+    }
+
     function renderDaily(){
+      renderDailyMes();
       renderDailyHomeSummary();
       const view=document.querySelector('#dailyView'); if(!view) return;
       const shift=resolveDailySelection();

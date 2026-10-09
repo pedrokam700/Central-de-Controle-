@@ -38,7 +38,7 @@ renderOperations();
 `;
 const html=fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')
   .replace('</html>','<script type="module" src="./failures-test-harness.mjs"></script></html>');
-const allowed=new Set(['mobile.css','ames/dashboard.css','ames/product.css','ames/occurrence-view.mjs','ames/trace-view.mjs','ames/data/trace.mjs','ames/evidence-view.mjs','ames/data/contract.mjs','ames/data/store.mjs','ames/data/dashboard.mjs','ames/data/failures.mjs','manifest.webmanifest']);
+const allowed=new Set(['mobile.css','ames/dashboard.css','ames/product.css','ames/occurrence-view.mjs','ames/trace-view.mjs','ames/data/trace.mjs','ames/evidence-view.mjs','ames/data/contract.mjs','ames/data/store.mjs','ames/data/dashboard.mjs','ames/data/daily.mjs','ames/data/failures.mjs','manifest.webmanifest']);
 const server=http.createServer((req,res)=>{
   const name=new URL(req.url,'http://localhost').pathname.replace(/^\/Central-de-Controle-\//,'');
   if(name==='index.html'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(html);}
