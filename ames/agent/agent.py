@@ -1369,7 +1369,10 @@ class Handler(BaseHTTPRequestHandler):
                 }), 202)
                 return
             if u.path == "/api/v1/repairs/refresh":
-                self._send(refresh_repairs(body.get("snapshot_id"), body.get("line"), body.get("unresolved_only", False)))
+                # Admission context only; SQLite/persistence are never gate-held.
+                with MES.job():
+                    result = refresh_repairs(body.get("snapshot_id"), body.get("line"), body.get("unresolved_only", False))
+                self._send(result)
                 return
             if u.path == "/api/v1/export/excel":
                 self._send(export_snapshot_excel(body.get("snapshot_id")))

@@ -74,6 +74,21 @@ class SchedulerTests(unittest.TestCase):
             with gate.critical():self.assertTrue(gate.snapshot()['busy'])
         self.assertFalse(gate.snapshot()['busy'])
 
+    def test_monitor_skips_between_active_normal_job_queries(self):
+        gate=MesScheduler()
+        with gate.job():
+            with gate.critical():pass
+            self.assertFalse(gate.snapshot()['busy'])
+            self.assertIsNone(gate.reserve_monitor())
+            # Other normal work is free to use MES during this job's transforms.
+            done=threading.Event()
+            def normal():
+                with gate.critical():done.set()
+            thread=threading.Thread(target=normal);thread.start();thread.join(2)
+            self.assertTrue(done.is_set())
+        ticket=gate.reserve_monitor();self.assertIsNotNone(ticket)
+        with gate.job(monitor=True,reservation=ticket):pass
+
     def test_proxy_limits_lock_to_mes_call_and_cleanup_after_cancel(self):
         token=threading.Event(); seen=[]
         class FakeView:
@@ -90,6 +105,15 @@ class SchedulerTests(unittest.TestCase):
         expected={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1',
             'ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
         for name,digest in expected.items():self.assertEqual(hashlib.sha256((ROOT/'ames'/'agent'/name).read_bytes()).hexdigest(),digest)
+
+    def test_cancel_on_connect_return_disconnects_handle(self):
+        token=threading.Event();closed=[]
+        class Browser:
+            def connect(self):token.set();return self
+            def disconnect(self):closed.append(True)
+        with self.assertRaises(Cancelled):
+            with MES.job(token=token):session_object(Browser()).connect()
+        self.assertEqual(closed,[True]);self.assertFalse(MES.snapshot()['busy'])
 
     def test_bridge_deep_real_orchestration_keeps_transforms_outside_gate(self):
         import engine_bridge
@@ -131,6 +155,25 @@ class SchedulerTests(unittest.TestCase):
             with gate.job(status=lambda _: (_ for _ in ()).throw(ValueError('status'))):
                 with gate.critical():pass
         self.assertFalse(gate.snapshot()['busy']);self.assertEqual(gate.snapshot()['queued'],0)
+
+    def test_original_excel_eleven_sheets_runs_while_mes_busy(self):
+        from openpyxl import load_workbook
+        with tempfile.TemporaryDirectory() as tmp:
+            target=pathlib.Path(tmp)/'agent.py';shutil.copyfile(ROOT/'ames'/'agent'/'agent.py',target)
+            spec=importlib.util.spec_from_file_location('excel_agent',target);agent=importlib.util.module_from_spec(spec);spec.loader.exec_module(agent)
+            sid=agent.STORE.create_snapshot(window_id=None,source_kind='test')
+            agent.STORE.ingest_line_metrics(sid,[{'line':'TAN10101','quantity':10,'fpy':90}])
+            agent.STORE.ingest_defects(sid,[{'line':'TAN10101','pcba_sn':'SYNTHETIC','defect_code':'D1'}])
+            result=[];errors=[]
+            def export():
+                try:result.append(agent.export_team_excel(['TAN10101']))
+                except BaseException as error:errors.append(error)
+            with MES.critical():
+                worker=threading.Thread(target=export);worker.start();worker.join(10)
+                self.assertFalse(worker.is_alive(),'Excel must not wait for MES');self.assertEqual(errors,[])
+            workbook=load_workbook(result[0]['path'],read_only=True)
+            try:self.assertEqual(workbook.sheetnames,['TOP3_FPY','BASE_DADOS','RAW_3028','HIST_PCBA','HIST_MATERIAL','PROCESSO_3022','DASH_REUSO','PCBAS_REUSO','MATERIAIS_REUSO','CORRELACOES','TIPOS_COMPONENTE'])
+            finally:workbook.close()
 
     def test_actual_agent_jobs_monitor_endpoints_and_sqlite_parallel(self):
         with tempfile.TemporaryDirectory() as tmp:

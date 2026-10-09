@@ -18,18 +18,25 @@ class MesScheduler:
         self.condition = Condition()
         self.queue = deque()
         self.owner = None
+        self.normal_jobs = 0
         self.context = local()
 
     @contextmanager
     def job(self, token=None, monitor=False, status=None, reservation=None):
         previous = getattr(self.context, 'job', None)
         self.context.job = dict(token=token, monitor=monitor, status=status, reservation=reservation)
+        normal = not monitor and reservation is None
+        if normal:
+            with self.condition:
+                self.normal_jobs += 1
         try:
             yield
             if token is not None and token.is_set():
                 raise Cancelled()
         finally:
             with self.condition:
+                if normal:
+                    self.normal_jobs -= 1
                 if reservation is not None and self.owner is reservation:
                     self.owner = None
                     self.condition.notify_all()
@@ -37,7 +44,7 @@ class MesScheduler:
 
     def reserve_monitor(self):
         with self.condition:
-            if self.owner is not None or self.queue:
+            if self.owner is not None or self.queue or self.normal_jobs:
                 return None
             ticket = object()
             self.owner = ticket
@@ -68,7 +75,7 @@ class MesScheduler:
                 if ticket is None:
                     ticket = object()
                     if job.get('monitor') and not cleanup:
-                        if self.owner is not None or self.queue:
+                        if self.owner is not None or self.queue or self.normal_jobs:
                             raise MonitorSkipped()
                         self.owner = ticket
                     else:
@@ -129,14 +136,17 @@ class SessionObject:
             return value
         @wraps(value)
         def call(*args, **kwargs):
-            with MES.critical(cleanup=name == 'disconnect'):
-                try:
+            try:
+                with MES.critical(cleanup=name == 'disconnect'):
                     result = value(*args, **kwargs)
-                except BaseException:
-                    if name == 'connect':
+                    return self if result is self._target else result
+            except BaseException:
+                # Cancellation may be raised by critical.__exit__ after connect.
+                # Tear down only this thread's handle, never the shared browser.
+                if name == 'connect':
+                    with MES.critical(cleanup=True):
                         self._target.disconnect()
-                    raise
-                return self if result is self._target else result
+                raise
         return call
 
 
