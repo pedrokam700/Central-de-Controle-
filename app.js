@@ -6,6 +6,7 @@
     import { createDailyView } from './ames/daily-view.mjs';
     import { createCoraView } from './ames/cora-view.mjs';
     import { MES_REASONING_RULES } from './ames/data/cora.mjs';
+    import { createOnboardingView, savedIntegrationMode } from './ames/onboarding-view.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch
@@ -1549,6 +1550,7 @@
         failuresMesView?.clear();
         dailyMesView?.clear();
         coraMesView?.clear();
+        integrationView?.clear();
         manualReportPage = 0;
         const failureOrigin = document.querySelector('#failureOrigin');
         if (failureOrigin) failureOrigin.value = 'all';
@@ -2400,7 +2402,18 @@
       // A seleção do indicador é controlada exclusivamente por openDashboardIndicator().
     }
 
+    let integrationView;
+    function renderIntegration() {
+      const banner = document.querySelector('#amesSetupWelcome');
+      banner?.classList.toggle('hidden', !currentAuthUser || Boolean(savedIntegrationMode()));
+      if (!currentAuthUser || activeView !== 'profile') return;
+      integrationView ||= createOnboardingView(document.querySelector('#amesIntegration'), { onChoice: () => {
+        banner?.classList.toggle('hidden', Boolean(savedIntegrationMode()));
+      } });
+      integrationView.render();
+    }
     function renderProfile() {
+      renderIntegration();
       if (!currentAccount) return;
       const userName = currentAccount.name;
       const userReports = state.reports.filter(r => isAssignedToCurrentUser(r));
@@ -6692,6 +6705,11 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       tab?.focus();
     });
 
+    document.querySelector('[data-open-integration]')?.addEventListener('click', () => {
+      show('profile');
+      document.querySelector('#amesSetupCollector')?.focus();
+      document.querySelector('#amesIntegration')?.scrollIntoView({ block: 'start' });
+    });
     document.querySelector('#failureOrigin')?.addEventListener('change', () => {
       applyFailureOrigin();
       renderFailuresMes();
