@@ -5,3 +5,4 @@ ui-debug.log
 ames/agent/data/
 ames/agent/config.json
 .vercel/
+dist/
