@@ -62,7 +62,7 @@ export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode
       <section id="${prefix}Evidence" class="mes-evidence"${expanded ? '' : ' hidden'} aria-label="Registros do indicador">
         ${expanded ? `<h3 tabindex="-1" id="${prefix}EvidenceTitle">Registros disponíveis · ${esc(line)} · snapshot ${esc(snapshot?.snapshot_id)}</h3>
         <p>${number(model.rows.length)} ocorrência(s) na lista parcial${product !== undefined ? ` · CPH exato: ${esc(product)}` : ''}${defect !== undefined ? ` · defeito: ${esc(defect || 'não informado')}` : ''}. Referências válidas somente nesta leitura; IDs duráveis, revisão e evidência bruta indisponíveis.</p>
-        ${occurrenceList(rows, page * PAGE_SIZE + 1)}
+        ${occurrenceList(rows, page * PAGE_SIZE + 1, { prefix })}
         ${rows.length ? '' : '<p>Nenhum registro neste filtro; a cobertura continua parcial.</p>'}
         <div class="mes-pagination"><button type="button" class="button secondary" id="${prefix}Prev"${page === 0 ? ' disabled' : ''}>Anterior</button><span>Página ${page + 1} de ${pages}</span><button type="button" class="button secondary" id="${prefix}Next"${page + 1 >= pages ? ' disabled' : ''}>Próxima</button></div>` : ''}
       </section>`;

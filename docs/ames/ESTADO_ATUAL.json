@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-08T21:15:00-03:00",
+  "updated_at": "2026-10-09T00:48:42Z",
   "project": "Central de Trabalho V2 + A-MES",
   "central_major_version": "2.0-preview",
   "ames_working_version": "0.5.23",
@@ -83,7 +83,7 @@
     "3022 real adapter and process timeline",
     "phased native fusion and evidence drilldowns per V2_AUDITORIA_ARQUITETURA.md"
   ],
-  "next_action": "Review native Falhas and run authenticated desktop/mobile smoke with real line/CPH snapshots and existing manual workflows. Stop before Rastreabilidade/Dia/CORA pending new review. No main merge or GREEN promotion.",
+  "next_action": "Review consolidated native sprint; validate authenticated real snapshots/manual workflows and existing CORA backend. Obtain real agent contract before transport. Stop before publication, Rules, real 3022, main/merge or deploy; not GREEN.",
   "architecture_audit": {
     "date": "2026-10-08",
     "baseline_sha": "8cbd5fee9558e5e60e312faea583a85435915dda",
@@ -135,7 +135,7 @@
     "tested_code_sha": "d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df"
   },
   "native_failures_checkpoint": {
-    "stage": "failures_manual_and_mes_read_only_review_required",
+    "stage": "failures_accepted_for_development_continuation",
     "base_sha": "d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df",
     "shell_build": "15.1.13.44",
     "local_contract_tests": 37,
@@ -147,6 +147,25 @@
     "factory_validated": false,
     "local_transport_enabled": false,
     "new_cloud_publication_enabled": false,
-    "ci_evidence": "See PR #22 and Issue #21 for exact checkpoint SHA and CI run"
+    "ci_evidence": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37863934049"
+  },
+  "native_sprint_checkpoint": {
+    "stage": "trace_daily_cora_onboarding_review_required",
+    "base_sha": "43672774db194031bf6050a5c3a3a73191bc1392",
+    "trace_sha": "05728949f1fe9dd17fe2efc24d919651f8545e09",
+    "daily_sha": "97d7bb3da044701bfe39528b31f6ff762e021e83",
+    "cora_sha": "5fe83c2d41a7f3a603906b127eea7cdf231bac46",
+    "onboarding_sha": "7d5b4b417ea23af73f9870b398db4ddb51bf32e9",
+    "shell_build": "15.1.13.45",
+    "local_contract_tests": 46,
+    "local_quality_checks": 130,
+    "browser_smoke": "synthetic_edge_headless_all_native_consumers_360_390_768_1280_css_zoom_200_passed",
+    "authenticated_test": false,
+    "factory_validated": false,
+    "local_transport_enabled": false,
+    "new_cloud_publication_enabled": false,
+    "cora_backend_verified": false,
+    "agent_package_modified": false,
+    "ci_evidence": "See PR #22 / Issue #21 for final SHA and CI"
   }
 }

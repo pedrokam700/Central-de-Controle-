@@ -46,6 +46,19 @@ const requiredFiles = [
   'ames/dashboard-view.mjs',
   'ames/occurrence-view.mjs',
   'ames/data/failures.mjs',
+  'ames/data/trace.mjs',
+  'ames/trace-view.mjs',
+  'ames/data/daily.mjs',
+  'ames/daily-view.mjs',
+  'ames/data/cora.mjs',
+  'ames/cora-view.mjs',
+  'ames/data/onboarding.mjs',
+  'ames/onboarding-view.mjs',
+  'scripts/ames-trace.test.mjs',
+  'scripts/ames-daily.test.mjs',
+  'scripts/ames-cora.test.mjs',
+  'scripts/ames-onboarding.test.mjs',
+  'scripts/ames-sprint.browser.mjs',
   'scripts/ames-failures.test.mjs',
   'scripts/ames-failures.browser.mjs',
   'ames/dashboard.css',
@@ -89,6 +102,7 @@ syntaxCheck('ames/data/dashboard.mjs');
 syntaxCheck('ames/dashboard-view.mjs');
 syntaxCheck('ames/occurrence-view.mjs');
 syntaxCheck('ames/data/failures.mjs');
+for (const name of ['ames/data/trace.mjs', 'ames/trace-view.mjs', 'ames/data/daily.mjs', 'ames/daily-view.mjs', 'ames/data/cora.mjs', 'ames/cora-view.mjs', 'ames/data/onboarding.mjs', 'ames/onboarding-view.mjs', 'scripts/ames-sprint.browser.mjs']) syntaxCheck(name);
 syntaxCheck('scripts/ames-failures.browser.mjs');
 syntaxCheck('scripts/ames-dashboard.browser.mjs');
 syntaxCheck('ames/data/product.mjs');
@@ -98,7 +112,7 @@ syntaxCheck('scripts/ames-product.browser.mjs');
 
 // Native data invariants are behavioral tests, not just source-string checks.
 {
-  const result = spawnSync(process.execPath, ['--test', '--test-isolation=none', 'scripts/ames-data.test.mjs', 'scripts/ames-dashboard.test.mjs', 'scripts/ames-product.test.mjs', 'scripts/ames-failures.test.mjs'], {
+  const result = spawnSync(process.execPath, ['--test', '--test-isolation=none', ...fs.readdirSync(filePath('scripts')).filter(name => /^ames-.*\.test\.mjs$/.test(name)).sort().map(name => 'scripts/' + name)], {
     cwd: root, encoding: 'utf8'
   });
   assertCheck(result.status === 0,
@@ -280,6 +294,15 @@ for (const asset of [
   "BASE+'ames/dashboard-view.mjs'",
   "BASE+'ames/occurrence-view.mjs'",
   "BASE+'ames/data/failures.mjs'",
+  "BASE+'ames/data/trace.mjs'",
+  "BASE+'ames/trace-view.mjs'",
+  "BASE+'ames/data/daily.mjs'",
+  "BASE+'ames/daily-view.mjs'",
+  "BASE+'ames/data/cora.mjs'",
+  "BASE+'ames/cora-view.mjs'",
+  "BASE+'ames/data/onboarding.mjs'",
+  "BASE+'ames/onboarding-view.mjs'",
+  "BASE+'ames/releases/latest/release.json'",
   "BASE+'ames/dashboard.css'",
   "BASE+'ames/data/product.mjs'",
   "BASE+'ames/product-view.mjs'",

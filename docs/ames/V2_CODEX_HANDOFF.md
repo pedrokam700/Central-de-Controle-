@@ -1,6 +1,12 @@
 # Handoff de execução ao Codex
 
-## Continuidade após Falhas
+## Continuidade após sprint econômico
+
+Falhas `43672774db194031bf6050a5c3a3a73191bc1392` aceito; o usuário autorizou e foram implementados em sequência Rastreabilidade (`05728949f1fe9dd17fe2efc24d919651f8545e09`), Central do Dia (`97d7bb3da044701bfe39528b31f6ff762e021e83`), CORA (`5fe83c2d41a7f3a603906b127eea7cdf231bac46`) e onboarding (`7d5b4b417ea23af73f9870b398db4ddb51bf32e9`). Retomada preservou os quatro commits e ajustes não commitados. Shell final `15.1.13.45`; 46 testes, 130 checks e smoke final desktop/mobile passaram. SHA final/CI no PR #22 e Issue #21; detalhes e limites em `V2_IMPLEMENTACAO_STATUS.md`.
+
+**Parar para revisão consolidada.** Sem transporte/publicação real, Rules, adaptador real 3022, main/merge, pacote/agente ou deploy. A implementação segura usa o store existente e evidencia indisponibilidade: contrato de transporte do agente ausente; backend CORA fora deste checkout, consumo/resposta ainda sem validação real. Próximo passo seguro: revisão + smoke autenticado com snapshots reais/fluxos manuais e contrato do agente antes de conectar transporte. **V2/V0.5.23/3022 NÃO GREEN.** As restrições de parada dos checkpoints abaixo são históricas.
+
+## Histórico após Falhas
 
 O usuário revisou/aprovou Produto/CPH `d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df` e autorizou **somente Falhas**. O checkpoint do shell `15.1.13.44` incorpora Manual/MES na view existente, sem vínculo persistente ou deduplicação histórica. CPH exato, linha isolada, cobertura parcial e detalhe invalidado por correção de snapshot; mesmo store/Auth e renderer compartilhado com Dashboard. 37 testes, 99 checks e smoke sintético de Falhas + regressões Dashboard/Produto passaram. Ver `V2_IMPLEMENTACAO_STATUS.md`; SHA final e CI no PR #22/Issue #21.
 
@@ -14,7 +20,7 @@ O usuário revisou/aprovou o Dashboard `2820bc17858d45b777cf5554c94f1df6d31e4d36
 
 O checkpoint Dashboard do shell `15.1.13.42` implementa somente a primeira view sobre `state.ames`; ver `V2_IMPLEMENTACAO_STATUS.md` para alcance e testes. Reconciliado a partir de `b76b8b40eceb15d51d7b9383d8c62944adb734d7`. O usuário determinou **parar aqui para revisão, sem avançar para Produto/CPH**. Próximo passo seguro: revisar o Dashboard e validar leitura autenticada com snapshots reais, sem promover V2/V0.5.23/3022 nem fazer merge na main. O SHA publicado e o CI ficam registrados no PR #22/Issue #21.
 
-O restante deste handoff descreve a missão ampla; a instrução atual de parar após Falhas e antes de Rastreabilidade/Dia/CORA prevalece sobre a sequência ampla. Os limites de checkpoints anteriores abaixo são históricos.
+O restante deste handoff descreve a missão ampla; a instrução atual de parar após o sprint para revisão consolidada prevalece sobre a sequência ampla. Os limites de checkpoints anteriores abaixo são históricos.
 
 Auditoria entregue antes do código no commit `c352693`; relatório atual: `V2_AUDITORIA_ARQUITETURA.md` (23 achados). Ver `V2_IMPLEMENTACAO_STATUS.md` para o corte seguro já implementado e os limites. Estado de aceite: V2/V0.5.23/3022 NÃO GREEN.
 

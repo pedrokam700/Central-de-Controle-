@@ -3,6 +3,10 @@
 .mes-trace[hidden] { display: none; }
 .mes-context-panel { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; font-size: 13px; overflow-wrap: anywhere; margin-bottom: 16px; }
 .mes-context-panel summary { min-height: 44px; padding: 10px 0; cursor: pointer; }
+.mes-context-panel .mes-pagination { display: flex; flex-wrap: wrap; gap: 10px; }
+.mes-context-panel .button { min-width: 0; max-width: 100%; min-height: 44px; height: auto; white-space: normal; overflow-wrap: anywhere; }
+#coraMes { scroll-margin-top: 70px; scroll-margin-bottom: 150px; }
+body.cora-route-active #aiAnalysisView #aiChatScroll { scroll-padding-top: 70px; }
 .mes-opt-in { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
 .mes-opt-in input { flex: 0 0 20px; width: 20px; min-height: 24px; }
 #operationsView .failure-origin-filter { display: grid; gap: 6px; max-width: 320px; margin-bottom: 20px; font-size: 13px; }

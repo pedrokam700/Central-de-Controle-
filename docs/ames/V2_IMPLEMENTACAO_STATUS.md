@@ -2,7 +2,38 @@
 
 Continuidade: Issue #21, PR draft #22, branch `v2/native-fusion`.
 
-## Checkpoint atual — somente Falhas nativa
+## Sprint atual — Rastreabilidade, Central do Dia, CORA e onboarding
+
+Falhas `43672774db194031bf6050a5c3a3a73191bc1392` aceito para continuidade. Os quatro blocos foram autorizados em sequência, exclusivamente em `v2/native-fusion`. Na retomada após cota: remoto confirmado no SHA de Falhas, quatro commits locais e ajustes finais preservados; nenhum reset, clean ou descarte. Shell final `15.1.13.45`.
+
+| Bloco | Checkpoint |
+| --- | --- |
+| Rastreabilidade | `05728949f1fe9dd17fe2efc24d919651f8545e09` |
+| Central do Dia | `97d7bb3da044701bfe39528b31f6ff762e021e83` |
+| CORA | `5fe83c2d41a7f3a603906b127eea7cdf231bac46` |
+| Onboarding | `7d5b4b417ea23af73f9870b398db4ddb51bf32e9` |
+
+- **Rastreabilidade:** ação inline na lista comum de ocorrências, reutilizada por Dashboard, Produto, Falhas, Dia e CORA. Consulta PCBA + CPH exato + linha na leitura atual, com referências e paginação. PCBA SN difere de Material SN; PCBA reutilizada não comprova componente reutilizado; Batch Count não é usado. Disponibilidade de 3074/2114/3022 explícita, sem registros inventados. Regra 3022 preservada: último evento válido com `event_time <= defect_time`; adaptador real permanece ausente. Correção com mesmo ID, clique sobre leitura substituída e logout invalidam o detalhe.
+- **Central do Dia:** consulta MES por linha/CPH/defeito na própria view, compartilhando renderer. Data e turno manuais aparecem como contexto, sem atribuição do snapshot a esse período. MES não entra nas contagens, tarefas, materialização de rotinas ou passagem de turno. Nenhuma soma entre linhas ou deduplicação histórica.
+- **CORA:** seleção explícita para incluir contexto MES na próxima consulta. Projeção estruturada em `centralData.mes` e seção própria do prompt existente, fora do truncamento do contexto manual. Até 25 observações, campos textuais limitados a 300 caracteres, limites/quantidades incluídas declarados. Fato observado, correlação, hipótese e causa confirmada por humano separados; nenhuma confirmação inferida. Snapshots legados deixam de entrar pela busca textual genérica de memória, evitando contorno dos filtros. Contexto é recomposto do store a cada requisição; não vira vínculo persistente. Backend de análise não está versionado neste checkout: uso efetivo e aderência das respostas às regras ainda dependem de validação do serviço existente. Nenhum endpoint criado.
+- **Onboarding:** convite no Início e configuração reaberta no Perfil, com `Configurar este computador` / `Somente visualizar`. Versão, pacote, hash, baseline e link vêm de `ames/releases/latest/release.json`, validado com projeção de campos permitidos. Apenas preferência deste navegador é persistida, sem credenciais. Manifesto inválido/indisponível não produz link; permite retry; resposta tardia após logout é ignorada. Não instala nem detecta agente: contrato de transporte real ausente, bloqueio explícito. Pacote preservado.
+- Um único `state.ames`/Auth/listener; render somente com sessão/view ativa, evidência compartilhada e assets no SW. Ajustes finais corrigem IDs de detalhes, retorno de foco, quebra dos botões em zoom e margem de rolagem sob o cabeçalho CORA. Nenhuma arquitetura iframe/overlay/proxy adicionada.
+
+### Validação consolidada
+
+**46 testes A-MES passaram; Quality Gate completo: 130 checks.** Suíte: `ames-data`, `ames-dashboard`, `ames-product`, `ames-failures`, `ames-trace`, `ames-daily`, `ames-cora`, `ames-onboarding` (arquivos `scripts/ames-*.test.mjs`, com `node --test --test-isolation=none`). O gate descobre essa suíte automaticamente. Permanece um aviso preexistente de locale hardcoded. Erro de permissão impresso no teste de sessão é injetado/esperado.
+
+Smoke final Edge headless: `scripts/ames-sprint.browser.mjs`, `scripts/ames-dashboard.browser.mjs`, `scripts/ames-product.browser.mjs` e `scripts/ames-failures.browser.mjs` passaram. Larguras 360/390/768/1280 e zoom CSS 200%; screenshots sintéticos revisados. Testes direcionados por bloco; regressão ampla somente na fase final, com repetição das verificações afetadas por correções/retomada. `git diff --check` incluído no fechamento. SHA final e CI publicados de forma consolidada no PR #22 / Issue #21.
+
+O harness novo usa HTML/CSS, store, renderizadores, entradas de Dia/CORA/Perfil, prompt e navegação CORA reais. Rotinas/tarefas são fixtures preservadas; não executa workflow manual completo. Cobriu linha/CPH, sem atribuição de data/turno, trace/foco/correção/corrida, contexto CORA limitado/atualizado, manifesto inválido/retry, preferência e logout/resposta tardia. Sem Auth/backend/agente e com rede externa bloqueada; não houve consulta real à IA ou download/execução do pacote. Regressões anteriores mantêm seus limites descritos abaixo.
+
+### Pendências reais e parada
+
+**Parar para revisão consolidada antes de transporte/publicação real, Firebase Rules, 3022 real, merge ou deploy.** Próximo passo seguro: revisar o candidato e validar com sessão/snapshots reais por linha/CPH, fluxos manuais existentes e backend CORA conhecido. Obter contrato real do agente antes de conectar transporte; não presumir endpoints.
+
+Pendem export coerente/paginado, IDs duráveis/revisão/bruto, registros reais 3074/2114/3022, teste autenticado/CRUD completo, dispositivo físico, cache offline completo, benchmark fabril, validação fábrica → Firebase → remoto e retirada final do protótipo. Contexto de prompt não garante comportamento do backend/modelo; metadados de pacote podem vir do cache e o ZIP não é verificado pela tela. Nenhuma alteração de main, Rules, pacote/agente ou deploy. **V2/V0.5.23/3022 NÃO GREEN; V0.5.20 continua baseline documentada.**
+
+## Histórico — Falhas nativa (aceito para continuidade)
 
 Produto/CPH `d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df` revisado e aprovado pelo usuário **para continuidade de desenvolvimento**. Branch `v2/native-fusion`, árvore limpa e HEAD local/remoto reconciliados nesse SHA antes deste corte. Aprovação de desenvolvimento não equivale a validação fabril. Shell `15.1.13.44`.
 

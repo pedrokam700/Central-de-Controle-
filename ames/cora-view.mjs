@@ -6,7 +6,7 @@ export function createCoraView(root, store, options = {}) {
   function render() {
     if (!root) return;
     if (!view) {
-      root.innerHTML = '<details><summary>Contexto MES da consulta</summary><label class="mes-opt-in"><input type="checkbox" data-cora-mes-include> Usar a linha e o CPH selecionados na próxima consulta</label><p>Fato observado ≠ correlação ≠ hipótese ≠ causa confirmada por humano. A seleção inclui até 25 registros da leitura atual; não representa todas as falhas.</p><p>Contexto preparado na Central. A utilização na resposta depende do serviço CORA disponível; validação do backend pendente.</p><section id="coraMesEvidence" class="ames-occurrence-view"></section></details>';
+      root.innerHTML = '<details><summary>Contexto MES da consulta</summary><label class="mes-opt-in"><input type="checkbox" data-cora-mes-include> Usar a linha e o CPH selecionados na próxima consulta</label><p>Fato observado ≠ correlação ≠ hipótese ≠ causa confirmada por humano. A seleção inclui até 25 registros da leitura atual; não representa todas as falhas.</p><p>Contexto preparado na Central. A utilização na resposta depende do serviço CORA disponível; validação do backend pendente.</p><section id="coraMesContent" class="ames-occurrence-view"></section></details>';
       view = createOccurrenceView(root.querySelector('section'), store, { ...options, mode: 'cora' });
     }
     view.render();
