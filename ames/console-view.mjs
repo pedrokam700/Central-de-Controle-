@@ -1,3 +1,5 @@
+import { traceDimensions, AGENT_CAPABILITIES } from './data/capabilities.mjs';
+import { dimensionList } from './capability-view.mjs';
 import { createOccurrenceView } from './occurrence-view.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 
@@ -20,12 +22,9 @@ export function createConsoleView(root, store, { locale } = {}) {
       <dt>Progresso real da coleta</dt><dd>Indisponível: não há job, etapas ou progresso no contrato exportado.</dd>
       <dt>Escopo da coleta</dt><dd>Linha do snapshot: ${esc(model.scope.line_id)}. Linhas/defeitos solicitados, limite, tipo de coleta e perfil de desempenho não informados. Filtros de consulta não alteram o coletor.</dd></dl>
       <p>Iniciar/parar coleta, selecionar várias linhas ou defeitos para coleta e alterar quantidade/tipo/perfil dependem do contrato real do agente. Nenhum comando é enviado por esta tela.</p>
-      <h3>Rastreabilidade e reuso</h3><dl>
-      <dt>3028 · PCBA / defeito</dt><dd>${snapshot ? 'Registros parciais disponíveis. Abra uma ocorrência e use “Rastrear esta PCBA”.' : 'Snapshot indisponível.'}</dd>
-      <dt>2114 · histórico da PCBA</dt><dd>Registros detalhados indisponíveis. Contagem informada: ${esc(snapshot?.summary.pcba_history_count ?? 'não informada')}.</dd>
-      <dt>3074 · Material SN / bind / unbind</dt><dd>Registros detalhados indisponíveis. Contagem legada de materiais: ${esc(snapshot?.summary.material_trace_count ?? 'não informada')} — não é quantidade comprovada de reusos.</dd>
-      <dt>PCBA reutilizada × material reutilizado</dt><dd>Dimensões distintas, ambas sem evidência suficiente. PCBA SN ≠ Material SN; Batch Count ≠ reuso.</dd>
-      <dt>3022 · processo</dt><dd>Preparado, não coletado. Futuro: último evento válido com event_time ≤ defect_time.</dd></dl>
+      <h3>Rastreabilidade e reuso</h3>${dimensionList(traceDimensions(snapshot), { showCounts: true })}
+      <p>PCBA reutilizada × material reutilizado: dimensões distintas, ambas sem evidência suficiente. PCBA SN ≠ Material SN; Batch Count ≠ quantidade de reusos.</p>
+      <details><summary>Contrato necessário para conectar o agente</summary><ul>${AGENT_CAPABILITIES.missing.map(item => `<li>${esc(item)}</li>`).join('')}</ul><p>Históricos e controles das versões isoladas permanecem preservados. Este export legado não permite reproduzi-los integralmente; não há comprovação de paridade completa.</p></details>
       <p>Sem ID durável, as referências valem somente nesta leitura. Correlação não confirma causa e não cria vínculo Manual ↔ MES.</p>
       <button type="button" class="button secondary" data-console-setup>Configurar este computador no Perfil</button>`;
   }
