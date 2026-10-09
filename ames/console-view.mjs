@@ -1,8 +1,7 @@
 import { createAgentClient } from './agent-client.mjs';
 import { createAutomationView } from './automation-view.mjs';
 import { createAdvancedView } from './advanced-view.mjs';
-import { createOccurrenceView } from './occurrence-view.mjs';
-import { createLineOverview, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
+import { createLineOverview, createTop3ParityView, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
 import {
   createSnConsoleView, createTraceConsoleView, createReuseConsoleView,
   createProcessConsoleView, createBaseConsoleView, createKnowledgeConsoleView
@@ -67,7 +66,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     }
     else if(id==='top3'){
       pane.innerHTML='<section data-top3-main></section><section data-top3-trend></section>';
-      const primary=createOccurrenceView(pane.querySelector('[data-top3-main]'),store,{locale,mode:'dashboard'});
+      const primary=createTop3ParityView(pane.querySelector('[data-top3-main]'),store);
       const trend=createTrendAddon(pane.querySelector('[data-top3-trend]'),store,client);
       view={render(){primary.render();trend.render();},clear(){primary.clear?.();trend.clear?.();pane.replaceChildren();}};
     }
