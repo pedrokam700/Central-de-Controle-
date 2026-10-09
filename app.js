@@ -1,5 +1,6 @@
 
     import { createAmesStore, clearSessionData } from './ames/data/store.mjs';
+    import { createConsoleView } from './ames/console-view.mjs';
     import { createDashboardView } from './ames/dashboard-view.mjs';
     import { createProductView } from './ames/product-view.mjs';
     import { createOccurrenceView } from './ames/occurrence-view.mjs';
@@ -507,6 +508,7 @@
         if (sessionGeneration !== dataSessionGeneration || !currentAuthUser) return;
         state.aiKnowledge = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         state.ames.replaceRemoteDocuments(state.aiKnowledge);
+        renderConsoleMes();
         renderDashboardMes();
         renderProductMes();
         renderFailuresMes();
@@ -517,6 +519,7 @@
       }, error => {
         if (sessionGeneration !== dataSessionGeneration) return;
         state.ames.replaceRemoteDocuments([]);
+        renderConsoleMes();
         renderDashboardMes();
         renderProductMes();
         renderFailuresMes();
@@ -1545,6 +1548,7 @@
         currentAccount = null;
         users = [];
         clearSessionData(state);
+        consoleMesView?.clear();
         dashboardMesView?.clear();
         productMesView?.clear();
         failuresMesView?.clear();
@@ -1810,6 +1814,9 @@
       } else if (activeView === 'daily') {
         document.querySelector('#pageTitle').textContent = t('Central do Dia');
         document.querySelector('#pageSubtitle').textContent = t('Rotinas do turno, alocações e execução operacional em tempo real.');
+      } else if (activeView === 'mesConsole') {
+        document.querySelector('#pageTitle').textContent = 'Console MES';
+        document.querySelector('#pageSubtitle').textContent = 'Automação A-MES · operação e investigação por linha';
       } else if (activeView === 'dashboard') {
         document.querySelector('#pageTitle').textContent = t('Dashboard Estratégico');
         document.querySelector('#pageSubtitle').textContent = t('Visão executiva e indicadores gerais de falhas de produtos.');
@@ -2325,6 +2332,13 @@
       document.querySelectorAll('[data-dashboard-indicator]').forEach(card => card.classList.remove('dashboard-indicator-selected'));
     }
 
+    let consoleMesView;
+    function renderConsoleMes() {
+      if (!currentAuthUser || activeView !== 'mesConsole') return;
+      consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, { locale: () => currentLanguage });
+      consoleMesView.render();
+    }
+
     let dashboardMesView;
     function renderDashboardMes() {
       if (!currentAuthUser || activeView !== 'dashboard') return;
@@ -2632,6 +2646,7 @@ function applyActiveView() {
         home: '#homeView',
         daily: '#dailyView',
         dashboard: '#dashboardView',
+        mesConsole: '#mesConsoleView',
         profile: '#profileView',
         product: '#productView',
         operations: '#operationsView',
@@ -2938,7 +2953,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.45'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.45'){localStorage.setItem('cora.sw.loaded','15.1.13.45');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>syncOfflineQueue().catch(()=>{}));window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.46'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.46'){localStorage.setItem('cora.sw.loaded','15.1.13.46');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -5877,6 +5892,7 @@ ${m.text}`).join('\n\n');
         renderSafely('notificações', renderCentralNotifications);
         ensureCentralNotificationEngine();
       }
+      renderSafely('Console MES', renderConsoleMes);
       renderSafely('tradução', translatePage);
 
       // Reaplica no final para garantir consistência mesmo se algum módulo
@@ -6705,6 +6721,12 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       tab?.focus();
     });
 
+    document.querySelector('#mesConsole')?.addEventListener('click', event => {
+      if (!event.target.closest('[data-console-setup]')) return;
+      show('profile');
+      document.querySelector('#amesSetupCollector')?.focus();
+      document.querySelector('#amesIntegration')?.scrollIntoView({ block: 'start' });
+    });
     document.querySelector('[data-open-integration]')?.addEventListener('click', () => {
       show('profile');
       document.querySelector('#amesSetupCollector')?.focus();
@@ -7406,5 +7428,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.45'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.45'){localStorage.setItem('cora.sw.loaded','15.1.13.45');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.46'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.46'){localStorage.setItem('cora.sw.loaded','15.1.13.46');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}

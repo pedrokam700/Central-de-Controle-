@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.45">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.46">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.45';
+  const BUILD='15.1.13.46';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2846,9 +2846,9 @@ body.dark .daily-side-panel{
 
   </style>
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.45" id="mobile-layout-styles">
-<link rel="stylesheet" href="./ames/dashboard.css?v=15.1.13.45">
-<link rel="stylesheet" href="./ames/product.css?v=15.1.13.45">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.46" id="mobile-layout-styles">
+<link rel="stylesheet" href="./ames/dashboard.css?v=15.1.13.46">
+<link rel="stylesheet" href="./ames/product.css?v=15.1.13.46">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -2888,6 +2888,7 @@ body.dark .daily-side-panel{
         <button data-page="work"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="nav-label">Atividades gerais</span></button>
         <button data-page="flow"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 7h12M6 12h12M6 17h12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="6" cy="7" r="1" fill="currentColor"/><circle cx="18" cy="12" r="1" fill="currentColor"/><circle cx="6" cy="17" r="1" fill="currentColor"/></svg></span><span class="nav-label">Fluxos</span></button>
         <button data-page="aiAnalysis"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 10h6M9 14h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span class="nav-label">CORA</span></button>
+        <button data-page="mesConsole"><span class="nav-icon" aria-hidden="true">⌁</span><span class="nav-label">Console MES</span></button>
         <button data-page="profile"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 19c.8-3 3-4.5 6.5-4.5s5.7 1.5 6.5 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span class="nav-label">Meu perfil</span></button>
       </nav>
       <div class="sidebar-foot"><div class="account-info" id="accountInfo"></div><button class="all-reports" id="changeAccount">Sair / Trocar conta</button></div>
@@ -3287,6 +3288,7 @@ body.dark .daily-side-panel{
         </section>
 
         <!-- Tela de Perfil do Usuário / Administração -->
+        <section class="overview hidden" id="mesConsoleView"><div id="mesConsole"></div></section>
         <section class="overview hidden" id="profileView">
           <section id="amesIntegration" class="mes-context-panel" aria-label="Configuração da integração A-MES"></section>
           <div class="stats">
@@ -3686,7 +3688,7 @@ body.dark .daily-side-panel{
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.45"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.46"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */

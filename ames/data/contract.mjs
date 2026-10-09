@@ -70,6 +70,7 @@ export function normalizeLegacySnapshot(payload) {
       defect_time: text(row.defect_time),
       defect_time_ms: instant(row.defect_time),
       repair_status: text(row.repair_status_current || row.repair_state_current),
+      defect_type: text(row.defect_type_current),
       raw_ref: null,
       evidence_status: 'source_observation'
     });

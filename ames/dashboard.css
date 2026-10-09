@@ -44,3 +44,9 @@ body.cora-route-active #aiAnalysisView #aiChatScroll { scroll-padding-top: 70px;
   .ames-occurrence-view .stat-value { font-size: 24px; }
   .ames-occurrence-view dl { grid-template-columns: minmax(0, 1fr); }
 }
+
+.mes-investigation { margin-top: 12px; }
+.mes-investigation input { min-width: 0; width: 100%; min-height: 44px; }
+#mesConsole { min-width: 0; overflow-wrap: anywhere; }
+#mesConsole .mes-context-panel dl { display: grid; gap: 8px; }
+#mesConsole .mes-context-panel dd { margin: 0 0 12px; }
