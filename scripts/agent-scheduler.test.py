@@ -10,6 +10,7 @@ import unittest
 import urllib.request
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
+from types import SimpleNamespace
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'ames' / 'agent'))
@@ -89,6 +90,47 @@ class SchedulerTests(unittest.TestCase):
         expected={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1',
             'ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
         for name,digest in expected.items():self.assertEqual(hashlib.sha256((ROOT/'ames'/'agent'/name).read_bytes()).hexdigest(),digest)
+
+    def test_bridge_deep_real_orchestration_keeps_transforms_outside_gate(self):
+        import engine_bridge
+        seen=[]; pauses=[]
+        def touched(name):
+            self.assertTrue(MES.snapshot()['busy'],name);seen.append(name)
+        class Browser:
+            def __init__(self,*args):pass
+            def connect(self):touched('connect');return self
+            def disconnect(self):touched('disconnect')
+        class Navigation:
+            def __init__(self,*args):pass
+            def ensure_3074(self):touched('nav3074')
+            def ensure_2114(self):touched('nav2114');return 'page'
+            def ensure_current_shift_2114(self,*args):touched('shift');return 'A'
+        class View:
+            def __init__(self,*args):pass
+            def _page(self):touched('page')
+            def turno_atual(self):touched('turno');return 'A'
+            def consultar(self,sn):touched('query');return {'rows':[]}
+        def flow(source,parsed,view,**kw):
+            self.assertFalse(MES.snapshot()['busy']);view.consultar('P');self.assertFalse(MES.snapshot()['busy']);pauses.append(kw['pause_s']);return {'source_sha256':'hash'}
+        def history(result,view,**kw):
+            self.assertFalse(MES.snapshot()['busy']);view.consultar('P');self.assertFalse(MES.snapshot()['busy']);pauses.append(kw['pause_s']);return {'pcbas':[]}
+        modules={'ames.browser':SimpleNamespace(AmesBrowser=Browser),'ames.navigation':SimpleNamespace(AmesNavigation=Navigation),'ames.tela_3074':SimpleNamespace(Tela3074=View),'ames.tela_2114':SimpleNamespace(Tela2114=View),'core.fluxo_3028_3074':SimpleNamespace(executar_fluxo=flow),'core.fluxo_2114':SimpleNamespace(executar_fluxo_2114=history)}
+        with tempfile.TemporaryDirectory() as tmp,patch.object(engine_bridge.importlib,'import_module',side_effect=modules.__getitem__):
+            for profile in ['fast','balanced','safe']:
+                result=engine_bridge.run_deep_v016_records(pathlib.Path(tmp),[{'pcba_sn':'P'}],'test',tmp,performance=profile)
+                self.assertEqual(result['version'],'0.16-live')
+        self.assertEqual(pauses,[0,0,.03,.03,.12,.12]);self.assertEqual(seen.count('disconnect'),3)
+        self.assertFalse(MES.snapshot()['busy'])
+
+    def test_monitor_reservation_released_before_first_call_error_and_callback_error(self):
+        gate=MesScheduler();ticket=gate.reserve_monitor()
+        with self.assertRaises(ValueError):
+            with gate.job(monitor=True,reservation=ticket):raise ValueError('preflight')
+        self.assertFalse(gate.snapshot()['busy'])
+        with self.assertRaises(ValueError):
+            with gate.job(status=lambda _: (_ for _ in ()).throw(ValueError('status'))):
+                with gate.critical():pass
+        self.assertFalse(gate.snapshot()['busy']);self.assertEqual(gate.snapshot()['queued'],0)
 
     def test_actual_agent_jobs_monitor_endpoints_and_sqlite_parallel(self):
         with tempfile.TemporaryDirectory() as tmp:

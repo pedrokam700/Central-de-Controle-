@@ -127,13 +127,18 @@ def run_full_v016(engine_dir: Path, export_path: str | Path, line_callback=None)
             raise RuntimeError("A 2114 está aberta, mas o Shift não foi selecionado.")
         if line_callback: line_callback("3074 FASE 1")
         result_3074 = flow.executar_fluxo(export_path, parsed, material, max_pcbas=0,
+            progress_pcba=lambda i,total,sn,failures,status: line_callback(f"3074 [{i}/{total}] {sn} {status}") if line_callback else None,
+            progress_component=lambda pi,pt,di,dt,ci,ct,sn,time,item,source: line_callback(f"3074 [{pi}/{pt}] {sn} componente {ci}/{ct}") if line_callback else None,
             checkpoint_path=output / f"V010_3074_CHECKPOINT_{fingerprint}.json",
             defect_local_offset_hours=float(times.get("defect_local_utc_offset_hours", -3)),
             grid_naive_offset_hours=float(times.get("grid_naive_utc_offset_hours", 0)))
         if line_callback: line_callback("2114 FASE 2114")
         result_2114 = history_flow.executar_fluxo_2114(result_3074, history,
             source_sha256=result_3074.get("source_sha256", fingerprint),
-            checkpoint_path=output / f"V011_2114_CHECKPOINT_{fingerprint}.json", include_current=True)
+            checkpoint_path=output / f"V011_2114_CHECKPOINT_{fingerprint}.json",
+            seed_checkpoint_path=output / f"V010_2114_CHECKPOINT_{fingerprint}.json",
+            progress=lambda i,total,sn,status,state: line_callback(f"2114 [{i}/{total}] {sn} {status}") if line_callback else None,
+            pause_s=0.25, include_current=True)
     finally:
         browser.disconnect()
     payload = {"version":"0.16", "generated_at":datetime.now().isoformat(timespec="seconds"),
