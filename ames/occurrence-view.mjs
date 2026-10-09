@@ -12,8 +12,9 @@ const labels = { fpy: 'FPY', check_fpy: 'Check FPY', quantity: 'Quantidade', def
 export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode = 'dashboard' } = {}) {
   const failures = mode === 'failures';
   const daily = mode === 'daily';
-  const compact = failures || daily;
-  const prefix = daily ? 'dailyMes' : failures ? 'failureMes' : 'dashMes';
+  const cora = mode === 'cora';
+  const compact = failures || daily || cora;
+  const prefix = cora ? 'coraMes' : daily ? 'dailyMes' : failures ? 'failureMes' : 'dashMes';
   let line = LINE_IDS[0], product, defect;
   let page = 0, expanded = false, previousSnapshot;
   let lastRenderKey = '';
@@ -31,7 +32,7 @@ export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode
     const focusId = root.contains(focused) ? focused.id : '';
     if (snapshotChanged) { expanded = false; page = 0; }
     previousSnapshot = read.snapshot;
-    const model = (daily ? selectDaily : failures ? selectFailures : selectDashboard)(store, { line_id: line, product, defect_code: defect });
+    const model = (daily ? selectDaily : compact ? selectFailures : selectDashboard)(store, { line_id: line, product, defect_code: defect });
     const snapshot = model.snapshot;
     const source = { remote: 'Último snapshot sincronizado', local: 'Snapshot local', local_cache: 'Cache local desconectado', none: 'Sem snapshot disponível' }[model.source];
     const freshness = { fresh: 'coleta recente', stale: 'coleta antiga', unknown: 'idade não verificável' }[model.freshness];
@@ -41,7 +42,7 @@ export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode
     page = Math.min(page, pages - 1);
     const rows = model.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
     root.innerHTML = `
-      <div class="section-head"><div><h2>${daily ? 'Contexto MES da operação' : failures ? 'MES · ocorrências disponíveis' : 'Operação por linha'}</h2><p>Origem: MES · uma linha por consulta</p></div></div>
+      <div class="section-head"><div><h2>${daily ? 'Contexto MES da operação' : compact ? 'MES · ocorrências disponíveis' : 'Operação por linha'}</h2><p>Origem: MES · uma linha por consulta</p></div></div>
       <div class="mes-filters">
         <label>Linha<select id="${prefix}Line">${LINE_IDS.map((id, i) => `<option value="${id}"${id === line ? ' selected' : ''}>Linha ${i + 1} · ${id}</option>`).join('')}</select></label>
         <label>CPH exato<select id="${prefix}Product"><option value="">Todos os modelos</option>${options(products, product)}</select></label>
@@ -90,7 +91,7 @@ export function createOccurrenceView(root, store, { locale = () => 'pt-BR', mode
     render();
     if (!changed && expanded && (button.id === `${prefix}Records` || button.hasAttribute('data-mes-code'))) root.querySelector(`#${prefix}EvidenceTitle`)?.focus();
   });
-  return Object.freeze({ render, clear() {
+  return Object.freeze({ render, filters: () => ({ line_id: line, product, defect_code: defect }), clear() {
     line = LINE_IDS[0]; product = undefined; defect = undefined; page = 0; expanded = false;
     previousSnapshot = undefined; lastRenderKey = ''; if (root) root.replaceChildren();
   } });

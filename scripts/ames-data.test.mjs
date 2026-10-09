@@ -163,7 +163,7 @@ test('actual shell listeners ignore late data/errors after logout and session re
   const context = vm.createContext({
     state, db: {}, console, collection: (_, name) => name,
     onSnapshot: (name, data, error) => { listeners.push({ name, data, error }); return () => {}; },
-    aiUpdateAIState() {}, renderAIMemoryPanel() {}, renderDashboardMes() { mesRenders++; }, renderProductMes() { productRenders++; }, renderFailuresMes() { failureRenders++; }, renderDailyMes() {}, render() {}, fillActivityProducts() {}
+    aiUpdateAIState() {}, renderAIMemoryPanel() {}, renderDashboardMes() { mesRenders++; }, renderProductMes() { productRenders++; }, renderFailuresMes() { failureRenders++; }, renderDailyMes() {}, renderCoraMes() {}, render() {}, fillActivityProducts() {}
   });
   vm.runInContext('let unsubscribeData=[]; let dataSessionGeneration=0; let currentAuthUser={uid:"first"}; let activeProduct=null;\n' + clear + sync + '\nsyncFirestore();', context);
   const first = listeners.find(l => l.name === 'aiKnowledge');
