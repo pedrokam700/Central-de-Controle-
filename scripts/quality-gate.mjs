@@ -33,6 +33,12 @@ function syntaxCheck(name) {
 }
 
 const requiredFiles = [
+  'ames/data/agent-contract.mjs',
+  'ames/agent-client.mjs',
+  'ames/automation-view.mjs',
+  'ames/agent-evidence-view.mjs',
+  'scripts/ames-agent.test.mjs',
+  'scripts/agent-scheduler.test.py',
   'index.html',
   'app.js',
   'sw.js',
@@ -101,6 +107,12 @@ const firestoreRules = read('firestore.rules');
 const firebaseConfigFile = read('firebase.json');
 
 syntaxCheck('app.js');
+for (const name of ['ames/data/agent-contract.mjs','ames/agent-client.mjs','ames/automation-view.mjs','ames/agent-evidence-view.mjs']) syntaxCheck(name);
+{
+  const result = spawnSync(process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3'), ['scripts/agent-scheduler.test.py'], {cwd:root,encoding:'utf8'});
+  assertCheck(result.status === 0, 'Agente: concorrência, endpoints, Excel original e hashes 3028', 'Agente: testes falharam\n'+(result.stderr||result.error||result.stdout));
+  if(result.status===0) console.log(result.stderr);
+}
 syntaxCheck('sw.js');
 syntaxCheck('ames/console-view.mjs');
 syntaxCheck('ames/capability-view.mjs');
@@ -296,6 +308,10 @@ assertCheck(
 
 // 8) Assets operacionais esperados continuam no cache do SW.
 for (const asset of [
+  "BASE+'ames/data/agent-contract.mjs'",
+  "BASE+'ames/agent-client.mjs'",
+  "BASE+'ames/automation-view.mjs'",
+  "BASE+'ames/agent-evidence-view.mjs'",
   "BASE+'index.html'",
   "BASE+'app.js'",
   "BASE+'ames/console-view.mjs'",

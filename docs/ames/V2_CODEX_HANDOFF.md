@@ -1,5 +1,16 @@
 # Handoff de execução ao Codex
 
+## Atualização — scheduler global e Console conectado (2026-10-09)
+
+Retomado de `0e5ce764497b53c58bfc3bdf6ca06582e15ed6f6` exclusivamente em `v2/native-fusion`, preservando os commits e alterações locais após a interrupção. Scheduler consolidado `680d04deeea073654a78147483650d141e20e824`; Console↔agente `ba59b1995eeb471b6f6e96ccafc467aa83147dae`. Shell `15.1.13.47`.
+
+Gate FIFO único cobre os acessos MES do agente; monitor pula ciclos durante jobs normais; cancelamento cooperativo libera a sessão inclusive em erro. Coletores 3028 com hashes originais. Conexão nativa usa contratos V0.5.23 e exige marcador FIFO, mesmo state.ames/Auth; coleta/linhas/falhas/perfis/config/progresso/monitor, registros 3074/2114, insights/matriz condicionais e Excel original de 11 sheets. Nenhuma tela antiga removida.
+
+**Validação:** Quality Gate final PASS (158 checks; 64 testes JS + 12 Python); smoke Console/Dia/CORA/onboarding e regressões Dashboard/Produto/Falhas, 360/390/768/1280 + zoom 200%. Sem MES físico/login/CRUD real nem benchmark. Candidato ZIP separado, original/config/banco preservados; instruções em `ames/agent/README.md` e builder em `scripts/build-agent-candidate.py`.
+
+**Próximo passo:** teste no posto com backup, um agente e origem CORS exata, concorrência e perfis/Excel; depois revisão das lacunas de paridade. API sem revisão/cursor, linha histórica derivada, funções auxiliares e publicação de históricos enriquecidos continuam pendentes. Checklist detalhada atualizada em [V2_CONSOLE_PARIDADE.md](V2_CONSOLE_PARIDADE.md). **V2/V0.5.23/3022 NÃO GREEN.** Sem main/Rules/produção/Vercel/3022 novo. As limitações e proibições antigas abaixo são histórico, substituídas pelo escopo autorizado deste sprint.
+
+
 ## Retomada atual — Console MES (paridade ainda incompleta)
 
 Branch `v2/native-fusion`, base `3655ba7b705a6f1c5a8e4c6a04c4406f914697e3`, árvore inicialmente limpa. Console técnico nativo implementado sobre o mesmo store/Auth, sem remover interfaces antigas. Checkpoints: Console `b298ded1e81df40809cd1b5692aaa3e2c9525a74`, capacidades/onboarding `5b8edab2bae568831e03b45bbb21ac10d28af2cb`, cache `53e7e843625b73835042fddb5ff293f553c17e1f`. Shell `15.1.13.46`.
