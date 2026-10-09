@@ -6,6 +6,7 @@ test('Console MES is one native full-screen shell over state.ames',()=>{
   const source=fs.readFileSync('ames/console-view.mjs','utf8');
   const css=fs.readFileSync('ames/console-legacy.css','utf8');
   assert.match(source,/console-legacy\.css/);
+  assert.match(source,/console-wave2\.css/);
   assert.match(source,/createAgentClient/);
   assert.match(source,/createAutomationView/);
   assert.match(source,/createAdvancedView/);
@@ -35,11 +36,23 @@ test('Wave 1 preserves R12 operational structure without simplifying it',()=>{
   for(const text of ['Catálogo','Tendências da linha','Backup local','Abrir Chrome/CDP','Histórico de jobs','Importações existentes','Configuração do posto']) assert.match(advanced,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
 });
 
+test('Wave 2 keeps SN trace and 3022 as one native investigation flow',()=>{
+  const specialized=fs.readFileSync('ames/console-specialized-views.mjs','utf8');
+  const css=fs.readFileSync('ames/console-wave2.css','utf8');
+  for(const text of ['Consulta individual por SN','3074','2114','3022','Falha atual da PCBA','Falhas antigas da PCBA','Materiais em 2º uso ou mais','PCBAs anteriores/desvinculadas']) assert.match(specialized,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['full','process_only','reuse_only','Escopo desta coleta','Progresso da rastreabilidade','Evidência carregada']) assert.match(specialized,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['Defect Time','última passagem concluída válida ≤ Defect Time','A5700','A5162','A5201','Manual/Automatic','Múltiplas passagens']) assert.match(specialized,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(css,/\.ames-sn-grid/);
+  assert.match(css,/\.ames-trace-layout/);
+  assert.match(css,/\.ames-process-kpis/);
+});
+
 test('offline package contains native parity modules and no parallel V0.5.23 runtime',()=>{
   const sw=fs.readFileSync('sw.js','utf8');
   const build=fs.readFileSync('scripts/build-static.mjs','utf8');
   assert.match(sw,/ames\/console-legacy-parity\.mjs/);
   assert.match(sw,/ames\/console-legacy\.css/);
+  assert.match(sw,/ames\/console-wave2\.css/);
   assert.match(sw,/ames\/console-specialized-views\.mjs/);
   assert.doesNotMatch(sw,/v0523-loader|ames\/v0523/);
   assert.match(build,/name==='ames\/v0523'/);
