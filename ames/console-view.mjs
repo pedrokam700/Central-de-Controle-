@@ -1,5 +1,6 @@
 import { createAgentClient } from './agent-client.mjs';
 import { createAutomationView } from './automation-view.mjs';
+import { createAdvancedView } from './advanced-view.mjs';
 import { createOccurrenceView } from './occurrence-view.mjs';
 import {
   createSnConsoleView, createTraceConsoleView, createReuseConsoleView,
@@ -71,7 +72,12 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   function ensure(id){
     if(views.has(id))return views.get(id);
     const pane=root.querySelector(`[data-console-pane="${id}"]`);let view;
-    if(id==='monitor')view=createAutomationView(pane,store,client);
+    if(id==='monitor'){
+      pane.innerHTML='<section data-monitor-main></section><section data-monitor-tools></section>';
+      const primary=createAutomationView(pane.querySelector('[data-monitor-main]'),store,client);
+      const tools=createAdvancedView(pane.querySelector('[data-monitor-tools]'),store,client);
+      view={render(){primary.render();tools.render();},clear(){primary.clear?.();tools.clear?.();pane.replaceChildren();}};
+    }
     else if(id==='top3')view=createOccurrenceView(pane,store,{locale,mode:'dashboard'});
     else if(id==='failures')view=createOccurrenceView(pane,store,{locale,mode:'failures'});
     else if(id==='sn')view=createSnConsoleView(pane,store,client);
