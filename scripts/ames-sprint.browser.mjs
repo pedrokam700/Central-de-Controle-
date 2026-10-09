@@ -11,30 +11,34 @@ const app=fs.readFileSync('app.js','utf8');
 const extract=(a,b)=>{assert(app.includes(a)&&app.includes(b));return app.slice(app.indexOf(a),app.indexOf(b));};
 const harness=`
 import {createAmesStore,clearSessionData} from './ames/data/store.mjs';
+import {createConsoleView} from './ames/console-view.mjs';
 import {createDailyView} from './ames/daily-view.mjs';
 import {createCoraView} from './ames/cora-view.mjs';
 import {MES_REASONING_RULES} from './ames/data/cora.mjs';
 import {createOnboardingView,savedIntegrationMode} from './ames/onboarding-view.mjs';
 const state={ames:createAmesStore(),workShifts:[{docId:'S1',name:'Turno manual A'}],routineExecutions:[{id:'MANUAL',status:'pending'}],activities:[{id:'TASK'}]};
 let currentAuthUser={uid:'synthetic'},activeView='daily',currentLanguage='pt-BR',dailySelectedDate='2026-10-08',dailySelectedShiftId='S1';
+${extract('    let consoleMesView;','    let dashboardMesView;')}
 ${extract('    let dailyMesView;','    function renderDaily(){')}
 ${extract('    let coraMesView;','    function renderAIAnalysis(){')}
 ${extract('    let integrationView;','    function renderProfile()')}
 const AI_SYSTEM_PROMPT='Test existing transport';
 ${extract('    function aiBuildPromptText(', '    function aiPageState(')}
 ${extract('let coraRoutePlaceholder = null;','function applyActiveView()')}
-function show(view){activeView=view;if(view==='aiAnalysis')enterCoraRoute();else exitCoraRoute();applyCoraPageLayout(view==='aiAnalysis');for(const id of ['home','daily','profile','aiAnalysis'])document.querySelector('#'+id+'View').classList.toggle('hidden',id!==view);document.body.classList.toggle('cora-route-active',view==='aiAnalysis');document.body.classList.toggle('ai-focus-mode',view==='aiAnalysis');renderDailyMes();renderCoraMes();renderIntegration();}
+function show(view){activeView=view;if(view==='aiAnalysis')enterCoraRoute();else exitCoraRoute();applyCoraPageLayout(view==='aiAnalysis');for(const id of ['home','daily','profile','aiAnalysis','mesConsole'])document.querySelector('#'+id+'View').classList.toggle('hidden',id!==view);document.body.classList.toggle('cora-route-active',view==='aiAnalysis');document.body.classList.toggle('ai-focus-mode',view==='aiAnalysis');renderDailyMes();renderCoraMes();renderConsoleMes();renderIntegration();}
 ${extract("    document.querySelector('[data-open-integration]')", "    document.querySelector('#failureOrigin')")}
+document.querySelector('[data-page=mesConsole]').addEventListener('click',()=>show('mesConsole'));
+document.querySelector('#mesConsole').addEventListener('click',e=>{if(e.target.closest('[data-console-setup]'))show('profile');});
 document.querySelector('#accountScreen').classList.add('hidden');
 document.querySelector('#dailyRoutineTimeline').innerHTML='<p>Rotina manual preservada</p>';
 window.sprint={show,
-replace(d){state.ames.replaceRemoteDocuments(d);renderDailyMes();renderCoraMes();},
+replace(d){state.ames.replaceRemoteDocuments(d);renderDailyMes();renderCoraMes();renderConsoleMes();},
 replaceSilent(d){state.ames.replaceRemoteDocuments(d);},
 date(d){dailySelectedDate=d;renderDailyMes();},
 manual(){return JSON.stringify([state.routineExecutions,state.activities]);},
 context(){return currentCoraMesContext();},
 prompt(){return aiBuildPromptText({centralData:{mes:currentCoraMesContext()}});},
-logout(){currentAuthUser=null;clearSessionData(state);dailyMesView?.clear();coraMesView?.clear();integrationView?.clear();renderIntegration();},
+logout(){currentAuthUser=null;clearSessionData(state);dailyMesView?.clear();coraMesView?.clear();integrationView?.clear();consoleMesView?.clear();renderIntegration();},
 login(){currentAuthUser={uid:'next'};show('profile');}
 };show('daily');
 `;
@@ -101,10 +105,44 @@ try{
   assert.deepEqual(await page.evaluate(()=>Object.keys(localStorage)),['central.ames.integration-mode.v1']);
   console.log('PASS: onboarding manifest package/version/hash, collector blocked, viewer preference, Profile reentry');
 
+  await page.locator('[data-page=mesConsole]').click();
+  assert.equal(await page.locator('#consoleMesRecords .stat-value').innerText(),'60');
+  const stable=await page.locator('#consoleMesLine').elementHandle();await show('mesConsole');
+  assert(await stable.evaluate(el=>el===document.querySelector('#consoleMesLine')));
+  await page.locator('#consoleMesProduct').selectOption('CPH2859V');assert.equal(await page.locator('#consoleMesRecords .stat-value').innerText(),'30');
+  await page.locator('#consoleMesPcba').fill('SYNTHETIC-PCBA-0');await page.locator('#consoleMesPcba').press('Enter');
+  assert.equal(await page.locator('#consoleMesRecords .stat-value').innerText(),'1');
+  await page.locator('#consoleMesProduct').selectOption('CPH2859');assert.equal(await page.locator('#consoleMesRecords .stat-value').innerText(),'0');
+  await page.locator('#consoleMesLine').selectOption('TAN10102');assert.equal(await page.locator('#consoleMesRecords .stat-value').innerText(),'10');
+  const states=productFixture();states.payload.defects.forEach((r,i)=>{r.repair_status_current=i%2?'OPEN':'CLOSED';r.defect_type_current=i%3?'PROCESS':'MATERIAL';});
+  await replace([states,b]);await page.locator('#consoleMesLine').selectOption('TAN10101');
+  await page.locator('#consoleMesRepair').selectOption(JSON.stringify('OPEN'));
+  await page.locator('#consoleMesType').selectOption(JSON.stringify('MATERIAL'));
+  assert.equal(await page.locator('#consoleMesRecords .stat-value').innerText(),'10');
+  await page.locator('#consoleMesRecords').click();assert.equal(await page.locator('#consoleMesEvidence > .mes-record-list > li').count(),10);
+  assert.match(await page.locator('#consoleMesEvidence').innerText(),/Defect Type na fonte/);
+  await page.locator('#mesConsole [data-mes-trace]').first().focus();await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#consoleMesTraceTitle').evaluate(el=>el===document.activeElement),true);
+  assert.match(await page.locator('[data-console-technical]').innerText(),/Progresso real da coleta/);
+  assert.match(await page.locator('[data-console-technical]').innerText(),/Registros detalhados indisponíveis/);
+  await replace([states,b]);assert.equal(await page.locator('#mesConsole [data-trace-slot]:not([hidden])').count(),0);
+  assert.equal(await page.locator('#consoleMesRecords').evaluate(el=>el===document.activeElement),true);
+  await page.locator('#consoleMesRecords').click();await page.evaluate(d=>sprint.replaceSilent(d),[a,b]);
+  await page.locator('#mesConsole [data-mes-trace]').first().click();assert.equal(await page.locator('#consoleMesEvidence').isVisible(),false);
+  await page.locator('#consoleMesLine').selectOption('TAN10103');assert.match(await page.locator('#mesConsole').innerText(),/Ausência de snapshot não significa zero falhas/);
+  await page.locator('#consoleMesLine').selectOption('TAN10101');await page.locator('#consoleMesRecords').click();
+  assert.equal(await page.locator('#consoleMesEvidence > .mes-record-list > li').count(),25);
+  await page.locator('#consoleMesNext').click();assert.match(await page.locator('#consoleMesEvidence .mes-pagination').innerText(),/Página 2 de 3/);
+  await page.locator('[data-console-setup]').click();await page.locator('#amesSetupCollector').click();
+  assert.match(await page.locator('#amesIntegration').innerText(),/127.0.0.1:8765/);
+  assert.match(await page.locator('#amesIntegration').innerText(),/03_ABRIR_CENTRAL_LOCAL_FALLBACK.bat/);
+  console.log('PASS: Console native navigation, exact CPH/PCBA, line/state filters, partial pagination, keyboard/focus, snapshot correction/race, onboarding location');
+
   for(const width of [360,390,768,1280]){
     await page.setViewportSize({width,height:900});
-    for(const [view,selector] of [['daily','#dailyMes'],['aiAnalysis','#coraMes'],['profile','#amesIntegration']]){
+    for(const [view,selector] of [['mesConsole','#mesConsole'],['daily','#dailyMes'],['aiAnalysis','#coraMes'],['profile','#amesIntegration']]){
       await show(view);
+      if(view==='mesConsole'){await page.locator('#consoleMesLine').selectOption('TAN10101');await page.locator('#consoleMesRecords').click();await page.locator('#mesConsole [data-mes-trace]').first().click();}
       if(view==='daily'){
         await page.locator('#dailyMesLine').selectOption('TAN10101');await page.locator('#dailyMesRecords').click();
         await page.locator('#dailyMes [data-mes-trace]').first().click();
@@ -115,12 +153,12 @@ try{
     }
   }
   await page.setViewportSize({width:390,height:900});await page.evaluate(()=>document.documentElement.style.zoom='2');
-  for(const [view,selector] of [['daily','#dailyMes'],['aiAnalysis','#coraMes'],['profile','#amesIntegration']]){
+  for(const [view,selector] of [['mesConsole','#mesConsole'],['daily','#dailyMes'],['aiAnalysis','#coraMes'],['profile','#amesIntegration']]){
     await show(view);assert.deepEqual(await page.locator(selector).evaluate(root=>[root,...root.querySelectorAll('*')].filter(el=>el.getClientRects().length&&(el.getBoundingClientRect().right>innerWidth+1||el.scrollWidth>el.clientWidth+2)).map(el=>el.id||el.tagName)),[],view+' zoom 200%');
   }
   await page.evaluate(()=>document.documentElement.style.zoom='');
   await page.evaluate(()=>sprint.logout());assert.equal((await page.evaluate(()=>sprint.context())).status,'signed_out');
-  for(const selector of ['#dailyMes','#coraMes','#amesIntegration'])assert.equal(await page.locator(selector).innerText(),'');
+  for(const selector of ['#mesConsole','#dailyMes','#coraMes','#amesIntegration'])assert.equal(await page.locator(selector).innerText(),'');
   await page.route('**/ames/releases/latest/release.json',route=>route.fulfill({status:200,contentType:'application/json',body:'{}'}));
   await page.evaluate(()=>sprint.login());await page.waitForSelector('[data-release-retry]');assert.equal(await page.locator('.mes-release a').count(),0);
   await page.unroute('**/ames/releases/latest/release.json');await page.locator('[data-release-retry]').click();await page.waitForSelector('.mes-release');

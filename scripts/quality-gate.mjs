@@ -40,6 +40,12 @@ const requiredFiles = [
   'manifest.webmanifest',
   'firestore.rules',
   'firebase.json',
+  'ames/console-view.mjs',
+  'ames/capability-view.mjs',
+  'ames/data/capabilities.mjs',
+  'scripts/ames-console.test.mjs',
+  'scripts/ames-capabilities.test.mjs',
+  'scripts/ames-cache.test.mjs',
   'ames/data/contract.mjs',
   'ames/data/store.mjs',
   'ames/data/dashboard.mjs',
@@ -96,6 +102,9 @@ const firebaseConfigFile = read('firebase.json');
 
 syntaxCheck('app.js');
 syntaxCheck('sw.js');
+syntaxCheck('ames/console-view.mjs');
+syntaxCheck('ames/capability-view.mjs');
+syntaxCheck('ames/data/capabilities.mjs');
 syntaxCheck('ames/data/contract.mjs');
 syntaxCheck('ames/data/store.mjs');
 syntaxCheck('ames/data/dashboard.mjs');
@@ -223,6 +232,7 @@ assertCheck(
     'workView',
     'flowView',
     'aiAnalysisView',
+    'mesConsoleView',
     'profileView'
   ];
 
@@ -288,6 +298,9 @@ assertCheck(
 for (const asset of [
   "BASE+'index.html'",
   "BASE+'app.js'",
+  "BASE+'ames/console-view.mjs'",
+  "BASE+'ames/capability-view.mjs'",
+  "BASE+'ames/data/capabilities.mjs'",
   "BASE+'ames/data/store.mjs'",
   "BASE+'ames/data/contract.mjs'",
   "BASE+'ames/data/dashboard.mjs'",

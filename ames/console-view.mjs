@@ -21,7 +21,7 @@ export function createConsoleView(root, store, { locale } = {}) {
       <dl><dt>Estado da automação / agente</dt><dd>Não verificável pelo snapshot. A disponibilidade de dados não comprova agente conectado ou coleta em andamento.</dd>
       <dt>Progresso real da coleta</dt><dd>Indisponível: não há job, etapas ou progresso no contrato exportado.</dd>
       <dt>Escopo da coleta</dt><dd>Linha do snapshot: ${esc(model.scope.line_id)}. Linhas/defeitos solicitados, limite, tipo de coleta e perfil de desempenho não informados. Filtros de consulta não alteram o coletor.</dd></dl>
-      <p>Iniciar/parar coleta, selecionar várias linhas ou defeitos para coleta e alterar quantidade/tipo/perfil dependem do contrato real do agente. Nenhum comando é enviado por esta tela.</p>
+      <p>Iniciar/parar coleta, selecionar várias linhas ou defeitos para coleta e alterar quantidade/tipo/perfil dependem da conexão nativa e da serialização global da sessão do agente V0.5.23. Nenhum comando é enviado por esta tela.</p>
       <h3>Rastreabilidade e reuso</h3>${dimensionList(traceDimensions(snapshot), { showCounts: true })}
       <p>PCBA reutilizada × material reutilizado: dimensões distintas, ambas sem evidência suficiente. PCBA SN ≠ Material SN; Batch Count ≠ quantidade de reusos.</p>
       <details><summary>Contrato necessário para conectar o agente</summary><ul>${AGENT_CAPABILITIES.missing.map(item => `<li>${esc(item)}</li>`).join('')}</ul><p>Históricos e controles das versões isoladas permanecem preservados. Este export legado não permite reproduzi-los integralmente; não há comprovação de paridade completa.</p></details>

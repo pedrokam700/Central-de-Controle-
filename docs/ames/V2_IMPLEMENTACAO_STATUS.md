@@ -2,6 +2,23 @@
 
 Continuidade: Issue #21, PR draft #22, branch `v2/native-fusion`.
 
+## Sprint atual — Console MES nativo e checklist V0.5.23
+
+Base remota e local confirmada `3655ba7b705a6f1c5a8e4c6a04c4406f914697e3`, sem alterações locais do preview no repositório. Nenhum reset/clean/descarte. Shell `15.1.13.46`.
+
+- **Console (`b298ded1e81df40809cd1b5692aaa3e2c9525a74`):** navegação própria nativa na Central, mesmo state.ames/Auth/listener. Reusa seletor/renderer de indicadores e ocorrências. Linha isolada, CPH exato, PCBA exata, Repair Status/Defect Type da fonte, FPY/Check/quantidade por linha, Top 3 da lista parcial, paginação e trace inline. Filtros não comandam coleta. Agregados fora de escopo não são atribuídos ao filtro. Detalhes invalidam em substituição/correção/logout; DOM preservado em leitura inalterada.
+- **Capacidades/onboarding (`5b8edab2bae568831e03b45bbb21ac10d28af2cb`):** disponibilidade de 3074/2114/3022 compartilhada com trace, sem inventar registros/reuso. Localização, bootstrap e fallback vêm do manifesto e documentação do pacote. Nenhum scan de porta, endpoint inventado, segundo estado ou instalação/download automático. Versão V0.5.23 e hash do pacote preservados.
+- **Cache (`53e7e843625b73835042fddb5ff293f553c17e1f`):** falha no precache não ativa shell incompleto; invalida apenas caches próprios. Assets estáticos versionados resolvem o precache offline, sem fallback HTML para módulos e sem armazenar APIs/URLs de usuário/reset. Respostas inválidas/redirects não sobrescrevem módulos. Não implica Auth/offline completo.
+- **Complemento V0.5.23:** ZIP local mais recente conferido por hash, código/UI/contrato lidos diretamente e comparados com V0.5.20. A checklist completa está em [V2_CONSOLE_PARIDADE.md](V2_CONSOLE_PARIDADE.md). Os dois coletores 3028 são bit a bit iguais entre as versões. Perfis/waits, progresso, matriz, 11 sheets e helpers preservados no pacote original; equivalentes nativos ainda incompletos.
+
+### Fechamento e bloqueio real
+
+56 testes comportamentais incluídos no Quality Gate; 143 checks passaram (um aviso preexistente de locale). Smoke sintético Console/Dia/CORA/onboarding passou em 360/390/768/1280 e zoom CSS 200%, com paginação/foco/correções/logout. Regressões Dashboard/Produto/Falhas passaram após atualizar a lista de módulos dos harnesses. Sem acesso à produção, Auth/CRUD real, execução de agente ou benchmark fabril.
+
+**Não declarar paridade/migração completa:** a inspeção V0.5.23 encontrou jobs analysis/deep_trace/SN em threads sem exclusão MES global compartilhada; o monitor só exclui analysis. Uma fila na UI não resolve concorrência com outros clientes. Antes de ativar comandos, corrigir/validar o contrato de serialização do scheduler sem reescrever 3028. /base não tem cursor/revisão e históricos podem derivar linha por LIMIT 1: não inventar completude ou contexto de CPH/linha.
+
+Controles de coleta, progresso real, configuração persistente do agente, histórico/reuso/matriz, Excel nativo e funções auxiliares continuam pendentes conforme checklist. Nenhuma tela antiga foi removida e nenhum pacote/agente, Firebase Rules, main, produção ou Vercel foi alterado. **V2/V0.5.23/3022 continuam NÃO GREEN.** SHA final, arquivos e resultados publicados uma vez no PR #22/Issue #21.
+
 ## Sprint atual — Rastreabilidade, Central do Dia, CORA e onboarding
 
 Falhas `43672774db194031bf6050a5c3a3a73191bc1392` aceito para continuidade. Os quatro blocos foram autorizados em sequência, exclusivamente em `v2/native-fusion`. Na retomada após cota: remoto confirmado no SHA de Falhas, quatro commits locais e ajustes finais preservados; nenhum reset, clean ou descarte. Shell final `15.1.13.45`.

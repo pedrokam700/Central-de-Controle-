@@ -1,5 +1,15 @@
 # Handoff de execução ao Codex
 
+## Retomada atual — Console MES (paridade ainda incompleta)
+
+Branch `v2/native-fusion`, base `3655ba7b705a6f1c5a8e4c6a04c4406f914697e3`, árvore inicialmente limpa. Console técnico nativo implementado sobre o mesmo store/Auth, sem remover interfaces antigas. Checkpoints: Console `b298ded1e81df40809cd1b5692aaa3e2c9525a74`, capacidades/onboarding `5b8edab2bae568831e03b45bbb21ac10d28af2cb`, cache `53e7e843625b73835042fddb5ff293f553c17e1f`. Shell `15.1.13.46`.
+
+O complemento obrigatório do usuário exige paridade com o ZIP V0.5.23. Arquivo fornecido em Downloads e hash conferido; comparação direta registrada em **[V2_CONSOLE_PARIDADE.md](V2_CONSOLE_PARIDADE.md)**, incluindo 11 sheets, escopos, waits e funções ainda ausentes no Console. Coletores 3028 idênticos à baseline V0.5.20 por hash.
+
+**Bloqueio real para ativar comandos:** agente V0.5.23 não oferece exclusão MES global entre jobs analysis/deep_trace/SN e monitor. A fila somente no navegador não resolve concorrência entre clientes. Dados históricos também exigem cuidado com linha derivada por LIMIT 1, snapshots incrementais sem revisão/cursor. Não declarar migração completa, não remover telas isoladas, não ativar comandos simulando segurança e não reescrever 3028. Próximo passo: corrigir/validar contrato de serialização do scheduler, sem mudar o coletor, antes do transporte nativo. Sem mudanças neste sprint no pacote/agente real, Rules, main, produção ou Vercel. V2/V0.5.23/3022 NÃO GREEN.
+
+Validação: 56 testes no gate, 143 checks, smokes sintéticos Console/Dia/CORA/onboarding e regressões dos renderizadores Dashboard/Produto/Falhas; 360/390/768/1280 e zoom 200%. Referências novas do renderer adicionadas aos harnesses. Sem benchmark fabril nem autenticação/agente reais. SHA final publicado de forma consolidada no PR #22 e Issue #21.
+
 ## Continuidade após sprint econômico
 
 Falhas `43672774db194031bf6050a5c3a3a73191bc1392` aceito; o usuário autorizou e foram implementados em sequência Rastreabilidade (`05728949f1fe9dd17fe2efc24d919651f8545e09`), Central do Dia (`97d7bb3da044701bfe39528b31f6ff762e021e83`), CORA (`5fe83c2d41a7f3a603906b127eea7cdf231bac46`) e onboarding (`7d5b4b417ea23af73f9870b398db4ddb51bf32e9`). Retomada preservou os quatro commits e ajustes não commitados. Shell final `15.1.13.45`; 46 testes, 130 checks e smoke final desktop/mobile passaram. SHA final/CI no PR #22 e Issue #21; detalhes e limites em `V2_IMPLEMENTACAO_STATUS.md`.
