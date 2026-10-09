@@ -2,6 +2,7 @@ import { createAgentClient } from './agent-client.mjs';
 import { createAutomationView } from './automation-view.mjs';
 import { createAdvancedView } from './advanced-view.mjs';
 import { createOccurrenceView } from './occurrence-view.mjs';
+import { createLineOverview, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
 import {
   createSnConsoleView, createTraceConsoleView, createReuseConsoleView,
   createProcessConsoleView, createBaseConsoleView, createKnowledgeConsoleView
@@ -19,23 +20,7 @@ const VIEWS = Object.freeze([
   ['knowledge','C','CORA conhecimento','CORA · conhecimento','Busca operacional com separação entre fato, correlação, hipótese e causa confirmada.']
 ]);
 
-const CSS = `
-  .ames-legacy-shell{--ames-bg:#f4f4f2;--ames-surface:#fff;--ames-soft:#f0f0ee;--ames-text:#151515;--ames-muted:#696966;--ames-line:#dededb;--ames-line2:#ececea;--ames-dark:#0d0d0d;--ames-blue:#245782;--ames-ok:#197244;--ames-warn:#a96500;--ames-danger:#c7352d;position:fixed;inset:0;z-index:1200;background:var(--ames-bg);color:var(--ames-text);display:grid;grid-template-columns:238px minmax(0,1fr);font:14px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
-  .ames-legacy-shell *{box-sizing:border-box}.ames-legacy-shell button,.ames-legacy-shell input,.ames-legacy-shell select{font:inherit}.ames-legacy-shell button{cursor:pointer}.ames-legacy-shell [hidden]{display:none!important}
-  .ames-legacy-sidebar{height:100vh;background:var(--ames-dark);color:#eee;padding:22px 13px 16px;display:flex;flex-direction:column;overflow:auto}.ames-legacy-brand{padding:0 10px 18px;border-bottom:1px solid #2f2f2d}.ames-legacy-brand-row{display:flex;gap:10px;align-items:center}.ames-legacy-mark{display:grid;place-items:center;width:31px;height:31px;border-radius:8px;background:#fff;color:#111;font-weight:800}.ames-legacy-brand strong{font-size:14px}.ames-legacy-brand span{display:block;color:#989893;font-size:10px;margin-top:2px}
-  .ames-legacy-nav{display:grid;gap:3px;margin:15px 0}.ames-legacy-nav button{display:flex;align-items:center;gap:9px;width:100%;border:0;background:transparent;color:#b9b9b4;border-radius:8px;padding:9px 10px;text-align:left;font-size:12px}.ames-legacy-nav button:hover,.ames-legacy-nav button.active{background:#262626;color:#fff}.ames-legacy-nav .ico{width:20px;text-align:center;color:#8d8d88}.ames-legacy-nav button.active .ico{color:#fff}.ames-legacy-foot{margin-top:auto;color:#888883;font-size:9.5px;line-height:1.5;padding:12px 10px 0}.ames-legacy-foot b{color:#bbb}
-  .ames-legacy-main{min-width:0;height:100vh;overflow:auto}.ames-legacy-topbar{min-height:76px;padding:15px clamp(18px,3vw,42px);display:flex;align-items:center;justify-content:space-between;gap:18px;background:rgba(255,255,255,.96);border-bottom:1px solid var(--ames-line);position:sticky;top:0;z-index:8;backdrop-filter:blur(10px)}.ames-legacy-title{margin:0;font-size:20px;letter-spacing:-.025em}.ames-legacy-sub{margin:4px 0 0;color:var(--ames-muted);font-size:11px}.ames-legacy-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ames-legacy-content{padding:22px clamp(18px,3vw,42px) 48px;max-width:1620px;margin:0 auto}
-  .ames-legacy-shell .button{border:1px solid transparent;border-radius:8px;min-height:38px;padding:8px 12px;font-weight:680;font-size:11px;white-space:nowrap}.ames-legacy-shell .button.primary{background:#111;color:#fff}.ames-legacy-shell .button.secondary{background:#fff;border-color:var(--ames-line);color:#111}.ames-legacy-shell .button:disabled{opacity:.45;cursor:not-allowed}.ames-legacy-shell .status,.ames-status-pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--ames-line);border-radius:999px;background:#fff;padding:7px 10px;font-size:10px;font-weight:700}.ames-agent-dot{width:7px;height:7px;border-radius:50%;background:var(--ames-danger)}.ames-agent-dot.ok{background:var(--ames-ok)}
-  .ames-legacy-shell .ames-view-intro{display:none}.ames-legacy-shell .panel,.ames-legacy-shell .mes-context-panel,.ames-legacy-shell .ames-console-form{background:var(--ames-surface);border:1px solid var(--ames-line);border-radius:12px;box-shadow:0 8px 26px rgba(0,0,0,.04);overflow:hidden}.ames-legacy-shell .mes-context-panel,.ames-legacy-shell .ames-console-form{padding:16px;margin:0 0 14px}.ames-legacy-shell .mes-context-panel h3{margin:0 0 10px;font-size:14px}.ames-legacy-shell .mes-context-panel p{font-size:10px;line-height:1.5;color:var(--ames-muted)}
-  .ames-legacy-shell .ames-reuse-kpis,.ames-legacy-shell .ames-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 14px}.ames-legacy-shell .stat,.ames-legacy-shell .ames-kv{background:#fff;border:1px solid var(--ames-line);border-radius:11px;padding:14px}.ames-legacy-shell .stat-label,.ames-legacy-shell .ames-kv small{display:block;font-size:9.5px;color:var(--ames-muted);margin-bottom:5px}.ames-legacy-shell .stat strong,.ames-legacy-shell .stat-value,.ames-legacy-shell .ames-kv b{display:block;font-size:18px;color:#111}.ames-legacy-shell .stat-note{display:block;font-size:9px;color:var(--ames-muted);margin-top:5px}.ames-legacy-shell .ames-kpi-button{text-align:left;cursor:pointer}.ames-legacy-shell .ames-kpi-button:hover{border-color:#b9cad7;background:#fbfdff}.ames-legacy-shell .ames-kpi-button.active{outline:2px solid #111}
-  .ames-legacy-shell .mes-pagination{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.ames-legacy-shell .mes-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:10px 0}.ames-legacy-shell label{display:grid;gap:5px;font-size:9.5px;color:var(--ames-muted);font-weight:680}.ames-legacy-shell input,.ames-legacy-shell select{width:100%;min-height:37px;border:1px solid var(--ames-line);border-radius:8px;padding:7px 9px;background:#fff;color:#111}.ames-legacy-shell fieldset{border:1px solid var(--ames-line);border-radius:9px;margin:0 0 12px;padding:12px;display:flex;gap:10px;flex-wrap:wrap}.ames-legacy-shell legend{padding:0 6px;font-weight:700}.ames-legacy-shell .mes-opt-in{display:flex;align-items:center;gap:7px;border:1px solid var(--ames-line2);border-radius:8px;padding:8px 10px;background:#fafafa}.ames-legacy-shell .mes-opt-in input{width:auto;min-height:auto}
-  .ames-legacy-shell .notice{border-left:3px solid #111;background:#fafafa;padding:11px 12px;font-size:10px;line-height:1.55}.ames-legacy-shell .notice.warn{border-left-color:var(--ames-warn);background:#fffaf2}.ames-legacy-shell .info-note{margin:10px 0;padding:11px;border-left:3px solid #111;background:#f3f3f0;font-size:10px;color:var(--ames-muted)}
-  .ames-legacy-shell .table-wrap{overflow:auto;max-height:650px;border:1px solid var(--ames-line);border-radius:10px}.ames-legacy-shell table{width:100%;min-width:1000px;border-collapse:collapse;background:#fff}.ames-legacy-shell th{position:sticky;top:0;z-index:2;background:#f7f7f5;color:#666;font-size:9px;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:10px 11px;border-bottom:1px solid var(--ames-line)}.ames-legacy-shell td{padding:9px 11px;border-bottom:1px solid var(--ames-line2);font-size:10px;vertical-align:top}.ames-legacy-shell tbody tr:nth-child(even){background:#f7fbfe}.ames-legacy-shell tbody tr:hover{background:#edf5fa}.ames-legacy-shell .ames-evidence-card{border:1px solid var(--ames-line);border-radius:9px;padding:12px;margin:8px 0;background:#fff}.ames-legacy-shell .ames-evidence-card-head{display:flex;justify-content:space-between;gap:10px}.ames-legacy-shell .ames-evidence-card-head div span{display:block;color:var(--ames-muted);font-size:12px}.ames-legacy-shell .ames-prior-pcba{margin-top:7px;padding:8px;border-left:3px solid #111;background:#f7f7f5}.ames-legacy-shell .ames-evidence-hit{background:#fff7c2!important}.ames-legacy-shell .ames-selected-evidence{scroll-margin-top:95px;border-width:2px}
-  .ames-legacy-shell details{margin-top:10px;border-top:1px solid var(--ames-line2);padding-top:10px}.ames-legacy-shell summary{font-size:10px;font-weight:750;cursor:pointer}.ames-legacy-shell [data-agent-status]{margin-top:12px;border-left:3px solid var(--ames-blue);background:#f5f9fc;padding:10px 12px}.ames-legacy-shell [data-agent-status] p,.ames-legacy-shell [data-trace-status] p,.ames-legacy-shell [data-sn-status] p{font-size:10px;margin:5px 0}
-  .ames-console-pane{min-width:0}.ames-shell-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;padding:11px 13px;border:1px solid var(--ames-line);border-radius:10px;background:#fff}.ames-shell-banner div{font-size:10px;color:var(--ames-muted)}.ames-shell-banner strong{color:#111}.ames-shell-build{font-size:9px;color:var(--ames-muted)}
-  @media(max-width:1100px){.ames-legacy-shell .ames-reuse-kpis,.ames-legacy-shell .ames-summary-grid{grid-template-columns:1fr 1fr}.ames-legacy-shell .mes-filters{grid-template-columns:1fr 1fr}}
-  @media(max-width:760px){.ames-legacy-shell{grid-template-columns:1fr}.ames-legacy-sidebar{position:fixed;left:0;top:0;bottom:0;width:min(86vw,300px);z-index:20;transform:translateX(-105%);transition:transform .2s}.ames-legacy-shell.menu-open .ames-legacy-sidebar{transform:translateX(0)}.ames-legacy-topbar{padding:12px}.ames-legacy-content{padding:13px}.ames-legacy-actions .ames-hide-mobile{display:none}.ames-mobile-menu{display:inline-flex!important}.ames-legacy-shell .ames-reuse-kpis,.ames-legacy-shell .ames-summary-grid,.ames-legacy-shell .mes-filters{grid-template-columns:1fr}}
-`;
+const STYLE_HREF = new URL('./console-legacy.css', import.meta.url).href;
 
 // Console MES nativo: mesma sessão/state.ames/Auth/agente. Nenhum iframe ou segunda aplicação.
 export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {} } = {}) {
@@ -45,7 +30,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
 
   const meta=()=>VIEWS.find(([id])=>id===active)||VIEWS[0];
   function mount(){
-    root.innerHTML=`<style>${CSS}</style><div class="ames-legacy-shell" data-ames-shell>
+    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
       <aside class="ames-legacy-sidebar">
         <div class="ames-legacy-brand"><div class="ames-legacy-brand-row"><div class="ames-legacy-mark">Q</div><div><strong>Central de trabalho</strong><span>A-MES · motor local</span></div></div></div>
         <nav class="ames-legacy-nav" aria-label="Views da automação A-MES">${VIEWS.map(([id,icon,label])=>`<button type="button" data-console-view="${id}"${id===active?' class="active"':''}><span class="ico">${icon}</span>${label}</button>`).join('')}</nav>
@@ -73,13 +58,19 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     if(views.has(id))return views.get(id);
     const pane=root.querySelector(`[data-console-pane="${id}"]`);let view;
     if(id==='monitor'){
-      pane.innerHTML='<section data-monitor-main></section><section data-monitor-tools></section>';
+      pane.innerHTML='<section data-monitor-main></section><section data-monitor-lines></section><section data-monitor-tools></section>';
       const primary=createAutomationView(pane.querySelector('[data-monitor-main]'),store,client);
+      const lineBoard=createLineOverview(pane.querySelector('[data-monitor-lines]'),store,client);
       const tools=createAdvancedView(pane.querySelector('[data-monitor-tools]'),store,client);
-      view={render(){primary.render();tools.render();},clear(){primary.clear?.();tools.clear?.();pane.replaceChildren();}};
+      view={render(){primary.render();lineBoard.render();tools.render();},clear(){primary.clear?.();lineBoard.clear?.();tools.clear?.();pane.replaceChildren();}};
     }
-    else if(id==='top3')view=createOccurrenceView(pane,store,{locale,mode:'dashboard'});
-    else if(id==='failures')view=createOccurrenceView(pane,store,{locale,mode:'failures'});
+    else if(id==='top3'){
+      pane.innerHTML='<section data-top3-main></section><section data-top3-trend></section>';
+      const primary=createOccurrenceView(pane.querySelector('[data-top3-main]'),store,{locale,mode:'dashboard'});
+      const trend=createTrendAddon(pane.querySelector('[data-top3-trend]'),store,client);
+      view={render(){primary.render();trend.render();},clear(){primary.clear?.();trend.clear?.();pane.replaceChildren();}};
+    }
+    else if(id==='failures')view=createFailuresParityView(pane,store,client);
     else if(id==='sn')view=createSnConsoleView(pane,store,client);
     else if(id==='trace')view=createTraceConsoleView(pane,store,client);
     else if(id==='reuse')view=createReuseConsoleView(pane,store);
