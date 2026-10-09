@@ -1,6 +1,12 @@
 # Handoff de execução ao Codex
 
-## Continuidade após Produto/CPH
+## Continuidade após Falhas
+
+O usuário revisou/aprovou Produto/CPH `d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df` e autorizou **somente Falhas**. O checkpoint do shell `15.1.13.44` incorpora Manual/MES na view existente, sem vínculo persistente ou deduplicação histórica. CPH exato, linha isolada, cobertura parcial e detalhe invalidado por correção de snapshot; mesmo store/Auth e renderer compartilhado com Dashboard. 37 testes, 99 checks e smoke sintético de Falhas + regressões Dashboard/Produto passaram. Ver `V2_IMPLEMENTACAO_STATUS.md`; SHA final e CI no PR #22/Issue #21.
+
+**Parar antes de Rastreabilidade, Central do Dia ou CORA, aguardando nova revisão.** Próximo passo seguro é revisar Falhas e validar com sessão/snapshots reais os registros por linha/CPH e fluxos manuais. Sem main, Rules, pacote, deploy ou ampliação 3022. V2/V0.5.23/3022 continuam NÃO GREEN.
+
+## Histórico após Produto/CPH
 
 O usuário revisou/aprovou o Dashboard `2820bc17858d45b777cf5554c94f1df6d31e4d36` para continuidade e autorizou **somente Produto/CPH**. Esse segundo consumidor está no shell `15.1.13.43`, com CPH exato, linhas separadas, cobertura e registros paginados; ver `V2_IMPLEMENTACAO_STATUS.md`. **Parar antes de Falhas, Rastreabilidade, Central do Dia ou CORA.** Próximo passo: revisão de Produto e smoke autenticado com snapshots reais. SHA e CI do checkpoint publicados no PR #22/Issue #21. Aprovação de desenvolvimento não equivale a GREEN/fábrica.
 
@@ -8,7 +14,7 @@ O usuário revisou/aprovou o Dashboard `2820bc17858d45b777cf5554c94f1df6d31e4d36
 
 O checkpoint Dashboard do shell `15.1.13.42` implementa somente a primeira view sobre `state.ames`; ver `V2_IMPLEMENTACAO_STATUS.md` para alcance e testes. Reconciliado a partir de `b76b8b40eceb15d51d7b9383d8c62944adb734d7`. O usuário determinou **parar aqui para revisão, sem avançar para Produto/CPH**. Próximo passo seguro: revisar o Dashboard e validar leitura autenticada com snapshots reais, sem promover V2/V0.5.23/3022 nem fazer merge na main. O SHA publicado e o CI ficam registrados no PR #22/Issue #21.
 
-O restante deste handoff descreve a missão ampla; a instrução atual de parar antes de Falhas prevalece sobre a sequência ampla.
+O restante deste handoff descreve a missão ampla; a instrução atual de parar após Falhas e antes de Rastreabilidade/Dia/CORA prevalece sobre a sequência ampla. Os limites de checkpoints anteriores abaixo são históricos.
 
 Auditoria entregue antes do código no commit `c352693`; relatório atual: `V2_AUDITORIA_ARQUITETURA.md` (23 achados). Ver `V2_IMPLEMENTACAO_STATUS.md` para o corte seguro já implementado e os limites. Estado de aceite: V2/V0.5.23/3022 NÃO GREEN.
 

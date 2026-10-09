@@ -1,29 +1,36 @@
-#dashboardMes { min-width: 0; margin-bottom: 24px; }
-#dashboardMes .mes-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-#dashboardMes label { display: grid; gap: 6px; font-size: 12px; }
-#dashboardMes select { width: 100%; min-width: 0; min-height: 44px; }
-#dashboardMes .mes-context { font-size: 12px; color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
-#dashboardMes .mes-coverage { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); font-size: 13px; line-height: 1.6; }
-#dashboardMes .mes-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-#dashboardMes .stat { min-width: 0; overflow-wrap: anywhere; }
-#dashboardMes .mes-records-toggle { display: grid; text-align: left; color: var(--text); cursor: pointer; font: inherit; }
-#dashboardMes button:disabled { cursor: default; opacity: .6; }
-#dashboardMes button:focus-visible, #dashboardMes select:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
-#dashboardMes .mes-pareto { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
-#dashboardMes h3 { flex-basis: 100%; margin: 8px 0; font-size: 14px; }
-#dashboardMes .button { min-height: 44px; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
-#dashboardMes .mes-evidence { margin-top: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; font-size: 12px; overflow-wrap: anywhere; }
-#dashboardMes .mes-evidence[hidden] { display: none; }
-#dashboardMes .mes-record-list { margin: 16px 0; padding-left: 22px; }
-#dashboardMes li { padding: 12px 0; border-bottom: 1px solid var(--line); }
-#dashboardMes dl { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 3fr); gap: 6px 12px; }
-#dashboardMes dt { color: var(--muted); }
-#dashboardMes dd { margin: 0; }
-#dashboardMes .mes-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.ames-occurrence-view { min-width: 0; margin-bottom: 24px; }
+#operationsView .failure-origin-filter { display: grid; gap: 6px; max-width: 320px; margin-bottom: 20px; font-size: 13px; }
+#failureOrigin { min-height: 44px; width: 100%; }
+#operationsView .failure-manual-reports { margin-top: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; font-size: 13px; overflow-wrap: anywhere; }
+#operationsView .failure-manual-reports summary { cursor: pointer; min-height: 44px; padding: 10px 0; }
+#operationsView .failure-report-pagination { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 12px; }
+#operationsView .failure-report-pagination button { min-height: 44px; }
+#failureManualReports .dashboard-detail-item { width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.ames-occurrence-view .mes-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ames-occurrence-view label { display: grid; gap: 6px; font-size: 12px; }
+.ames-occurrence-view select { width: 100%; min-width: 0; min-height: 44px; }
+.ames-occurrence-view .mes-context { font-size: 12px; color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
+.ames-occurrence-view .mes-coverage { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); font-size: 13px; line-height: 1.6; }
+.ames-occurrence-view .mes-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.ames-occurrence-view .stat { min-width: 0; overflow-wrap: anywhere; }
+.ames-occurrence-view .mes-records-toggle { display: grid; text-align: left; color: var(--text); cursor: pointer; font: inherit; }
+.ames-occurrence-view button:disabled { cursor: default; opacity: .6; }
+.ames-occurrence-view button:focus-visible, .ames-occurrence-view select:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.ames-occurrence-view .mes-pareto { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+.ames-occurrence-view h3 { flex-basis: 100%; margin: 8px 0; font-size: 14px; }
+.ames-occurrence-view .button { min-height: 44px; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+.ames-occurrence-view .mes-evidence { margin-top: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; font-size: 12px; overflow-wrap: anywhere; }
+.ames-occurrence-view .mes-evidence[hidden] { display: none; }
+.ames-occurrence-view .mes-record-list { margin: 16px 0; padding-left: 22px; }
+.ames-occurrence-view li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.ames-occurrence-view dl { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 3fr); gap: 6px 12px; }
+.ames-occurrence-view dt { color: var(--muted); }
+.ames-occurrence-view dd { margin: 0; }
+.ames-occurrence-view .mes-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 @media (max-width: 600px) {
-  #dashboardMes .mes-filters { grid-template-columns: minmax(0, 1fr); }
-  #dashboardMes .mes-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #dashboardMes .stat { padding: 12px; }
-  #dashboardMes .stat-value { font-size: 24px; }
-  #dashboardMes dl { grid-template-columns: minmax(0, 1fr); }
+  .ames-occurrence-view .mes-filters { grid-template-columns: minmax(0, 1fr); }
+  .ames-occurrence-view .mes-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ames-occurrence-view .stat { padding: 12px; }
+  .ames-occurrence-view .stat-value { font-size: 24px; }
+  .ames-occurrence-view dl { grid-template-columns: minmax(0, 1fr); }
 }

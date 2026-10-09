@@ -159,10 +159,11 @@ test('actual shell listeners ignore late data/errors after logout and session re
   const state = { ames: store, products: [], aiKnowledge: [] };
   let mesRenders = 0;
   let productRenders = 0;
+  let failureRenders = 0;
   const context = vm.createContext({
     state, db: {}, console, collection: (_, name) => name,
     onSnapshot: (name, data, error) => { listeners.push({ name, data, error }); return () => {}; },
-    aiUpdateAIState() {}, renderAIMemoryPanel() {}, renderDashboardMes() { mesRenders++; }, renderProductMes() { productRenders++; }, render() {}, fillActivityProducts() {}
+    aiUpdateAIState() {}, renderAIMemoryPanel() {}, renderDashboardMes() { mesRenders++; }, renderProductMes() { productRenders++; }, renderFailuresMes() { failureRenders++; }, render() {}, fillActivityProducts() {}
   });
   vm.runInContext('let unsubscribeData=[]; let dataSessionGeneration=0; let currentAuthUser={uid:"first"}; let activeProduct=null;\n' + clear + sync + '\nsyncFirestore();', context);
   const first = listeners.find(l => l.name === 'aiKnowledge');
@@ -192,6 +193,7 @@ test('actual shell listeners ignore late data/errors after logout and session re
   assert.equal(store.read(LINE_IDS[0]).source, 'none');
   assert.equal(mesRenders, 3);
   assert.equal(productRenders, 3);
+  assert.equal(failureRenders, 3);
 });
 
 test('time parser rejects ambiguous timezone, impossible dates, and invalid clock', () => {

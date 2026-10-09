@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-08T22:20:00-03:00",
+  "updated_at": "2026-10-08T21:15:00-03:00",
   "project": "Central de Trabalho V2 + A-MES",
   "central_major_version": "2.0-preview",
   "ames_working_version": "0.5.23",
@@ -83,7 +83,7 @@
     "3022 real adapter and process timeline",
     "phased native fusion and evidence drilldowns per V2_AUDITORIA_ARQUITETURA.md"
   ],
-  "next_action": "Review native Produto/CPH and run authenticated desktop/mobile smoke with real snapshots. Stop before Falhas/Rastreabilidade/Dia/CORA. No main merge or GREEN promotion.",
+  "next_action": "Review native Falhas and run authenticated desktop/mobile smoke with real line/CPH snapshots and existing manual workflows. Stop before Rastreabilidade/Dia/CORA pending new review. No main merge or GREEN promotion.",
   "architecture_audit": {
     "date": "2026-10-08",
     "baseline_sha": "8cbd5fee9558e5e60e312faea583a85435915dda",
@@ -121,12 +121,28 @@
     "tested_code_sha": "2820bc17858d45b777cf5554c94f1df6d31e4d36"
   },
   "native_product_checkpoint": {
-    "stage": "product_cph_read_only_review_required",
+    "stage": "product_cph_approved_for_development_continuation",
     "base_sha": "2820bc17858d45b777cf5554c94f1df6d31e4d36",
     "shell_build": "15.1.13.43",
     "local_contract_tests": 30,
     "local_quality_checks": 90,
     "browser_smoke": "passed_synthetic_edge_headless_product_and_dashboard_360_390_768_1280_css_zoom_200",
+    "authenticated_test": false,
+    "factory_validated": false,
+    "local_transport_enabled": false,
+    "new_cloud_publication_enabled": false,
+    "ci_evidence": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37862679559",
+    "tested_code_sha": "d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df"
+  },
+  "native_failures_checkpoint": {
+    "stage": "failures_manual_and_mes_read_only_review_required",
+    "base_sha": "d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df",
+    "shell_build": "15.1.13.44",
+    "local_contract_tests": 37,
+    "local_quality_checks": 99,
+    "browser_smoke": "passed_synthetic_edge_headless_failures_dashboard_product_360_390_768_1280_css_zoom_200",
+    "persistent_manual_mes_links": false,
+    "historical_occurrence_deduplication": false,
     "authenticated_test": false,
     "factory_validated": false,
     "local_transport_enabled": false,

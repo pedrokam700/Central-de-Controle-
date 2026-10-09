@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.43">
+  <link rel="manifest" href="/Central-de-Controle-/manifest.webmanifest?v=15.1.13.44">
   <title>CORA — Central de Orientação e Raciocínio Assistido</title>
   
 <script id="cora-build-guard">
 (()=>{
-  const BUILD='15.1.13.43';
+  const BUILD='15.1.13.44';
   document.documentElement.classList.add('cora-boot-pending');
   const key='cora.build.active';
   const finish=()=>document.documentElement.classList.remove('cora-boot-pending');
@@ -2846,9 +2846,9 @@ body.dark .daily-side-panel{
 
   </style>
 
-  <link rel="stylesheet" href="mobile.css?v=15.1.13.43" id="mobile-layout-styles">
-<link rel="stylesheet" href="./ames/dashboard.css?v=15.1.13.43">
-<link rel="stylesheet" href="./ames/product.css?v=15.1.13.43">
+  <link rel="stylesheet" href="mobile.css?v=15.1.13.44" id="mobile-layout-styles">
+<link rel="stylesheet" href="./ames/dashboard.css?v=15.1.13.44">
+<link rel="stylesheet" href="./ames/product.css?v=15.1.13.44">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -3145,7 +3145,7 @@ body.dark .daily-side-panel{
         </section>
         <!-- Dashboard Estratégico -->
         <section class="overview hidden" id="dashboardView">
-          <section id="dashboardMes" aria-label="Operação por linha"></section>
+          <section id="dashboardMes" class="ames-occurrence-view" aria-label="Operação por linha"></section>
           <div class="section-head"><div><h2>Ações e reports de produto</h2><p>Registros manuais da Central · todos os produtos e linhas · filtros MES não se aplicam</p></div></div>
           <div class="stats">
             <article class="stat dashboard-stat" role="button" tabindex="0" data-dashboard-indicator="month" aria-label="Ver falhas registradas no mês atual"><div class="stat-label">Reports de Produto (Mês Atual)</div><div class="stat-value" id="dashTotalMonth">0</div><div class="stat-note" id="dashTotalNote">Registradas no mês vigente · clique para detalhar</div></article>
@@ -3376,16 +3376,19 @@ body.dark .daily-side-panel{
         </section>
 
         <section class="overview hidden" id="operationsView">
-          <section>
-            <div class="section-head"><div><h2>Falhas</h2><p>Registro universal de ocorrências. A classificação inicial pode ser desconhecida e evolui conforme surgem evidências.</p></div></div>
+          <div class="section-head"><div><h2>Falhas</h2><p>Registros manuais e observações MES. As contagens são independentes; não representam um total de falhas únicas.</p></div></div>
+          <label class="failure-origin-filter">Origem<select id="failureOrigin"><option value="all">Manual e MES</option><option value="manual">Manual</option><option value="mes">MES</option></select></label>
+          <section id="failuresMes" class="ames-occurrence-view" aria-label="Ocorrências MES"></section>
+          <section id="failureManual" aria-label="Registros manuais">
+            <div class="section-head"><div><h2>Manual · falhas registradas</h2><p>Casos manuais existentes, de todas as linhas. Filtros MES não se aplicam a estes registros.</p></div></div>
             <div class="stats">
-              <article class="stat"><div class="stat-label">Total de falhas</div><div class="stat-value" id="opTotalCount">0</div><div class="stat-note">Todas as ocorrências registradas</div></article>
+              <article class="stat"><div class="stat-label">Casos manuais</div><div class="stat-value" id="opTotalCount">0</div><div class="stat-note">Registros manuais · sem somar MES ou reports</div></article>
               <article class="stat"><div class="stat-label">Em aberto</div><div class="stat-value" id="opOpenCount">0</div><div class="stat-note">Precisam de tratamento ou investigação</div></article>
               <article class="stat"><div class="stat-label">Postos envolvidos</div><div class="stat-value" id="opStationCount">0</div><div class="stat-note">Postos / estações conhecidos</div></article>
               <article class="stat"><div class="stat-label">Sem classificação</div><div class="stat-value" id="opWaitingCount">0</div><div class="stat-note">Aguardando definição da origem</div></article>
             </div>
             <section class="panel recurrence-radar-shell" id="recurrenceRadarPanel" style="margin-top:14px">
-              <div class="section-head compact"><div><h3>Radar de recorrência</h3><p>Cruza Falhas + Reports por componente, CPH, linha, máquina, posto, processo e descrição.</p></div><button type="button" class="button secondary button-compact" id="recurrenceRadarRefresh">Recalcular</button></div>
+              <div class="section-head compact"><div><h3>Radar de recorrência</h3><p>Possíveis correlações entre Falhas e Reports manuais. Não inclui MES, não vincula ocorrências e não confirma causa.</p></div><button type="button" class="button secondary button-compact" id="recurrenceRadarRefresh">Recalcular</button></div>
               <div class="recurrence-radar-summary" id="recurrenceRadarSummary"></div>
               <div class="recurrence-radar-list" id="recurrenceRadarList"></div>
             </section>
@@ -3395,8 +3398,9 @@ body.dark .daily-side-panel{
                 <label>Classificação<select id="opCategory"><option value="">Todas</option><option value="NAO_DEFINIDO">Não definido / Em análise</option><option value="OPERACIONAL">Operacional</option><option value="MAQUINA">Máquina</option><option value="PROCESSO">Processo</option><option value="PRODUTO">Produto (suspeita)</option><option value="TESTE_INSPECAO">Teste / Inspeção</option><option value="OUTRO">Outro</option></select></label>
                 <label>Status<select id="opStatus"><option value="">Todos</option><option value="pendente">Pendente</option><option value="aguardando">Aguardando</option><option value="andamento">Em andamento</option><option value="concluido">Pronto</option><option value="cancelado">Cancelada</option></select></label>
               </div>
-              <div class="table-wrap"><table><thead><tr><th>Registro</th><th>Produto / componente</th><th>Máquina / posto</th><th>Classificação / processo</th><th>Falha</th><th>Status</th></tr></thead><tbody id="opRows"></tbody></table><div class="empty hidden" id="opEmpty">Nenhuma falha encontrada.</div></div>
+              <div class="table-wrap"><table><thead><tr><th>Registro Manual</th><th>Produto / componente</th><th>Máquina / posto</th><th>Classificação / processo</th><th>Falha</th><th>Status</th></tr></thead><tbody id="opRows"></tbody></table><div class="empty hidden" id="opEmpty">Nenhuma falha encontrada.</div></div>
             </div>
+            <details class="failure-manual-reports"><summary>Manual · Reports existentes</summary><p>Reports preservados, inclusive quando relacionados a um caso manual. Não somar reports, casos e ocorrências MES como falhas únicas.</p><div id="failureManualReports" class="dashboard-detail-list" tabindex="-1"></div><div class="failure-report-pagination"><button type="button" class="button secondary" id="failureReportPrev">Anterior</button><span id="failureReportPage"></span><button type="button" class="button secondary" id="failureReportNext">Próxima</button></div></details>
           </section>
         </section>
 
@@ -3677,7 +3681,7 @@ body.dark .daily-side-panel{
   <div class="modal-backdrop hidden" id="searchResultsModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title">Resultados da pesquisa</h2><p id="searchResultsSubtitle" class="modal-subtitle"></p></div><button class="close close-search-results">×</button></div><div id="globalResults" class="detail-main"></div></div></div>
   <!-- V12 — colaboração, Central da equipe e permissões de participação -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.43"></script>
+  <script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.44"></script>
 
 <style id="cora-v1518-final-authority">
 /* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */

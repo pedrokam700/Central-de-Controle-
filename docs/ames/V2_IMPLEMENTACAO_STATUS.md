@@ -2,7 +2,32 @@
 
 Continuidade: Issue #21, PR draft #22, branch `v2/native-fusion`.
 
-## Checkpoint atual — somente Produto/CPH nativo
+## Checkpoint atual — somente Falhas nativa
+
+Produto/CPH `d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df` revisado e aprovado pelo usuário **para continuidade de desenvolvimento**. Branch `v2/native-fusion`, árvore limpa e HEAD local/remoto reconciliados nesse SHA antes deste corte. Aprovação de desenvolvimento não equivale a validação fabril. Shell `15.1.13.44`.
+
+- A própria view Falhas oferece filtro de origem `Manual e MES`, `Manual` ou `MES`. Casos e Reports manuais permanecem independentes, com ações existentes; Reports têm consulta paginada na mesma view. Contagens não são somadas como falhas únicas, inclusive quando um Report já está relacionado a um caso manual. O radar existente continua apenas manual e seu rótulo explicita possível correlação, não causa confirmada.
+- `ames/data/failures.mjs` reutiliza a consulta de linha/CPH exato de Dashboard sobre `state.ames`, sem importar registros manuais, agregar linhas ou fazer deduplicação histórica. Identidade legada explicitamente sem capacidade de vínculo persistente. Nenhum `Ambos`, escrita de `evidence_ref`, conversão MES → Report, segundo store/Auth ou nova consulta remota.
+- `ames/occurrence-view.mjs` concentra os controles, contexto e drill-down antes existentes em Dashboard; `ames/dashboard-view.mjs` é o adaptador. Falhas usa a mesma renderização com somente o contador de registros disponíveis, sem KPIs agregados/Pareto duplicados. A lista comum `ames/evidence-view.mjs` continua reutilizada por Produto, Dashboard e Falhas.
+- Linha obrigatória e isolada; CPH canônico exato. Origem, snapshot, coleta, cobertura parcial e referência disponíveis, sem afirmar ausência de falha quando não há registros. Mesma PCBA/defeito em outra linha é outro contexto. Só os registros carregados abrem, com 25 itens por página.
+- Correção/substituição, inclusive com mesmo snapshot ID, fecha o detalhe temporário e restaura foco. Atualização enquanto a origem MES está oculta também invalida o detalhe. Clique sobre leitura substituída não abre dados novos silenciosamente. Sem reconstrução em leitura inalterada; render somente na view autenticada ativa, usando o listener existente. Logout limpa conteúdo, controles e fontes.
+- Não há inferência de causa, reuso, recorrência confirmada, 2114, 3074 ou 3022. Assets compartilhados no cache, versão sincronizada e gate ampliado; sem mudança de main, Firebase Rules, pacote ou deploy.
+
+### Validação de Falhas
+
+- `node --test --test-isolation=none scripts/ames-data.test.mjs scripts/ames-dashboard.test.mjs scripts/ames-product.test.mjs scripts/ames-failures.test.mjs`: **37 testes passaram**. Os 7 novos cobrem coexistência, CPH2859/CPH2859V, linha obrigatória, PCBA/defeito em linhas distintas, parcial/ausente, ausência de ID durável/vínculo persistente/deduplicação global, correção com mesmo ID, logout e entrada real da view. Regressões anteriores e listener real incluídos. O erro de permissão impresso no teste de sessão é injetado e esperado.
+- `node scripts/quality-gate.mjs`: **99 checks passaram**. Permanece apenas o aviso preexistente de um locale hardcoded.
+- `node scripts/ames-failures.browser.mjs`: Edge headless isolado com HTML/CSS, entrada/renderização/listeners de Falhas reais, store real e fixtures sintéticas (1 caso e 26 Reports manuais, incluindo relação manual preexistente). Cobriu origem, preservação, paginação, encaminhamento de ação manual, CPH exato, linhas, teclado/foco, escape, correção/corrida/origem oculta, exclusão/logout, DOM estável e ausência de escrita/conversão/vínculo. Rede externa bloqueada e storage inalterado.
+- Smoke 360/390/768/1280 px e zoom CSS 200%, com conteúdo MES e consulta de Reports sem overflow e seletor de origem acessível. Screenshots locais sintéticos revisados. Regressões `scripts/ames-dashboard.browser.mjs` e `scripts/ames-product.browser.mjs` passaram.
+- O harness substitui helpers auxiliares e o radar manual; a ação de abrir Report é verificada por spy, sem modal/CRUD E2E. Auth/Firebase não são carregados. Scripts browser exigem Playwright e navegador (`PLAYWRIGHT_MODULE`, `BROWSER_CHANNEL=msedge`, `FAILURES_SCREENSHOTS` opcional); ficam fora do job estático de CI. SHA exato e resultado CI registrados no PR #22/Issue #21.
+
+### Limites e próximo passo seguro de Falhas
+
+**Parar após Falhas, antes de Rastreabilidade, Central do Dia ou CORA.** Revisar este checkpoint e executar smoke autenticado desktop/mobile com snapshots reais, conferindo registros por linha/CPH na fonte e os fluxos manuais existentes. Não houve validação fábrica → Firebase → remoto, login/CRUD E2E, dispositivo físico, benchmark fabril ou prova de cache offline completo. Os testes de performance verificam paginação e estabilidade do DOM em leituras inalteradas.
+
+IDs duráveis, revisão, export coerente/paginado, evidência bruta, transporte local, publicação autorizada, regras em emulador, onboarding, demais views e retirada do protótipo continuam pendentes. **V2/V0.5.23/3022 NÃO GREEN. V0.5.20 permanece baseline documentada.**
+
+## Histórico — Produto/CPH nativo (aprovado para continuidade de desenvolvimento)
 
 Dashboard `2820bc17858d45b777cf5554c94f1df6d31e4d36` revisado e aprovado pelo usuário **para continuidade de desenvolvimento**. HEAD local/remoto e PR #22 reconciliados nesse SHA antes deste corte. Essa aprovação não é validação fabril. Novo shell: `15.1.13.43`.
 
