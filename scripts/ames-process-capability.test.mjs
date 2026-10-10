@@ -9,6 +9,7 @@ test('process_only is fail-closed when agent has no batch 3022 capability',()=>{
   assert.match(client,/value\.trace_mode==='process_only'/);
   assert.match(client,/capabilities\?\.process_timeline!==true/);
   assert.match(client,/process_only exige coleta 3022 em lote/);
+  assert.doesNotMatch(client,/request\('\/preflight'\)/);
 });
 
 test('UI explains partial 3022 instead of advertising unsupported collection',()=>{
