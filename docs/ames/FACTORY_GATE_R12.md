@@ -54,16 +54,17 @@ Antes do gate físico:
 2. parar agente/monitor antigos;
 3. extrair o bundle de migração gerado para o HEAD atual;
 4. executar `ATUALIZAR_R12_EXISTENTE.bat` e informar a pasta raiz da R12 existente;
-5. o updater valida os hashes congelados do 3028, cria backup de código/configuração/SQLite e só então aplica a camada canônica;
-6. executar `00_INICIAR_AQUI.bat` dentro da instalação atualizada;
-7. o launcher valida frontend, ambiente Python, dependências, rede A‑MES, agente, Chrome/CDP e só então abre a única Central;
-8. login A‑MES permanece manual.
+5. **antes de alterar a instalação**, o script tenta criar `R12_ENGINE_CAPTURE_PREMIGRATION.zip` com o motor original sanitizado; se a captura automática não localizar/validar o motor, apenas avisa e deixa disponível a captura manual durante o gate;
+6. o updater valida os hashes congelados do 3028, cria backup de código/configuração/SQLite e só então aplica a camada canônica;
+7. executar `00_INICIAR_AQUI.bat` dentro da instalação atualizada;
+8. o launcher valida frontend, ambiente Python, dependências, rede A‑MES, agente, Chrome/CDP e só então abre a única Central;
+9. login A‑MES permanece manual.
 
-O rollback preserva a base SQLite e restaura launcher/configuração anteriores; arquivos introduzidos somente pela migração, como `FRONTEND_GATE.json`, são removidos quando não existiam na instalação original.
+O bundle também inclui `ROLLBACK_R12_EXISTENTE.bat`. Sem parâmetros adicionais ele localiza o backup candidato mais recente e restaura código/configuração/launcher anteriores, preservando a base SQLite operacional. Arquivos introduzidos somente pela migração, como `FRONTEND_GATE.json`, são removidos quando não existiam na instalação original.
 
 ### Captura segura do motor R12
 
-Ainda durante a validação, executar:
+A captura pré-migração é automática em modo best-effort. Se aparecer aviso de que ela não foi criada, executar durante a validação:
 
 `suporte\ames-workstation\CAPTURAR_MOTOR_R12_SEGURO.bat`
 
@@ -93,58 +94,23 @@ Resultado esperado: no máximo **PRONTO PARA VALIDAR 9/9**. Isso ainda não é G
 
 Executar hoje e dia anterior.
 
-Para cada linha, registrar:
-
-- FPY;
-- Check FPY;
-- Quantity;
-- Top 3;
-- quantidade de ocorrências;
-- snapshot/origem;
-- tempo de execução.
-
-Falha se houver vazamento entre linhas, CPH aproximado ou ausência convertida em zero.
+Para cada linha, registrar FPY, Check FPY, Quantity, Top 3, quantidade de ocorrências, snapshot/origem e tempo de execução. Falha se houver vazamento entre linhas, CPH aproximado ou ausência convertida em zero.
 
 ### Gate C — 2114
 
-Usar ocorrências reais de ambos os turnos quando possível.
-
-Obrigatório:
-
-- Shift 1 = 07:30–17:30;
-- Shift 2 = 17:30–07:30;
-- seleção automática de Shift;
-- nenhuma intervenção manual no OPC para escolher Shift;
-- `Manual/Automatic` preservado como modo de registro, não tipo de reparo;
-- estados N/Y e Defect Type preservados.
+Usar ocorrências reais de ambos os turnos quando possível. Obrigatório: Shift 1=07:30–17:30, Shift 2=17:30–07:30, seleção automática de Shift, nenhuma intervenção manual no OPC, `Manual/Automatic` preservado como modo de registro e estados N/Y/Defect Type preservados.
 
 ### Gate D — 3074 / reuso
 
-Confirmar separadamente:
-
-- segundo/terceiro uso da própria PCBA;
-- segundo/terceiro uso de Material SN;
-- PCBAs anteriores/desvinculadas;
-- Bind/Unbind em relação ao Defect Time;
-- `Batch Count` nunca usado como contagem de usos.
-
-Clicar em KPI de reuso deve abrir o item/SN exato que sustenta a contagem.
+Confirmar separadamente segundo/terceiro uso da própria PCBA, segundo/terceiro uso de Material SN, PCBAs anteriores/desvinculadas, Bind/Unbind em relação ao Defect Time e que `Batch Count` nunca é usado como contagem de usos. KPI de reuso deve abrir o item/SN exato.
 
 ### Gate E — 3022 / processo
 
-Executar caso simples e caso com múltiplas passagens/retrabalho.
-
-Regra obrigatória:
+Executar caso simples e caso com múltiplas passagens/retrabalho. Regra obrigatória:
 
 `ocorrência atual → Defect Time → posto relevante → última passagem válida <= Defect Time`
 
-Validar ao menos:
-
-- processo separado de Defect Time;
-- A5162/A7600 em falha de aparência de câmera quando a evidência real existir;
-- retorno A5201 em retrabalho de tampa quando houver evidência;
-- A5700 como corte principal de análise antes de packing;
-- nenhuma estação promovida automaticamente a causa.
+Validar processo separado de Defect Time, estações relevantes somente quando houver evidência real, A5700 como corte principal quando aplicável e nenhuma estação promovida automaticamente a causa.
 
 ### Gate F — modos seletivos
 
@@ -156,63 +122,30 @@ Validar ao menos:
 
 ### Gate G — Consulta por SN
 
-Usar PCBA real e Material SN real.
-
-Resultado deve reunir, quando houver evidência:
-
-- falha atual;
-- falhas antigas da PCBA;
-- materiais 2º+ uso;
-- PCBAs anteriores/desvinculadas;
-- 3074;
-- 2114;
-- 3022;
-- processo/horário distinto de Defect Time.
+Usar PCBA real e Material SN real. Resultado deve reunir, quando houver evidência: falha atual, falhas antigas da PCBA, materiais 2º+ uso, PCBAs anteriores/desvinculadas, 3074, 2114, 3022 e processo/horário distinto de Defect Time.
 
 ### Gate H — concorrência e cancelamento
 
-- nenhum comando A‑MES simultâneo;
-- jobs normais FIFO;
-- monitor pula ciclo ocupado sem criar backlog;
-- cancelamento cooperativo não corrompe snapshot nem SQLite.
+Nenhum comando A‑MES simultâneo; jobs normais FIFO; monitor pula ciclo ocupado sem backlog; cancelamento cooperativo não corrompe snapshot nem SQLite.
 
 ### Gate I — experiência, equipe, offline e recuperação
 
 - 9 views desktop;
 - mobile sem overflow estrutural;
-- Excel;
-- Base local;
-- CORA conhecimento;
+- Excel, Base local e CORA conhecimento;
 - usuário/posto A coleta e usuário ativo B consegue ler o snapshot MES sanitizado já sincronizado;
 - usuário B não recebe agente local, sessão A‑MES, cookie, credencial ou capacidade de comando remoto;
 - após primeiro acesso online/cache válido, cortar internet externa e confirmar abertura do shell/dados persistidos;
 - reconectar internet e confirmar retomada da sincronização Firebase;
-- reiniciar agente/notebook;
-- configuração preservada;
-- bootstrap repara dependências se necessário;
+- reiniciar agente/notebook e confirmar configuração preservada/bootstrap;
 - nenhuma senha A‑MES persistida.
 
 ## 4. Performance
 
-Medir no posto, por linha e por etapa:
-
-- 3028;
-- 3074;
-- 2114;
-- 3022;
-- total full.
-
-Comparar com a automação local R12. Não declarar ganho/perda sem medida real.
+Medir no posto, por linha e etapa: 3028, 3074, 2114, 3022 e total full. Comparar com a automação local R12. Não declarar ganho/perda sem medida real.
 
 ## 5. Critério de promoção
 
-Somente após evidência dos gates acima:
-
-1. registrar diferenças reais;
-2. corrigir regressões;
-3. repetir apenas os gates afetados + regressão global;
-4. obter aprovação explícita do usuário;
-5. então decidir merge do PR #23;
-6. somente depois decidir publicação das novas `firestore.rules` e produção.
+Somente após evidência dos gates acima: registrar diferenças reais; corrigir regressões; repetir gates afetados + regressão global; obter aprovação explícita do usuário; então decidir merge do PR #23; somente depois decidir publicação das novas `firestore.rules` e produção.
 
 CI verde e preview funcional são necessários, mas nunca suficientes para GREEN físico.
