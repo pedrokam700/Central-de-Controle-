@@ -14,9 +14,9 @@ test('gate físico permanece auditável e nunca vira GREEN apenas por CI ou capa
     'Reboot / bootstrap',
     'Origem desta Central',
     'GREEN físico somente após evidência no posto e aprovação do usuário.'
-  ]) assert.match(runtime,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  ]) assert.ok(runtime.includes(text));
   assert.match(runtime,/process_timeline===true/);
-  assert.match(runtime,/!processReady\?'PARCIAL · 3022 EM LOTE PENDENTE':'PRONTO PARA VALIDAR 9\/9'/);
+  assert.ok(runtime.includes("!processReady?'PARCIAL · 3022 EM LOTE PENDENTE':'PRONTO PARA VALIDAR 9/9'"));
   assert.doesNotMatch(runtime,/GREEN físico.*CI.*success/i);
-  for(const cls of ['ames-factory-gate','ames-gate-pill','ames-gate-checks','ames-gate-proof']) assert.match(css,new RegExp(cls));
+  for(const cls of ['ames-factory-gate','ames-gate-pill','ames-gate-checks','ames-gate-proof']) assert.ok(css.includes(cls));
 });
