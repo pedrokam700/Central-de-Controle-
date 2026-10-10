@@ -9,6 +9,7 @@ import { createMonitorRuntimeView } from './console-monitor-runtime.mjs';
 import { withKnowledgeArchitecture } from './console-knowledge-architecture.mjs';
 import { withAgentRefresh } from './console-refresh-decorator.mjs';
 import { withTraceSelectionHelper } from './console-trace-scope.mjs';
+import { createFailureProcessAddon } from './console-failure-process.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
@@ -87,7 +88,13 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       const base={render(){primary.render();trend.render();},clear(){primary.clear?.();trend.clear?.();pane.replaceChildren();}};
       view=withAgentRefresh(base,pane,store,client,{label:'Atualizar'});
     }
-    else if(id==='failures')view=createFailuresParityView(pane,store,client);
+    else if(id==='failures'){
+      pane.innerHTML='<section data-failures-main></section><section data-failures-process></section>';
+      const failureRoot=pane.querySelector('[data-failures-main]');
+      const primary=createFailuresParityView(failureRoot,store,client);
+      const process=createFailureProcessAddon(pane.querySelector('[data-failures-process]'),store,failureRoot);
+      view={render(){primary.render();process.render();},clear(){primary.clear?.();process.clear?.();pane.replaceChildren();}};
+    }
     else if(id==='sn')view=withProcessCapability(createSnConsoleView(pane,store,client),pane,store,'sn');
     else if(id==='trace'){
       const base=withTraceSelectionHelper(withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace'),pane,store);
