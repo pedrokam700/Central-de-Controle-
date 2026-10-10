@@ -30,6 +30,10 @@ function deployedApp(source){
   return source.replace(oldImport,newImport).replace(oldInit,newInit);
 }
 
+function rootEntry(){
+  return `<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<meta name="robots" content="noindex">\n<title>Central de Controle</title>\n<meta http-equiv="refresh" content="0; url=/Central-de-Controle-/">\n</head>\n<body>\n<p>Abrindo a Central… <a href="/Central-de-Controle-/">Continuar</a></p>\n<script>location.replace('/Central-de-Controle/'+location.search+location.hash);</script>\n</body>\n</html>\n`;
+}
+
 collect('ames');
 collect('icons');
 for(const name of [...new Set(names)]){
@@ -39,6 +43,10 @@ for(const name of [...new Set(names)]){
   else if(name==='app.js')fs.writeFileSync(target,deployedApp(fs.readFileSync(name,'utf8')));
   else fs.copyFileSync(name,target);
 }
+// Entrada raiz é um arquivo real, não um redirect/rewrite do provedor. Isso evita
+// conflitos com Pretty URLs/canonicalização e mantém a Central no base path único.
+fs.mkdirSync(out,{recursive:true});
+fs.writeFileSync(path.join(out,'index.html'),rootEntry());
 const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
 const branch=process.env.VERCEL_GIT_COMMIT_REF||process.env.BRANCH||process.env.GITHUB_REF_NAME||null;
 const provider=process.env.VERCEL?'vercel':process.env.NETLIFY?'netlify':process.env.GITHUB_ACTIONS?'github-actions':'unknown';
