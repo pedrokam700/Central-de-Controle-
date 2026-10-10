@@ -109,7 +109,11 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const scope=collectionScope(value);let path,body;
       if(type==='deep'){
         path='/deep-trace';body={...scope};
-        if(value.trace_mode!==undefined){if(!['full','process_only','reuse_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');body.trace_mode=value.trace_mode;}
+        if(value.trace_mode!==undefined){
+          if(!['full','process_only','reuse_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
+          if(value.trace_mode==='process_only'&&store.agent().capabilities?.process_timeline!==true)throw Error('process_only exige coleta 3022 em lote. Conecte um agente 3022-R12+ ou aguarde a incorporação do coletor 3022 no agente canônico.');
+          body.trace_mode=value.trace_mode;
+        }
       }
       else if(type==='today'||type==='previous_day'){path='/runs';body={preset:type,lines:scope.lines,performance:scope.performance};}
       else if(type==='custom'){path='/runs';body={preset:'custom',mode:'custom',lines:scope.lines,performance:scope.performance,start_at:value.start_at,end_at:value.end_at,shift:value.shift||null};if(!body.start_at||!body.end_at||body.start_at>=body.end_at)throw Error('Informe período válido.');}
