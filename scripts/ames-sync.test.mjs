@@ -39,6 +39,6 @@ test('offline/reconnect publishes once; active teammates read sanitized latest l
   const sync=createMesSync(store,remote,{queue,online:()=>online,schedule:()=>0,unschedule:()=>{}});sync.start('A');await sync.capture();assert.equal(pending.size,1);assert.equal(writes.length,0);
   online=true;await sync.retry();assert.equal(pending.size,1);await sync.retry();assert.equal(pending.size,0);assert.equal(heads.size,1);await sync.capture();assert.equal(writes.length,1);
   const sameAccount=createAmesStore(),readerA=createMesSync(sameAccount,remote,{queue,online:()=>false});readerA.start('A');await new Promise(r=>setTimeout(r,30));assert.equal(sameAccount.read('TAN10101').snapshot.revision,1);readerA.stop();
-  const teammate=createAmesStore(),readerB=createMesSync(teammate,remote,{queue,online:()=>false});readerB.start('B');await new Promise(r=>setTimeout(r,30));assert.equal(teammate.read('TAN10101').snapshot.revision,1);assert.equal(teammate.read('TAN10101').source,'sync');
+  const teammate=createAmesStore(),readerB=createMesSync(teammate,remote,{queue,online:()=>false});readerB.start('B');await new Promise(r=>setTimeout(r,30));assert.equal(teammate.read('TAN10101').snapshot.revision,1);assert.equal(teammate.read('TAN10101').source,'remote');
   readerB.stop();teammate.clear();assert.equal(teammate.read('TAN10101').snapshot,null);sync.stop();
 });
