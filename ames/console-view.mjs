@@ -6,6 +6,7 @@ import { createSnConsoleView, createTraceConsoleView, createProcessConsoleView }
 import { createReuseConsoleView, createBaseConsoleView, createKnowledgeConsoleView } from './console-wave3-views.mjs';
 import { withProcessCapability, applyMonitorProcessCapability } from './console-capability-guard.mjs';
 import { createMonitorRuntimeView } from './console-monitor-runtime.mjs';
+import { withKnowledgeArchitecture } from './console-knowledge-architecture.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
@@ -89,7 +90,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     else if(id==='reuse')view=createReuseConsoleView(pane,store);
     else if(id==='process')view=withProcessCapability(createProcessConsoleView(pane,store),pane,store,'process');
     else if(id==='base')view=createBaseConsoleView(pane,store,client);
-    else if(id==='knowledge')view=createKnowledgeConsoleView(pane,client);
+    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client),pane);
     views.set(id,view);return view;
   }
 
