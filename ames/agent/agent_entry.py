@@ -114,15 +114,17 @@ class Handler(a.Handler):
             try:
                 support=_process_support()
                 self._send({"schema":canonical.SCHEMA,"candidate_version":a.CANDIDATE_VERSION,"source_id":canonical.source_id(a.STORE),
-                            "scheduler":a.MES.snapshot(),"process_timeline":bool(support.get("ready")),"process_contract":"R11_DERIVED_R12_FACTORY_GATE",
-                            "process_support":support,"cursor":True,"revision":True,"durable_local_ids":True,"native_console":True})
+                            "package_root":str(a.BASE_DIR.parent.resolve()),"scheduler":a.MES.snapshot(),"process_timeline":bool(support.get("ready")),
+                            "process_contract":"R11_DERIVED_R12_FACTORY_GATE","process_support":support,"cursor":True,"revision":True,
+                            "durable_local_ids":True,"native_console":True})
             except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
             return
         if u.path=="/api/v1/health":
             try:
                 engine=a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR);support=process_r11.engine_support(engine)
                 self._send({"ok":True,"agent_version":a.AGENT_VERSION,"candidate_version":a.CANDIDATE_VERSION,"agent_build":"CANONICAL-R11-BATCH",
-                            "mes_scheduler":a.MES.snapshot(),"db":str(a.DB_PATH),"engine_found":bool(engine),"engine_dir":str(engine) if engine else None,
+                            "package_root":str(a.BASE_DIR.parent.resolve()),"mes_scheduler":a.MES.snapshot(),"db":str(a.DB_PATH),
+                            "engine_found":bool(engine),"engine_dir":str(engine) if engine else None,
                             "chrome_cdp":a.CONFIG.get("chrome_cdp"),"chrome_cdp_reachable":a._tcp_probe("127.0.0.1",9222,timeout=.5),
                             "ames_host":a.CONFIG.get("ames_host","172.29.185.215"),"ames_port":int(a.CONFIG.get("ames_port",80)),
                             "ames_reachable":a._tcp_probe(a.CONFIG.get("ames_host","172.29.185.215"),int(a.CONFIG.get("ames_port",80)),timeout=1.0),
@@ -156,11 +158,12 @@ class Handler(a.Handler):
 def main():
     try:a.maybe_backup_on_start()
     except Exception as exc:print(f"[BACKUP] aviso: {exc}")
-    a.STORE.record_audit("AGENT_START",workstation=a.WORKSTATION,details={"agent_version":a.AGENT_VERSION,"entry":"agent_entry.py","process_contract":"R11_DERIVED_R12_FACTORY_GATE"})
+    a.STORE.record_audit("AGENT_START",workstation=a.WORKSTATION,details={"agent_version":a.AGENT_VERSION,"entry":"agent_entry.py","process_contract":"R11_DERIVED_R12_FACTORY_GATE","package_root":str(a.BASE_DIR.parent.resolve())})
     ap=argparse.ArgumentParser(description="A-MES Local Agent - Central V2")
     ap.add_argument("--host",default=a.CONFIG.get("host","127.0.0.1"));ap.add_argument("--port",type=int,default=int(a.CONFIG.get("port",8765)));args=ap.parse_args()
     server=a.ThreadingHTTPServer((args.host,args.port),Handler);a.recover_jobs();a.ensure_monitor_thread()
     print(f"A-MES Canonical Agent {a.CANDIDATE_VERSION} · 3022 R11-derived / R12 gate")
+    print(f"Package root: {a.BASE_DIR.parent.resolve()}")
     print(f"API: http://{args.host}:{args.port}/api/v1/health")
     try:server.serve_forever(poll_interval=.4)
     except KeyboardInterrupt:pass
