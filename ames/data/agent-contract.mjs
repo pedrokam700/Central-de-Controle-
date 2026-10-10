@@ -66,7 +66,8 @@ export function normalizeAgentRead(payload) {
   const legacy=payload.legacy;
   const defects=legacy.defects.filter(row=>String(row.snapshot_id)===String(legacy.summary.snapshot_id));
   const base = normalizeLegacySnapshot({...legacy,defects});
-  const removedOccurrences=normalizeRemovedRows(payload.datasets?.removed_defects,legacy,base);
+  const removedAvailable=payload.removed_defects_available!==false&&Array.isArray(payload.datasets?.removed_defects);
+  const removedOccurrences=removedAvailable?normalizeRemovedRows(payload.datasets.removed_defects,legacy,base):[];
   const datasets = {};
   for (const name of ['pcba_history','material_reuse','history_contexts','process_events','process_defect_contexts']) {
     datasets[name] = projectAgentRows(payload.datasets?.[name], base.line_id, base.snapshot_id);
@@ -83,10 +84,11 @@ export function normalizeAgentRead(payload) {
   const processAvailable = datasets.process_events.length > 0 || datasets.process_defect_contexts.length > 0;
   return immutable({...base, source_schema:'agent-v0.5.23-read',
     removed_occurrences:removedOccurrences,
+    removed_occurrences_status:removedAvailable?'available':'unavailable',
     pcba_history:{status:'partial',records:datasets.pcba_history},material_trace:{status:'partial',records:datasets.material_reuse},
     history_contexts:datasets.history_contexts, insights,
     process_timeline:{status:processAvailable?'partial':'not_collected',events:datasets.process_events,contexts:datasets.process_defect_contexts},
-    coverage:{...base.coverage,rejected_rows:base.coverage.rejected_rows+legacy.defects.length-defects.length,reasons:[...base.coverage.reasons,'agent_has_no_revision_or_cursor','historical_line_derived_by_agent',...(removedOccurrences.length?['removed_defects_loaded_separately']:[]),...(processAvailable?['3022_evidence_available']:[])]}});
+    coverage:{...base.coverage,rejected_rows:base.coverage.rejected_rows+legacy.defects.length-defects.length,reasons:[...base.coverage.reasons,'agent_has_no_revision_or_cursor','historical_line_derived_by_agent',...(removedAvailable?[]:['removed_defects_unavailable']),...(removedOccurrences.length?['removed_defects_loaded_separately']:[]),...(processAvailable?['3022_evidence_available']:[])]}});
 }
 
 export function collectionScope(value) {
