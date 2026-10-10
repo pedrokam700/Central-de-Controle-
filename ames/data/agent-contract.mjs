@@ -49,10 +49,24 @@ export function projectAgentRows(rows, line, snapshotId) {
   });
 }
 
+function normalizeRemovedRows(rows,legacy,base){
+  const source=(Array.isArray(rows)?rows:[]).filter(row=>row?.line===base.line_id&&typeof row?.pcba_sn==='string'&&row.pcba_sn.trim()).map(row=>({...row,present_in_3028:0}));
+  if(!source.length)return [];
+  const normalized=normalizeLegacySnapshot({...legacy,summary:{...legacy.summary,defect_rows:source.length},defects:source});
+  return normalized.occurrences.map((row,index)=>({
+    ...row,
+    identity_kind:'legacy_removed_row',
+    evidence_ref:JSON.stringify([base.line_id,base.snapshot_id,'removed',row.defect_key||index]),
+    snapshot_id:base.snapshot_id,
+    present_in_3028:false
+  }));
+}
+
 export function normalizeAgentRead(payload) {
   const legacy=payload.legacy;
   const defects=legacy.defects.filter(row=>String(row.snapshot_id)===String(legacy.summary.snapshot_id));
   const base = normalizeLegacySnapshot({...legacy,defects});
+  const removedOccurrences=normalizeRemovedRows(payload.datasets?.removed_defects,legacy,base);
   const datasets = {};
   for (const name of ['pcba_history','material_reuse','history_contexts','process_events','process_defect_contexts']) {
     datasets[name] = projectAgentRows(payload.datasets?.[name], base.line_id, base.snapshot_id);
@@ -68,10 +82,11 @@ export function normalizeAgentRead(payload) {
   }
   const processAvailable = datasets.process_events.length > 0 || datasets.process_defect_contexts.length > 0;
   return immutable({...base, source_schema:'agent-v0.5.23-read',
+    removed_occurrences:removedOccurrences,
     pcba_history:{status:'partial',records:datasets.pcba_history},material_trace:{status:'partial',records:datasets.material_reuse},
     history_contexts:datasets.history_contexts, insights,
     process_timeline:{status:processAvailable?'partial':'not_collected',events:datasets.process_events,contexts:datasets.process_defect_contexts},
-    coverage:{...base.coverage,rejected_rows:base.coverage.rejected_rows+legacy.defects.length-defects.length,reasons:[...base.coverage.reasons,'agent_has_no_revision_or_cursor','historical_line_derived_by_agent',...(processAvailable?['3022_evidence_available']:[])]}});
+    coverage:{...base.coverage,rejected_rows:base.coverage.rejected_rows+legacy.defects.length-defects.length,reasons:[...base.coverage.reasons,'agent_has_no_revision_or_cursor','historical_line_derived_by_agent',...(removedOccurrences.length?['removed_defects_loaded_separately']:[]),...(processAvailable?['3022_evidence_available']:[])]}});
 }
 
 export function collectionScope(value) {
