@@ -8,6 +8,7 @@ import { withProcessCapability, applyMonitorProcessCapability } from './console-
 import { createMonitorRuntimeView } from './console-monitor-runtime.mjs';
 import { withKnowledgeArchitecture } from './console-knowledge-architecture.mjs';
 import { withAgentRefresh } from './console-refresh-decorator.mjs';
+import { withTraceSelectionHelper } from './console-trace-scope.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
@@ -88,7 +89,10 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     }
     else if(id==='failures')view=createFailuresParityView(pane,store,client);
     else if(id==='sn')view=withProcessCapability(createSnConsoleView(pane,store,client),pane,store,'sn');
-    else if(id==='trace')view=withAgentRefresh(withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace'),pane,store,client,{label:'Atualizar tela'});
+    else if(id==='trace'){
+      const base=withTraceSelectionHelper(withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace'),pane,store);
+      view=withAgentRefresh(base,pane,store,client,{label:'Atualizar tela'});
+    }
     else if(id==='reuse')view=withAgentRefresh(createReuseConsoleView(pane,store),pane,store,client,{label:'Atualizar'});
     else if(id==='process')view=withAgentRefresh(withProcessCapability(createProcessConsoleView(pane,store),pane,store,'process'),pane,store,client,{label:'Atualizar'});
     else if(id==='base')view=createBaseConsoleView(pane,store,client);
