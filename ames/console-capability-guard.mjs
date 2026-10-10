@@ -52,6 +52,17 @@ function applyProcess(root,store){
   else ensureNotice(root,'process-view','3022 em lote não está habilitado no agente conectado. Evidência 3022 já persistida continua visível nesta página; nova coleta de processo exige agente 3022-R12+ ou coletor canônico validado.','warn');
 }
 
+export function applyMonitorProcessCapability(root,store){
+  const button=root?.querySelector('[data-agent-action="deep"]');
+  if(!button)return;
+  const ready=processReady(store);
+  button.textContent=ready?'Rastrear 3074 + 2114 + 3022':'Rastrear 3074 + 2114 · 3022 indisponível';
+  button.title=ready?'Coleta completa disponível neste agente.':'Este agente não declara 3022 em lote. A coleta continua com 3074 + 2114 e o Console sinaliza 3022 como indisponível.';
+  const card=button.closest('.stat');
+  const note=card?.querySelector('.stat-note');
+  if(note)note.textContent=ready?'Atualiza 2114 das PCBAs já conhecidas ou executa rastreabilidade 3074 + 2114 + 3022.':'Atualiza 2114 e reuso 3074. O 3022 em lote fica explícito como indisponível até o agente declarar essa capacidade.';
+}
+
 export function withProcessCapability(view,root,store,kind){
   const apply=kind==='trace'?applyTrace:kind==='sn'?applySn:applyProcess;
   return Object.freeze({
