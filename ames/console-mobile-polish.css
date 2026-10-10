@@ -1,0 +1,26 @@
+.ames-mobile-backdrop{display:none;border:0;padding:0;margin:0;background:transparent}
+@media(max-width:760px){
+  .ames-legacy-shell,.ames-legacy-main,.ames-legacy-sidebar{height:100dvh;min-height:100dvh}
+  .ames-legacy-main{overscroll-behavior:contain}
+  .ames-mobile-backdrop{position:fixed;inset:0;z-index:19;background:rgba(0,0,0,.38);backdrop-filter:blur(1px)}
+  .ames-legacy-shell.menu-open .ames-mobile-backdrop{display:block}
+  .ames-legacy-topbar>div:first-child{min-width:0;flex:1 1 auto}
+  .ames-legacy-title,.ames-legacy-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ames-legacy-actions{flex:0 1 auto;justify-content:flex-end;min-width:0}
+  .ames-status-pill{max-width:min(45vw,190px);overflow:hidden}
+  .ames-status-pill>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ames-legacy-shell .button{min-height:40px}
+  .ames-legacy-shell input,.ames-legacy-shell select{min-height:40px}
+  .ames-legacy-shell .mes-opt-in{min-height:40px}
+  .ames-legacy-shell .table-wrap{max-width:100%;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+  .ames-legacy-shell table{min-width:780px}
+  .ames-legacy-content{padding-bottom:max(22px,env(safe-area-inset-bottom))}
+  .ames-legacy-sidebar{padding-bottom:max(13px,env(safe-area-inset-bottom))}
+}
+@media(max-width:420px){
+  .ames-legacy-topbar{align-items:flex-start;gap:7px}
+  .ames-legacy-sub{display:none}
+  .ames-status-pill{max-width:38vw;padding-inline:7px}
+  .ames-legacy-content{padding-inline:9px}
+  .ames-line-summary,.ames-top3-kpis .ames-summary-grid,.ames-sn-summary,.ames-process-kpis{grid-template-columns:1fr!important}
+}
