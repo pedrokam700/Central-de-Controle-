@@ -35,6 +35,7 @@ function rootEntry(){
 }
 
 collect('ames');
+collect('core');
 collect('icons');
 for(const name of [...new Set(names)]){
   const target=path.join(out,'Central-de-Controle-',name);
