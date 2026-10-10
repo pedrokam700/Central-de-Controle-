@@ -20,5 +20,8 @@ for(const name of [...new Set(names)]){
   fs.mkdirSync(path.dirname(target),{recursive:true});
   fs.copyFileSync(name,target);
 }
-fs.writeFileSync(path.join(out,'release-build.json'),JSON.stringify({sha:process.env.VERCEL_GIT_COMMIT_SHA||null,build:'15.1.13.48',project:'central-cora-v2'}));
-console.log('Native integrated static assets:',new Set(names).size);
+const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
+const branch=process.env.VERCEL_GIT_COMMIT_REF||process.env.BRANCH||process.env.GITHUB_REF_NAME||null;
+const provider=process.env.VERCEL?'vercel':process.env.NETLIFY?'netlify':process.env.GITHUB_ACTIONS?'github-actions':'unknown';
+fs.writeFileSync(path.join(out,'release-build.json'),JSON.stringify({sha,branch,provider,build:'15.1.13.48',project:'central-cora-v2'}));
+console.log('Native integrated static assets:',new Set(names).size,'deployment sha:',sha||'unavailable');

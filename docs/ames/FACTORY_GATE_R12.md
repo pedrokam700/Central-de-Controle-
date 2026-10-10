@@ -31,6 +31,8 @@ Para o PR #23, usar preferencialmente o preview que estiver associado ao **SHA e
 
 Se o Vercel estiver bloqueado por cota/build-rate-limit, o deploy-preview do PR pode ser usado desde que o status do commit confirme que ele foi publicado para o SHA sob teste.
 
+O build estático gera `release-build.json` apenas com metadados seguros de implantação (SHA, branch, provider e versão). O Console lê esse arquivo e mostra **Frontend SHA** no Monitoramento/Gate físico. Para o teste ser auditável, o SHA mostrado na tela deve corresponder ao HEAD do PR #23 que está sendo validado.
+
 O candidato gerado pelo PR possui dois atalhos separados:
 
 - `ABRIR_PREVIEW_PR23.bat` abre o deploy-preview usado no gate;
@@ -61,12 +63,13 @@ O helper:
 2. Abrir `ABRIR_PREVIEW_PR23.bat` ou diretamente o preview ligado ao SHA em validação.
 3. Console MES → Monitoramento → Verificar.
 4. Confirmar no painel **Gate físico · posto de fábrica**:
+   - **Frontend SHA** igual ao HEAD do PR #23 sob teste;
    - agente conectado;
    - motor disponível;
    - Chrome/CDP conectado;
    - rede A‑MES conectada;
    - scheduler validado;
-   - build identificado.
+   - build do agente identificado.
 5. Confirmar que Linha 1=`TAN10101`, Linha 2=`TAN10102`, Linha 3=`TAN10103` continuam separadas.
 
 Resultado esperado: no máximo **PRONTO PARA VALIDAR 9/9**. Isso ainda não é GREEN físico.
