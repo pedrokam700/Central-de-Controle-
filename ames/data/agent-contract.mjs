@@ -1,4 +1,4 @@
-import { immutable, normalizeLegacySnapshot, requireLine } from './contract.mjs';
+import { immutable, normalizeLegacySnapshot, requireLine, LINE_IDS } from './contract.mjs';
 
 export const AGENT_URL = 'http://127.0.0.1:8765/api/v1';
 export const SCHEDULER_POLICY = 'fifo-monitor-skip-v1';
@@ -19,6 +19,19 @@ const fields = [
   'previous_operation_code','previous_operation_name','previous_station','previous_event_time','previous_hist_seq','previous_event_group'
 ];
 
+const provenanceContextFields = ['line_id','product','pcba_sn','material_sn','kind','defect_key','context_key'];
+const scalar=value=>typeof value==='string'?value.slice(0,12000):typeof value==='number'||typeof value==='boolean'?value:undefined;
+const stringList=(value,{lines=false}={})=>Array.isArray(value)?[...new Set(value.filter(v=>typeof v==='string').map(v=>v.slice(0,200)).filter(v=>!lines||LINE_IDS.includes(v)))].slice(0,100):undefined;
+const provenanceContexts=value=>Array.isArray(value)?value.slice(0,100).map(context=>{
+  if(!context||typeof context!=='object'||Array.isArray(context))return null;
+  const projected={};
+  for(const key of provenanceContextFields){
+    const value=scalar(context[key]);
+    if(value!==undefined&&(key!=='line_id'||LINE_IDS.includes(value)))projected[key]=value;
+  }
+  return Object.keys(projected).length?projected:null;
+}).filter(Boolean):undefined;
+
 export function r12CompatibleBuild(health) {
   const match = /^3022-R(\d+)$/.exec(String(health?.agent_build || ''));
   return !!match && Number(match[1]) >= R12_MIN_BUILD && health?.auto_3022_ready === true && health?.mes_scheduler?.policy === SCHEDULER_POLICY;
@@ -26,8 +39,14 @@ export function r12CompatibleBuild(health) {
 
 export function projectAgentRows(rows, line, snapshotId) {
   requireLine(line);
-  return (Array.isArray(rows) ? rows : []).filter(r => r?.line === line && String(r.snapshot_id) === String(snapshotId)).map(r =>
-    Object.fromEntries(fields.filter(k => typeof r[k] === 'string' || typeof r[k] === 'number' || typeof r[k] === 'boolean').map(k => [k, typeof r[k] === 'string' ? r[k].slice(0,12000) : r[k]])));
+  return (Array.isArray(rows) ? rows : []).filter(r => r?.line === line && String(r.snapshot_id) === String(snapshotId)).map(r => {
+    const projected=Object.fromEntries(fields.map(k=>[k,scalar(r[k])]).filter(([,v])=>v!==undefined));
+    const lineCandidates=stringList(r.line_candidates,{lines:true});if(lineCandidates)projected.line_candidates=lineCandidates;
+    if(typeof r.line_ambiguous==='boolean')projected.line_ambiguous=r.line_ambiguous;
+    const productCandidates=stringList(r.product_candidates);if(productCandidates)projected.product_candidates=productCandidates;
+    const contexts=provenanceContexts(r.provenance_contexts);if(contexts)projected.provenance_contexts=contexts;
+    return projected;
+  });
 }
 
 export function normalizeAgentRead(payload) {
