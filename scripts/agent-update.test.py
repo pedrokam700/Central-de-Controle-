@@ -21,6 +21,13 @@ class UpdateTests(unittest.TestCase):
             for name in updater.FILES:
                 (target/name).write_text('old '+name)
                 shutil.copy2(ROOT/'ames'/'agent'/name,source/name)
+
+            # A R12 original não possuía a camada H1. O updater precisa registrar
+            # esses arquivos como ausentes e o rollback deve removê-los novamente.
+            migration_only=('agent_hardened_entry.py','hardening.py')
+            for name in migration_only:
+                (target/name).unlink()
+
             (source/'candidate-files.json').write_text(json.dumps({n:hashlib.sha256((source/n).read_bytes()).hexdigest() for n in updater.FILES}))
 
             # Simula a raiz real produzida pelo bundle. O updater deve copiar as
@@ -37,10 +44,13 @@ class UpdateTests(unittest.TestCase):
             self.assertTrue((saved/'ames_local.sqlite3').exists())
             self.assertEqual((saved/'ames-agent'/'agent.py').read_text(),'old agent.py')
             self.assertEqual((saved/'root'/'00_INICIAR_AQUI.bat').read_text(),'old launcher')
-            self.assertIn('FRONTEND_GATE.json',json.loads((saved/'backup.json').read_text())['root_absent'])
+            saved_manifest=json.loads((saved/'backup.json').read_text())
+            self.assertIn('FRONTEND_GATE.json',saved_manifest['root_absent'])
+            for name in migration_only:self.assertIn(name,saved_manifest['agent_absent'])
             self.assertEqual((package/'00_INICIAR_AQUI.bat').read_text(),'new 00_INICIAR_AQUI.bat')
             self.assertEqual(json.loads((package/'FRONTEND_GATE.json').read_text())['expected_sha'],'1'*40)
             self.assertTrue((target/'agent_entry.py').is_file());self.assertTrue((target/'process_r11.py').is_file())
+            for name in migration_only:self.assertTrue((target/name).is_file())
             origins=json.loads((target/'config.json').read_text())['allowed_origins']
             self.assertIn(updater.ORIGIN,origins);self.assertIn(updater.PREVIEW_ORIGIN,origins);self.assertIn(updater.NETLIFY_PREVIEW_ORIGIN,origins);self.assertEqual(len(origins),len(set(origins)))
             newer=store.create_snapshot(window_id=None,source_kind='after update')
@@ -50,6 +60,7 @@ class UpdateTests(unittest.TestCase):
             self.assertEqual((target/'agent.py').read_text(),'old agent.py')
             self.assertEqual((package/'00_INICIAR_AQUI.bat').read_text(),'old launcher')
             self.assertFalse((package/'FRONTEND_GATE.json').exists())
+            for name in migration_only:self.assertFalse((target/name).exists())
             for name,value in updater.HASHES.items():self.assertEqual(hashlib.sha256((target/name).read_bytes()).hexdigest(),value)
 
 if __name__=='__main__':unittest.main()
