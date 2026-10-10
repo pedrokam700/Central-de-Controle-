@@ -21,48 +21,63 @@ Checklist de preflight:
 - scheduler compatível;
 - nenhuma senha/cookie/sessão A‑MES em config, SQLite, Firebase ou sync.
 
-### Preview da branch e CORS local
+### Preview da branch, SHA exato e CORS local
 
-Para o PR #23, usar preferencialmente o preview que estiver associado ao **SHA exato em validação**. As origens atualmente autorizadas são somente estas três:
+O bundle de migração R12 gerado pelo CI contém `FRONTEND_GATE.json` com o **HEAD exato do PR #23** usado para gerar o pacote. O launcher `00_INICIAR_AQUI.bat` não confia em alias por nome: ele consulta `release-build.json` e abre somente um preview cujo `sha` seja exatamente igual ao `expected_sha` do bundle.
 
-- produção: `https://central-cora-v2.vercel.app`;
+As origens aprovadas para o gate são:
+
 - preview Vercel da branch: `https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app`;
 - deploy-preview do PR #23: `https://deploy-preview-23--productcontrolcenter.netlify.app`.
 
-Se o Vercel estiver bloqueado por cota/build-rate-limit, o deploy-preview do PR pode ser usado desde que o status do commit confirme que ele foi publicado para o SHA sob teste.
+Produção (`https://central-cora-v2.vercel.app`) não vale como evidência do PR #23. O parâmetro `/prod` existe apenas como override explícito e não deve ser usado no gate.
 
-O build estático gera `release-build.json` apenas com metadados seguros de implantação (SHA, branch, provider e versão). O Console lê esse arquivo e mostra **Frontend SHA** no Monitoramento/Gate físico. Para o teste ser auditável, o SHA mostrado na tela deve corresponder ao HEAD do PR #23 que está sendo validado.
+Fluxo automático do launcher:
 
-O candidato gerado pelo PR possui dois atalhos separados:
+1. lê `FRONTEND_GATE.json`;
+2. tenta Vercel e Netlify;
+3. consulta `/release-build.json` sem cache;
+4. escolhe a primeira origem cujo SHA seja exatamente o esperado;
+5. grava somente `FRONTEND_GATE_STATE.json` com `SHA + URL + horário`, sem segredo;
+6. se a internet externa cair depois dessa validação, aceita reutilizar apenas a mesma origem já validada para o mesmo SHA, permitindo que o Service Worker/cache da Central assuma o shell offline;
+7. se nunca houve validação daquele SHA e nenhum preview exato está acessível, o launcher falha fechado e não inicia o posto.
 
-- `ABRIR_PREVIEW_PR23.bat` abre o deploy-preview usado no gate;
-- `ABRIR_CENTRAL_V2.bat` abre a produção e **não** deve ser usado como evidência de validação do PR #23.
+Isso remove a dependência de o Vercel estar disponível: se ele estiver bloqueado por cota/build-rate-limit e o Netlify estiver publicado no HEAD correto, o launcher seleciona o Netlify automaticamente.
 
-O agente usa allowlist **exata** de origem. Antes do gate, se a origem escolhida ainda não existir em `ames-agent/config.json`, executar o helper idempotente:
+O agente mantém allowlist **exata** das origens Vercel, Netlify e produção; não existe wildcard. O updater acrescenta apenas as origens aprovadas a `ames-agent/config.json`, preservando o restante da configuração. Nenhuma senha, cookie, sessão, Wi‑Fi ou token é lido/escrito por essa etapa.
 
-`scripts/ames-authorize-preview-origin.ps1`
+## 2. Migração do notebook que já possui R12
 
-Sem parâmetro, ele prepara o deploy-preview atual do PR #23. Para outra origem aprovada, usar `-Origin` explicitamente.
+Antes do gate físico:
 
-O helper:
+1. manter uma cópia íntegra da instalação R12 atual;
+2. parar agente/monitor antigos;
+3. extrair o bundle de migração gerado para o HEAD atual;
+4. executar `ATUALIZAR_R12_EXISTENTE.bat` e informar a pasta raiz da R12 existente;
+5. o updater valida os hashes congelados do 3028, cria backup de código/configuração/SQLite e só então aplica a camada canônica;
+6. executar `00_INICIAR_AQUI.bat` dentro da instalação atualizada;
+7. o launcher valida frontend, ambiente Python, dependências, rede A‑MES, agente, Chrome/CDP e só então abre a única Central;
+8. login A‑MES permanece manual.
 
-- aceita apenas as três origens exatas listadas acima;
-- não usa wildcard Vercel/Netlify;
-- se a origem já estiver autorizada, termina sem regravar o arquivo nem criar backup desnecessário;
-- altera somente `allowed_origins` quando realmente há mudança;
-- cria backup antes de qualquer escrita;
-- grava UTF‑8 sem BOM;
-- não lê nem grava senha, cookie, sessão, Wi‑Fi ou credencial;
-- exige reinício do agente somente quando a configuração for alterada.
+O rollback preserva a base SQLite e restaura launcher/configuração anteriores; arquivos introduzidos somente pela migração, como `FRONTEND_GATE.json`, são removidos quando não existiam na instalação original.
 
-## 2. Ordem do gate
+### Captura segura do motor R12
+
+Ainda durante a validação, executar:
+
+`suporte\ames-workstation\CAPTURAR_MOTOR_R12_SEGURO.bat`
+
+A captura é necessária para fechar o futuro pacote de **PC totalmente novo**. Ela coleta somente código/manifesto/hashes necessários e exclui SQLite, logs, outputs, `.venv`, perfil Chrome, cookies, sessão e credenciais. O pacote para PC novo permanece bloqueado até essa captura ser comparada e validada.
+
+## 3. Ordem do gate
 
 ### Gate A — conexão e isolamento
 
-1. Confirmar no GitHub o SHA atual do PR #23 e o status verde do preview ligado a ele.
-2. Abrir `ABRIR_PREVIEW_PR23.bat` ou diretamente o preview ligado ao SHA em validação.
-3. Console MES → Monitoramento → Verificar.
-4. Confirmar no painel **Gate físico · posto de fábrica**:
+1. Confirmar no GitHub o SHA atual do PR #23 e que Static Quality + Agent/Sync E2E/Firestore estão verdes nesse HEAD.
+2. Executar `00_INICIAR_AQUI.bat` da instalação migrada.
+3. Confirmar no console do launcher o **Frontend exigido** e a **Central selecionada**.
+4. Console MES → Monitoramento → Verificar.
+5. Confirmar no painel **Gate físico · posto de fábrica**:
    - **Frontend SHA** igual ao HEAD do PR #23 sob teste;
    - agente conectado;
    - motor disponível;
@@ -70,7 +85,7 @@ O helper:
    - rede A‑MES conectada;
    - scheduler validado;
    - build do agente identificado.
-5. Confirmar que Linha 1=`TAN10101`, Linha 2=`TAN10102`, Linha 3=`TAN10103` continuam separadas.
+6. Confirmar que Linha 1=`TAN10101`, Linha 2=`TAN10102`, Linha 3=`TAN10103` continuam separadas.
 
 Resultado esperado: no máximo **PRONTO PARA VALIDAR 9/9**. Isso ainda não é GREEN físico.
 
@@ -161,19 +176,23 @@ Resultado deve reunir, quando houver evidência:
 - monitor pula ciclo ocupado sem criar backlog;
 - cancelamento cooperativo não corrompe snapshot nem SQLite.
 
-### Gate I — experiência e recuperação
+### Gate I — experiência, equipe, offline e recuperação
 
 - 9 views desktop;
 - mobile sem overflow estrutural;
 - Excel;
 - Base local;
 - CORA conhecimento;
+- usuário/posto A coleta e usuário ativo B consegue ler o snapshot MES sanitizado já sincronizado;
+- usuário B não recebe agente local, sessão A‑MES, cookie, credencial ou capacidade de comando remoto;
+- após primeiro acesso online/cache válido, cortar internet externa e confirmar abertura do shell/dados persistidos;
+- reconectar internet e confirmar retomada da sincronização Firebase;
 - reiniciar agente/notebook;
 - configuração preservada;
 - bootstrap repara dependências se necessário;
 - nenhuma senha A‑MES persistida.
 
-## 3. Performance
+## 4. Performance
 
 Medir no posto, por linha e por etapa:
 
@@ -185,7 +204,7 @@ Medir no posto, por linha e por etapa:
 
 Comparar com a automação local R12. Não declarar ganho/perda sem medida real.
 
-## 4. Critério de promoção
+## 5. Critério de promoção
 
 Somente após evidência dos gates acima:
 
@@ -193,6 +212,7 @@ Somente após evidência dos gates acima:
 2. corrigir regressões;
 3. repetir apenas os gates afetados + regressão global;
 4. obter aprovação explícita do usuário;
-5. então decidir merge do PR #23.
+5. então decidir merge do PR #23;
+6. somente depois decidir publicação das novas `firestore.rules` e produção.
 
 CI verde e preview funcional são necessários, mas nunca suficientes para GREEN físico.
