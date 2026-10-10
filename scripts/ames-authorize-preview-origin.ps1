@@ -1,15 +1,16 @@
 param(
-  [string]$Origin = 'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app',
+  [string]$Origin = 'https://deploy-preview-23--productcontrolcenter.netlify.app',
   [string]$ConfigPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $ApprovedOrigins = @(
   'https://central-cora-v2.vercel.app',
-  'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
+  'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app',
+  'https://deploy-preview-23--productcontrolcenter.netlify.app'
 )
 
-# Fail closed: no wildcard and no arbitrary Vercel origin.
+# Fail closed: no wildcard and no arbitrary Vercel/Netlify origin.
 if ($ApprovedOrigins -notcontains $Origin) {
   throw "Origem recusada: $Origin"
 }
