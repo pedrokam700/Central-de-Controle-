@@ -8,7 +8,6 @@ const allowed=/\.(mjs|css|svg|png|json)$/;
 function collect(dir){
   for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
     const name=path.posix.join(dir,entry.name);
-    if(name==='ames/v0523')continue; // referência histórica, não é uma segunda UI publicada
     if(entry.isDirectory())collect(name);
     else if(allowed.test(entry.name))names.push(name);
   }
