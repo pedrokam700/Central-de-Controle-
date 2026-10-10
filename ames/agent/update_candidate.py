@@ -7,7 +7,10 @@ import socket
 import sqlite3
 import uuid
 from pathlib import Path
-FILES=('agent.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py')
+FILES=('agent.py','agent_entry.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py')
+ROOT_FILES=('INICIAR_POSTO_CENTRAL_V2.bat','00_INICIAR_AQUI.bat','INICIAR_CENTRAL_AMES.cmd',
+            'suporte/ames-workstation/ROTA_AMES_APLICAR.bat','suporte/ames-workstation/ROTA_AMES_REMOVER.bat',
+            'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1')
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
 ORIGIN='https://central-cora-v2.vercel.app'
 PREVIEW_ORIGIN='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
@@ -26,47 +29,65 @@ def installation(path):
     except OSError:pass
     return target,cfg
 
+def _copy_preserving(src,dst):
+    dst.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(src,dst)
+
 def backup(target):
-    folder=target.parent/'candidate-backups'/uuid.uuid4().hex;folder.mkdir(parents=True);names=[]
+    package=target.parent
+    folder=package/'candidate-backups'/uuid.uuid4().hex;folder.mkdir(parents=True)
+    agent_files=[];root_files=[]
     for name in (*FILES,'config.json'):
-        if (target/name).exists():shutil.copy2(target/name,folder/name);names.append(name)
+        if (target/name).exists():_copy_preserving(target/name,folder/'ames-agent'/name);agent_files.append(name)
+    for rel in ROOT_FILES:
+        if (package/rel).exists():_copy_preserving(package/rel,folder/'root'/rel);root_files.append(rel)
     db=target/'data'/'ames_local.sqlite3'
     if db.exists():
         src=sqlite3.connect(db);dst=sqlite3.connect(folder/'ames_local.sqlite3')
         try:
             with dst:src.backup(dst)
         finally:dst.close();src.close()
-    (folder/'backup.json').write_text(json.dumps({'target':str(target),'files':names}),encoding='utf-8')
+    (folder/'backup.json').write_text(json.dumps({'target':str(target),'agent_files':agent_files,'root_files':root_files}),encoding='utf-8')
     return folder
 
 def update(path,source=None):
-    target,cfg=installation(path);source=Path(source or Path(__file__).parent)
+    target,cfg=installation(path);source=Path(source or Path(__file__).parent);package=target.parent;source_root=source.parent
     manifest=json.loads((source/'candidate-files.json').read_text(encoding='utf-8'))
     for name in FILES:
         if hashlib.sha256((source/name).read_bytes()).hexdigest()!=manifest[name]:raise ValueError('Candidate hash mismatch: '+name)
+    for rel in ROOT_FILES:
+        if not (source_root/rel).is_file():raise ValueError('Candidate workstation file missing: '+rel)
     saved=backup(target)
     try:
         for name in FILES:shutil.copy2(source/name,target/name)
+        for rel in ROOT_FILES:_copy_preserving(source_root/rel,package/rel)
         cfg['allowed_origins']=list(dict.fromkeys([*(cfg.get('allowed_origins') or []),*ORIGINS]))
         (target/'config.json').write_text(json.dumps(cfg,ensure_ascii=False,indent=2),encoding='utf-8')
     except BaseException:
-        for name in json.loads((saved/'backup.json').read_text(encoding='utf-8'))['files']:shutil.copy2(saved/name,target/name)
+        manifest_old=json.loads((saved/'backup.json').read_text(encoding='utf-8'))
+        for name in manifest_old.get('agent_files',[]):_copy_preserving(saved/'ames-agent'/name,target/name)
+        for rel in manifest_old.get('root_files',[]):_copy_preserving(saved/'root'/rel,package/rel)
         raise
-    print('UPDATED 0.5.24-rc1; backup/rollback:',saved)
+    print('UPDATED 0.5.24-rc1 + canonical 3022 entry; backup/rollback:',saved)
     return saved
 
 def rollback(path,saved=None):
-    target,_=installation(path);source=Path(saved).resolve() if saved else Path(__file__).parent/'rollback-v0523'
+    target,_=installation(path);package=target.parent
     if saved:
-        manifest=json.loads((source/'backup.json').read_text(encoding='utf-8'))
+        source=Path(saved).resolve();manifest=json.loads((source/'backup.json').read_text(encoding='utf-8'))
         if Path(manifest['target']).resolve()!=target:raise ValueError('Backup belongs to another installation')
-        names=manifest['files']
-        if not all(n in (*FILES,'config.json') for n in names):raise ValueError('Invalid backup manifest')
-    else:names=['agent.py','engine_bridge.py','store.py']
-    for name in names:
-        if not (source/name).is_file():raise ValueError('Incomplete rollback: '+name)
-    before=backup(target)
-    for name in names:shutil.copy2(source/name,target/name)
+        before=backup(target)
+        for name in manifest.get('agent_files',[]):
+            if not (source/'ames-agent'/name).is_file():raise ValueError('Incomplete backup: '+name)
+            _copy_preserving(source/'ames-agent'/name,target/name)
+        for rel in manifest.get('root_files',[]):
+            if not (source/'root'/rel).is_file():raise ValueError('Incomplete root backup: '+rel)
+            _copy_preserving(source/'root'/rel,package/rel)
+    else:
+        source=Path(__file__).parent/'rollback-v0523';names=['agent.py','engine_bridge.py','store.py']
+        for name in names:
+            if not (source/name).is_file():raise ValueError('Incomplete rollback: '+name)
+        before=backup(target)
+        for name in names:shutil.copy2(source/name,target/name)
     print('ROLLED BACK; SQLite retained; pre-rollback backup:',before)
     return before
 
