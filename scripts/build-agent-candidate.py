@@ -6,7 +6,7 @@ from pathlib import Path,PurePosixPath
 import zipfile
 SOURCE_SHA='1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167'
 COLLECTORS={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
-FILES=['agent.py','agent_entry.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py']
+FILES=['agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py']
 PRODUCTION_URL='https://central-cora-v2.vercel.app'
 VERCEL_PREVIEW_URL='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
 PR_PREVIEW_URL='https://deploy-preview-23--productcontrolcenter.netlify.app'
@@ -21,8 +21,6 @@ def build(source,destination):
         for name,digest in COLLECTORS.items():
             assert hashlib.sha256(old.read(prefix+name)).hexdigest()==digest
             assert hashlib.sha256((root/'ames'/'agent'/name).read_bytes()).hexdigest()==digest
-        # A candidate que se declara 3022 em lote precisa conter o contrato de
-        # tela/processo já provado em R11 ou uma evolução compatível (R12+).
         tela3022=next((n for n in old.namelist() if n.endswith('/AMES_Automacao_V0_16_PADRAO_VALIDADO/ames/tela_3022.py')),None)
         if not tela3022:raise ValueError('Source package has no tela_3022.py')
         source3022=old.read(tela3022).decode('utf-8-sig',errors='replace')
@@ -30,7 +28,6 @@ def build(source,destination):
             if symbol not in source3022:raise ValueError('3022 source lacks required R11/R12 contract: '+symbol)
         for info in old.infolist():
             parts=PurePosixPath(info.filename).parts
-            # Reference ZIP includes a runtime SQLite database: never redistribute it.
             if info.is_dir() or any(p.lower() in ('data','__pycache__','.git','.venv','logs','output','outputs','checkpoints','chromeprofile') for p in parts) or info.filename.endswith(('.pyc','.sqlite3','.db','.log')):continue
             files[info.filename]=old.read(info)
         config_example=prefix+'config.example.json'
@@ -44,9 +41,6 @@ def build(source,destination):
         files[prefix+'candidate-files.json']=json.dumps({n:hashlib.sha256(files[prefix+n]).hexdigest() for n in FILES},sort_keys=True,indent=2).encode()
         files[base+'CANDIDATO_0_5_24_RC1.md']=(root/'ames'/'agent'/'README.md').read_bytes().replace(b'\r\n',b'\n')
         files[base+'suporte/PREPARAR_PREVIEW_CENTRAL_V2.ps1']=(root/'scripts'/'ames-authorize-preview-origin.ps1').read_bytes().replace(b'\r\n',b'\n')
-
-        # Recupera o bootstrap de posto que existia na linha offline, mas agora
-        # abre a UNICA Central V2. Nenhum destes arquivos carrega uma segunda UI.
         workstation=root/'tools'/'ames-workstation'
         workstation_files={
             'ROTA_AMES_APLICAR.bat':'suporte/ames-workstation/ROTA_AMES_APLICAR.bat',
@@ -61,7 +55,6 @@ def build(source,destination):
         files[base+'INICIAR_POSTO_CENTRAL_V2.bat']=launcher
         files[base+'00_INICIAR_AQUI.bat']=launcher
         files[base+'INICIAR_CENTRAL_AMES.cmd']=b'@echo off\r\ncall "%~dp0INICIAR_POSTO_CENTRAL_V2.bat" %*\r\n'
-
         for action,filename in [('update','ATUALIZAR_CANDIDATO.bat'),('rollback','ROLLBACK_CANDIDATO.bat')]:
             files[base+filename]=('@echo off\r\nsetlocal\r\nif "%~1"=="" (\r\n  echo Uso: '+filename+' "C:\\pasta\\instalacao-existente"\r\n  pause\r\n  exit /b 1\r\n)\r\nwhere py >nul 2>nul\r\nif errorlevel 1 (\r\n  python "%~dp0ames-agent\\update_candidate.py" '+action+' "%~1"\r\n) else (\r\n  py -3 "%~dp0ames-agent\\update_candidate.py" '+action+' "%~1"\r\n)\r\npause\r\n').encode('ascii')
         files[base+'ABRIR_CENTRAL_V2.bat']=('@echo off\r\nstart "" "'+PRODUCTION_URL+'/Central-de-Controle-/"\r\n').encode('ascii')
@@ -71,6 +64,6 @@ def build(source,destination):
             info=zipfile.ZipInfo(name,(2026,10,9,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;new.writestr(info,data)
     with zipfile.ZipFile(destination) as new:assert new.testzip() is None
     print('Candidate:',destination);print('SHA-256:',hashlib.sha256(destination.read_bytes()).hexdigest())
-    print('Exact 3028 retained; R11/R12 3022 contract required; single-Central workstation bootstrap included.')
+    print('Exact 3028 retained; R11/R12 3022 contract required; hardening H1 and single-Central bootstrap included.')
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('source');p.add_argument('destination');a=p.parse_args();build(a.source,a.destination)
