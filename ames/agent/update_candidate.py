@@ -11,7 +11,8 @@ FILES=('agent.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
 ORIGIN='https://central-cora-v2.vercel.app'
 PREVIEW_ORIGIN='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
-ORIGINS=(ORIGIN,PREVIEW_ORIGIN)
+NETLIFY_PREVIEW_ORIGIN='https://deploy-preview-23--productcontrolcenter.netlify.app'
+ORIGINS=(ORIGIN,PREVIEW_ORIGIN,NETLIFY_PREVIEW_ORIGIN)
 
 def installation(path):
     target=Path(path).resolve()
