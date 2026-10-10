@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getAuth, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const BUILD='15.1.13.48';
 const firebaseConfig={
@@ -12,11 +13,19 @@ const firebaseConfig={
   measurementId:"G-J8RQMXQT4D"
 };
 
-// A Central continua usando o mesmo Firebase app/Auth. Este bootstrap existe apenas
-// para que o Firestore seja inicializado com cache persistente ANTES do app.js chamar
-// getFirestore(app). Assim, após um primeiro acesso online bem-sucedido, dados já
-// sincronizados podem continuar disponíveis durante perda de internet/reinício.
+// Um único Firebase app/Auth. O bootstrap apenas configura persistência ANTES de
+// app.js obter as instâncias. Primeiro login/primeiro carregamento ainda exigem
+// internet; depois disso o navegador pode restaurar a sessão e dados já cacheados.
 const app=getApps().length?getApp():initializeApp(firebaseConfig);
+try{
+  await setPersistence(getAuth(app),browserLocalPersistence);
+  window.__centralAuthPersistence='local';
+}catch(error){
+  window.__centralAuthPersistence='default-fallback';
+  window.__centralAuthPersistenceError=String(error?.code||error?.message||error);
+  console.warn('[Central] Persistência explícita do Auth indisponível:',error);
+}
+
 try{
   initializeFirestore(app,{
     localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})
