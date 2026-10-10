@@ -7,7 +7,7 @@ function memoryStorage({legacy=0}={}){
   const rows=new Map();
   return {
     async put(item){rows.set(item.id,structuredClone(item));},
-    async list(){return [...rows.values()].map(structuredClone);},
+    async list(){return [...rows.values()].map(value=>structuredClone(value));},
     async remove(id){rows.delete(id);},
     async legacyCount(){return legacy;},
     rows
