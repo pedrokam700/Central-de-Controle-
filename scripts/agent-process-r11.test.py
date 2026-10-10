@@ -16,6 +16,12 @@ def main():
         store=Store(td/'ames.sqlite3');store.initialize();process_r11.patch_store(store)
         wid=store.ensure_window('today','2026-10-10T07:30:00','2026-10-10T08:00:00',None,['TAN10101'])
         sid=store.create_snapshot(window_id=wid,source_kind='test')
+        # Processo 3022 só pode receber linha/CPH pelo contexto da ocorrência atual.
+        # O fixture precisa representar o mesmo vínculo real 3028 -> PCBA -> 3022.
+        store.ingest_defects(sid,[{
+            'line':'TAN10101','pcba_sn':'002527TEST','defect_code':'E1','defect_desc':'Camera impurity',
+            'defect_time':'2026-10-10 10:32:00','product_model':'CPH2859','manual_or_auto':'MANUAL'
+        }],reconcile_window=False)
         ctx={
             'line':'TAN10101','product_model':'CPH2859','pcba_sn':'002527TEST','defect_key':'d1','defect_code':'E1',
             'defect_desc':'Camera impurity','defect_time':'2026-10-10 10:32:00','defect_time_utc':'2026-10-10T13:32:00+00:00',
@@ -32,7 +38,9 @@ def main():
         assert catalog['process_defect_contexts']==1,catalog
         rows=store.dataset_rows('process_defect_contexts',sid,line='TAN10101')
         assert len(rows)==1 and rows[0]['reference_station_code']=='A5162',rows
-        assert store.dataset_rows('process_events',sid,line='TAN10101'), 'process event missing'
+        events=store.dataset_rows('process_events',sid,line='TAN10101')
+        assert len(events)==1 and events[0]['line']=='TAN10101',events
+        assert events[0]['pcba_sn']=='002527TEST' and events[0]['operation_code']=='A5162',events
 
         engine=td/'engine';(engine/'ames').mkdir(parents=True)
         (engine/'ames'/'__init__.py').write_text('',encoding='utf-8')
