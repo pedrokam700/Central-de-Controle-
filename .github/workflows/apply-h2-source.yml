@@ -1,0 +1,31 @@
+name: Apply H2 source migration
+on:
+  push:
+    branches: [v2/console-parity-r12]
+    paths:
+      - scripts/hardening-h2-apply.py
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: v2/console-parity-r12
+          fetch-depth: 1
+      - name: Apply exact H2 migration
+        run: python3 scripts/hardening-h2-apply.py
+      - name: Verify only intended source migration
+        run: |
+          git diff --check
+          git diff -- app.js
+          test -n "$(git status --porcelain app.js)"
+      - name: Remove one-shot migrator and commit
+        run: |
+          rm -f scripts/hardening-h2-apply.py .github/workflows/apply-h2-source.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js scripts/hardening-h2-apply.py .github/workflows/apply-h2-source.yml
+          git commit -m "Hardening H2: integrar outbox offline segura na Central"
+          git push origin HEAD:v2/console-parity-r12
