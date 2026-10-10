@@ -67,7 +67,7 @@ test('Wave 4 projects MES into Central pages without merging reuse dashboard int
   const product=fs.readFileSync('ames/product-view.mjs','utf8');
   const cora=fs.readFileSync('ames/cora-view.mjs','utf8');
   for(const text of ['MES · saúde das linhas','FPY, Check FPY, Quantity, CPH','Dashboards de reuso']) assert.match(dash,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  for(const text of ['MES · contexto operacional do dia','não atribuí-lo automaticamente a esta data ou turno']) assert.match(daily,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['MES · contexto operacional do dia','sem atribuí-lo automaticamente a esta data ou turno']) assert.match(daily,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   for(const text of ['Linha e CPH continuam exatos','lista parcial não prova ausência']) assert.match(context,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(product,/CPH exato/);
   assert.match(cora,/Fato observado ≠ correlação ≠ hipótese ≠ causa confirmada por humano/);
