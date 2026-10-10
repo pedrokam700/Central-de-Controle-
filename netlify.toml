@@ -1,0 +1,30 @@
+[build]
+  command = "node scripts/build-static.mjs"
+  publish = "dist"
+
+[[redirects]]
+  from = "/"
+  to = "/Central-de-Controle-/"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "/Central-de-Controle-"
+  to = "/Central-de-Controle-/"
+  status = 302
+  force = true
+
+[[redirects]]
+  from = "/Central-de-Controle-/"
+  to = "/Central-de-Controle-/index.html"
+  status = 200
+
+[[headers]]
+  for = "/Central-de-Controle-/*.mjs"
+  [headers.values]
+    Content-Type = "text/javascript; charset=utf-8"
+
+[[headers]]
+  for = "/Central-de-Controle-/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
