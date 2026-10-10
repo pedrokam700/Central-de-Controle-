@@ -7,6 +7,7 @@ test('Console MES is one native full-screen shell over state.ames',()=>{
   const css=fs.readFileSync('ames/console-legacy.css','utf8');
   assert.match(source,/console-legacy\.css/);
   assert.match(source,/console-wave2\.css/);
+  assert.match(source,/console-wave3\.css/);
   assert.match(source,/createAgentClient/);
   assert.match(source,/createAutomationView/);
   assert.match(source,/createAdvancedView/);
@@ -25,6 +26,7 @@ test('all nine canonical views are mounted natively through one client',()=>{
   for(const text of ['Monitoramento','Top 3 & FPY','Falhas','Consulta por SN','Rastreabilidade','Dashboards de reuso','Processo / 3022 & AT','Base local','CORA conhecimento']) assert.match(source,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.equal((source.match(/createAgentClient\(/g)||[]).length,1);
   assert.match(source,/const client=createAgentClient\(store/);
+  assert.match(source,/console-wave3-views\.mjs/);
 });
 
 test('Wave 1 preserves R12 operational structure without simplifying it',()=>{
@@ -47,13 +49,26 @@ test('Wave 2 keeps SN trace and 3022 as one native investigation flow',()=>{
   assert.match(css,/\.ames-process-kpis/);
 });
 
+test('Wave 3 keeps reuso Base local and CORA native and evidence-first',()=>{
+  const views=fs.readFileSync('ames/console-wave3-views.mjs','utf8');
+  const css=fs.readFileSync('ames/console-wave3.css','utf8');
+  for(const text of ['Segundo uso da própria PCBA','segundo uso de Material SN','Abrir SNs exatos','ITEM EXATO EM EVIDÊNCIA','Drill-down não carregado']) assert.match(views,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['3028 · falhas','2114 · histórico PCBA','3074 · material/reuso','3022 · process_events','process_defect_contexts','Histórico operacional do agente','Backup']) assert.match(views,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['Fato / evidência','Correlação','Hipótese','Causa confirmada','não transforma correlação em causa']) assert.match(views,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(css,/\.ames-reuse-summary/);
+  assert.match(css,/\.ames-base-actions/);
+  assert.match(css,/\.ames-knowledge-list/);
+});
+
 test('offline package contains native parity modules and no parallel V0.5.23 runtime',()=>{
   const sw=fs.readFileSync('sw.js','utf8');
   const build=fs.readFileSync('scripts/build-static.mjs','utf8');
   assert.match(sw,/ames\/console-legacy-parity\.mjs/);
   assert.match(sw,/ames\/console-legacy\.css/);
   assert.match(sw,/ames\/console-wave2\.css/);
+  assert.match(sw,/ames\/console-wave3\.css/);
   assert.match(sw,/ames\/console-specialized-views\.mjs/);
+  assert.match(sw,/ames\/console-wave3-views\.mjs/);
   assert.doesNotMatch(sw,/v0523-loader|ames\/v0523/);
   assert.match(build,/name==='ames\/v0523'/);
 });
