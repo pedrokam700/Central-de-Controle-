@@ -13,12 +13,20 @@ function collect(dir){
   }
 }
 
+function deployedIndex(source){
+  const moduleTag='<script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.48"></script>';
+  if(!source.includes(moduleTag))throw new Error('Tag canônica de app.js não encontrada no index.html');
+  const bootGuard=`<script id="central-runtime-boot-guard">\n(()=>{\n  const form=document.querySelector('#loginForm');\n  const status=document.querySelector('#authLoginStatus');\n  const button=document.querySelector('#loginButton');\n  if(!form)return;\n  const fail=()=>{\n    if(window.__centralLoginModuleReady)return false;\n    if(status){status.textContent='A aplicação não carregou completamente neste preview. Recarregue a página ou use um deploy validado.';status.className='auth-status error';}\n    if(button){button.disabled=true;button.textContent='Aplicação indisponível';}\n    return true;\n  };\n  form.addEventListener('submit',event=>{if(fail()){event.preventDefault();event.stopImmediatePropagation();}},true);\n  setTimeout(fail,5000);\n})();\n</script>`;
+  return source.replace(moduleTag,bootGuard+'\n'+moduleTag);
+}
+
 collect('ames');
 collect('icons');
 for(const name of [...new Set(names)]){
   const target=path.join(out,'Central-de-Controle-',name);
   fs.mkdirSync(path.dirname(target),{recursive:true});
-  fs.copyFileSync(name,target);
+  if(name==='index.html')fs.writeFileSync(target,deployedIndex(fs.readFileSync(name,'utf8')));
+  else fs.copyFileSync(name,target);
 }
 const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
 const branch=process.env.VERCEL_GIT_COMMIT_REF||process.env.BRANCH||process.env.GITHUB_REF_NAME||null;
