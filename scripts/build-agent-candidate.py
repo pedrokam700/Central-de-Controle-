@@ -36,15 +36,29 @@ def build(source,destination):
         files[prefix+'candidate-files.json']=json.dumps({n:hashlib.sha256(files[prefix+n]).hexdigest() for n in FILES},sort_keys=True,indent=2).encode()
         files[base+'CANDIDATO_0_5_24_RC1.md']=(root/'ames'/'agent'/'README.md').read_bytes().replace(b'\r\n',b'\n')
         files[base+'suporte/PREPARAR_PREVIEW_CENTRAL_V2.ps1']=(root/'scripts'/'ames-authorize-preview-origin.ps1').read_bytes().replace(b'\r\n',b'\n')
+
+        # Recupera o bootstrap de posto que existia na linha offline, mas agora
+        # abre a UNICA Central V2. Nenhum destes arquivos carrega uma segunda UI.
+        workstation=root/'tools'/'ames-workstation'
+        workstation_files={
+            'INICIAR_POSTO_CENTRAL_V2.bat':'INICIAR_POSTO_CENTRAL_V2.bat',
+            'ROTA_AMES_APLICAR.bat':'suporte/ames-workstation/ROTA_AMES_APLICAR.bat',
+            'ROTA_AMES_REMOVER.bat':'suporte/ames-workstation/ROTA_AMES_REMOVER.bat',
+            'START_AGENT_CANONICAL.ps1':'suporte/ames-workstation/START_AGENT_CANONICAL.ps1',
+            'DIAGNOSTICO_POSTO.ps1':'suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1',
+        }
+        for source_name,target_name in workstation_files.items():
+            files[base+target_name]=(workstation/source_name).read_bytes()
+
         for action,filename in [('update','ATUALIZAR_CANDIDATO.bat'),('rollback','ROLLBACK_CANDIDATO.bat')]:
             files[base+filename]=('@echo off\r\nsetlocal\r\nif "%~1"=="" (\r\n  echo Uso: '+filename+' "C:\\pasta\\instalacao-existente"\r\n  pause\r\n  exit /b 1\r\n)\r\nwhere py >nul 2>nul\r\nif errorlevel 1 (\r\n  python "%~dp0ames-agent\\update_candidate.py" '+action+' "%~1"\r\n) else (\r\n  py -3 "%~dp0ames-agent\\update_candidate.py" '+action+' "%~1"\r\n)\r\npause\r\n').encode('ascii')
-        files[base+'ABRIR_CENTRAL_V2.bat']=('@echo off\r\nstart "" "'+PRODUCTION_URL+'"\r\n').encode('ascii')
-        files[base+'ABRIR_PREVIEW_PR23.bat']=('@echo off\r\nstart "" "'+PR_PREVIEW_URL+'"\r\n').encode('ascii')
+        files[base+'ABRIR_CENTRAL_V2.bat']=('@echo off\r\nstart "" "'+PRODUCTION_URL+'/Central-de-Controle-/"\r\n').encode('ascii')
+        files[base+'ABRIR_PREVIEW_PR23.bat']=('@echo off\r\nstart "" "'+VERCEL_PREVIEW_URL+'/Central-de-Controle-/"\r\n').encode('ascii')
     with zipfile.ZipFile(destination,'x',compression=zipfile.ZIP_DEFLATED) as new:
         for name,data in sorted(files.items()):
             info=zipfile.ZipInfo(name,(2026,10,9,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;new.writestr(info,data)
     with zipfile.ZipFile(destination) as new:assert new.testzip() is None
     print('Candidate:',destination);print('SHA-256:',hashlib.sha256(destination.read_bytes()).hexdigest())
-    print('Original collectors/engine/helpers/UI retained; runtime databases excluded; backup/rollback and PR preview opener included.')
+    print('Original collectors/engine/helpers retained; runtime databases excluded; single-Central workstation bootstrap included.')
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('source');p.add_argument('destination');a=p.parse_args();build(a.source,a.destination)
