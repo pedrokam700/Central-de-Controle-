@@ -4,7 +4,7 @@ import { createAdvancedView } from './advanced-view.mjs';
 import { createLineOverview, createTop3ParityView, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
 import { createSnConsoleView, createTraceConsoleView, createProcessConsoleView } from './console-specialized-views.mjs';
 import { createReuseConsoleView, createBaseConsoleView, createKnowledgeConsoleView } from './console-wave3-views.mjs';
-import { withProcessCapability } from './console-capability-guard.mjs';
+import { withProcessCapability, applyMonitorProcessCapability } from './console-capability-guard.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
@@ -69,10 +69,11 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     const pane=root.querySelector(`[data-console-pane="${id}"]`);let view;
     if(id==='monitor'){
       pane.innerHTML='<section data-monitor-main></section><section data-monitor-lines></section><section data-monitor-tools></section>';
-      const primary=createAutomationView(pane.querySelector('[data-monitor-main]'),store,client);
+      const monitorRoot=pane.querySelector('[data-monitor-main]');
+      const primary=createAutomationView(monitorRoot,store,client);
       const lineBoard=createLineOverview(pane.querySelector('[data-monitor-lines]'),store,client);
       const tools=createAdvancedView(pane.querySelector('[data-monitor-tools]'),store,client);
-      view={render(){primary.render();lineBoard.render();tools.render();},clear(){primary.clear?.();lineBoard.clear?.();tools.clear?.();pane.replaceChildren();}};
+      view={render(){primary.render();applyMonitorProcessCapability(monitorRoot,store);lineBoard.render();tools.render();},clear(){primary.clear?.();lineBoard.clear?.();tools.clear?.();pane.replaceChildren();}};
     }
     else if(id==='top3'){
       pane.innerHTML='<section data-top3-main></section><section data-top3-trend></section>';
