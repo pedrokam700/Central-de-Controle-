@@ -31,7 +31,7 @@ function deployedApp(source){
 }
 
 function rootEntry(){
-  return `<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<meta name="robots" content="noindex">\n<title>Central de Controle</title>\n<meta http-equiv="refresh" content="0; url=/Central-de-Controle-/">\n</head>\n<body>\n<p>Abrindo a Central… <a href="/Central-de-Controle-/">Continuar</a></p>\n<script>location.replace('/Central-de-Controle/'+location.search+location.hash);</script>\n</body>\n</html>\n`;
+  return `<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<meta name="robots" content="noindex">\n<title>Central de Controle</title>\n<meta http-equiv="refresh" content="0; url=/Central-de-Controle-/">\n</head>\n<body>\n<p>Abrindo a Central… <a href="/Central-de-Controle-/">Continuar</a></p>\n<script>location.replace('/Central-de-Controle-/'+location.search+location.hash);</script>\n</body>\n</html>\n`;
 }
 
 collect('ames');
