@@ -2,12 +2,13 @@
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import socket
 import sqlite3
 import uuid
 from pathlib import Path
-FILES=('agent.py','agent_entry.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py')
+FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py')
 ROOT_FILES=('INICIAR_POSTO_CENTRAL_V2.bat','00_INICIAR_AQUI.bat','INICIAR_CENTRAL_AMES.cmd',
             'suporte/ames-workstation/ROTA_AMES_APLICAR.bat','suporte/ames-workstation/ROTA_AMES_REMOVER.bat',
             'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1',
@@ -26,6 +27,7 @@ def installation(path):
     for name,expected in HASHES.items():
         if hashlib.sha256((target/name).read_bytes()).hexdigest()!=expected:raise ValueError('Unexpected collector: '+name)
     cfg=json.loads((target/'config.json').read_text(encoding='utf-8-sig')) if (target/'config.json').exists() else {}
+    if not isinstance(cfg,dict):raise ValueError('Invalid config.json root')
     try:
         with socket.create_connection(('127.0.0.1',int(cfg.get('port',8765))),timeout=.5):raise RuntimeError('Stop agent and monitor before updating')
     except OSError:pass
@@ -34,18 +36,35 @@ def installation(path):
 def _copy_preserving(src,dst):
     dst.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(src,dst)
 
+def _atomic_json(path,value):
+    path=Path(path);tmp=path.with_name(path.name+'.tmp.'+uuid.uuid4().hex)
+    tmp.write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    parsed=json.loads(tmp.read_text(encoding='utf-8'))
+    if not isinstance(parsed,dict):raise ValueError('Invalid generated config')
+    os.replace(tmp,path)
+
 def _restore_root(package,saved,manifest):
     for rel in manifest.get('root_files',[]):_copy_preserving(saved/'root'/rel,package/rel)
     for rel in manifest.get('root_absent',[]):
         path=package/rel
         if path.is_file():path.unlink()
 
+def _restore_agent(target,saved,manifest):
+    for name in manifest.get('agent_files',[]):
+        src=saved/'ames-agent'/name
+        if not src.is_file():raise ValueError('Incomplete backup: '+name)
+        _copy_preserving(src,target/name)
+    for name in manifest.get('agent_absent',[]):
+        path=target/name
+        if path.is_file():path.unlink()
+
 def backup(target):
     package=target.parent
     folder=package/'candidate-backups'/uuid.uuid4().hex;folder.mkdir(parents=True)
-    agent_files=[];root_files=[];root_absent=[]
+    agent_files=[];agent_absent=[];root_files=[];root_absent=[]
     for name in (*FILES,'config.json'):
         if (target/name).exists():_copy_preserving(target/name,folder/'ames-agent'/name);agent_files.append(name)
+        else:agent_absent.append(name)
     for rel in (*ROOT_FILES,*OPTIONAL_ROOT_FILES):
         if (package/rel).exists():_copy_preserving(package/rel,folder/'root'/rel);root_files.append(rel)
         else:root_absent.append(rel)
@@ -55,13 +74,14 @@ def backup(target):
         try:
             with dst:src.backup(dst)
         finally:dst.close();src.close()
-    (folder/'backup.json').write_text(json.dumps({'target':str(target),'agent_files':agent_files,'root_files':root_files,'root_absent':root_absent}),encoding='utf-8')
+    (folder/'backup.json').write_text(json.dumps({'target':str(target),'agent_files':agent_files,'agent_absent':agent_absent,'root_files':root_files,'root_absent':root_absent}),encoding='utf-8')
     return folder
 
 def update(path,source=None):
     target,cfg=installation(path);source=Path(source or Path(__file__).parent);package=target.parent;source_root=source.parent
     manifest=json.loads((source/'candidate-files.json').read_text(encoding='utf-8'))
     for name in FILES:
+        if not (source/name).is_file():raise ValueError('Candidate file missing: '+name)
         if hashlib.sha256((source/name).read_bytes()).hexdigest()!=manifest[name]:raise ValueError('Candidate hash mismatch: '+name)
     for rel in ROOT_FILES:
         if not (source_root/rel).is_file():raise ValueError('Candidate workstation file missing: '+rel)
@@ -72,13 +92,13 @@ def update(path,source=None):
         for rel in OPTIONAL_ROOT_FILES:
             if (source_root/rel).is_file():_copy_preserving(source_root/rel,package/rel)
         cfg['allowed_origins']=list(dict.fromkeys([*(cfg.get('allowed_origins') or []),*ORIGINS]))
-        (target/'config.json').write_text(json.dumps(cfg,ensure_ascii=False,indent=2),encoding='utf-8')
+        _atomic_json(target/'config.json',cfg)
     except BaseException:
         manifest_old=json.loads((saved/'backup.json').read_text(encoding='utf-8'))
-        for name in manifest_old.get('agent_files',[]):_copy_preserving(saved/'ames-agent'/name,target/name)
+        _restore_agent(target,saved,manifest_old)
         _restore_root(package,saved,manifest_old)
         raise
-    print('UPDATED 0.5.25-rc1 + canonical 3022 entry; backup/rollback:',saved)
+    print('UPDATED 0.5.25-rc1 + hardening H1; backup/rollback:',saved)
     return saved
 
 def rollback(path,saved=None):
@@ -87,9 +107,7 @@ def rollback(path,saved=None):
         source=Path(saved).resolve();manifest=json.loads((source/'backup.json').read_text(encoding='utf-8'))
         if Path(manifest['target']).resolve()!=target:raise ValueError('Backup belongs to another installation')
         before=backup(target)
-        for name in manifest.get('agent_files',[]):
-            if not (source/'ames-agent'/name).is_file():raise ValueError('Incomplete backup: '+name)
-            _copy_preserving(source/'ames-agent'/name,target/name)
+        _restore_agent(target,source,manifest)
         for rel in manifest.get('root_files',[]):
             if not (source/'root'/rel).is_file():raise ValueError('Incomplete root backup: '+rel)
         _restore_root(package,source,manifest)
