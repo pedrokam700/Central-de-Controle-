@@ -117,7 +117,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     saveConfig:value=>action(async()=>{check();const scope=collectionScope(value);const cfg={configured_lines:scope.lines,performance:scope.performance};await request('/config',cfg);publish({config:{...store.agent().config,...cfg}});}),
     collect:(type,value)=>action(async()=>{
       check();if(store.agent().job&&!['done','error','cancelled','skipped'].includes(store.agent().job.status))throw new Error('Aguarde ou cancele o job atual.');
-      const scope=collectionScope(value);let path,body;
+      const scope=type==='sn'?null:collectionScope(value);let path,body;
       if(type==='deep'){
         path='/deep-trace';body={...scope};
         if(value.trace_mode!==undefined){
