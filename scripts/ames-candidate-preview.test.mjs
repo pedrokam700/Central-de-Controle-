@@ -10,5 +10,6 @@ test('candidate builder inclui preview seguro e helper sem alterar coletores 302
   assert.match(build,/ames-authorize-preview-origin\.ps1/);
   assert.match(build,/COLLECTORS=/);
   assert.match(build,/Original collectors\/engine\/helpers\/UI retained/);
-  assert.doesNotMatch(build,/allowed_origins[^\n]*\*/);
+  assert.doesNotMatch(build,/https:\/\/\*\.vercel\.app/);
+  assert.doesNotMatch(build,/['"]\*['"]/);
 });
