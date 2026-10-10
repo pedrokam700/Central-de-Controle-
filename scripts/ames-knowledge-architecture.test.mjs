@@ -14,3 +14,11 @@ test('CORA knowledge keeps R11 architecture panel while using the native base',(
   assert.match(sw,/ames\/console-knowledge-architecture\.css/);
   assert.doesNotMatch(arch,/iframe|ShadowRoot|new Function/);
 });
+
+test('erro de busca CORA fica fora das classes fato correlacao hipotese causa',()=>{
+  const code=fs.readFileSync('ames/console-wave3-views.mjs','utf8');
+  assert.match(code,/Falha na busca local/);
+  assert.match(code,/Erro de transporte\/consulta não é fato, correlação, hipótese nem causa/);
+  assert.match(code,/catch\(err\)\{result=\[\];error=err\.message;/);
+  assert.doesNotMatch(code,/kind:'fact',text:error\.message,source:'erro'/);
+});
