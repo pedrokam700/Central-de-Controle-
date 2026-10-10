@@ -48,8 +48,8 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     try{
       const payloads=[];
       for(const h of heads){
-        if(!LINE_IDS.includes(h.line_id)||h.owner_uid!==u||h.schema!==CANONICAL_SCHEMA)throw Error('Escopo remoto inválido');
-        const parts=[];for(let i=0;i<h.parts;i++){if(!alive(u,g)||read!==readGeneration)return;parts.push(await remote.getPart(u,h,i));}
+        if(!LINE_IDS.includes(h.line_id)||!h.owner_uid||typeof h.owner_uid!=='string'||h.schema!==CANONICAL_SCHEMA)throw Error('Escopo remoto inválido');
+        const parts=[];for(let i=0;i<h.parts;i++){if(!alive(u,g)||read!==readGeneration)return;parts.push(await remote.getPart(h.owner_uid,h,i));}
         const text=parts.join('');if(await sha(text)!==h.hash)throw Error('Snapshot remoto incompleto ou alterado');
         const p=JSON.parse(text);if(p.line_id!==h.line_id||p.source_id!==h.source_id||p.snapshot_revision!==h.snapshot_revision||p.snapshot_id!==h.snapshot_id)throw Error('Manifesto remoto divergente');
         normalizeCanonical(p);payloads.push(p);
@@ -58,7 +58,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
   }
   return {
-    start(user){this.stop();uid=user;const u=uid,g=generation;unwatch=remote.watch(u,heads=>{if(!alive(u,g))return;const key=JSON.stringify(heads.map(h=>h.key).sort());if(key===headsKey)return;headsKey=key;lastHeads=heads;receive(heads);},error=>{if(alive(u,g))status({read_status:'error',read_error:error.message});});flush();},
+    start(user){this.stop();uid=user;const u=uid,g=generation;unwatch=remote.watch(u,heads=>{if(!alive(u,g))return;const key=JSON.stringify(heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort());if(key===headsKey)return;headsKey=key;lastHeads=heads;receive(heads);},error=>{if(alive(u,g))status({read_status:'error',read_error:error.message});});flush();},
     async capture(){
       if(!uid)return;const u=uid,g=generation,payloads=store.localCanonical();
       const signature=JSON.stringify(payloads.map(p=>[p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));if(signature===seen)return;
