@@ -7,6 +7,12 @@ export function withAgentRefresh(view,root,store,client,{label='Atualizar leitur
     const value=select?.value;
     return LINE_IDS.includes(value)?value:null;
   }
+  function productLabel(snapshot){
+    const products=[...new Set((snapshot?.occurrences||[]).map(row=>row.product_key).filter(Boolean))];
+    if(products.length===1)return products[0];
+    if(products.length>1)return `${products.length} CPH · ${products.slice(0,3).join(' · ')}${products.length>3?' · …':''}`;
+    return 'CPH não informado';
+  }
   function paintProvenance(bar){
     let meta=bar.querySelector('[data-native-provenance]');
     if(!meta){meta=document.createElement('span');meta.dataset.nativeProvenance='1';meta.className='ames-native-provenance';bar.append(meta);}
@@ -15,9 +21,8 @@ export function withAgentRefresh(view,root,store,client,{label='Atualizar leitur
     const read=store.read(line),snapshot=read.snapshot;
     meta.hidden=false;
     if(!snapshot){meta.textContent=`${line} · sem snapshot · ausência não equivale a zero`;return;}
-    const cph=snapshot.product_model||snapshot.cph||snapshot.product||'CPH não informado';
     const coverage=snapshot.coverage?.status||'indisponível';
-    meta.textContent=`${line} · snapshot ${snapshot.snapshot_id||'—'} · origem ${read.source||'none'} · ${read.freshness||'unknown'} · cobertura ${coverage} · ${cph}`;
+    meta.textContent=`${line} · snapshot ${snapshot.snapshot_id||'—'} · origem ${read.source||'none'} · ${read.freshness||'unknown'} · cobertura ${coverage} · ${productLabel(snapshot)}`;
   }
   function decorate(){
     let bar=root.querySelector('[data-native-refresh-bar]');
