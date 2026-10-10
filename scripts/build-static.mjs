@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const out=path.resolve('dist');
+const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
 const names=['index.html','app.js','styles.css','mobile.css','sw.js','manifest.webmanifest'];
 const allowed=/\.(mjs|css|svg|png|json)$/;
 
