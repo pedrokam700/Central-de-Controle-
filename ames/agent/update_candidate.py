@@ -10,7 +10,8 @@ from pathlib import Path
 FILES=('agent.py','agent_entry.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py')
 ROOT_FILES=('INICIAR_POSTO_CENTRAL_V2.bat','00_INICIAR_AQUI.bat','INICIAR_CENTRAL_AMES.cmd',
             'suporte/ames-workstation/ROTA_AMES_APLICAR.bat','suporte/ames-workstation/ROTA_AMES_REMOVER.bat',
-            'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1')
+            'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1',
+            'suporte/ames-workstation/CAPTURAR_MOTOR_R12_SEGURO.bat','suporte/ames-workstation/capture-r12-engine.py')
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
 ORIGIN='https://central-cora-v2.vercel.app'
 PREVIEW_ORIGIN='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
@@ -67,7 +68,7 @@ def update(path,source=None):
         for name in manifest_old.get('agent_files',[]):_copy_preserving(saved/'ames-agent'/name,target/name)
         for rel in manifest_old.get('root_files',[]):_copy_preserving(saved/'root'/rel,package/rel)
         raise
-    print('UPDATED 0.5.24-rc1 + canonical 3022 entry; backup/rollback:',saved)
+    print('UPDATED 0.5.25-rc1 + canonical 3022 entry; backup/rollback:',saved)
     return saved
 
 def rollback(path,saved=None):
