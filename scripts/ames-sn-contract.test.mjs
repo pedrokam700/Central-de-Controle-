@@ -14,5 +14,6 @@ test('Consulta por SN envia somente SN e deixa linha CPH e Shift virem da fonte'
   assert.doesNotMatch(snBlock,/name="line"/);
   assert.doesNotMatch(snBlock,/name="performance"/);
   assert.doesNotMatch(snBlock,/scope\(/);
+  assert.match(client,/const scope=type==='sn'\?null:collectionScope\(value\)/);
   assert.match(client,/body=\{sn:String\(value\.sn\|\|''\)\.trim\(\),include_3022:true\}/);
 });
