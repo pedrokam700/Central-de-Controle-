@@ -16,6 +16,15 @@ test('launcher usa uma Central e um agente local',()=>{
   assert.doesNotMatch(launcher,/start\s+""\s+"http:\/\/127\.0\.0\.1:8765\/?"/i);
 });
 
+test('bundle R12 abre somente preview do SHA exato e conserva fallback offline validado',()=>{
+  assert.match(launcher,/FRONTEND_GATE\.json/);
+  assert.match(launcher,/release-build\.json\?gate=/);
+  assert.match(launcher,/expected_sha/);
+  assert.match(launcher,/deploy-preview-23|preview_urls/);
+  assert.match(launcher,/FRONTEND_GATE_STATE\.json/);
+  assert.match(launcher,/Nenhum preview com o SHA exato/i);
+});
+
 test('launcher recupera auto-repair R11 quando .venv existe mas esta incompleto',()=>{
   assert.match(launcher,/:depscheck/);
   for(const dep of ['pandas','openpyxl','playwright','pyautogui','pyperclip'])assert.ok(launcher.includes(dep),`depscheck sem ${dep}`);
@@ -40,7 +49,7 @@ test('rota A-MES e temporaria e nao troca gateway padrao',()=>{
 
 test('bootstrap nao armazena segredos e falha fechado em servico desconhecido',()=>{
   assert.match(starter,/candidate_version/);
-  assert.match(starter,/0\.5\.24/);
+  assert.match(starter,/0\.5\.24|0\.5\.25/);
   assert.match(starter,/nao se identificou como agente A-MES/i);
   assert.doesNotMatch(starter,/password|senha\s*=|cookie|wifi.*key/i);
   assert.match(diag,/nao le nem imprime senha A-MES/i);
