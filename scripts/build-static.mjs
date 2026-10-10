@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
-const names=['index.html','app.js','styles.css','mobile.css','sw.js','manifest.webmanifest'];
+const names=['index.html','app.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest'];
 const allowed=/\.(mjs|css|svg|png|json)$/;
 
 function collect(dir){
@@ -14,10 +14,11 @@ function collect(dir){
 }
 
 function deployedIndex(source){
-  const moduleTag='<script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.48"></script>';
-  if(!source.includes(moduleTag))throw new Error('Tag canônica de app.js não encontrada no index.html');
+  const appTag='<script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.48"></script>';
+  const bootstrapTag='<script type="module" src="/Central-de-Controle-/offline-bootstrap.mjs?v=15.1.13.48"></script>';
+  if(!source.includes(appTag))throw new Error('Tag canônica de app.js não encontrada no index.html');
   const bootGuard=`<script id="central-runtime-boot-guard">\n(()=>{\n  const form=document.querySelector('#loginForm');\n  const status=document.querySelector('#authLoginStatus');\n  const button=document.querySelector('#loginButton');\n  if(!form)return;\n  const fail=()=>{\n    if(window.__centralLoginModuleReady)return false;\n    if(status){status.textContent='A aplicação não carregou completamente neste preview. Recarregue a página ou use um deploy validado.';status.className='auth-status error';}\n    if(button){button.disabled=true;button.textContent='Aplicação indisponível';}\n    return true;\n  };\n  form.addEventListener('submit',event=>{if(fail()){event.preventDefault();event.stopImmediatePropagation();}},true);\n  setTimeout(fail,5000);\n})();\n</script>`;
-  return source.replace(moduleTag,bootGuard+'\n'+moduleTag);
+  return source.replace(appTag,bootGuard+'\n'+bootstrapTag);
 }
 
 collect('ames');
