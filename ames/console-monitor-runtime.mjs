@@ -1,7 +1,7 @@
 import { LINE_IDS } from './data/contract.mjs';
 import { AGENT_URL } from './data/agent-contract.mjs';
 
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const STAGES=['3028','3074','2114','3022'];
 
 function stageInfo(job,stage,processReady){
