@@ -57,9 +57,9 @@ Entre os controles e comportamentos que não devem desaparecer:
 - atualização do dia anterior;
 - monitoramento recorrente;
 - atualização N/Y;
-- rastrear 3074 + 2114 + 3022;
+- rastrear 3074 + 2114 + 3022 quando o agente declarar suporte;
 - coleta completa, somente 3022 e somente reuso/histórico quando o agente suportar;
-- consulta SN com 3074/2114/3022;
+- consulta SN com 3074/2114 e tentativa 3022 individual quando a fonte estiver disponível;
 - históricos;
 - reuso de PCBA separado de reuso de Material SN;
 - dashboards/matriz de reuso;
@@ -82,7 +82,7 @@ Na referência 3022-R12 o coletor real já existe localmente e deve ser consumid
 - regras configuráveis por CPH/família de falha;
 - múltiplas passagens/retrabalhos e seleção da passagem válida anterior à ocorrência atual.
 
-Ausência de 3022 continua sendo “não coletado”, nunca zero e nunca dado inventado.
+Ausência de 3022 continua sendo “não coletado”, nunca zero e nunca dado inventado. `process_only` deve ser fail-closed enquanto o agente não declarar `process_timeline=true`.
 
 ## Arquitetura
 
@@ -90,7 +90,8 @@ A integração deve ser nativa dentro da Central.
 
 Não usar:
 - iframe;
-- segunda aplicação paralela;
+- Shadow DOM executando a interface antiga;
+- segunda aplicação paralela dentro da Central;
 - segundo Firebase/store;
 - segundo Auth;
 - segundo agente.
@@ -104,6 +105,8 @@ Usar o mesmo:
 - contratos canônicos;
 - coletores existentes.
 
+A automação isolada R12 do posto permanece disponível como fallback operacional até a validação física. Isso não autoriza reembutir a UI antiga dentro da Central.
+
 ## Regra de aceitação
 
 A migração do Console MES só pode ser considerada completa quando:
@@ -114,7 +117,8 @@ A migração do Console MES só pode ser considerada completa quando:
 4. O Dashboard de reuso continuar separado do Dashboard geral.
 5. A experiência permanecer próxima e reconhecível em relação à automação atual.
 6. Melhorias posteriores da V0.5.23/R12/candidato forem incorporadas quando realmente superiores.
-7. A interface isolada antiga só puder ser removida após paridade funcional confirmada no posto real.
+7. A automação isolada R12 do posto só puder ser aposentada após paridade funcional confirmada no posto real.
+8. Dentro da Central existir apenas a implementação nativa; nenhuma UI antiga paralela deve permanecer ativa.
 
 ## Resumo em uma frase
 
