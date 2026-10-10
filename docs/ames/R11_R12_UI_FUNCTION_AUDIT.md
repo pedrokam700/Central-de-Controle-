@@ -22,6 +22,8 @@ Objetivo: impedir que a migração considere “paridade” apenas porque a view
 | Perfis de desempenho | fast / balanced / safe | preservado na versão atual |
 | Pipeline 3028/3074/2114/3022 | pipeline nativo ligado ao job/capabilities | restaurado |
 | Estado do motor | agente, engine, Chrome, rede, 3022, snapshots | restaurado |
+| Configurar posto | atalho direto no topbar → configuração avançada do mesmo agente | restaurado sem segunda aplicação |
+| Gate físico | preflight de agente/motor/CDP/rede/SHA/preview + pendências reais | acrescentado; nunca marca GREEN sozinho |
 | Segundo plano / Chrome visível | **não portado como seletor** | ver nota abaixo |
 
 **Nota sobre “Segundo plano / Chrome visível”:** no pacote R11 auditado, a UI enviava a propriedade `background`, mas o agente R11 não a consumia na execução do job; o único uso de “background” no agente era a flag do próprio Chrome `--disable-background-mode`. O agente canônico atual também não possui esse campo no contrato. Recriar o seletor faria a Central exibir um controle sem efeito real. A ação útil correspondente — abrir o Chrome dedicado/CDP — permanece explícita. Se o código R12 real demonstrar uma semântica posterior para esse campo, ela deve ser incorporada ao contrato antes de reaparecer na UI.
@@ -53,6 +55,7 @@ Objetivo: impedir que a migração considere “paridade” apenas porque a view
 - Manual/Automatic;
 - Defect Type;
 - Repair Comment;
+- contexto 3022 separado de Defect Time e de causa;
 - recarregar leitura.
 
 ### Consulta por SN
@@ -119,7 +122,8 @@ Preservado/expandido:
 - process_events/3022;
 - process_defect_contexts;
 - history_contexts;
-- catálogo;
+- catálogo do agente;
+- seletor pode incorporar dinamicamente todos os datasets realmente declarados pelo catálogo, sem hardcode inventado;
 - tendências;
 - jobs;
 - busca;
