@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { withBaseCatalog } from '../ames/console-base-catalog.mjs';
 
 test('Base local pode carregar datasets declarados pelo agente sem inventar nomes',()=>{
   const code=fs.readFileSync('ames/console-base-catalog.mjs','utf8');
   const shell=fs.readFileSync('ames/console-view.mjs','utf8');
   const sw=fs.readFileSync('sw.js','utf8');
+  assert.equal(typeof withBaseCatalog,'function');
   assert.match(code,/client\.auxiliary\('catalog'/);
   assert.match(code,/result\?\.datasets/);
   assert.match(code,/row\?\.dataset\|\|row\?\.name/);
