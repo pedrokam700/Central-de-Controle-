@@ -12,5 +12,5 @@ test('CORA knowledge keeps R11 architecture panel while using the native base',(
   assert.match(css,/\.ames-knowledge-architecture-grid/);
   assert.match(sw,/ames\/console-knowledge-architecture\.mjs/);
   assert.match(sw,/ames\/console-knowledge-architecture\.css/);
-  assert.doesNotMatch(arch,/segundo banco|iframe|ShadowRoot/);
+  assert.doesNotMatch(arch,/iframe|ShadowRoot|new Function/);
 });
