@@ -36,13 +36,15 @@ jobs:
         run: node scripts/quality-gate.mjs
 
       - name: Build R12 existing-install migration bundle
-        run: python3 scripts/build-r12-migration-bundle.py "$RUNNER_TEMP/central-v2-r12-migration-${GITHUB_SHA}.zip"
+        env:
+          FRONTEND_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/build-r12-migration-bundle.py "$RUNNER_TEMP/central-v2-r12-migration-${FRONTEND_SHA}.zip" --frontend-sha "$FRONTEND_SHA"
 
       - name: Upload R12 migration bundle
         uses: actions/upload-artifact@v6
         with:
           name: central-v2-r12-migration-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ${{ runner.temp }}/central-v2-r12-migration-${{ github.sha }}.zip
+          path: ${{ runner.temp }}/central-v2-r12-migration-${{ github.event.pull_request.head.sha || github.sha }}.zip
           if-no-files-found: error
           retention-days: 7
 
