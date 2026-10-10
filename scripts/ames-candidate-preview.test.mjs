@@ -22,9 +22,10 @@ test('candidate builder separa produção e preview, preserva 3028 e inclui fus�
   assert.match(build,/correlacionar_falha_3022/);
   assert.match(build,/extrair_passagens_processo/);
   assert.match(build,/INICIAR_POSTO_CENTRAL_V2\.bat/);
-  assert.ok(readme.includes('ABRIR_PREVIEW_PR23.bat'));
-  assert.ok(readme.includes('ABRIR_CENTRAL_V2.bat'));
-  assert.ok(readme.includes('não deve ser usado como evidência de validação do PR'));
+  assert.ok(readme.includes('INICIAR_POSTO_CENTRAL_V2.bat'));
+  assert.ok(readme.includes('R11_DERIVED_R12_FACTORY_GATE'));
+  assert.ok(readme.includes('ZIP público `0.5.24-rc1` anterior foi bloqueado'));
+  assert.ok(readme.includes('CI/preview verde não substituem validação física R12'));
   assert.doesNotMatch(build,/https:\/\/\*\.(?:vercel|netlify)\.app/);
   assert.doesNotMatch(build,/['"]\*['"]/);
 });
