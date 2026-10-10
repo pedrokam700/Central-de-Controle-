@@ -60,15 +60,23 @@ test('Wave 3 keeps reuso Base local and CORA native and evidence-first',()=>{
   assert.match(css,/\.ames-knowledge-list/);
 });
 
+test('Wave 4 projects MES into Central pages without merging reuse dashboard into general dashboard',()=>{
+  const context=fs.readFileSync('ames/central-mes-context.mjs','utf8');
+  const dash=fs.readFileSync('ames/dashboard-view.mjs','utf8');
+  const daily=fs.readFileSync('ames/daily-view.mjs','utf8');
+  const product=fs.readFileSync('ames/product-view.mjs','utf8');
+  const cora=fs.readFileSync('ames/cora-view.mjs','utf8');
+  for(const text of ['MES · saúde das linhas','FPY, Check FPY, Quantity, CPH','Dashboards de reuso']) assert.match(dash,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['MES · contexto operacional do dia','não atribuí-lo automaticamente a esta data ou turno']) assert.match(daily,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['Linha e CPH continuam exatos','lista parcial não prova ausência']) assert.match(context,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(product,/CPH exato/);
+  assert.match(cora,/Fato observado ≠ correlação ≠ hipótese ≠ causa confirmada por humano/);
+});
+
 test('offline package contains native parity modules and no parallel V0.5.23 runtime',()=>{
   const sw=fs.readFileSync('sw.js','utf8');
   const build=fs.readFileSync('scripts/build-static.mjs','utf8');
-  assert.match(sw,/ames\/console-legacy-parity\.mjs/);
-  assert.match(sw,/ames\/console-legacy\.css/);
-  assert.match(sw,/ames\/console-wave2\.css/);
-  assert.match(sw,/ames\/console-wave3\.css/);
-  assert.match(sw,/ames\/console-specialized-views\.mjs/);
-  assert.match(sw,/ames\/console-wave3-views\.mjs/);
+  for(const asset of ['console-legacy-parity.mjs','console-legacy.css','console-wave2.css','console-wave3.css','console-specialized-views.mjs','console-wave3-views.mjs','central-mes-context.mjs','central-mes-context.css']) assert.match(sw,new RegExp(`ames\\/${asset.replaceAll('.','\\.')}`));
   assert.doesNotMatch(sw,/v0523-loader|ames\/v0523/);
   assert.match(build,/name==='ames\/v0523'/);
 });
