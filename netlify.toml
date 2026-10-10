@@ -2,20 +2,11 @@
   command = "node scripts/build-static.mjs"
   publish = "dist"
 
-# O diretório publicado já contém dist/Central-de-Controle-/index.html.
-# Não reescrever a própria rota canônica para index.html: o Netlify
-# canonicaliza /index.html de volta para o diretório e isso pode formar loop.
-[[redirects]]
-  from = "/"
-  to = "/Central-de-Controle-/"
-  status = 302
-  force = true
-
-[[redirects]]
-  from = "/Central-de-Controle-"
-  to = "/Central-de-Controle-/"
-  status = 302
-  force = true
+# Evita qualquer canonicalização/redirect HTTP do próprio Netlify no preview.
+# O build publica dist/index.html (entrada raiz estática) e
+# dist/Central-de-Controle-/index.html (Central real).
+[build.processing.html]
+  pretty_urls = false
 
 [[headers]]
   for = "/Central-de-Controle-/*.mjs"
