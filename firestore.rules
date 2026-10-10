@@ -20,10 +20,13 @@ service cloud.firestore {
       return activeUser() && userProfile().data.role == 'admin';
     }
 
-    match /users/{userId} {
-      allow read: if activeUser();
+    function mesLine(lineId) {
+      return lineId in ['TAN10101', 'TAN10102', 'TAN10103'];
+    }
 
-      // Bootstrap do próprio perfil após criar/login no Firebase Auth.
+    match /users/{userId} {
+      allow get: if (signedIn() && request.auth.uid == userId) || activeUser();
+      allow list: if activeUser();
       allow create: if signedIn()
         && request.auth.uid == userId
         && request.resource.data.email == request.auth.token.email
@@ -35,9 +38,6 @@ service cloud.firestore {
             && request.auth.token.email == 'pedro.henrique@grupomultilaser.com.br'
           )
         );
-
-      // O usuário pode atualizar o próprio perfil, mas não pode se promover
-      // nem alterar o estado disabled. Administração continua com o admin.
       allow update: if isAdmin() || (
         activeUser()
         && request.auth.uid == userId
@@ -45,49 +45,24 @@ service cloud.firestore {
         && request.resource.data.disabled == resource.data.disabled
         && request.resource.data.email == resource.data.email
       );
-
       allow delete: if isAdmin();
     }
 
     // Dados de trabalho compartilhados pela equipe autenticada.
-    match /products/{documentId} {
-      allow read, create, update, delete: if activeUser();
-    }
+    match /products/{documentId} { allow read, create, update, delete: if activeUser(); }
+    match /reports/{documentId} { allow read, create, update, delete: if activeUser(); }
+    match /operationalFailures/{documentId} { allow read, create, update, delete: if activeUser(); }
+    match /activities/{documentId} { allow read, create, update, delete: if activeUser(); }
+    match /flows/{documentId} { allow read, create, update, delete: if activeUser(); }
+    match /failureAnalyses/{documentId} { allow read, create, update, delete: if activeUser(); }
+    match /aiKnowledge/{documentId} { allow read, create, update, delete: if activeUser(); }
+    match /aiConversations/{documentId} { allow read, create, update, delete: if activeUser(); }
 
-    match /reports/{documentId} {
-      allow read, create, update, delete: if activeUser();
-    }
-
-    match /operationalFailures/{documentId} {
-      allow read, create, update, delete: if activeUser();
-    }
-
-    match /activities/{documentId} {
-      allow read, create, update, delete: if activeUser();
-    }
-
-    match /flows/{documentId} {
-      allow read, create, update, delete: if activeUser();
-    }
-
-    match /failureAnalyses/{documentId} {
-      allow read, create, update, delete: if activeUser();
-    }
-
-    match /aiKnowledge/{documentId} {
-      allow read, create, update, delete: if activeUser();
-    }
-
-    match /aiConversations/{documentId} {
-      allow read, create, update, delete: if activeUser();
-    }
-
-    // MES v2: private publication namespace per authenticated owner and line.
-    // A second PC signs into the same account; no cross-user wildcard access.
+    // MES v2: cada usuário/posto só escreve no próprio namespace. As partes já
+    // sanitizadas podem ser lidas por qualquer usuário ativo da mesma Central.
     match /amesUsers/{ownerId}/lines/{lineId} {
       function owner() {
-        return activeUser() && request.auth.uid == ownerId
-          && lineId in ['TAN10101', 'TAN10102', 'TAN10103'];
+        return activeUser() && request.auth.uid == ownerId && mesLine(lineId);
       }
       function validHead() {
         let d = request.resource.data;
@@ -109,8 +84,11 @@ service cloud.firestore {
             && (request.resource.data.snapshot_revision > resource.data.snapshot_revision
               || request.resource.data == resource.data)));
       allow delete: if false;
+
       match /snapshots/{snapshotKey}/parts/{partId} {
-        allow read: if owner();
+        // Leitura de dados já coletados/sanitizados é compartilhada; escrita
+        // continua restrita ao dono do namespace.
+        allow read: if activeUser() && mesLine(lineId);
         allow create: if owner()
           && request.resource.data.keys().hasOnly(['owner_uid','line_id','key','index','data'])
           && request.resource.data.owner_uid == ownerId && request.resource.data.line_id == lineId
@@ -123,36 +101,48 @@ service cloud.firestore {
       }
     }
 
-    // Configuração da Central do Dia: todos os usuários ativos podem ler,
-    // somente administradores alteram a estrutura operacional.
+    // Ponte de leitura da equipe: um único head sanitizado por linha aponta para
+    // as partes do usuário/posto que publicou a evidência mais recente.
+    match /amesTeamLines/{lineId} {
+      function validTeamHead() {
+        let d = request.resource.data;
+        return mesLine(lineId)
+          && d.keys().hasOnly(['schema','owner_uid','line_id','source_id','snapshot_id','snapshot_num','snapshot_revision','key','hash','parts','collected_at'])
+          && d.schema == 'central-ames-v2' && d.line_id == lineId
+          && d.owner_uid is string && d.owner_uid == request.auth.uid
+          && d.source_id is string && d.source_id.size() <= 64
+          && d.snapshot_id is string && d.snapshot_num is int && d.snapshot_num > 0
+          && d.snapshot_revision is int && d.snapshot_revision > 0
+          && d.key is string && d.key.matches('[a-f0-9]{64}')
+          && d.hash is string && d.hash.matches('[a-f0-9]{64}')
+          && d.parts is int && d.parts > 0 && d.parts <= 5000 && d.collected_at is string;
+      }
+      allow read: if activeUser() && mesLine(lineId);
+      allow create, update: if activeUser() && validTeamHead();
+      allow delete: if false;
+    }
+
     match /workShifts/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
-
     match /operationalScopes/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
-
     match /workAllocations/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
-
     match /routineTemplates/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
-
-    // Execuções são trabalho operacional: usuários autenticados ativos
-    // precisam iniciar e concluir as rotinas às quais têm acesso na interface.
     match /routineExecutions/{documentId} {
       allow read, create, update: if activeUser();
       allow delete: if isAdmin();
     }
 
-    // Negação explícita para qualquer coleção não prevista.
     match /{document=**} {
       allow read, write: if false;
     }

@@ -36,10 +36,12 @@ test('each sample KPI and Pareto count resolves to exact references within the s
   const s = setup(fixture());
   const m = selectDashboard(s, { line_id: LINE_IDS[0] });
   assert.deepEqual(m.sample_metric.evidence_refs, m.rows.map(row => row.evidence_ref));
+  assert.equal(m.pareto[0].description,'Synthetic defect');
   for (const bar of m.pareto) {
     const filtered = selectDashboard(s, { line_id: LINE_IDS[0], defect_code: bar.code });
     assert.equal(filtered.rows.length, bar.count);
     assert.equal(filtered.rows.every(row => m.sample_metric.evidence_refs.includes(row.evidence_ref)), true);
+    assert.equal(filtered.rows.some(row => row.defect_desc === bar.description), true);
   }
   const update = fixture(); update.payload.summary.snapshot_id = 'NEXT';
   s.replaceRemoteDocuments([update]);

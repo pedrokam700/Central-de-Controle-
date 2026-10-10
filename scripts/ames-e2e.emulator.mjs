@@ -24,7 +24,7 @@ async function stop(){if(child?.exitCode===null){const exited=new Promise(r=>chi
 const api=async(route,body)=>{const response=await fetch(`http://127.0.0.1:${port}/api/v1`+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const value=await response.json();if(!response.ok)throw Error(JSON.stringify(value));return value;};
 const eventually=async(fn,label)=>{for(let i=0;i<300;i++){if(await fn())return;await new Promise(r=>setTimeout(r,20));}throw Error('Timeout: '+label);};
 try{
- await env.clearFirestore();await env.withSecurityRulesDisabled(c=>fb.setDoc(fb.doc(c.firestore(),'users','E2E'),{role:'user',disabled:false}));
+ await env.clearFirestore();await env.withSecurityRulesDisabled(async c=>{for(const id of ['E2E','OTHER'])await fb.setDoc(fb.doc(c.firestore(),'users',id),{email:id.toLowerCase()+'@example.test',role:'user',disabled:false});});
  await start();const state={ames:createAmesStore(),reports:[{id:'manual'}]},pending=[];
  client=createAgentClient(state.ames,{fetcher:(url,options)=>fetch(url.replace('127.0.0.1:8765','127.0.0.1:'+port),options),schedule:fn=>{pending.push(fn);return fn;},unschedule:fn=>{const i=pending.indexOf(fn);if(i>=0)pending.splice(i,1);}});
  await client.connect();assert.equal(state.ames.agent().capabilities.process_timeline,false);
@@ -43,12 +43,14 @@ try{
  const request={sn:'P',include_3022:false,request_id:'e2e-request-1'},first=await api('/sn-lookup',request),again=await api('/sn-lookup',request);assert.equal(first.id,again.id);
  await client.collect('sn',{...scope,sn:'ERROR'});assert.equal((await finish()).status,'error');
  await client.collect('sn',{...scope,sn:'BLOCK'});await eventually(async()=>(await api('/health')).mes_scheduler.busy,'gate');await client.cancel();assert.equal((await finish()).status,'cancelled');
- const auth={currentUser:{uid:'E2E'}},db=env.authenticatedContext('E2E').firestore(),remote=firestoreTransport({...fb,db,auth});
+ const authA={currentUser:{uid:'E2E'}},dbA=env.authenticatedContext('E2E').firestore(),remoteA=firestoreTransport({...fb,db:dbA,auth:authA});
  const queueData=new Map(),queue={put:async e=>queueData.set(e.id,e),remove:async id=>queueData.delete(id),list:async uid=>[...queueData.values()].filter(e=>e.uid===uid)};
- let online=false;sync=createMesSync(state.ames,remote,{queue,online:()=>online});sync.start('E2E');await sync.capture();assert.equal(queueData.size,3);online=true;await sync.retry();assert.equal(queueData.size,0);
- const second=createAmesStore();reader=createMesSync(second,remote,{queue,online:()=>false});reader.start('E2E');await eventually(()=>!!second.read(scope.lines[0]).snapshot,'remote PC');assert.equal(second.read(scope.lines[0]).snapshot.revision,after.revision);
- reader.stop();second.clear();auth.currentUser={uid:'OTHER'};reader.start('OTHER');await new Promise(r=>setTimeout(r,50));assert.equal(second.read(scope.lines[0]).snapshot,null);reader.stop();auth.currentUser={uid:'E2E'};
+ let online=false;sync=createMesSync(state.ames,remoteA,{queue,online:()=>online});sync.start('E2E');await sync.capture();assert.equal(queueData.size,3);online=true;await sync.retry();assert.equal(queueData.size,0);
+ const sameAccount=createAmesStore(),sameReader=createMesSync(sameAccount,remoteA,{queue,online:()=>false});sameReader.start('E2E');await eventually(()=>!!sameAccount.read(scope.lines[0]).snapshot,'same-account remote PC');assert.equal(sameAccount.read(scope.lines[0]).snapshot.revision,after.revision);sameReader.stop();
+ const authB={currentUser:{uid:'OTHER'}},dbB=env.authenticatedContext('OTHER').firestore(),remoteB=firestoreTransport({...fb,db:dbB,auth:authB});
+ const teammate=createAmesStore();reader=createMesSync(teammate,remoteB,{queue,online:()=>false});reader.start('OTHER');await eventually(()=>!!teammate.read(scope.lines[0]).snapshot,'teammate remote PC');assert.equal(teammate.read(scope.lines[0]).snapshot.revision,after.revision);assert.equal(teammate.read(scope.lines[0]).source,'remote');
+ reader.stop();teammate.clear();assert.equal(teammate.read(scope.lines[0]).snapshot,null);
  const id=first.id;await stop();await start();const restored=await api('/sn-lookup',request);assert.equal(restored.id,id);assert.equal((await api('/v2/capabilities')).source_id,after.source_id);
  client.clear();state.ames.clear();assert.equal(state.ames.read(scope.lines[0]).snapshot,null);assert.deepEqual(state.reports,[{id:'manual'}]);
- console.log('PASS: native client -> actual HTTP agent/scheduler -> simulated MES -> SQLite/revision -> Firebase Rules/parts -> second-PC state; collection/SN/deep/error/cancel/restart/idempotence/Excel/user isolation/logout');
+ console.log('PASS: native client -> HTTP agent/scheduler -> simulated MES -> SQLite/revision -> Firebase sanitized team sharing -> second-PC state; collection/SN/deep/error/cancel/restart/idempotence/Excel/logout');
 }finally{client?.clear();sync?.stop();reader?.stop();await stop();await env.cleanup();fs.rmSync(temp,{recursive:true,force:true});}

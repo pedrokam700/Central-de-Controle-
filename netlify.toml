@@ -1,0 +1,19 @@
+[build]
+  command = "node scripts/build-static.mjs"
+  publish = "dist"
+
+# Evita qualquer canonicalização/redirect HTTP do próprio Netlify no preview.
+# O build publica dist/index.html (entrada raiz estática) e
+# dist/Central-de-Controle-/index.html (Central real).
+[build.processing.html]
+  pretty_urls = false
+
+[[headers]]
+  for = "/Central-de-Controle-/*.mjs"
+  [headers.values]
+    Content-Type = "text/javascript; charset=utf-8"
+
+[[headers]]
+  for = "/Central-de-Controle-/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"

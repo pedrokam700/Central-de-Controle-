@@ -1,40 +1,149 @@
-import { traceDimensions } from './data/capabilities.mjs';
 import { createAgentClient } from './agent-client.mjs';
 import { createAutomationView } from './automation-view.mjs';
-import { createAgentEvidenceView } from './agent-evidence-view.mjs';
-import {createAdvancedView} from './advanced-view.mjs';
-import { dimensionList } from './capability-view.mjs';
-import { createOccurrenceView } from './occurrence-view.mjs';
-import { escapeHtml as esc } from './evidence-view.mjs';
+import { createAdvancedView } from './advanced-view.mjs';
+import { createLineOverview, createTop3ParityView, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
+import { createSnConsoleView, createTraceConsoleView, createProcessConsoleView } from './console-specialized-views.mjs';
+import { createReuseConsoleView, createBaseConsoleView, createKnowledgeConsoleView } from './console-wave3-views.mjs';
+import { withProcessCapability, applyMonitorProcessCapability } from './console-capability-guard.mjs';
+import { createMonitorRuntimeView } from './console-monitor-runtime.mjs';
+import { withKnowledgeArchitecture } from './console-knowledge-architecture.mjs';
+import { withAgentRefresh } from './console-refresh-decorator.mjs';
+import { withTraceSelectionHelper } from './console-trace-scope.mjs';
+import { createFailureProcessAddon } from './console-failure-process.mjs';
+import { withBaseCatalog } from './console-base-catalog.mjs';
 
-// A native technical view of the session store. No transport or separate state.
+const VIEWS = Object.freeze([
+  ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
+  ['top3','↗','Top 3 & FPY','Top 3 & FPY','FPY, Check FPY, Quantity e Top 3 sempre separados por linha.'],
+  ['failures','!','Falhas','Falhas','Ocorrências atuais, estados de reparo e histórico operacional.'],
+  ['sn','⌕','Consulta por SN','Consulta por SN','Investigação de PCBA ou Material SN com 3074, 2114 e 3022 quando a fonte estiver disponível.'],
+  ['trace','⌘','Rastreabilidade','Rastreabilidade','Coleta seletiva full, process_only ou reuse_only sem misturar linhas e respeitando capacidades do agente.'],
+  ['reuse','▥','Dashboards de reuso','Dashboards de reuso','Segundo uso de PCBA e Material SN, recorrência e vínculos históricos.'],
+  ['process','≡','Processo / 3022 & AT','Processo / 3022 & AT','Timeline de montagem, teste, detecção, AT e retorno à linha quando 3022 estiver disponível.'],
+  ['base','▦','Base local','Base local','SQLite e datasets locais preservados para consulta e auditoria.'],
+  ['knowledge','C','CORA conhecimento','CORA · conhecimento','Busca operacional com separação entre fato, correlação, hipótese e causa confirmada.']
+]);
+
+const STYLE_HREF = new URL('./console-legacy.css', import.meta.url).href;
+const WAVE2_STYLE_HREF = new URL('./console-wave2.css', import.meta.url).href;
+const WAVE3_STYLE_HREF = new URL('./console-wave3.css', import.meta.url).href;
+const MOBILE_STYLE_HREF = new URL('./console-mobile-polish.css', import.meta.url).href;
+
+// Fusão nativa definitiva do Console MES: uma sessão, um state.ames, um agent client.
+// A V0.5.22/V0.5.23/R12 permanece como referência visual/operacional, nunca como app paralelo.
 export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {} } = {}) {
-  let operation, technical, automation, advanced, evidence, lastSnapshot, lastKey;
-  const client = createAgentClient(store, {...transport, changed() { automation?.render(); advanced?.render(); operation?.render(); onChange(); }});
-  function mount() {
-    root.innerHTML = `<p>Automação A-MES · dados da mesma Central, separados por linha. Filtros de investigação não alteram o escopo da coleta.</p><section data-console-agent></section><section data-console-operation class="ames-occurrence-view"></section><section data-console-evidence></section><section data-console-technical class="mes-context-panel" aria-label="Coleta e disponibilidade técnica"></section>`;
-    automation = createAutomationView(root.querySelector('[data-console-agent]'), store, client);
-    const tools=root.ownerDocument.createElement('section');tools.dataset.consoleAdvanced='';root.querySelector('[data-console-agent]').after(tools);advanced=createAdvancedView(tools,store,client);
-    evidence = createAgentEvidenceView(root.querySelector('[data-console-evidence]'), store);
-    technical = root.querySelector('[data-console-technical]');
-    operation = createOccurrenceView(root.querySelector('[data-console-operation]'), store, { locale, mode: 'console', onRender: renderTechnical });
+  let active='monitor', mounted=false, disposed=false;
+  const views=new Map();
+  const client=createAgentClient(store,{...transport,changed(){if(disposed)return;renderActive();paintHeader();onChange();}});
+
+  const meta=()=>VIEWS.find(([id])=>id===active)||VIEWS[0];
+  function setMenu(open){
+    const shell=root.querySelector('[data-ames-shell]'),button=root.querySelector('[data-console-menu]');
+    shell?.classList.toggle('menu-open',!!open);
+    button?.setAttribute('aria-expanded',String(!!open));
   }
-  function renderTechnical(model) {
-    const snapshot = model.snapshot;
-    evidence.render(model.scope.line_id);
-    const key = JSON.stringify([model.source, model.local_connected, model.scope.line_id]);
-    if (snapshot === lastSnapshot && key === lastKey) return;
-    lastSnapshot = snapshot; lastKey = key;
-    technical.innerHTML = `<h2>Coleta e fontes · ${esc(model.scope.line_id)}</h2>
-      <p>Snapshot ${esc(snapshot?.snapshot_id || 'indisponível')} · gerado em ${esc(snapshot?.generated_at || 'não informado')}. Origem da leitura: ${esc(model.source)}.</p>
-      <p>Estado e progresso do agente aparecem em “Coleta e agente deste computador”. Um snapshot sincronizado não comprova agente conectado. Dados históricos adicionais são lidos localmente, quando disponíveis.</p>
-      <h3>Rastreabilidade e reuso</h3>${dimensionList(traceDimensions(snapshot), { showCounts: true })}
-      <p>PCBA SN ≠ Material SN; Batch Count ≠ quantidade de reusos. Indicadores e matriz só aparecem com os registros retornados pelo agente; cobertura parcial não representa o universo completo. Interface isolada preservada; validação fabril pendente.</p>
-      <p>Sem ID durável, as referências valem somente nesta leitura. Correlação não confirma causa e não cria vínculo Manual ↔ MES.</p>
-      <button type="button" class="button secondary" data-console-setup>Configurar este computador no Perfil</button>`;
+  function openWorkstationSetup(){
+    switchView('monitor');
+    const pane=root.querySelector('[data-console-pane="monitor"]');
+    const details=pane?.querySelector('[data-monitor-tools] details');
+    if(details)details.open=true;
+    const fieldsets=[...(pane?.querySelectorAll('[data-monitor-tools] fieldset')||[])];
+    const setup=fieldsets.find(fieldset=>/Configuração do posto/i.test(fieldset.querySelector('legend')?.textContent||''))||details;
+    requestAnimationFrame(()=>setup?.scrollIntoView({behavior:'smooth',block:'start'}));
   }
-  return Object.freeze({ render() { if (!root) return; if (!operation) mount(); automation.render(); advanced.render(); operation.render(); }, clear() {
-    advanced?.clear();advanced=undefined;
-    automation?.clear(); client.clear(); operation?.clear(); operation = undefined; automation = undefined; evidence = undefined; lastSnapshot = undefined; lastKey = undefined; root?.replaceChildren();
-  } });
+  function mount(){
+    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
+      <aside class="ames-legacy-sidebar">
+        <div class="ames-legacy-brand"><div class="ames-legacy-brand-row"><div class="ames-legacy-mark">Q</div><div><strong>Central de trabalho</strong><span>A-MES · motor local integrado</span></div></div></div>
+        <nav class="ames-legacy-nav" aria-label="Views da automação A-MES">${VIEWS.map(([id,icon,label])=>`<button type="button" data-console-view="${id}"${id===active?' class="active"':''}><span class="ico">${icon}</span>${label}</button>`).join('')}</nav>
+        <div class="ames-legacy-foot"><b>Offline por padrão.</b><br>MES e banco permanecem no notebook. As 9 views usam o mesmo state.ames, o mesmo agente local e a mesma base operacional.<br><br><span data-console-build-foot>R12 · 9 views</span></div>
+      </aside>
+      <button type="button" class="ames-mobile-backdrop" data-console-menu-close aria-label="Fechar menu do Console MES"></button>
+      <main class="ames-legacy-main">
+        <header class="ames-legacy-topbar"><div><h1 class="ames-legacy-title" data-console-title></h1><p class="ames-legacy-sub" data-console-sub></p></div><div class="ames-legacy-actions">
+          <button class="button secondary ames-mobile-menu" type="button" data-console-menu aria-expanded="false" aria-label="Abrir menu do Console MES" style="display:none">☰</button>
+          <span class="ames-status-pill"><span class="ames-agent-dot" data-console-dot></span><span data-console-status>Agente local desconectado</span></span>
+          <span class="ames-status-pill ames-hide-mobile"><span class="ames-agent-dot" data-console-process-dot></span><span data-console-process>3022 em lote indisponível</span></span>
+          <button class="button secondary ames-hide-mobile" type="button" data-console-open-ames>Abrir A-MES</button>
+          <button class="button secondary ames-hide-mobile" type="button" data-console-setup>Configurar posto</button>
+          <button class="button secondary ames-hide-mobile" type="button" data-console-check>Verificar</button>
+          <button class="button secondary" type="button" data-console-back>Voltar à Central</button>
+        </div></header>
+        <div class="ames-legacy-content"><div class="ames-shell-banner"><div><strong>Console MES integrado</strong> · experiência operacional R12/V0.5.22 preservada sobre a arquitetura nativa da Central V2.</div><span class="ames-shell-build" data-console-build>MES local</span></div>${VIEWS.map(([id])=>`<section class="ames-console-pane" data-console-pane="${id}"${id===active?'':' hidden'}></section>`).join('')}</div>
+      </main></div>`;
+    for(const button of root.querySelectorAll('[data-console-view]'))button.addEventListener('click',()=>switchView(button.dataset.consoleView));
+    root.querySelector('[data-console-menu]')?.addEventListener('click',()=>setMenu(!root.querySelector('[data-ames-shell]')?.classList.contains('menu-open')));
+    root.querySelector('[data-console-menu-close]')?.addEventListener('click',()=>setMenu(false));
+    root.querySelector('[data-console-back]')?.addEventListener('click',()=>document.querySelector('.main-nav [data-page="home"], [data-page="home"]')?.click());
+    root.querySelector('[data-console-open-ames]')?.addEventListener('click',async()=>{try{if(store.agent().status!=='connected')await client.connect();await client.auxiliary('chrome');}catch(error){store.updateAgent({error:error.message});paintHeader();}});
+    root.querySelector('[data-console-setup]')?.addEventListener('click',openWorkstationSetup);
+    root.querySelector('[data-console-check]')?.addEventListener('click',async()=>{try{if(store.agent().status==='connected')await client.refresh();else await client.connect();}catch(error){store.updateAgent({error:error.message});paintHeader();}});
+    mounted=true;paintHeader();
+  }
+
+  function ensure(id){
+    if(views.has(id))return views.get(id);
+    const pane=root.querySelector(`[data-console-pane="${id}"]`);let view;
+    if(id==='monitor'){
+      pane.innerHTML='<section data-monitor-main></section><section data-monitor-runtime></section><section data-monitor-lines></section><section data-monitor-tools></section>';
+      const monitorRoot=pane.querySelector('[data-monitor-main]');
+      const primary=createAutomationView(monitorRoot,store,client);
+      const runtime=createMonitorRuntimeView(pane.querySelector('[data-monitor-runtime]'),store);
+      const lineBoard=createLineOverview(pane.querySelector('[data-monitor-lines]'),store,client);
+      const tools=createAdvancedView(pane.querySelector('[data-monitor-tools]'),store,client);
+      view={render(){primary.render();applyMonitorProcessCapability(monitorRoot,store);runtime.render();lineBoard.render();tools.render();},clear(){primary.clear?.();runtime.clear?.();lineBoard.clear?.();tools.clear?.();pane.replaceChildren();}};
+    }
+    else if(id==='top3'){
+      pane.innerHTML='<section data-top3-main></section><section data-top3-trend></section>';
+      const primary=createTop3ParityView(pane.querySelector('[data-top3-main]'),store);
+      const trend=createTrendAddon(pane.querySelector('[data-top3-trend]'),store,client);
+      const base={render(){primary.render();trend.render();},clear(){primary.clear?.();trend.clear?.();pane.replaceChildren();}};
+      view=withAgentRefresh(base,pane,store,client,{label:'Atualizar'});
+    }
+    else if(id==='failures'){
+      pane.innerHTML='<section data-failures-main></section><section data-failures-process></section>';
+      const failureRoot=pane.querySelector('[data-failures-main]');
+      const primary=createFailuresParityView(failureRoot,store,client);
+      const process=createFailureProcessAddon(pane.querySelector('[data-failures-process]'),store,failureRoot);
+      view={render(){primary.render();process.render();},clear(){primary.clear?.();process.clear?.();pane.replaceChildren();}};
+    }
+    else if(id==='sn')view=withProcessCapability(createSnConsoleView(pane,store,client),pane,store,'sn');
+    else if(id==='trace'){
+      const base=withTraceSelectionHelper(withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace'),pane,store);
+      view=withAgentRefresh(base,pane,store,client,{label:'Atualizar tela'});
+    }
+    else if(id==='reuse')view=withAgentRefresh(createReuseConsoleView(pane,store),pane,store,client,{label:'Atualizar'});
+    else if(id==='process')view=withAgentRefresh(withProcessCapability(createProcessConsoleView(pane,store),pane,store,'process'),pane,store,client,{label:'Atualizar'});
+    else if(id==='base')view=withBaseCatalog(createBaseConsoleView(pane,store,client),pane,store,client);
+    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client),pane);
+    views.set(id,view);return view;
+  }
+
+  function paintHeader(){
+    if(!mounted)return;const a=store.agent(),m=meta();
+    const title=root.querySelector('[data-console-title]'),sub=root.querySelector('[data-console-sub]'),status=root.querySelector('[data-console-status]'),build=root.querySelector('[data-console-build]'),foot=root.querySelector('[data-console-build-foot]'),dot=root.querySelector('[data-console-dot]'),process=root.querySelector('[data-console-process]'),processDot=root.querySelector('[data-console-process-dot]');
+    if(title)title.textContent=m[3];if(sub)sub.textContent=m[4];
+    const connected=a.status==='connected',processReady=connected&&a.capabilities?.process_timeline===true;
+    if(status)status.textContent=connected?`Agente local conectado${a.agent_build?' · '+a.agent_build:''}`:'Agente local desconectado';
+    dot?.classList.toggle('ok',connected);
+    if(process)process.textContent=processReady?'3022 em lote disponível':'3022 em lote indisponível';
+    processDot?.classList.toggle('ok',processReady);
+    const buildText=a.agent_build||a.capabilities?.agent_build||'MES local';if(build)build.textContent=buildText;if(foot)foot.textContent=`${buildText} · 9 views`;
+  }
+
+  function switchView(id){
+    if(!VIEWS.some(([key])=>key===id))return;active=id;setMenu(false);
+    for(const button of root.querySelectorAll('[data-console-view]'))button.classList.toggle('active',button.dataset.consoleView===id);
+    for(const pane of root.querySelectorAll('[data-console-pane]'))pane.hidden=pane.dataset.consolePane!==id;
+    renderActive();
+  }
+
+  function renderActive(){if(!mounted)mount();ensure(active)?.render();paintHeader();}
+
+  return Object.freeze({
+    render(){if(!root||disposed)return;if(!mounted)mount();renderActive();},
+    clear(){disposed=true;for(const view of views.values())view?.clear?.();views.clear();client.clear();root?.replaceChildren();mounted=false;}
+  });
 }
+
+export { VIEWS as CANONICAL_VIEWS };
