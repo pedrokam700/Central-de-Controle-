@@ -41,12 +41,26 @@ test('metadata duplicada por e-mail não preserva autoridade local',()=>{
   assert.equal(findLegacyUserMetadata(rows,'none@empresa.com'),null);
 });
 
+test('bloqueio de escrita local não reativa autenticação legada nem derruba bootstrap',()=>{
+  const raw=JSON.stringify([{name:'User',email:'u@empresa.com',password:'secret',role:'admin'}]);
+  let removed=false;
+  const blocked={
+    getItem:key=>key===LEGACY_CREDENTIALS_MIGRATION.key?raw:null,
+    setItem(){throw new Error('storage blocked');},
+    removeItem(){removed=true;throw new Error('storage blocked');}
+  };
+  const rows=sanitizeLegacyUserMetadata(blocked);
+  assert.deepEqual(rows,[{name:'User',email:'u@empresa.com'}]);
+  assert.equal(removed,true);
+});
+
 test('contrato H3A exige Firebase como única autoridade',()=>{
   assert.equal(LEGACY_CREDENTIALS_MIGRATION.authority,'firebase-only');
   const app=fs.readFileSync('app.js','utf8');
   const sw=fs.readFileSync('sw.js','utf8');
   assert.match(app,/\.\/core\/auth-hardening\.mjs/);
   assert.match(app,/sanitizeLegacyUserMetadata/);
+  assert.match(app,/const credential = await signInWithEmailAndPassword\(auth, email, password\)/);
   assert.doesNotMatch(app,/legacy\.password\s*===\s*password/);
   assert.doesNotMatch(app,/auth\/invalid-credential[\s\S]{0,600}createUserWithEmailAndPassword/);
   assert.doesNotMatch(app,/legacy\?\.role/);
