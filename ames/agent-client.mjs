@@ -15,6 +15,17 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     return data;
   }
   function check(){if(store.agent().status!=='connected')throw new Error('Conecte o agente com scheduler compatível.');}
+  function publicConfig(cfg={}){
+    return {
+      ...Object.fromEntries(['ames_host','ames_port','ames_start_url','chrome_profile_dir'].map(k=>[k,cfg[k]||''])),
+      configured_lines:(cfg.configured_lines||[]).filter(l=>LINE_IDS.includes(l)),
+      performance:['fast','balanced','safe'].includes(cfg.performance)?cfg.performance:'balanced',
+      day_start:cfg.day_start,
+      monitor_interval_minutes:cfg.monitor_interval_minutes,
+      backup_retention:cfg.backup_retention,
+      auto_backup_on_start:cfg.auto_backup_on_start
+    };
+  }
   async function refresh() {
     check();if(refreshing)return;refreshing=true;const token=generation;
     try {
@@ -97,7 +108,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         capabilities={schema:'central-r12-local',native_console:true,cursor:false,revision:false,process_timeline:true,legacy_r12:true,agent_build:health.agent_build};
       }
       const cfg=await request('/config');
-      const config={...Object.fromEntries(['ames_host','ames_port','ames_start_url','chrome_profile_dir'].map(k=>[k,cfg[k]||''])),configured_lines:(cfg.configured_lines||[]).filter(l=>LINE_IDS.includes(l)),performance:['fast','balanced','safe'].includes(cfg.performance)?cfg.performance:'balanced',day_start:cfg.day_start,monitor_interval_minutes:cfg.monitor_interval_minutes};
+      const config=publicConfig(cfg);
       publish({status:'connected',config,capabilities,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.playwright_ready!==false},agent_build:health.agent_build||'',error:''});
       const monitor=await request('/monitor');publish({monitor:{enabled:!!monitor.enabled,interval_minutes:monitor.interval_minutes,next_run_at:monitor.next_run_at}});
       await refresh();
@@ -139,11 +150,13 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       else if(name==='upload')result=await request('/upload/3028',{filename:value.filename,data_b64:value.data_b64});
       else if(name==='import')result=await request('/import/integrated',{payload:value.payload,source_name:value.filename});
       else if(name==='search')result=await request('/cora/search?'+new URLSearchParams({line,q:value.q}));
+      else if(name==='config')result=await request('/config');
       else if(name==='setup')result=await request('/config',value.config);
       else if(name==='jobs')result=await request('/jobs');
       else if(name==='monitor')result=await request('/monitor');
       else throw Error('Operação desconhecida');
-      publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(name==='setup'?{config:{...store.agent().config,...value.config}}:{})});if(['repairs','import'].includes(name))await refresh();return result;
+      const configPatch=name==='config'?publicConfig(result):name==='setup'?{...store.agent().config,...value.config}:undefined;
+      publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(configPatch?{config:configPatch}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
     clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',config:null,job:null,readiness:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
