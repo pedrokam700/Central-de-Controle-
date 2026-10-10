@@ -15,6 +15,13 @@ test('launcher usa uma Central e um agente local',()=>{
   assert.doesNotMatch(launcher,/start\s+""\s+"http:\/\/127\.0\.0\.1:8765\/?"/i);
 });
 
+test('launcher recupera auto-repair R11 quando .venv existe mas esta incompleto',()=>{
+  assert.match(launcher,/:depscheck/);
+  for(const dep of ['pandas','openpyxl','playwright','pyautogui','pyperclip'])assert.ok(launcher.includes(dep),`depscheck sem ${dep}`);
+  assert.match(launcher,/09_REPARAR_DEPENDENCIAS\.bat" \/auto/);
+  assert.match(launcher,/01_INSTALAR_UMA_VEZ\.bat" \/auto/);
+});
+
 test('rota A-MES e temporaria e nao troca gateway padrao',()=>{
   assert.match(route,/172\.29\.185\.215\/32/);
   assert.match(route,/PolicyStore ActiveStore/);
