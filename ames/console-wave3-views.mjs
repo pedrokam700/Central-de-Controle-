@@ -16,7 +16,31 @@ const INSIGHT_DRILL={
 };
 
 const groupLabel=value=>({pcba_kpis:'PCBA reutilizada',material_kpis:'Material SN reutilizado',correlation_kpis:'Correlação material ↔ PCBA'})[value]||String(value||'Indicadores').replaceAll('_',' ');
-const exactId=row=>row?.current_pcba_sn||row?.pcba_sn||row?.item_sn||row?.material_sn||row?.serial_number||row?.sn||'';
+const first=(...values)=>values.find(value=>value!==undefined&&value!==null&&String(value).trim()!=='')??'';
+const drillKind=selected=>String(selected||'').startsWith('correlation_')?'correlation':String(selected||'').startsWith('material_')?'material':'pcba';
+const pcbaId=row=>first(row?.current_pcba_sn,row?.pcba_sn,row?.['PCBA atual'],row?.PCBA,row?.['PCBA']);
+const materialId=row=>first(row?.item_sn,row?.material_sn,row?.['Material SN']);
+const historicalPcba=row=>first(row?.historical_pcba,row?.['PCBA desvinculada']);
+export function reuseExactId(row={},selected=''){
+  const kind=drillKind(selected),pcba=pcbaId(row),material=materialId(row),historical=historicalPcba(row);
+  if(kind==='correlation'&&material&&historical)return `${material} ↔ ${historical}`;
+  if(kind==='material')return material||pcba||historical||first(row.serial_number,row.sn);
+  return pcba||material||historical||first(row.serial_number,row.sn);
+}
+const reuseMeta=(row={},selected='')=>drillKind(selected)==='pcba'
+  ?first(row.defect_code,row['Defect Code'],row['Defect Code atual'],row.relation,row['Situação da PCBA'])
+  :first(row.item_type,row.material_type,row['Tipo material'],row.relation,row['Classificação desta PCBA'],row['Defect Code atual'],row.defect_code);
+export function reuseColumns(row={},selected=''){
+  const kind=drillKind(selected);
+  const priority={
+    pcba:['PCBA','PCBA atual','current_pcba_sn','pcba_sn','Defect Code','Defect Code atual','defect_code','Uso da PCBA na falha','Usos conhecidos da PCBA','Reusos anteriores da PCBA','Falhas anteriores 2114','Mesma falha anterior','Mesma família anterior','Situação da PCBA','Linha','Modelo'],
+    material:['Material SN','item_sn','material_sn','Tipo material','item_type','material_type','PCBA atual','current_pcba_sn','pcba_sn','PCBAs desvinculadas','previous_pcbas_json','PCBAs desvinculadas únicas','Uso material na falha','Reusos anteriores material','Usos conhecidos material','Reusos conhecidos material','PCBAs com mesma falha','PCBAs com mesma família','PCBAs com falha diferente','Defect Code atual','defect_code','Linha','Modelo'],
+    correlation:['Material SN','item_sn','material_sn','PCBA atual','current_pcba_sn','pcba_sn','PCBA desvinculada','historical_pcba','Estado vínculo atual','Classificação desta PCBA','Defect Code atual','Defect Code antigo','Defect Description antigo','Hist Seq','Linha','Modelo']
+  }[kind];
+  const keys=Object.keys(row).filter(key=>!key.startsWith('_'));
+  const ordered=[...priority,...keys].filter((key,index,list)=>Object.hasOwn(row,key)&&list.indexOf(key)===index);
+  return ordered.slice(0,16).map(key=>[key,key]);
+}
 
 export function createReuseConsoleView(root,store){
   let line=LINE_IDS[0],selected='',last='';
@@ -27,7 +51,7 @@ export function createReuseConsoleView(root,store){
     root.innerHTML=`<section class="mes-context-panel ames-reuse-head">${sectionHead('Dashboards de reuso','Área especializada. Segundo uso da própria PCBA e segundo uso de Material SN continuam conceitos separados.',`<label>Linha<select data-reuse-line>${lineOptions(line)}</select></label>`)}
       <div class="ames-summary-grid ames-reuse-summary">${kv('Snapshot',snapshot?.snapshot_id||'—',read.source||'sem fonte')}${kv('Grupos',groupCount)}${kv('Indicadores',kpiCount)}${kv('Drill-downs',drillCount,'itens exatos')}${kv('Linha',line,'isolada')}${kv('CPH',snapshot?.product_model||snapshot?.cph||'—','sem aproximação')}</div></section>
       ${!insights?'<div class="ames-empty ames-empty-large"><span>▥</span><h3>Reuso ainda não enriquecido nesta linha</h3><p>Execute Rastreabilidade em modo completo ou reuse_only. Ausência de dados não significa ausência de reutilização.</p></div>':Object.entries(groups).map(([group,pairs])=>`<section class="mes-context-panel ames-reuse-group">${sectionHead(groupLabel(group),'Clique apenas nos indicadores que possuem evidência exata carregada.')}<div class="ames-reuse-kpis">${(pairs||[]).map(([label,value])=>{const drill=INSIGHT_DRILL[label],available=Boolean(drill&&insights.drilldowns?.[drill]);return available?`<button type="button" class="stat ames-kpi-button${selected===drill?' active':''}" data-reuse-drill="${esc(drill)}"><span class="stat-label">${esc(label)}</span><strong class="stat-value">${esc(fmt(value))}</strong><span class="stat-note">Abrir SNs exatos →</span></button>`:`<div class="stat ames-kpi-disabled"><span class="stat-label">${esc(label)}</span><strong class="stat-value">${esc(fmt(value))}</strong><span class="stat-note">Drill-down não carregado nesta leitura</span></div>`}).join('')}</div></section>`).join('')}
-      ${selected?`<section class="mes-context-panel ames-selected-evidence">${sectionHead('ITEM EXATO EM EVIDÊNCIA',`${rows.length} registro(s) sustentam o indicador selecionado. Nenhum número fica sem mostrar a placa/material quando o drill-down existe.`,`<button type="button" class="button secondary" data-reuse-clear>Fechar evidência</button>`)}${rows.length?`<div class="ames-evidence-hero"><small>Primeiro item do conjunto</small><b>${esc(exactId(rows[0])||'Identificador não informado')}</b><span>${esc(rows[0].item_type||rows[0].defect_code||rows[0].relation||'')}</span></div>`:''}${rowsTable(rows,Object.keys(rows[0]||{}).filter(k=>!k.startsWith('_')).slice(0,12).map(k=>[k,k]),{empty:'O indicador existe, mas nenhum registro detalhado foi retornado nesta leitura.',highlight:(_,i)=>i===0})}</section>`:''}`;
+      ${selected?`<section class="mes-context-panel ames-selected-evidence">${sectionHead('ITEM EXATO EM EVIDÊNCIA',`${rows.length} registro(s) sustentam o indicador selecionado. Nenhum número fica sem mostrar a placa/material quando o drill-down existe.`,`<button type="button" class="button secondary" data-reuse-clear>Fechar evidência</button>`)}${rows.length?`<div class="ames-evidence-hero"><small>Primeiro item do conjunto</small><b>${esc(reuseExactId(rows[0],selected)||'Identificador não informado')}</b><span>${esc(reuseMeta(rows[0],selected))}</span></div>`:''}${rowsTable(rows,reuseColumns(rows[0]||{},selected),{empty:'O indicador existe, mas nenhum registro detalhado foi retornado nesta leitura.',highlight:(_,i)=>i===0})}</section>`:''}`;
     root.querySelector('[data-reuse-line]')?.addEventListener('change',e=>{line=e.target.value;selected='';last='';render();});
     root.querySelector('[data-reuse-clear]')?.addEventListener('click',()=>{selected='';last='';render();});
     for(const btn of root.querySelectorAll('[data-reuse-drill]'))btn.addEventListener('click',()=>{selected=btn.dataset.reuseDrill;last='';render();requestAnimationFrame(()=>root.querySelector('.ames-selected-evidence')?.scrollIntoView({behavior:'smooth',block:'start'}));});
