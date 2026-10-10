@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { withProcessCapability } from '../ames/console-capability-guard.mjs';
+import { withProcessCapability, applyMonitorProcessCapability } from '../ames/console-capability-guard.mjs';
 
 test('process_only is fail-closed when agent has no batch 3022 capability',()=>{
   const client=fs.readFileSync('ames/agent-client.mjs','utf8');
   assert.equal(typeof withProcessCapability,'function');
+  assert.equal(typeof applyMonitorProcessCapability,'function');
   assert.match(client,/value\.trace_mode==='process_only'/);
   assert.match(client,/capabilities\?\.process_timeline!==true/);
   assert.match(client,/process_only exige coleta 3022 em lote/);
@@ -18,6 +19,8 @@ test('UI explains partial 3022 instead of advertising unsupported collection',()
   assert.match(guard,/3022 será marcado como indisponível/);
   assert.match(guard,/consulta individual ainda pode tentar a tela 3022/i);
   assert.match(guard,/radio\.disabled=!ready/);
+  assert.match(guard,/Rastrear 3074 \+ 2114 · 3022 indisponível/);
+  assert.match(guard,/Atualiza 2114 e reuso 3074/);
   assert.match(css,/ames-capability-disabled/);
 });
 
