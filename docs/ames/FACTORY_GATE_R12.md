@@ -23,17 +23,24 @@ Checklist de preflight:
 
 ### Preview da branch e CORS local
 
-O preview físico usa a origem:
+Para o PR #23, usar preferencialmente o preview que estiver associado ao **SHA exato em validação**. As origens atualmente autorizadas são somente estas três:
 
-`https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app`
+- produção: `https://central-cora-v2.vercel.app`;
+- preview Vercel da branch: `https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app`;
+- deploy-preview do PR #23: `https://deploy-preview-23--productcontrolcenter.netlify.app`.
 
-O agente usa allowlist exata de origem. Antes do gate, se essa origem ainda não existir em `ames-agent/config.json`, executar o helper idempotente:
+Se o Vercel estiver bloqueado por cota/build-rate-limit, o deploy-preview do PR pode ser usado desde que o status do commit confirme que ele foi publicado para o SHA sob teste.
+
+O agente usa allowlist **exata** de origem. Antes do gate, se a origem escolhida ainda não existir em `ames-agent/config.json`, executar o helper idempotente:
 
 `scripts/ames-authorize-preview-origin.ps1`
 
+Sem parâmetro, ele prepara o deploy-preview atual do PR #23. Para outra origem aprovada, usar `-Origin` explicitamente.
+
 O helper:
 
-- aceita apenas origens `https://central-cora-v2*.vercel.app`;
+- aceita apenas as três origens exatas listadas acima;
+- não usa wildcard Vercel/Netlify;
 - altera somente `allowed_origins`;
 - cria backup antes da escrita;
 - grava UTF‑8 sem BOM;
@@ -44,7 +51,7 @@ O helper:
 
 ### Gate A — conexão e isolamento
 
-1. Abrir a Central preview.
+1. Abrir a Central preview ligada ao SHA em validação.
 2. Console MES → Monitoramento → Verificar.
 3. Confirmar no painel **Gate físico · posto de fábrica**:
    - agente conectado;
