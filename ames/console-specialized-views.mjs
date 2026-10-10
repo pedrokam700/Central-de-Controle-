@@ -76,17 +76,30 @@ export function createTraceConsoleView(root,store,client){
   return {render,clear(){root?.replaceChildren();mounted=false;evidence=undefined;}};
 }
 
+export function filterProcessScope(allContexts=[],allEvents=[],{pcba='',defect=''}={}){
+  const contexts=allContexts.filter(row=>(!pcba||row.pcba_sn===pcba)&&(!defect||row.defect_code===defect));
+  const pcbas=[...new Set(contexts.map(row=>row.pcba_sn).filter(Boolean))];
+  const pcbaSet=new Set(pcbas);
+  const events=allEvents.filter(row=>{
+    if(pcba&&row.pcba_sn!==pcba)return false;
+    if(defect&&!pcbaSet.has(row.pcba_sn))return false;
+    return true;
+  });
+  return {contexts,events,pcbas};
+}
+
 export function createProcessConsoleView(root,store){
   let line=LINE_IDS[0],pcba='',defect='',mounted=false,last='';
   function render(){
-    const snapshot=store.read(line).snapshot,process=snapshot?.process_timeline||{},allContexts=process.contexts||[],allEvents=process.events||[],contexts=allContexts.filter(r=>(!pcba||r.pcba_sn===pcba)&&(!defect||r.defect_code===defect)),events=allEvents.filter(r=>!pcba||r.pcba_sn===pcba);
-    const key=JSON.stringify([line,snapshot?.snapshot_id,pcba,defect,contexts.length,events.length]);if(key===last)return;last=key;
-    const codes=[...new Set(allContexts.map(r=>r.defect_code).filter(Boolean))],pcbas=[...new Set(allContexts.map(r=>r.pcba_sn).filter(Boolean))],withReference=contexts.filter(r=>r.reference_event_time).length,withAt=contexts.filter(r=>r.repair_action||r.return_a5201_event_time).length,multiPass=contexts.filter(r=>Number(r.reference_pass_count_before_defect||0)>1).length;
+    const snapshot=store.read(line).snapshot,process=snapshot?.process_timeline||{},allContexts=process.contexts||[],allEvents=process.events||[];
+    const {contexts,events,pcbas}=filterProcessScope(allContexts,allEvents,{pcba,defect});
+    const key=JSON.stringify([line,snapshot?.snapshot_id,pcba,defect,contexts.length,events.length,pcbas]);if(key===last)return;last=key;
+    const codes=[...new Set(allContexts.map(r=>r.defect_code).filter(Boolean))],withReference=contexts.filter(r=>r.reference_event_time).length,withAt=contexts.filter(r=>r.repair_action||r.return_a5201_event_time).length,multiPass=contexts.filter(r=>Number(r.reference_pass_count_before_defect||0)>1).length;
     root.innerHTML=`<section class="ames-process-toolbar mes-context-panel">${sectionHead('Leitura temporal 3022 / AT','Investigue a ocorrência pela falha, PCBA e posto relevante — sem confundir Defect Time com horário real de processo.')}<div class="mes-filters"><label>Linha<select data-process-line>${lineOptions(line)}</select></label><label>PCBA exata<input data-process-pcba value="${esc(pcba)}" placeholder="todas as PCBAs"></label><label>Falha<select data-process-defect><option value="">Todas as falhas</option>${codes.map(code=>`<option${code===defect?' selected':''}>${esc(code)}</option>`).join('')}</select></label></div></section>
-      <div class="ames-summary-grid ames-process-kpis">${kv('Contextos',contexts.length)}${kv('PCBAs no recorte',pcba?1:pcbas.length)}${kv('Com horário relevante',withReference)}${kv('Com AT / retorno',withAt)}${kv('Múltiplas passagens',multiPass)}${kv('Eventos 3022',events.length)}</div>
+      <div class="ames-summary-grid ames-process-kpis">${kv('Contextos',contexts.length)}${kv('PCBAs no recorte',pcbas.length)}${kv('Com horário relevante',withReference)}${kv('Com AT / retorno',withAt)}${kv('Múltiplas passagens',multiPass)}${kv('Eventos 3022',events.length)}</div>
       <div class="ames-rule-strip ames-rule-strip-strong"><b>Regra temporal obrigatória</b><span>ocorrência atual → Defect Time → posto relevante → última passagem concluída válida ≤ Defect Time</span><small>Nunca usar simplesmente o último evento da peça. A5700 fecha o conjunto de testes relevante; packing continua preservado, mas fora do foco analítico.</small></div>
       <section class="mes-context-panel ames-process-contexts">${sectionHead('Falha → evidência temporal / AT','Manual/Automatic é modo de registro da falha; retrabalho, A5162, A5201 e retornos continuam separados como evidência.')}${rowsTable(contexts,[['pcba_sn','PCBA'],['defect_code','Falha'],['defect_time','Defect Time'],['registration_mode','Manual/Automatic'],['failure_family','Família'],['reference_rule_id','Regra'],['reference_station_code','Posto relevante'],['reference_event_time','Horário relevante'],['reference_pass_count_before_defect','Passagens antes'],['repair_action','AT / ação'],['return_a5201_event_time','Retorno A5201'],['next_reference_event_time','Próx. posto'],['previous_operation_code','Processo anterior'],['previous_event_time','Horário anterior'],['status','Status']],{empty:'Nenhum contexto de falha/processo carregado neste recorte.'})}</section>
-      <details class="mes-context-panel ames-timeline-panel"${pcba?' open':''}><summary>Timeline 3022 carregada · ${events.length} evento(s)${pcba?` · ${esc(pcba)}`:''}</summary><div class="ames-timeline-note">A5100, A5150, A5162, A5201, A5202, A5265, A5700 e A7600 permanecem como postos relevantes conforme família/regra. Múltiplas passagens precisam preservar a ordem real.</div>${rowsTable(events,[['pcba_sn','PCBA'],['operation_code','Posto'],['operation_name','Processo'],['station','Station'],['event_time','Horário'],['event_group','Grupo'],['hist_seq','Hist Seq']],{empty:'Nenhum evento 3022 carregado para este recorte.'})}</details>`;
+      <details class="mes-context-panel ames-timeline-panel"${pcba||defect?' open':''}><summary>Timeline 3022 do recorte · ${events.length} evento(s)${pcba?` · ${esc(pcba)}`:''}${defect?` · falha ${esc(defect)}`:''}</summary><div class="ames-timeline-note">Quando há filtro de falha, a timeline mostra somente PCBAs pertencentes aos contextos dessa falha. A5100, A5150, A5162, A5201, A5202, A5265, A5700 e A7600 permanecem como postos relevantes conforme família/regra. Múltiplas passagens precisam preservar a ordem real.</div>${rowsTable(events,[['pcba_sn','PCBA'],['operation_code','Posto'],['operation_name','Processo'],['station','Station'],['event_time','Horário'],['event_group','Grupo'],['hist_seq','Hist Seq']],{empty:'Nenhum evento 3022 carregado para este recorte.'})}</details>`;
     root.querySelector('[data-process-line]').addEventListener('change',e=>{line=e.target.value;pcba='';defect='';last='';render();});
     root.querySelector('[data-process-pcba]').addEventListener('change',e=>{pcba=e.target.value.trim();last='';render();});
     root.querySelector('[data-process-pcba]').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.target.dispatchEvent(new Event('change',{bubbles:true}));}});
