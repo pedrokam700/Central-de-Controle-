@@ -7,6 +7,7 @@ const route=fs.readFileSync('tools/ames-workstation/ROTA_AMES_APLICAR.bat','utf8
 const diag=fs.readFileSync('tools/ames-workstation/DIAGNOSTICO_POSTO.ps1','utf8');
 const starter=fs.readFileSync('tools/ames-workstation/START_AGENT_CANONICAL.ps1','utf8');
 const entry=fs.readFileSync('ames/agent/agent_entry.py','utf8');
+const hardenedEntry=fs.readFileSync('ames/agent/agent_hardened_entry.py','utf8');
 const builder=fs.readFileSync('scripts/build-agent-candidate.py','utf8');
 
 test('launcher usa uma Central e um agente local',()=>{
@@ -32,12 +33,18 @@ test('launcher recupera auto-repair R11 quando .venv existe mas esta incompleto'
   assert.match(launcher,/01_INSTALAR_UMA_VEZ\.bat" \/auto/);
 });
 
-test('agente ativo precisa ser da mesma pasta do pacote',()=>{
+test('agente ativo precisa ser da mesma pasta, build canonico e hardening H1',()=>{
   assert.match(entry,/"package_root":str\(a\.BASE_DIR\.parent\.resolve\(\)\)/);
   assert.match(starter,/package_root/);
   assert.match(starter,/\$actual -ieq \$expected/);
   assert.match(starter,/Stop-AgentOn8765/);
   assert.match(starter,/agent_build -like 'CANONICAL-\*'/);
+  assert.match(starter,/agent_hardened_entry\.py/);
+  assert.match(starter,/api\/v1\/hardening\/health/);
+  assert.match(starter,/schema_version/);
+  assert.match(starter,/SQLite=\$\(\$hard\.integrity\)/);
+  assert.match(hardenedEntry,/hardening\.install/);
+  assert.match(hardenedEntry,/HardenedHandler/);
 });
 
 test('rota A-MES e temporaria e nao troca gateway padrao',()=>{
@@ -55,8 +62,8 @@ test('bootstrap nao armazena segredos e falha fechado em servico desconhecido',(
   assert.match(diag,/nao le nem imprime senha A-MES/i);
 });
 
-test('candidate builder inclui ferramentas de posto',()=>{
-  for(const name of ['INICIAR_POSTO_CENTRAL_V2.bat','ROTA_AMES_APLICAR.bat','ROTA_AMES_REMOVER.bat','START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1']){
+test('candidate builder inclui ferramentas de posto e hardening',()=>{
+  for(const name of ['INICIAR_POSTO_CENTRAL_V2.bat','ROTA_AMES_APLICAR.bat','ROTA_AMES_REMOVER.bat','START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','agent_hardened_entry.py','hardening.py']){
     assert.ok(builder.includes(name),`builder nao inclui ${name}`);
   }
 });
