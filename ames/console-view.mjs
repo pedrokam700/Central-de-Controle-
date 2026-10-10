@@ -4,15 +4,16 @@ import { createAdvancedView } from './advanced-view.mjs';
 import { createLineOverview, createTop3ParityView, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
 import { createSnConsoleView, createTraceConsoleView, createProcessConsoleView } from './console-specialized-views.mjs';
 import { createReuseConsoleView, createBaseConsoleView, createKnowledgeConsoleView } from './console-wave3-views.mjs';
+import { withProcessCapability } from './console-capability-guard.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
   ['top3','↗','Top 3 & FPY','Top 3 & FPY','FPY, Check FPY, Quantity e Top 3 sempre separados por linha.'],
   ['failures','!','Falhas','Falhas','Ocorrências atuais, estados de reparo e histórico operacional.'],
-  ['sn','⌕','Consulta por SN','Consulta por SN','Investigação de PCBA ou Material SN com 3074, 2114 e 3022.'],
-  ['trace','⌘','Rastreabilidade','Rastreabilidade','Coleta seletiva full, process_only ou reuse_only sem misturar linhas.'],
+  ['sn','⌕','Consulta por SN','Consulta por SN','Investigação de PCBA ou Material SN com 3074, 2114 e 3022 quando a fonte estiver disponível.'],
+  ['trace','⌘','Rastreabilidade','Rastreabilidade','Coleta seletiva full, process_only ou reuse_only sem misturar linhas e respeitando capacidades do agente.'],
   ['reuse','▥','Dashboards de reuso','Dashboards de reuso','Segundo uso de PCBA e Material SN, recorrência e vínculos históricos.'],
-  ['process','≡','Processo / 3022 & AT','Processo / 3022 & AT','Timeline de montagem, teste, detecção, AT e retorno à linha.'],
+  ['process','≡','Processo / 3022 & AT','Processo / 3022 & AT','Timeline de montagem, teste, detecção, AT e retorno à linha quando 3022 estiver disponível.'],
   ['base','▦','Base local','Base local','SQLite e datasets locais preservados para consulta e auditoria.'],
   ['knowledge','C','CORA conhecimento','CORA · conhecimento','Busca operacional com separação entre fato, correlação, hipótese e causa confirmada.']
 ]);
@@ -71,10 +72,10 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       view={render(){primary.render();trend.render();},clear(){primary.clear?.();trend.clear?.();pane.replaceChildren();}};
     }
     else if(id==='failures')view=createFailuresParityView(pane,store,client);
-    else if(id==='sn')view=createSnConsoleView(pane,store,client);
-    else if(id==='trace')view=createTraceConsoleView(pane,store,client);
+    else if(id==='sn')view=withProcessCapability(createSnConsoleView(pane,store,client),pane,store,'sn');
+    else if(id==='trace')view=withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace');
     else if(id==='reuse')view=createReuseConsoleView(pane,store);
-    else if(id==='process')view=createProcessConsoleView(pane,store);
+    else if(id==='process')view=withProcessCapability(createProcessConsoleView(pane,store),pane,store,'process');
     else if(id==='base')view=createBaseConsoleView(pane,store,client);
     else if(id==='knowledge')view=createKnowledgeConsoleView(pane,client);
     views.set(id,view);return view;
