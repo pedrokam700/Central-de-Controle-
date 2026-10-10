@@ -5,6 +5,7 @@ import { createLineOverview, createTop3ParityView, createTrendAddon, createFailu
 import { createSnConsoleView, createTraceConsoleView, createProcessConsoleView } from './console-specialized-views.mjs';
 import { createReuseConsoleView, createBaseConsoleView, createKnowledgeConsoleView } from './console-wave3-views.mjs';
 import { withProcessCapability, applyMonitorProcessCapability } from './console-capability-guard.mjs';
+import { createMonitorRuntimeView } from './console-monitor-runtime.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
@@ -68,12 +69,13 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     if(views.has(id))return views.get(id);
     const pane=root.querySelector(`[data-console-pane="${id}"]`);let view;
     if(id==='monitor'){
-      pane.innerHTML='<section data-monitor-main></section><section data-monitor-lines></section><section data-monitor-tools></section>';
+      pane.innerHTML='<section data-monitor-main></section><section data-monitor-runtime></section><section data-monitor-lines></section><section data-monitor-tools></section>';
       const monitorRoot=pane.querySelector('[data-monitor-main]');
       const primary=createAutomationView(monitorRoot,store,client);
+      const runtime=createMonitorRuntimeView(pane.querySelector('[data-monitor-runtime]'),store);
       const lineBoard=createLineOverview(pane.querySelector('[data-monitor-lines]'),store,client);
       const tools=createAdvancedView(pane.querySelector('[data-monitor-tools]'),store,client);
-      view={render(){primary.render();applyMonitorProcessCapability(monitorRoot,store);lineBoard.render();tools.render();},clear(){primary.clear?.();lineBoard.clear?.();tools.clear?.();pane.replaceChildren();}};
+      view={render(){primary.render();applyMonitorProcessCapability(monitorRoot,store);runtime.render();lineBoard.render();tools.render();},clear(){primary.clear?.();runtime.clear?.();lineBoard.clear?.();tools.clear?.();pane.replaceChildren();}};
     }
     else if(id==='top3'){
       pane.innerHTML='<section data-top3-main></section><section data-top3-trend></section>';
