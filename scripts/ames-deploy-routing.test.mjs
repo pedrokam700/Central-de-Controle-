@@ -1,0 +1,39 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+
+const canonical='/Central-de-Controle-/';
+
+test('Vercel e Netlify publicam a mesma base canônica sem servir HTML órfão',()=>{
+  const vercel=JSON.parse(fs.readFileSync('vercel.json','utf8'));
+  const netlify=fs.readFileSync('netlify.toml','utf8');
+  assert.equal(vercel.outputDirectory,'dist');
+  assert(vercel.redirects.some(r=>r.source==='/'&&r.destination===canonical));
+  assert.match(netlify,/publish\s*=\s*"dist"/);
+  assert.match(netlify,/from\s*=\s*"\/"[\s\S]*to\s*=\s*"\/Central-de-Controle-\/"/);
+  assert.match(netlify,/from\s*=\s*"\/Central-de-Controle-\/"[\s\S]*to\s*=\s*"\/Central-de-Controle-\/index\.html"/);
+});
+
+test('build estático garante app.js no mesmo base path e bloqueia submit silencioso se o runtime falhar',()=>{
+  const out=fs.mkdtempSync(path.join(os.tmpdir(),'central-static-'));
+  try{
+    const run=spawnSync(process.execPath,['scripts/build-static.mjs'],{cwd:process.cwd(),encoding:'utf8',env:{...process.env,CENTRAL_STATIC_OUT:out,COMMIT:'TEST-SHA',BRANCH:'test'}});
+    assert.equal(run.status,0,run.stderr||run.stdout);
+    const base=path.join(out,'Central-de-Controle-');
+    assert.equal(fs.existsSync(path.join(base,'index.html')),true);
+    assert.equal(fs.existsSync(path.join(base,'app.js')),true);
+    const html=fs.readFileSync(path.join(base,'index.html'),'utf8');
+    assert.match(html,/id="central-runtime-boot-guard"/);
+    assert.match(html,/window\.__centralLoginModuleReady/);
+    assert.match(html,/form\.addEventListener\('submit'/);
+    assert.match(html,/event\.preventDefault\(\)/);
+    assert.match(html,/src="\/Central-de-Controle-\/app\.js\?v=15\.1\.13\.48"/);
+    const release=JSON.parse(fs.readFileSync(path.join(out,'release-build.json'),'utf8'));
+    assert.equal(release.sha,'TEST-SHA');
+  }finally{
+    fs.rmSync(out,{recursive:true,force:true});
+  }
+});
