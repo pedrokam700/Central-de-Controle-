@@ -78,5 +78,7 @@ test('offline package contains native parity modules and no parallel V0.5.23 run
   const build=fs.readFileSync('scripts/build-static.mjs','utf8');
   for(const asset of ['console-legacy-parity.mjs','console-legacy.css','console-wave2.css','console-wave3.css','console-specialized-views.mjs','console-wave3-views.mjs','central-mes-context.mjs','central-mes-context.css']) assert.match(sw,new RegExp(`ames\\/${asset.replaceAll('.','\\.')}`));
   assert.doesNotMatch(sw,/v0523-loader|ames\/v0523/);
-  assert.match(build,/name==='ames\/v0523'/);
+  assert.doesNotMatch(build,/v0523-loader|ames\/v0523/);
+  assert.equal(fs.existsSync('ames/v0523-loader.mjs'),false);
+  assert.equal(fs.existsSync('ames/v0523'),false);
 });
