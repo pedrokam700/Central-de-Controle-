@@ -2,10 +2,8 @@ import { createAgentClient } from './agent-client.mjs';
 import { createAutomationView } from './automation-view.mjs';
 import { createAdvancedView } from './advanced-view.mjs';
 import { createLineOverview, createTop3ParityView, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
-import {
-  createSnConsoleView, createTraceConsoleView, createReuseConsoleView,
-  createProcessConsoleView, createBaseConsoleView, createKnowledgeConsoleView
-} from './console-specialized-views.mjs';
+import { createSnConsoleView, createTraceConsoleView, createProcessConsoleView } from './console-specialized-views.mjs';
+import { createReuseConsoleView, createBaseConsoleView, createKnowledgeConsoleView } from './console-wave3-views.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
@@ -21,6 +19,7 @@ const VIEWS = Object.freeze([
 
 const STYLE_HREF = new URL('./console-legacy.css', import.meta.url).href;
 const WAVE2_STYLE_HREF = new URL('./console-wave2.css', import.meta.url).href;
+const WAVE3_STYLE_HREF = new URL('./console-wave3.css', import.meta.url).href;
 
 // Fusão nativa definitiva do Console MES: uma sessão, um state.ames, um agent client.
 // A V0.5.22/V0.5.23/R12 permanece como referência visual/operacional, nunca como app paralelo.
@@ -31,7 +30,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
 
   const meta=()=>VIEWS.find(([id])=>id===active)||VIEWS[0];
   function mount(){
-    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
+    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
       <aside class="ames-legacy-sidebar">
         <div class="ames-legacy-brand"><div class="ames-legacy-brand-row"><div class="ames-legacy-mark">Q</div><div><strong>Central de trabalho</strong><span>A-MES · motor local integrado</span></div></div></div>
         <nav class="ames-legacy-nav" aria-label="Views da automação A-MES">${VIEWS.map(([id,icon,label])=>`<button type="button" data-console-view="${id}"${id===active?' class="active"':''}><span class="ico">${icon}</span>${label}</button>`).join('')}</nav>
