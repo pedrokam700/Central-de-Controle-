@@ -1,5 +1,6 @@
 @import url('./console-r12-fidelity.css');
 @import url('./console-monitor-runtime.css');
+@import url('./console-knowledge-architecture.css');
 .ames-mobile-backdrop{display:none;border:0;padding:0;margin:0;background:transparent}
 @media(max-width:760px){
   .ames-legacy-shell,.ames-legacy-main,.ames-legacy-sidebar{height:100dvh;min-height:100dvh}
