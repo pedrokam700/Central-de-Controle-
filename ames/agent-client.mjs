@@ -142,7 +142,6 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       else if(name==='setup')result=await request('/config',value.config);
       else if(name==='jobs')result=await request('/jobs');
       else if(name==='monitor')result=await request('/monitor');
-      else if(name==='preflight')result=await request('/preflight');
       else throw Error('Operação desconhecida');
       publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(name==='setup'?{config:{...store.agent().config,...value.config}}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
