@@ -40,7 +40,7 @@ test('offline native imports and versioned CSS resolve canonical static precache
   // Primeiro install válido é online para permitir o cache dos SDKs Firebase exatos;
   // a opção offline abaixo representa a perda de internet depois desse bootstrap.
   const h=harness({offline:true});await h.lifecycle('install');assert(h.activated());
-  for(const path of ['app.js?v=15.1.13.48','ames/console-view.mjs','ames/data/capabilities.mjs','mobile.css?v=15.1.13.48','ames/releases/latest/release.json']){
+  for(const path of ['', 'app.js?v=15.1.13.48','ames/console-view.mjs','ames/data/capabilities.mjs','mobile.css?v=15.1.13.48','ames/releases/latest/release.json']){
     const res=await h.request(base+path);assert.equal(res.status,200);assert.match(await res.text(),/^cached/);
   }
   h.entries.delete(base+'ames/console-view.mjs');const missing=await h.request(base+'ames/console-view.mjs');assert.equal(missing.status,504);assert.doesNotMatch(await missing.text(),/index.html/);
