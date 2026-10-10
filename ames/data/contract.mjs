@@ -29,6 +29,7 @@ const text = value => typeof value === 'string' ? value : '';
 const identifier = value => typeof value === 'string' ? value.trim() : Number.isSafeInteger(value) ? String(value) : '';
 const count = value => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 const percent = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+const presence = value => value === false || value === 0 || value === '0' ? false : value === true || value === 1 || value === '1' ? true : null;
 
 export function immutable(value) {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -62,6 +63,7 @@ export function normalizeLegacySnapshot(payload) {
       line_id: line,
       snapshot_id: snapshotId,
       source_view: '3028',
+      defect_key: identifier(row.defect_key) || null,
       pcba_sn: text(row.pcba_sn).trim(),
       product_model: text(row.product_model),
       product_key: productKey(row.product_model),
@@ -69,8 +71,19 @@ export function normalizeLegacySnapshot(payload) {
       defect_desc: text(row.defect_desc),
       defect_time: text(row.defect_time),
       defect_time_ms: instant(row.defect_time),
-      repair_status: text(row.repair_status_current || row.repair_state_current),
-      defect_type: text(row.defect_type_current),
+      defect_oper: text(row.defect_oper),
+      registration_mode: text(row.registration_mode || row.manual_or_auto || row['Manual/Automatic']),
+      manual_or_auto: text(row.manual_or_auto || row.registration_mode || row['Manual/Automatic']),
+      repair_status: text(row.repair_status_current || row.repair_state_current || row.repair_status),
+      defect_type: text(row.defect_type_current || row.defect_type),
+      repair_user: text(row.repair_user),
+      repair_comment: text(row.repair_comment),
+      defect_reason_type: text(row.defect_reason_type),
+      defect_reason_desc: text(row.defect_reason_desc),
+      repair_code: text(row.repair_code),
+      repair_desc: text(row.repair_desc),
+      work_shift: text(row.work_shift),
+      present_in_3028: presence(row.present_in_3028),
       raw_ref: null,
       evidence_status: 'source_observation'
     });
