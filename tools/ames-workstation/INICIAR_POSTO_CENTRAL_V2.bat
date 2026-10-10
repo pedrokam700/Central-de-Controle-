@@ -6,14 +6,31 @@ set "ROOT=%~dp0"
 if exist "%ROOT%..\..\ames-agent\agent.py" set "ROOT=%ROOT%..\..\"
 for %%I in ("%ROOT%.") do set "ROOT=%%~fI\"
 
-set "CENTRAL=https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app/Central-de-Controle-/"
-if /I "%~1"=="/prod" set "CENTRAL=https://central-cora-v2.vercel.app/Central-de-Controle-/"
+set "CENTRAL="
+set "EXPECTED_FRONTEND_SHA="
+if /I "%~1"=="/prod" (
+  set "CENTRAL=https://central-cora-v2.vercel.app/Central-de-Controle-/"
+) else if exist "%ROOT%FRONTEND_GATE.json" (
+  for /f "usebackq delims=" %%S in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$g=ConvertFrom-Json (Get-Content -Raw (Join-Path $env:ROOT 'FRONTEND_GATE.json'));Write-Output ([string]$g.expected_sha)"`) do set "EXPECTED_FRONTEND_SHA=%%S"
+  for /f "usebackq delims=" %%U in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$gate=ConvertFrom-Json (Get-Content -Raw (Join-Path $env:ROOT 'FRONTEND_GATE.json'));$state=Join-Path $env:ROOT 'FRONTEND_GATE_STATE.json';foreach($candidate in @($gate.preview_urls)){try{$base=([string]$candidate).TrimEnd('/');$probe=$base+'/release-build.json?gate='+[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();$r=Invoke-RestMethod $probe -TimeoutSec 8;if([string]$r.sha -eq [string]$gate.expected_sha){$j=ConvertTo-Json @{expected_sha=[string]$gate.expected_sha;url=$base;validated_at=(Get-Date).ToUniversalTime().ToString('o')} -Compress;Set-Content -Path $state -Value $j -Encoding UTF8;Write-Output ($base+'/Central-de-Controle-/');exit 0}}catch{}};if(Test-Path $state){try{$s=ConvertFrom-Json (Get-Content -Raw $state);$u=([string]$s.url).TrimEnd('/');if([string]$s.expected_sha -eq [string]$gate.expected_sha -and @($gate.preview_urls) -contains $u){Write-Output ($u+'/Central-de-Controle-/');exit 0}}catch{}};exit 3"`) do set "CENTRAL=%%U"
+  if not defined CENTRAL (
+    echo [ERRO] Nenhum preview com o SHA exato %EXPECTED_FRONTEND_SHA% esta acessivel e nao existe preview previamente validado neste posto.
+    echo        Conecte a internet normal e tente novamente. A coleta nao sera iniciada em frontend diferente do pacote.
+    goto :fail
+  )
+) else (
+  rem Candidatos antigos sem manifesto de gate mantem o preview historico; o
+  rem bundle R12 atual sempre inclui FRONTEND_GATE.json e usa verificacao exata.
+  set "CENTRAL=https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app/Central-de-Controle-/"
+)
 
 echo ============================================================
 echo   CENTRAL V2 + A-MES - INICIAR POSTO
 echo ============================================================
 echo Arquitetura: Central web ^+ um agente local ^+ um Chrome/CDP.
 echo Nenhuma senha A-MES/Wi-Fi e armazenada por este launcher.
+if defined EXPECTED_FRONTEND_SHA echo Frontend exigido: %EXPECTED_FRONTEND_SHA%
+echo Central selecionada: %CENTRAL%
 echo.
 
 if not exist "%ROOT%.venv\Scripts\python.exe" (
@@ -94,11 +111,13 @@ start "" "%CENTRAL%"
 echo.
 echo [OK] Posto iniciado.
 echo - Central: %CENTRAL%
+if defined EXPECTED_FRONTEND_SHA echo - Frontend esperado: %EXPECTED_FRONTEND_SHA%
 echo - Agente local: http://127.0.0.1:8765
 echo - Chrome A-MES: perfil dedicado / CDP 9222
 echo - O login do A-MES continua manual.
-echo - Se a internet externa cair depois do primeiro carregamento/cache valido,
-echo   a coleta local continua; a Central usa cache e o Firebase sincroniza ao voltar.
+echo - Se a internet externa cair depois de um preview validado/cache valido,
+echo   o launcher reutiliza somente a mesma origem/SHA; a coleta local continua
+echo   e o Firebase sincroniza ao voltar.
 exit /b 0
 
 :depscheck
