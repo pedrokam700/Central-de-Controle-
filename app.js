@@ -11,6 +11,7 @@
     import { MES_REASONING_RULES } from './ames/data/cora.mjs';
     import { createOnboardingView, savedIntegrationMode } from './ames/onboarding-view.mjs';
     import {createOfflineOutbox,createBrowserOutboxStorage} from './core/offline-outbox.mjs';
+    import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction
@@ -362,10 +363,8 @@
       unsubscribeData = [];
     }
 
-    function legacyUsers() {
-      try { return JSON.parse(localStorage.getItem('controleFalhas.users.v1') || '[]') || []; }
-      catch { return []; }
-    }
+    const legacyUserMetadata=sanitizeLegacyUserMetadata(localStorage);
+    function legacyUsers() { return legacyUserMetadata; }
 
     function legacyState() {
       try { return JSON.parse(localStorage.getItem('controleFalhas.v2') || 'null'); }
@@ -384,7 +383,7 @@
           docId: firebaseUser.uid,
           name: data.name || legacy?.name || firebaseUser.displayName || email.split('@')[0],
           email: data.email || email,
-          role: data.role || (isAdminEmail ? 'admin' : legacy?.role || 'user'),
+          role: data.role || (isAdminEmail ? 'admin' : 'user'),
           disabled: Boolean(data.disabled),
           createdAt: data.createdAt || now(),
           updatedAt: data.updatedAt || now()
@@ -394,7 +393,7 @@
       const profile = {
         name: legacy?.name || firebaseUser.displayName || email.split('@')[0],
         email,
-        role: isAdminEmail ? 'admin' : (legacy?.role || 'user'),
+        role: isAdminEmail ? 'admin' : 'user',
         disabled: false,
         createdAt: now(),
         updatedAt: now()
@@ -1410,19 +1409,8 @@
         }
         setLoginStatus('Validando acesso...', 'info');
         try {
-          let credential;
-          try {
-            credential = await signInWithEmailAndPassword(auth, email, password);
-          } catch (error) {
-            const legacy = legacyUsers().find(u => String(u.email || '').toLowerCase() === email);
-            if (['auth/user-not-found','auth/invalid-credential','auth/invalid-login-credentials'].includes(error?.code)
-                && legacy && legacy.password === password) {
-              credential = await createUserWithEmailAndPassword(auth, email, password);
-            } else {
-              throw error;
-            }
-          }
-          const legacy = legacyUsers().find(u => String(u.email || '').toLowerCase() === email);
+          const credential = await signInWithEmailAndPassword(auth, email, password);
+          const legacy = findLegacyUserMetadata(legacyUsers(), email);
           const account = await finishLogin(credential.user, legacy);
           if (!account || currentAccount?.uid !== credential.user.uid) {
             const sessionError = new Error('O Firebase autenticou a conta, mas a sessão da Central não foi concluída.');
@@ -1568,7 +1556,7 @@
         return;
       }
       try {
-        const legacyUser = legacyUsers().find(u => (u.email || '').toLowerCase() === (firebaseUser.email || '').toLowerCase());
+        const legacyUser = findLegacyUserMetadata(legacyUsers(), firebaseUser.email);
         await finishLogin(firebaseUser, legacyUser);
       } catch (error) {
         console.error(error);
