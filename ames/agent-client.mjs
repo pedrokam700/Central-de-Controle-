@@ -58,7 +58,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         const summary={line:entry.line,snapshot_id:entry.snapshot_id,collected_at:entry.collected_at,defect_rows:entry.defect_rows,fpy:entry.metrics?.fpy,check_fpy:entry.metrics?.check_fpy,quantity:entry.metrics?.quantity};
         if(!LINE_IDS.includes(summary.line)||!summary.snapshot_id)continue;
         const q=`&line=${encodeURIComponent(summary.line)}&snapshot_id=${encodeURIComponent(summary.snapshot_id)}&limit=100000`;
-        const names=['defects','pcba_history','material_reuse','history_contexts','process_events','process_defect_contexts'];
+        const names=['defects','removed_defects','pcba_history','material_reuse','history_contexts','process_events','process_defect_contexts'];
         const data=await Promise.all(names.map(async name=>[name,(await request('/base?dataset='+name+q)).rows]));
         const datasets=Object.fromEntries(data);
         let insights;
