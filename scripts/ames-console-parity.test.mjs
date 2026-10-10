@@ -34,7 +34,7 @@ test('Wave 1 preserves R12 operational structure without simplifying it',()=>{
   const parity=fs.readFileSync('ames/console-legacy-parity.mjs','utf8');
   const automation=fs.readFileSync('ames/automation-view.mjs','utf8');
   const advanced=fs.readFileSync('ames/advanced-view.mjs','utf8');
-  for(const text of ['Central das Linhas','Atualizar todas','Atualizar esta linha','Top 3 defeitos','Ocorrências da leitura','Evolução do dia','SN, código ou descrição','Repair N','Repair Y','Removida do export']) assert.match(parity,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['Central das Linhas','Atualizar todas','Atualizar esta linha','Top 3 defeitos','Ocorrências da leitura','Evolução do dia','SN, código, descrição, reparo','Repair N','Repair Y','Removida do export']) assert.match(parity,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   for(const text of ['Atualizar dia anterior','Atualizar agora','Iniciar monitoramento','Rastrear 3074 + 2114 + 3022','Atualizar N/Y','Baixar Excel']) assert.match(automation,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   for(const text of ['Catálogo','Tendências da linha','Backup local','Abrir Chrome/CDP','Histórico de jobs','Importações existentes','Configuração do posto']) assert.match(advanced,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
 });
