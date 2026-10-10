@@ -1,3 +1,4 @@
+@import url('./console-r12-fidelity.css');
 .ames-mobile-backdrop{display:none;border:0;padding:0;margin:0;background:transparent}
 @media(max-width:760px){
   .ames-legacy-shell,.ames-legacy-main,.ames-legacy-sidebar{height:100dvh;min-height:100dvh}
