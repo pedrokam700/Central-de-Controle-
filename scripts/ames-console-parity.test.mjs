@@ -15,6 +15,7 @@ test('Console MES is one native full-screen shell over state.ames',()=>{
   assert.match(source,/createTop3ParityView/);
   assert.match(source,/createTrendAddon/);
   assert.match(source,/createFailuresParityView/);
+  assert.match(source,/withProcessCapability/);
   for(const fn of ['createSnConsoleView','createTraceConsoleView','createReuseConsoleView','createProcessConsoleView','createBaseConsoleView','createKnowledgeConsoleView']) assert.match(source,new RegExp(fn));
   assert.match(css,/\.ames-legacy-shell\{[^}]*position:fixed;inset:0;z-index:1200/);
   assert.match(css,/grid-template-columns:176px minmax\(0,1fr\)/);
@@ -49,6 +50,14 @@ test('Wave 2 keeps SN trace and 3022 as one native investigation flow',()=>{
   assert.match(css,/\.ames-process-kpis/);
 });
 
+test('3022 modes are capability-gated instead of being falsely advertised',()=>{
+  const guard=fs.readFileSync('ames/console-capability-guard.mjs','utf8');
+  const css=fs.readFileSync('ames/console-wave2.css','utf8');
+  for(const text of ['process_timeline','process_only','3022 em lote indisponível neste agente','3022 será marcado como indisponível','agente 3022-R12+','evidência retornada pela fonte']) assert.match(guard,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(guard,/radio\.disabled=!ready/);
+  assert.match(css,/\.ames-mode-card\.ames-capability-disabled/);
+});
+
 test('Wave 3 keeps reuso Base local and CORA native and evidence-first',()=>{
   const views=fs.readFileSync('ames/console-wave3-views.mjs','utf8');
   const css=fs.readFileSync('ames/console-wave3.css','utf8');
@@ -76,7 +85,7 @@ test('Wave 4 projects MES into Central pages without merging reuse dashboard int
 test('offline package contains native parity modules and no parallel V0.5.23 runtime',()=>{
   const sw=fs.readFileSync('sw.js','utf8');
   const build=fs.readFileSync('scripts/build-static.mjs','utf8');
-  for(const asset of ['console-legacy-parity.mjs','console-legacy.css','console-wave2.css','console-wave3.css','console-specialized-views.mjs','console-wave3-views.mjs','central-mes-context.mjs','central-mes-context.css']) assert.match(sw,new RegExp(`ames\\/${asset.replaceAll('.','\\.')}`));
+  for(const asset of ['console-legacy-parity.mjs','console-legacy.css','console-wave2.css','console-wave3.css','console-specialized-views.mjs','console-wave3-views.mjs','console-capability-guard.mjs','central-mes-context.mjs','central-mes-context.css']) assert.match(sw,new RegExp(`ames\\/${asset.replaceAll('.','\\.')}`));
   assert.doesNotMatch(sw,/v0523-loader|ames\/v0523/);
   assert.doesNotMatch(build,/v0523-loader|ames\/v0523/);
   assert.equal(fs.existsSync('ames/v0523-loader.mjs'),false);
