@@ -46,11 +46,9 @@ try{
  const authA={currentUser:{uid:'E2E'}},dbA=env.authenticatedContext('E2E').firestore(),remoteA=firestoreTransport({...fb,db:dbA,auth:authA});
  const queueData=new Map(),queue={put:async e=>queueData.set(e.id,e),remove:async id=>queueData.delete(id),list:async uid=>[...queueData.values()].filter(e=>e.uid===uid)};
  let online=false;sync=createMesSync(state.ames,remoteA,{queue,online:()=>online});sync.start('E2E');await sync.capture();assert.equal(queueData.size,3);online=true;await sync.retry();assert.equal(queueData.size,0);
- // Mesmo usuário, outro PC.
  const sameAccount=createAmesStore(),sameReader=createMesSync(sameAccount,remoteA,{queue,online:()=>false});sameReader.start('E2E');await eventually(()=>!!sameAccount.read(scope.lines[0]).snapshot,'same-account remote PC');assert.equal(sameAccount.read(scope.lines[0]).snapshot.revision,after.revision);sameReader.stop();
- // Usuário diferente da mesma Central lê somente o snapshot sanitizado já publicado.
  const authB={currentUser:{uid:'OTHER'}},dbB=env.authenticatedContext('OTHER').firestore(),remoteB=firestoreTransport({...fb,db:dbB,auth:authB});
- const teammate=createAmesStore();reader=createMesSync(teammate,remoteB,{queue,online:()=>false});reader.start('OTHER');await eventually(()=>!!teammate.read(scope.lines[0]).snapshot,'teammate remote PC');assert.equal(teammate.read(scope.lines[0]).snapshot.revision,after.revision);assert.equal(teammate.read(scope.lines[0]).source,'sync');
+ const teammate=createAmesStore();reader=createMesSync(teammate,remoteB,{queue,online:()=>false});reader.start('OTHER');await eventually(()=>!!teammate.read(scope.lines[0]).snapshot,'teammate remote PC');assert.equal(teammate.read(scope.lines[0]).snapshot.revision,after.revision);assert.equal(teammate.read(scope.lines[0]).source,'remote');
  reader.stop();teammate.clear();assert.equal(teammate.read(scope.lines[0]).snapshot,null);
  const id=first.id;await stop();await start();const restored=await api('/sn-lookup',request);assert.equal(restored.id,id);assert.equal((await api('/v2/capabilities')).source_id,after.source_id);
  client.clear();state.ames.clear();assert.equal(state.ames.read(scope.lines[0]).snapshot,null);assert.deepEqual(state.reports,[{id:'manual'}]);
