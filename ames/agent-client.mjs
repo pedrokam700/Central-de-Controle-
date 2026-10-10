@@ -58,13 +58,15 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         const summary={line:entry.line,snapshot_id:entry.snapshot_id,collected_at:entry.collected_at,defect_rows:entry.defect_rows,fpy:entry.metrics?.fpy,check_fpy:entry.metrics?.check_fpy,quantity:entry.metrics?.quantity};
         if(!LINE_IDS.includes(summary.line)||!summary.snapshot_id)continue;
         const q=`&line=${encodeURIComponent(summary.line)}&snapshot_id=${encodeURIComponent(summary.snapshot_id)}&limit=100000`;
-        const names=['defects','removed_defects','pcba_history','material_reuse','history_contexts','process_events','process_defect_contexts'];
+        const names=['defects','pcba_history','material_reuse','history_contexts','process_events','process_defect_contexts'];
         const data=await Promise.all(names.map(async name=>[name,(await request('/base?dataset='+name+q)).rows]));
-        const datasets=Object.fromEntries(data);
+        const datasets=Object.fromEntries(data);let removedDefectsAvailable=true;
+        try{datasets.removed_defects=(await request('/base?dataset=removed_defects'+q)).rows||[];}
+        catch(error){if(error.name==='AbortError')throw error;removedDefectsAvailable=false;datasets.removed_defects=[];}
         let insights;
         try {insights=await request(`/insights?line=${encodeURIComponent(summary.line)}&snapshot_id=${encodeURIComponent(summary.snapshot_id)}`);}
         catch(error){if(error.name==='AbortError')throw error;publish({error:'Indicadores de reuso indisponíveis: '+error.message});}
-        payloads.push({schema:'central-agent-read-v1',legacy:{schema:LEGACY_SCHEMA,line:summary.line,summary,generated_at:before.generated_at,defects:datasets.defects||[]},datasets,insights});
+        payloads.push({schema:'central-agent-read-v1',legacy:{schema:LEGACY_SCHEMA,line:summary.line,summary,generated_at:before.generated_at,defects:datasets.defects||[]},datasets,removed_defects_available:removedDefectsAvailable,insights});
       }
       const after=await request('/team-dashboard');
       const signature=x=>JSON.stringify((x.lines||[]).map(r=>[r.line,r.snapshot_id,r.collected_at]));
