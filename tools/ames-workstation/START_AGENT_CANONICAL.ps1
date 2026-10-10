@@ -27,6 +27,14 @@ function Stop-AgentOn8765 {
   }
 }
 
+function Get-HardeningHealth {
+  try {
+    $hh=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -TimeoutSec 2
+    if($hh.ok -and [string]$hh.hardening -eq 'H1' -and [string]$hh.integrity -eq 'ok' -and [int]$hh.schema_version -ge 1){return $hh}
+  } catch {}
+  return $null
+}
+
 try{
   $h=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 2
   if($h.ok){
@@ -36,11 +44,12 @@ try{
     $versionOk=([string]$h.candidate_version -like '0.5.24*' -or [string]$h.candidate_version -like '0.5.25*')
     $buildOk=([string]$h.agent_build -like 'CANONICAL-*')
     $rootOk=($actual -and $actual -ieq $expected)
-    if($versionOk -and $buildOk -and $rootOk){
-      Write-Host "[OK] Agente canonico ja esta ativo: $($h.candidate_version) / $($h.agent_build) / $actual"
+    $hard=Get-HardeningHealth
+    if($versionOk -and $buildOk -and $rootOk -and $hard){
+      Write-Host "[OK] Agente canonico H1 ja esta ativo: $($h.candidate_version) / $($h.agent_build) / schema=$($hard.schema_version) / $actual"
       exit 0
     }
-    Write-Host "Agente de outra pasta/build detectado: versao=$($h.candidate_version) build=$($h.agent_build) root=$actual"
+    Write-Host "Agente antigo/incompativel detectado: versao=$($h.candidate_version) build=$($h.agent_build) root=$actual H1=$([bool]$hard)"
     Stop-AgentOn8765
   }
 }catch{
@@ -58,10 +67,11 @@ for($i=0;$i -lt 30;$i++){
   try{
     $h=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 1
     $actual='';if($h.package_root){$actual=[IO.Path]::GetFullPath([string]$h.package_root).TrimEnd([char]92)}
-    if($h.ok -and [string]$h.agent_build -like 'CANONICAL-*' -and $actual -ieq $expected){
-      Write-Host "[OK] Agente ativo: $($h.candidate_version) / $($h.agent_build) / $actual"
+    $hard=Get-HardeningHealth
+    if($h.ok -and [string]$h.agent_build -like 'CANONICAL-*' -and $actual -ieq $expected -and $hard){
+      Write-Host "[OK] Agente H1 ativo: $($h.candidate_version) / $($h.agent_build) / schema=$($hard.schema_version) / SQLite=$($hard.integrity) / $actual"
       exit 0
     }
   }catch{}
 }
-throw "Agente iniciou, mas a API 8765 nao respondeu com o entrypoint/pasta canonicos. Consulte $errLog"
+throw "Agente iniciou, mas a API 8765 nao respondeu com o entrypoint/pasta/H1 canonicos. Consulte $errLog"
