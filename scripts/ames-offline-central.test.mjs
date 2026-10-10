@@ -44,7 +44,7 @@ test('escritas operacionais offline usam outbox H2 por UID e replay idempotente'
   assert.match(app,/offlineOutbox\.replay\(\{uid,write,sessionIsCurrent\}\)/);
   assert.match(app,/setDoc\(doc\(db,item\.collection,item\.documentId\),item\.payload\)/);
   assert.match(app,/window\.addEventListener\('online'/);
-  assert.match(outbox,/indexedDB\.open\(DB_NAME,DB_VERSION\)/);
+  assert.match(outbox,/dbApi\.open\(DB_NAME,DB_VERSION\)/);
   assert.match(outbox,/const DB_VERSION=2/);
   assert.match(outbox,/LEGACY_STORE='queue'/);
   assert.match(outbox,/item\.uid!==uid/);
