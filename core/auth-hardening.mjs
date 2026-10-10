@@ -6,19 +6,23 @@ const email=value=>text(value).toLowerCase();
 
 export function sanitizeLegacyUserMetadata(storage=globalThis.localStorage,{now=()=>Date.now()}={}){
   if(!storage||typeof storage.getItem!=='function'||typeof storage.setItem!=='function'||typeof storage.removeItem!=='function')return [];
-  const raw=storage.getItem(LEGACY_USERS_KEY);
+  let raw;
+  try{raw=storage.getItem(LEGACY_USERS_KEY);}catch{return [];}
   if(!raw)return [];
+  const marker=(status,extra={})=>{try{storage.setItem(MIGRATION_MARKER,JSON.stringify({at:Number(now()),status,...extra}));}catch{}};
+  const removeSource=status=>{
+    try{storage.removeItem(LEGACY_USERS_KEY);}catch{}
+    marker(status);
+  };
   let parsed;
   try{parsed=JSON.parse(raw);}catch{
     // Corrupted legacy credential storage has no safe migration path. Delete the
     // credential-bearing source instead of leaving potentially recoverable secrets.
-    storage.removeItem(LEGACY_USERS_KEY);
-    storage.setItem(MIGRATION_MARKER,JSON.stringify({at:Number(now()),status:'removed_corrupt_legacy_storage'}));
+    removeSource('removed_corrupt_legacy_storage');
     return [];
   }
   if(!Array.isArray(parsed)){
-    storage.removeItem(LEGACY_USERS_KEY);
-    storage.setItem(MIGRATION_MARKER,JSON.stringify({at:Number(now()),status:'removed_invalid_legacy_storage'}));
+    removeSource('removed_invalid_legacy_storage');
     return [];
   }
   const seen=new Set(),metadata=[];
@@ -30,8 +34,13 @@ export function sanitizeLegacyUserMetadata(storage=globalThis.localStorage,{now=
   }
   // Rewrite the same legacy key with metadata only. password, role and any other
   // local authority disappear permanently; Firebase/profile remains authoritative.
-  storage.setItem(LEGACY_USERS_KEY,JSON.stringify(metadata));
-  storage.setItem(MIGRATION_MARKER,JSON.stringify({at:Number(now()),status:'credentials_removed',users:metadata.length}));
+  try{
+    storage.setItem(LEGACY_USERS_KEY,JSON.stringify(metadata));
+    marker('credentials_removed',{users:metadata.length});
+  }catch{
+    // If rewriting is blocked, prefer deleting the credential-bearing source.
+    removeSource('credentials_source_removed_storage_rewrite_failed');
+  }
   return metadata;
 }
 
