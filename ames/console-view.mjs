@@ -10,6 +10,7 @@ import { withKnowledgeArchitecture } from './console-knowledge-architecture.mjs'
 import { withAgentRefresh } from './console-refresh-decorator.mjs';
 import { withTraceSelectionHelper } from './console-trace-scope.mjs';
 import { createFailureProcessAddon } from './console-failure-process.mjs';
+import { withBaseCatalog } from './console-base-catalog.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
@@ -41,6 +42,15 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     shell?.classList.toggle('menu-open',!!open);
     button?.setAttribute('aria-expanded',String(!!open));
   }
+  function openWorkstationSetup(){
+    switchView('monitor');
+    const pane=root.querySelector('[data-console-pane="monitor"]');
+    const details=pane?.querySelector('[data-monitor-tools] details');
+    if(details)details.open=true;
+    const fieldsets=[...(pane?.querySelectorAll('[data-monitor-tools] fieldset')||[])];
+    const setup=fieldsets.find(fieldset=>/Configuração do posto/i.test(fieldset.querySelector('legend')?.textContent||''))||details;
+    requestAnimationFrame(()=>setup?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
   function mount(){
     root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
       <aside class="ames-legacy-sidebar">
@@ -55,6 +65,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
           <span class="ames-status-pill"><span class="ames-agent-dot" data-console-dot></span><span data-console-status>Agente local desconectado</span></span>
           <span class="ames-status-pill ames-hide-mobile"><span class="ames-agent-dot" data-console-process-dot></span><span data-console-process>3022 em lote indisponível</span></span>
           <button class="button secondary ames-hide-mobile" type="button" data-console-open-ames>Abrir A-MES</button>
+          <button class="button secondary ames-hide-mobile" type="button" data-console-setup>Configurar posto</button>
           <button class="button secondary ames-hide-mobile" type="button" data-console-check>Verificar</button>
           <button class="button secondary" type="button" data-console-back>Voltar à Central</button>
         </div></header>
@@ -65,6 +76,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     root.querySelector('[data-console-menu-close]')?.addEventListener('click',()=>setMenu(false));
     root.querySelector('[data-console-back]')?.addEventListener('click',()=>document.querySelector('.main-nav [data-page="home"], [data-page="home"]')?.click());
     root.querySelector('[data-console-open-ames]')?.addEventListener('click',async()=>{try{if(store.agent().status!=='connected')await client.connect();await client.auxiliary('chrome');}catch(error){store.updateAgent({error:error.message});paintHeader();}});
+    root.querySelector('[data-console-setup]')?.addEventListener('click',openWorkstationSetup);
     root.querySelector('[data-console-check]')?.addEventListener('click',async()=>{try{if(store.agent().status==='connected')await client.refresh();else await client.connect();}catch(error){store.updateAgent({error:error.message});paintHeader();}});
     mounted=true;paintHeader();
   }
@@ -102,7 +114,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     }
     else if(id==='reuse')view=withAgentRefresh(createReuseConsoleView(pane,store),pane,store,client,{label:'Atualizar'});
     else if(id==='process')view=withAgentRefresh(withProcessCapability(createProcessConsoleView(pane,store),pane,store,'process'),pane,store,client,{label:'Atualizar'});
-    else if(id==='base')view=createBaseConsoleView(pane,store,client);
+    else if(id==='base')view=withBaseCatalog(createBaseConsoleView(pane,store,client),pane,store,client);
     else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client),pane);
     views.set(id,view);return view;
   }
