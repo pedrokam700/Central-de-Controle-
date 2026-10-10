@@ -21,12 +21,22 @@ function deployedIndex(source){
   return source.replace(appTag,bootGuard+'\n'+bootstrapTag);
 }
 
+function deployedApp(source){
+  const oldImport='import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";';
+  const newImport='import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";';
+  const oldInit='const app = initializeApp(firebaseConfig);';
+  const newInit='const app = getApps().length ? getApp() : initializeApp(firebaseConfig);';
+  if(!source.includes(oldImport)||!source.includes(oldInit))throw new Error('Bootstrap Firebase canônico não encontrado em app.js');
+  return source.replace(oldImport,newImport).replace(oldInit,newInit);
+}
+
 collect('ames');
 collect('icons');
 for(const name of [...new Set(names)]){
   const target=path.join(out,'Central-de-Controle-',name);
   fs.mkdirSync(path.dirname(target),{recursive:true});
   if(name==='index.html')fs.writeFileSync(target,deployedIndex(fs.readFileSync(name,'utf8')));
+  else if(name==='app.js')fs.writeFileSync(target,deployedApp(fs.readFileSync(name,'utf8')));
   else fs.copyFileSync(name,target);
 }
 const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
