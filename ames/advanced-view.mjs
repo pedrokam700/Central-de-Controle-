@@ -39,7 +39,7 @@ export function createAdvancedView(root,store,client){
         if(name==='import'){const payload=JSON.parse(await file.text());if(disposed)return;await client.auxiliary('import',{filename:file.name,payload});}
         else{const bytes=new Uint8Array(await file.arrayBuffer());if(disposed)return;let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));const r=await client.auxiliary('upload',{filename:file.name,data_b64:btoa(binary)});if(!disposed)store.updateAgent({upload_path:r.path});}
       }else if(name==='loadsetup'){
-        const r=await client.auxiliary('setup',{config:{}});applyConfig(r.config||{});root.querySelector('[data-advanced-status]').textContent='Configuração atual carregada do agente.';return;
+        const r=await client.auxiliary('config');applyConfig(r||{});root.querySelector('[data-advanced-status]').textContent='Configuração atual carregada do agente sem alterar o posto.';return;
       }else if(name==='setup'){
         const config={day_start:values.day_start,ames_host:values.ames_host,ames_port:Number(values.ames_port),ames_start_url:values.ames_start_url,chrome_profile_dir:values.chrome_profile_dir,setup_complete:true};
         if(values.monitor_interval_minutes)config.monitor_interval_minutes=Number(values.monitor_interval_minutes);
