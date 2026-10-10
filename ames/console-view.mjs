@@ -7,6 +7,7 @@ import { createReuseConsoleView, createBaseConsoleView, createKnowledgeConsoleVi
 import { withProcessCapability, applyMonitorProcessCapability } from './console-capability-guard.mjs';
 import { createMonitorRuntimeView } from './console-monitor-runtime.mjs';
 import { withKnowledgeArchitecture } from './console-knowledge-architecture.mjs';
+import { withAgentRefresh } from './console-refresh-decorator.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
@@ -82,13 +83,14 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       pane.innerHTML='<section data-top3-main></section><section data-top3-trend></section>';
       const primary=createTop3ParityView(pane.querySelector('[data-top3-main]'),store);
       const trend=createTrendAddon(pane.querySelector('[data-top3-trend]'),store,client);
-      view={render(){primary.render();trend.render();},clear(){primary.clear?.();trend.clear?.();pane.replaceChildren();}};
+      const base={render(){primary.render();trend.render();},clear(){primary.clear?.();trend.clear?.();pane.replaceChildren();}};
+      view=withAgentRefresh(base,pane,store,client,{label:'Atualizar'});
     }
     else if(id==='failures')view=createFailuresParityView(pane,store,client);
     else if(id==='sn')view=withProcessCapability(createSnConsoleView(pane,store,client),pane,store,'sn');
-    else if(id==='trace')view=withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace');
-    else if(id==='reuse')view=createReuseConsoleView(pane,store);
-    else if(id==='process')view=withProcessCapability(createProcessConsoleView(pane,store),pane,store,'process');
+    else if(id==='trace')view=withAgentRefresh(withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace'),pane,store,client,{label:'Atualizar tela'});
+    else if(id==='reuse')view=withAgentRefresh(createReuseConsoleView(pane,store),pane,store,client,{label:'Atualizar'});
+    else if(id==='process')view=withAgentRefresh(withProcessCapability(createProcessConsoleView(pane,store),pane,store,'process'),pane,store,client,{label:'Atualizar'});
     else if(id==='base')view=createBaseConsoleView(pane,store,client);
     else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client),pane);
     views.set(id,view);return view;
