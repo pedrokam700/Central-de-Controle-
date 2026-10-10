@@ -10,6 +10,7 @@
     import { createCoraView } from './ames/cora-view.mjs';
     import { MES_REASONING_RULES } from './ames/data/cora.mjs';
     import { createOnboardingView, savedIntegrationMode } from './ames/onboarding-view.mjs';
+    import {createOfflineOutbox,createBrowserOutboxStorage} from './core/offline-outbox.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction
@@ -2955,17 +2956,37 @@ const aiPilot = {
     function aiLoadHistory(id){const x=(state.failureAnalyses||[]).find(a=>(a.docId||a.id)===id);if(!x)return;aiPilot.mode=x.mode||'data';aiPilot.perspective=x.perspective||'COMPLETA';aiPilot.context=x.problem||'';aiPilot.source=x.source||'Histórico';aiPilot.rows=[];aiPilot.columns=[];const c=document.querySelector('#aiContext');if(c)c.value=aiPilot.context;aiRenderResult(x.result||{});renderAIAnalysis();}
 
     // ==================== V15V — OFFLINE / AUDIT / LLMOPS / EXPORT ====================
-    const OFFLINE_DB_NAME='central-trabalho-offline'; const OFFLINE_DB_VERSION=1; const OFFLINE_STORE='queue';
-    let offlineDbPromise=null;
-    function offlineDb(){
-      if(offlineDbPromise) return offlineDbPromise;
-      offlineDbPromise=new Promise((resolve,reject)=>{const req=indexedDB.open(OFFLINE_DB_NAME,OFFLINE_DB_VERSION);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(OFFLINE_STORE))db.createObjectStore(OFFLINE_STORE,{keyPath:'id'});};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
-      return offlineDbPromise;
+    // H2: outbox isolada por UID. A fila V1 sem dono permanece em quarentena e
+    // nunca e atribuida automaticamente ao usuario que estiver logado depois.
+    const offlineOutbox=createOfflineOutbox({storage:createBrowserOutboxStorage()});
+    let offlineSyncPromise=null;
+    async function queueOfflineWrite(collectionName,payload){
+      const uid=currentAuthUser?.uid;
+      if(!uid)throw new Error('Sessao autenticada obrigatoria para salvar offline.');
+      return offlineOutbox.enqueue({uid,collection:collectionName,payload});
     }
-    async function queueOfflineWrite(collectionName,payload){const item={id:(crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`),collection:collectionName,payload,createdAt:now()};try{const dbx=await offlineDb();await new Promise((res,rej)=>{const tx=dbx.transaction(OFFLINE_STORE,'readwrite');tx.objectStore(OFFLINE_STORE).put(item);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch{const k='centralAI.offline.queue.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push(item);localStorage.setItem(k,JSON.stringify(arr.slice(-50)));}return item;}
-    async function listOfflineQueue(){let out=[];try{const dbx=await offlineDb();out=await new Promise((res,rej)=>{const tx=dbx.transaction(OFFLINE_STORE,'readonly');const r=tx.objectStore(OFFLINE_STORE).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);});}catch{}const localKey='centralAI.offline.queue.v1';try{out=[...out,...JSON.parse(localStorage.getItem(localKey)||'[]')];}catch{}const unique=[...new Map(out.map(x=>[x.id,x])).values()];return unique;}
-    async function removeOfflineQueue(id){try{const dbx=await offlineDb();await new Promise((res,rej)=>{const tx=dbx.transaction(OFFLINE_STORE,'readwrite');tx.objectStore(OFFLINE_STORE).delete(id);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch{}try{const k='centralAI.offline.queue.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]').filter(x=>x.id!==id);localStorage.setItem(k,JSON.stringify(arr));}catch{}}
-    async function syncOfflineQueue(){if(!navigator.onLine||!currentAccount)return;const items=await listOfflineQueue().catch(()=>[]);for(const item of items){try{await addDoc(collection(db,item.collection),item.payload);await removeOfflineQueue(item.id);}catch(err){console.warn('Fila offline ainda pendente:',err.message);break;}}if(items.length)showSaveToast('Sincronização offline concluída quando a conexão voltou.','success');}
+    async function listOfflineQueue(){return currentAuthUser?.uid?offlineOutbox.pending(currentAuthUser.uid):[];}
+    async function removeOfflineQueue(id){return currentAuthUser?.uid?offlineOutbox.ack(currentAuthUser.uid,id):false;}
+    async function syncOfflineQueue(){
+      if(!navigator.onLine||!currentAccount||!currentAuthUser)return {synced:0,failed:0,remaining:0,stopped:false,legacy_quarantined:0};
+      if(offlineSyncPromise)return offlineSyncPromise;
+      const uid=currentAuthUser.uid;
+      const sessionIsCurrent=()=>currentAuthUser?.uid===uid;
+      const write=async item=>{
+        const request=setDoc(doc(db,item.collection,item.documentId),item.payload);
+        let timer;
+        const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Timeout ao confirmar escrita offline no Firestore')),15000);});
+        try{return await Promise.race([request,timeout]);}finally{clearTimeout(timer);}
+      };
+      offlineSyncPromise=offlineOutbox.replay({uid,write,sessionIsCurrent}).then(result=>{
+        window.__centralOfflineLegacyPending=result.legacy_quarantined;
+        if(result.legacy_quarantined)console.warn(`[Central] ${result.legacy_quarantined} item(ns) da fila offline V1 permanecem em quarentena sem UID; nenhum foi reenviado automaticamente.`);
+        if(result.synced)showSaveToast(`${result.synced} registro(s) offline sincronizado(s) com seguranca.`,'success');
+        return result;
+      }).finally(()=>{offlineSyncPromise=null;});
+      return offlineSyncPromise;
+    }
+    offlineOutbox.legacyPendingCount().then(count=>{window.__centralOfflineLegacyPending=count;if(count)console.warn(`[Central] ${count} item(ns) offline V1 em quarentena aguardam recuperacao explicita.`);}).catch(error=>console.warn('Diagnostico da fila offline legada indisponivel:',error.message));
     let offlineSupportRegistered=false;
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
@@ -6899,7 +6920,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
           updates: []
         };
 
-        if(!navigator.onLine){const localId=`offline-${Date.now()}`;report.docId=localId;await queueOfflineWrite('reports',report);state.reports=[...state.reports,report];showSaveToast('Sem conexão. Report salvo no dispositivo e aguardará sincronização.','success');} else { await addDoc(collection(db, "reports"), report); }
+        if(!navigator.onLine){const queued=await queueOfflineWrite('reports',report);report.docId=queued.documentId;state.reports=[...state.reports,report];showSaveToast('Sem conexão. Report salvo no dispositivo e aguardará sincronização.','success');} else { await addDoc(collection(db, "reports"), report); }
         closeFailureModal();
         show('product');
         openDetail(report.id);
@@ -6999,7 +7020,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[],
         originType:operationalContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:operationalContext?.scopeId||'',originScopeName:operationalContext?.scopeName||'',originScopeCode:operationalContext?.scopeCode||'',originScopeType:operationalContext?.scopeType||'',originShiftId:operationalContext?.shiftId||'',originShiftName:operationalContext?.shiftName||'',originDateKey:operationalContext?.dateKey||'',productionProductCodes:operationalContext?.productionProductCodes?.length?operationalContext.productionProductCodes:productCodes,productionProductLabels:operationalContext?.productionProductLabels?.length?operationalContext.productionProductLabels:productCodes.map(productDisplayCode),productionFamilies:operationalContext?.productionFamilies||[],productionBaseCodes:operationalContext?.productionBaseCodes||[],autoContextLinked:Boolean(inferredProduction)
       };
-      if(!navigator.onLine){item.docId=`offline-${Date.now()}`;await queueOfflineWrite('operationalFailures',item);state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
+      if(!navigator.onLine){const queued=await queueOfflineWrite('operationalFailures',item);item.docId=queued.documentId;state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
       const origin=pendingOriginContext;
       if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedFailureIds||[]),item.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedFailureIds:linked,updatedAt:now()},{merge:true});}
       pendingOriginContext=null;
