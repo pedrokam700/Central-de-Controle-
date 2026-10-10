@@ -84,8 +84,8 @@ export function createBrowserOutboxStorage({indexedDB:dbApi=globalThis.indexedDB
   };
   return Object.freeze({
     async put(item){try{return await run('readwrite',store=>store.put(item));}catch(error){fallbackPut(item);return item.id;}},
-    async list(){let primary=[];try{primary=await run('readonly',store=>store.getAll())||[];}catch{}let fallback=[];try{fallback=fallbackList();}catch(error){throw error;}return [...new Map([...primary,...fallback].map(row=>[row.id,row])).values()];},
-    async remove(id){let primaryError=null;try{await run('readwrite',store=>store.delete(id));}catch(error){primaryError=error;}try{fallbackRemove(id);}catch(error){if(primaryError)throw new AggregateError([primaryError,error],'Falha ao remover item offline');throw error;}},
+    async list(){let primary=[];try{primary=await run('readonly',store=>store.getAll())||[];}catch{}let fallback=[];try{fallback=fallbackList();}catch(error){throw error;}return [...new Map([...primary,...fallback].filter(row=>row?.id).map(row=>[row.id,row])).values()];},
+    async remove(id){let primaryError=null;try{await run('readwrite',store=>store.delete(id));}catch(error){primaryError=error;}if(local){try{fallbackRemove(id);}catch(error){if(primaryError)throw new AggregateError([primaryError,error],'Falha ao remover item offline');throw error;}}else if(primaryError)throw primaryError;},
     async legacyCount(){let count=await legacyIndexedCount();if(local){try{const raw=local.getItem(LEGACY_FALLBACK_KEY);const parsed=raw?JSON.parse(raw):[];if(Array.isArray(parsed))count+=parsed.length;}catch{count+=1;}}return count;}
   });
 }
@@ -121,9 +121,9 @@ export function createOfflineOutbox({storage=createBrowserOutboxStorage(),now=()
     if(!item)return false;validateItem(item);if(item.uid!==uid)throw new Error('Retry recusado: item pertence a outro usuário');
     await storage.put({...item,status:'pending',attempts:Number(item.attempts||0)+1,lastError:String(error?.message||error||'erro').slice(0,1000)});return true;
   };
-  const replay=async({uid,write,sessionIsCurrent=()=>true}={})=>{
-    uid=uidValue(uid);if(!uid)throw new Error('Sessão obrigatória para sincronizar offline');
-    if(typeof write!=='function')throw new TypeError('Writer offline obrigatório');
+  const replay=({uid,write,sessionIsCurrent=()=>true}={})=>{
+    uid=uidValue(uid);if(!uid)return Promise.reject(new Error('Sessão obrigatória para sincronizar offline'));
+    if(typeof write!=='function')return Promise.reject(new TypeError('Writer offline obrigatório'));
     if(locks.has(uid))return locks.get(uid);
     const task=(async()=>{
       let synced=0,failed=0,stopped=false;
