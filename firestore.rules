@@ -21,7 +21,10 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if activeUser();
+      // O próprio usuário autenticado precisa conseguir consultar se seu perfil
+      // existe antes do bootstrap. Listar outros perfis continua exigindo conta ativa.
+      allow get: if (signedIn() && request.auth.uid == userId) || activeUser();
+      allow list: if activeUser();
 
       // Bootstrap do próprio perfil após criar/login no Firebase Auth.
       allow create: if signedIn()
