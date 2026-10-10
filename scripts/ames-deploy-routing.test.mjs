@@ -7,14 +7,18 @@ import {spawnSync} from 'node:child_process';
 
 const canonical='/Central-de-Controle-/';
 
-test('Vercel e Netlify publicam a mesma base canônica sem servir HTML órfão',()=>{
+test('Vercel e Netlify publicam a mesma base canônica sem loop de redirect',()=>{
   const vercel=JSON.parse(fs.readFileSync('vercel.json','utf8'));
   const netlify=fs.readFileSync('netlify.toml','utf8');
   assert.equal(vercel.outputDirectory,'dist');
   assert(vercel.redirects.some(r=>r.source==='/'&&r.destination===canonical));
   assert.match(netlify,/publish\s*=\s*"dist"/);
   assert.match(netlify,/from\s*=\s*"\/"[\s\S]*to\s*=\s*"\/Central-de-Controle-\/"/);
-  assert.match(netlify,/from\s*=\s*"\/Central-de-Controle-\/"[\s\S]*to\s*=\s*"\/Central-de-Controle-\/index\.html"/);
+  assert.match(netlify,/from\s*=\s*"\/Central-de-Controle-"[\s\S]*to\s*=\s*"\/Central-de-Controle-\/"/);
+  // O arquivo físico dist/Central-de-Controle-/index.html deve ser servido pelo
+  // próprio diretório. Reescrever a rota canônica para index.html pode entrar
+  // em loop com a canonicalização de pretty URLs do Netlify.
+  assert.doesNotMatch(netlify,/from\s*=\s*"\/Central-de-Controle-\/"[\s\S]{0,180}to\s*=\s*"\/Central-de-Controle-\/index\.html"/);
 });
 
 test('build estático carrega bootstrap offline no base path e bloqueia submit silencioso se runtime falhar',()=>{
