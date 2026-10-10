@@ -11,9 +11,12 @@ Central oficial: https://central-cora-v2.vercel.app
    `ATUALIZAR_CANDIDATO.bat "C:\pasta\instalacao-existente"`
 4. O atualizador verifica os coletores, faz backup automático de código/config e
    backup SQLite consistente em `candidate-backups/<id>`, depois aplica seis módulos.
-   Configuração local e dados são preservados. A origem exata da Central é adicionada.
-5. Inicie pelo `00_INICIAR_AQUI.bat` original. Use `ABRIR_CENTRAL_V2.bat` e conecte
-   pelo Console MES. Permita acesso à rede local no navegador se solicitado.
+   Configuração local e dados são preservados. As origens exatas aprovadas da Central/preview são adicionadas sem wildcard.
+5. Inicie pelo `00_INICIAR_AQUI.bat` original. Para o gate físico do PR #23 use
+   `ABRIR_PREVIEW_PR23.bat`; `ABRIR_CENTRAL_V2.bat` continua abrindo a produção e
+   não deve ser usado como evidência de validação do PR. Confirme no GitHub que o
+   deploy-preview está associado ao SHA exato em teste antes de iniciar o gate.
+6. Conecte pelo Console MES. Permita acesso à rede local no navegador se solicitado.
 
 Instalação nova: use `00_INICIAR_AQUI.bat` da pasta candidata. O ZIP não distribui
 banco de fábrica, cookies, sessão, perfil Chrome nem senha Wi-Fi. Dependências,
@@ -50,6 +53,7 @@ A UI isolada e `03_ABRIR_CENTRAL_LOCAL_FALLBACK.bat` continuam disponíveis.
 ## Checklist no posto
 
 - [ ] Backup concluído e rollback localizado; instalar candidato, iniciar agente.
+- [ ] Confirmar SHA do PR #23 e abrir `ABRIR_PREVIEW_PR23.bat`, não a produção.
 - [ ] Chrome/CDP, rota e Wi-Fi por perfil existente; login manual A-MES.
 - [ ] Central conecta; testar linhas 1, 2 e 3 separadamente.
 - [ ] 3028, 3074, 2114, SN, reparos, período/turno e escopo.

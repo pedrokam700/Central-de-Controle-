@@ -2,12 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-test('helper de preview altera somente allowed_origins e preserva backup/config sem credenciais',()=>{
+test('helper de preview usa allowlist exata e é idempotente sem tocar credenciais',()=>{
   const ps=fs.readFileSync('scripts/ames-authorize-preview-origin.ps1','utf8');
   assert.ok(ps.includes('https://central-cora-v2.vercel.app'));
   assert.ok(ps.includes('https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'));
   assert.ok(ps.includes('https://deploy-preview-23--productcontrolcenter.netlify.app'));
   assert.ok(ps.includes('$ApprovedOrigins -notcontains $Origin'));
+  assert.ok(ps.includes('$origins -contains $Origin'));
+  assert.ok(ps.includes('nenhuma alteração necessária'));
+  assert.ok(ps.includes('exit 0'));
   assert.ok(ps.includes('no wildcard'));
   assert.ok(ps.includes('allowed_origins'));
   assert.ok(ps.includes('Copy-Item'));

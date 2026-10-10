@@ -7,7 +7,10 @@ import zipfile
 SOURCE_SHA='1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167'
 COLLECTORS={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
 FILES=['agent.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py']
-ORIGINS=['https://central-cora-v2.vercel.app','https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app','https://deploy-preview-23--productcontrolcenter.netlify.app']
+PRODUCTION_URL='https://central-cora-v2.vercel.app'
+VERCEL_PREVIEW_URL='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
+PR_PREVIEW_URL='https://deploy-preview-23--productcontrolcenter.netlify.app'
+ORIGINS=[PRODUCTION_URL,VERCEL_PREVIEW_URL,PR_PREVIEW_URL]
 def build(source,destination):
     source,destination=Path(source).resolve(),Path(destination).resolve()
     if destination.exists() or source==destination:raise ValueError('New destination required')
@@ -35,12 +38,13 @@ def build(source,destination):
         files[base+'suporte/PREPARAR_PREVIEW_CENTRAL_V2.ps1']=(root/'scripts'/'ames-authorize-preview-origin.ps1').read_bytes().replace(b'\r\n',b'\n')
         for action,filename in [('update','ATUALIZAR_CANDIDATO.bat'),('rollback','ROLLBACK_CANDIDATO.bat')]:
             files[base+filename]=('@echo off\r\nsetlocal\r\nif "%~1"=="" (\r\n  echo Uso: '+filename+' "C:\\pasta\\instalacao-existente"\r\n  pause\r\n  exit /b 1\r\n)\r\nwhere py >nul 2>nul\r\nif errorlevel 1 (\r\n  python "%~dp0ames-agent\\update_candidate.py" '+action+' "%~1"\r\n) else (\r\n  py -3 "%~dp0ames-agent\\update_candidate.py" '+action+' "%~1"\r\n)\r\npause\r\n').encode('ascii')
-        files[base+'ABRIR_CENTRAL_V2.bat']=b'@echo off\r\nstart "" "https://central-cora-v2.vercel.app"\r\n'
+        files[base+'ABRIR_CENTRAL_V2.bat']=('@echo off\r\nstart "" "'+PRODUCTION_URL+'"\r\n').encode('ascii')
+        files[base+'ABRIR_PREVIEW_PR23.bat']=('@echo off\r\nstart "" "'+PR_PREVIEW_URL+'"\r\n').encode('ascii')
     with zipfile.ZipFile(destination,'x',compression=zipfile.ZIP_DEFLATED) as new:
         for name,data in sorted(files.items()):
             info=zipfile.ZipInfo(name,(2026,10,9,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;new.writestr(info,data)
     with zipfile.ZipFile(destination) as new:assert new.testzip() is None
     print('Candidate:',destination);print('SHA-256:',hashlib.sha256(destination.read_bytes()).hexdigest())
-    print('Original collectors/engine/helpers/UI retained; runtime databases excluded; backup/rollback included.')
+    print('Original collectors/engine/helpers/UI retained; runtime databases excluded; backup/rollback and PR preview opener included.')
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('source');p.add_argument('destination');a=p.parse_args();build(a.source,a.destination)

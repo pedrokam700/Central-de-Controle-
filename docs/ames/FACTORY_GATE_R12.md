@@ -31,6 +31,11 @@ Para o PR #23, usar preferencialmente o preview que estiver associado ao **SHA e
 
 Se o Vercel estiver bloqueado por cota/build-rate-limit, o deploy-preview do PR pode ser usado desde que o status do commit confirme que ele foi publicado para o SHA sob teste.
 
+O candidato gerado pelo PR possui dois atalhos separados:
+
+- `ABRIR_PREVIEW_PR23.bat` abre o deploy-preview usado no gate;
+- `ABRIR_CENTRAL_V2.bat` abre a produção e **não** deve ser usado como evidência de validação do PR #23.
+
 O agente usa allowlist **exata** de origem. Antes do gate, se a origem escolhida ainda não existir em `ames-agent/config.json`, executar o helper idempotente:
 
 `scripts/ames-authorize-preview-origin.ps1`
@@ -41,26 +46,28 @@ O helper:
 
 - aceita apenas as três origens exatas listadas acima;
 - não usa wildcard Vercel/Netlify;
-- altera somente `allowed_origins`;
-- cria backup antes da escrita;
+- se a origem já estiver autorizada, termina sem regravar o arquivo nem criar backup desnecessário;
+- altera somente `allowed_origins` quando realmente há mudança;
+- cria backup antes de qualquer escrita;
 - grava UTF‑8 sem BOM;
 - não lê nem grava senha, cookie, sessão, Wi‑Fi ou credencial;
-- exige reinício do agente para aplicar.
+- exige reinício do agente somente quando a configuração for alterada.
 
 ## 2. Ordem do gate
 
 ### Gate A — conexão e isolamento
 
-1. Abrir a Central preview ligada ao SHA em validação.
-2. Console MES → Monitoramento → Verificar.
-3. Confirmar no painel **Gate físico · posto de fábrica**:
+1. Confirmar no GitHub o SHA atual do PR #23 e o status verde do preview ligado a ele.
+2. Abrir `ABRIR_PREVIEW_PR23.bat` ou diretamente o preview ligado ao SHA em validação.
+3. Console MES → Monitoramento → Verificar.
+4. Confirmar no painel **Gate físico · posto de fábrica**:
    - agente conectado;
    - motor disponível;
    - Chrome/CDP conectado;
    - rede A‑MES conectada;
    - scheduler validado;
    - build identificado.
-4. Confirmar que Linha 1=`TAN10101`, Linha 2=`TAN10102`, Linha 3=`TAN10103` continuam separadas.
+5. Confirmar que Linha 1=`TAN10101`, Linha 2=`TAN10102`, Linha 3=`TAN10103` continuam separadas.
 
 Resultado esperado: no máximo **PRONTO PARA VALIDAR 9/9**. Isso ainda não é GREEN físico.
 

@@ -43,7 +43,13 @@ if (-not ($obj.PSObject.Properties.Name -contains 'allowed_origins')) {
 }
 
 $origins = @($obj.allowed_origins | ForEach-Object { [string]$_ } | Where-Object { $_ })
-if ($origins -notcontains $Origin) { $origins += $Origin }
+if ($origins -contains $Origin) {
+  Write-Host '[OK] Origem já autorizada; nenhuma alteração necessária.' -ForegroundColor Green
+  Write-Host "     $Origin"
+  exit 0
+}
+
+$origins += $Origin
 $obj.allowed_origins = @($origins | Select-Object -Unique)
 
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
