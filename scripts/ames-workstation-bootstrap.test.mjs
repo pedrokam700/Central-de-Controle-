@@ -6,6 +6,7 @@ const launcher=fs.readFileSync('tools/ames-workstation/INICIAR_POSTO_CENTRAL_V2.
 const route=fs.readFileSync('tools/ames-workstation/ROTA_AMES_APLICAR.bat','utf8');
 const diag=fs.readFileSync('tools/ames-workstation/DIAGNOSTICO_POSTO.ps1','utf8');
 const starter=fs.readFileSync('tools/ames-workstation/START_AGENT_CANONICAL.ps1','utf8');
+const entry=fs.readFileSync('ames/agent/agent_entry.py','utf8');
 const builder=fs.readFileSync('scripts/build-agent-candidate.py','utf8');
 
 test('launcher usa uma Central e um agente local',()=>{
@@ -22,6 +23,14 @@ test('launcher recupera auto-repair R11 quando .venv existe mas esta incompleto'
   assert.match(launcher,/01_INSTALAR_UMA_VEZ\.bat" \/auto/);
 });
 
+test('agente ativo precisa ser da mesma pasta do pacote',()=>{
+  assert.match(entry,/"package_root":str\(a\.BASE_DIR\.parent\.resolve\(\)\)/);
+  assert.match(starter,/package_root/);
+  assert.match(starter,/\$actual -ieq \$expected/);
+  assert.match(starter,/Stop-AgentOn8765/);
+  assert.match(starter,/agent_build -like 'CANONICAL-\*'/);
+});
+
 test('rota A-MES e temporaria e nao troca gateway padrao',()=>{
   assert.match(route,/172\.29\.185\.215\/32/);
   assert.match(route,/PolicyStore ActiveStore/);
@@ -29,9 +38,10 @@ test('rota A-MES e temporaria e nao troca gateway padrao',()=>{
   assert.doesNotMatch(route,/Set-NetIPInterface|Set-DnsClientServerAddress|route\s+delete\s+0\.0\.0\.0/i);
 });
 
-test('bootstrap nao armazena segredos e falha fechado em agente antigo',()=>{
+test('bootstrap nao armazena segredos e falha fechado em servico desconhecido',()=>{
   assert.match(starter,/candidate_version/);
   assert.match(starter,/0\.5\.24/);
+  assert.match(starter,/nao se identificou como agente A-MES/i);
   assert.doesNotMatch(starter,/password|senha\s*=|cookie|wifi.*key/i);
   assert.match(diag,/nao le nem imprime senha A-MES/i);
 });
