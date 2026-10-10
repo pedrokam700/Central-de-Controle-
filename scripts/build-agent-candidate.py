@@ -53,6 +53,8 @@ def build(source,destination):
             'ROTA_AMES_REMOVER.bat':'suporte/ames-workstation/ROTA_AMES_REMOVER.bat',
             'START_AGENT_CANONICAL.ps1':'suporte/ames-workstation/START_AGENT_CANONICAL.ps1',
             'DIAGNOSTICO_POSTO.ps1':'suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1',
+            'CAPTURAR_MOTOR_R12_SEGURO.bat':'suporte/ames-workstation/CAPTURAR_MOTOR_R12_SEGURO.bat',
+            'capture-r12-engine.py':'suporte/ames-workstation/capture-r12-engine.py',
         }
         for source_name,target_name in workstation_files.items():files[base+target_name]=(workstation/source_name).read_bytes()
         launcher=(workstation/'INICIAR_POSTO_CENTRAL_V2.bat').read_bytes()
