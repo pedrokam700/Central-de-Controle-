@@ -80,6 +80,33 @@ test('legacy R12 projection keeps 3022 events and defect contexts isolated by li
   assert.equal(normalized.process_timeline.contexts[0].registration_mode,'MANUAL');
 });
 
+test('legacy R12 keeps operational failure fields already collected by 3028/repair refresh', () => {
+  const legacy=productFixture(line_id,1).payload,sid=String(legacy.summary.snapshot_id),source=legacy.defects[0];
+  Object.assign(source,{
+    manual_or_auto:'MANUAL',repair_status_current:'Y',defect_type_current:'MainBoard',repair_user:'AT01',
+    repair_comment:'troca confirmada',defect_reason_type:'incoming batch abnormal',defect_reason_desc:'material',
+    repair_code:'Failure Material device',repair_desc:'substituicao',work_shift:'1st Shift',present_in_3028:0,
+    raw_json:'NAO_PODE_VAZAR'
+  });
+  const normalized=normalizeAgentRead({legacy,datasets:{pcba_history:[],material_reuse:[],history_contexts:[],process_events:[],process_defect_contexts:[]},insights:null});
+  const row=normalized.occurrences[0];
+  assert.equal(row.registration_mode,'MANUAL');
+  assert.equal(row.manual_or_auto,'MANUAL');
+  assert.equal(row.repair_status,'Y');
+  assert.equal(row.defect_type,'MainBoard');
+  assert.equal(row.repair_user,'AT01');
+  assert.equal(row.repair_comment,'troca confirmada');
+  assert.equal(row.defect_reason_type,'incoming batch abnormal');
+  assert.equal(row.defect_reason_desc,'material');
+  assert.equal(row.repair_code,'Failure Material device');
+  assert.equal(row.repair_desc,'substituicao');
+  assert.equal(row.work_shift,'1st Shift');
+  assert.equal(row.present_in_3028,false);
+  assert.equal(row.raw_json,undefined);
+  assert.equal(row.raw_ref,null);
+  assert.equal(String(row.snapshot_id),sid);
+});
+
 test('agent client asks SN with 3022 and exposes full/process-only/reuse-only trace mode', () => {
   const source=fs.readFileSync('ames/agent-client.mjs','utf8');
   assert.match(source,/include_3022:true/);
