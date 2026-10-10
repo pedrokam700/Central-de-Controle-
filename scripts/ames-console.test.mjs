@@ -83,7 +83,7 @@ test('legacy R12 projection keeps 3022 events and defect contexts isolated by li
 test('legacy R12 keeps operational failure fields already collected by 3028/repair refresh', () => {
   const legacy=productFixture(line_id,1).payload,sid=String(legacy.summary.snapshot_id),source=legacy.defects[0];
   Object.assign(source,{
-    manual_or_auto:'MANUAL',repair_status_current:'Y',defect_type_current:'MainBoard',repair_user:'AT01',
+    snapshot_id:sid,manual_or_auto:'MANUAL',repair_status_current:'Y',defect_type_current:'MainBoard',repair_user:'AT01',
     repair_comment:'troca confirmada',defect_reason_type:'incoming batch abnormal',defect_reason_desc:'material',
     repair_code:'Failure Material device',repair_desc:'substituicao',work_shift:'1st Shift',present_in_3028:0,
     raw_json:'NAO_PODE_VAZAR'
