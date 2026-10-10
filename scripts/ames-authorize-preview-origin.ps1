@@ -4,9 +4,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$ApprovedOrigins = @(
+  'https://central-cora-v2.vercel.app',
+  'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
+)
 
-# Fail closed: this helper exists only for Central V2 previews owned by this project.
-if ($Origin -notmatch '^https://central-cora-v2[a-z0-9-]*\.vercel\.app$') {
+# Fail closed: no wildcard and no arbitrary Vercel origin.
+if ($ApprovedOrigins -notcontains $Origin) {
   throw "Origem recusada: $Origin"
 }
 
