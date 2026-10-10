@@ -6,7 +6,7 @@ $root=(Resolve-Path $Root).Path
 $expected=[IO.Path]::GetFullPath($root).TrimEnd([char]92)
 $pythonw=Join-Path $root '.venv\Scripts\pythonw.exe'
 $python=Join-Path $root '.venv\Scripts\python.exe'
-$agent=Join-Path $root 'ames-agent\agent_entry.py'
+$agent=Join-Path $root 'ames-agent\agent_hardened_entry.py'
 $logs=Join-Path $root 'logs'
 $outLog=Join-Path $logs 'agent_stdout.log'
 $errLog=Join-Path $logs 'agent_stderr.log'
@@ -14,7 +14,7 @@ $errLog=Join-Path $logs 'agent_stderr.log'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 if(-not (Test-Path $python)){throw "Python do ambiente local nao encontrado: $python"}
 if(-not (Test-Path $pythonw)){$pythonw=$python}
-if(-not (Test-Path $agent)){throw "Entrypoint canonico nao encontrado: $agent"}
+if(-not (Test-Path $agent)){throw "Entrypoint canonico endurecido nao encontrado: $agent"}
 
 function Stop-AgentOn8765 {
   $listeners=Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue
