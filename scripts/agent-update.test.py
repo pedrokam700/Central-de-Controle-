@@ -22,7 +22,8 @@ class UpdateTests(unittest.TestCase):
             store=Store(target/'data'/'ames_local.sqlite3');store.initialize();first=store.create_snapshot(window_id=None,source_kind='legacy')
             with patch.object(updater.socket,'create_connection',side_effect=OSError):saved=updater.update(target,source)
             self.assertTrue((saved/'ames_local.sqlite3').exists());self.assertEqual((saved/'agent.py').read_text(),'old agent.py')
-            self.assertIn(updater.ORIGIN,json.loads((target/'config.json').read_text())['allowed_origins'])
+            origins=json.loads((target/'config.json').read_text())['allowed_origins']
+            self.assertIn(updater.ORIGIN,origins);self.assertIn(updater.PREVIEW_ORIGIN,origins);self.assertEqual(len(origins),len(set(origins)))
             newer=store.create_snapshot(window_id=None,source_kind='after update')
             with patch.object(updater.socket,'create_connection',side_effect=OSError):updater.rollback(target,saved)
             self.assertEqual(store.latest_snapshot_id(),newer);self.assertGreater(newer,first)
