@@ -64,18 +64,55 @@ def build(destination:Path,frontend_sha:str):
         '  set /p "TARGET=R12: "\r\n'
         ')\r\n'
         'if "%TARGET%"=="" exit /b 2\r\n'
+        'for %%I in ("%TARGET%") do (set "TARGET_FULL=%%~fI"& set "TARGET_NAME=%%~nxI")\r\n'
+        'set "CAPTURE_ROOT=%TARGET_FULL%"\r\n'
+        'if /I "%TARGET_NAME%"=="ames-agent" for %%I in ("%TARGET_FULL%\\..") do set "CAPTURE_ROOT=%%~fI"\r\n'
+        'set "CAPTURE=%CAPTURE_ROOT%\\R12_ENGINE_CAPTURE_PREMIGRATION.zip"\r\n'
         'where py >nul 2>nul\r\n'
-        'if errorlevel 1 (\r\n'
-        '  python "%~dp0ames-agent\\update_candidate.py" update "%TARGET%"\r\n'
+        'if errorlevel 1 (set "PYRUN=python") else (set "PYRUN=py -3")\r\n'
+        'if not exist "%CAPTURE%" (\r\n'
+        '  echo [PRE-MIGRACAO] Tentando capturar o motor R12 original sem dados/sessao...\r\n'
+        '  %PYRUN% "%~dp0suporte\\ames-workstation\\capture-r12-engine.py" "%CAPTURE_ROOT%" "%CAPTURE%"\r\n'
+        '  if errorlevel 1 (\r\n'
+        '    echo [AVISO] A captura automatica nao foi criada. A instalacao ainda nao foi alterada; o gate podera diagnosticar e a captura manual continua disponivel.\r\n'
+        '  ) else (\r\n'
+        '    echo [OK] Captura pre-migracao: %CAPTURE%\r\n'
+        '  )\r\n'
         ') else (\r\n'
-        '  py -3 "%~dp0ames-agent\\update_candidate.py" update "%TARGET%"\r\n'
+        '  echo [PRE-MIGRACAO] Captura original ja existe e sera preservada: %CAPTURE%\r\n'
         ')\r\n'
+        '%PYRUN% "%~dp0ames-agent\\update_candidate.py" update "%TARGET_FULL%"\r\n'
         'if errorlevel 1 exit /b %errorlevel%\r\n'
         'echo.\r\n'
         'echo [OK] Migracao aplicada com backup/rollback preservado.\r\n'
         'echo Agora execute 00_INICIAR_AQUI.bat dentro da instalacao atualizada.\r\n'
         'exit /b 0\r\n'
-    ).encode('ascii')
+    ).encode('ascii',errors='replace')
+    payload['ROLLBACK_R12_EXISTENTE.bat']=(
+        '@echo off\r\nsetlocal EnableExtensions\r\n'
+        'set "TARGET=%~1"\r\n'
+        'if "%TARGET%"=="" (\r\n'
+        '  echo Informe a pasta raiz da automacao R12 migrada.\r\n'
+        '  set /p "TARGET=R12: "\r\n'
+        ')\r\n'
+        'if "%TARGET%"=="" exit /b 2\r\n'
+        'for %%I in ("%TARGET%") do (set "TARGET_FULL=%%~fI"& set "TARGET_NAME=%%~nxI")\r\n'
+        'set "PACKAGE_ROOT=%TARGET_FULL%"\r\n'
+        'if /I "%TARGET_NAME%"=="ames-agent" for %%I in ("%TARGET_FULL%\\..") do set "PACKAGE_ROOT=%%~fI"\r\n'
+        'set "BACKUP=%~2"\r\n'
+        'if "%BACKUP%"=="" for /f "usebackq delims=" %%B in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Join-Path $env:PACKAGE_ROOT ''candidate-backups'';if(Test-Path $p){$b=Get-ChildItem $p -Directory ^| Where-Object {Test-Path (Join-Path $_.FullName ''backup.json'')} ^| Sort-Object LastWriteTime -Descending ^| Select-Object -First 1 -ExpandProperty FullName;if($b){Write-Output $b}}"`) do set "BACKUP=%%B"\r\n'
+        'if "%BACKUP%"=="" (\r\n'
+        '  echo [ERRO] Nenhum backup candidato foi encontrado em %PACKAGE_ROOT%\\candidate-backups.\r\n'
+        '  exit /b 3\r\n'
+        ')\r\n'
+        'where py >nul 2>nul\r\n'
+        'if errorlevel 1 (set "PYRUN=python") else (set "PYRUN=py -3")\r\n'
+        'echo Restaurando backup: %BACKUP%\r\n'
+        '%PYRUN% "%~dp0ames-agent\\update_candidate.py" rollback "%TARGET_FULL%" --backup "%BACKUP%"\r\n'
+        'if errorlevel 1 exit /b %errorlevel%\r\n'
+        'echo [OK] Rollback concluido. SQLite operacional foi preservado.\r\n'
+        'exit /b 0\r\n'
+    ).encode('ascii',errors='replace')
     manifest={
         'schema':'central-r12-migration-bundle-v2',
         'purpose':'update-existing-r12-only',
@@ -83,8 +120,10 @@ def build(destination:Path,frontend_sha:str):
         'new_pc_supported':False,
         'factory_gate_required':True,
         'preview_selection':'exact-sha-with-validated-offline-fallback',
+        'pre_migration_capture':'best-effort-before-update',
+        'rollback':'latest-candidate-backup',
         'files':{name:digest(data) for name,data in sorted(payload.items())},
-        'notes':['does not contain A-MES credentials/session','does not contain runtime SQLite','updater validates frozen 3028 hashes before update','launcher accepts only a preview whose release-build.json matches frontend_sha; after one valid check it may reuse that exact origin/SHA from cache state']
+        'notes':['does not contain A-MES credentials/session','does not contain runtime SQLite','updater validates frozen 3028 hashes before update','launcher accepts only a preview whose release-build.json matches frontend_sha; after one valid check it may reuse that exact origin/SHA from cache state','update attempts a safe R12 engine capture before modifying the installation','rollback helper restores the newest candidate backup and preserves operational SQLite']
     }
     payload['MIGRATION_MANIFEST.json']=(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n').encode('utf-8')
     payload['LEIA_PRIMEIRO_R12.txt']=(
@@ -97,10 +136,12 @@ def build(destination:Path,frontend_sha:str):
         'Depois de uma validacao online bem-sucedida, a mesma origem/SHA pode ser reutilizada durante perda de internet para o shell offline.\r\n'
         '1. Pare agente/monitor da R12.\r\n'
         '2. Execute ATUALIZAR_R12_EXISTENTE.bat e informe a pasta da instalacao.\r\n'
+        '   Antes de alterar a instalacao, o script tenta gerar R12_ENGINE_CAPTURE_PREMIGRATION.zip automaticamente.\r\n'
         '3. Execute 00_INICIAR_AQUI.bat na instalacao atualizada.\r\n'
         '4. Login A-MES permanece manual.\r\n'
-        '5. Execute suporte\\ames-workstation\\CAPTURAR_MOTOR_R12_SEGURO.bat durante o gate para gerar a captura sem dados/sessao.\r\n'
+        '5. Se a captura automatica avisar falha, execute suporte\\ames-workstation\\CAPTURAR_MOTOR_R12_SEGURO.bat durante o gate.\r\n'
         '6. Rode o gate fisico 9/9 antes de qualquer promocao.\r\n'
+        '7. Se a migracao precisar ser desfeita, execute ROLLBACK_R12_EXISTENTE.bat; ele usa o backup candidato mais recente e preserva SQLite.\r\n'
     ).encode('utf-8')
     destination.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(destination,'x',compression=zipfile.ZIP_DEFLATED) as z:
