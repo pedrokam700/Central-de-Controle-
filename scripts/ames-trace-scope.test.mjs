@@ -17,3 +17,15 @@ test('Rastreabilidade oferece seleção visual usando somente Defect Codes carre
   assert.doesNotMatch(helper,/client\.|collect\(|fetch\(|auxiliary\(/);
   assert.match(sw,/ames\/console-trace-scope\.mjs/);
 });
+
+test('modo Selecionadas nunca cai silenciosamente em todas as falhas',()=>{
+  const helper=fs.readFileSync('ames/console-trace-scope.mjs','utf8');
+  assert.match(helper,/codeMode==='selected'/);
+  assert.match(helper,/\[data-trace-run\]/);
+  assert.match(helper,/selectedCodes\(inputRef\)\.length/);
+  assert.match(helper,/stopImmediatePropagation\(\)/);
+  assert.match(helper,/Nenhuma coleta foi enviada/);
+  assert.match(helper,/exige ao menos um código antes de iniciar/);
+  assert.match(helper,/root\.addEventListener\('click',runGuard,true\)/);
+  assert.match(helper,/root\.removeEventListener\('click',runGuard,true\)/);
+});
