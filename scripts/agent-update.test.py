@@ -5,7 +5,10 @@ import pathlib
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 import zipfile
 from unittest.mock import patch
 ROOT=pathlib.Path(__file__).resolve().parents[1]
@@ -16,6 +19,9 @@ from store import Store
 _frontend_spec=importlib.util.spec_from_file_location('frontend_package',ROOT/'scripts'/'frontend_package.py')
 assert _frontend_spec and _frontend_spec.loader
 frontend_package=importlib.util.module_from_spec(_frontend_spec);_frontend_spec.loader.exec_module(frontend_package)
+_server_spec=importlib.util.spec_from_file_location('serve_staged_frontend',ROOT/'tools'/'ames-workstation'/'serve-staged-frontend.py')
+assert _server_spec and _server_spec.loader
+local_server=importlib.util.module_from_spec(_server_spec);_server_spec.loader.exec_module(local_server)
 
 class UpdateTests(unittest.TestCase):
     def test_backup_update_and_rollback_preserve_database_collectors_workstation_and_frontend_gate(self):
@@ -28,17 +34,9 @@ class UpdateTests(unittest.TestCase):
                 (target/name).write_text('old '+name)
                 shutil.copy2(ROOT/'ames'/'agent'/name,source/name)
 
-            # A R12 original não possuía a camada H1. O updater precisa registrar
-            # esses arquivos como ausentes e o rollback deve removê-los novamente.
             migration_only=('agent_hardened_entry.py','hardening.py')
-            for name in migration_only:
-                (target/name).unlink()
-
+            for name in migration_only:(target/name).unlink()
             (source/'candidate-files.json').write_text(json.dumps({n:hashlib.sha256((source/n).read_bytes()).hexdigest() for n in updater.FILES}))
-
-            # Simula a raiz real produzida pelo bundle. O updater deve copiar as
-            # ferramentas e o gate do frontend, mas rollback precisa remover o gate
-            # se ele não existia antes da migração.
             for rel in updater.ROOT_FILES:
                 dst=candidate_root/rel;dst.parent.mkdir(parents=True,exist_ok=True);dst.write_text('new '+rel)
             gate=candidate_root/'FRONTEND_GATE.json';gate.write_text(json.dumps({'expected_sha':'1'*40,'preview_urls':['https://example.test']}))
@@ -76,6 +74,7 @@ class UpdateTests(unittest.TestCase):
         (dist/'release-build.json').write_text(json.dumps({'sha':sha,'build':'test','release_identity_schema':'central-release-identity-v1','release_identity_sha256':hashlib.sha256(identity).hexdigest()}))
         (dist/'Central-de-Controle-'/'index.html').write_text('<!doctype html><title>Central</title>')
         (dist/'Central-de-Controle-'/'app.js').write_text('export const ok=true;')
+        (dist/'Central-de-Controle-'/'offline-bootstrap.mjs').write_text('export const localProof=true;')
         package=root/'frontend.zip';frontend_package.build_package(dist,package,sha)
         return package,sha
 
@@ -94,7 +93,6 @@ class UpdateTests(unittest.TestCase):
             self.assertFalse(marker['activated'])
             self.assertIsNone(marker['serving_origin'])
             self.assertEqual(marker['package_sha256'],hashlib.sha256(package.read_bytes()).hexdigest())
-            # Idempotente: staging do mesmo pacote/SHA reutiliza exatamente a mesma pasta.
             self.assertEqual(updater.stage_frontend(target,package,sha),staged)
 
     def test_stage_frontend_fails_closed_on_wrong_sha_tamper_or_existing_identity_conflict(self):
@@ -103,8 +101,6 @@ class UpdateTests(unittest.TestCase):
             package,sha=self._frontend_package(root)
             with self.assertRaises(ValueError):updater.stage_frontend(install,package,'8'*40)
             self.assertFalse((install/'frontend-packages'/('8'*40)).exists())
-
-            # Adultera um membro mantendo o manifesto original: verificação deve bloquear antes de extrair.
             tampered=root/'tampered.zip'
             with zipfile.ZipFile(package,'r') as src,zipfile.ZipFile(tampered,'w',compression=zipfile.ZIP_DEFLATED) as dst:
                 for info in src.infolist():
@@ -113,11 +109,30 @@ class UpdateTests(unittest.TestCase):
                     dst.writestr(info,data)
             with self.assertRaises(ValueError):updater.stage_frontend(install,tampered,sha)
             self.assertFalse((install/'frontend-packages'/sha).exists())
-
             staged=updater.stage_frontend(install,package,sha)
             marker=json.loads((staged/updater.FRONTEND_STAGE_MARKER).read_text());marker['package_sha256']='0'*64
             (staged/updater.FRONTEND_STAGE_MARKER).write_text(json.dumps(marker))
             with self.assertRaises(ValueError):updater.stage_frontend(install,package,sha)
             self.assertTrue((staged/'Central-de-Controle-'/'index.html').is_file(),'identity conflict must not destructively replace staged frontend')
+
+    def test_loopback_proof_server_serves_staged_shell_but_never_proxies_api(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);install=root/'installed';target=install/'ames-agent';target.mkdir(parents=True);(target/'agent.py').write_text('# existing agent')
+            package,sha=self._frontend_package(root);staged=updater.stage_frontend(install,package,sha)
+            httpd=local_server.create_server(staged,sha,0)
+            self.assertEqual(httpd.server_address[0],'127.0.0.1')
+            thread=threading.Thread(target=httpd.serve_forever,kwargs={'poll_interval':0.05},daemon=True);thread.start()
+            try:
+                origin=f'http://127.0.0.1:{httpd.server_address[1]}'
+                with urllib.request.urlopen(origin+'/Central-de-Controle-/',timeout=3) as response:
+                    self.assertEqual(response.status,200);self.assertIn(b'Central',response.read());self.assertEqual(response.headers.get('X-Content-Type-Options'),'nosniff')
+                with urllib.request.urlopen(origin+'/Central-de-Controle-/offline-bootstrap.mjs',timeout=3) as response:
+                    self.assertEqual(response.headers.get_content_type(),'text/javascript')
+                with self.assertRaises(urllib.error.HTTPError) as blocked:
+                    urllib.request.urlopen(origin+'/api/chat-cognitive',timeout=3)
+                self.assertEqual(blocked.exception.code,503)
+                self.assertEqual(json.loads(blocked.exception.read())['error'],'cora_backend_not_configured_for_local_origin')
+            finally:
+                httpd.shutdown();httpd.server_close();thread.join(timeout=2)
 
 if __name__=='__main__':unittest.main()
