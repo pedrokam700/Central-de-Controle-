@@ -1,0 +1,62 @@
+name: One-shot app modularization third-slice reconciliation
+
+on:
+  push:
+    branches:
+      - hardening/p0-production-readiness
+    paths:
+      - .github/workflows/hardening-app-modularization-third-slice.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify exact branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hardening/p0-production-readiness
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
+      - name: Reconcile third modularization slice
+        run: node scripts/reconcile-app-modularization-third-slice.mjs
+      - name: Validate readiness and user profile service
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            scripts/production-readiness.test.mjs \
+            scripts/ames-user-profile-service.test.mjs \
+            scripts/ames-session-admission-app.test.mjs \
+            scripts/ames-firestore-guarded-client.test.mjs \
+            scripts/ames-cache.test.mjs
+          git diff --check
+      - name: Remove one-shot tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/hardening-app-modularization-third-slice.yml
+          rm -f scripts/reconcile-app-modularization-third-slice.mjs
+          git diff --check
+      - name: Commit reconciled readiness only after validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hardening/p0-production-readiness
+          test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo "No third-slice readiness changes"; exit 1; }
+          git commit -m "Hardening: reconcile third app modularization slice"
+          git push origin HEAD:hardening/p0-production-readiness
