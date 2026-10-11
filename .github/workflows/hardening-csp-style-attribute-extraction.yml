@@ -1,4 +1,4 @@
-# retry with validation artifact capture
+# retry after separating style-block and style-attribute metadata
 name: One-shot CSP style-attribute extraction
 
 on:
@@ -30,7 +30,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
       - name: Externalize static style attributes
-        run: node scripts/patch-csp-style-attributes.mjs
+        run: node scripts/run-csp-style-attribute-extraction-once.mjs
       - name: Validate CSP attribute extraction
         shell: bash
         run: |
@@ -62,6 +62,7 @@ jobs:
           rm -f .github/workflows/hardening-csp-inventory-snapshot.yml
           rm -f .github/workflows/hardening-csp-style-attribute-extraction.yml
           rm -f scripts/patch-csp-style-attributes.mjs
+          rm -f scripts/run-csp-style-attribute-extraction-once.mjs
           git diff --check
       - name: Commit only after validation
         shell: bash
