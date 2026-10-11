@@ -1,15 +1,19 @@
 import {normalizeCanonical,CANONICAL_SCHEMA} from './data/canonical.mjs';
 import {LINE_IDS} from './data/contract.mjs';
 import {projectCanonicalForCloud} from './data/cloud-projection.mjs';
+import {normalizePublicationFence} from './data/publication-fence.mjs';
 const sha=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 export function sanitizeSnapshot(payload){
   return projectCanonicalForCloud(payload);
 }
-export async function publication(uid,payload){
+export async function publication(uid,payload,{collectorFence=null}={}){
   const safe=sanitizeSnapshot(payload),text=JSON.stringify(safe),hash=await sha(text);
-  const key=await sha(JSON.stringify([safe.source_id,safe.snapshot_id,safe.snapshot_revision,hash]));
+  const normalizedFence=collectorFence==null?null:normalizePublicationFence(collectorFence,{line:safe.line_id,ownerUid:uid});
+  const keyMaterial=[safe.source_id,safe.snapshot_id,safe.snapshot_revision,hash];if(normalizedFence)keyMaterial.push(normalizedFence.fence);
+  const key=await sha(JSON.stringify(keyMaterial));
   const parts=[];for(let i=0;i<text.length;){let end=Math.min(i+150000,text.length);if(end<text.length&&/[\uD800-\uDBFF]/.test(text[end-1]))end--;parts.push(text.slice(i,end));i=end;}
   const head={schema:CANONICAL_SCHEMA,owner_uid:uid,line_id:safe.line_id,source_id:safe.source_id,snapshot_id:safe.snapshot_id,snapshot_num:Number(safe.snapshot_id),snapshot_revision:safe.snapshot_revision,key,hash,parts:parts.length,collected_at:safe.collected_at};
+  if(normalizedFence)head.collector_fence=normalizedFence;
   return {id:uid+':'+safe.line_id+':'+key,uid,head,parts};
 }
 export function indexedQueue(){
@@ -18,7 +22,8 @@ export function indexedQueue(){
   const run=async(mode,work)=>{const d=await open();return new Promise((resolve,reject)=>{const t=d.transaction('pending',mode),s=t.objectStore('pending');let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
   return {put:x=>run('readwrite',s=>s.put(x)),remove:id=>run('readwrite',s=>s.delete(id)),list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid)};
 }
-export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout}={}){
+export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,collectorFenceForLine=null}={}){
+  if(collectorFenceForLine!==null&&typeof collectorFenceForLine!=='function')throw new TypeError('collectorFenceForLine deve ser função ou null');
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[];
   const alive=(u,g)=>u===uid&&g===generation;
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
@@ -59,8 +64,14 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     start(user){this.stop();uid=user;const u=uid,g=generation;unwatch=remote.watch(u,heads=>{if(!alive(u,g))return;const key=JSON.stringify(heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort());if(key===headsKey)return;headsKey=key;lastHeads=heads;receive(heads);},error=>{if(alive(u,g))status({read_status:'error',read_error:error.message});});flush();},
     async capture(){
       if(!uid)return;const u=uid,g=generation,payloads=store.localCanonical();
-      const signature=JSON.stringify(payloads.map(p=>[p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));if(signature===seen)return;
-      for(const p of payloads){const entry=await publication(u,p);if(!alive(u,g))return;await queue.put(entry);}
+      let signature,fences=null;
+      if(collectorFenceForLine){
+        fences=new Map();const rows=[];
+        for(const p of payloads){const raw=await collectorFenceForLine(p.line_id),fence=raw==null?null:normalizePublicationFence(raw,{line:p.line_id,ownerUid:u});fences.set(p.line_id,fence);rows.push([p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash,fence?.fence||null]);}
+        signature=JSON.stringify(rows);
+      }else signature=JSON.stringify(payloads.map(p=>[p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));
+      if(signature===seen)return;
+      for(const p of payloads){const entry=await publication(u,p,{collectorFence:fences?.get(p.line_id)||null});if(!alive(u,g))return;await queue.put(entry);}
       if(!alive(u,g))return;seen=signature;status({status:'pending',pending:(await queue.list(u)).length});flush();
     },
     retry(){if(uid&&lastHeads.length)receive(lastHeads);return flush();},
