@@ -1,0 +1,31 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "app_modularization_guarded_firestore_client",
+  "status": "focused_green_full_ci_pending",
+  "validated_parent": "b8c3b6ab04a81df4a2c9a3e125d465eb2553e4e1",
+  "focused_run": 38182747659,
+  "assertions": [
+    "guarded Firestore client is extracted to core/firestore-guarded-client.mjs",
+    "self-profile bootstrap remains allowed for users/{same UID} even before currentAccount capabilities exist",
+    "viewer/operator/engineer/admin capability matrix remains enforced before raw Firestore mutations",
+    "unknown collections remain fail-closed",
+    "writeBatch checks set/update/delete individually and preserves fluent semantics",
+    "app.js delegates addDoc/setDoc/updateDoc/deleteDoc/writeBatch to the extracted guarded client",
+    "guarded client reads actor UID and capabilities dynamically rather than capturing stale session state",
+    "offline shell caches both firestore-write-policy and firestore-guarded-client modules",
+    "35 focused policy/RBAC/offline/cache/release tests passed before the functional commit",
+    "temporary one-shot write tooling was removed before the functional commit"
+  ],
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "full Static Quality on a normal descendant of the bot-produced extraction commit",
+    "full Firestore Rules/cross-PC E2E on the same descendant",
+    "reconcile app_modularization readiness after full CI",
+    "continue gradual extraction only after this slice is GREEN"
+  ]
+}
