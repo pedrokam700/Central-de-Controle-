@@ -258,19 +258,39 @@
     },
     "csp_inventory": {
       "priority": "P1",
-      "status": "green_inventory_only",
+      "status": "green_source_inventory_policy_pending",
       "green": [
         "frontend source inventory",
         "approved A-MES intranet HTTP classified explicitly",
         "unknown non-loopback HTTP remains blocking",
-        "eval/inline blockers remain visible"
+        "inline script blocks eliminated: 0",
+        "inline style blocks eliminated: 0",
+        "inline style attributes eliminated: 0",
+        "eval/new Function blockers eliminated: 0",
+        "dynamic script element creation inventory: 0",
+        "15 former inline style blocks externalized with cascade order preserved and offline/build coverage",
+        "45 former static style attributes externalized with one-to-one mapping and direct runtime style-property updates preserved",
+        "source inventory now reports blocking_csp_ready only when scripts/styles/style-attributes/eval/insecure HTTP are all clean",
+        "CSP source-form cleanup passed Static Quality and Firestore Rules/cross-PC E2E"
       ],
       "remaining": [
-        "enforce blocking CSP only after reported inline/eval blockers are eliminated without breaking Firebase/CORA/A-MES"
+        "derive a directive-specific CSP allowlist from runtime dependencies; do not promote test/example origins such as central.invalid or https://... into policy",
+        "validate Firebase, CORA, local agent and factory A-MES origins by resource type instead of using one generic origin list",
+        "exercise the candidate policy in Content-Security-Policy-Report-Only on an externally reachable preview",
+        "enforce a blocking CSP only after report-only evidence is GREEN and no required Central/CORA/A-MES path is broken"
       ],
       "evidence": [
         "scripts/csp-inventory.mjs",
-        "scripts/ames-csp-inventory.test.mjs"
+        "scripts/ames-csp-inventory.test.mjs",
+        "scripts/ames-csp-style-extraction.test.mjs",
+        "scripts/ames-csp-style-attributes.test.mjs",
+        "hardening/csp-style-extraction-evidence.json",
+        "hardening/csp-style-attribute-extraction-evidence.json",
+        "hardening/csp-inline-style-attribute-map.json"
+      ],
+      "full_ci_runs": [
+        38179802958,
+        38180353061
       ]
     },
     "operational_registry": {

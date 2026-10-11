@@ -2,7 +2,7 @@
   "schema": "central-csp-style-extraction-evidence-v1",
   "branch": "hardening/p0-production-readiness",
   "code_commit": "4e7bb0e264d4ce6eb70e06029b4594507e7d6a62",
-  "status": "focused_green_full_ci_pending",
+  "status": "green",
   "focused_validation": {
     "style_extraction_one_shot_run": 38179554973,
     "quality_guard_fix_one_shot_run": 38179746126,
@@ -35,8 +35,13 @@
     "production_rules_publish_allowed": false
   },
   "remaining": [
-    "full Static Quality and Firestore Rules/cross-PC E2E on this normal descendant commit",
-    "remediate any inline style attributes reported by the enhanced inventory without changing runtime behavior",
-    "prove final CSP directives and required Firebase/CORA/A-MES origins before enforcing a blocking policy"
-  ]
+    "derive and validate final CSP directives and required Firebase/CORA/A-MES origins before enforcing a blocking policy",
+    "exercise the resulting CSP in report-only mode on an externally reachable preview before blocking enforcement"
+  ],
+  "full_ci_run": 38179802958,
+  "gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  }
 }
