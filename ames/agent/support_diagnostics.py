@@ -1,7 +1,7 @@
 """Export-safe support diagnostics.
 
 Local diagnostics are protected by workstation pairing and may include technical
-error text useful on the machine.  This module creates a second, stricter payload
+error text useful on the machine. This module creates a second, stricter payload
 for sharing with support: allowlisted metadata only, no free-form job errors, no
 job IDs, no local paths, no production identifiers and no raw MES content.
 """
@@ -22,6 +22,31 @@ def _pick(source: Any, keys: tuple[str, ...]) -> dict:
     if not isinstance(source, dict):
         return {}
     return {key: source.get(key) for key in keys if key in source}
+
+
+def assert_export_safe(payload: Any) -> None:
+    """Structural guard: exported support payload must stay free of sensitive domains."""
+    forbidden_key_fragments = (
+        "password", "senha", "cookie", "credential", "authorization", "token", "secret",
+        "pcba", "material_sn", "imei", "raw", "payload", "comment", "error_text", "path",
+    )
+    forbidden_value_markers = ("DO_NOT_LEAK", "Bearer ", "X-Central-Agent-Token")
+
+    def walk(value: Any, path: str = "root") -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                lowered = str(key).lower()
+                if any(fragment in lowered for fragment in forbidden_key_fragments):
+                    raise RuntimeError(f"Support diagnostic forbidden key: {path}.{key}")
+                walk(child, f"{path}.{key}")
+        elif isinstance(value, (list, tuple)):
+            for index, child in enumerate(value):
+                walk(child, f"{path}[{index}]")
+        elif isinstance(value, str):
+            if any(marker.lower() in value.lower() for marker in forbidden_value_markers):
+                raise RuntimeError(f"Support diagnostic forbidden value at {path}")
+
+    walk(payload)
 
 
 def build(local: dict) -> dict:
@@ -70,7 +95,7 @@ def build(local: dict) -> dict:
             backup,
             ("schema", "available", "verified", "integrity", "bytes", "schema_version", "snapshot_count", "verified_at", "error"),
         ),
-        "scheduler": _pick(scheduler, ("busy", "queued", "policy", "running_kind", "running_id")),
+        "scheduler": _pick(scheduler, ("busy", "queued", "policy", "running_kind")),
         "collection": {
             "configured_lines": list(collection.get("configured_lines") or []),
             "performance": collection.get("performance"),
@@ -82,29 +107,5 @@ def build(local: dict) -> dict:
         "snapshots": snapshots if isinstance(snapshots, dict) else {},
         "recent_jobs": safe_jobs,
     }
+    assert_export_safe(payload)
     return payload
-
-
-def assert_export_safe(payload: Any) -> None:
-    """Structural guard: exported support payload must stay free of sensitive domains."""
-    forbidden_key_fragments = (
-        "password", "senha", "cookie", "credential", "authorization", "token", "secret",
-        "pcba", "material_sn", "imei", "raw", "payload", "comment", "error_text", "path",
-    )
-    forbidden_value_markers = ("DO_NOT_LEAK", "Bearer ", "X-Central-Agent-Token")
-
-    def walk(value: Any, path: str = "root") -> None:
-        if isinstance(value, dict):
-            for key, child in value.items():
-                lowered = str(key).lower()
-                if any(fragment in lowered for fragment in forbidden_key_fragments):
-                    raise RuntimeError(f"Support diagnostic forbidden key: {path}.{key}")
-                walk(child, f"{path}.{key}")
-        elif isinstance(value, (list, tuple)):
-            for index, child in enumerate(value):
-                walk(child, f"{path}[{index}]")
-        elif isinstance(value, str):
-            if any(marker.lower() in value.lower() for marker in forbidden_value_markers):
-                raise RuntimeError(f"Support diagnostic forbidden value at {path}")
-
-    walk(payload)
