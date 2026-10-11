@@ -95,3 +95,25 @@ jobs:
         run: |
           export FIREBASE_TEST_MODULES="$RUNNER_TEMP/ames-tests/node_modules"
           "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs'
+
+  post-deploy-smoke:
+    name: Published preview smoke
+    if: github.event_name == 'pull_request'
+    needs: static-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify exact SHA and canonical route on deployed preview
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          node scripts/post-deploy-smoke.mjs
+          --origin "https://deploy-preview-${PR_NUMBER}--productcontrolcenter.netlify.app"
+          --sha "$EXPECTED_SHA"
+          --wait-ms 180000
+          --max-redirects 4
