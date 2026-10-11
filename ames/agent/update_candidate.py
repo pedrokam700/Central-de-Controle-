@@ -11,7 +11,7 @@ import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
 FILES=(
-    'agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py',
+    'agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','local_frontend_server.py',
     'operational_calendar.py','operational_registry.py','diagnostics.py','migrations.py','disaster_recovery.py',
     'support_diagnostics.py','workstation_identity.py','retention_policy.py','engine_bridge.py',
     'store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py'
@@ -30,6 +30,7 @@ FRONTEND_PACKAGE_SCHEMA='central-immutable-frontend-v1'
 FRONTEND_PACKAGE_MANIFEST='FRONTEND_PACKAGE_MANIFEST.json'
 FRONTEND_STAGE_SCHEMA='central-local-frontend-stage-v1'
 FRONTEND_STAGE_MARKER='_CENTRAL_FRONTEND_STAGE.json'
+FRONTEND_STAGE_MANIFEST='_CENTRAL_FRONTEND_MANIFEST.json'
 
 def _package_target(path):
     target=Path(path).resolve()
@@ -117,16 +118,23 @@ def _verify_staged_frontend(folder,manifest):
         if _sha256_file(path)!=item['sha256']:raise ValueError('Staged frontend hash mismatch: '+item['path'])
     return True
 
+def _verify_stage_metadata(folder,manifest,package_digest):
+    folder=Path(folder);marker_path=folder/FRONTEND_STAGE_MARKER;manifest_path=folder/FRONTEND_STAGE_MANIFEST
+    if not marker_path.is_file() or not manifest_path.is_file():raise ValueError('Existing frontend stage metadata missing; refusing overwrite')
+    state=json.loads(marker_path.read_text(encoding='utf-8'));stored_manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
+    if state.get('schema')!=FRONTEND_STAGE_SCHEMA or state.get('frontend_sha')!=manifest.get('frontend_sha') or state.get('package_sha256')!=package_digest:raise ValueError('Existing frontend stage identity mismatch; refusing overwrite')
+    if stored_manifest!=manifest:raise ValueError('Existing frontend stage manifest mismatch; refusing overwrite')
+    if state.get('stage_manifest_sha256')!=_sha256_file(manifest_path):raise ValueError('Existing frontend stage manifest digest mismatch; refusing overwrite')
+    _verify_staged_frontend(folder,stored_manifest)
+    return True
+
 def stage_frontend(path,frontend_package,expected_sha):
     _,package_root=_package_target(path)
     package_path=Path(frontend_package).resolve();manifest=_frontend_package_manifest(package_path,expected_sha)
-    sha=str(manifest['frontend_sha']).lower();root=package_root/'frontend-packages';final=root/sha;marker=final/FRONTEND_STAGE_MARKER
+    sha=str(manifest['frontend_sha']).lower();root=package_root/'frontend-packages';final=root/sha
     package_digest=_sha256_file(package_path)
     if final.exists():
-        if not marker.is_file():raise ValueError('Existing frontend stage has no activation marker; refusing overwrite')
-        state=json.loads(marker.read_text(encoding='utf-8'))
-        if state.get('schema')!=FRONTEND_STAGE_SCHEMA or state.get('frontend_sha')!=sha or state.get('package_sha256')!=package_digest:raise ValueError('Existing frontend stage identity mismatch; refusing overwrite')
-        _verify_staged_frontend(final,manifest)
+        _verify_stage_metadata(final,manifest,package_digest)
         return final
     root.mkdir(parents=True,exist_ok=True);temp=root/(sha+'.stage.'+uuid.uuid4().hex)
     temp.mkdir()
@@ -135,10 +143,13 @@ def stage_frontend(path,frontend_package,expected_sha):
             for item in manifest['files']:
                 rel=item['path'];data=archive.read('frontend/'+rel);dst=temp/rel;dst.parent.mkdir(parents=True,exist_ok=True);dst.write_bytes(data)
         _verify_staged_frontend(temp,manifest)
+        _atomic_json(temp/FRONTEND_STAGE_MANIFEST,manifest)
+        manifest_digest=_sha256_file(temp/FRONTEND_STAGE_MANIFEST)
         _atomic_json(temp/FRONTEND_STAGE_MARKER,{
             'schema':FRONTEND_STAGE_SCHEMA,
             'frontend_sha':sha,
             'package_sha256':package_digest,
+            'stage_manifest_sha256':manifest_digest,
             'release_identity_sha256':manifest.get('release_identity_sha256'),
             'canonical_path':'/Central-de-Controle-/',
             'activated':False,
