@@ -1,10 +1,11 @@
+import { LINE_IDS, requireRegisteredLine } from './operational-registry.mjs';
+
 // Read-only compatibility contract. No MES command or cloud publisher lives here.
-export const LINE_IDS = Object.freeze(['TAN10101', 'TAN10102', 'TAN10103']);
+export { LINE_IDS };
 export const LEGACY_SCHEMA = 'central-v2-ames-line-v1';
 
 export function requireLine(line) {
-  if (!LINE_IDS.includes(line)) throw new TypeError('An explicit supported line is required');
-  return line;
+  return requireRegisteredLine(line);
 }
 
 export function productKey(value) {
