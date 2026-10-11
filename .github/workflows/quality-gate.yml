@@ -39,6 +39,9 @@ jobs:
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
 
+      - name: Run unified release identity contract
+        run: node --test scripts/release-contract.test.mjs
+
       - name: Run local agent pairing contract
         run: node --test scripts/ames-agent-pairing.test.mjs
 
