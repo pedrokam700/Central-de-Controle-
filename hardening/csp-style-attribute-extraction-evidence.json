@@ -1,0 +1,42 @@
+{
+  "schema": "central-csp-style-attribute-extraction-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "code_commit": "a1d80ae664fe1f9501eb9876aa8909207cde89ef",
+  "status": "focused_green_full_ci_pending",
+  "focused_validation": {
+    "one_shot_run": 38180302939,
+    "inline_style_attributes_before": 45,
+    "inline_style_attributes_after": 0,
+    "inline_style_blocks_after": 0,
+    "inline_scripts_after": 0,
+    "eval_like_after": 0,
+    "set_attribute_style_writes": 0,
+    "style_css_text_writes": 0,
+    "style_attribute_assignments": 0,
+    "direct_style_property_updates_preserved": true,
+    "service_worker_precaches_attribute_stylesheet": true,
+    "immutable_build_includes_attribute_stylesheet": true,
+    "central_quality_gate_focused_run": "green",
+    "temporary_inventory_workflow_removed": true,
+    "one_shot_write_workflow_removed": true,
+    "temporary_patch_scripts_removed": true
+  },
+  "implementation": {
+    "stylesheet": "csp-inline-16-style-attributes.css",
+    "mapping": "hardening/csp-inline-style-attribute-map.json",
+    "token_attribute": "data-csp-inline-style",
+    "specificity_strategy": "high-specificity external selectors without !important; runtime element.style.property assignments retain inline priority"
+  },
+  "promotion": {
+    "csp_fully_green": false,
+    "blocking_csp_enforced": false,
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "full Static Quality and Firestore Rules/cross-PC E2E on this normal descendant commit",
+    "derive and validate final CSP directives/origin allowlist for Firebase, CORA, A-MES/local dependencies",
+    "exercise CSP in report-only mode on an externally reachable preview before blocking enforcement"
+  ]
+}
