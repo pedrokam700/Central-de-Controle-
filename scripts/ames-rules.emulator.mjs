@@ -31,7 +31,6 @@ try{
   await assertSucceeds(setDoc(doc(a,...path),head));
   await assertSucceeds(setDoc(doc(a,...team),head));
   await assertSucceeds(getDoc(doc(a,...path)));
-  // Head privado continua do publicador; equipe lê somente a ponte e partes sanitizadas.
   await assertFails(getDoc(doc(b,...path)));
   await assertSucceeds(getDoc(doc(b,...team)));
   await assertSucceeds(getDoc(doc(b,...part)));
@@ -86,36 +85,33 @@ try{
   await assertFails(setDoc(doc(supervisor,'workShifts','shift-supervisor'),{name:'blocked'}));
   await assertSucceeds(setDoc(doc(admin,'workShifts','shift-admin'),{name:'allowed'}));
 
-  // Lease/fencing groundwork: namespace próprio, ainda não exigido pelos heads MES.
+  // Lease/fencing groundwork: autoridade de expiração depende apenas de request.time e renewed_at(server).
   const wsA='ws_'+'a'.repeat(32),wsB='ws_'+'b'.repeat(32),leaseRef=doc(operator,'amesLineLeases',line);
-  const future=()=>Timestamp.fromMillis(Date.now()+10*60*1000);
-  const leaseA={schema:'central-collector-lease-v1',line_id:line,owner_uid:'operatorV2',workstation_id:wsA,generation:1,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),expires_at:future(),status:'active'};
+  const leaseA={schema:'central-collector-lease-v1',line_id:line,owner_uid:'operatorV2',workstation_id:wsA,generation:1,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),status:'active'};
   await assertSucceeds(setDoc(leaseRef,leaseA));
   await assertSucceeds(getDoc(doc(viewer,'amesLineLeases',line)));
   await assertFails(getDoc(doc(pending,'amesLineLeases',line)));
   await assertFails(setDoc(doc(viewer,'amesLineLeases','TAN10102'),{...leaseA,line_id:'TAN10102',owner_uid:'viewerV2'}));
-  // Outro coletor não toma a linha antes do vencimento, mesmo elevando a geração.
-  await assertFails(setDoc(doc(engineer,'amesLineLeases',line),{...leaseA,owner_uid:'engineerV2',workstation_id:wsB,generation:2,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),expires_at:future()}));
+  // Outro coletor não toma a linha antes do TTL do servidor, mesmo elevando a geração.
+  await assertFails(setDoc(doc(engineer,'amesLineLeases',line),{...leaseA,owner_uid:'engineerV2',workstation_id:wsB,generation:2,acquired_at:serverTimestamp(),renewed_at:serverTimestamp()}));
   const liveLease=(await getDoc(leaseRef)).data();
-  // O mesmo coletor renova sem mudar geração nem acquired_at.
-  await assertSucceeds(setDoc(leaseRef,{...liveLease,renewed_at:serverTimestamp(),expires_at:future()}));
+  await assertSucceeds(setDoc(leaseRef,{...liveLease,renewed_at:serverTimestamp()}));
   await assertFails(deleteDoc(leaseRef));
-  // Para provar takeover sem esperar TTL real, o emulador sem Rules semeia um lease expirado.
+
+  // Para provar takeover sem esperar 10 minutos, semeia lease com renewed_at já expirado.
   await env.withSecurityRulesDisabled(async c=>{
     await setDoc(doc(c.firestore(),'amesLineLeases',line),{
       schema:'central-collector-lease-v1',line_id:line,owner_uid:'operatorV2',workstation_id:wsA,generation:4,
-      acquired_at:Timestamp.fromMillis(Date.now()-20*60*1000),renewed_at:Timestamp.fromMillis(Date.now()-20*60*1000),
-      expires_at:Timestamp.fromMillis(Date.now()-1000),status:'active'
+      acquired_at:Timestamp.fromMillis(Date.now()-20*60*1000),renewed_at:Timestamp.fromMillis(Date.now()-11*60*1000),status:'active'
     });
   });
-  const takeover={schema:'central-collector-lease-v1',line_id:line,owner_uid:'engineerV2',workstation_id:wsB,generation:5,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),expires_at:future(),status:'active'};
+  const takeover={schema:'central-collector-lease-v1',line_id:line,owner_uid:'engineerV2',workstation_id:wsB,generation:5,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),status:'active'};
   await assertSucceeds(setDoc(doc(engineer,'amesLineLeases',line),takeover));
-  // Geração stale não revive autoridade depois da troca.
+
   await env.withSecurityRulesDisabled(async c=>{
     await setDoc(doc(c.firestore(),'amesLineLeases','TAN10102'),{
       schema:'central-collector-lease-v1',line_id:'TAN10102',owner_uid:'operatorV2',workstation_id:wsA,generation:9,
-      acquired_at:Timestamp.fromMillis(Date.now()-20*60*1000),renewed_at:Timestamp.fromMillis(Date.now()-20*60*1000),
-      expires_at:Timestamp.fromMillis(Date.now()-1000),status:'active'
+      acquired_at:Timestamp.fromMillis(Date.now()-20*60*1000),renewed_at:Timestamp.fromMillis(Date.now()-11*60*1000),status:'active'
     });
   });
   await assertFails(setDoc(doc(engineer,'amesLineLeases','TAN10102'),{...takeover,line_id:'TAN10102',generation:9}));
@@ -139,5 +135,5 @@ try{
   const escalated=auth('newEscalated','new2@example.test',true);
   await assertFails(setDoc(doc(escalated,'users','newEscalated'),{uid:'newEscalated',name:'Bad',...v2('new2@example.test','operator','approved')}));
 
-  console.log('PASS: legacy/V2 RBAC + append-only admission audit + MES authority + non-enforced collector lease/fencing groundwork');
+  console.log('PASS: legacy/V2 RBAC + admission audit + MES authority + server-time collector lease/fencing groundwork');
 }finally{await env.cleanup();}
