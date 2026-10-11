@@ -14,14 +14,14 @@ const sha256=path=>crypto.createHash('sha256').update(fs.readFileSync(path)).dig
 export function buildReleaseIdentity({frontendSha=null}={}){
   const pkg=json('package.json');
   const latest=json('ames/releases/latest/release.json');
-  const index=read('index.html');
+  const buildGuard=read('cora-build-guard.js');
   const offline=read('offline-bootstrap.mjs');
   const hardened=read('ames/agent/agent_hardened_entry.py');
   const hardening=read('ames/agent/hardening.py');
   const canonical=read('ames/data/canonical.mjs');
   const entry=read('ames/agent/agent_entry.py');
 
-  const centralBuild=capture(index,/const\s+BUILD\s*=\s*["']([^"']+)["']/,'index BUILD');
+  const centralBuild=capture(buildGuard,/const\s+BUILD\s*=\s*["']([^"']+)["']/,'cora build guard BUILD');
   const offlineBuild=capture(offline,/const\s+BUILD\s*=\s*["']([^"']+)["']/,'offline bootstrap BUILD');
   if(centralBuild!==offlineBuild)throw new Error('Release identity: shell e offline bootstrap usam builds diferentes');
 

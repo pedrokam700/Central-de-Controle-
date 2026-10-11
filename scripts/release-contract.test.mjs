@@ -11,7 +11,7 @@ const latest=json('ames/releases/latest/release.json');
 const hardened=read('ames/agent/agent_hardened_entry.py');
 const launcher=read('tools/ames-workstation/START_AGENT_CANONICAL.ps1');
 const build=read('scripts/build-static.mjs');
-const index=read('index.html');
+const buildGuard=read('cora-build-guard.js');
 const offline=read('offline-bootstrap.mjs');
 
 function capture(text,regex,label){
@@ -33,9 +33,10 @@ test('identidade do produto e release permanecem explicitamente separadas',()=>{
 });
 
 test('build do frontend é único entre shell, bootstrap e artefato estático',()=>{
-  const shellBuild=capture(index,/const\s+BUILD\s*=\s*["']([^"']+)["']/,'index BUILD');
+  const shellBuild=capture(buildGuard,/const\s+BUILD\s*=\s*["']([^"']+)["']/,'cora build guard BUILD');
   const bootstrapBuild=capture(offline,/const\s+BUILD\s*=\s*["']([^"']+)["']/,'offline bootstrap BUILD');
   assert.equal(bootstrapBuild,shellBuild,'offline bootstrap usa build diferente do shell');
+  assert.match(buildGuard,/const\s+BUILD\s*=\s*["']15\.1\.13\.48["']/,'build guard externo deixou de expor o BUILD canônico');
   assert.ok(build.includes('build:identity.central_build'),'build-static não publica o BUILD vindo da identidade canônica');
   assert.match(build,/release-identity\.json/,'build-static deixou de publicar release-identity.json');
 });

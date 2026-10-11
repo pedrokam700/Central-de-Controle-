@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { buildReleaseIdentity } from './release-identity.mjs';
 
 const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
-const names=['index.html','app.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest'];
+const names=['index.html','app.js','cora-build-guard.js','central-runtime-boot-guard.js','root-entry.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest'];
 const allowed=/\.(mjs|css|svg|png|json)$/;
 
 function collect(dir){
@@ -19,8 +19,8 @@ function deployedIndex(source){
   const appTag='<script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.48"></script>';
   const bootstrapTag='<script type="module" src="/Central-de-Controle-/offline-bootstrap.mjs?v=15.1.13.48"></script>';
   if(!source.includes(appTag))throw new Error('Tag canônica de app.js não encontrada no index.html');
-  const bootGuard=`<script id="central-runtime-boot-guard">\n(()=>{\n  const form=document.querySelector('#loginForm');\n  const status=document.querySelector('#authLoginStatus');\n  const button=document.querySelector('#loginButton');\n  if(!form)return;\n  const fail=()=>{\n    if(window.__centralLoginModuleReady)return false;\n    if(status){status.textContent='A aplicação não carregou completamente neste preview. Recarregue a página ou use um deploy validado.';status.className='auth-status error';}\n    if(button){button.disabled=true;button.textContent='Aplicação indisponível';}\n    return true;\n  };\n  form.addEventListener('submit',event=>{if(fail()){event.preventDefault();event.stopImmediatePropagation();}},true);\n  setTimeout(fail,5000);\n})();\n</script>`;
-  return source.replace(appTag,bootGuard+'\n'+bootstrapTag);
+  const bootGuardTag='<script id="central-runtime-boot-guard" src="/Central-de-Controle-/central-runtime-boot-guard.js?v=15.1.13.48"></script>';
+  return source.replace(appTag,bootGuardTag+'\n'+bootstrapTag);
 }
 
 function deployedApp(source){
@@ -33,7 +33,7 @@ function deployedApp(source){
 }
 
 function rootEntry(){
-  return `<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<meta name="robots" content="noindex">\n<title>Central de Controle</title>\n<meta http-equiv="refresh" content="0; url=/Central-de-Controle-/">\n</head>\n<body>\n<p>Abrindo a Central… <a href="/Central-de-Controle-/">Continuar</a></p>\n<script>location.replace('/Central-de-Controle-/'+location.search+location.hash);</script>\n</body>\n</html>\n`;
+  return `<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<meta name="robots" content="noindex">\n<title>Central de Controle</title>\n<meta http-equiv="refresh" content="0; url=/Central-de-Controle-/">\n</head>\n<body>\n<p>Abrindo a Central… <a href="/Central-de-Controle-/">Continuar</a></p>\n<script src="/Central-de-Controle-/root-entry.js?v=15.1.13.48"></script>\n</body>\n</html>\n`;
 }
 
 collect('ames');
