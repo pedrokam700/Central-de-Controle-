@@ -3,7 +3,7 @@ import {pathToFileURL} from 'node:url';
 const tools=process.env.FIREBASE_TEST_MODULES;
 if(!tools)throw Error('Set FIREBASE_TEST_MODULES to isolated node_modules');
 const {initializeTestEnvironment,assertSucceeds,assertFails}=await import(pathToFileURL(tools+'/@firebase/rules-unit-testing/dist/esm/index.esm.js'));
-const {doc,setDoc,getDoc,deleteDoc,updateDoc}=await import(pathToFileURL(tools+'/firebase/firestore/dist/index.mjs'));
+const {doc,setDoc,getDoc,deleteDoc,updateDoc,serverTimestamp,Timestamp}=await import(pathToFileURL(tools+'/firebase/firestore/dist/index.mjs'));
 const env=await initializeTestEnvironment({projectId:'demo-central-mes',firestore:{rules:fs.readFileSync('firestore.rules','utf8')}});
 const uid='A',key='a'.repeat(64),line='TAN10101';
 const head={schema:'central-ames-v2',owner_uid:uid,line_id:line,source_id:'source',snapshot_id:'1',snapshot_num:1,snapshot_revision:1,key,hash:key,parts:1,collected_at:'2026-10-09T10:00:00Z'};
@@ -38,14 +38,12 @@ try{
   await assertFails(getDoc(doc(guest,...team)));await assertFails(getDoc(doc(guest,...part)));
   await assertFails(getDoc(doc(disabled,...team)));await assertFails(getDoc(doc(disabled,...part)));
   await assertFails(setDoc(doc(b,...path),head));
-  await assertFails(setDoc(doc(b,...team),head)); // B não pode alegar owner_uid A.
+  await assertFails(setDoc(doc(b,...team),head));
   const bKey='b'.repeat(64),bHead={...head,owner_uid:'B',source_id:'source-b',key:bKey,hash:bKey};
-  // Team head sem head privado correspondente deve falhar fechado.
   await assertFails(setDoc(doc(b,...team),bHead));
   await assertSucceeds(setDoc(doc(b,'amesUsers','B','lines',line,'snapshots',bKey,'parts','0'),{owner_uid:'B',line_id:line,key:bKey,index:0,data:'sanitized-b'}));
   await assertSucceeds(setDoc(doc(b,'amesUsers','B','lines',line),bHead));
   await assertSucceeds(setDoc(doc(b,...team),bHead));
-  // Nem o próprio dono pode publicar um team head divergente do namespace privado.
   await assertFails(setDoc(doc(b,...team),{...bHead,snapshot_revision:2}));
   await assertFails(setDoc(doc(a,...path),{...head,line_id:'TAN10102'}));
   await assertFails(setDoc(doc(a,...part),{owner_uid:'A',line_id:line,key,index:0,data:'changed'}));
@@ -54,7 +52,6 @@ try{
   await assertFails(setDoc(doc(a,'amesUsers','A','lines','TAN99999'),{...head,line_id:'TAN99999'}));
   await assertFails(setDoc(doc(a,'amesTeamLines','TAN99999'),{...head,line_id:'TAN99999'}));
 
-  // Legado continua exatamente compatível durante a migração gradual.
   await assertSucceeds(setDoc(doc(a,'reports','legacy-report'),{description:'manual preserved'}));
   await assertSucceeds(setDoc(doc(a,'products','legacy-product'),{name:'legacy preserved'}));
 
@@ -66,18 +63,15 @@ try{
   const supervisor=auth('supervisorV2','supervisor@example.test',true);
   const admin=auth('adminV2','admin@example.test',true);
 
-  // Admissão v2: aprovação e e-mail verificado são ambos obrigatórios.
   await assertFails(getDoc(doc(pending,'reports','seed')));
   await assertFails(getDoc(doc(unverified,'reports','seed')));
   await assertSucceeds(getDoc(doc(viewer,'reports','seed')));
 
-  // Viewer é realmente read-only.
   await assertFails(setDoc(doc(viewer,'reports','viewer-write'),{description:'blocked'}));
   await assertFails(setDoc(doc(viewer,'products','viewer-product'),{name:'blocked'}));
   const viewerKey='c'.repeat(64),viewerHead={...head,owner_uid:'viewerV2',source_id:'viewer',key:viewerKey,hash:viewerKey};
   await assertFails(setDoc(doc(viewer,'amesUsers','viewerV2','lines',line,'snapshots',viewerKey,'parts','0'),{owner_uid:'viewerV2',line_id:line,key:viewerKey,index:0,data:'blocked'}));
 
-  // Operator executa operação e publica MES, mas não altera catálogo técnico.
   await assertSucceeds(setDoc(doc(operator,'reports','operator-report'),{description:'allowed'}));
   await assertSucceeds(setDoc(doc(operator,'operationalFailures','operator-failure'),{issue:'allowed'}));
   await assertFails(setDoc(doc(operator,'products','operator-product'),{name:'blocked'}));
@@ -86,14 +80,47 @@ try{
   await assertSucceeds(setDoc(doc(operator,'amesUsers','operatorV2','lines',line),operatorHead));
   await assertSucceeds(setDoc(doc(operator,'amesTeamLines',line),operatorHead));
 
-  // Engineer e supervisor podem manter dados técnicos, mas configuração segue admin-only.
   await assertSucceeds(setDoc(doc(engineer,'products','engineer-product'),{name:'allowed'}));
   await assertSucceeds(setDoc(doc(engineer,'failureAnalyses','engineer-analysis'),{status:'open'}));
   await assertSucceeds(setDoc(doc(supervisor,'aiKnowledge','supervisor-knowledge'),{title:'allowed'}));
   await assertFails(setDoc(doc(supervisor,'workShifts','shift-supervisor'),{name:'blocked'}));
   await assertSucceeds(setDoc(doc(admin,'workShifts','shift-admin'),{name:'allowed'}));
 
-  // Auditoria de admissão é append-only e somente admin pode criá-la/ler.
+  // Lease/fencing groundwork: namespace próprio, ainda não exigido pelos heads MES.
+  const wsA='ws_'+'a'.repeat(32),wsB='ws_'+'b'.repeat(32),leaseRef=doc(operator,'amesLineLeases',line);
+  const future=()=>Timestamp.fromMillis(Date.now()+10*60*1000);
+  const leaseA={schema:'central-collector-lease-v1',line_id:line,owner_uid:'operatorV2',workstation_id:wsA,generation:1,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),expires_at:future(),status:'active'};
+  await assertSucceeds(setDoc(leaseRef,leaseA));
+  await assertSucceeds(getDoc(doc(viewer,'amesLineLeases',line)));
+  await assertFails(getDoc(doc(pending,'amesLineLeases',line)));
+  await assertFails(setDoc(doc(viewer,'amesLineLeases','TAN10102'),{...leaseA,line_id:'TAN10102',owner_uid:'viewerV2'}));
+  // Outro coletor não toma a linha antes do vencimento, mesmo elevando a geração.
+  await assertFails(setDoc(doc(engineer,'amesLineLeases',line),{...leaseA,owner_uid:'engineerV2',workstation_id:wsB,generation:2,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),expires_at:future()}));
+  const liveLease=(await getDoc(leaseRef)).data();
+  // O mesmo coletor renova sem mudar geração nem acquired_at.
+  await assertSucceeds(setDoc(leaseRef,{...liveLease,renewed_at:serverTimestamp(),expires_at:future()}));
+  await assertFails(deleteDoc(leaseRef));
+  // Para provar takeover sem esperar TTL real, o emulador sem Rules semeia um lease expirado.
+  await env.withSecurityRulesDisabled(async c=>{
+    await setDoc(doc(c.firestore(),'amesLineLeases',line),{
+      schema:'central-collector-lease-v1',line_id:line,owner_uid:'operatorV2',workstation_id:wsA,generation:4,
+      acquired_at:Timestamp.fromMillis(Date.now()-20*60*1000),renewed_at:Timestamp.fromMillis(Date.now()-20*60*1000),
+      expires_at:Timestamp.fromMillis(Date.now()-1000),status:'active'
+    });
+  });
+  const takeover={schema:'central-collector-lease-v1',line_id:line,owner_uid:'engineerV2',workstation_id:wsB,generation:5,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),expires_at:future(),status:'active'};
+  await assertSucceeds(setDoc(doc(engineer,'amesLineLeases',line),takeover));
+  // Geração stale não revive autoridade depois da troca.
+  await env.withSecurityRulesDisabled(async c=>{
+    await setDoc(doc(c.firestore(),'amesLineLeases','TAN10102'),{
+      schema:'central-collector-lease-v1',line_id:'TAN10102',owner_uid:'operatorV2',workstation_id:wsA,generation:9,
+      acquired_at:Timestamp.fromMillis(Date.now()-20*60*1000),renewed_at:Timestamp.fromMillis(Date.now()-20*60*1000),
+      expires_at:Timestamp.fromMillis(Date.now()-1000),status:'active'
+    });
+  });
+  await assertFails(setDoc(doc(engineer,'amesLineLeases','TAN10102'),{...takeover,line_id:'TAN10102',generation:9}));
+  await assertSucceeds(setDoc(doc(engineer,'amesLineLeases','TAN10102'),{...takeover,line_id:'TAN10102',generation:10}));
+
   const audit={schema:'central-admission-audit-v1',action:'approve',target_uid:'viewerV2',actor_uid:'adminV2',at:123456,reason:'approved for operation',before:{approval_state:'pending',access_level:'viewer'},after:{approval_state:'approved',access_level:'operator'}};
   await assertSucceeds(setDoc(doc(admin,'admissionAudit','audit-1'),audit));
   await assertSucceeds(getDoc(doc(admin,'admissionAudit','audit-1')));
@@ -103,16 +130,14 @@ try{
   await assertFails(updateDoc(doc(admin,'admissionAudit','audit-1'),{reason:'tampered'}));
   await assertFails(deleteDoc(doc(admin,'admissionAudit','audit-1')));
 
-  // Um usuário v2 não pode promover a própria capacidade/admissão.
   await assertFails(updateDoc(doc(viewer,'users','viewerV2'),{access_level:'engineer'}));
   await assertFails(updateDoc(doc(viewer,'users','viewerV2'),{approval_state:'pending'}));
   await assertSucceeds(updateDoc(doc(viewer,'users','viewerV2'),{name:'Viewer Name'}));
 
-  // Novo cadastro v2 nasce obrigatoriamente pending/viewer; escalada no create falha.
   const newUser=auth('newV2','new@example.test',false);
   await assertSucceeds(setDoc(doc(newUser,'users','newV2'),{uid:'newV2',name:'New',...v2('new@example.test','viewer','pending')}));
   const escalated=auth('newEscalated','new2@example.test',true);
   await assertFails(setDoc(doc(escalated,'users','newEscalated'),{uid:'newEscalated',name:'Bad',...v2('new2@example.test','operator','approved')}));
 
-  console.log('PASS: legacy compatibility + v2 verified/approved admission + RBAC capabilities + append-only admission audit + MES authority');
+  console.log('PASS: legacy/V2 RBAC + append-only admission audit + MES authority + non-enforced collector lease/fencing groundwork');
 }finally{await env.cleanup();}
