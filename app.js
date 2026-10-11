@@ -15,9 +15,10 @@
     import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
     import {buildSignupProfile,evaluateSessionAdmission} from './core/session-admission.mjs';
     import {migrateLegacyProfile,approveV2Profile,denyV2Profile,changeV2AccessLevel} from './core/admission-admin.mjs';
+    import {assertFirestoreWriteAllowed} from './core/firestore-write-policy.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction, arrayUnion
+      getFirestore, collection, addDoc as firebaseAddDoc, onSnapshot, doc, deleteDoc as firebaseDeleteDoc, updateDoc as firebaseUpdateDoc, setDoc as firebaseSetDoc, getDoc, getDocs, query, where, writeBatch as firebaseWriteBatch, runTransaction, arrayUnion
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import {
       getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -37,6 +38,33 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
+
+    function clientWriteActorUid(){ return auth.currentUser?.uid || currentAuthUser?.uid || ''; }
+    function assertClientWrite(reference,operation){
+      return assertFirestoreWriteAllowed({
+        path:reference?.path||'',
+        operation,
+        actorUid:clientWriteActorUid(),
+        capabilities:currentAccount?.capabilities||null
+      });
+    }
+    function addDoc(reference,data){ assertClientWrite(reference,'create'); return firebaseAddDoc(reference,data); }
+    function setDoc(reference,data,options){
+      assertClientWrite(reference,'set');
+      return options===undefined?firebaseSetDoc(reference,data):firebaseSetDoc(reference,data,options);
+    }
+    function updateDoc(reference,...args){ assertClientWrite(reference,'update'); return firebaseUpdateDoc(reference,...args); }
+    function deleteDoc(reference){ assertClientWrite(reference,'delete'); return firebaseDeleteDoc(reference); }
+    function writeBatch(database){
+      const raw=firebaseWriteBatch(database);
+      const guarded={
+        set(reference,data,options){ assertClientWrite(reference,'set'); options===undefined?raw.set(reference,data):raw.set(reference,data,options); return guarded; },
+        update(reference,...args){ assertClientWrite(reference,'update'); raw.update(reference,...args); return guarded; },
+        delete(reference){ assertClientWrite(reference,'delete'); raw.delete(reference); return guarded; },
+        commit(){ return raw.commit(); }
+      };
+      return guarded;
+    }
 
     window.__centralLoginModuleReady = true;
     window.addEventListener('error', event => console.error('[Central] Erro global:', event.error || event.message));
@@ -1180,9 +1208,9 @@
       const q=String(query||'').trim().toLowerCase(),items=[];
       const add=(title,sub,kind,fn,searchText='')=>{if(!q||[title,sub,kind,searchText].join(' ').toLowerCase().includes(q))items.push({title,sub,kind,fn});};
       add(t('Abrir Central do Dia'),currentLanguage==='en-US'?'Current shift, routines and assignments':'Turno atual, rotinas e alocações',t('Ação'),()=>show('daily'),'central rotina turno');
-      add(t('Nova atividade'),currentLanguage==='en-US'?'Create a task or structured activity':'Criar tarefa ou atividade estruturada',t('Ação'),()=>openActivityModal(),'atividade tarefa');
-      add(t('Registrar falha'),currentLanguage==='en-US'?'Register an operational occurrence':'Registrar ocorrência operacional',t('Ação'),()=>openOperationalFailureModal(),'falha ocorrência');
-      add(t('Cadastrar produto'),currentLanguage==='en-US'?'Add product / CPH':'Adicionar produto / CPH',t('Ação'),()=>openProductModal(),'produto cph');
+      if(hasCapability('write_operational'))add(t('Nova atividade'),currentLanguage==='en-US'?'Create a task or structured activity':'Criar tarefa ou atividade estruturada',t('Ação'),()=>openActivityModal(),'atividade tarefa');
+      if(hasCapability('write_operational'))add(t('Registrar falha'),currentLanguage==='en-US'?'Register an operational occurrence':'Registrar ocorrência operacional',t('Ação'),()=>openOperationalFailureModal(),'falha ocorrência');
+      if(hasCapability('write_technical'))add(t('Cadastrar produto'),currentLanguage==='en-US'?'Add product / CPH':'Adicionar produto / CPH',t('Ação'),()=>openProductModal(),'produto cph');
       add(t('Abrir saúde dos dados'),currentLanguage==='en-US'?'Review incomplete or inconsistent records':'Revisar registros incompletos ou inconsistentes',t('Ação'),()=>openDataHealth(),'saúde dados');
       if(canAdminister())add(t('Configurar operação'),currentLanguage==='en-US'?'Shifts, scopes, assignment matrix and routines':'Turnos, escopos, matriz e rotinas',t('Admin'),()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel')?.scrollIntoView({behavior:'smooth',block:'start'});},80);},'admin matriz');
       const match=(...v)=>!q||v.flat(Infinity).filter(Boolean).join(' ').toLowerCase().includes(q);
@@ -2500,7 +2528,58 @@
     }
 
     const ADMIN_ACCESS_LEVELS = ['viewer','operator','engineer','supervisor','admin'];
-    function canAdminister(){ return currentAccount?.capabilities?.administer === true; }
+    function hasCapability(name){ return currentAccount?.capabilities?.active === true && currentAccount.capabilities?.[name] === true; }
+    function canAdminister(){ return hasCapability('administer'); }
+    function capabilityDeniedMessage(name){
+      const labels={write_operational:'operacional',write_technical:'técnica',administer:'administrativa'};
+      return currentLanguage==='en-US'
+        ? 'Your access level does not allow this action.'
+        : 'Seu nível de acesso não permite esta ação '+(labels[name]||'')+'.';
+    }
+    function requireCapability(name){
+      if(hasCapability(name))return true;
+      showSaveToast(capabilityDeniedMessage(name),'error');
+      return false;
+    }
+    const CAPABILITY_FORM_MAP=Object.freeze({
+      productForm:'write_technical',componentForm:'write_technical',
+      failureForm:'write_operational',operationalFailureForm:'write_operational',activityForm:'write_operational',flowForm:'write_operational',routineExecutionForm:'write_operational',
+      dailyShiftForm:'administer',dailyScopeForm:'administer',dailyProductionContextForm:'administer',dailyAllocationForm:'administer',dailyRoutineForm:'administer',familyRenameForm:'administer'
+    });
+    const CAPABILITY_CLICK_RULES=Object.freeze([
+      {capability:'write_technical',hide:true,selector:'#newProduct,#headerNewProduct,#newComponent,#aiSaveInvestigation'},
+      {capability:'write_operational',hide:true,selector:'#newFailure,#newOperationalFailure,#headerNewOperationalFailure,#quickOperationalFailure,#newActivity,#newFlow,#quickActivity,#quickFailure,#quickFlow'},
+      {capability:'write_operational',hide:false,selector:'#saveArtifacts,#saveAnalysis,#saveQuantity,#saveDetailPage,#editFailureName,#saveFailureName,#addUpdate,#saveOperationalEvidence,#saveOperationalDetail,#deleteOperationalDetail,#convertOperationalToProductReport,#saveActivityChanges,#saveActivityEvidence,#structureActivity,#activitySteps input,#saveFlowChanges,#saveRoutineExecutionButton,#saveShiftHandover'},
+      {capability:'administer',hide:false,selector:'#deleteReport,#deleteActivity,#cancelActivity,#deleteFlow,.delete-family-btn'}
+    ]);
+    function applyCapabilityControl(rule){
+      const allowed=hasCapability(rule.capability);
+      document.querySelectorAll(rule.selector).forEach(el=>{
+        if(rule.hide){
+          if(!allowed){el.dataset.capabilityHidden='1';el.style.setProperty('display','none','important');}
+          else if(el.dataset.capabilityHidden==='1'){el.style.removeProperty('display');delete el.dataset.capabilityHidden;}
+        }else if('disabled' in el){
+          if(!allowed){if(el.dataset.capabilityDisabled!=='1')el.dataset.capabilityWasDisabled=el.disabled?'1':'0';el.dataset.capabilityDisabled='1';el.disabled=true;el.title=capabilityDeniedMessage(rule.capability);}
+          else if(el.dataset.capabilityDisabled==='1'){el.disabled=el.dataset.capabilityWasDisabled==='1';delete el.dataset.capabilityDisabled;delete el.dataset.capabilityWasDisabled;if(el.title===capabilityDeniedMessage(rule.capability))el.removeAttribute('title');}
+        }
+      });
+    }
+    function applyCapabilityUi(){
+      if(!currentAccount)return;
+      CAPABILITY_CLICK_RULES.forEach(applyCapabilityControl);
+      document.documentElement.dataset.centralAccessLevel=currentAccount.accessLevel||currentAccount.generation||'unknown';
+    }
+    document.addEventListener('submit',event=>{
+      const capability=CAPABILITY_FORM_MAP[event.target?.id];
+      if(!capability||hasCapability(capability))return;
+      event.preventDefault();event.stopImmediatePropagation();showSaveToast(capabilityDeniedMessage(capability),'error');
+    },true);
+    document.addEventListener('click',event=>{
+      for(const rule of CAPABILITY_CLICK_RULES){
+        if(!event.target?.closest?.(rule.selector)||hasCapability(rule.capability))continue;
+        event.preventDefault();event.stopImmediatePropagation();showSaveToast(capabilityDeniedMessage(rule.capability),'error');return;
+      }
+    },true);
     function adminUiText(pt,en){ return currentLanguage==='en-US' ? en : pt; }
     function adminAccessLevelLabel(level){
       const labels=currentLanguage==='en-US'
@@ -6038,6 +6117,7 @@ ${m.text}`).join('\n\n');
       }
       renderSafely('Console MES', renderConsoleMes);
       renderSafely('tradução', translatePage);
+      renderSafely('permissões da interface', applyCapabilityUi);
 
       // Reaplica no final para garantir consistência mesmo se algum módulo
       // tiver alterado o DOM durante a atualização.
@@ -6122,7 +6202,7 @@ ${m.text}`).join('\n\n');
       if (creating) input?.focus();
       else if (input) input.value = '';
     }
-    function openProductModal() {
+    function openProductModal() { if(!requireCapability('write_technical'))return;
       const preferredFamily = expandedProductFamily || activeData()?.family || '';
       document.querySelector('#productModal').classList.remove('hidden');
       fillProductFamilySelector(preferredFamily);
@@ -6135,10 +6215,11 @@ ${m.text}`).join('\n\n');
       syncProductFamilyInput();
       updateProductCodePreview();
     }
-    function openComponentModal(returnToFailure = false) { if (!activeData()) return openProductModal(); continueToFailureAfterComponent = returnToFailure; document.querySelector('#componentModalSubtitle').textContent = `Produto selecionado: ${productDisplayCode(activeData().code)} · ${activeData().family}`; document.querySelector('#componentModal').classList.remove('hidden'); document.querySelector('#componentForm input').focus(); }
+    function openComponentModal(returnToFailure = false) { if(!requireCapability('write_technical'))return; if (!activeData()) return openProductModal(); continueToFailureAfterComponent = returnToFailure; document.querySelector('#componentModalSubtitle').textContent = `Produto selecionado: ${productDisplayCode(activeData().code)} · ${activeData().family}`; document.querySelector('#componentModal').classList.remove('hidden'); document.querySelector('#componentForm input').focus(); }
     function closeComponentModal() { document.querySelector('#componentModal').classList.add('hidden'); document.querySelector('#componentForm').reset(); continueToFailureAfterComponent = false; }
     function fillFailureComponents() { const components = activeData()?.components || []; document.querySelector('#failureComponent').innerHTML = '<option value="">Selecione</option>' + components.sort((a, b) => a.localeCompare(b)).map(component => `<option value="${esc(component)}">${esc(component)}</option>`).join(''); }
     function openFailureModal() {
+      if(!requireCapability('write_operational'))return;
       if (!activeData()) return openProductModal();
       if (!(activeData().components || []).length) return openComponentModal(true);
       fillFailureComponents();
@@ -6150,7 +6231,7 @@ ${m.text}`).join('\n\n');
     function closeFailureModal() { document.querySelector('#failureModal').classList.add('hidden'); document.querySelector('#failureForm').reset(); }
     function fillActivityProducts(){ const select=document.querySelector('#activityProduct'); if(!select)return; const current=select.value; select.innerHTML='<option value="">Não relacionado a produto</option>'+state.products.sort((a,b)=>productDisplayCode(a.code).localeCompare(productDisplayCode(b.code))).map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))} · ${esc(p.family)}</option>`).join(''); select.value=current||activeProduct||''; }
     function syncActivityModeUI(){const form=document.querySelector('#activityForm');if(!form)return;const structured=form.elements.activityMode?.value==='structured';document.querySelector('#activityStructuredCreate')?.classList.toggle('hidden',!structured);}
-    function openActivityModal(prefill={}) {fillActivityProducts();updateOwnerDropdowns();const form=document.querySelector('#activityForm');if(prefill.title)form.elements.title.value=prefill.title;if(prefill.area)form.elements.area.value=prefill.area;if(prefill.description)form.elements.description.value=prefill.description;if(prefill.activityMode)form.elements.activityMode.value=prefill.activityMode;syncActivityModeUI();translatePage();document.querySelector('#activityModal').classList.remove('hidden');document.querySelector('#activityForm [name="title"]').focus();}
+    function openActivityModal(prefill={}) {if(!requireCapability('write_operational'))return;fillActivityProducts();updateOwnerDropdowns();const form=document.querySelector('#activityForm');if(prefill.title)form.elements.title.value=prefill.title;if(prefill.area)form.elements.area.value=prefill.area;if(prefill.description)form.elements.description.value=prefill.description;if(prefill.activityMode)form.elements.activityMode.value=prefill.activityMode;syncActivityModeUI();translatePage();document.querySelector('#activityModal').classList.remove('hidden');document.querySelector('#activityForm [name="title"]').focus();}
     function closeActivityModal() {document.querySelector('#activityModal').classList.add('hidden');document.querySelector('#activityForm').reset();syncActivityModeUI();pendingOriginContext=null;}
     function openDetail(id) { selectedId = id; renderDetail(); document.querySelector('#detailModal').classList.remove('hidden'); }
     function closeDetail() { document.querySelector('#detailModal').classList.add('hidden'); selectedId = null; }
@@ -6221,7 +6302,7 @@ ${m.text}`).join('\n\n');
     }
 
     function fillFlowProducts() { const select = document.querySelector('#flowProduct'); select.innerHTML = `<option value="">${esc(t('Não relacionado a produto'))}</option>` + state.products.sort((a, b) => a.code.localeCompare(b.code)).map(product => `<option value="${esc(product.code)}">${esc(product.code)} · ${esc(product.family)}</option>`).join(''); }
-    function openFlowModal() { fillFlowProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#flowModal').classList.remove('hidden'); document.querySelector('#flowForm select').focus(); }
+    function openFlowModal() { if(!requireCapability('write_operational'))return; fillFlowProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#flowModal').classList.remove('hidden'); document.querySelector('#flowForm select').focus(); }
     function closeFlowModal() { document.querySelector('#flowModal').classList.add('hidden'); document.querySelector('#flowForm').reset(); }
     function openFlowDetail(id) { selectedFlowId = id; renderFlowDetail(); document.querySelector('#flowDetailModal').classList.remove('hidden'); }
     function closeFlowDetail() { document.querySelector('#flowDetailModal').classList.add('hidden'); selectedFlowId = null; }
@@ -6358,6 +6439,7 @@ ${m.text}`).join('\n\n');
       preview.innerHTML=''; [...(input.files||[])].filter(f=>f.type.startsWith('image/')).slice(0,8).forEach(file=>{const reader=new FileReader();reader.onload=e=>{const box=document.createElement('div');box.className='preview-thumb';box.innerHTML=`<img src="${e.target.result}" alt="Prévia da evidência">`;preview.appendChild(box);};reader.readAsDataURL(file);});
     }
     function openOperationalFailureModal(prefill={}){
+      if(!requireCapability('write_operational'))return;
       updateOwnerDropdowns();
       const form=document.querySelector('#operationalFailureForm');
       form.reset();
