@@ -58,6 +58,9 @@ jobs:
       - name: Run R12 migration bundle V5 closure tests
         run: python3 scripts/agent-r12-bundle-v5.test.py
 
+      - name: Run immutable frontend package tests
+        run: python3 scripts/agent-frontend-package.test.py
+
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
 
@@ -83,6 +86,28 @@ jobs:
         env:
           PYTHON_BIN: python3
         run: node scripts/quality-gate.mjs
+
+      - name: Build immutable frontend package from exact dist
+        env:
+          FRONTEND_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CENTRAL_STATIC_OUT: ${{ runner.temp }}/central-static-${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node scripts/build-static.mjs
+          python3 scripts/frontend_package.py build \
+            --dist "$CENTRAL_STATIC_OUT" \
+            --output "$RUNNER_TEMP/central-frontend-${FRONTEND_SHA}.zip" \
+            --sha "$FRONTEND_SHA"
+          sha256sum "$RUNNER_TEMP/central-frontend-${FRONTEND_SHA}.zip" > "$RUNNER_TEMP/central-frontend-${FRONTEND_SHA}.zip.sha256"
+
+      - name: Upload immutable frontend package
+        uses: actions/upload-artifact@v6
+        with:
+          name: central-frontend-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/central-frontend-${{ github.event.pull_request.head.sha || github.sha }}.zip
+            ${{ runner.temp }}/central-frontend-${{ github.event.pull_request.head.sha || github.sha }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Build R12 existing-install migration bundle V5
         env:
