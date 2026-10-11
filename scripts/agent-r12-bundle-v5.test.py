@@ -78,16 +78,20 @@ def test_builder_and_updater_runtime_contract_match_exactly():
     check("operational_registry.py" in updater, "Python operational registry missing from update contract")
 
 
-def test_hardened_entrypoint_transitive_local_imports_are_closed_inside_bundle_contract():
+def test_hardened_entrypoint_transitive_local_imports_are_closed_or_explicitly_frozen():
     included = {Path(name).stem for name in builder.RUNTIME_FILES}
+    frozen = {Path(name).stem for name in builder.FROZEN_EXISTING_RUNTIME}
     required = transitive_local_imports("agent_hardened_entry")
-    missing = required - included
+    missing = required - included - frozen
     check(not missing, f"missing transitive hardened runtime imports: {sorted(missing)}")
+    check(frozen == {"ames_3028", "ames_3028_live"}, f"unexpected frozen runtime exception set: {sorted(frozen)}")
+    check(frozen <= required, "frozen 3028 modules are no longer runtime dependencies")
+    check(not (frozen & included), "frozen 3028 collectors must not be silently shipped by migration bundle")
     expected = {
         "agent_hardened_entry", "agent_entry", "agent", "canonical", "diagnostics",
         "disaster_recovery", "hardening", "local_security", "migrations", "operational_calendar",
         "operational_registry", "process_r11", "process_timeline", "retention_policy", "store",
-        "support_diagnostics", "workstation_identity",
+        "support_diagnostics", "workstation_identity", "ames_3028", "ames_3028_live",
     }
     check(expected <= required, f"transitive closure no longer sees expected runtime modules: {sorted(expected - required)}")
 
@@ -107,6 +111,8 @@ def test_v5_bundle_is_complete_private_data_free_and_deterministic():
             check(archive.testzip() is None, "bundle zip integrity failed")
             for name in builder.RUNTIME_FILES:
                 check(f"ames-agent/{name}" in names, f"runtime file missing from bundle: {name}")
+            for name in builder.FROZEN_EXISTING_RUNTIME:
+                check(f"ames-agent/{name}" not in names, f"frozen 3028 collector must remain existing-install dependency: {name}")
             check("ames-agent/update_candidate.py" in names, "updater missing from bundle")
             check("ames-agent/candidate-files.json" in names, "candidate hash manifest missing")
             check("FRONTEND_GATE.json" in names, "frontend gate missing")
@@ -125,8 +131,8 @@ def test_v5_bundle_is_complete_private_data_free_and_deterministic():
             candidate = json.loads(archive.read("ames-agent/candidate-files.json"))
             check(tuple(candidate.keys()) == tuple(sorted(candidate.keys())), "candidate-files.json must be deterministic/sorted")
             check(set(candidate) == set(builder.RUNTIME_FILES), "candidate file hash contract differs from runtime files")
-            for name, expected in candidate.items():
-                check(sha256(archive.read(f"ames-agent/{name}")) == expected, f"candidate hash mismatch: {name}")
+            for name, expected_hash in candidate.items():
+                check(sha256(archive.read(f"ames-agent/{name}")) == expected_hash, f"candidate hash mismatch: {name}")
 
             gate = json.loads(archive.read("FRONTEND_GATE.json"))
             check(gate["schema"] == "central-frontend-gate-v1", "frontend gate schema mismatch")
@@ -141,10 +147,11 @@ def test_v5_bundle_is_complete_private_data_free_and_deterministic():
             check(manifest["new_pc_supported"] is False, "migration bundle must never become new-PC installer silently")
             check(manifest["factory_gate_required"] is True, "factory physical gate missing")
             check(tuple(manifest["runtime_contract"]) == tuple(builder.RUNTIME_FILES), "manifest runtime contract mismatch")
+            check(tuple(manifest["frozen_existing_runtime"]) == tuple(builder.FROZEN_EXISTING_RUNTIME), "frozen runtime contract missing from manifest")
             check(manifest["hardening"]["retention_mode"] == "observe_only", "retention mode must stay non-destructive")
-            for name, expected in manifest["files"].items():
+            for name, expected_hash in manifest["files"].items():
                 check(name in names, f"manifest hashes missing archive member: {name}")
-                check(sha256(archive.read(name)) == expected, f"manifest hash mismatch: {name}")
+                check(sha256(archive.read(name)) == expected_hash, f"manifest hash mismatch: {name}")
 
             all_text = "\n".join(
                 archive.read(name).decode("utf-8", errors="ignore")
@@ -164,7 +171,7 @@ def test_bundle_does_not_modify_frozen_3028_hash_contract():
 if __name__ == "__main__":
     tests = [
         test_builder_and_updater_runtime_contract_match_exactly,
-        test_hardened_entrypoint_transitive_local_imports_are_closed_inside_bundle_contract,
+        test_hardened_entrypoint_transitive_local_imports_are_closed_or_explicitly_frozen,
         test_v5_bundle_is_complete_private_data_free_and_deterministic,
         test_bundle_does_not_modify_frozen_3028_hash_contract,
     ]
