@@ -101,7 +101,11 @@
         "operator UX permits operational writes but blocks technical/admin writes",
         "engineer UX permits operational plus technical writes but blocks admin writes",
         "command palette and primary write modals are capability-filtered",
-        "Firestore Rules remain final server authority"
+        "Firestore Rules remain final server authority",
+        "admin UI exposes a live legacy-account migration inventory derived from the loaded users collection",
+        "legacy inventory distinguishes V2, active legacy and disabled legacy accounts without exporting account PII",
+        "legacy migration tooling never bulk-migrates, auto-migrates or infers an access level",
+        "disabled legacy accounts and invalid/empty inventory keep fallback removal fail-closed"
       ],
       "evidence": [
         "firestore.rules",
@@ -120,16 +124,21 @@
         "core/firestore-write-policy.mjs",
         "scripts/ames-firestore-write-policy.test.mjs",
         "scripts/ames-capability-write-ui.test.mjs",
-        "hardening/capability-write-ui-evidence.json"
+        "hardening/capability-write-ui-evidence.json",
+        "core/legacy-account-migration.mjs",
+        "scripts/ames-legacy-account-migration.test.mjs",
+        "scripts/ames-legacy-account-migration-app.test.mjs",
+        "hardening/legacy-account-migration-inventory-evidence.json"
       ],
       "remaining": [
-        "inventory and migrate active legacy accounts one-by-one with explicit administrator-selected access level",
-        "remove legacy fallback only after every active account is migrated and regression evidence is green"
+        "use the live admin inventory to migrate every legacy account one-by-one with an explicit administrator-selected access level; no production account migration is proven yet",
+        "remove the legacy fallback only after the live inventory reports zero legacy accounts, including disabled legacy accounts, and a separate regression/promotion gate is GREEN"
       ],
       "full_ci_runs": [
         38154172207,
         38154816019,
-        38155936063
+        38155936063,
+        38156414534
       ]
     },
     "sqlite_migrations": {
