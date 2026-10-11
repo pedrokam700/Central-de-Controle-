@@ -1,3 +1,4 @@
+# retry after structural test-harness fix
 name: One-shot CSP style extraction
 
 on:
