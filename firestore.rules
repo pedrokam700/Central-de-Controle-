@@ -10,14 +10,50 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function isV2Profile() {
+      return userProfile().data.admission_version == 2;
+    }
+
+    function validV2Access(level) {
+      return level in ['viewer', 'operator', 'engineer', 'supervisor', 'admin'];
+    }
+
+    function v2Approved() {
+      return isV2Profile()
+        && request.auth.token.email_verified == true
+        && userProfile().data.approval_state == 'approved'
+        && validV2Access(userProfile().data.access_level);
+    }
+
     function activeUser() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userProfile().data.disabled != true;
+        && userProfile().data.disabled != true
+        && (!isV2Profile() || v2Approved());
     }
 
     function isAdmin() {
-      return activeUser() && userProfile().data.role == 'admin';
+      return activeUser()
+        && (
+          (!isV2Profile() && userProfile().data.role == 'admin')
+          || (isV2Profile() && userProfile().data.access_level == 'admin')
+        );
+    }
+
+    function canOperationalWrite() {
+      return activeUser()
+        && (
+          !isV2Profile()
+          || userProfile().data.access_level in ['operator', 'engineer', 'supervisor', 'admin']
+        );
+    }
+
+    function canEngineerWrite() {
+      return activeUser()
+        && (
+          !isV2Profile()
+          || userProfile().data.access_level in ['engineer', 'supervisor', 'admin']
+        );
     }
 
     function mesLine(lineId) {
@@ -32,37 +68,76 @@ service cloud.firestore {
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.disabled == false
         && (
-          request.resource.data.role == 'user'
-          || (
-            request.resource.data.role == 'admin'
-            && request.auth.token.email == 'pedro.henrique@grupomultilaser.com.br'
+          // Compatibilidade: clientes atuais continuam criando o perfil legado.
+          (
+            !('admission_version' in request.resource.data)
+            && (
+              request.resource.data.role == 'user'
+              || (
+                request.resource.data.role == 'admin'
+                && request.auth.token.email == 'pedro.henrique@grupomultilaser.com.br'
+              )
+            )
+          )
+          ||
+          // Novo fluxo: nasce pendente/viewer e só fica ativo após verificação + aprovação.
+          (
+            request.resource.data.admission_version == 2
+            && request.resource.data.role == 'user'
+            && request.resource.data.access_level == 'viewer'
+            && request.resource.data.approval_state == 'pending'
           )
         );
       allow update: if isAdmin() || (
         activeUser()
         && request.auth.uid == userId
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.disabled == resource.data.disabled
-        && request.resource.data.email == resource.data.email
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'disabled', 'email', 'admission_version', 'access_level', 'approval_state'
+        ])
       );
       allow delete: if isAdmin();
     }
 
-    // Dados de trabalho compartilhados pela equipe autenticada.
-    match /products/{documentId} { allow read, create, update, delete: if activeUser(); }
-    match /reports/{documentId} { allow read, create, update, delete: if activeUser(); }
-    match /operationalFailures/{documentId} { allow read, create, update, delete: if activeUser(); }
-    match /activities/{documentId} { allow read, create, update, delete: if activeUser(); }
-    match /flows/{documentId} { allow read, create, update, delete: if activeUser(); }
-    match /failureAnalyses/{documentId} { allow read, create, update, delete: if activeUser(); }
-    match /aiKnowledge/{documentId} { allow read, create, update, delete: if activeUser(); }
-    match /aiConversations/{documentId} { allow read, create, update, delete: if activeUser(); }
+    // Dados de trabalho compartilhados pela equipe autenticada. Perfis legados
+    // preservam o comportamento atual; perfis v2 passam a obedecer capacidades.
+    match /products/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if canEngineerWrite();
+    }
+    match /reports/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
+    }
+    match /operationalFailures/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
+    }
+    match /activities/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
+    }
+    match /flows/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
+    }
+    match /failureAnalyses/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if canEngineerWrite();
+    }
+    match /aiKnowledge/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if canEngineerWrite();
+    }
+    match /aiConversations/{documentId} {
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
+    }
 
     // MES v2: cada usuário/posto só escreve no próprio namespace. As partes já
     // sanitizadas podem ser lidas por qualquer usuário ativo da mesma Central.
     match /amesUsers/{ownerId}/lines/{lineId} {
       function owner() {
-        return activeUser() && request.auth.uid == ownerId && mesLine(lineId);
+        return canOperationalWrite() && request.auth.uid == ownerId && mesLine(lineId);
       }
       function validHead() {
         let d = request.resource.data;
@@ -87,7 +162,7 @@ service cloud.firestore {
 
       match /snapshots/{snapshotKey}/parts/{partId} {
         // Leitura de dados já coletados/sanitizados é compartilhada; escrita
-        // continua restrita ao dono do namespace.
+        // continua restrita ao dono do namespace e exige capacidade operacional.
         allow read: if activeUser() && mesLine(lineId);
         allow create: if owner()
           && request.resource.data.keys().hasOnly(['owner_uid','line_id','key','index','data'])
@@ -121,7 +196,7 @@ service cloud.firestore {
         return getAfter(/databases/$(database)/documents/amesUsers/$(request.auth.uid)/lines/$(lineId)).data == request.resource.data;
       }
       allow read: if activeUser() && mesLine(lineId);
-      allow create, update: if activeUser() && validTeamHead() && matchesPublisherHead();
+      allow create, update: if canOperationalWrite() && validTeamHead() && matchesPublisherHead();
       allow delete: if false;
     }
 
@@ -142,7 +217,8 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
     match /routineExecutions/{documentId} {
-      allow read, create, update: if activeUser();
+      allow read: if activeUser();
+      allow create, update: if canOperationalWrite();
       allow delete: if isAdmin();
     }
 
