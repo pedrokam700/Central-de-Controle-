@@ -11,10 +11,11 @@
     import { MES_REASONING_RULES } from './ames/data/cora.mjs';
     import { createOnboardingView, savedIntegrationMode } from './ames/onboarding-view.mjs';
     import {createOfflineOutbox,createBrowserOutboxStorage} from './core/offline-outbox.mjs';
+    import {offlineWritePlan,routineFailureLinkEffect} from './core/offline-domain-write.mjs';
     import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction
+      getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction, arrayUnion
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import {
       getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -2948,10 +2949,10 @@ const aiPilot = {
     // nunca e atribuida automaticamente ao usuario que estiver logado depois.
     const offlineOutbox=createOfflineOutbox({storage:createBrowserOutboxStorage()});
     let offlineSyncPromise=null;
-    async function queueOfflineWrite(collectionName,payload){
+    async function queueOfflineWrite(collectionName,payload,{effects=[]}={}){
       const uid=currentAuthUser?.uid;
       if(!uid)throw new Error('Sessao autenticada obrigatoria para salvar offline.');
-      return offlineOutbox.enqueue({uid,collection:collectionName,payload});
+      return offlineOutbox.enqueue({uid,collection:collectionName,payload,effects});
     }
     async function listOfflineQueue(){return currentAuthUser?.uid?offlineOutbox.pending(currentAuthUser.uid):[];}
     async function removeOfflineQueue(id){return currentAuthUser?.uid?offlineOutbox.ack(currentAuthUser.uid,id):false;}
@@ -2961,7 +2962,17 @@ const aiPilot = {
       const uid=currentAuthUser.uid;
       const sessionIsCurrent=()=>currentAuthUser?.uid===uid;
       const write=async item=>{
-        const request=setDoc(doc(db,item.collection,item.documentId),item.payload);
+        const plan=offlineWritePlan(item),batch=writeBatch(db);
+        for(const step of plan){
+          if(step.kind==='set_document'){
+            batch.set(doc(db,step.collection,step.documentId),step.payload);
+          }else if(step.kind==='routine_failure_link'){
+            batch.update(doc(db,step.collection,step.documentId),{[step.field]:arrayUnion(step.value),updatedAt:step.updatedAt});
+          }else{
+            throw new Error('Operacao offline nao suportada: '+String(step.kind||''));
+          }
+        }
+        const request=batch.commit();
         let timer;
         const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Timeout ao confirmar escrita offline no Firestore')),15000);});
         try{return await Promise.race([request,timeout]);}finally{clearTimeout(timer);}
@@ -7008,9 +7019,22 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[],
         originType:operationalContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:operationalContext?.scopeId||'',originScopeName:operationalContext?.scopeName||'',originScopeCode:operationalContext?.scopeCode||'',originScopeType:operationalContext?.scopeType||'',originShiftId:operationalContext?.shiftId||'',originShiftName:operationalContext?.shiftName||'',originDateKey:operationalContext?.dateKey||'',productionProductCodes:operationalContext?.productionProductCodes?.length?operationalContext.productionProductCodes:productCodes,productionProductLabels:operationalContext?.productionProductLabels?.length?operationalContext.productionProductLabels:productCodes.map(productDisplayCode),productionFamilies:operationalContext?.productionFamilies||[],productionBaseCodes:operationalContext?.productionBaseCodes||[],autoContextLinked:Boolean(inferredProduction)
       };
-      if(!navigator.onLine){const queued=await queueOfflineWrite('operationalFailures',item);item.docId=queued.documentId;state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
       const origin=pendingOriginContext;
-      if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedFailureIds||[]),item.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedFailureIds:linked,updatedAt:now()},{merge:true});}
+      const routineEffect=origin?.type==='routineExecution'
+        ? routineFailureLinkEffect({executionKey:origin.executionKey,failureId:item.id,linkedAt:item.createdAt||now()})
+        : null;
+      if(!navigator.onLine){
+        const queued=await queueOfflineWrite('operationalFailures',item,{effects:routineEffect?[routineEffect]:[]});
+        item.docId=queued.documentId;state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');
+      }else if(routineEffect){
+        const batch=writeBatch(db),failureRef=doc(collection(db,'operationalFailures'));
+        batch.set(failureRef,item);
+        batch.update(doc(db,'routineExecutions',routineEffect.executionKey),{linkedFailureIds:arrayUnion(routineEffect.failureId),updatedAt:routineEffect.linkedAt});
+        await withTimeout(batch.commit(),15000,'Registro da falha e vinculo da rotina');
+        item.docId=failureRef.id;
+      }else{
+        item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;
+      }
       pendingOriginContext=null;
       closeOperationalFailureModal();show('operations');openOperationalDetail(item.id);
     });

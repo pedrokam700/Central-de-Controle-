@@ -87,7 +87,14 @@ test('Central usa H2 no source, no build e no cache offline',()=>{
   const module=fs.readFileSync('core/offline-outbox.mjs','utf8');
   assert.match(app,/\.\/core\/offline-outbox\.mjs/);
   assert.match(app,/offlineOutbox\.replay\(\{uid,write,sessionIsCurrent\}\)/);
-  assert.match(app,/setDoc\(doc\(db,item\.collection,item\.documentId\),item\.payload\)/);
+  assert.match(app,/\.\/core\/offline-domain-write\.mjs/);
+  assert.match(app,/offlineWritePlan\(item\)/);
+  assert.match(app,/writeBatch\(db\)/);
+  assert.match(app,/arrayUnion\(step\.value\)/);
+  assert.match(app,/queueOfflineWrite\('operationalFailures',item,\{effects:routineEffect\?\[routineEffect\]:\[\]\}\)/);
+  assert.match(app,/routineFailureLinkEffect\(\{executionKey:origin\.executionKey/);
+  assert.match(app,/batch\.update\(doc\(db,'routineExecutions',routineEffect\.executionKey\),\{linkedFailureIds:arrayUnion\(routineEffect\.failureId\)/);
+  assert.equal(app.includes("const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedFailureIds||[]),item.id])]"),false);
   assert.match(app,/report\.docId=queued\.documentId/);
   assert.match(app,/item\.docId=queued\.documentId/);
   assert.match(app,/legacyPendingCount/);
@@ -95,6 +102,7 @@ test('Central usa H2 no source, no build e no cache offline',()=>{
   assert.doesNotMatch(app,/addDoc\(collection\(db,item\.collection\),item\.payload\)/);
   assert.doesNotMatch(app,/arr\.slice\(-50\)/);
   assert.match(sw,/core\/offline-outbox\.mjs/);
+  assert.match(sw,/core\/offline-domain-write\.mjs/);
   assert.match(build,/collect\('core'\)/);
   assert.match(module,/const DB_VERSION=2/);
   assert.match(module,/LEGACY_STORE='queue'/);
