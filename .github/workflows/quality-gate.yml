@@ -30,6 +30,9 @@ jobs:
       - name: Install test-only Excel reader
         run: python3 -m pip install openpyxl==3.1.5
 
+      - name: Run database and snapshot hardening tests
+        run: python3 scripts/agent-hardening.test.py
+
       - name: Run Central quality gate
         env:
           PYTHON_BIN: python3
