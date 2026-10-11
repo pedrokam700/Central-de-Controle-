@@ -19,6 +19,7 @@ RUNTIME_FILES = (
     "hardening.py",
     "local_security.py",
     "operational_calendar.py",
+    "operational_registry.py",
     "diagnostics.py",
     "migrations.py",
     "disaster_recovery.py",
@@ -84,9 +85,8 @@ def _validate_updater_contract() -> None:
         )
 
 
-def _local_imports(path: Path) -> set[str]:
+def _local_imports(path: Path, local_modules: set[str]) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    local_modules = {Path(name).stem for name in RUNTIME_FILES}
     imports: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -103,10 +103,23 @@ def _local_imports(path: Path) -> set[str]:
 
 def _validate_runtime_closure() -> None:
     included = {Path(name).stem for name in RUNTIME_FILES}
-    required = _local_imports(AGENT / "agent_hardened_entry.py")
+    available = {path.stem for path in AGENT.glob("*.py") if path.is_file()}
+    required: set[str] = set()
+    pending = ["agent_hardened_entry"]
+    while pending:
+        module = pending.pop()
+        if module in required:
+            continue
+        required.add(module)
+        path = AGENT / f"{module}.py"
+        if not path.is_file():
+            continue
+        for imported in _local_imports(path, available):
+            if imported not in required:
+                pending.append(imported)
     missing = sorted(required - included)
     if missing:
-        raise ValueError(f"Hardened entrypoint imports modules absent from bundle: {missing}")
+        raise ValueError(f"Transitive hardened runtime imports absent from bundle: {missing}")
 
 
 def _update_batch() -> bytes:
