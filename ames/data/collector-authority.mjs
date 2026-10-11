@@ -2,7 +2,6 @@ import {LINE_IDS} from './operational-registry.mjs';
 
 export const COLLECTOR_LEASE_SCHEMA='central-collector-lease-v1';
 export const COLLECTOR_LEASE_TTL_MS=10*60*1000;
-export const COLLECTOR_LEASE_MAX_TTL_MS=15*60*1000;
 const WS_RE=/^ws_[0-9a-f]{32}$/;
 
 export function validateCollectorIdentity(value){
@@ -17,14 +16,14 @@ export function validateLeaseLine(value){
   return line;
 }
 
-export function validateLeaseTtl(value=COLLECTOR_LEASE_TTL_MS){
-  const ttl=Number(value);
-  if(!Number.isInteger(ttl)||ttl<60_000||ttl>COLLECTOR_LEASE_MAX_TTL_MS)throw new Error('TTL de lease inválido');
-  return ttl;
-}
-
 export function leasePath(line){
   return ['amesLineLeases',validateLeaseLine(line)];
+}
+
+export function leaseExpiryMs(current){
+  const renewed=Number(current?.renewed_at_ms);
+  if(!Number.isFinite(renewed))throw new Error('renewed_at remoto inválido');
+  return renewed+COLLECTOR_LEASE_TTL_MS;
 }
 
 export function classifyLease(current,{uid,workstationId,nowMs=Date.now()}={}){
@@ -37,11 +36,10 @@ export function classifyLease(current,{uid,workstationId,nowMs=Date.now()}={}){
   if(current.schema!==COLLECTOR_LEASE_SCHEMA)throw new Error('Lease remoto incompatível');
   const generation=Number(current.generation);
   if(!Number.isInteger(generation)||generation<1)throw new Error('Geração remota inválida');
-  const expires=Number(current.expires_at_ms);
-  if(!Number.isFinite(expires))throw new Error('Expiração remota inválida');
+  const expires=leaseExpiryMs(current);
   const same=current.owner_uid===owner&&current.workstation_id===workstation;
-  if(same&&expires>now)return Object.freeze({action:'renew',generation,reason:'same_collector'});
-  if(expires<=now)return Object.freeze({action:'takeover',generation:generation+1,reason:'expired'});
+  if(same&&expires>now)return Object.freeze({action:'renew',generation,reason:'same_collector',expires_at_ms:expires});
+  if(expires<=now)return Object.freeze({action:'takeover',generation:generation+1,reason:'expired',expired_at_ms:expires});
   return Object.freeze({action:'blocked',generation,reason:'held_by_other_collector',holder:{owner_uid:current.owner_uid,workstation_id:current.workstation_id,expires_at_ms:expires}});
 }
 
@@ -64,13 +62,13 @@ export function leaseContract(){
   return Object.freeze({
     schema:COLLECTOR_LEASE_SCHEMA,
     ttl_ms:COLLECTOR_LEASE_TTL_MS,
-    max_ttl_ms:COLLECTOR_LEASE_MAX_TTL_MS,
-    authority:'firestore_transaction_and_rules',
+    authority:'firestore_request_time_plus_fixed_ttl',
     activation:'contract_only_not_enforced_on_mes_heads',
     semantics:Object.freeze({
-      acquire:'generation=1 when line has no lease',
-      renew:'same owner_uid + workstation_id keeps generation while unexpired',
-      takeover:'only after expiry and increments generation',
+      acquire:'generation=1 when line has no lease; acquired_at/renewed_at use server timestamp',
+      renew:'same owner_uid + workstation_id keeps generation and refreshes renewed_at with server timestamp',
+      expiry:'renewed_at(server) + fixed 10 minute TTL; client clock never decides authority',
+      takeover:'only after server-derived expiry and increments generation',
       fencing:'MES publication will later require exact current generation + workstation_id'
     })
   });
