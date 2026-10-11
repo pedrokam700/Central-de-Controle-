@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const readinessPath='hardening/production-readiness.json';
 const sessionEvidencePath='hardening/session-admission-app-evidence.json';
 const adminEvidencePath='hardening/admission-admin-ui-evidence.json';
+const readinessTestPath='scripts/ames-production-readiness.test.mjs';
 const readiness=JSON.parse(fs.readFileSync(readinessPath,'utf8'));
 const sessionEvidence=JSON.parse(fs.readFileSync(sessionEvidencePath,'utf8'));
 const adminEvidence=JSON.parse(fs.readFileSync(adminEvidencePath,'utf8'));
@@ -83,4 +84,13 @@ if(readiness.gates.published_preview_smoke.status==='green')throw new Error('pre
 for(const [path,value] of [[readinessPath,readiness],[sessionEvidencePath,sessionEvidence],[adminEvidencePath,adminEvidence]]){
   fs.writeFileSync(path,JSON.stringify(value,null,2)+'\n');
 }
+
+let readinessTest=fs.readFileSync(readinessTestPath,'utf8');
+const oldExpectation="  assert.match(readiness.gates.offline_outbox_uid_idempotency.remaining.join(' '),/routineExecution/i);";
+const newExpectation="  assert.equal(readiness.gates.offline_outbox_uid_idempotency.status,'green');\n  assert.equal(readiness.gates.offline_outbox_uid_idempotency.full_ci_run,38153144329);";
+if(!readinessTest.includes(oldExpectation))throw new Error('stale H2 readiness expectation not found exactly once');
+if(readinessTest.indexOf(oldExpectation)!==readinessTest.lastIndexOf(oldExpectation))throw new Error('stale H2 readiness expectation duplicated');
+readinessTest=readinessTest.replace(oldExpectation,newExpectation);
+fs.writeFileSync(readinessTestPath,readinessTest);
+
 console.log('PASS readiness reconciled without promotion');
