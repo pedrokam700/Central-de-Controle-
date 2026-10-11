@@ -16,6 +16,7 @@ import hardening
 import local_security
 import migrations
 import operational_calendar
+import support_diagnostics
 
 HARDENED_CANDIDATE_VERSION = "0.5.25-rc1"
 entry.a.CANDIDATE_VERSION = HARDENED_CANDIDATE_VERSION
@@ -90,6 +91,24 @@ def _hardened_live_ingest(*args, **kwargs):
 entry.a.ingest_3028_live = _hardened_live_ingest
 
 
+def _dr_status():
+    return disaster_recovery.latest_status(entry.a.STORE, entry.a.BACKUP_DIR)
+
+
+def _local_diagnostics():
+    hardening_health = {
+        **hardening.health(entry.a.STORE),
+        "migration_registry": migrations.public_contract(),
+        "migration_state": MIGRATION_STATE,
+    }
+    return diagnostics.build(
+        entry.a,
+        hardening_health=hardening_health,
+        calendar=operational_calendar.public_contract(entry.a.CONFIG),
+        backup_status=_dr_status(),
+    )
+
+
 class HardenedHandler(entry.Handler):
     _PUBLIC_API = {"/api/v1/health", "/api/v1/hardening/health"}
 
@@ -132,9 +151,6 @@ class HardenedHandler(entry.Handler):
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         self.send_header("Cache-Control", "no-store")
 
-    def _dr_status(self):
-        return disaster_recovery.latest_status(entry.a.STORE, entry.a.BACKUP_DIR)
-
     def do_GET(self):
         path = urlparse(self.path).path
         if not self._authorized(path):
@@ -151,7 +167,7 @@ class HardenedHandler(entry.Handler):
                         "operational_calendar": operational_calendar.public_contract(entry.a.CONFIG),
                         "migration_registry": migrations.public_contract(),
                         "migration_state": MIGRATION_STATE,
-                        "backup": self._dr_status(),
+                        "backup": _dr_status(),
                         "current_shift": operational_calendar.shift_for(entry.a.CONFIG),
                         **hardening.health(entry.a.STORE),
                     }
@@ -161,21 +177,14 @@ class HardenedHandler(entry.Handler):
             return
         if path == "/api/v1/diagnostics":
             try:
-                hardening_health = {
-                    **hardening.health(entry.a.STORE),
-                    "migration_registry": migrations.public_contract(),
-                    "migration_state": MIGRATION_STATE,
-                }
-                calendar = operational_calendar.public_contract(entry.a.CONFIG)
-                self._send({
-                    "ok": True,
-                    "diagnostics": diagnostics.build(
-                        entry.a,
-                        hardening_health=hardening_health,
-                        calendar=calendar,
-                        backup_status=self._dr_status(),
-                    ),
-                })
+                self._send({"ok": True, "diagnostics": _local_diagnostics()})
+            except Exception as exc:
+                self._send({"ok": False, "error": type(exc).__name__, "message": str(exc)}, 500)
+            return
+        if path == "/api/v1/diagnostics/support":
+            try:
+                payload = support_diagnostics.build(_local_diagnostics())
+                self._send({"ok": True, "diagnostics": payload})
             except Exception as exc:
                 self._send({"ok": False, "error": type(exc).__name__, "message": str(exc)}, 500)
             return
