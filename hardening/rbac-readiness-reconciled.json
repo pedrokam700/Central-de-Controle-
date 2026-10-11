@@ -1,0 +1,24 @@
+{
+  "schema": "central-rbac-readiness-reconciled-v1",
+  "reconciliation_commit": "adafe0a2564f3f088e5d7e1f36365f103e93ae89",
+  "status": "full_ci_pending",
+  "evidence": {
+    "h2_full_ci_run": 38153144329,
+    "session_admission_full_ci_run": 38154172207,
+    "audited_admin_ui_full_ci_run": 38154816019
+  },
+  "expected_state": {
+    "offline_outbox_uid_idempotency": "green",
+    "admission_rbac": "partial",
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false,
+    "published_preview_smoke": "partial",
+    "factory_9_of_9": "pending"
+  },
+  "remaining_admission_work": [
+    "inventory and migrate active legacy accounts one-by-one with explicit administrator-selected access level",
+    "make write controls capability-aware for viewer/operator/engineer UX while Rules remain server authority",
+    "remove legacy fallback only after every active account is migrated and regression evidence is green"
+  ]
+}
