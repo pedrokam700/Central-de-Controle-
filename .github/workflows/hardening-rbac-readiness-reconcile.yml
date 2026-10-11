@@ -25,19 +25,19 @@ jobs:
           node-version: 24
       - name: Refuse moved branch
         run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Branch moved; fail closed."; exit 1; }
-      - name: Reconcile evidence and readiness
+      - name: Reconcile evidence, readiness and H2 expectation
         run: node scripts/reconcile-rbac-readiness.mjs
       - name: Validate readiness remains fail-closed
         run: |
           node --test scripts/ames-production-readiness.test.mjs
-          git diff --check -- hardening/production-readiness.json hardening/session-admission-app-evidence.json hardening/admission-admin-ui-evidence.json
+          git diff --check -- hardening/production-readiness.json hardening/session-admission-app-evidence.json hardening/admission-admin-ui-evidence.json scripts/ames-production-readiness.test.mjs
       - name: Commit reconciliation and remove one-shot machinery
         run: |
           rm .github/workflows/hardening-rbac-readiness-reconcile.yml
           rm scripts/reconcile-rbac-readiness.mjs
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add hardening/production-readiness.json hardening/session-admission-app-evidence.json hardening/admission-admin-ui-evidence.json .github/workflows/hardening-rbac-readiness-reconcile.yml scripts/reconcile-rbac-readiness.mjs
+          git add hardening/production-readiness.json hardening/session-admission-app-evidence.json hardening/admission-admin-ui-evidence.json scripts/ames-production-readiness.test.mjs .github/workflows/hardening-rbac-readiness-reconcile.yml scripts/reconcile-rbac-readiness.mjs
           git diff --cached --check
           git commit -m "Hardening: reconcile H2 and RBAC readiness evidence"
           git push origin HEAD:hardening/p0-production-readiness
