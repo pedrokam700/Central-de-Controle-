@@ -1,0 +1,32 @@
+{
+  "schema": "central-csp-style-extraction-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "code_commit": "1b0f899342090d4bbccfe5d69be68ede5a814e4c",
+  "status": "focused_green_full_ci_pending",
+  "focused_validation": {
+    "one_shot_run": 38179554973,
+    "exact_head_guard": "green",
+    "inline_style_blocks_expected": 15,
+    "inline_style_blocks_externalized": 15,
+    "cascade_order_preserved_by_same-position_links": true,
+    "build_includes_extracted_styles": true,
+    "service_worker_precaches_extracted_styles": true,
+    "csp_inventory_counts_inline_style_attributes": true,
+    "blocking_csp_ready_requires_zero_inline_style_blocks_and_attributes": true,
+    "dependent_contract_tests": "green",
+    "one_shot_write_workflow_removed": true,
+    "temporary_patch_scripts_removed": true
+  },
+  "promotion": {
+    "csp_fully_green": false,
+    "blocking_csp_enforced": false,
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "full Static Quality and Firestore Rules/cross-PC E2E on a normal descendant commit",
+    "remediate any inline style attributes reported by the enhanced inventory without changing runtime behavior",
+    "prove final CSP directives and required Firebase/CORA/A-MES origins before enforcing a blocking policy"
+  ]
+}
