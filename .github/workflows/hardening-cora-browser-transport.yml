@@ -1,4 +1,4 @@
-# retry with generated regex escaping fixed
+# retry with generated getOrigin/getToken regex escaping fixed
 name: One-shot CORA browser transport extraction
 
 on:
