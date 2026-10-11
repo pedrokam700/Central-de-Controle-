@@ -1,3 +1,4 @@
+# retry after exact fetch inventory reconciliation
 name: One-shot CORA direct fetch boundary
 
 on:
@@ -29,7 +30,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
       - name: Patch remaining CORA direct fetches through destination boundary
-        run: node scripts/patch-cora-direct-fetch-boundary.mjs
+        run: node scripts/run-cora-direct-fetch-boundary-once.mjs
       - name: Validate focused CORA runtime network boundary
         shell: bash
         run: |
@@ -51,6 +52,7 @@ jobs:
           set -euo pipefail
           rm -f .github/workflows/hardening-cora-direct-fetch-boundary.yml
           rm -f scripts/patch-cora-direct-fetch-boundary.mjs
+          rm -f scripts/run-cora-direct-fetch-boundary-once.mjs
           git diff --check
       - name: Commit only after focused validation
         shell: bash
