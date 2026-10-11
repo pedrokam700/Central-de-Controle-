@@ -1,0 +1,42 @@
+name: One-shot CSP blocker snapshot
+
+on:
+  push:
+    branches:
+      - hardening/p0-production-readiness
+    paths:
+      - .github/workflows/hardening-csp-snapshot.yml
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact hardening head
+        uses: actions/checkout@v7
+        with:
+          ref: hardening/p0-production-readiness
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Refuse moved branch
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Branch moved; fail closed."; exit 1; }
+      - name: Capture current CSP inventory
+        run: |
+          node scripts/csp-inventory.mjs > hardening/csp-inventory-current.json
+          node --test scripts/ames-csp-inventory.test.mjs
+          node -e "const x=require('./hardening/csp-inventory-current.json'); if(x.mode!=='inventory_only') process.exit(1); console.log(JSON.stringify(x,null,2));"
+          git diff --check -- hardening/csp-inventory-current.json
+      - name: Commit snapshot and remove one-shot workflow
+        run: |
+          rm .github/workflows/hardening-csp-snapshot.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add hardening/csp-inventory-current.json .github/workflows/hardening-csp-snapshot.yml
+          git diff --cached --check
+          git commit -m "Hardening: record current CSP blockers"
+          git push origin HEAD:hardening/p0-production-readiness
