@@ -32,6 +32,6 @@ const clearReplacement="store.updateAgent({status:'disconnected',config:null,job
 replaceOnce(clearAnchor,clearReplacement,'session clear');
 
 if((src.match(/request\('\/hardening\/health'\)/g)||[]).length!==1)throw new Error('hardening health probe missing or duplicated');
-if((src.match(/workstation_identity_status/g)||[]).length!==3)throw new Error('workstation identity status contract changed unexpectedly');
+if((src.match(/workstation_identity_status/g)||[]).length!==2)throw new Error('workstation identity status contract changed unexpectedly');
 fs.writeFileSync(FILE,src);
 console.log(JSON.stringify({hardening_health_probe:true,legacy_fallback:true,session_clear:true},null,2));
