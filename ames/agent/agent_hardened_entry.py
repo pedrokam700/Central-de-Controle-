@@ -12,12 +12,15 @@ import agent_entry as entry
 import diagnostics
 import hardening
 import local_security
+import migrations
 import operational_calendar
 
 HARDENED_CANDIDATE_VERSION = "0.5.25-rc1"
 entry.a.CANDIDATE_VERSION = HARDENED_CANDIDATE_VERSION
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
+MIGRATION_STATE = migrations.apply(entry.a.STORE)
+HARDENING_STATE = {**HARDENING_STATE, "migration_registry": MIGRATION_STATE}
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)
@@ -110,6 +113,8 @@ class HardenedHandler(entry.Handler):
                         "candidate_version": HARDENED_CANDIDATE_VERSION,
                         "local_security": local_security.public_status(AGENT_TOKEN_PATH),
                         "operational_calendar": operational_calendar.public_contract(entry.a.CONFIG),
+                        "migration_registry": migrations.public_contract(),
+                        "migration_state": MIGRATION_STATE,
                         "current_shift": operational_calendar.shift_for(entry.a.CONFIG),
                         **hardening.health(entry.a.STORE),
                     }
@@ -119,7 +124,11 @@ class HardenedHandler(entry.Handler):
             return
         if path == "/api/v1/diagnostics":
             try:
-                hardening_health = hardening.health(entry.a.STORE)
+                hardening_health = {
+                    **hardening.health(entry.a.STORE),
+                    "migration_registry": migrations.public_contract(),
+                    "migration_state": MIGRATION_STATE,
+                }
                 calendar = operational_calendar.public_contract(entry.a.CONFIG)
                 self._send({
                     "ok": True,
