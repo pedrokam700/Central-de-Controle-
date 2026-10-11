@@ -258,7 +258,7 @@
     },
     "csp_inventory": {
       "priority": "P1",
-      "status": "green_source_inventory_policy_pending",
+      "status": "green_report_only_candidate_external_observation_pending",
       "green": [
         "frontend source inventory",
         "approved A-MES intranet HTTP classified explicitly",
@@ -271,13 +271,21 @@
         "15 former inline style blocks externalized with cascade order preserved and offline/build coverage",
         "45 former static style attributes externalized with one-to-one mapping and direct runtime style-property updates preserved",
         "source inventory now reports blocking_csp_ready only when scripts/styles/style-attributes/eval/insecure HTTP are all clean",
-        "CSP source-form cleanup passed Static Quality and Firestore Rules/cross-PC E2E"
+        "CSP source-form cleanup passed Static Quality and Firestore Rules/cross-PC E2E",
+        "directive-specific CSP Report-Only candidate derived from runtime-proven dependencies",
+        "Netlify and Vercel carry the same Content-Security-Policy-Report-Only header",
+        "candidate policy excludes unsafe-inline and unsafe-eval",
+        "browser connect-src includes only same-origin, Firebase Auth/Firestore services and local loopback agent",
+        "factory A-MES host remains agent-side and is not exposed as a browser connect-src origin",
+        "test/example/unresolved origins remain excluded from the candidate allowlist",
+        "CSP Report-Only candidate passed Static Quality and Firestore Rules/cross-PC E2E"
       ],
       "remaining": [
-        "derive a directive-specific CSP allowlist from runtime dependencies; do not promote test/example origins such as central.invalid or https://... into policy",
-        "validate Firebase, CORA, local agent and factory A-MES origins by resource type instead of using one generic origin list",
-        "exercise the candidate policy in Content-Security-Policy-Report-Only on an externally reachable preview",
-        "enforce a blocking CSP only after report-only evidence is GREEN and no required Central/CORA/A-MES path is broken"
+        "create/use an explicitly authorized hardening preview PR before external CSP observation; no open PR currently uses hardening/p0-production-readiness as head",
+        "observe Content-Security-Policy-Report-Only violations on the externally reachable preview",
+        "add only origins proven necessary by report-only runtime evidence",
+        "exercise Firebase Auth, Firestore, same-origin CORA routes and local-agent connectivity under the report-only candidate",
+        "promote to blocking Content-Security-Policy only through a separate gated change after external observation is GREEN"
       ],
       "evidence": [
         "scripts/csp-inventory.mjs",
@@ -286,11 +294,17 @@
         "scripts/ames-csp-style-attributes.test.mjs",
         "hardening/csp-style-extraction-evidence.json",
         "hardening/csp-style-attribute-extraction-evidence.json",
-        "hardening/csp-inline-style-attribute-map.json"
+        "hardening/csp-inline-style-attribute-map.json",
+        "hardening/csp-report-only-plan.json",
+        "hardening/csp-report-only-evidence.json",
+        "scripts/ames-csp-report-only.test.mjs",
+        "netlify.toml",
+        "vercel.json"
       ],
       "full_ci_runs": [
         38179802958,
-        38180353061
+        38180353061,
+        38180774012
       ]
     },
     "operational_registry": {
