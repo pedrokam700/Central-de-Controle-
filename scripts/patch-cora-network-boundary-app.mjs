@@ -101,7 +101,7 @@ test('aiPostJSON routes requests through destination boundary before fetch',()=>
   assert.match(fn,/origin:window\\.location\\.origin/);
   assert.match(fn,/method:['\"]POST['\"]/);
   assert.match(fn,/approvedExternalOrigins:\[\]/);
-  assert.match(fn,/headers\\.Authorization=`Bearer \\$\\{token\\}`/);
+  assert.match(fn,/headers\\.Authorization=\\x60Bearer \\$\\{token\\}\\x60/);
   assert.match(fn,/fetch\\(prepared\\.url,\\{method:['\"]POST['\"],headers:prepared\\.headers,body:JSON\\.stringify\\(prepared\\.payload\\)\\}\\)/);
   assert.doesNotMatch(fn,/fetch\\(url,/);
 });
