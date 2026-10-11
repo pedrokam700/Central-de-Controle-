@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-test('candidate builder separa produção e preview, preserva 3028, inclui H1 e fusão do posto',()=>{
+test('candidate builder separa produção e preview, preserva 3028, inclui H1/token local e fusão do posto',()=>{
   const build=fs.readFileSync('scripts/build-agent-candidate.py','utf8');
   const readme=fs.readFileSync('ames/agent/README.md','utf8');
   assert.match(build,/central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477\.vercel\.app/);
@@ -15,15 +15,17 @@ test('candidate builder separa produção e preview, preserva 3028, inclui H1 e 
   assert.match(build,/PREPARAR_PREVIEW_CENTRAL_V2\.ps1/);
   assert.match(build,/ames-authorize-preview-origin\.ps1/);
   assert.match(build,/COLLECTORS=/);
-  assert.match(build,/Exact 3028 retained; R11\/R12 3022 contract required; hardening H1 and single-Central bootstrap included/);
+  assert.match(build,/Exact 3028 retained; R11\/R12 3022 contract required; hardening H1, workstation token and single-Central bootstrap included/);
   assert.match(build,/agent_entry\.py/);
   assert.match(build,/agent_hardened_entry\.py/);
   assert.match(build,/hardening\.py/);
+  assert.match(build,/local_security\.py/);
   assert.match(build,/process_r11\.py/);
   assert.match(build,/class Tela3022/);
   assert.match(build,/correlacionar_falha_3022/);
   assert.match(build,/extrair_passagens_processo/);
   assert.match(build,/INICIAR_POSTO_CENTRAL_V2\.bat/);
+  assert.match(build,/if any\('local_agent_token' in name for name in files\):raise ValueError/);
   assert.ok(readme.includes('INICIAR_POSTO_CENTRAL_V2.bat'));
   assert.ok(readme.includes('R11_DERIVED_R12_FACTORY_GATE'));
   assert.ok(readme.includes('ZIP público `0.5.24-rc1` anterior foi bloqueado'));
