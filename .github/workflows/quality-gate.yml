@@ -42,7 +42,7 @@ jobs:
       - name: Run local agent pairing contract
         run: node --test scripts/ames-agent-pairing.test.mjs
 
-      - name: Run remaining A-MES Node contract suites
+      - name: Run A-MES Node contract suites
         run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
 
       - name: Run scheduler Python contract
@@ -71,60 +71,6 @@ jobs:
           path: ${{ runner.temp }}/central-v2-r12-migration-${{ github.event.pull_request.head.sha || github.sha }}.zip
           if-no-files-found: error
           retention-days: 7
-
-  node-contract-diagnostics:
-    name: Node contract · ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: agent
-            file: scripts/ames-agent.test.mjs
-          - name: base-catalog
-            file: scripts/ames-base-catalog.test.mjs
-          - name: cache
-            file: scripts/ames-cache.test.mjs
-          - name: capabilities
-            file: scripts/ames-capabilities.test.mjs
-          - name: data
-            file: scripts/ames-data.test.mjs
-          - name: hardening
-            file: scripts/ames-hardening.test.mjs
-          - name: offline-central
-            file: scripts/ames-offline-central.test.mjs
-          - name: offline-outbox
-            file: scripts/ames-offline-outbox.test.mjs
-          - name: sync
-            file: scripts/ames-sync.test.mjs
-          - name: candidate-preview
-            file: scripts/ames-candidate-preview.test.mjs
-          - name: deploy-routing
-            file: scripts/ames-deploy-routing.test.mjs
-          - name: offline-shell
-            file: scripts/ames-offline-shell.test.mjs
-          - name: onboarding
-            file: scripts/ames-onboarding.test.mjs
-          - name: preview-origin
-            file: scripts/ames-preview-origin.test.mjs
-          - name: r12-capture
-            file: scripts/ames-r12-capture.test.mjs
-          - name: r12-migration-bundle
-            file: scripts/ames-r12-migration-bundle.test.mjs
-          - name: release-build
-            file: scripts/ames-release-build.test.mjs
-          - name: workstation-bootstrap
-            file: scripts/ames-workstation-bootstrap.test.mjs
-          - name: workstation-config
-            file: scripts/ames-workstation-config.test.mjs
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-      - name: Run ${{ matrix.file }}
-        run: node --test --test-isolation=none ${{ matrix.file }}
 
   sync-emulator:
     name: Agent and sync E2E with Firestore Rules
