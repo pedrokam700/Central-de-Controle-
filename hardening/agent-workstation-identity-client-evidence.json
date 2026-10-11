@@ -2,9 +2,15 @@
   "schema": "central-hardening-evidence-v1",
   "branch": "hardening/p0-production-readiness",
   "subject": "agent_workstation_identity_client_binding",
-  "status": "focused_green_full_ci_pending",
+  "status": "green",
   "validated_parent": "1aba11cc3b3569b3bea0fe1e67a45be75c3c7bf2",
   "focused_run": 38186156469,
+  "full_ci_run": 38186194411,
+  "gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
   "assertions": [
     "browser reads stable workstation identity only from the local hardened agent health endpoint",
     "workstation identity is validated against the collector identity contract before entering client state",
@@ -21,7 +27,6 @@
     "production_rules_publish_allowed": false
   },
   "remaining": [
-    "full CI on a normal descendant commit",
     "observe current collector lease without claim/takeover",
     "wire only matching live lease fence into collectorFenceForLine in observe-only mode",
     "physical multi-workstation same-line conflict and recovery before enforcement"
