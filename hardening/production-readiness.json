@@ -510,11 +510,11 @@
     },
     "app_modularization": {
       "priority": "P1",
-      "status": "in_progress_two_slices_green",
+      "status": "in_progress_three_slices_green",
       "remaining": [
-        "continue gradual extraction in small behavior-preserving slices without framework rewrite",
-        "extract profile/auth services without moving listener/UI orchestration until each boundary is independently tested",
-        "keep each extraction behind focused tests and full CI before starting the next slice"
+        "pause further extraction unless the next slice materially improves production readiness; do not modularize for its own sake",
+        "keep finishLogin/listener/UI orchestration in app.js until a separately justified boundary exists",
+        "continue to require focused tests and full CI for any future extraction"
       ],
       "green": [
         "CORA browser transport extracted from app.js into core/cora-browser-transport.mjs",
@@ -529,7 +529,13 @@
         "capability checks execute before raw add/set/update/delete and batch mutations",
         "unknown collections remain fail-closed and actor/capabilities are read dynamically",
         "offline shell caches the extracted guarded Firestore client",
-        "second modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E"
+        "second modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E",
+        "user profile load/create service extracted from app.js into core/user-profile-service.mjs",
+        "existing-profile normalization and legacy admin compatibility preserved",
+        "missing profiles still use buildSignupProfile and start as V2 viewer pending",
+        "profile creation continues through the guarded Firestore setDoc path and self-profile bootstrap policy",
+        "finishLogin, auth listeners and signup orchestration remain in app.js unchanged",
+        "third modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E"
       ],
       "evidence": [
         "core/cora-browser-transport.mjs",
@@ -540,11 +546,16 @@
         "core/firestore-guarded-client.mjs",
         "scripts/ames-firestore-guarded-client.test.mjs",
         "scripts/ames-capability-write-ui.test.mjs",
-        "hardening/firestore-guarded-client-modularization-evidence.json"
+        "hardening/firestore-guarded-client-modularization-evidence.json",
+        "core/user-profile-service.mjs",
+        "scripts/ames-user-profile-service.test.mjs",
+        "scripts/ames-session-admission-app.test.mjs",
+        "hardening/user-profile-service-modularization-evidence.json"
       ],
       "full_ci_runs": [
         38182402337,
-        38182776966
+        38182776966,
+        38183041134
       ]
     },
     "r12_engine_consolidation": {
