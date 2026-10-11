@@ -1,10 +1,11 @@
 {
   "schema": "central-csp-style-extraction-evidence-v1",
   "branch": "hardening/p0-production-readiness",
-  "code_commit": "1b0f899342090d4bbccfe5d69be68ede5a814e4c",
+  "code_commit": "4e7bb0e264d4ce6eb70e06029b4594507e7d6a62",
   "status": "focused_green_full_ci_pending",
   "focused_validation": {
-    "one_shot_run": 38179554973,
+    "style_extraction_one_shot_run": 38179554973,
+    "quality_guard_fix_one_shot_run": 38179746126,
     "exact_head_guard": "green",
     "inline_style_blocks_expected": 15,
     "inline_style_blocks_externalized": 15,
@@ -14,8 +15,17 @@
     "csp_inventory_counts_inline_style_attributes": true,
     "blocking_csp_ready_requires_zero_inline_style_blocks_and_attributes": true,
     "dependent_contract_tests": "green",
-    "one_shot_write_workflow_removed": true,
+    "central_quality_gate_focused_run": "green",
+    "legacy_styles_css_guard_false_positive_fixed": true,
+    "temporary_diagnostic_workflow_removed": true,
+    "one_shot_write_workflows_removed": true,
     "temporary_patch_scripts_removed": true
+  },
+  "diagnosis": {
+    "previous_full_ci_run": 38179592002,
+    "previous_failure": "The legacy quality-gate regex matched csp-inline-01-central-inline-styles.css as if it were the prohibited canonical styles.css file.",
+    "functional_regression_detected": false,
+    "fix": "The quality guard now rejects only the exact styles.css basename, including optional path/query/hash."
   },
   "promotion": {
     "csp_fully_green": false,
@@ -25,7 +35,7 @@
     "production_rules_publish_allowed": false
   },
   "remaining": [
-    "full Static Quality and Firestore Rules/cross-PC E2E on a normal descendant commit",
+    "full Static Quality and Firestore Rules/cross-PC E2E on this normal descendant commit",
     "remediate any inline style attributes reported by the enhanced inventory without changing runtime behavior",
     "prove final CSP directives and required Firebase/CORA/A-MES origins before enforcing a blocking policy"
   ]
