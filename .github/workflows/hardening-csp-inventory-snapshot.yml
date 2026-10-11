@@ -1,4 +1,4 @@
-name: Temporary CSP inventory snapshot
+name: Temporary CSP inline-style detail
 
 on:
   push:
@@ -21,10 +21,42 @@ jobs:
           node-version: '24'
       - name: Generate current CSP inventory
         run: node scripts/csp-inventory.mjs > csp-inventory-current.json
-      - name: Upload inventory
+      - name: Classify static inline style attributes
+        shell: python
+        run: |
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import json
+
+          class P(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.rows=[]
+              def handle_starttag(self,tag,attrs):
+                  data=dict(attrs)
+                  if 'style' in data:
+                      self.rows.append({
+                          'line': self.getpos()[0],
+                          'tag': tag,
+                          'id': data.get('id'),
+                          'class': data.get('class'),
+                          'style': data.get('style') or ''
+                      })
+              def handle_startendtag(self,tag,attrs):
+                  self.handle_starttag(tag,attrs)
+
+          p=P(); p.feed(Path('index.html').read_text())
+          for row in p.rows:
+              s=row['style'].lower()
+              row['initial_state_hint']=any(token in s for token in ('display:none','display: none','visibility:hidden','visibility: hidden','opacity:0','opacity: 0'))
+              row['geometry_hint']=any(token in s for token in ('width:','height:','top:','left:','right:','bottom:','transform:','position:'))
+          Path('csp-inline-style-detail.json').write_text(json.dumps({'count':len(p.rows),'rows':p.rows},indent=2,ensure_ascii=False))
+      - name: Upload inventory detail
         uses: actions/upload-artifact@v6
         with:
-          name: csp-inventory-${{ github.sha }}
-          path: csp-inventory-current.json
+          name: csp-inline-style-detail-${{ github.sha }}
+          path: |
+            csp-inventory-current.json
+            csp-inline-style-detail.json
           if-no-files-found: error
           retention-days: 1
