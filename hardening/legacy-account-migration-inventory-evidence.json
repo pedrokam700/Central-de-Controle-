@@ -1,0 +1,32 @@
+{
+  "schema": "central-legacy-account-migration-inventory-evidence-v1",
+  "code_commit": "6a857191202513af952d750f69b5dd249387a6dc",
+  "status": "focused_green_full_ci_pending",
+  "focused_validation": {
+    "inventory_contract_tests": "green",
+    "app_parse": "green",
+    "admin_ui_integration_tests": "green",
+    "rbac_regression_tests": "green",
+    "capability_ui_regression_tests": "green",
+    "counts_legacy_active_and_disabled": true,
+    "no_bulk_migration": true,
+    "no_auto_migration": true,
+    "no_access_level_inference": true,
+    "disabled_legacy_blocks_fallback_removal": true,
+    "empty_inventory_blocks_fallback_removal": true,
+    "v2_invalid_blocks_fallback_removal": true,
+    "migration_remains_per_account": true,
+    "inventory_module_precached": true,
+    "one_shot_write_workflow_removed": true
+  },
+  "evidence": [
+    "core/legacy-account-migration.mjs",
+    "scripts/ames-legacy-account-migration.test.mjs",
+    "app.js",
+    "scripts/ames-legacy-account-migration-app.test.mjs",
+    "core/admission-admin.mjs",
+    "hardening/admission-admin-ui-evidence.json",
+    "sw.js"
+  ],
+  "promotion_note": "This proves only the inventory and assisted per-account migration tooling. It does not prove that production accounts have been migrated. Do not remove the legacy fallback until the live admin inventory reports zero legacy accounts and a separate regression/promotion gate is GREEN."
+}
