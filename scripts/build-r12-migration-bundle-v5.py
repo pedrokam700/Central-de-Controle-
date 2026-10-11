@@ -34,6 +34,14 @@ RUNTIME_FILES = (
     "process_r11.py",
 )
 
+# These collectors are deliberately NOT shipped by the migration bundle. They are
+# frozen factory-proven files already present in the existing R12 installation;
+# update_candidate.py validates their exact SHA-256 before any candidate update.
+FROZEN_EXISTING_RUNTIME = (
+    "ames_3028.py",
+    "ames_3028_live.py",
+)
+
 PREVIEW_URLS = (
     "https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app",
     "https://deploy-preview-23--productcontrolcenter.netlify.app",
@@ -103,6 +111,7 @@ def _local_imports(path: Path, local_modules: set[str]) -> set[str]:
 
 def _validate_runtime_closure() -> None:
     included = {Path(name).stem for name in RUNTIME_FILES}
+    frozen_existing = {Path(name).stem for name in FROZEN_EXISTING_RUNTIME}
     available = {path.stem for path in AGENT.glob("*.py") if path.is_file()}
     required: set[str] = set()
     pending = ["agent_hardened_entry"]
@@ -117,9 +126,11 @@ def _validate_runtime_closure() -> None:
         for imported in _local_imports(path, available):
             if imported not in required:
                 pending.append(imported)
-    missing = sorted(required - included)
+    missing = sorted(required - included - frozen_existing)
     if missing:
         raise ValueError(f"Transitive hardened runtime imports absent from bundle: {missing}")
+    if not frozen_existing <= required:
+        raise ValueError("Frozen 3028 runtime contract is no longer reachable from hardened agent")
 
 
 def _update_batch() -> bytes:
@@ -259,6 +270,7 @@ def _payload(frontend_sha: str) -> dict[str, bytes]:
         "pre_migration_capture": "best-effort-before-update",
         "rollback": "latest-candidate-backup",
         "runtime_contract": list(RUNTIME_FILES),
+        "frozen_existing_runtime": list(FROZEN_EXISTING_RUNTIME),
         "hardening": {
             "snapshot_lifecycle": True,
             "ordered_sqlite_migrations": True,
