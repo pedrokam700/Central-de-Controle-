@@ -1,4 +1,4 @@
-# retry after patch-harness syntax fix
+# diagnostic retry after focused-validation failure
 name: One-shot CORA aiPostJSON destination boundary
 
 on:
@@ -35,6 +35,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          exec > >(tee cora-boundary-validation.log) 2>&1
           node --check app.js
           node --test \
             scripts/ames-cora-network-boundary.test.mjs \
@@ -44,6 +45,14 @@ jobs:
             scripts/ames-cache.test.mjs \
             scripts/ames-release-build.test.mjs
           git diff --check
+      - name: Upload validation diagnostic
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cora-boundary-validation-${{ github.sha }}
+          path: cora-boundary-validation.log
+          if-no-files-found: warn
+          retention-days: 1
       - name: Remove one-shot write tooling
         shell: bash
         run: |
