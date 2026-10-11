@@ -2,8 +2,9 @@
 
 This module deliberately wraps the current agent/store instead of rewriting the
 validated collectors. It adds:
-- explicit SQLite migrations;
+- explicit SQLite migrations with checksum verification;
 - snapshot lifecycle (collecting -> complete/error);
+- deterministic recovery of interrupted snapshots after restart;
 - latest-snapshot reads that ignore incomplete snapshots;
 - fail-closed canonical export for incomplete snapshots;
 - strict/atomic config writes.
@@ -22,6 +23,7 @@ from typing import Any, Dict, Iterable
 
 HARDENING_SCHEMA_VERSION = 1
 MIGRATION_ID = "0001_snapshot_lifecycle"
+MIGRATION_CHECKSUM = "snapshot-status-v1:completed_at,error"
 
 
 def _quick_check(store) -> str:
@@ -38,7 +40,11 @@ def _column_names(con, table: str) -> set[str]:
 
 
 def apply_migrations(store) -> Dict[str, Any]:
-    """Apply idempotent local migrations after Store.initialize()."""
+    """Apply idempotent local migrations after Store.initialize().
+
+    A recorded migration is immutable: if its checksum changes, startup fails
+    closed instead of silently accepting schema drift on an old workstation.
+    """
     _quick_check(store)
     applied = []
     with store.connect() as con:
@@ -51,19 +57,24 @@ def apply_migrations(store) -> Dict[str, Any]:
                )"""
         )
         row = con.execute(
-            "SELECT version FROM schema_migrations WHERE migration_id=?",
+            "SELECT version,checksum FROM schema_migrations WHERE migration_id=?",
             (MIGRATION_ID,),
         ).fetchone()
-        if not row:
+        if row:
+            if int(row["version"]) != HARDENING_SCHEMA_VERSION or str(row["checksum"]) != MIGRATION_CHECKSUM:
+                raise RuntimeError(
+                    "SQLite migration checksum mismatch: banco foi criado por uma definição diferente de "
+                    f"{MIGRATION_ID}"
+                )
+        else:
             columns = _column_names(con, "snapshots")
             if "completed_at" not in columns:
                 con.execute("ALTER TABLE snapshots ADD COLUMN completed_at TEXT")
             if "error" not in columns:
                 con.execute("ALTER TABLE snapshots ADD COLUMN error TEXT")
-            checksum = "snapshot-status-v1:completed_at,error"
             con.execute(
                 "INSERT INTO schema_migrations(version,migration_id,applied_at,checksum) VALUES(?,?,datetime('now'),?)",
-                (HARDENING_SCHEMA_VERSION, MIGRATION_ID, checksum),
+                (HARDENING_SCHEMA_VERSION, MIGRATION_ID, MIGRATION_CHECKSUM),
             )
             applied.append(MIGRATION_ID)
         con.execute(
@@ -72,6 +83,30 @@ def apply_migrations(store) -> Dict[str, Any]:
         )
     _quick_check(store)
     return {"schema_version": HARDENING_SCHEMA_VERSION, "applied": applied}
+
+
+def recover_interrupted_snapshots(store) -> int:
+    """Fail closed after an unclean stop.
+
+    A snapshot left as `collecting` belongs to a process that no longer exists.
+    Keeping it in that state forever hides the reason from diagnostics. Mark it
+    as error/interrupted while preserving every row already persisted for audit.
+    """
+    from store import utc_now
+
+    with store.connect() as con:
+        rows = con.execute("SELECT id FROM snapshots WHERE status='collecting' ORDER BY id").fetchall()
+        ids = [int(row["id"]) for row in rows]
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            con.execute(
+                f"""UPDATE snapshots
+                    SET status='error',completed_at=COALESCE(completed_at,?),
+                        error=COALESCE(NULLIF(error,''),'Agent restarted before snapshot completion')
+                    WHERE id IN ({placeholders}) AND status='collecting'""",
+                [utc_now(), *ids],
+            )
+    return len(ids)
 
 
 def strict_load_config(path: str | Path) -> Dict[str, Any]:
@@ -155,6 +190,8 @@ def install_store_guards(store) -> Dict[str, Any]:
                 raise ValueError("Snapshot not found")
             if row["status"] == "complete":
                 return sid
+            if row["status"] != "collecting":
+                raise RuntimeError(f"Snapshot {sid} não está em collecting: {row['status']}")
             evidence = 0
             for table in ("line_metrics", "defect_observations", "snapshot_payloads"):
                 evidence += int(
@@ -165,7 +202,7 @@ def install_store_guards(store) -> Dict[str, Any]:
             if evidence <= 0:
                 raise RuntimeError("Snapshot sem evidência persistida; recusado como complete")
             con.execute(
-                "UPDATE snapshots SET status='complete',completed_at=?,error=NULL WHERE id=?",
+                "UPDATE snapshots SET status='complete',completed_at=?,error=NULL WHERE id=? AND status='collecting'",
                 (utc_now(), sid),
             )
         return sid
@@ -340,6 +377,7 @@ def install(agent_module, canonical_module) -> Dict[str, Any]:
     # JSON errors and could silently fall back to defaults.
     strict_load_config(agent_module.CONFIG_PATH)
     migration = install_store_guards(agent_module.STORE)
+    recovered = recover_interrupted_snapshots(agent_module.STORE)
 
     def write_config(config):
         atomic_write_json(agent_module.CONFIG_PATH, config)
@@ -348,7 +386,7 @@ def install(agent_module, canonical_module) -> Dict[str, Any]:
     for name in ("ingest_integrated", "ingest_3028_path", "ingest_3028_live"):
         _wrap_snapshot_operation(agent_module, name)
     _guard_canonical_export(canonical_module, agent_module.STORE)
-    return migration
+    return {**migration, "recovered_interrupted_snapshots": recovered}
 
 
 def health(store) -> Dict[str, Any]:
@@ -365,11 +403,16 @@ def health(store) -> Dict[str, Any]:
         latest_complete = con.execute(
             "SELECT MAX(id) FROM snapshots WHERE status='complete'"
         ).fetchone()[0]
+        migration = con.execute(
+            "SELECT version,migration_id,checksum FROM schema_migrations WHERE migration_id=?",
+            (MIGRATION_ID,),
+        ).fetchone()
     return {
         "schema_version": int(version[0]) if version else 0,
         "integrity": _quick_check(store),
         "collecting_snapshots": collecting,
         "error_snapshots": errors,
         "latest_complete_snapshot_id": int(latest_complete) if latest_complete is not None else None,
+        "migration": dict(migration) if migration else None,
         "config_write": "atomic",
     }
