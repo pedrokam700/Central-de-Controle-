@@ -1,8 +1,8 @@
 """Canonical agent entrypoint with production hardening enabled.
 
 Keeps agent_entry.py as the R11/R12 compatibility boundary and layers database
-migrations, transactional snapshot visibility, atomic config handling and
-loopback authorization on top.
+migrations, transactional snapshot visibility, atomic config handling, explicit
+operational calendar and loopback authorization on top.
 """
 from __future__ import annotations
 
@@ -11,9 +11,25 @@ from urllib.parse import urlparse
 import agent_entry as entry
 import hardening
 import local_security
+import operational_calendar
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
+if operational_calendar.migrate_config(entry.a.CONFIG):
+    entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)
+
+# Preserve the validated 3028 collector itself. Only the time-window provider is
+# upgraded: production-day boundary is explicit and distinct from work shifts.
+def _today_window():
+    return operational_calendar.today_window(entry.a.CONFIG)
+
+
+def _previous_day_window():
+    return operational_calendar.previous_day_window(entry.a.CONFIG)
+
+
+entry.a.today_window = _today_window
+entry.a.previous_day_window = _previous_day_window
 
 # ingest_3028_live builds its response dashboard before the hardening wrapper marks
 # the new snapshots complete. Refresh only that response projection afterwards;
@@ -88,6 +104,8 @@ class HardenedHandler(entry.Handler):
                         "ok": True,
                         "hardening": "H1",
                         "local_security": local_security.public_status(AGENT_TOKEN_PATH),
+                        "operational_calendar": operational_calendar.public_contract(entry.a.CONFIG),
+                        "current_shift": operational_calendar.shift_for(entry.a.CONFIG),
                         **hardening.health(entry.a.STORE),
                     }
                 )
