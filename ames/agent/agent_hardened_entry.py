@@ -2,8 +2,9 @@
 
 Keeps agent_entry.py as the R11/R12 compatibility boundary and layers database
 migrations, transactional snapshot visibility, atomic config handling, explicit
-operational calendar, local authorization, stable workstation identity and
-non-destructive DR verification on top of the validated collector runtime.
+operational calendar, local authorization, stable workstation identity, retention
+governance and non-destructive DR verification on top of the validated collector
+runtime.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ import hardening
 import local_security
 import migrations
 import operational_calendar
+import retention_policy
 import support_diagnostics
 import workstation_identity
 
@@ -99,11 +101,20 @@ def _dr_status():
     return disaster_recovery.latest_status(entry.a.STORE, entry.a.BACKUP_DIR)
 
 
+def _retention_inventory():
+    return retention_policy.inventory(
+        entry.a.STORE,
+        entry.a.BACKUP_DIR,
+        backup_keep=int(entry.a.CONFIG.get("backup_retention", 10)),
+    )
+
+
 def _local_diagnostics():
     hardening_health = {
         **hardening.health(entry.a.STORE),
         "migration_registry": migrations.public_contract(),
         "migration_state": MIGRATION_STATE,
+        "retention": _retention_inventory(),
     }
     return diagnostics.build(
         entry.a,
@@ -190,6 +201,18 @@ class HardenedHandler(entry.Handler):
             try:
                 payload = support_diagnostics.build(_local_diagnostics())
                 self._send({"ok": True, "diagnostics": payload})
+            except Exception as exc:
+                self._send({"ok": False, "error": type(exc).__name__, "message": str(exc)}, 500)
+            return
+        if path == "/api/v1/retention/plan":
+            try:
+                self._send({
+                    "ok": True,
+                    "policy": retention_policy.public_contract(
+                        backup_keep=int(entry.a.CONFIG.get("backup_retention", 10))
+                    ),
+                    "inventory": _retention_inventory(),
+                })
             except Exception as exc:
                 self._send({"ok": False, "error": type(exc).__name__, "message": str(exc)}, 500)
             return
