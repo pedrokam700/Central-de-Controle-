@@ -178,16 +178,71 @@
       "status": "green",
       "evidence": ["scripts/agent-support-diagnostics.test.py"]
     },
+    "immutable_frontend_distribution": {
+      "priority": "P1",
+      "status": "green_staging_not_activated",
+      "green": [
+        "same build-static dist packaged without parallel frontend",
+        "exact frontend SHA bound to release-build.json",
+        "release identity digest verified",
+        "per-file SHA-256 and size manifest",
+        "byte-for-byte deterministic package",
+        "tamper/wrong-SHA/path/symlink failures are fail-closed",
+        "GitHub Actions publishes central-frontend-<SHA> artifact",
+        "stage-frontend extracts atomically to frontend-packages/<SHA>",
+        "staging is idempotent and records activated=false",
+        "staging performs no network probe and does not require agent shutdown",
+        "loopback proof server binds only 127.0.0.1",
+        "loopback proof server serves static shell with browser-safe MIME and blocks /api/* with 503",
+        "launcher remains unchanged"
+      ],
+      "evidence": [
+        "scripts/frontend_package.py",
+        "scripts/agent-frontend-package.test.py",
+        "ames/agent/update_candidate.py",
+        "scripts/agent-update.test.py",
+        "tools/ames-workstation/serve-staged-frontend.py",
+        ".github/workflows/quality-gate.yml"
+      ],
+      "remaining": [
+        "define authenticated CORA/API routing for local origin after backend identity/version is proven",
+        "validate Firebase Auth localhost/domain behavior and first-install SDK preparation",
+        "decide whether Firebase SDK should be vendored for never-prepared-PC offline bootstrap",
+        "validate Service Worker/local-origin lifecycle",
+        "only then consider preferring local origin in launcher"
+      ]
+    },
     "offline_readiness": {
       "priority": "P1",
       "status": "green_contract_partial_distribution",
-      "green": ["Auth persistence state", "Firestore persistent-cache state", "Service Worker state", "offline_ready fail-closed"],
-      "remaining": ["fully local immutable frontend distribution without depending on prior hosted-origin preparation"]
+      "green": [
+        "Auth persistence state",
+        "Firestore persistent-cache state",
+        "Service Worker state",
+        "offline_ready fail-closed",
+        "immutable frontend can be verified and staged locally without activation"
+      ],
+      "remaining": [
+        "local origin is not launcher default",
+        "first local-origin preparation still depends on Firebase SDK availability from gstatic",
+        "CORA relative /api routes are intentionally blocked on proof server until backend contract is known"
+      ]
     },
     "r12_existing_install_bundle": {
       "priority": "P1",
       "status": "green_existing_install_only",
-      "green": ["V5 deterministic bundle", "runtime import closure", "hash manifest", "rollback", "no runtime DB/token/workstation identity", "exact frontend SHA gate"],
+      "green": [
+        "V5 deterministic bundle",
+        "transitive runtime import closure",
+        "operational_registry runtime dependency included",
+        "ames_3028.py and ames_3028_live.py modeled explicitly as frozen existing-install dependencies",
+        "frozen 3028 exact hashes remain updater gate",
+        "hash manifest",
+        "rollback",
+        "no runtime DB/token/workstation identity",
+        "exact frontend SHA gate",
+        "update_candidate includes non-activating immutable frontend staging command"
+      ],
       "remaining": ["new-PC fused package remains blocked until real R12 factory capture"]
     },
     "workstation_identity": {
