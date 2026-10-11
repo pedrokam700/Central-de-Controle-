@@ -7,7 +7,7 @@ const sw=fs.readFileSync('sw.js','utf8');
 const index=fs.readFileSync('index.html','utf8');
 
 test('admin V2 usa capability e não role legado como autoridade de UI',()=>{
-  assert.match(app,/function canAdminister\(\)\{ return currentAccount\?\.capabilities\?\.administer === true; \}/);
+  assert.match(app,/function canAdminister\(\)\{ return (?:currentAccount\?\.capabilities\?\.administer === true|hasCapability\('administer'\)); \}/);
   for(const old of ["currentAccount?.role !== 'admin'","currentAccount?.role!=='admin'","currentAccount?.role === 'admin'","currentAccount?.role==='admin'","currentAccount.role === 'admin'","currentAccount.role==='admin'"])assert.equal(app.includes(old),false,old);
 });
 
