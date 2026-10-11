@@ -1,0 +1,30 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "app_modularization_cora_browser_transport",
+  "status": "focused_green_full_ci_pending",
+  "validated_parent": "b4a8719a80babbf8653d7575e85e2f1e3e628ff9",
+  "focused_run": 38182362559,
+  "assertions": [
+    "CORA browser transport is extracted to core/cora-browser-transport.mjs",
+    "app.js no longer contains unqualified raw fetch primitives",
+    "aiPostJSON and coraAppFetch are thin delegates to the extracted transport",
+    "destination policy remains centralized in core/cora-network-boundary.mjs",
+    "mutable FAILURE_AI_ENDPOINT remains behind the guarded transport",
+    "GET and POST semantics, auth token handling, timeout signals and backend errors are preserved",
+    "the extracted transport is part of the offline shell cache",
+    "44 focused CORA/cache/release tests passed before the functional commit",
+    "temporary one-shot write tooling was removed before the functional commit"
+  ],
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "full Static Quality on a normal descendant of the bot-produced extraction commit",
+    "full Firestore Rules/cross-PC E2E on the same descendant",
+    "reconcile app_modularization readiness after full CI",
+    "continue modularization only in small behavior-preserving slices"
+  ]
+}
