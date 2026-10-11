@@ -1,3 +1,5 @@
+import {normalizeOfflineEffects} from './offline-domain-write.mjs';
+
 const DB_NAME='central-trabalho-offline';
 const DB_VERSION=2;
 const STORE='outbox-v2';
@@ -19,6 +21,7 @@ function validateItem(item){
   if(!ALLOWED_COLLECTIONS.includes(item.collection))throw new TypeError('Coleção offline não autorizada');
   if(!idValue(item.documentId)||!idValue(item.operationId)||!idValue(item.id))throw new TypeError('Identidade offline incompleta');
   if(!plain(item.payload))throw new TypeError('Payload offline inválido');
+  normalizeOfflineEffects(item.effects,item);
   return item;
 }
 
@@ -93,7 +96,7 @@ export function createBrowserOutboxStorage({indexedDB:dbApi=globalThis.indexedDB
 export function createOfflineOutbox({storage=createBrowserOutboxStorage(),now=()=>Date.now(),uuid=()=>crypto.randomUUID()}={}){
   if(!storage||typeof storage.put!=='function'||typeof storage.list!=='function'||typeof storage.remove!=='function')throw new TypeError('Storage offline inválido');
   const locks=new Map();
-  const enqueue=async({uid,collection,payload,operationId,documentId}={})=>{
+  const enqueue=async({uid,collection,payload,effects,operationId,documentId}={})=>{
     uid=uidValue(uid);collection=collectionValue(collection);
     if(!uid)throw new Error('Sessão obrigatória para salvar offline');
     if(!ALLOWED_COLLECTIONS.includes(collection))throw new Error('Coleção não autorizada para offline');
@@ -101,7 +104,10 @@ export function createOfflineOutbox({storage=createBrowserOutboxStorage(),now=()
     const op=idValue(operationId)||idValue(uuid());
     if(!op)throw new Error('Não foi possível gerar operationId');
     const doc=idValue(documentId)||`offline-${op}`;
-    const item=validateItem({schema:SCHEMA,id:`${uid}:${collection}:${doc}`,uid,collection,documentId:doc,operationId:op,payload:clone(payload),createdAt:Number(now()),attempts:0,lastError:'',status:'pending'});
+    const base={schema:SCHEMA,id:`${uid}:${collection}:${doc}`,uid,collection,documentId:doc,operationId:op,payload:clone(payload),createdAt:Number(now()),attempts:0,lastError:'',status:'pending'};
+    const normalizedEffects=normalizeOfflineEffects(effects,base);
+    if(normalizedEffects.length)base.effects=normalizedEffects.map(clone);
+    const item=validateItem(base);
     await storage.put(item);return Object.freeze(clone(item));
   };
   const pending=async uid=>{
@@ -131,7 +137,8 @@ export function createOfflineOutbox({storage=createBrowserOutboxStorage(),now=()
       for(const item of items){
         if(!sessionIsCurrent()){stopped=true;break;}
         try{
-          // Writer must use item.documentId with an idempotent set/upsert.
+          // Writer must commit the whole item (primary document + any typed
+          // domain effects) atomically/idempotently before returning success.
           await write(item);
           if(!sessionIsCurrent()){stopped=true;break;}
           await ack(uid,item.id);synced++;
