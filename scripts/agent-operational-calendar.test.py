@@ -9,11 +9,32 @@ AGENT = ROOT / "ames" / "agent"
 sys.path.insert(0, str(AGENT))
 
 import operational_calendar as cal  # noqa: E402
+import operational_registry as registry  # noqa: E402
 
 
 def check(value, message):
     if not value:
         raise AssertionError(message)
+
+
+def test_registry_matches_current_extrema_contract():
+    check(registry.SITE_ID == "extrema", "site id da fábrica deve permanecer explícito")
+    check(registry.SITE_TIMEZONE == "America/Sao_Paulo", "timezone deve vir do registry")
+    check(registry.LINE_IDS == ("TAN10101", "TAN10102", "TAN10103"), "IDs MES atuais não podem mudar")
+    check(cal.DEFAULT_TIMEZONE == registry.SITE_TIMEZONE, "calendário Python deve consumir o registry")
+    check(registry.require_line("tan10102") == "TAN10102", "linha registrada deve normalizar sem inferência")
+    try:
+        registry.require_line("Linha 2")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("label amigável não pode virar identidade MES implicitamente")
+
+    js = (ROOT / "ames" / "data" / "operational-registry.mjs").read_text(encoding="utf-8")
+    rules = (ROOT / "firestore.rules").read_text(encoding="utf-8")
+    for line in registry.LINE_IDS:
+        check(line in js, f"registry JS perdeu {line}")
+        check(line in rules, f"Rules perdeu {line}")
 
 
 def test_legacy_day_start_is_migrated_without_shift_reinterpretation():
@@ -64,6 +85,7 @@ def test_invalid_calendar_fails_closed():
 
 if __name__ == "__main__":
     tests = [
+        test_registry_matches_current_extrema_contract,
         test_legacy_day_start_is_migrated_without_shift_reinterpretation,
         test_production_windows_keep_0700_boundary,
         test_shift_classification_crosses_midnight,
