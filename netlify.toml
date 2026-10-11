@@ -8,6 +8,16 @@
 [build.processing.html]
   pretty_urls = false
 
+# Baseline de segurança que não interfere com Firebase/CORA/agente local.
+# CSP bloqueante fica para uma wave separada depois do inventário de scripts/origens.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "geolocation=(), payment=(), usb=(), serial=()"
+
 [[headers]]
   for = "/Central-de-Controle-/*.mjs"
   [headers.values]
@@ -17,3 +27,19 @@
   for = "/Central-de-Controle-/sw.js"
   [headers.values]
     Cache-Control = "no-cache"
+
+# Identidade de release nunca pode ficar presa em cache e mascarar SHA antigo.
+[[headers]]
+  for = "/release-build.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
+  for = "/release-identity.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
+  for = "/Central-de-Controle-/release-identity.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
