@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import mimetypes
-import os
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -16,6 +14,15 @@ HOST = "127.0.0.1"
 
 class StagedFrontendHandler(SimpleHTTPRequestHandler):
     server_version = "CentralLocalFrontend/0.1"
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        ".js": "text/javascript",
+        ".mjs": "text/javascript",
+        ".css": "text/css",
+        ".json": "application/json",
+        ".webmanifest": "application/manifest+json",
+        ".svg": "image/svg+xml",
+    }
 
     def log_message(self, fmt, *args):
         # Keep workstation output concise and never log query fragments/tokens.
