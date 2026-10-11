@@ -9,6 +9,7 @@
     import { createDailyView } from './ames/daily-view.mjs';
     import { createCoraView } from './ames/cora-view.mjs';
     import { MES_REASONING_RULES } from './ames/data/cora.mjs';
+    import {projectCoraMesExternalContext} from './ames/data/cora-external.mjs';
     import { createOnboardingView, savedIntegrationMode } from './ames/onboarding-view.mjs';
     import {createOfflineOutbox,createBrowserOutboxStorage} from './core/offline-outbox.mjs';
     import {offlineWritePlan,routineFailureLinkEffect} from './core/offline-domain-write.mjs';
@@ -3127,6 +3128,10 @@ const aiPilot = {
     function currentCoraMesContext() {
       return currentAuthUser ? coraMesView?.context() || { status: 'not_selected' } : { status: 'signed_out' };
     }
+    function aiBuildExternalCentralContext(){
+      const local=aiBuildDynamicCentralContext();
+      return {...local,mes:projectCoraMesExternalContext(local?.mes||{status:'not_selected'})};
+    }
     function renderAIAnalysis(){
       renderCoraMes();
       const modeButtons=document.querySelectorAll('[data-ai-mode]'); modeButtons.forEach(b=>b.classList.toggle('active',b.dataset.aiMode===aiPilot.mode));
@@ -3237,7 +3242,8 @@ function registerOfflineSupport(){
       const bytes=Uint8Array.from(atob(file.data),c=>c.charCodeAt(0));const blob=new Blob([bytes],{type:file.mime||'application/octet-stream'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=file.name||'CORA-artefato';a.click();setTimeout(()=>URL.revokeObjectURL(url),500);
     }
     function aiArtifactRequestPayload(){
-      return {kind:'8d',context:aiPilot.context,result:aiPilot.lastResult||{},images:aiPilot.images.map(x=>({name:x.name,type:x.type,dataUrl:x.dataUrl})),currentReport:aiBuildDynamicCentralContext().currentReport,currentOperationalFailure:aiBuildDynamicCentralContext().currentOperationalFailure,activeProduct:aiBuildDynamicCentralContext().activeProduct,centralData:aiBuildDynamicCentralContext(),conversation:(aiPilot.conversation||[]).slice(-20)};
+      const centralData=aiBuildExternalCentralContext();
+      return {kind:'8d',context:aiPilot.context,result:aiPilot.lastResult||{},images:aiPilot.images.map(x=>({name:x.name,type:x.type,dataUrl:x.dataUrl})),currentReport:centralData.currentReport,currentOperationalFailure:centralData.currentOperationalFailure,activeProduct:centralData.activeProduct,centralData,conversation:(aiPilot.conversation||[]).slice(-20)};
     }
     async function aiGenerateArtifact(kind){
       const payload=aiArtifactRequestPayload();payload.kind=kind;aiSetThinking(true,`Verificando dados para ${kind.toUpperCase()}…`);
@@ -3908,7 +3914,7 @@ ${rowsText.slice(0,50000)}`;
     }
     function aiBuildPayload(){
       const memory=aiBuildMemoryContext(aiPilot.context);
-      const centralData=aiBuildDynamicCentralContext();
+      const centralData=aiBuildExternalCentralContext();
       return {
         mode:aiPilot.mode,
         perspective:aiPilot.perspective,
