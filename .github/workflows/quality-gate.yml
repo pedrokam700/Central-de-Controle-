@@ -34,6 +34,9 @@ jobs:
       - name: Run database and snapshot hardening tests
         run: python3 scripts/agent-hardening.test.py
 
+      - name: Run ordered SQLite migration registry tests
+        run: python3 scripts/agent-migrations.test.py
+
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
 
