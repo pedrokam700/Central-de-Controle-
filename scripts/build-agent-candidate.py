@@ -6,7 +6,7 @@ from pathlib import Path,PurePosixPath
 import zipfile
 SOURCE_SHA='1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167'
 COLLECTORS={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
-FILES=['agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py']
+FILES=['agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py']
 PRODUCTION_URL='https://central-cora-v2.vercel.app'
 VERCEL_PREVIEW_URL='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
 PR_PREVIEW_URL='https://deploy-preview-23--productcontrolcenter.netlify.app'
@@ -68,6 +68,6 @@ def build(source,destination):
             info=zipfile.ZipInfo(name,(2026,10,9,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;new.writestr(info,data)
     with zipfile.ZipFile(destination) as new:assert new.testzip() is None
     print('Candidate:',destination);print('SHA-256:',hashlib.sha256(destination.read_bytes()).hexdigest())
-    print('Exact 3028 retained; R11/R12 3022 contract required; hardening H1, workstation token and single-Central bootstrap included.')
+    print('Exact 3028 retained; R11/R12 3022 contract required; hardening H1, workstation token, explicit operational calendar and single-Central bootstrap included.')
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('source');p.add_argument('destination');a=p.parse_args();build(a.source,a.destination)
