@@ -119,12 +119,15 @@ def test_v5_bundle_is_complete_private_data_free_and_deterministic():
             check("MIGRATION_MANIFEST.json" in names, "migration manifest missing")
             check("ATUALIZAR_R12_EXISTENTE.bat" in names, "update helper missing")
             check("ROLLBACK_R12_EXISTENTE.bat" in names, "rollback helper missing")
+            check("suporte/ames-workstation/serve-staged-frontend.py" in names, "verified local frontend proof server missing")
+            check("suporte/ames-workstation/frontend-local-state.py" in names, "local frontend activation state tool missing")
 
             forbidden = {
                 "ames-agent/config.json",
                 "ames-agent/data/ames_local.sqlite3",
                 "ames-agent/data/local_agent_token",
                 "ames-agent/data/workstation_identity.json",
+                "FRONTEND_LOCAL_STATE.json",
             }
             check(not (forbidden & names), f"private/runtime files leaked into bundle: {sorted(forbidden & names)}")
 
@@ -149,6 +152,8 @@ def test_v5_bundle_is_complete_private_data_free_and_deterministic():
             check(tuple(manifest["runtime_contract"]) == tuple(builder.RUNTIME_FILES), "manifest runtime contract mismatch")
             check(tuple(manifest["frozen_existing_runtime"]) == tuple(builder.FROZEN_EXISTING_RUNTIME), "frozen runtime contract missing from manifest")
             check(manifest["hardening"]["retention_mode"] == "observe_only", "retention mode must stay non-destructive")
+            check(manifest["hardening"]["local_frontend_proof_tools"] is True, "local frontend proof tools must be declared")
+            check(manifest["hardening"]["local_frontend_launcher_default"] is False, "bundle must not silently activate local frontend")
             for name, expected_hash in manifest["files"].items():
                 check(name in names, f"manifest hashes missing archive member: {name}")
                 check(sha256(archive.read(name)) == expected_hash, f"manifest hash mismatch: {name}")
