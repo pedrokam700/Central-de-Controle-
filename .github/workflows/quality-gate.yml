@@ -64,6 +64,9 @@ jobs:
       - name: Run verified local frontend proof server tests
         run: python3 scripts/agent-local-frontend-server.test.py
 
+      - name: Run local frontend activation state tests
+        run: python3 scripts/agent-local-frontend-state.test.py
+
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
 
