@@ -1,0 +1,29 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "cora_all_browser_fetch_destinations",
+  "status": "focused_green_full_ci_pending",
+  "validated_parent": "6dc09bb906d550497b753dcb237ac7c28009e9dc",
+  "focused_run": 38181743748,
+  "assertions": [
+    "all 11 remaining CORA browser requests route through coraAppFetch before network submission",
+    "only aiPostJSON and coraAppFetch retain raw fetch primitives in app.js",
+    "window.FAILURE_AI_ENDPOINT cannot approve or bypass an external destination",
+    "approvedExternalOrigins remains an immutable empty list in browser request helpers",
+    "GET metrics preserves no-body semantics",
+    "POST request bodies are parsed and reserialized through the destination boundary",
+    "same-origin CORA routes remain available without granting browser provider egress",
+    "temporary one-shot write tooling was removed before the functional commit"
+  ],
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "full Static Quality on a normal descendant of the bot-produced integration commit",
+    "full Firestore Rules/cross-PC E2E on the same descendant",
+    "reconcile production-readiness after full CI",
+    "keep authoritative CORA backend version/health contract as a separate blocker"
+  ]
+}
