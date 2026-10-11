@@ -40,6 +40,7 @@
   <link rel="stylesheet" href="mobile.css?v=15.1.13.48" id="mobile-layout-styles">
 <link rel="stylesheet" href="./ames/dashboard.css?v=15.1.13.48">
 <link rel="stylesheet" href="./ames/product.css?v=15.1.13.48">
+  <link rel="stylesheet" href="/Central-de-Controle-/csp-inline-16-style-attributes.css?v=15.1.13.48" data-extracted-style-attributes="true">
 </head>
 <!-- V14.11: correção estrutural da IA + blindagem da inicialização; LLM configurável + RAG + multimodalidade + planilhas + login Firebase preservado -->
 <body>
@@ -51,8 +52,8 @@
       </div>
       
       <!-- Pesquisa Global -->
-      <div class="global-search-wrap" style="padding: 10px 11px 0;">
-        <input id="globalSearch" type="search" placeholder="Pesquisar em tudo..." style="width: 100%; background: #252525; color: #fff; border: 1px solid #4a4a47; border-radius: 7px; padding: 8px 10px; font-size: 12px;">
+      <div class="global-search-wrap" data-csp-inline-style="csp-001">
+        <input id="globalSearch" type="search" placeholder="Pesquisar em tudo..." data-csp-inline-style="csp-002">
       </div>
 
       <nav class="main-nav" aria-label="Áreas de trabalho">
@@ -73,7 +74,7 @@
           <div id="operationsBrowser" class="side-subnav hidden">
             <button class="side-action" id="newOperationalFailure">+ Registrar falha</button>
             <div class="tree-heading"><span>Falhas</span></div>
-            <div class="muted" style="padding:10px">Registro universal de ocorrências: operação, máquina, processo, produto em suspeita ou ainda sem classificação definida.</div>
+            <div class="muted" data-csp-inline-style="csp-003">Registro universal de ocorrências: operação, máquina, processo, produto em suspeita ou ainda sem classificação definida.</div>
           </div>
         </div>
         <button data-page="work"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="nav-label">Atividades gerais</span></button>
@@ -123,7 +124,7 @@
 <section class="priority-card priority-waiting" data-priority="waiting"><h3><span class="priority-dot"></span>Aguardando</h3><div class="priority-count" id="priorityWaitingCount">0</div><div class="priority-list" id="priorityWaitingList"></div></section>
 <section class="priority-card priority-next" data-priority="next"><h3><span class="priority-dot"></span>Próximos</h3><div class="priority-count" id="priorityNextCount">0</div><div class="priority-list" id="priorityNextList"></div></section>
 </div>
-<div class="panel" style="margin-top:14px"><div class="home-list" id="homeQueue"></div><div class="empty hidden" id="homeQueueEmpty">Nenhuma pendência no momento.</div></div>
+<div class="panel" data-csp-inline-style="csp-004"><div class="home-list" id="homeQueue"></div><div class="empty hidden" id="homeQueueEmpty">Nenhuma pendência no momento.</div></div>
 </div>
 <div class="central-pane">
 <div class="team-intro"><strong>Central da equipe</strong><span>Veja o que está disponível, o que já está em andamento e onde está concentrada a carga de trabalho.</span></div>
@@ -360,7 +361,7 @@
             <div id="dashboardInlineContent" class="dashboard-inline-content"></div>
           </section>
 
-          <div class="inline-actions" style="justify-content:flex-end"><button class="button secondary" id="weeklySummaryBtn">Resumo da semana</button></div>
+          <div class="inline-actions" data-csp-inline-style="csp-005"><button class="button secondary" id="weeklySummaryBtn">Resumo da semana</button></div>
 
           <div class="dashboard-grid">
             <section>
@@ -373,20 +374,20 @@
 
             <section>
               <div class="section-head"><div><h2>Distribuição dos Status</h2><p>Visão de saúde global dos reports de produto.</p></div></div>
-              <div class="panel" style="padding: 20px;">
-                <div style="display:flex; justify-content:space-between; font-weight:600; font-size:12px;">
+              <div class="panel" data-csp-inline-style="csp-006">
+                <div data-csp-inline-style="csp-007">
                   <span>Progresso Geral</span>
                   <span id="dashProgressPercent">0%</span>
                 </div>
                 <div class="progress-bar-container">
-                  <div id="dashBarDone" class="progress-bar-fill progress-fill-done" style="width: 0%" title="Concluídos"></div>
-                  <div id="dashBarWaiting" class="progress-bar-fill progress-fill-waiting" style="width: 0%" title="Aguardando Fornecedor"></div>
-                  <div id="dashBarPending" class="progress-bar-fill progress-fill-pending" style="width: 0%" title="Pendentes"></div>
+                  <div id="dashBarDone" class="progress-bar-fill progress-fill-done" data-csp-inline-style="csp-008" title="Concluídos"></div>
+                  <div id="dashBarWaiting" class="progress-bar-fill progress-fill-waiting" data-csp-inline-style="csp-009" title="Aguardando Fornecedor"></div>
+                  <div id="dashBarPending" class="progress-bar-fill progress-fill-pending" data-csp-inline-style="csp-010" title="Pendentes"></div>
                 </div>
-                <div style="margin-top:20px; display:grid; gap:10px;">
-                  <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px;"><span class="status done">Concluídos</span><strong id="dashCountDone">0</strong></div>
-                  <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px;"><span class="status waiting">Aguardando fornecedor</span><strong id="dashCountWaiting">0</strong></div>
-                  <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px;"><span class="status pending">Pendentes</span><strong id="dashCountPending">0</strong></div>
+                <div data-csp-inline-style="csp-011">
+                  <div data-csp-inline-style="csp-012"><span class="status done">Concluídos</span><strong id="dashCountDone">0</strong></div>
+                  <div data-csp-inline-style="csp-013"><span class="status waiting">Aguardando fornecedor</span><strong id="dashCountWaiting">0</strong></div>
+                  <div data-csp-inline-style="csp-014"><span class="status pending">Pendentes</span><strong id="dashCountPending">0</strong></div>
                 </div>
               </div>
             </section>
@@ -513,15 +514,15 @@
               </div>
             </div>
           </section>
-                  <section class="profile-security" style="margin-top:28px; padding-top:18px; border-top:1px solid var(--border);">
+                  <section class="profile-security" data-csp-inline-style="csp-015">
             <details>
-              <summary style="cursor:pointer; color:var(--muted); font-size:13px; font-weight:600;">
+              <summary data-csp-inline-style="csp-016">
                 Segurança da conta
               </summary>
-              <div class="panel" style="margin-top:10px; padding:14px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+              <div class="panel" data-csp-inline-style="csp-017">
                 <div>
                   <strong>Alterar senha</strong>
-                  <div class="muted" style="margin-top:4px;">Envie um link seguro para criar uma nova senha.</div>
+                  <div class="muted" data-csp-inline-style="csp-018">Envie um link seguro para criar uma nova senha.</div>
                 </div>
                 <button class="button secondary" id="profileChangePassword">Enviar link para trocar senha</button>
               </div>
@@ -566,7 +567,7 @@
           </div>
 
           <div id="tab-historico" class="tab-content hidden">
-            <div class="panel" style="padding: 20px;">
+            <div class="panel" data-csp-inline-style="csp-019">
               <div id="productHistoryTimeline" class="timeline"></div>
               <div class="empty hidden" id="productHistoryEmpty">Nenhum histórico registrado ainda.</div>
             </div>
@@ -585,12 +586,12 @@
               <article class="stat"><div class="stat-label">Postos envolvidos</div><div class="stat-value" id="opStationCount">0</div><div class="stat-note">Postos / estações conhecidos</div></article>
               <article class="stat"><div class="stat-label">Sem classificação</div><div class="stat-value" id="opWaitingCount">0</div><div class="stat-note">Aguardando definição da origem</div></article>
             </div>
-            <section class="panel recurrence-radar-shell" id="recurrenceRadarPanel" style="margin-top:14px">
+            <section class="panel recurrence-radar-shell" id="recurrenceRadarPanel" data-csp-inline-style="csp-020">
               <div class="section-head compact"><div><h3>Radar de recorrência</h3><p>Possíveis correlações entre Falhas e Reports manuais. Não inclui MES, não vincula ocorrências e não confirma causa.</p></div><button type="button" class="button secondary button-compact" id="recurrenceRadarRefresh">Recalcular</button></div>
               <div class="recurrence-radar-summary" id="recurrenceRadarSummary"></div>
               <div class="recurrence-radar-list" id="recurrenceRadarList"></div>
             </section>
-            <div class="panel" style="margin-top:14px">
+            <div class="panel" data-csp-inline-style="csp-021">
               <div class="filters">
                 <label>Buscar falha<input id="opSearch" type="search" placeholder="Produto, máquina, posto, processo ou problema"></label>
                 <label>Classificação<select id="opCategory"><option value="">Todas</option><option value="NAO_DEFINIDO">Não definido / Em análise</option><option value="OPERACIONAL">Operacional</option><option value="MAQUINA">Máquina</option><option value="PROCESSO">Processo</option><option value="PRODUTO">Produto (suspeita)</option><option value="TESTE_INSPECAO">Teste / Inspeção</option><option value="OUTRO">Outro</option></select></label>
@@ -622,12 +623,12 @@
             <label class="span2">E-mail corporativo<input name="email" type="email" autocomplete="email" required placeholder="nome@empresa.com"></label>
             <label class="span2">Senha<input name="password" type="password" autocomplete="current-password" required placeholder="••••••••"></label>
           </div>
-          <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+          <div data-csp-inline-style="csp-022">
             <a href="#" class="link" id="btnGoForgot">Esqueci minha senha</a>
             <a href="#" class="link" id="btnGoRegister">Criar uma conta</a>
           </div>
           <div class="form-actions">
-            <button type="submit" class="button primary" id="loginButton" style="width:100%">Entrar</button>
+            <button type="submit" class="button primary" id="loginButton" data-csp-inline-style="csp-023">Entrar</button>
           <div id="authLoginStatus" class="auth-status" role="status" aria-live="polite"></div>
           </div>
         </form>
@@ -642,11 +643,11 @@
             <label class="span2">E-mail corporativo<input name="email" type="email" autocomplete="email" required placeholder="nome@empresa.com"></label>
             <label class="span2">Senha<input name="password" type="password" autocomplete="new-password" minlength="4" required placeholder="••••••••"></label>
           </div>
-          <div style="margin-top: 10px; text-align: right;">
+          <div data-csp-inline-style="csp-024">
             <a href="#" class="link" id="btnGoLoginFromReg">Já tenho uma conta</a>
           </div>
           <div class="form-actions">
-            <button class="button primary" style="width:100%">Cadastrar conta</button>
+            <button class="button primary" data-csp-inline-style="csp-025">Cadastrar conta</button>
           </div>
         </form>
       </div>
@@ -658,11 +659,11 @@
           <div class="form-grid">
             <label class="span2">E-mail corporativo<input name="email" type="email" autocomplete="email" required placeholder="nome@empresa.com"></label>
           </div>
-          <div style="margin-top: 10px; text-align: right;">
+          <div data-csp-inline-style="csp-026">
             <a href="#" class="link" id="btnGoLoginFromForgot">Voltar para o login</a>
           </div>
           <div class="form-actions">
-            <button class="button primary" style="width:100%">Enviar link de recuperação</button>
+            <button class="button primary" data-csp-inline-style="csp-027">Enviar link de recuperação</button>
           </div>
         </form>
       </div>
@@ -675,12 +676,12 @@
             <label class="span2">Nova senha<input name="newPassword" type="password" autocomplete="new-password" minlength="4" required placeholder="Digite a nova senha"></label>
             <label class="span2">Repetir nova senha<input name="confirmPassword" type="password" autocomplete="new-password" minlength="4" required placeholder="Digite a senha novamente"></label>
           </div>
-          <div id="resetPasswordHint" class="help" style="margin-top:10px;">As duas senhas precisam ser exatamente iguais.</div>
-          <div style="margin-top: 10px; text-align: right;">
+          <div id="resetPasswordHint" class="help" data-csp-inline-style="csp-028">As duas senhas precisam ser exatamente iguais.</div>
+          <div data-csp-inline-style="csp-029">
             <a href="#" class="link" id="btnGoLoginFromReset">Voltar para o login</a>
           </div>
           <div class="form-actions">
-            <button class="button primary" id="resetPasswordButton" style="width:100%">Finalizar troca de senha</button>
+            <button class="button primary" id="resetPasswordButton" data-csp-inline-style="csp-030">Finalizar troca de senha</button>
           </div>
         </form>
       </div>
@@ -705,8 +706,8 @@
         <span id="confirmMessage">Deseja realmente apagar esta família?</span>
         <div class="confirm-warning" id="confirmWarning"></div>
       </div>
-      <div style="padding: 0 24px 20px;">
-        <div class="form-actions" style="margin-top:0; padding-top:15px;">
+      <div data-csp-inline-style="csp-031">
+        <div class="form-actions" data-csp-inline-style="csp-032">
           <button type="button" class="button secondary close-confirm">Cancelar</button>
           <button type="button" class="button danger" id="btnConfirmDelete">Excluir definitivamente</button>
         </div>
@@ -808,7 +809,7 @@
     </form>
   </div></div>
 
-  <div class="modal-backdrop hidden" id="operationalDetailModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title" id="opDetailTitle"></h2><p class="modal-subtitle" id="opDetailSubtitle"></p></div><button class="close close-operational-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Descrição</span><span class="detail-value" id="opDetailIssue"></span><div id="opMachineInfo" class="generated-output" style="margin-top:14px"></div>
+  <div class="modal-backdrop hidden" id="operationalDetailModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 class="modal-title" id="opDetailTitle"></h2><p class="modal-subtitle" id="opDetailSubtitle"></p></div><button class="close close-operational-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Descrição</span><span class="detail-value" id="opDetailIssue"></span><div id="opMachineInfo" class="generated-output" data-csp-inline-style="csp-033"></div>
       <div class="analysis-section" id="opDetailProductScopeSection">
         <div class="section-head compact"><div><h3>Produto(s) afetado(s)</h3><p>Você pode corrigir o escopo depois do registro: um SKU, produto base, vários SKUs ou a família inteira.</p></div></div>
         <div class="form-grid">
@@ -819,7 +820,7 @@
           <label id="opDetailMultiScopeLabel" class="span2 hidden">Múltiplos SKUs<select id="opDetailMultiProductSelect" multiple size="5"></select><span class="help">Adicione ou remova SKUs antes de salvar.</span></label>
         </div>
       </div>
-      <label style="margin-top:18px">Causa confirmada<textarea id="opDetailCause"></textarea></label><label style="margin-top:12px">Ação corretiva<textarea id="opDetailAction"></textarea></label><label style="margin-top:12px">Observações<textarea id="opDetailNotes"></textarea></label><div class="evidence-box" style="margin-top:16px"><label>Adicionar fotos / evidências<input id="opDetailEvidenceInput" type="file" multiple accept="image/*,.pdf"></label><div id="opDetailEvidencePreview" class="evidence-preview"></div><div class="form-actions" style="padding-top:10px"><button class="button secondary" id="saveOperationalEvidence">Salvar evidências</button></div></div><div class="form-actions"><button class="button secondary" id="saveOperationalDetail">Salvar alterações</button><button class="button danger" id="deleteOperationalDetail">Excluir</button></div></div><aside class="detail-side"><label>Responsável<select id="opDetailOwnerSelect"><option value="">Selecione</option></select></label><label>Status<select id="opDetailStatus"><option value="pendente">Pendente</option><option value="aguardando">Aguardando</option><option value="andamento">Em andamento</option><option value="concluido">Pronto</option></select></label><button type="button" class="button secondary" id="convertOperationalToProductReport">Transformar em Report de Produto</button><span class="detail-label">Evidências</span><div class="evidence-gallery" id="opDetailEvidence"></div></aside></div></div></div>
+      <label data-csp-inline-style="csp-034">Causa confirmada<textarea id="opDetailCause"></textarea></label><label data-csp-inline-style="csp-035">Ação corretiva<textarea id="opDetailAction"></textarea></label><label data-csp-inline-style="csp-036">Observações<textarea id="opDetailNotes"></textarea></label><div class="evidence-box" data-csp-inline-style="csp-037"><label>Adicionar fotos / evidências<input id="opDetailEvidenceInput" type="file" multiple accept="image/*,.pdf"></label><div id="opDetailEvidencePreview" class="evidence-preview"></div><div class="form-actions" data-csp-inline-style="csp-038"><button class="button secondary" id="saveOperationalEvidence">Salvar evidências</button></div></div><div class="form-actions"><button class="button secondary" id="saveOperationalDetail">Salvar alterações</button><button class="button danger" id="deleteOperationalDetail">Excluir</button></div></div><aside class="detail-side"><label>Responsável<select id="opDetailOwnerSelect"><option value="">Selecione</option></select></label><label>Status<select id="opDetailStatus"><option value="pendente">Pendente</option><option value="aguardando">Aguardando</option><option value="andamento">Em andamento</option><option value="concluido">Pronto</option></select></label><button type="button" class="button secondary" id="convertOperationalToProductReport">Transformar em Report de Produto</button><span class="detail-label">Evidências</span><div class="evidence-gallery" id="opDetailEvidence"></div></aside></div></div></div>
 
   <div class="modal-backdrop hidden" id="activityModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 class="modal-title">Nova atividade geral</h2><p class="modal-subtitle">E-mails, análises e tarefas organizadas.</p></div><button class="close close-activity" aria-label="Fechar">×</button></div><form id="activityForm"><div class="form-grid"><label class="span2">Título da atividade<input name="title" required placeholder="Ex.: Enviar e-mail de análise"></label><label>Tipo<select name="type" required><option value="E-mail">E-mail</option><option value="Análise">Análise</option><option value="Alinhamento">Alinhamento</option><option value="Reunião">Reunião</option><option value="Outro">Outro</option></select></label><label>Área / assunto<input name="area" required placeholder="Ex.: Reparos"></label><label>Responsável principal<select id="activityOwnerSelect" name="owner" required><option value="">Selecione</option></select></label>
           <div class="assignment-box" id="activityAssignmentBox">
@@ -849,13 +850,13 @@
             <p class="assignment-note">Apenas o administrador pode distribuir para outras pessoas. O responsável pelo seguimento continua separado do acesso à tarefa.</p>
           </div>
           <label>Link do e-mail enviado<input name="emailLink" type="url" placeholder="https://..."></label><label class="span2">Descrição da situação<textarea name="description" required placeholder="Explique por que o fluxo foi aberto."></textarea></label><label class="span2">Formulário do fluxo<input name="formAttachment" type="file" accept="image/*,.pdf,.doc,.docx"></label></div><div class="form-actions"><button type="button" class="button secondary close-flow">Cancelar</button><button class="button primary">Salvar fluxo</button></div></form></div></div>
-  <div class="modal-backdrop hidden" id="detailModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div style="min-width:0;flex:1"><div class="detail-heading-row"><h2 id="detailTitle" class="modal-title"></h2><div class="detail-heading-actions"><button id="editFailureName" class="button secondary button-compact" type="button">Editar descrição</button><button id="saveDetailPage" class="button primary button-compact" type="button">Salvar página</button></div></div><p id="detailSubtitle" class="modal-subtitle"></p><div id="failureNameEditor" class="failure-name-editor hidden"><label style="margin:8px 0 6px">Descrição da falha</label><textarea id="failureNameInput" rows="3" placeholder="Descrição da falha"></textarea><button id="saveFailureName" class="button secondary button-compact" type="button">Salvar descrição</button><button id="cancelFailureName" class="button secondary button-compact" type="button">Cancelar</button></div></div><button class="close close-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Descrição</span><span id="detailIssue" class="detail-value"></span><span class="detail-label">Links do report</span><div id="detailLinks" class="links detail-value"></div><span class="detail-label">Atualizar links e evidências</span><div class="artifact-grid"><label>Link do seu report<input id="detailReportLink" type="url" placeholder="https://..."></label><div class="optional-link-control"><label class="check optional-toggle"><input id="enableResponseLink" type="checkbox"><span>Adicionar link separado da resposta</span></label><p class="help">Deixe desativado quando a resposta estiver no mesmo e-mail do seu report.</p><label id="responseLinkField" class="hidden">Link da resposta<input id="detailResponseLink" type="url" placeholder="https://..."></label></div><label class="span2">Adicionar fotos/evidências<input id="detailEvidenceInput" type="file" multiple accept="image/*,.pdf"></label></div><div class="artifact-actions"><button id="saveArtifacts" class="button secondary">Salvar links e evidências</button></div><span class="detail-label">Evidências registradas</span><span id="detailEvidence" class="detail-value"></span>
+  <div class="modal-backdrop hidden" id="detailModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div data-csp-inline-style="csp-039"><div class="detail-heading-row"><h2 id="detailTitle" class="modal-title"></h2><div class="detail-heading-actions"><button id="editFailureName" class="button secondary button-compact" type="button">Editar descrição</button><button id="saveDetailPage" class="button primary button-compact" type="button">Salvar página</button></div></div><p id="detailSubtitle" class="modal-subtitle"></p><div id="failureNameEditor" class="failure-name-editor hidden"><label data-csp-inline-style="csp-040">Descrição da falha</label><textarea id="failureNameInput" rows="3" placeholder="Descrição da falha"></textarea><button id="saveFailureName" class="button secondary button-compact" type="button">Salvar descrição</button><button id="cancelFailureName" class="button secondary button-compact" type="button">Cancelar</button></div></div><button class="close close-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Descrição</span><span id="detailIssue" class="detail-value"></span><span class="detail-label">Links do report</span><div id="detailLinks" class="links detail-value"></div><span class="detail-label">Atualizar links e evidências</span><div class="artifact-grid"><label>Link do seu report<input id="detailReportLink" type="url" placeholder="https://..."></label><div class="optional-link-control"><label class="check optional-toggle"><input id="enableResponseLink" type="checkbox"><span>Adicionar link separado da resposta</span></label><p class="help">Deixe desativado quando a resposta estiver no mesmo e-mail do seu report.</p><label id="responseLinkField" class="hidden">Link da resposta<input id="detailResponseLink" type="url" placeholder="https://..."></label></div><label class="span2">Adicionar fotos/evidências<input id="detailEvidenceInput" type="file" multiple accept="image/*,.pdf"></label></div><div class="artifact-actions"><button id="saveArtifacts" class="button secondary">Salvar links e evidências</button></div><span class="detail-label">Evidências registradas</span><span id="detailEvidence" class="detail-value"></span>
           <div class="analysis-section"><div class="section-head compact"><div><h3>Análise da ocorrência</h3><p>Preencha somente o que já estiver disponível. Nada aqui bloqueia o registro.</p></div></div><div class="analysis-grid"><label>Problema<textarea id="analysisProblem" placeholder="Problema observado"></textarea></label><label>Onde foi detectado?<textarea id="analysisWhere" placeholder="Linha, estação, máquina ou área"></textarea></label><label>Quando começou<input id="analysisWhen" type="date"></label><label>Quantidade afetada<input id="analysisAffected" type="number" min="0" step="1" placeholder="Opcional"></label><label class="span2">Hipótese de causa<textarea id="analysisHypothesis" placeholder="Pode ser uma hipótese ainda não confirmada."></textarea></label><label class="span2">Testes realizados<textarea id="analysisTests" placeholder="Testes já realizados, se houver."></textarea></label><label class="span2">Causa confirmada<textarea id="analysisCause" placeholder="Somente quando houver confirmação."></textarea></label><label class="span2">Ação corretiva<textarea id="analysisAction" placeholder="Ação definida ou realizada."></textarea></label><label class="span2">Observações<textarea id="analysisNotes" placeholder="Observações adicionais."></textarea></label></div><div class="inline-actions"><button id="saveAnalysis" class="button secondary">Salvar análise</button><button id="generateAnalysisSummary" class="button secondary">Gerar resumo</button></div></div>
           <div class="analysis-section"><div class="section-head compact"><div><h3>Quantidade acumulada</h3><p>Atualize somente quando houver uma nova consolidação. Não é necessário lançar diariamente.</p></div></div><div class="artifact-grid"><label>Quantidade acumulada<input id="detailQuantity" type="number" min="0" step="1" placeholder="Ex.: 468"></label><label>Período considerado<input id="detailQuantityPeriod" placeholder="Ex.: 20/03/2026 a 07/08/2026"></label><label class="span2">Observações sobre a quantidade<textarea id="detailQuantityNotes" placeholder="Ex.: quantidade consolidada retroativamente."></textarea></label></div><div class="artifact-actions"><button id="saveQuantity" class="button secondary">Salvar quantidade</button></div><div class="quantity-history" id="quantityHistory"></div></div>
-          <div class="analysis-section"><div class="section-head compact"><div><h3>Ferramentas</h3><p>Use os dados já registrados para preparar a comunicação ou consultar o histórico.</p></div></div><div class="inline-actions"><button id="generateReport" class="button secondary">Gerar Report rápido</button><button id="openEngineeringAssistant" class="button secondary">✦ Assistente</button></div><div id="generatedOutput" class="generated-output hidden" style="margin-top:10px"></div></div>
-          <div class="update"><label>Atualização da falha<input id="updateInput" placeholder="Ex.: Report enviado."></label><div class="update-row"><button class="button secondary" id="addUpdate">Adicionar atualização</button></div></div><span class="detail-label">Histórico de atualizações</span><div id="timeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" style="margin-top:0">Pendências automáticas</span><div id="detailTasks" class="task-list"></div><span class="detail-label">Status calculated</span><div id="detailStatus" class="detail-value"></div><span class="detail-label">E-mail de cobrança</span><div id="detailEmailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteReport" class="button danger">Excluir registro</button></div></aside></div></div></div>
-  <div class="modal-backdrop hidden" id="activityDetailModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 id="activityDetailTitle" class="modal-title"></h2><p id="activityDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-activity-detail" aria-label="Fechar">×</button></div><div class="detail" style="grid-template-columns:1fr"><div class="detail-main"><div class="detail-heading-row"><span class="detail-label" style="margin-top:0">Contexto</span><div class="inline-actions"><button id="editActivityDescription" class="button secondary button-compact" type="button">Editar descrição</button><button id="cancelActivity" class="button secondary button-compact hidden" type="button">Cancelar atividade</button><button id="deleteActivity" class="button danger button-compact hidden" type="button">Excluir</button></div></div><span id="activityDetailDescription" class="detail-value"></span><div id="activityDescriptionEditor" class="description-editor hidden"><label>Descrição / contexto<textarea id="activityDetailDescriptionInput"></textarea></label><div class="artifact-actions"><button id="cancelActivityDescription" class="button secondary" type="button">Cancelar</button><button id="saveActivityDescription" class="button primary" type="button">Salvar descrição</button></div></div><span class="detail-label">Link relacionado</span><div id="activityDetailLink" class="links detail-value"></div><div id="activityTimingBanner" class="activity-timing-banner hidden"></div><div class="activity-continuity-entry"><button type="button" class="button secondary button-compact" id="structureActivity">Estruturar atividade</button></div><section class="analysis-section hidden" id="activityStructuredSection"><div class="section-head compact"><div><h3>Plano & continuidade</h3><p id="activityMovementInfo">Mantenha explícito onde o trabalho está e qual é a próxima ação.</p></div></div><div class="activity-progress-row"><div><span class="daily-mini-label">Progresso das etapas</span><strong id="activityStepProgress">0/0</strong></div><div class="activity-progress-track"><span id="activityStepProgressBar"></span></div></div><label>Próxima ação<input id="activityNextAction" placeholder="Qual é o próximo passo concreto?"></label><div class="activity-steps" id="activitySteps"></div><div class="activity-step-add"><input id="activityNewStep" placeholder="Adicionar uma etapa"><button type="button" class="button secondary" id="addActivityStep">+ Etapa</button></div><div class="evidence-box"><label>Adicionar arquivos / evidências<input id="activityEvidenceInput" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"></label><div class="artifact-actions"><button type="button" class="button secondary" id="saveActivityEvidence">Salvar arquivos</button></div><div class="evidence-gallery" id="activityEvidenceGallery"></div></div></section><div class="update"><div class="artifact-grid"><label>Status<select id="activityDetailStatus"><option value="pendente">Pendente</option><option value="aguardando">Aguardando</option><option value="andamento">Em andamento</option><option value="concluido">Pronto</option><option value="cancelado">Cancelada</option></select></label><label>Prazo<input id="activityDetailDue" type="date"></label></div><div class="artifact-actions"><button id="saveActivityChanges" class="button secondary">Salvar alterações</button></div></div><div class="update"><label>Atualização<input id="activityUpdateInput" placeholder="Ex.: E-mail enviado."></label><div class="update-row"><button class="button secondary" id="addActivityUpdate">Adicionar atualização</button></div></div><span class="detail-label">Histórico</span><div id="activityTimeline" class="timeline"></div><div class="inline-actions"><button id="generateActivityEmail" class="button secondary">✦ Gerar e-mail</button></div></div></div></div></div>
-  <div class="modal-backdrop hidden" id="flowDetailModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 id="flowDetailTitle" class="modal-title"></h2><p id="flowDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-flow-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Situação</span><span id="flowDetailDescription" class="detail-value"></span><span class="detail-label">Etapa 1 · Formulário e e-mail</span><div class="artifact-grid"><label>Formulário do fluxo<input id="flowDetailAttachment" type="file" accept="image/*,.pdf,.doc,.docx"></label><label>Link do e-mail<input id="flowDetailEmailLink" type="url" placeholder="https://..."></label></div><span class="detail-label">Etapa 2 · Folha de rosto</span><div class="artifact-grid"><label>Link / arquivo da folha de rosto<input id="flowDetailCoverLink" type="url" placeholder="https://..."></label><label>Responsável pelo seguimento<select id="flowDetailOwnerSelect"><option value="">Selecione</option></select></label></div><span class="detail-label">Etapa 3 · Seguimento no fluxo</span><div class="artifact-grid"><label class="span2">Link ou registro do seguimento<input id="flowDetailFollowUpLink" type="url" placeholder="https://..."></label></div><div class="artifact-actions"><button id="saveFlowChanges" class="button secondary">Salvar etapas</button></div><span class="detail-label">Arquivos e links</span><div id="flowDetailFiles" class="evidence-gallery"></div><span class="detail-label">Histórico</span><div id="flowTimeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" style="margin-top:0">Andamento do fluxo</span><div id="flowSteps" class="task-list"></div><span class="detail-label">Status calculado</span><div id="flowDetailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteFlow" class="button danger">Excluir fluxo</button></div></aside></div></div></div>
+          <div class="analysis-section"><div class="section-head compact"><div><h3>Ferramentas</h3><p>Use os dados já registrados para preparar a comunicação ou consultar o histórico.</p></div></div><div class="inline-actions"><button id="generateReport" class="button secondary">Gerar Report rápido</button><button id="openEngineeringAssistant" class="button secondary">✦ Assistente</button></div><div id="generatedOutput" class="generated-output hidden" data-csp-inline-style="csp-041"></div></div>
+          <div class="update"><label>Atualização da falha<input id="updateInput" placeholder="Ex.: Report enviado."></label><div class="update-row"><button class="button secondary" id="addUpdate">Adicionar atualização</button></div></div><span class="detail-label">Histórico de atualizações</span><div id="timeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" data-csp-inline-style="csp-042">Pendências automáticas</span><div id="detailTasks" class="task-list"></div><span class="detail-label">Status calculated</span><div id="detailStatus" class="detail-value"></div><span class="detail-label">E-mail de cobrança</span><div id="detailEmailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteReport" class="button danger">Excluir registro</button></div></aside></div></div></div>
+  <div class="modal-backdrop hidden" id="activityDetailModal" role="dialog" aria-modal="true"><div class="modal"><div class="modal-head"><div><h2 id="activityDetailTitle" class="modal-title"></h2><p id="activityDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-activity-detail" aria-label="Fechar">×</button></div><div class="detail" data-csp-inline-style="csp-043"><div class="detail-main"><div class="detail-heading-row"><span class="detail-label" data-csp-inline-style="csp-044">Contexto</span><div class="inline-actions"><button id="editActivityDescription" class="button secondary button-compact" type="button">Editar descrição</button><button id="cancelActivity" class="button secondary button-compact hidden" type="button">Cancelar atividade</button><button id="deleteActivity" class="button danger button-compact hidden" type="button">Excluir</button></div></div><span id="activityDetailDescription" class="detail-value"></span><div id="activityDescriptionEditor" class="description-editor hidden"><label>Descrição / contexto<textarea id="activityDetailDescriptionInput"></textarea></label><div class="artifact-actions"><button id="cancelActivityDescription" class="button secondary" type="button">Cancelar</button><button id="saveActivityDescription" class="button primary" type="button">Salvar descrição</button></div></div><span class="detail-label">Link relacionado</span><div id="activityDetailLink" class="links detail-value"></div><div id="activityTimingBanner" class="activity-timing-banner hidden"></div><div class="activity-continuity-entry"><button type="button" class="button secondary button-compact" id="structureActivity">Estruturar atividade</button></div><section class="analysis-section hidden" id="activityStructuredSection"><div class="section-head compact"><div><h3>Plano & continuidade</h3><p id="activityMovementInfo">Mantenha explícito onde o trabalho está e qual é a próxima ação.</p></div></div><div class="activity-progress-row"><div><span class="daily-mini-label">Progresso das etapas</span><strong id="activityStepProgress">0/0</strong></div><div class="activity-progress-track"><span id="activityStepProgressBar"></span></div></div><label>Próxima ação<input id="activityNextAction" placeholder="Qual é o próximo passo concreto?"></label><div class="activity-steps" id="activitySteps"></div><div class="activity-step-add"><input id="activityNewStep" placeholder="Adicionar uma etapa"><button type="button" class="button secondary" id="addActivityStep">+ Etapa</button></div><div class="evidence-box"><label>Adicionar arquivos / evidências<input id="activityEvidenceInput" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"></label><div class="artifact-actions"><button type="button" class="button secondary" id="saveActivityEvidence">Salvar arquivos</button></div><div class="evidence-gallery" id="activityEvidenceGallery"></div></div></section><div class="update"><div class="artifact-grid"><label>Status<select id="activityDetailStatus"><option value="pendente">Pendente</option><option value="aguardando">Aguardando</option><option value="andamento">Em andamento</option><option value="concluido">Pronto</option><option value="cancelado">Cancelada</option></select></label><label>Prazo<input id="activityDetailDue" type="date"></label></div><div class="artifact-actions"><button id="saveActivityChanges" class="button secondary">Salvar alterações</button></div></div><div class="update"><label>Atualização<input id="activityUpdateInput" placeholder="Ex.: E-mail enviado."></label><div class="update-row"><button class="button secondary" id="addActivityUpdate">Adicionar atualização</button></div></div><span class="detail-label">Histórico</span><div id="activityTimeline" class="timeline"></div><div class="inline-actions"><button id="generateActivityEmail" class="button secondary">✦ Gerar e-mail</button></div></div></div></div></div>
+  <div class="modal-backdrop hidden" id="flowDetailModal" role="dialog" aria-modal="true"><div class="modal large"><div class="modal-head"><div><h2 id="flowDetailTitle" class="modal-title"></h2><p id="flowDetailSubtitle" class="modal-subtitle"></p></div><button class="close close-flow-detail" aria-label="Fechar">×</button></div><div class="detail"><div class="detail-main"><span class="detail-label">Situação</span><span id="flowDetailDescription" class="detail-value"></span><span class="detail-label">Etapa 1 · Formulário e e-mail</span><div class="artifact-grid"><label>Formulário do fluxo<input id="flowDetailAttachment" type="file" accept="image/*,.pdf,.doc,.docx"></label><label>Link do e-mail<input id="flowDetailEmailLink" type="url" placeholder="https://..."></label></div><span class="detail-label">Etapa 2 · Folha de rosto</span><div class="artifact-grid"><label>Link / arquivo da folha de rosto<input id="flowDetailCoverLink" type="url" placeholder="https://..."></label><label>Responsável pelo seguimento<select id="flowDetailOwnerSelect"><option value="">Selecione</option></select></label></div><span class="detail-label">Etapa 3 · Seguimento no fluxo</span><div class="artifact-grid"><label class="span2">Link ou registro do seguimento<input id="flowDetailFollowUpLink" type="url" placeholder="https://..."></label></div><div class="artifact-actions"><button id="saveFlowChanges" class="button secondary">Salvar etapas</button></div><span class="detail-label">Arquivos e links</span><div id="flowDetailFiles" class="evidence-gallery"></div><span class="detail-label">Histórico</span><div id="flowTimeline" class="timeline"></div></div><aside class="detail-side"><span class="detail-label" data-csp-inline-style="csp-045">Andamento do fluxo</span><div id="flowSteps" class="task-list"></div><span class="detail-label">Status calculado</span><div id="flowDetailStatus" class="detail-value"></div><div class="form-actions"><button id="deleteFlow" class="button danger">Excluir fluxo</button></div></aside></div></div></div>
 
 
 <div class="daily-tour-layer hidden" id="dailyTourModal" role="dialog" aria-modal="true" aria-labelledby="dailyTourTitle">
