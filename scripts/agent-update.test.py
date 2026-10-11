@@ -125,7 +125,7 @@ class UpdateTests(unittest.TestCase):
             package,sha=self._frontend_package(root);staged=updater.stage_frontend(install,package,sha)
             (staged/'Central-de-Controle-'/'app.js').write_text('tampered after staging')
             with self.assertRaises(ValueError) as rejected:local_server.create_server(staged,sha,0)
-            self.assertIn('hash mismatch',str(rejected.exception))
+            self.assertRegex(str(rejected.exception),r'(size|hash) mismatch')
 
     def test_loopback_proof_server_serves_verified_shell_but_never_proxies_api_or_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
