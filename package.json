@@ -16,6 +16,7 @@
     "test:deployment": "node --test scripts/ames-deployment-security.test.mjs scripts/ames-release-build.test.mjs scripts/ames-post-deploy-smoke.test.mjs",
     "test:cora-contract": "node --test scripts/ames-cora-api-contract.test.mjs",
     "state": "node scripts/current-engineering-state.mjs",
+    "csp:inventory": "node scripts/csp-inventory.mjs",
     "smoke:deploy": "node scripts/post-deploy-smoke.mjs"
   }
 }
