@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {approveV2Profile,denyV2Profile,changeV2AccessLevel,ADMISSION_AUDIT_SCHEMA} from '../core/admission-admin.mjs';
+import {approveV2Profile,denyV2Profile,changeV2AccessLevel,migrateLegacyProfile,ADMISSION_AUDIT_SCHEMA} from '../core/admission-admin.mjs';
 
 const admin={uid:'admin-1',role:'user',disabled:false,admission_version:2,access_level:'admin',approval_state:'approved'};
 const viewer={uid:'user-1',role:'user',disabled:false,admission_version:2,access_level:'viewer',approval_state:'pending'};
@@ -48,8 +48,22 @@ test('mudança de nível exige perfil v2 previamente aprovado',()=>{
   assert.throws(()=>changeV2AccessLevel({actorProfile:admin,actorUid:'admin-1',targetProfile:viewer,accessLevel:'engineer'}),/Somente perfil V2 aprovado/);
 });
 
-test('perfil legado nunca é migrado implicitamente por comando administrativo',()=>{
-  const legacy={uid:'legacy-1',role:'user',disabled:false};
+test('perfil legado exige migração explícita com nível escolhido pelo admin',()=>{
+  const legacy={uid:'legacy-1',email:'legacy@example.test',name:'Legacy',role:'user',disabled:false};
   assert.throws(()=>approveV2Profile({actorProfile:admin,actorUid:'admin-1',targetProfile:legacy,accessLevel:'operator'}),/migrado explicitamente/);
   assert.throws(()=>denyV2Profile({actorProfile:admin,actorUid:'admin-1',targetProfile:legacy}),/migrado explicitamente/);
+  const result=migrateLegacyProfile({actorProfile:admin,actorUid:'admin-1',targetProfile:legacy,accessLevel:'engineer',reason:'Responsável técnico',at:400});
+  assert.deepEqual(result.patch,{role:'user',admission_version:2,access_level:'engineer',approval_state:'approved',disabled:false,migrated_by:'admin-1',migrated_at:400,updatedAt:400});
+  assert.equal(result.audit.action,'migrate_legacy_profile');
+  assert.equal(result.audit.before.generation,'legacy');
+  assert.equal(result.audit.after.generation,'v2');
+  assert.equal(result.audit.after.access_level,'engineer');
+});
+
+test('migração nunca infere nível nem permite auto-migração administrativa',()=>{
+  const legacy={uid:'legacy-1',role:'user',disabled:false};
+  assert.throws(()=>migrateLegacyProfile({actorProfile:admin,actorUid:'admin-1',targetProfile:legacy}),/Nível de acesso inválido/);
+  assert.throws(()=>migrateLegacyProfile({actorProfile:admin,actorUid:'legacy-1',targetProfile:legacy,accessLevel:'operator'}),/própria conta/);
+  const alreadyV2={...viewer,approval_state:'approved'};
+  assert.throws(()=>migrateLegacyProfile({actorProfile:admin,actorUid:'admin-1',targetProfile:alreadyV2,accessLevel:'operator'}),/Somente perfil legado/);
 });
