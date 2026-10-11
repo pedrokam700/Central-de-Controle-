@@ -2,7 +2,7 @@
   "schema": "central-hardening-evidence-v1",
   "branch": "hardening/p0-production-readiness",
   "subject": "app_modularization_cora_browser_transport",
-  "status": "focused_green_full_ci_pending",
+  "status": "green",
   "validated_parent": "b4a8719a80babbf8653d7575e85e2f1e3e628ff9",
   "focused_run": 38182362559,
   "assertions": [
@@ -22,9 +22,12 @@
     "production_rules_publish_allowed": false
   },
   "remaining": [
-    "full Static Quality on a normal descendant of the bot-produced extraction commit",
-    "full Firestore Rules/cross-PC E2E on the same descendant",
-    "reconcile app_modularization readiness after full CI",
     "continue modularization only in small behavior-preserving slices"
-  ]
+  ],
+  "full_ci_run": 38182402337,
+  "gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  }
 }
