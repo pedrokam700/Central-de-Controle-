@@ -1,0 +1,13 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "quality_gate_external_build_authority",
+  "status": "full_ci_pending",
+  "validated_head_parent": "74ff57664256730ee2c6f58dce75ca4a615b881c",
+  "one_shot_run": 38159101005,
+  "notes": [
+    "One-shot patch completed successfully on the exact parent SHA.",
+    "Previous full CI on c7b86cca failed only at Run Central quality gate while Firestore Rules/cross-PC E2E succeeded.",
+    "This normal commit exists only to trigger full CI on the bot-produced corrected HEAD."
+  ]
+}
