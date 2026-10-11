@@ -37,6 +37,9 @@ jobs:
       - name: Run ordered SQLite migration registry tests
         run: python3 scripts/agent-migrations.test.py
 
+      - name: Run disaster recovery verification tests
+        run: python3 scripts/agent-disaster-recovery.test.py
+
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
 
