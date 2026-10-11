@@ -8,12 +8,16 @@ const diag=fs.readFileSync('tools/ames-workstation/DIAGNOSTICO_POSTO.ps1','utf8'
 const starter=fs.readFileSync('tools/ames-workstation/START_AGENT_CANONICAL.ps1','utf8');
 const entry=fs.readFileSync('ames/agent/agent_entry.py','utf8');
 const hardenedEntry=fs.readFileSync('ames/agent/agent_hardened_entry.py','utf8');
+const localSecurity=fs.readFileSync('ames/agent/local_security.py','utf8');
 const builder=fs.readFileSync('scripts/build-agent-candidate.py','utf8');
 
-test('launcher usa uma Central e um agente local',()=>{
+test('launcher usa uma Central e um agente local pareado',()=>{
   assert.match(launcher,/127\.0\.0\.1:8765\/api\/v1\/health/);
   assert.match(launcher,/api\/v1\/chrome\/start/);
   assert.match(launcher,/central-cora-v2-git-v2-console-parity-r12/);
+  assert.match(launcher,/local_agent_token/);
+  assert.match(launcher,/X-Central-Agent-Token/);
+  assert.match(launcher,/#ames_agent_token=%AGENT_TOKEN%/);
   assert.doesNotMatch(launcher,/start\s+""\s+"http:\/\/127\.0\.0\.1:8765\/?"/i);
 });
 
@@ -33,7 +37,7 @@ test('launcher recupera auto-repair R11 quando .venv existe mas esta incompleto'
   assert.match(launcher,/01_INSTALAR_UMA_VEZ\.bat" \/auto/);
 });
 
-test('agente ativo precisa ser da mesma pasta, build canonico e hardening H1',()=>{
+test('agente ativo precisa ser da mesma pasta, build canonico, H1 e segurança local',()=>{
   assert.match(entry,/"package_root":str\(a\.BASE_DIR\.parent\.resolve\(\)\)/);
   assert.match(starter,/package_root/);
   assert.match(starter,/\$actual -ieq \$expected/);
@@ -44,7 +48,10 @@ test('agente ativo precisa ser da mesma pasta, build canonico e hardening H1',()
   assert.match(starter,/schema_version/);
   assert.match(starter,/SQLite=\$\(\$hard\.integrity\)/);
   assert.match(hardenedEntry,/hardening\.install/);
+  assert.match(hardenedEntry,/local_security\.ensure_token/);
   assert.match(hardenedEntry,/HardenedHandler/);
+  assert.match(localSecurity,/TOKEN_HEADER = "X-Central-Agent-Token"/);
+  assert.match(localSecurity,/secrets\.token_urlsafe\(32\)/);
 });
 
 test('rota A-MES e temporaria e nao troca gateway padrao',()=>{
@@ -54,16 +61,17 @@ test('rota A-MES e temporaria e nao troca gateway padrao',()=>{
   assert.doesNotMatch(route,/Set-NetIPInterface|Set-DnsClientServerAddress|route\s+delete\s+0\.0\.0\.0/i);
 });
 
-test('bootstrap nao armazena segredos e falha fechado em servico desconhecido',()=>{
+test('bootstrap nao armazena segredos A-MES e falha fechado em servico desconhecido',()=>{
   assert.match(starter,/candidate_version/);
   assert.match(starter,/0\.5\.24|0\.5\.25/);
   assert.match(starter,/nao se identificou como agente A-MES/i);
   assert.doesNotMatch(starter,/password|senha\s*=|cookie|wifi.*key/i);
   assert.match(diag,/nao le nem imprime senha A-MES/i);
+  assert.doesNotMatch(builder,/local_agent_token/);
 });
 
-test('candidate builder inclui ferramentas de posto e hardening',()=>{
-  for(const name of ['INICIAR_POSTO_CENTRAL_V2.bat','ROTA_AMES_APLICAR.bat','ROTA_AMES_REMOVER.bat','START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','agent_hardened_entry.py','hardening.py']){
+test('candidate builder inclui ferramentas de posto, hardening e segurança local',()=>{
+  for(const name of ['INICIAR_POSTO_CENTRAL_V2.bat','ROTA_AMES_APLICAR.bat','ROTA_AMES_REMOVER.bat','START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','agent_hardened_entry.py','hardening.py','local_security.py']){
     assert.ok(builder.includes(name),`builder nao inclui ${name}`);
   }
 });
