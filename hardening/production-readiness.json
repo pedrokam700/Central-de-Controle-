@@ -45,8 +45,23 @@
     },
     "admission_rbac": {
       "priority": "P0",
-      "status": "pending",
-      "remaining": ["verified email", "approval state", "capability model", "compatible migration of current accounts", "Rules + emulator coverage"]
+      "status": "partial",
+      "green": [
+        "dual-mode Rules preserve legacy profiles",
+        "v2 requires email_verified plus approved admission",
+        "viewer/operator/engineer/supervisor/admin capability matrix",
+        "viewer read-only and operator MES/operational publish",
+        "self-escalation blocked",
+        "new v2 profile constrained to pending viewer",
+        "Rules emulator coverage",
+        "client access-policy contract"
+      ],
+      "evidence": ["firestore.rules", "scripts/ames-rules.emulator.mjs", "core/access-policy.mjs", "scripts/ames-access-policy.test.mjs"],
+      "remaining": [
+        "integrate newV2Profile and admission guard into actual app.js signup/login",
+        "admin approval UI and account-by-account migration",
+        "remove legacy fallback only after every active account is migrated"
+      ]
     },
     "sqlite_migrations": {
       "priority": "P0",
