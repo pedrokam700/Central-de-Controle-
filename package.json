@@ -1,0 +1,18 @@
+{
+  "name": "central-de-trabalho",
+  "private": true,
+  "version": "2.0.0-preview",
+  "description": "Central de Trabalho + A-MES canonical application",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "node scripts/build-static.mjs",
+    "test": "node scripts/quality-gate.mjs",
+    "test:release": "node --test scripts/release-contract.test.mjs",
+    "test:auth": "node --test scripts/ames-auth-hardening.test.mjs",
+    "test:outbox": "node --test scripts/ames-offline-outbox.test.mjs",
+    "smoke:deploy": "node scripts/post-deploy-smoke.mjs"
+  }
+}
