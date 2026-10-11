@@ -18,6 +18,7 @@
     import {migrateLegacyProfile,approveV2Profile,denyV2Profile,changeV2AccessLevel} from './core/admission-admin.mjs';
     import {assertFirestoreWriteAllowed} from './core/firestore-write-policy.mjs';
     import {legacyAccountMigrationInventory,legacyMigrationProgress} from './core/legacy-account-migration.mjs';
+    import {prepareCoraNetworkRequest} from './core/cora-network-boundary.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc as firebaseAddDoc, onSnapshot, doc, deleteDoc as firebaseDeleteDoc, updateDoc as firebaseUpdateDoc, setDoc as firebaseSetDoc, getDoc, getDocs, query, where, writeBatch as firebaseWriteBatch, runTransaction, arrayUnion
@@ -3380,7 +3381,16 @@ function registerOfflineSupport(){
     async function aiPostJSON(url, payload){
       const token=auth?.currentUser?await auth.currentUser.getIdToken():null;
       const headers={'Content-Type':'application/json'}; if(token)headers.Authorization=`Bearer ${token}`;
-      const res=await fetch(url,{method:'POST',headers,body:JSON.stringify(payload)});
+      const prepared=prepareCoraNetworkRequest({
+        url,
+        origin:window.location.origin,
+        method:'POST',
+        payload,
+        sanitized:false,
+        approvedExternalOrigins:[],
+        headers
+      });
+      const res=await fetch(prepared.url,{method:'POST',headers:prepared.headers,body:JSON.stringify(prepared.payload)});
       const data=await res.json().catch(()=>({}));
       if(!res.ok)throw new Error(data?.error||`HTTP ${res.status}`);
       return data;
