@@ -23,6 +23,8 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
+      - name: Install test-only Excel reader
+        run: python3 -m pip install openpyxl==3.1.5
       - name: Refuse moved branch
         run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Branch moved; fail closed."; exit 1; }
       - name: Apply exact quality gate patch
