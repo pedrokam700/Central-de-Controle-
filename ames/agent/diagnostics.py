@@ -32,6 +32,16 @@ def _safe_backup(info: Any) -> dict | None:
     }
 
 
+def _safe_backup_status(info: Any) -> dict:
+    if not isinstance(info, dict):
+        return {}
+    allowed = (
+        "schema", "available", "verified", "integrity", "bytes",
+        "schema_version", "snapshot_count", "verified_at", "error",
+    )
+    return {key: info.get(key) for key in allowed if key in info}
+
+
 def _db_sizes(path: Path) -> dict:
     def size(candidate: Path) -> int:
         try:
@@ -80,7 +90,13 @@ def _assert_sanitized(value: Any, path: str = "root") -> None:
             _assert_sanitized(child, f"{path}[{index}]")
 
 
-def build(agent, *, hardening_health: dict | None = None, calendar: dict | None = None) -> dict:
+def build(
+    agent,
+    *,
+    hardening_health: dict | None = None,
+    calendar: dict | None = None,
+    backup_status: dict | None = None,
+) -> dict:
     db_path = Path(agent.DB_PATH)
     snapshot = _snapshot_summary(agent.STORE)
     lines = list(agent.CONFIG.get("configured_lines") or [])
@@ -116,6 +132,7 @@ def build(agent, *, hardening_health: dict | None = None, calendar: dict | None 
         },
         "calendar": calendar or {},
         "backup": _safe_backup(latest_backup),
+        "backup_verification": _safe_backup_status(backup_status),
         **snapshot,
     }
     _assert_sanitized(payload)
@@ -127,6 +144,7 @@ def public_summary(payload: dict) -> dict:
     runtime = payload.get("runtime") or {}
     database = payload.get("database") or {}
     connectivity = payload.get("connectivity") or {}
+    backup = payload.get("backup_verification") or {}
     return {
         "schema": payload.get("schema"),
         "generated_at": payload.get("generated_at"),
@@ -135,6 +153,8 @@ def public_summary(payload: dict) -> dict:
         "sqlite_integrity": (database.get("hardening") or {}).get("integrity"),
         "ames_reachable": connectivity.get("ames_reachable"),
         "chrome_cdp_reachable": connectivity.get("chrome_cdp_reachable"),
+        "backup_verified": backup.get("verified"),
+        "backup_integrity": backup.get("integrity"),
         "scheduler": payload.get("scheduler"),
         "latest_complete_by_line": database.get("latest_complete_by_line") or {},
     }
