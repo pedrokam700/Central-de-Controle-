@@ -208,6 +208,49 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /amesLineLeases/{lineId} {
+      function validCollectorLease() {
+        let d = request.resource.data;
+        return mesLine(lineId)
+          && d.keys().hasOnly(['schema','line_id','owner_uid','workstation_id','generation','acquired_at','renewed_at','expires_at','status'])
+          && d.schema == 'central-collector-lease-v1'
+          && d.line_id == lineId
+          && d.owner_uid == request.auth.uid
+          && d.workstation_id is string && d.workstation_id.matches('^ws_[0-9a-f]{32}$')
+          && d.generation is int && d.generation > 0
+          && d.acquired_at is timestamp
+          && d.renewed_at is timestamp
+          && d.expires_at is timestamp
+          && d.status == 'active'
+          && d.expires_at > request.time
+          && d.expires_at <= request.time + duration.value(15, 'm');
+      }
+      function sameCollectorRenewal() {
+        let d = request.resource.data;
+        return resource.data.expires_at > request.time
+          && d.owner_uid == resource.data.owner_uid
+          && d.workstation_id == resource.data.workstation_id
+          && d.generation == resource.data.generation
+          && d.acquired_at == resource.data.acquired_at
+          && d.renewed_at == request.time;
+      }
+      function expiredTakeover() {
+        let d = request.resource.data;
+        return resource.data.expires_at <= request.time
+          && d.generation == resource.data.generation + 1
+          && d.acquired_at == request.time
+          && d.renewed_at == request.time;
+      }
+      allow read: if activeUser() && mesLine(lineId);
+      allow create: if canOperationalWrite() && validCollectorLease()
+        && request.resource.data.generation == 1
+        && request.resource.data.acquired_at == request.time
+        && request.resource.data.renewed_at == request.time;
+      allow update: if canOperationalWrite() && validCollectorLease()
+        && (sameCollectorRenewal() || expiredTakeover());
+      allow delete: if false;
+    }
+
     match /workShifts/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();
