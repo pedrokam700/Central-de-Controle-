@@ -24,11 +24,11 @@ test('factory A-MES HTTP is classified explicitly while arbitrary insecure HTTP 
 });
 
 test('blocking CSP readiness is computed from real blockers instead of declared optimistically',()=>{
-  const expected=inventory.inline_scripts===0&&inventory.eval_like===0&&inventory.insecure_non_local_urls.length===0;
+  const expected=inventory.inline_scripts===0&&inventory.inline_styles===0&&inventory.inline_style_attributes===0&&inventory.eval_like===0&&inventory.insecure_non_local_urls.length===0;
   assert.equal(inventory.blocking_csp_ready,expected);
   if(!expected){
     assert.ok(
-      inventory.inline_scripts>0||inventory.eval_like>0||inventory.insecure_non_local_urls.length>0,
+      inventory.inline_scripts>0||inventory.inline_styles>0||inventory.inline_style_attributes>0||inventory.eval_like>0||inventory.insecure_non_local_urls.length>0,
       'CSP not ready but no explicit blocker was reported'
     );
   }

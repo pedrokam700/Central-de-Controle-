@@ -5,6 +5,7 @@ import { buildReleaseIdentity } from './release-identity.mjs';
 
 const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
 const names=['index.html','app.js','cora-build-guard.js','central-runtime-boot-guard.js','root-entry.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest'];
+for(const entry of fs.readdirSync('.')){if(/^csp-inline-\d{2}-[a-z0-9-]+\.css$/i.test(entry))names.push(entry);}
 const allowed=/\.(mjs|css|svg|png|json)$/;
 
 function collect(dir){

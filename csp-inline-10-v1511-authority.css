@@ -1,0 +1,33 @@
+
+/* V15.1.11 — navigation/history polish and hard cleanup */
+.ai-sidebar-history{display:flex!important;flex-direction:column!important;gap:12px!important;min-height:0!important;}
+.ai-sidebar-history-section{display:flex!important;flex-direction:column!important;gap:3px!important;min-width:0!important;}
+.ai-sidebar-history-title{font-size:10px!important;font-weight:750!important;color:var(--muted)!important;margin:2px 6px 4px!important;letter-spacing:.02em!important;}
+.ai-sidebar-history-item{position:relative!important;display:grid!important;grid-template-columns:22px minmax(0,1fr) 24px!important;align-items:center!important;gap:3px!important;min-height:34px!important;padding:2px 2px!important;border-radius:8px!important;background:transparent!important;border:1px solid transparent!important;overflow:visible!important;}
+.ai-sidebar-history-item:hover{background:var(--soft)!important;border-color:var(--line)!important;}
+.ai-sidebar-history-open{min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;border:0!important;background:transparent!important;color:var(--text)!important;text-align:left!important;padding:7px 3px!important;font-size:11px!important;font-weight:620!important;cursor:pointer!important;}
+.ai-history-pin-icon,.ai-history-more{width:24px!important;height:24px!important;display:grid!important;place-items:center!important;border:0!important;background:transparent!important;color:var(--muted)!important;border-radius:7px!important;padding:0!important;opacity:1!important;visibility:visible!important;cursor:pointer!important;}
+.ai-history-pin-icon svg{width:15px!important;height:15px!important;display:block!important;}
+.ai-history-pin-icon.active{color:var(--text)!important;background:var(--soft)!important;}
+.ai-history-pin-icon:hover,.ai-history-more:hover{background:var(--soft)!important;color:var(--text)!important;}
+.ai-history-menu{position:absolute!important;right:0!important;top:31px!important;display:none!important;min-width:130px!important;padding:5px!important;border:1px solid var(--line)!important;border-radius:9px!important;background:var(--surface)!important;box-shadow:0 10px 28px rgba(0,0,0,.16)!important;z-index:1000!important;}
+.ai-history-menu.open{display:grid!important;}
+.ai-history-menu button{border:0!important;background:transparent!important;color:var(--text)!important;text-align:left!important;padding:8px 9px!important;border-radius:7px!important;font-size:10px!important;cursor:pointer!important;}
+.ai-history-menu button:hover{background:var(--soft)!important;}
+.ai-sidebar-history-empty{color:var(--muted)!important;font-size:9px!important;padding:4px 6px!important;}
+
+/* The central sidebar collapse control must never collapse into a dash. */
+.sidebar .brand-top #sidebarCollapse{width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;border-radius:10px!important;display:grid!important;place-items:center!important;flex:0 0 38px!important;font-size:0!important;line-height:0!important;}
+.sidebar .brand-top #sidebarCollapse .sidebar-collapse-glyph{width:20px!important;height:20px!important;display:grid!important;place-items:center!important;}
+.sidebar .brand-top #sidebarCollapse .sidebar-collapse-glyph svg{width:19px!important;height:19px!important;display:block!important;stroke:currentColor!important;}
+
+/* Remove the stray header-left dash/placeholder on non-CORA pages. */
+.main > .topbar > div:first-child:empty{display:none!important;}
+.main > .topbar > div:first-child .page-title:empty,
+.main > .topbar > div:first-child .page-subtitle:empty{display:none!important;}
+
+/* Modern send icon: clean paper plane, no broken triangle/cross artifact. */
+.ai-send .send-icon{width:18px!important;height:18px!important;position:relative!important;display:block!important;transform:none!important;}
+.ai-send .send-icon:before{content:""!important;position:absolute!important;left:2px!important;top:3px!important;width:14px!important;height:12px!important;border:0!important;background:currentColor!important;clip-path:polygon(0 0,100% 0,53% 100%,42% 57%,0 45%)!important;transform:none!important;}
+.ai-send .send-icon:after{display:none!important;content:none!important;}
+body.dark .ai-send .send-icon:before{background:currentColor!important;}

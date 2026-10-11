@@ -40,8 +40,8 @@ function approvedOperationalHttp(raw){
 export function buildCspInventory(){
   const files=collectFiles();
   const origins=new Set(),insecureNonLocal=new Set(),operationalHttp=new Set();
-  let inlineScripts=0,inlineStyles=0,evalLike=0,dynamicScripts=0;
-  const evalFiles=[],inlineScriptFiles=[],inlineStyleFiles=[];
+  let inlineScripts=0,inlineStyles=0,inlineStyleAttributes=0,evalLike=0,dynamicScripts=0;
+  const evalFiles=[],inlineScriptFiles=[],inlineStyleFiles=[],inlineStyleAttributeFiles=[];
   const urlRegex=/(?:https?|wss?):\/\/[^\s"'`()<>\\]+/g;
   for(const file of files){
     const text=fs.readFileSync(file,'utf8');
@@ -60,6 +60,8 @@ export function buildCspInventory(){
       if(count){inlineScripts+=count;inlineScriptFiles.push({file,count});}
       const styles=[...text.matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/gi)].length;
       if(styles){inlineStyles+=styles;inlineStyleFiles.push({file,count:styles});}
+      const styleAttrs=[...text.matchAll(/\sstyle\s*=\s*(?:"[^"]*"|'[^']*')/gi)].length;
+      if(styleAttrs){inlineStyleAttributes+=styleAttrs;inlineStyleAttributeFiles.push({file,count:styleAttrs});}
     }
     const evalCount=(text.match(/\beval\s*\(/g)||[]).length+(text.match(/\bnew\s+Function\s*\(/g)||[]).length;
     if(evalCount){evalLike+=evalCount;evalFiles.push({file,count:evalCount});}
@@ -75,10 +77,12 @@ export function buildCspInventory(){
     inline_script_files:inlineScriptFiles,
     inline_styles:inlineStyles,
     inline_style_files:inlineStyleFiles,
+    inline_style_attributes:inlineStyleAttributes,
+    inline_style_attribute_files:inlineStyleAttributeFiles,
     eval_like:evalLike,
     eval_files:evalFiles,
     dynamic_script_elements:dynamicScripts,
-    blocking_csp_ready:inlineScripts===0&&evalLike===0&&insecureNonLocal.size===0,
+    blocking_csp_ready:inlineScripts===0&&inlineStyles===0&&inlineStyleAttributes===0&&evalLike===0&&insecureNonLocal.size===0,
     mode:'inventory_only'
   };
 }
