@@ -64,7 +64,7 @@ test('unfenced publication remains backward-compatible while fenced generations 
   assert.notEqual(generation4.id,generation5.id);
   assert.equal(generation4.head.collector_fence.generation,4);
   assert.equal(generation5.head.collector_fence.generation,5);
-  assert.throws(()=>publication('A',payload,{collectorFence:fence(4,{line_id:'TAN10102'})}),/outra linha/);
+  await assert.rejects(publication('A',payload,{collectorFence:fence(4,{line_id:'TAN10102'})}),/outra linha/);
 });
 
 test('optional sync fence provider recaptures unchanged MES content when authority generation changes',async()=>{
@@ -81,7 +81,7 @@ test('optional sync fence provider recaptures unchanged MES content when authori
   sync.stop();
 });
 
-test('offline shell precaches publication fence imported by sync',()=>{
+test('offline shell precaches complete publication fence dependency chain',()=>{
   const sw=fs.readFileSync('sw.js','utf8');
-  assert.match(sw,/ames\/data\/publication-fence\.mjs/);
+  for(const asset of ['ames/data/operational-registry.mjs','ames/data/collector-authority.mjs','ames/data/publication-fence.mjs'])assert.ok(sw.includes(asset),asset+' missing from offline shell');
 });
