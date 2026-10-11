@@ -1,6 +1,7 @@
 import { AGENT_URL, SCHEDULER_POLICY, collectionScope, r12CompatibleBuild } from './data/agent-contract.mjs';
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
 import {CANONICAL_SCHEMA,DATASETS} from './data/canonical.mjs';
+import {validateCollectorIdentity} from './data/collector-authority.mjs';
 
 const AGENT_TOKEN_KEY='central.ames.agentToken.v1';
 function bootstrapAgentToken(explicit=''){
@@ -19,6 +20,22 @@ function bootstrapAgentToken(explicit=''){
     }else token=window.sessionStorage?.getItem(AGENT_TOKEN_KEY)||'';
   }catch{}
   return token;
+}
+
+export const AGENT_WORKSTATION_IDENTITY_SCHEMA='central-workstation-identity-v1';
+
+export function publicAgentWorkstationIdentity(payload){
+  const raw=payload?.workstation_identity;
+  if(!raw||typeof raw!=='object'||raw.schema!==AGENT_WORKSTATION_IDENTITY_SCHEMA||raw.stable!==true)return null;
+  let workstationId;
+  try{workstationId=validateCollectorIdentity(raw.workstation_id);}
+  catch{return null;}
+  return Object.freeze({
+    schema:AGENT_WORKSTATION_IDENTITY_SCHEMA,
+    workstation_id:workstationId,
+    stable:true,
+    identity_kind:String(raw.identity_kind||'random_local_capability')
+  });
 }
 
 // Transport belongs to the existing session; all operational data lives in store.
@@ -122,6 +139,15 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     connect:()=>action(async()=>{
       const health=await request('/health');
       if(health.agent_version!=='0.5.23'||health.mes_scheduler?.policy!==SCHEDULER_POLICY)throw new Error('Instale o patch de serialização com scheduler FIFO antes de conectar o Console.');
+      let workstationIdentity=null,workstationIdentityStatus='legacy_unavailable';
+      try {
+        const hardened=await request('/hardening/health');
+        workstationIdentity=publicAgentWorkstationIdentity(hardened);
+        workstationIdentityStatus=workstationIdentity?'ready':'invalid';
+      } catch(error) {
+        if(error.name==='AbortError')throw error;
+        if(String(error.message||'').includes('não autorizado'))throw error;
+      }
       let capabilities=null;
       try {
         const candidate=await request('/v2/capabilities');
@@ -136,7 +162,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       }
       const cfg=await request('/config');
       const config=publicConfig(cfg);
-      publish({status:'connected',config,capabilities,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.playwright_ready!==false},agent_build:health.agent_build||'',error:''});
+      publish({status:'connected',config,capabilities,workstation_identity:workstationIdentity,workstation_identity_status:workstationIdentityStatus,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.playwright_ready!==false},agent_build:health.agent_build||'',error:''});
       const monitor=await request('/monitor');publish({monitor:{enabled:!!monitor.enabled,interval_minutes:monitor.interval_minutes,next_run_at:monitor.next_run_at}});
       await refresh();
     }),
@@ -186,6 +212,6 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(configPatch?{config:configPatch}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
-    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',config:null,job:null,readiness:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
+    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',config:null,job:null,readiness:null,monitor:null,capabilities:null,workstation_identity:null,workstation_identity_status:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
   });
 }
