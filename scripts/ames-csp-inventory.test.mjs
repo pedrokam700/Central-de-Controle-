@@ -11,14 +11,25 @@ test('CSP inventory scans the real frontend surface without enforcing policy',()
   assert.ok(inventory.external_origins.includes('https://www.gstatic.com'),'Firebase CDN origin must stay visible in CSP inventory');
 });
 
-test('frontend source contains no insecure non-local HTTP dependency',()=>{
-  assert.deepEqual(inventory.insecure_non_local_urls,[],'insecure non-local HTTP URL found in frontend source');
+test('factory A-MES HTTP is classified explicitly while arbitrary insecure HTTP stays blocked',()=>{
+  assert.deepEqual(inventory.insecure_non_local_urls,[],'unexpected insecure non-local HTTP URL found in frontend source');
+  assert.ok(
+    inventory.approved_operational_http_references.includes('http://172.29.185.215/asymes'),
+    'approved A-MES intranet reference must remain visible in CSP inventory'
+  );
+  assert.ok(
+    inventory.external_origins.includes('http://172.29.185.215'),
+    'A-MES origin must not be hidden from source inventory'
+  );
 });
 
-test('blocking CSP readiness is computed from blockers instead of declared optimistically',()=>{
+test('blocking CSP readiness is computed from real blockers instead of declared optimistically',()=>{
   const expected=inventory.inline_scripts===0&&inventory.eval_like===0&&inventory.insecure_non_local_urls.length===0;
   assert.equal(inventory.blocking_csp_ready,expected);
   if(!expected){
-    assert.ok(inventory.inline_scripts>0||inventory.eval_like>0,'CSP not ready but no explicit blocker was reported');
+    assert.ok(
+      inventory.inline_scripts>0||inventory.eval_like>0||inventory.insecure_non_local_urls.length>0,
+      'CSP not ready but no explicit blocker was reported'
+    );
   }
 });
