@@ -10,7 +10,9 @@ from datetime import datetime, timedelta
 from typing import Any, Dict
 from zoneinfo import ZoneInfo
 
-DEFAULT_TIMEZONE = "America/Sao_Paulo"
+import operational_registry
+
+DEFAULT_TIMEZONE = operational_registry.SITE_TIMEZONE
 DEFAULT_PRODUCTION_DAY_START = "07:00"
 DEFAULT_SHIFTS = {
     "1": {"label": "1º Turno", "start": "07:30", "end": "17:30"},
