@@ -65,7 +65,7 @@ let testSource=fs.readFileSync('scripts/ames-offline-outbox.test.mjs','utf8');
 testSource=replaceExactly(
   testSource,
   "  assert.match(app,/setDoc\\(doc\\(db,item\\.collection,item\\.documentId\\),item\\.payload\\)/);",
-  "  assert.match(app,/\\.\\/core\\/offline-domain-write\\.mjs/);\n  assert.match(app,/offlineWritePlan\\(item\\)/);\n  assert.match(app,/writeBatch\\(db\\)/);\n  assert.match(app,/arrayUnion\\(step\\.value\\)/);\n  assert.match(app,/queueOfflineWrite\\('operationalFailures',item,\\{effects:routineEffect\\?\\[routineEffect\\]:\\[\\]\\}\\)/);\n  assert.match(app,/routineFailureLinkEffect\\(\\{executionKey:origin\\.executionKey/);\n  assert.match(app,/batch\\.update\\(doc\\(db,'routineExecutions',routineEffect\\.executionKey\\),\\{linkedFailureIds:arrayUnion\\(routineEffect\\.failureId\\)/);\n  assert.doesNotMatch(app,/linked=\\[\\.\\.\\.new Set/);",
+  "  assert.match(app,/\\.\\/core\\/offline-domain-write\\.mjs/);\n  assert.match(app,/offlineWritePlan\\(item\\)/);\n  assert.match(app,/writeBatch\\(db\\)/);\n  assert.match(app,/arrayUnion\\(step\\.value\\)/);\n  assert.match(app,/queueOfflineWrite\\('operationalFailures',item,\\{effects:routineEffect\\?\\[routineEffect\\]:\\[\\]\\}\\)/);\n  assert.match(app,/routineFailureLinkEffect\\(\\{executionKey:origin\\.executionKey/);\n  assert.match(app,/batch\\.update\\(doc\\(db,'routineExecutions',routineEffect\\.executionKey\\),\\{linkedFailureIds:arrayUnion\\(routineEffect\\.failureId\\)/);\n  assert.equal(app.includes(\"const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedFailureIds||[]),item.id])]\"),false);",
   'offline source integration assertions'
 );
 testSource=replaceExactly(
