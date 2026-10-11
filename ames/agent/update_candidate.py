@@ -8,7 +8,12 @@ import socket
 import sqlite3
 import uuid
 from pathlib import Path
-FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py')
+FILES=(
+    'agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py',
+    'operational_calendar.py','diagnostics.py','migrations.py','disaster_recovery.py',
+    'support_diagnostics.py','workstation_identity.py','retention_policy.py','engine_bridge.py',
+    'store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py'
+)
 ROOT_FILES=('INICIAR_POSTO_CENTRAL_V2.bat','00_INICIAR_AQUI.bat','INICIAR_CENTRAL_AMES.cmd',
             'suporte/ames-workstation/ROTA_AMES_APLICAR.bat','suporte/ames-workstation/ROTA_AMES_REMOVER.bat',
             'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1',
@@ -98,7 +103,7 @@ def update(path,source=None):
         _restore_agent(target,saved,manifest_old)
         _restore_root(package,saved,manifest_old)
         raise
-    print('UPDATED 0.5.25-rc1 + hardening H1; backup/rollback:',saved)
+    print('UPDATED 0.5.25-rc1 + production hardening; backup/rollback:',saved)
     return saved
 
 def rollback(path,saved=None):
