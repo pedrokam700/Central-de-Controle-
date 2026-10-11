@@ -1,0 +1,30 @@
+name: Temporary CSP inventory snapshot
+
+on:
+  push:
+    branches:
+      - hardening/p0-production-readiness
+    paths:
+      - .github/workflows/hardening-csp-inventory-snapshot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Generate current CSP inventory
+        run: node scripts/csp-inventory.mjs > csp-inventory-current.json
+      - name: Upload inventory
+        uses: actions/upload-artifact@v6
+        with:
+          name: csp-inventory-${{ github.sha }}
+          path: csp-inventory-current.json
+          if-no-files-found: error
+          retention-days: 1
