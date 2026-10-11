@@ -8,6 +8,7 @@ for %%I in ("%ROOT%.") do set "ROOT=%%~fI\"
 
 set "CENTRAL="
 set "EXPECTED_FRONTEND_SHA="
+set "AGENT_TOKEN="
 if /I "%~1"=="/prod" (
   set "CENTRAL=https://central-cora-v2.vercel.app/Central-de-Controle-/"
 ) else if exist "%ROOT%FRONTEND_GATE.json" (
@@ -97,22 +98,28 @@ if errorlevel 1 (
 echo [4/7] Iniciando/verificando agente canonico...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%suporte\ames-workstation\START_AGENT_CANONICAL.ps1" -Root "%ROOT%"
 if errorlevel 1 goto :fail
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Join-Path $env:ROOT 'ames-agent\data\local_agent_token';if(Test-Path $p){$t=(Get-Content -Raw $p).Trim();if($t.Length -ge 32){Write-Output $t;exit 0}};exit 3"`) do set "AGENT_TOKEN=%%T"
+if not defined AGENT_TOKEN (
+  echo [ERRO] Token local do agente nao foi criado. O posto nao sera aberto sem pareamento.
+  goto :fail
+)
 
 echo [5/7] Abrindo Chrome dedicado A-MES pelo mesmo agente...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$r=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/chrome/start' -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 12;if(-not $r.ok){exit 1};exit 0}catch{Write-Host $_.Exception.Message;exit 1}"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$headers=@{'X-Central-Agent-Token'=$env:AGENT_TOKEN};$r=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/chrome/start' -Method Post -Headers $headers -ContentType 'application/json' -Body '{}' -TimeoutSec 12;if(-not $r.ok){exit 1};exit 0}catch{Write-Host $_.Exception.Message;exit 1}"
 if errorlevel 1 goto :fail
 
 echo [6/7] Preflight local...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$h=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 3;Write-Host ('Agente: '+$h.candidate_version+' / Build='+$h.agent_build+' / A-MES='+$h.ames_reachable+' / CDP='+$h.chrome_cdp_reachable+' / 3022='+$h.auto_3022_ready);if(-not $h.ok){exit 1}}catch{Write-Host $_.Exception.Message;exit 1}"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$h=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 3;$hh=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -TimeoutSec 3;Write-Host ('Agente: '+$h.candidate_version+' / Build='+$h.agent_build+' / A-MES='+$h.ames_reachable+' / CDP='+$h.chrome_cdp_reachable+' / 3022='+$h.auto_3022_ready+' / Security='+$hh.local_security.mode);if(-not $h.ok -or -not $hh.ok -or [string]$hh.local_security.mode -ne 'workstation-token-v1'){exit 1}}catch{Write-Host $_.Exception.Message;exit 1}"
 if errorlevel 1 goto :fail
 
-echo [7/7] Abrindo a UNICA Central...
-start "" "%CENTRAL%"
+echo [7/7] Abrindo a UNICA Central com pareamento local...
+start "" "%CENTRAL%#ames_agent_token=%AGENT_TOKEN%"
 echo.
 echo [OK] Posto iniciado.
 echo - Central: %CENTRAL%
 if defined EXPECTED_FRONTEND_SHA echo - Frontend esperado: %EXPECTED_FRONTEND_SHA%
 echo - Agente local: http://127.0.0.1:8765
+echo - Pareamento local: workstation-token-v1
 echo - Chrome A-MES: perfil dedicado / CDP 9222
 echo - O login do A-MES continua manual.
 echo - Se a internet externa cair depois de um preview validado/cache valido,
