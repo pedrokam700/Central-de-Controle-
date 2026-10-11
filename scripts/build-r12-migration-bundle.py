@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 AGENT=ROOT/'ames'/'agent'
 WORKSTATION=ROOT/'tools'/'ames-workstation'
-FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py')
+FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py')
 PREVIEW_URLS=(
     'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app',
     'https://deploy-preview-23--productcontrolcenter.netlify.app',
@@ -30,10 +30,22 @@ ROOT_FILES={
 
 def digest(data:bytes)->str:return hashlib.sha256(data).hexdigest()
 
+def _validate_updater_contract():
+    source=(AGENT/'update_candidate.py').read_text(encoding='utf-8')
+    match=re.search(r"FILES=\((.*?)\)\nROOT_FILES=",source,re.S)
+    if not match:raise ValueError('Could not read update_candidate FILES contract')
+    updater=set(re.findall(r"'([^']+\.py)'",match.group(1)))
+    expected=set(FILES)
+    if updater!=expected:
+        missing=sorted(updater-expected);extra=sorted(expected-updater)
+        raise ValueError(f'Bundle/updater FILES mismatch; missing={missing}; extra={extra}')
+
+
 def build(destination:Path,frontend_sha:str):
     destination=destination.resolve();frontend_sha=str(frontend_sha).strip().lower()
     if destination.exists():raise ValueError(f'Destination exists: {destination}')
     if not re.fullmatch(r'[0-9a-f]{40}',frontend_sha):raise ValueError('frontend_sha must be an exact 40-hex commit SHA')
+    _validate_updater_contract()
     payload={}
     for name in (*FILES,'update_candidate.py'):
         path=AGENT/name
@@ -114,7 +126,7 @@ def build(destination:Path,frontend_sha:str):
         'exit /b 0\r\n'
     ).encode('ascii',errors='replace')
     manifest={
-        'schema':'central-r12-migration-bundle-v3',
+        'schema':'central-r12-migration-bundle-v4',
         'purpose':'update-existing-r12-only',
         'frontend_sha':frontend_sha,
         'new_pc_supported':False,
@@ -122,9 +134,9 @@ def build(destination:Path,frontend_sha:str):
         'preview_selection':'exact-sha-with-validated-offline-fallback',
         'pre_migration_capture':'best-effort-before-update',
         'rollback':'latest-candidate-backup',
-        'hardening':'H1-snapshot-lifecycle-migrations-atomic-config',
+        'hardening':'H1-snapshot-lifecycle-migrations-atomic-config-workstation-token',
         'files':{name:digest(data) for name,data in sorted(payload.items())},
-        'notes':['does not contain A-MES credentials/session','does not contain runtime SQLite','updater validates frozen 3028 hashes before update','launcher accepts only a preview whose release-build.json matches frontend_sha; after one valid check it may reuse that exact origin/SHA from cache state','update attempts a safe R12 engine capture before modifying the installation','rollback helper restores the newest candidate backup, removes migration-only agent files that did not previously exist and preserves operational SQLite','hardening H1 adds explicit SQLite migrations and hides incomplete snapshots from canonical/latest reads']
+        'notes':['does not contain A-MES credentials/session','does not contain runtime SQLite or workstation token','updater validates frozen 3028 hashes before update','launcher accepts only a preview whose release-build.json matches frontend_sha; after one valid check it may reuse that exact origin/SHA from cache state','update attempts a safe R12 engine capture before modifying the installation','rollback helper restores the newest candidate backup, removes migration-only agent files that did not previously exist and preserves operational SQLite','hardening H1 adds explicit SQLite migrations, hides incomplete snapshots from canonical/latest reads, uses atomic config writes and requires a local workstation token for hosted Central API access']
     }
     payload['MIGRATION_MANIFEST.json']=(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n').encode('utf-8')
     payload['LEIA_PRIMEIRO_R12.txt']=(
@@ -132,10 +144,11 @@ def build(destination:Path,frontend_sha:str):
         'Este bundle NAO e instalador para computador novo.\r\n'
         'Ele atualiza uma instalacao R12 existente depois de validar os coletores 3028.\r\n'
         'O updater cria backup do codigo/configuracao/SQLite antes da troca e nao apaga a base.\r\n'
-        'Hardening H1: migrations SQLite explicitas, snapshots incompletos nao viram latest e config e escrita atomicamente.\r\n'
+        'Hardening H1: migrations SQLite explicitas, snapshots incompletos nao viram latest, config atomica e token local do posto.\r\n'
         f'Frontend esperado neste bundle: {frontend_sha}\r\n'
         'O launcher testa Vercel/Netlify e abre somente um preview cujo release-build.json tenha exatamente esse SHA.\r\n'
         'Depois de uma validacao online bem-sucedida, a mesma origem/SHA pode ser reutilizada durante perda de internet para o shell offline.\r\n'
+        'O token do agente e gerado somente no posto, nao vem dentro deste ZIP e nao e enviado ao Firebase/Vercel/Netlify.\r\n'
         '1. Pare agente/monitor da R12.\r\n'
         '2. Execute ATUALIZAR_R12_EXISTENTE.bat e informe a pasta da instalacao.\r\n'
         '   Antes de alterar a instalacao, o script tenta gerar R12_ENGINE_CAPTURE_PREMIGRATION.zip automaticamente.\r\n'
