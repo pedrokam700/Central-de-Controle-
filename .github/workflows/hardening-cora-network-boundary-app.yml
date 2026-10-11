@@ -1,4 +1,4 @@
-# diagnostic retry after focused-validation failure
+# retry after generated-test literal assertion fix
 name: One-shot CORA aiPostJSON destination boundary
 
 on:
@@ -30,12 +30,11 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
       - name: Patch aiPostJSON through destination boundary
-        run: node scripts/patch-cora-network-boundary-app.mjs
+        run: node scripts/run-cora-network-boundary-app-once.mjs
       - name: Validate focused runtime boundary
         shell: bash
         run: |
           set -euo pipefail
-          exec > >(tee cora-boundary-validation.log) 2>&1
           node --check app.js
           node --test \
             scripts/ames-cora-network-boundary.test.mjs \
@@ -45,20 +44,13 @@ jobs:
             scripts/ames-cache.test.mjs \
             scripts/ames-release-build.test.mjs
           git diff --check
-      - name: Upload validation diagnostic
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: cora-boundary-validation-${{ github.sha }}
-          path: cora-boundary-validation.log
-          if-no-files-found: warn
-          retention-days: 1
       - name: Remove one-shot write tooling
         shell: bash
         run: |
           set -euo pipefail
           rm -f .github/workflows/hardening-cora-network-boundary-app.yml
           rm -f scripts/patch-cora-network-boundary-app.mjs
+          rm -f scripts/run-cora-network-boundary-app-once.mjs
           git diff --check
       - name: Commit only after focused validation
         shell: bash
