@@ -1,0 +1,147 @@
+{
+  "schema": "central-production-readiness-v1",
+  "physical_candidate": {
+    "branch": "v2/console-parity-r12",
+    "sha": "5e45127d3b61b37968a4c2b05596919670b307cb",
+    "frozen": true,
+    "factory_9_of_9": "pending"
+  },
+  "hardening_branch": "hardening/p0-production-readiness",
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false,
+    "required_before_stable": [
+      "factory_9_of_9_green",
+      "hardening_p0_green",
+      "admission_rbac_green",
+      "cora_backend_contract_green",
+      "published_preview_smoke_green",
+      "r12_engine_factory_capture_green",
+      "affected_physical_regression_green"
+    ]
+  },
+  "gates": {
+    "transactional_snapshots": {
+      "priority": "P0",
+      "status": "green",
+      "evidence": ["scripts/agent-hardening.test.py"]
+    },
+    "offline_outbox_uid_idempotency": {
+      "priority": "P0",
+      "status": "partial",
+      "green": ["reports", "operationalFailures", "uid isolation", "deterministic document id", "legacy quarantine"],
+      "remaining": ["compound routineExecution side effect must use merge-safe/domain-aware replay"]
+    },
+    "local_agent_pairing": {
+      "priority": "P0",
+      "status": "green",
+      "evidence": ["scripts/ames-agent-pairing.test.mjs"]
+    },
+    "legacy_browser_password_authority": {
+      "priority": "P0",
+      "status": "green",
+      "evidence": ["scripts/ames-auth-hardening.test.mjs"]
+    },
+    "admission_rbac": {
+      "priority": "P0",
+      "status": "pending",
+      "remaining": ["verified email", "approval state", "capability model", "compatible migration of current accounts", "Rules + emulator coverage"]
+    },
+    "sqlite_migrations": {
+      "priority": "P0",
+      "status": "green",
+      "evidence": ["scripts/agent-migrations.test.py"]
+    },
+    "cora_backend_version_contract": {
+      "priority": "P0",
+      "status": "blocked",
+      "remaining": ["identify authoritative backend source/deploy", "/api/health", "/api/version", "frontend/backend compatibility contract"],
+      "blocker": "Vercel project is visible as Express but route/deployment inspection is outside current connection scope"
+    },
+    "operational_calendar_semantics": {
+      "priority": "P0",
+      "status": "green",
+      "evidence": ["scripts/agent-operational-calendar.test.py"]
+    },
+    "published_preview_smoke": {
+      "priority": "P0",
+      "status": "partial",
+      "green": ["exact SHA", "release identity digest", "redirect bound", "canonical HTML", "factory gate"],
+      "remaining": ["run successfully against externally accessible preview"],
+      "blocker": "push runs skip preview smoke; earlier Netlify PR preview returned HTTP 401 to CI"
+    },
+    "mes_rules_authority": {
+      "priority": "P1",
+      "status": "green_code_not_published",
+      "evidence": ["scripts/ames-rules.emulator.mjs", "scripts/ames-e2e.emulator.mjs"],
+      "remaining": ["production publication only after explicit promotion authorization"]
+    },
+    "release_identity": {
+      "priority": "P1",
+      "status": "green",
+      "evidence": ["scripts/release-contract.test.mjs", "scripts/ames-release-build.test.mjs"]
+    },
+    "typed_cloud_allowlist": {
+      "priority": "P1",
+      "status": "green",
+      "evidence": ["ames/data/cloud-projection.mjs", "scripts/ames-cloud-projection.test.mjs", "scripts/ames-sync.test.mjs"]
+    },
+    "operational_registry": {
+      "priority": "P1",
+      "status": "partial",
+      "green": ["site/timezone registry", "JS contract consumes registry", "parity test with Python and Rules"],
+      "remaining": ["migrate Python consumers", "migrate/generate Rules without changing TAN10101/TAN10102/TAN10103"]
+    },
+    "retention_lifecycle": {
+      "priority": "P1",
+      "status": "partial",
+      "green": ["observe-only inventory", "dataset classification", "critical MES preserve-until-approved", "no destructive cleanup"],
+      "remaining": ["approve retention periods by data class before any deletion"]
+    },
+    "disaster_recovery": {
+      "priority": "P1",
+      "status": "partial",
+      "green": ["verified local backup", "read-only quick_check", "non-destructive restore drill"],
+      "remaining": ["authorized encrypted off-machine backup target"]
+    },
+    "support_diagnostics": {
+      "priority": "P1",
+      "status": "green",
+      "evidence": ["scripts/agent-support-diagnostics.test.py"]
+    },
+    "offline_readiness": {
+      "priority": "P1",
+      "status": "green_contract_partial_distribution",
+      "green": ["Auth persistence state", "Firestore persistent-cache state", "Service Worker state", "offline_ready fail-closed"],
+      "remaining": ["fully local immutable frontend distribution without depending on prior hosted-origin preparation"]
+    },
+    "r12_existing_install_bundle": {
+      "priority": "P1",
+      "status": "green_existing_install_only",
+      "green": ["V5 deterministic bundle", "runtime import closure", "hash manifest", "rollback", "no runtime DB/token/workstation identity", "exact frontend SHA gate"],
+      "remaining": ["new-PC fused package remains blocked until real R12 factory capture"]
+    },
+    "workstation_identity": {
+      "priority": "P1",
+      "status": "green_groundwork",
+      "green": ["stable random local id", "atomic persistence", "corruption fail-closed"],
+      "remaining": ["collector lease/fencing authority is intentionally not active"]
+    },
+    "multi_collector_authority": {
+      "priority": "P1",
+      "status": "pending",
+      "remaining": ["site/line collector lease", "generation/fencing", "server-serialized authority", "offline stale publisher rejection"]
+    },
+    "app_modularization": {
+      "priority": "P1",
+      "status": "pending",
+      "remaining": ["gradual extraction of auth/session/data/features without framework rewrite"]
+    },
+    "r12_engine_consolidation": {
+      "priority": "P1",
+      "status": "factory_gate_pending",
+      "remaining": ["capture real R12", "compare behavior", "9/9", "then remove process_r11 compatibility bridge"]
+    }
+  }
+}
