@@ -16,7 +16,7 @@
     import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
     import {buildSignupProfile,evaluateSessionAdmission} from './core/session-admission.mjs';
     import {migrateLegacyProfile,approveV2Profile,denyV2Profile,changeV2AccessLevel} from './core/admission-admin.mjs';
-    import {assertFirestoreWriteAllowed} from './core/firestore-write-policy.mjs';
+    import {createGuardedFirestoreClient} from './core/firestore-guarded-client.mjs';
     import {legacyAccountMigrationInventory,legacyMigrationProgress} from './core/legacy-account-migration.mjs';
     import {createCoraBrowserTransport} from './core/cora-browser-transport.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -46,33 +46,6 @@
       getOrigin:()=>window.location.origin,
       getToken:async()=>auth?.currentUser?await auth.currentUser.getIdToken():null
     });
-
-    function clientWriteActorUid(){ return auth.currentUser?.uid || currentAuthUser?.uid || ''; }
-    function assertClientWrite(reference,operation){
-      return assertFirestoreWriteAllowed({
-        path:reference?.path||'',
-        operation,
-        actorUid:clientWriteActorUid(),
-        capabilities:currentAccount?.capabilities||null
-      });
-    }
-    function addDoc(reference,data){ assertClientWrite(reference,'create'); return firebaseAddDoc(reference,data); }
-    function setDoc(reference,data,options){
-      assertClientWrite(reference,'set');
-      return options===undefined?firebaseSetDoc(reference,data):firebaseSetDoc(reference,data,options);
-    }
-    function updateDoc(reference,...args){ assertClientWrite(reference,'update'); return firebaseUpdateDoc(reference,...args); }
-    function deleteDoc(reference){ assertClientWrite(reference,'delete'); return firebaseDeleteDoc(reference); }
-    function writeBatch(database){
-      const raw=firebaseWriteBatch(database);
-      const guarded={
-        set(reference,data,options){ assertClientWrite(reference,'set'); options===undefined?raw.set(reference,data):raw.set(reference,data,options); return guarded; },
-        update(reference,...args){ assertClientWrite(reference,'update'); raw.update(reference,...args); return guarded; },
-        delete(reference){ assertClientWrite(reference,'delete'); raw.delete(reference); return guarded; },
-        commit(){ return raw.commit(); }
-      };
-      return guarded;
-    }
 
     window.__centralLoginModuleReady = true;
     window.addEventListener('error', event => console.error('[Central] Erro global:', event.error || event.message));
@@ -104,6 +77,16 @@
     let users = [];
     let currentAccount = null;
     let currentAuthUser = null;
+    const guardedFirestore=createGuardedFirestoreClient({
+      rawAddDoc:firebaseAddDoc,
+      rawSetDoc:firebaseSetDoc,
+      rawUpdateDoc:firebaseUpdateDoc,
+      rawDeleteDoc:firebaseDeleteDoc,
+      rawWriteBatch:firebaseWriteBatch,
+      getActorUid:()=>auth.currentUser?.uid || currentAuthUser?.uid || '',
+      getCapabilities:()=>currentAccount?.capabilities||null
+    });
+    const {addDoc,setDoc,updateDoc,deleteDoc,writeBatch}=guardedFirestore;
     let unsubscribeData = [];
     let dataSessionGeneration = 0;
     // Controle de concorrência da autenticação: criação/login e onAuthStateChanged
