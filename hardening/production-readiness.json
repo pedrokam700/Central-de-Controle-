@@ -118,6 +118,20 @@
       "status": "green",
       "evidence": ["ames/data/cloud-projection.mjs", "scripts/ames-cloud-projection.test.mjs", "scripts/ames-sync.test.mjs"]
     },
+    "cora_external_data_policy": {
+      "priority": "P1",
+      "status": "green_contract_enforcement_pending",
+      "green": [
+        "credentials/session/raw MES classified never_external",
+        "PCBA SN/Material SN/operator/images/comments/documents classified local_only by default",
+        "technical context requires explicit allowlist",
+        "allowlisted technical context still requires sanitization proof",
+        "unknown fields default local_only",
+        "policy errors do not echo blocked values"
+      ],
+      "evidence": ["core/cora-egress-policy.mjs", "scripts/ames-cora-egress-policy.test.mjs"],
+      "remaining": ["integrate policy into actual external CORA /api request builders before payload leaves the browser"]
+    },
     "csp_inventory": {
       "priority": "P1",
       "status": "green_inventory_only",
@@ -128,9 +142,24 @@
     "operational_registry": {
       "priority": "P1",
       "status": "partial",
-      "green": ["site/timezone registry", "JS contract consumes registry", "Python operational registry", "operational calendar consumes Python site timezone", "cross-check with Firestore Rules", "no friendly-label inference for MES identity"],
-      "evidence": ["ames/data/operational-registry.mjs", "ames/agent/operational_registry.py", "scripts/agent-operational-calendar.test.py"],
-      "remaining": ["migrate remaining Python consumers such as canonical.py", "migrate/generate Rules without changing TAN10101/TAN10102/TAN10103"]
+      "green": [
+        "site/timezone registry",
+        "JS contract consumes registry",
+        "Python operational registry",
+        "operational calendar consumes Python site timezone",
+        "canonical.py consumes Python line registry",
+        "canonical contract test pins exact TAN10101/TAN10102/TAN10103",
+        "cross-check with Firestore Rules",
+        "no friendly-label inference for MES identity"
+      ],
+      "evidence": [
+        "ames/data/operational-registry.mjs",
+        "ames/agent/operational_registry.py",
+        "ames/agent/canonical.py",
+        "scripts/agent-operational-calendar.test.py",
+        "scripts/agent-canonical.test.py"
+      ],
+      "remaining": ["migrate/generate Rules registry without changing TAN10101/TAN10102/TAN10103"]
     },
     "retention_lifecycle": {
       "priority": "P1",
