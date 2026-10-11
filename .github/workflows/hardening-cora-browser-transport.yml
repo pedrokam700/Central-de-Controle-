@@ -1,0 +1,67 @@
+name: One-shot CORA browser transport extraction
+
+on:
+  push:
+    branches:
+      - hardening/p0-production-readiness
+    paths:
+      - .github/workflows/hardening-cora-browser-transport.yml
+
+permissions:
+  contents: write
+
+jobs:
+  extract-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify exact branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hardening/p0-production-readiness
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
+      - name: Extract CORA browser transport from app.js
+        run: node scripts/patch-cora-browser-transport.mjs
+      - name: Validate extracted transport and unchanged CORA behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          node --test \
+            scripts/ames-cora-browser-transport.test.mjs \
+            scripts/ames-cora-direct-fetch-boundary-app.test.mjs \
+            scripts/ames-cora-network-boundary-app.test.mjs \
+            scripts/ames-cora-network-boundary.test.mjs \
+            scripts/ames-cora-egress-transport.test.mjs \
+            scripts/ames-cora-egress-policy.test.mjs \
+            scripts/ames-cora-mes-egress-app.test.mjs \
+            scripts/ames-cache.test.mjs \
+            scripts/ames-release-build.test.mjs
+          git diff --check
+      - name: Remove one-shot write tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/hardening-cora-browser-transport.yml
+          rm -f scripts/patch-cora-browser-transport.mjs
+          git diff --check
+      - name: Commit extraction only after validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hardening/p0-production-readiness
+          test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo "No browser transport extraction changes"; exit 1; }
+          git commit -m "Hardening: extract CORA browser transport from app"
+          git push origin HEAD:hardening/p0-production-readiness
