@@ -46,6 +46,9 @@ jobs:
       - name: Run sanitized diagnostics contract
         run: python3 scripts/agent-diagnostics.test.py
 
+      - name: Run export-safe support diagnostics contract
+        run: python3 scripts/agent-support-diagnostics.test.py
+
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
 
