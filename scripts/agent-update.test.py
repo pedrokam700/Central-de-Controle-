@@ -88,11 +88,15 @@ class UpdateTests(unittest.TestCase):
             self.assertEqual(staged,install/'frontend-packages'/sha)
             self.assertTrue((staged/'Central-de-Controle-'/'index.html').is_file())
             marker=json.loads((staged/updater.FRONTEND_STAGE_MARKER).read_text())
+            stage_manifest=staged/updater.FRONTEND_STAGE_MANIFEST
+            self.assertTrue(stage_manifest.is_file())
             self.assertEqual(marker['schema'],updater.FRONTEND_STAGE_SCHEMA)
             self.assertEqual(marker['frontend_sha'],sha)
             self.assertFalse(marker['activated'])
             self.assertIsNone(marker['serving_origin'])
             self.assertEqual(marker['package_sha256'],hashlib.sha256(package.read_bytes()).hexdigest())
+            self.assertEqual(marker['stage_manifest_sha256'],hashlib.sha256(stage_manifest.read_bytes()).hexdigest())
+            self.assertEqual(json.loads(stage_manifest.read_text())['frontend_sha'],sha)
             self.assertEqual(updater.stage_frontend(target,package,sha),staged)
 
     def test_stage_frontend_fails_closed_on_wrong_sha_tamper_or_existing_identity_conflict(self):
@@ -115,12 +119,21 @@ class UpdateTests(unittest.TestCase):
             with self.assertRaises(ValueError):updater.stage_frontend(install,package,sha)
             self.assertTrue((staged/'Central-de-Controle-'/'index.html').is_file(),'identity conflict must not destructively replace staged frontend')
 
-    def test_loopback_proof_server_serves_staged_shell_but_never_proxies_api(self):
+    def test_loopback_proof_server_rejects_tampered_extracted_stage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);install=root/'installed';target=install/'ames-agent';target.mkdir(parents=True);(target/'agent.py').write_text('# existing agent')
+            package,sha=self._frontend_package(root);staged=updater.stage_frontend(install,package,sha)
+            (staged/'Central-de-Controle-'/'app.js').write_text('tampered after staging')
+            with self.assertRaises(ValueError) as rejected:local_server.create_server(staged,sha,0)
+            self.assertIn('hash mismatch',str(rejected.exception))
+
+    def test_loopback_proof_server_serves_verified_shell_but_never_proxies_api_or_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp);install=root/'installed';target=install/'ames-agent';target.mkdir(parents=True);(target/'agent.py').write_text('# existing agent')
             package,sha=self._frontend_package(root);staged=updater.stage_frontend(install,package,sha)
             httpd=local_server.create_server(staged,sha,0)
             self.assertEqual(httpd.server_address[0],'127.0.0.1')
+            self.assertEqual(httpd.central_stage['frontend_sha'],sha)
             thread=threading.Thread(target=httpd.serve_forever,kwargs={'poll_interval':0.05},daemon=True);thread.start()
             try:
                 origin=f'http://127.0.0.1:{httpd.server_address[1]}'
@@ -128,11 +141,18 @@ class UpdateTests(unittest.TestCase):
                     self.assertEqual(response.status,200);self.assertIn(b'Central',response.read());self.assertEqual(response.headers.get('X-Content-Type-Options'),'nosniff')
                 with urllib.request.urlopen(origin+'/Central-de-Controle-/offline-bootstrap.mjs',timeout=3) as response:
                     self.assertEqual(response.headers.get_content_type(),'text/javascript')
+                with urllib.request.urlopen(origin+local_server.HEALTH_PATH,timeout=3) as response:
+                    health=json.loads(response.read());self.assertEqual(health['frontend_sha'],sha);self.assertFalse(health['launcher_default']);self.assertFalse(health['stage_activated']);self.assertEqual(health['served_from'],'verified-immutable-stage')
+                for metadata in (updater.FRONTEND_STAGE_MARKER,updater.FRONTEND_STAGE_MANIFEST):
+                    with self.assertRaises(urllib.error.HTTPError) as hidden:urllib.request.urlopen(origin+'/'+metadata,timeout=3)
+                    self.assertEqual(hidden.exception.code,404)
                 with self.assertRaises(urllib.error.HTTPError) as blocked:
                     urllib.request.urlopen(origin+'/api/chat-cognitive',timeout=3)
                 self.assertEqual(blocked.exception.code,503)
                 self.assertEqual(json.loads(blocked.exception.read())['error'],'cora_backend_not_configured_for_local_origin')
             finally:
                 httpd.shutdown();httpd.server_close();thread.join(timeout=2)
+            marker=json.loads((staged/updater.FRONTEND_STAGE_MARKER).read_text())
+            self.assertFalse(marker['activated']);self.assertIsNone(marker['serving_origin'])
 
 if __name__=='__main__':unittest.main()
