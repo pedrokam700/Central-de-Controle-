@@ -11,8 +11,11 @@
     "build": "node scripts/build-static.mjs",
     "test": "node scripts/quality-gate.mjs",
     "test:release": "node --test scripts/release-contract.test.mjs",
-    "test:auth": "node --test scripts/ames-auth-hardening.test.mjs",
+    "test:auth": "node --test scripts/ames-auth-hardening.test.mjs scripts/ames-access-policy.test.mjs",
     "test:outbox": "node --test scripts/ames-offline-outbox.test.mjs",
+    "test:deployment": "node --test scripts/ames-deployment-security.test.mjs scripts/ames-release-build.test.mjs scripts/ames-post-deploy-smoke.test.mjs",
+    "test:cora-contract": "node --test scripts/ames-cora-api-contract.test.mjs",
+    "state": "node scripts/current-engineering-state.mjs",
     "smoke:deploy": "node scripts/post-deploy-smoke.mjs"
   }
 }
