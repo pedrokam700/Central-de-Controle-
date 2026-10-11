@@ -13,6 +13,34 @@ const firebaseConfig={
   measurementId:"G-J8RQMXQT4D"
 };
 
+// A ponte histórica podia manter senhas em controleFalhas.users.v1 e o app antigo
+// ainda sabia compará-las. Preserve somente metadados legados; credenciais locais
+// deixam de existir antes de app.js carregar. Firebase Auth é a única autoridade.
+try{
+  const key='controleFalhas.users.v1';
+  const raw=localStorage.getItem(key);
+  if(raw){
+    const parsed=JSON.parse(raw);
+    if(Array.isArray(parsed)){
+      let changed=false;
+      const sanitized=parsed.map(item=>{
+        if(!item||typeof item!=='object'||Array.isArray(item))return item;
+        if(!Object.prototype.hasOwnProperty.call(item,'password'))return item;
+        changed=true;
+        const {password,...rest}=item;
+        return rest;
+      });
+      if(changed)localStorage.setItem(key,JSON.stringify(sanitized));
+    }
+  }
+  window.__centralLegacyCredentialBridge='disabled';
+}catch(error){
+  // Never restore or copy a corrupt legacy credential store. Firebase Auth can
+  // still initialize normally; expose only a diagnostic flag, not its contents.
+  window.__centralLegacyCredentialBridge='disabled_with_invalid_legacy_store';
+  console.warn('[Central] Armazenamento legado inválido; credenciais locais não serão usadas.');
+}
+
 // Um único Firebase app/Auth. O bootstrap apenas configura persistência ANTES de
 // app.js obter as instâncias. Primeiro login/primeiro carregamento ainda exigem
 // internet; depois disso o navegador pode restaurar a sessão e dados já cacheados.
