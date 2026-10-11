@@ -26,22 +26,23 @@ jobs:
       - name: Refuse moved branch
         run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Branch moved; fail closed."; exit 1; }
       - name: Apply exact CSP script extraction patch
-        run: node scripts/apply-csp-script-extraction-patch-v2.mjs
-      - name: Validate source and built HTML script policy
+        run: node scripts/apply-csp-script-extraction-patch-v3.mjs
+      - name: Validate source, built HTML and release identity
         run: |
           node --check cora-build-guard.js
           node --check central-runtime-boot-guard.js
           node --check root-entry.js
-          node --test scripts/ames-csp-inventory.test.mjs scripts/ames-csp-script-extraction.test.mjs
-          git diff --check -- index.html scripts/build-static.mjs sw.js cora-build-guard.js central-runtime-boot-guard.js root-entry.js scripts/ames-csp-script-extraction.test.mjs
+          node --test scripts/release-contract.test.mjs scripts/ames-csp-inventory.test.mjs scripts/ames-csp-script-extraction.test.mjs
+          git diff --check -- index.html scripts/build-static.mjs scripts/release-identity.mjs scripts/release-contract.test.mjs sw.js cora-build-guard.js central-runtime-boot-guard.js root-entry.js scripts/ames-csp-script-extraction.test.mjs
       - name: Commit extraction and remove one-shot machinery
         run: |
           rm .github/workflows/hardening-csp-script-extraction.yml
           rm scripts/apply-csp-script-extraction-patch.mjs
           rm scripts/apply-csp-script-extraction-patch-v2.mjs
+          rm scripts/apply-csp-script-extraction-patch-v3.mjs
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html scripts/build-static.mjs sw.js cora-build-guard.js central-runtime-boot-guard.js root-entry.js scripts/ames-csp-script-extraction.test.mjs .github/workflows/hardening-csp-script-extraction.yml scripts/apply-csp-script-extraction-patch.mjs scripts/apply-csp-script-extraction-patch-v2.mjs
+          git add index.html scripts/build-static.mjs scripts/release-identity.mjs scripts/release-contract.test.mjs sw.js cora-build-guard.js central-runtime-boot-guard.js root-entry.js scripts/ames-csp-script-extraction.test.mjs .github/workflows/hardening-csp-script-extraction.yml scripts/apply-csp-script-extraction-patch.mjs scripts/apply-csp-script-extraction-patch-v2.mjs scripts/apply-csp-script-extraction-patch-v3.mjs
           git diff --cached --check
           git commit -m "Hardening: remove inline script CSP blockers"
           git push origin HEAD:hardening/p0-production-readiness
