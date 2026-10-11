@@ -1,0 +1,35 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "mes_publication_fence_groundwork",
+  "status": "green_groundwork_enforcement_disabled",
+  "validated_sha": "78d919a5ece23ba1f6f1a6e410c97504b566edaf",
+  "full_ci_run": 38185679744,
+  "gates": {
+    "static_quality": "success",
+    "ames_node_contract_suites": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
+  "assertions": [
+    "publication fence validates exact line_id, owner_uid, workstation_id, generation and deterministic token",
+    "unfenced publication remains backward-compatible and does not gain collector_fence metadata",
+    "optional fenced publication writes collector_fence metadata into the MES head",
+    "same canonical content under a new collector generation receives a distinct publication identity",
+    "optional collectorFenceForLine causes unchanged MES content to be recaptured when authority generation changes",
+    "stale, current, unknown and unfenced states are classified without activating transport enforcement",
+    "offline shell precaches operational-registry, collector-authority and publication-fence dependencies"
+  ],
+  "activation": "metadata_ready_runtime_enforcement_disabled",
+  "explicitly_not_proven": [
+    "actual runtime binding from live collector lease to collectorFenceForLine",
+    "stale offline publisher rejection at MES head commit",
+    "two-workstation same-line takeover and recovery in factory conditions",
+    "production Firestore Rules enforcement for fenced heads"
+  ],
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  }
+}
