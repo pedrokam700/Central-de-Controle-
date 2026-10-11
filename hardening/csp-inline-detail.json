@@ -1,0 +1,167 @@
+{
+  "schema": "central-csp-inline-detail-v1",
+  "styles": [
+    {
+      "index": 1,
+      "line": 27,
+      "attrs": "id=\"central-inline-styles\"",
+      "bytes": 72820,
+      "sha256": "64c8c8fa1be46bc6ddd3367d89c1b0dcad3d0cbbc16570ff15e8e2f95f5856a2",
+      "preview": ":root { --bg:#f4f4f2; --surface:#fff; --soft:#f0f0ee; --text:#111; --muted:#6b6b68; --line:#dededb; --accent:#111; --accent-soft:#e8e8e5; --blue:#30302f; --blue-soft:#efefec; --war",
+      "before": "n(rs=>Promise.all(rs.map(r=>r.unregister()))) : Promise.resolve() ]).finally(()=>location.reload()); })(); </script> ",
+      "after": " <style id=\"v1415-styles\"> :root { --bg:#f4f4f2; --surface:#fff; --soft:#f0f0ee; --text"
+    },
+    {
+      "index": 2,
+      "line": 1016,
+      "attrs": "id=\"v1415-styles\"",
+      "bytes": 62163,
+      "sha256": "a63d590f3183cdefe7971eb98087f526e4907a12f47b2da7108d59bf83da2da8",
+      "preview": ":root { --bg:#f4f4f2; --surface:#fff; --soft:#f0f0ee; --text:#111; --muted:#6b6b68; --line:#dededb; --accent:#111; --accent-soft:#e8e8e5; --blue:#30302f; --blue-soft:#efefec; --war",
+      "before": "scrollbar-track{ background:var(--surface); } body.dark ::selection{ background:#5b625e; color:#fff; } </style> ",
+      "after": " <style id=\"central-v14-16-ui\">/* V14.18 — chat com rolagem isolada */ body:has(#aiAnalysisView:not(.hidden)){overflow:h"
+    },
+    {
+      "index": 3,
+      "line": 1612,
+      "attrs": "id=\"central-v14-16-ui\"",
+      "bytes": 1215,
+      "sha256": "2e6618c34812ab7c5fbeea7274e806d0d8b866bfba39e23d1c04eb428f503b8d",
+      "preview": "/* V14.18 — chat com rolagem isolada */ body:has(#aiAnalysisView:not(.hidden)){overflow:hidden} .content:has(#aiAnalysisView:not(.hidden)){height:calc(100vh - 88px);overflow:hidden",
+      "before": "in:0 auto 14px;padding:8px 11px;color:var(--muted);font-size:10px}.ai-chat-head .ai-head-sub{max-width:700px} </style> ",
+      "after": " <style id=\"v1421-ui-styles\"> :root{--ai-side-width:180px;--dark-bg:#111;--dark-surface:#191919;--dark-elevated:#202020"
+    },
+    {
+      "index": 4,
+      "line": 1624,
+      "attrs": "id=\"v1421-ui-styles\"",
+      "bytes": 11336,
+      "sha256": "732d448fcb9b76f96d62edf7ec1fb4cc30b1400841cd143809e5f319a81ccd99",
+      "preview": ":root{--ai-side-width:180px;--dark-bg:#111;--dark-surface:#191919;--dark-elevated:#202020;--dark-input:#242424;--dark-hover:#2a2a2a;--dark-line:#363633;--dark-text:#f2f2ee;--dark-m",
+      "before": "rder-radius:4px;background:#e9e9e5;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}</style> ",
+      "after": " <style id=\"cora-v1505-definitive\"> /* V15.0.5 — CORA: rota de tela inteira, sem segundo cabeçalho e sem painel flutuan"
+    },
+    {
+      "index": 5,
+      "line": 1705,
+      "attrs": "id=\"cora-v1505-definitive\"",
+      "bytes": 20936,
+      "sha256": "fc9367619d374d2fd872b63175f1d0c5bbd4156fcf72a3d1d51d90c9b414aad5",
+      "preview": "/* V15.0.5 — CORA: rota de tela inteira, sem segundo cabeçalho e sem painel flutuante. */ :root{ --cora-side:252px; --cora-header:52px; --dark-bg:#111110; --dark-surface:#191918; -",
+      "before": "ble{max-width:94%;font-size:13px} .ai-composer-wrap{padding:7px 9px 4px} .ai-composer-meta{padding:0 4px} } </style> ",
+      "after": " <style id=\"v1510-final-overrides\"> /* V15.1.0 — CORA final interaction/layout correction + product navigation */ :roo"
+    },
+    {
+      "index": 6,
+      "line": 1892,
+      "attrs": "id=\"v1510-final-overrides\"",
+      "bytes": 13591,
+      "sha256": "7814f5f3ae67102d4b93ac88e4ea86fdbc69c02a834499fecf5d67e0a43a6467",
+      "preview": "/* V15.1.0 — CORA final interaction/layout correction + product navigation */ :root{ --cora-black:#0b0b0b; --cora-black-2:#121212; --cora-white:#ffffff; --cora-light:#f7f7f5; } /* ",
+      "before": "} body.cora-route-active #aiAnalysisView #aiChatScroll > .ai-investigation-context{width:100%!important} } </style> ",
+      "after": " <style id=\"v15-1-4-final-layout\"> /* V15.1.4 — definitive UI overrides for the served web/index.html */ /* Central s"
+    },
+    {
+      "index": 7,
+      "line": 2002,
+      "attrs": "id=\"v15-1-4-final-layout\"",
+      "bytes": 7988,
+      "sha256": "dc673c59de11b2249a8cf94cd0e6b09347f51051f4286445c9cc4805406922d7",
+      "preview": "/* V15.1.4 — definitive UI overrides for the served web/index.html */ /* Central sidebar: slightly narrower */ .app{grid-template-columns:240px minmax(0,1fr)!important} .sidebar{wi",
+      "before": "ate-columns:1fr!important} body.cora-route-active #aiAnalysisView .ai-side-panel{display:none!important} } </style> ",
+      "after": " <style id=\"v15-1-6-final\"> /* V15.1.7 — CORA final shell: fixed rail, chat-only scroll, floating controls, compact co"
+    },
+    {
+      "index": 8,
+      "line": 2180,
+      "attrs": "id=\"v15-1-6-final\"",
+      "bytes": 10903,
+      "sha256": "a7e775d561d2452529f08c49d70014f0e78d2599352b01bf3659e655044d1863",
+      "preview": "/* V15.1.7 — CORA final shell: fixed rail, chat-only scroll, floating controls, compact composer. */ :root{--cora-rail:#070707;--cora-chat-light:#fff;--cora-chat-dark:#111110;--cor",
+      "before": "l scroll on the central product tree */ .sidebar .tree{overflow:visible!important;max-height:none!important} </style> ",
+      "after": " <style id=\"cora-final-layout-v1517\"> /* V15.1.7 — authoritative CORA shell. This block intentionally comes last. */ h"
+    },
+    {
+      "index": 9,
+      "line": 2263,
+      "attrs": "id=\"cora-final-layout-v1517\"",
+      "bytes": 10174,
+      "sha256": "cb11575d4945277250f419daeb4b684562e3e5a374dc4439d995a17e63726860",
+      "preview": "/* V15.1.7 — authoritative CORA shell. This block intentionally comes last. */ html.cora-route-active, body.cora-route-active{height:100%!important;min-height:100%!important;overfl",
+      "before": "t:34px!important} body.cora-route-active #aiAnalysisView .ai-language-wrap select{height:34px!important} } </style> ",
+      "after": " <style id=\"v1511-authority\"> /* V15.1.11 — navigation/history polish and hard cleanup */ .ai-sidebar-history{display:f"
+    },
+    {
+      "index": 10,
+      "line": 2339,
+      "attrs": "id=\"v1511-authority\"",
+      "bytes": 4322,
+      "sha256": "8780562aca2eb0ea2832bc2fcb12327ed68b41ced9d8ea696d90afdc99454562",
+      "preview": "/* V15.1.11 — navigation/history polish and hard cleanup */ .ai-sidebar-history{display:flex!important;flex-direction:column!important;gap:12px!important;min-height:0!important;} .",
+      "before": "5px!important} body.cora-route-active #aiAnalysisView .ai-language-wrap select{max-width:122px!important} } </style> ",
+      "after": " <style id=\"v151313-final-authority\"> /* V15.1.13.16 — consolidated UI authority. These rules replace the previous side"
+    },
+    {
+      "index": 11,
+      "line": 2374,
+      "attrs": "id=\"v151313-final-authority\"",
+      "bytes": 8075,
+      "sha256": "32e7ce416604f0d777226b6d1db4c57d19c75c9f130127b52206e3ec18866d48",
+      "preview": "/* V15.1.13.16 — consolidated UI authority. These rules replace the previous sidebar/progress overrides. */ /* Expanded Central sidebar — canonical icon/text/chevron grid. */ .side",
+      "before": "e!important;content:none!important;} body.dark .ai-send .send-icon:before{background:currentColor!important;} </style> ",
+      "after": " <style id=\"daily-layout-v15-1-13-30\"> /* V15.1.13.28 — Central do Dia */ .daily-view{gap:18px} .daily-hero{display:"
+    },
+    {
+      "index": 12,
+      "line": 2430,
+      "attrs": "id=\"daily-layout-v15-1-13-30\"",
+      "bytes": 48137,
+      "sha256": "142a453f7234855eb3db5712b5fdfebbd1277518dec72e02dd3d2d140b38b344",
+      "preview": "/* V15.1.13.28 — Central do Dia */ .daily-view{gap:18px} .daily-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:24px 26px;border:1px solid var",
+      "before": "cora-route-active #aiAnalysisView .ai-work-cancel{border-color:#44443f!important;color:#c6c6c0!important;} </style> ",
+      "after": " <link rel=\"stylesheet\" href=\"mobile.css?v=15.1.13.48\" id=\"mobile-layout-styles\"> <link rel=\"stylesheet\" href=\"./ames"
+    },
+    {
+      "index": 13,
+      "line": 3693,
+      "attrs": "id=\"cora-v1518-final-authority\"",
+      "bytes": 10975,
+      "sha256": "fefe1d86f8d8a3559519e4b48f688640b586da06e86015ee18742a1f436dc31f",
+      "preview": "/* V15.1.8 — CORA single-source layout. Removes legacy conflicting layout rules. */ html.cora-route-active, body.cora-route-active{ height:100dvh!important; min-height:100dvh!impor",
+      "before": "age/dist/xlsx.full.min.js\"></script> <script type=\"module\" src=\"/Central-de-Controle-/app.js?v=15.1.13.48\"></script> ",
+      "after": " <style id=\"v1510-layout-authority\"> /* V15.1.10 — final UI authority: one collapse control + floating CORA composer. "
+    },
+    {
+      "index": 14,
+      "line": 3992,
+      "attrs": "id=\"v1510-layout-authority\"",
+      "bytes": 15078,
+      "sha256": "2d475251bc5a9dac88ed32a3667b8edbf0bdce9338b54b660d16d9dbd7685a34",
+      "preview": "/* V15.1.10 — final UI authority: one collapse control + floating CORA composer. */ /* Global Central sidebar collapse: one real SVG button, never a glyph/dash. */ .sidebar .brand-",
+      "before": "px!important} body.cora-route-active #aiAnalysisView .ai-language-wrap select{max-width:120px!important} } </style> ",
+      "after": " <style id=\"cora-sidebar-structure-v15-1-13-21\"> /* The rail owns its height. Only the history track can consume remain"
+    },
+    {
+      "index": 15,
+      "line": 4172,
+      "attrs": "id=\"cora-sidebar-structure-v15-1-13-21\"",
+      "bytes": 1097,
+      "sha256": "61d6078392ec9b3bd6d56c2d646d4120a4a11813bfe13fd8d0e0409060f39d8a",
+      "preview": "/* The rail owns its height. Only the history track can consume remaining space. */ body.cora-route-active #aiAnalysisView .ai-side-panel { display:grid; grid-template-rows:auto au",
+      "before": ";text-overflow:ellipsis} .product-btn .variant-color{white-space:nowrap!important;overflow:visible!important} </style> ",
+      "after": " </html> "
+    }
+  ],
+  "scripts": [
+    {
+      "index": 1,
+      "line": 11,
+      "attrs": "id=\"cora-build-guard\"",
+      "bytes": 664,
+      "sha256": "fa23960b59f544421a9048741ff4d034111e02f7bf2a5faeb40e4ba98a9bf8d1",
+      "preview": "(()=>{ const BUILD='15.1.13.48'; document.documentElement.classList.add('cora-boot-pending'); const key='cora.build.active'; const finish=()=>document.documentElement.classList.rem",
+      "before": "e-Controle-/manifest.webmanifest?v=15.1.13.48\"> <title>CORA — Central de Orientação e Raciocínio Assistido</title> ",
+      "after": " <style id=\"central-inline-styles\"> :root { --bg:#f4f4f2; --surface:#fff; --soft:#f0f0ee; "
+    }
+  ]
+}
