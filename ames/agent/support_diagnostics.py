@@ -80,6 +80,7 @@ def build(local: dict) -> dict:
             "python": runtime.get("python"),
             "platform": runtime.get("platform"),
             "workstation_ref": _short_hash(runtime.get("workstation")),
+            "workstation_id_ref": _short_hash(runtime.get("workstation_id")),
         },
         "database": {
             "db_bytes": database.get("db_bytes"),
