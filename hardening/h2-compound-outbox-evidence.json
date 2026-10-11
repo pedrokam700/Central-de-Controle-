@@ -1,7 +1,8 @@
 {
   "schema": "central-h2-compound-outbox-evidence-v1",
   "code_commit": "c84280403d7bd940b0137c644728c060396bbb8e",
-  "status": "focused_green_full_ci_pending",
+  "verification_commit": "ca705f0bf9641d6d5e918f11828f8dd78c4794f2",
+  "status": "green",
   "focused_validation": {
     "app_parse": "green",
     "tests_passed": 12,
@@ -15,13 +16,24 @@
     "legacy_v2_outbox_compatible": true,
     "service_worker_dependency_cached": true
   },
+  "full_ci": {
+    "run_id": 38153144329,
+    "static_quality": "success",
+    "ames_node_contracts": "success",
+    "central_quality_gate": "success",
+    "immutable_frontend_build": "success",
+    "r12_bundle_build": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_hardening_push"
+  },
   "implementation": [
     "core/offline-domain-write.mjs",
     "core/offline-outbox.mjs",
     "app.js",
     "sw.js",
     "scripts/ames-offline-domain-write.test.mjs",
-    "scripts/ames-offline-outbox.test.mjs"
+    "scripts/ames-offline-outbox.test.mjs",
+    "scripts/ames-offline-central.test.mjs"
   ],
-  "promotion_note": "Do not mark offline_outbox_uid_idempotency GREEN until the full Central Quality Gate and Firestore E2E pass on a descendant containing code_commit."
+  "promotion_note": "H2 compound offline writes are GREEN internally. This does not promote the product candidate or replace the separate published-preview/factory gates."
 }
