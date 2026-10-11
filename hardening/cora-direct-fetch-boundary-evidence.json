@@ -2,7 +2,7 @@
   "schema": "central-hardening-evidence-v1",
   "branch": "hardening/p0-production-readiness",
   "subject": "cora_all_browser_fetch_destinations",
-  "status": "focused_green_full_ci_pending",
+  "status": "green",
   "validated_parent": "6dc09bb906d550497b753dcb237ac7c28009e9dc",
   "focused_run": 38181743748,
   "assertions": [
@@ -21,9 +21,13 @@
     "production_rules_publish_allowed": false
   },
   "remaining": [
-    "full Static Quality on a normal descendant of the bot-produced integration commit",
-    "full Firestore Rules/cross-PC E2E on the same descendant",
-    "reconcile production-readiness after full CI",
-    "keep authoritative CORA backend version/health contract as a separate blocker"
-  ]
+    "authoritative CORA backend provider egress remains outside the proven client boundary",
+    "backend version/health compatibility and server-side egress governance remain separate blockers"
+  ],
+  "full_ci_run": 38181784611,
+  "gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  }
 }

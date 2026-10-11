@@ -219,7 +219,7 @@
     },
     "cora_external_data_policy": {
       "priority": "P1",
-      "status": "partial_runtime_enforcement",
+      "status": "partial_client_boundary_green_backend_governance_pending",
       "green": [
         "credentials/session/raw MES classified never_external",
         "PCBA SN/Material SN/operator/images/comments/documents classified local_only by default",
@@ -233,7 +233,14 @@
         "MES external projection preserves exact CPH identity and absence semantics",
         "runtime CORA payload builders replace only centralData.mes with the sanitized MES projection while retaining the full MES context locally",
         "CORA egress policy, route transport and MES projection modules are available in the offline shell",
-        "runtime MES egress boundary passed Static Quality and Firestore Rules/cross-PC E2E"
+        "runtime MES egress boundary passed Static Quality and Firestore Rules/cross-PC E2E",
+        "same-origin CORA application requests pass a destination boundary before browser network submission",
+        "all 11 formerly direct CORA browser fetches now use coraAppFetch and prepareCoraNetworkRequest",
+        "window.FAILURE_AI_ENDPOINT cannot redirect browser traffic to an external provider because browser approvedExternalOrigins is immutable and empty",
+        "audit, memory, chat, failure intake, image, slides, investigation artifact and audio routes remain local-only by route policy",
+        "AI metrics remains no-payload and failure-analysis routes remain structured-external candidates only at policy level; browser direct provider egress is disabled",
+        "only the two reviewed boundary helpers retain raw fetch primitives in app.js",
+        "CORA client destination boundary passed Static Quality and Firestore Rules/cross-PC E2E"
       ],
       "evidence": [
         "core/cora-egress-policy.mjs",
@@ -243,17 +250,25 @@
         "scripts/ames-cora-egress-transport.test.mjs",
         "scripts/ames-cora-external-projection.test.mjs",
         "scripts/ames-cora-mes-egress-app.test.mjs",
-        "hardening/cora-mes-egress-runtime-evidence.json"
+        "hardening/cora-mes-egress-runtime-evidence.json",
+        "core/cora-network-boundary.mjs",
+        "scripts/ames-cora-network-boundary.test.mjs",
+        "scripts/ames-cora-network-boundary-app.test.mjs",
+        "scripts/ames-cora-direct-fetch-boundary-app.test.mjs",
+        "hardening/cora-network-boundary-app-evidence.json",
+        "hardening/cora-direct-fetch-boundary-evidence.json"
       ],
       "remaining": [
-        "define route-specific local-only or sanitized external projections for free-form context, conversation, images, audio, documents, memory and audit metadata without weakening required CORA features",
-        "apply the route/payload guard to every actual external CORA request builder only after each route has an approved projection or an explicit local-only path",
-        "keep the backend version/health compatibility work separate and blocked until the authoritative CORA backend scope is accessible"
+        "inspect the authoritative CORA backend egress path when project/source access is available and prove that local-only routes are never forwarded to external model providers",
+        "prove server-side sanitization/allowlist enforcement for any failure-analysis payload that the backend sends to an external provider",
+        "keep backend /api/health, /api/version and frontend/backend compatibility as the separate P0 backend-contract blocker"
       ],
       "full_ci_runs": [
         38157245123,
         38157402697,
-        38157683195
+        38157683195,
+        38181467837,
+        38181784611
       ]
     },
     "csp_inventory": {
