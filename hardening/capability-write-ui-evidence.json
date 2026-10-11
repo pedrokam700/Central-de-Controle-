@@ -1,0 +1,36 @@
+{
+  "schema": "central-capability-write-ui-evidence-v1",
+  "code_commit": "2cddc15cbbe62e577b3e581440059a11fcae7778",
+  "status": "focused_green_full_ci_pending",
+  "focused_validation": {
+    "app_parse": "green",
+    "write_policy_unit_tests": "green",
+    "capability_ui_integration_tests": "green",
+    "access_policy_regression_tests": "green",
+    "session_admission_regression_tests": "green",
+    "admin_ui_regression_tests": "green",
+    "firestore_direct_writes_guarded": true,
+    "firestore_batches_guarded": true,
+    "unknown_collection_fails_closed": true,
+    "viewer_read_only_client_ux": true,
+    "operator_operational_only_client_ux": true,
+    "engineer_technical_plus_operational_client_ux": true,
+    "admin_controls_capability_gated": true,
+    "command_palette_capability_filtered": true,
+    "write_modals_fail_closed_before_open": true,
+    "server_rules_remain_final_authority": true,
+    "write_policy_precached": true,
+    "one_shot_write_workflow_removed": true
+  },
+  "evidence": [
+    "core/firestore-write-policy.mjs",
+    "scripts/ames-firestore-write-policy.test.mjs",
+    "app.js",
+    "scripts/ames-capability-write-ui.test.mjs",
+    "scripts/ames-admission-admin-app.test.mjs",
+    "core/access-policy.mjs",
+    "firestore.rules",
+    "sw.js"
+  ],
+  "promotion_note": "Do not remove the RBAC capability-UX readiness item until the full Central Quality Gate and Firestore E2E pass on a descendant containing code_commit. Firestore Rules remain the server authority and are not published by this change."
+}
