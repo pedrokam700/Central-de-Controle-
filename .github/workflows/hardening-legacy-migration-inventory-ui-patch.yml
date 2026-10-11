@@ -1,0 +1,44 @@
+name: One-shot legacy migration inventory UI patch
+
+on:
+  push:
+    branches:
+      - hardening/p0-production-readiness
+    paths:
+      - .github/workflows/hardening-legacy-migration-inventory-ui-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact hardening head
+        uses: actions/checkout@v7
+        with:
+          ref: hardening/p0-production-readiness
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Refuse moved branch
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Branch moved; fail closed."; exit 1; }
+      - name: Apply exact anchored patch
+        run: node scripts/apply-legacy-migration-inventory-ui-patch.mjs
+      - name: Parse app and run focused migration tests
+        run: |
+          node --check app.js
+          node --test scripts/ames-legacy-account-migration.test.mjs scripts/ames-legacy-account-migration-app.test.mjs scripts/ames-admission-admin-app.test.mjs scripts/ames-session-admission-app.test.mjs scripts/ames-capability-write-ui.test.mjs
+          git diff --check -- app.js sw.js scripts/ames-legacy-account-migration-app.test.mjs
+      - name: Commit patched app and remove one-shot machinery
+        run: |
+          rm .github/workflows/hardening-legacy-migration-inventory-ui-patch.yml
+          rm scripts/apply-legacy-migration-inventory-ui-patch.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js sw.js scripts/ames-legacy-account-migration-app.test.mjs .github/workflows/hardening-legacy-migration-inventory-ui-patch.yml scripts/apply-legacy-migration-inventory-ui-patch.mjs
+          git diff --cached --check
+          git commit -m "Hardening: add legacy account migration inventory UI"
+          git push origin HEAD:hardening/p0-production-readiness
