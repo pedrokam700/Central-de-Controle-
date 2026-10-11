@@ -14,6 +14,7 @@
     import {offlineWritePlan,routineFailureLinkEffect} from './core/offline-domain-write.mjs';
     import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
     import {buildSignupProfile,evaluateSessionAdmission} from './core/session-admission.mjs';
+    import {migrateLegacyProfile,approveV2Profile,denyV2Profile,changeV2AccessLevel} from './core/admission-admin.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction, arrayUnion
@@ -125,7 +126,7 @@
       'Meu perfil de usuário':'My user profile','Resumo de suas atividades, reports subidos e configurações de conta.':'Summary of your activities, uploaded reports, and account settings.','Reports subidos':'Reports uploaded','Registrados por você':'Registered by you','Reports concluídos':'Reports completed','Finalizados com sucesso':'Successfully completed','Reports pendentes':'Pending reports','Precisam ser finalizados':'Need to be completed','Atividades & Fluxos':'Activities & Flows','Atribuídos a você':'Assigned to you','Meus Reports Enviados':'My Submitted Reports','Reports de produto registradas sob a sua autoria.':'Product failures registered by you.','Registro':'Record','Produto / Família':'Product / Family','Componente / Falha':'Component / Failure','Links':'Links','Status':'Status','Você ainda não subiu nenhum report.':'You have not uploaded any reports yet.','Gestão de Usuários (Acesso do Administrador)':'User Management (Administrator Access)','Gerencie quem tem acesso ao sistema e eleve privilégios de usuário.':'Manage who has access to the system and grant user privileges.','Nome':'Name','E-mail':'Email','Nível de Acesso':'Access Level','Ações':'Actions','Administrador':'Administrator','Usuário Normal':'Standard User','Tornar Usuário':'Make User','Promover a Adm':'Promote to Admin','Excluir':'Delete','Desativar':'Disable','Reativar':'Enable','(Sua conta)':'(Your account)',
       'Visão Geral do Produto':'Product Overview','Todas as informações conectadas a este único produto.':'All information connected to this single product.','Visão Geral':'Overview','Falhas':'Failures','Atividades':'Activities','Histórico':'History','Falhas de Produto':'Product Failures','Falhas Operacionais':'Operational Failures','Atividades Relacionadas':'Related Activities','Fluxos Relacionados':'Related Flows','Filtro:':'Filter:','Falhas':'Operational / Machines','Buscar falha':'Search failure','Material ou descrição':'Material or description','Componente':'Component','Todos':'All','Pendente':'Pending','Concluído':'Completed','Componente / falha':'Component / failure','Material':'Material','Responsável':'Owner','Pendências':'Pending items','Ainda não há falhas para este produto.':'There are no failures for this product yet.','Nenhuma atividade vinculada a este produto.':'No activities linked to this product.','Fluxo':'Flow','Escopo':'Scope','Criado Por':'Created By','Seguimento':'Follow-up','Nenhum fluxo vinculado a este produto.':'No flows linked to this product.','Nenhum histórico registrado ainda.':'No history recorded yet.',
       'Visão geral de todos os produtos e famílias.':'Overview of all products and families.','Buscar':'Search','Família':'Family','Todas':'All','Produto, componente ou material':'Product, component, or material','Atualização':'Update','Nenhum report encontrado.':'No report found.','Título, área ou descrição':'Title, area, or description','Nenhuma atividade encontrada.':'No activity found.','Produto, retrabalho ou descrição':'Product, rework, or description','Responsável pelo seguimento':'Follow-up owner','Etapas':'Steps','Nenhum fluxo encontrado.':'No flow found.','Formulário e e-mail, folha de rosto e seguimento organizados em três etapas.':'Form, email, cover sheet, and follow-up organized into three steps.',
-      'Entrar na central':'Sign in to Work Center','Acesse com seu e-mail e senha corporativos.':'Sign in with your corporate email and password.','E-mail corporativo':'Corporate email','Senha':'Password','Esqueci minha senha':'Forgot my password','Criar uma conta':'Create an account','Entrar':'Sign in','Criar nova conta':'Create a new account','Cadastre-se para acessar a central. Novas contas iniciam como Usuário Normal.':'Register to access the work center. New accounts start as Standard User.','Seu nome':'Your name','Já tenho uma conta':'I already have an account','Cadastrar conta':'Create account','Recuperar senha':'Reset password','Informe seu e-mail e enviaremos um link seguro para criar uma nova senha.':'Enter your email and we will send a secure link to create a new password.','Nova senha':'New password','Digite a nova senha':'Enter the new password','Repetir nova senha':'Repeat new password','Digite a senha novamente':'Enter the password again','As duas senhas precisam ser exatamente iguais.':'Both passwords must be exactly the same.','As senhas não coincidem. Digite a mesma senha nos dois campos.':'The passwords do not match. Enter the same password in both fields.','As duas senhas coincidem.':'The passwords match.','Voltar para o login':'Back to sign in','Redefinir senha':'Reset password','Enviar link de recuperação':'Send recovery link','Trocar senha':'Change password','Finalizar troca de senha':'Finish password change','Salvando...':'Saving...','Se a conta existir, o Firebase enviará um link seguro para redefinição da senha. Abra o link recebido para escolher e confirmar a nova senha.':'If the account exists, Firebase will send a secure password reset link. Open the link to choose and confirm the new password.','Senha alterada com sucesso. Agora você pode entrar com a nova senha.':'Password changed successfully. You can now sign in with the new password.','O link de recuperação é inválido ou expirou. Solicite um novo link pelo login.':'The recovery link is invalid or expired. Request a new link from the login.','Este link de recuperação expirou. Solicite um novo link.':'This recovery link has expired. Request a new link.','Este link de recuperação é inválido. Solicite um novo link.':'This recovery link is invalid. Request a new link.',
+      'Entrar na central':'Sign in to Work Center','Acesse com seu e-mail e senha corporativos.':'Sign in with your corporate email and password.','E-mail corporativo':'Corporate email','Senha':'Password','Esqueci minha senha':'Forgot my password','Criar uma conta':'Create an account','Entrar':'Sign in','Criar nova conta':'Create a new account','Cadastre-se para acessar a central. Novas contas iniciam como Viewer e aguardam aprovação.':'Register to access the work center. New accounts start as Viewer and await approval.','Seu nome':'Your name','Já tenho uma conta':'I already have an account','Cadastrar conta':'Create account','Recuperar senha':'Reset password','Informe seu e-mail e enviaremos um link seguro para criar uma nova senha.':'Enter your email and we will send a secure link to create a new password.','Nova senha':'New password','Digite a nova senha':'Enter the new password','Repetir nova senha':'Repeat new password','Digite a senha novamente':'Enter the password again','As duas senhas precisam ser exatamente iguais.':'Both passwords must be exactly the same.','As senhas não coincidem. Digite a mesma senha nos dois campos.':'The passwords do not match. Enter the same password in both fields.','As duas senhas coincidem.':'The passwords match.','Voltar para o login':'Back to sign in','Redefinir senha':'Reset password','Enviar link de recuperação':'Send recovery link','Trocar senha':'Change password','Finalizar troca de senha':'Finish password change','Salvando...':'Saving...','Se a conta existir, o Firebase enviará um link seguro para redefinição da senha. Abra o link recebido para escolher e confirmar a nova senha.':'If the account exists, Firebase will send a secure password reset link. Open the link to choose and confirm the new password.','Senha alterada com sucesso. Agora você pode entrar com a nova senha.':'Password changed successfully. You can now sign in with the new password.','O link de recuperação é inválido ou expirou. Solicite um novo link pelo login.':'The recovery link is invalid or expired. Request a new link from the login.','Este link de recuperação expirou. Solicite um novo link.':'This recovery link has expired. Request a new link.','Este link de recuperação é inválido. Solicite um novo link.':'This recovery link is invalid. Request a new link.',
       'Excluir família':'Delete family','Esta ação não poderá ser desfeita.':'This action cannot be undone.','Deseja realmente apagar esta família?':'Are you sure you want to delete this family?','Cancelar':'Cancel','Salvar falha':'Save failure','Nova atividade geral':'New general activity','E-mails, análises e tarefas organizadas.':'Organized emails, analyses, and tasks.','Título da atividade':'Activity title','Tipo':'Type','Área / assunto':'Area / subject','Prazo':'Due date','Descrição / contexto':'Description / context','Detalhes da atividade...':'Activity details...','Link relacionado':'Related link','Salvar atividade':'Save activity','Novo fluxo':'New flow','Acompanhamento de processos em três etapas.':'Three-step process follow-up.','Produto relacionado':'Related product','Não relacionado a produto':'Not related to a product','Tipo de retrabalho':'Rework type','Retrabalho de embalagem':'Packaging rework','Retrabalho de montagem':'Assembly rework','Embalagem e montagem':'Packaging and assembly','Outro fluxo':'Other flow','Link do e-mail enviado':'Sent email link','Explique por que o fluxo foi aberto.':'Explain why the flow was opened.','Formulário do fluxo':'Flow form','Salvar fluxo':'Save flow',
       'Descrição':'Description','Links do report':'Report links','Atualizar links e evidências':'Update links and evidence','Link do seu report':'Your report link','Link da resposta do fornecedor':'Supplier response link','Adicionar fotos/evidências':'Add photos/evidence','Salvar links e evidências':'Save links and evidence','Evidências registradas':'Recorded evidence','Nenhuma evidência anexada ainda.':'No evidence attached yet.','Atualização da falha':'Failure update','Adicionar atualização':'Add update','Histórico de atualizações':'Update history','Pendências automáticas':'Automatic pending items','Status calculated':'Calculated status','Excluir registro':'Delete record','Contexto':'Context','Salvar alterações':'Save changes','Excluir atividade':'Delete activity','Situação':'Situation','Etapa 1 · Formulário e e-mail':'Step 1 · Form and email','Etapa 2 · Folha de rosto':'Step 2 · Cover sheet','Etapa 3 · Seguimento no fluxo':'Step 3 · Flow follow-up','Folha de rosto':'Cover sheet','Link / arquivo da folha de rosto':'Cover sheet link / file','Link ou registro do seguimento':'Follow-up link or record','Salvar etapas':'Save steps','Selecione':'Select','Arquivos e links':'Files and links','Andamento do fluxo':'Flow progress','Status calculado':'Calculated status','Excluir fluxo':'Delete flow',
       'Cadastre o primeiro produto.':'Register the first product.','Sem pendências':'No pending items','em aberto':'open','Abrir link':'Open link','Abrir link relacionado':'Open related link','E-mail enviado':'Email sent','Folha de rosto':'Cover sheet','Registro de seguimento':'Follow-up record','Meu report':'My report','Resposta':'Response','Sem atualização':'No update','Geral':'General','Operacional':'Operational','Máquina':'Machine','Linha':'Line','Nenhum produto cadastrado':'No product registered','Cadastre uma família e um produto para começar.':'Register a family and a product to get started.','Consulta geral por família, produto e componente.':'General search by family, product, and component.','E-mails, análises, alinhamentos e tarefas que precisam acontecer.':'Emails, analyses, alignments, and tasks that need to happen.','Formulário, e-mail, folha de rosto e seguimento em um processo único.':'Form, email, cover sheet, and follow-up in one process.','Prioridades, reports de produto e atividades gerais em um só lugar.':'Priorities, product reports, and general activities in one place.','Visão executiva e indicadores gerais de falhas de produtos.':'Executive view and general product failure indicators.','E-mails, análises, alinhamentos e outras tarefas que não pertencem a uma falha de produto.':'Emails, analyses, alignments, and other tasks that do not belong to a product failure.'
@@ -710,7 +711,7 @@
       const root=document.querySelector(rootSelector), select=document.querySelector(selectId);
       if(!root || !select) return;
       const radios=[...root.querySelectorAll('input[name="assignment_mode"]')];
-      const isAdmin=currentAccount?.role==='admin';
+      const isAdmin=canAdminister();
       const currentMode=radios.find(r=>r.checked)?.value || 'private';
       select.disabled=!isAdmin || currentMode==='open';
       if (!isAdmin) {
@@ -729,7 +730,7 @@
       const root=document.querySelector(rootSelector), select=document.querySelector(selectId);
       if(!root || !select) return;
       const mode=root.querySelector('input[name="assignment_mode"]:checked')?.value || 'private';
-      const isAdmin=currentAccount?.role==='admin';
+      const isAdmin=canAdminister();
       select.disabled=!isAdmin || mode==='open';
       select.multiple=mode!=='private';
       if(mode==='open') [...select.options].forEach(o=>o.selected=false);
@@ -748,7 +749,7 @@
       const root=formElement.querySelector('.assignment-box');
       const mode=root?.querySelector('input[name="assignment_mode"]:checked')?.value || 'private';
       let assignees=selectedNames('#'+root.querySelector('select').id);
-      if(currentAccount?.role!=='admin') assignees=[currentAccount?.name || fallbackOwner].filter(Boolean);
+      if(!canAdminister()) assignees=[currentAccount?.name || fallbackOwner].filter(Boolean);
       if(mode==='private') assignees=assignees.slice(0,1);
       if(mode==='open') assignees=[];
       return {
@@ -774,7 +775,7 @@
       return (item?.collaborationRequests || []).filter(r => r.status === 'pending');
     }
     function canManageParticipation(item) {
-      return currentAccount && (currentAccount.role === 'admin' || isAssignedToCurrentUser(item));
+      return currentAccount && (canAdminister() || isAssignedToCurrentUser(item));
     }
     async function requestParticipation(kind, id) {
       if (!currentAccount) return;
@@ -987,7 +988,7 @@
       return activity?.dueDate?`${t('Prazo')}: ${activity.dueDate}`:'';
     }
     function activityCanHardDelete(activity){
-      if(!activity||currentAccount?.role!=='admin')return false;
+      if(!activity||!canAdminister())return false;
       const assignment=normalizeAssignment(activity);
       const assignedOthers=(assignment.assignees||[]).some(name=>name&&name!==activity.openedBy&&name!==currentAccount?.name);
       const hasOperationalHistory=(activity.updates||[]).length>0||(activity.steps||[]).some(step=>step.done)||evidenceEntries(activity.evidence).length>0||Boolean(activity.originRoutineExecutionId)||activityEffectiveStatus(activity)!=='pendente';
@@ -1183,14 +1184,14 @@
       add(t('Registrar falha'),currentLanguage==='en-US'?'Register an operational occurrence':'Registrar ocorrência operacional',t('Ação'),()=>openOperationalFailureModal(),'falha ocorrência');
       add(t('Cadastrar produto'),currentLanguage==='en-US'?'Add product / CPH':'Adicionar produto / CPH',t('Ação'),()=>openProductModal(),'produto cph');
       add(t('Abrir saúde dos dados'),currentLanguage==='en-US'?'Review incomplete or inconsistent records':'Revisar registros incompletos ou inconsistentes',t('Ação'),()=>openDataHealth(),'saúde dados');
-      if(currentAccount?.role==='admin')add(t('Configurar operação'),currentLanguage==='en-US'?'Shifts, scopes, assignment matrix and routines':'Turnos, escopos, matriz e rotinas',t('Admin'),()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel')?.scrollIntoView({behavior:'smooth',block:'start'});},80);},'admin matriz');
+      if(canAdminister())add(t('Configurar operação'),currentLanguage==='en-US'?'Shifts, scopes, assignment matrix and routines':'Turnos, escopos, matriz e rotinas',t('Admin'),()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel')?.scrollIntoView({behavior:'smooth',block:'start'});},80);},'admin matriz');
       const match=(...v)=>!q||v.flat(Infinity).filter(Boolean).join(' ').toLowerCase().includes(q);
       state.products.filter(p=>match(p.code,p.family,p.name,p.commercialName,p.components)).slice(0,8).forEach(p=>add(productDisplayCode(p.code),`Produto · ${p.family||'—'}`,t('Produto'),()=>{activeProduct=p.code;activeFamily='';show('product');},[p.code,p.family,p.components].join(' ')));
       state.reports.filter(r=>match(r.id,r.product,r.family,r.component,r.issue,r.material)).slice(0,8).forEach(r=>add(`${r.id} · ${r.component||'Report'}`,r.issue||failureScopeSummary(r),t('Report'),()=>openDetail(r.id),[r.id,r.product,r.issue].join(' ')));
       state.operationalFailures.filter(r=>match(r.id,r.issue,r.owner,r.maquina,r.linha,r.estacao)).slice(0,8).forEach(r=>add(`${r.id} · ${r.issue||'Falha'}`,failureScopeSummary(r),t('Falha'),()=>{show('operations');openOperationalDetail(r.id);},[r.id,r.issue,r.maquina,r.linha].join(' ')));
       state.activities.filter(a=>match(a.id,a.title,a.area,a.description,a.nextAction)).slice(0,8).forEach(a=>add(`${a.id} · ${a.title}`,a.nextAction?`Próxima: ${a.nextAction}`:a.area,t('Atividade'),()=>{show('work');openActivityDetail(a.id);},[a.id,a.title,a.area,a.nextAction].join(' ')));
       state.flows.filter(f=>match(f.id,f.scope,f.description,f.product)).slice(0,6).forEach(f=>add(`${f.id} · ${f.scope}`,f.description||'',t('Fluxo'),()=>{show('flow');openFlowDetail(f.id);},[f.id,f.scope,f.product].join(' ')));
-      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(currentAccount?.role==='admin')setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},120);},[r.name,r.description,r.checklistTemplate].join(' ')));
+      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(canAdminister())setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},120);},[r.name,r.description,r.checklistTemplate].join(' ')));
       return items.slice(0,32);
     }
     function renderCommandPalette(query=''){
@@ -1614,7 +1615,7 @@
     });
 
     function requestDeleteFamily(familyName) {
-      if (currentAccount?.role !== 'admin') {
+      if (!canAdminister()) {
         alert('Apenas usuários administradores podem excluir famílias e produtos.');
         return;
       }
@@ -1638,7 +1639,7 @@
     }
 
     function requestRenameFamily(familyName) {
-      if (currentAccount?.role !== 'admin') {
+      if (!canAdminister()) {
         alert('Apenas usuários administradores podem renomear famílias.');
         return;
       }
@@ -1661,7 +1662,7 @@
       const oldFamily = familyToRename;
       const next = String(newFamilyName || '').trim();
       if (!oldFamily || !next) return;
-      if (currentAccount?.role !== 'admin') return alert('Apenas usuários administradores podem renomear famílias.');
+      if (!canAdminister()) return alert('Apenas usuários administradores podem renomear famílias.');
       if (next === oldFamily) { closeFamilyRenameModal(); return; }
       const collision = state.products.some(p => productFamily(p) !== oldFamily && productFamily(p).toLocaleLowerCase() === next.toLocaleLowerCase());
       if (collision) {
@@ -1714,7 +1715,7 @@
       const oldFamily = familyToRename;
       const next = String(newFamilyName || '').trim();
       if (!oldFamily || !next) return;
-      if (currentAccount?.role !== 'admin') return alert('Apenas administradores podem renomear famílias.');
+      if (!canAdminister()) return alert('Apenas administradores podem renomear famílias.');
       if (next === oldFamily) { closeFamilyRenameModal(); return; }
 
       const collision = state.products.some(p => productFamily(p) !== oldFamily && productFamily(p).toLocaleLowerCase() === next.toLocaleLowerCase());
@@ -1769,20 +1770,40 @@
       closeConfirmModal();
     }
 
-    window.toggleUserRole = async function(email) {
-      if (currentAccount?.role !== 'admin') return alert('Apenas administradores podem alterar permissões.');
-      const u = users.find(user => user.email === email);
-      if (!u || u.email === ADMIN_EMAIL) return;
-      const newRole = u.role === 'admin' ? 'user' : 'admin';
-      await updateDoc(doc(db, 'users', u.docId), { role: newRole, updatedAt: now() });
-    };
-
-    window.toggleUserDisabled = async function(email) {
-      if (currentAccount?.role !== 'admin') return alert('Apenas administradores podem desativar contas.');
-      const u = users.find(user => user.email === email);
-      if (!u || u.email === ADMIN_EMAIL) return;
-      const nextDisabled = !Boolean(u.disabled);
-      await updateDoc(doc(db, 'users', u.docId), { disabled: nextDisabled, updatedAt: now() });
+    window.applyAdmissionAdminAction = async function(encodedUid, action) {
+      if (!canAdminister()) return alert(adminUiText('Apenas administradores ativos podem alterar admissão e níveis de acesso.','Only active administrators can change admission and access levels.'));
+      const targetUid=decodeURIComponent(String(encodedUid||''));
+      if(!targetUid||targetUid===currentAccount?.uid)return alert(adminUiText('A própria conta é protegida contra autoescalonamento e autobloqueio.','Your own account is protected against self-escalation and self-lockout.'));
+      const actor=users.find(user=>user.docId===currentAccount?.uid);
+      const target=users.find(user=>user.docId===targetUid);
+      if(!actor||!target)return alert(adminUiText('Não foi possível localizar o perfil de acesso.','Access profile could not be found.'));
+      const accessLevel=document.getElementById('admin-access-'+encodedUid)?.value||'';
+      if(['migrate','approve','change_level'].includes(action)&&!ADMIN_ACCESS_LEVELS.includes(accessLevel))return alert(adminUiText('Escolha explicitamente o nível de acesso antes de continuar.','Choose the access level explicitly before continuing.'));
+      const at=Date.now();
+      const common={
+        actorProfile:{...actor,uid:actor.uid||actor.docId},
+        actorUid:currentAuthUser?.uid,
+        targetProfile:{...target,uid:target.uid||target.docId},
+        reason:'Central admin UI',
+        at,
+        actorEmailVerified:currentAuthUser?.emailVerified===true
+      };
+      let command;
+      try {
+        if(action==='migrate')command=migrateLegacyProfile({...common,accessLevel});
+        else if(action==='approve')command=approveV2Profile({...common,accessLevel});
+        else if(action==='deny')command=denyV2Profile(common);
+        else if(action==='change_level')command=changeV2AccessLevel({...common,accessLevel});
+        else throw new Error('Ação administrativa de admissão inválida.');
+        const batch=writeBatch(db);
+        batch.update(doc(db,'users',targetUid),command.patch);
+        batch.set(doc(collection(db,'admissionAudit')),command.audit);
+        await withTimeout(batch.commit(),15000,'Atualização auditada de acesso');
+        showSaveToast(adminUiText('Acesso atualizado com trilha de auditoria.','Access updated with an audit trail.'),'success');
+      } catch (error) {
+        console.error('[Central] Falha ao aplicar admissão/RBAC:',error);
+        alert(error?.message||adminUiText('Não foi possível atualizar o acesso.','Access could not be updated.'));
+      }
     };
 
     function renderTree() {
@@ -1791,7 +1812,7 @@
         (acc[family] ??= []).push(p);
         return acc;
       }, {});
-      const isAdmin = currentAccount?.role === 'admin';
+      const isAdmin = canAdminister();
       const chevron = () => `<span class="family-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
       const menuIcon = `<svg viewBox="0 0 24 24"><path d="M12 6.5a1.4 1.4 0 1 0 0 .01M12 12a1.4 1.4 0 1 0 0 .01M12 17.5a1.4 1.4 0 1 0 0 .01" fill="currentColor"/></svg>`;
       const html = Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([family, products]) => {
@@ -2119,8 +2140,8 @@
     }
     function dailyRelevantRecurrences(){
       const shiftId=dailySelectedShiftId,uid=currentAuthUser?.uid||'';
-      const allocations=currentAccount?.role==='admin'?activeWorkAllocations().filter(a=>a.shiftId===shiftId):activeWorkAllocations().filter(a=>a.shiftId===shiftId&&a.userId===uid);
-      const productionScopeIds=currentAccount?.role==='admin'?state.operationalScopes.filter(scope=>dailyProductionCodes(scope.docId,shiftId).length).map(scope=>scope.docId):[];
+      const allocations=canAdminister()?activeWorkAllocations().filter(a=>a.shiftId===shiftId):activeWorkAllocations().filter(a=>a.shiftId===shiftId&&a.userId===uid);
+      const productionScopeIds=canAdminister()?state.operationalScopes.filter(scope=>dailyProductionCodes(scope.docId,shiftId).length).map(scope=>scope.docId):[];
       const scopeIds=[...new Set([...allocations.flatMap(a=>a.scopeIds||[]),...productionScopeIds])];
       const lines=new Set(scopeIds.flatMap(id=>{const scope=state.operationalScopes.find(s=>s.docId===id);return [recurrenceNorm(scope?.name||''),recurrenceNorm(scope?.code||'')];}).filter(Boolean));
       const codes=new Set(scopeIds.flatMap(id=>dailyProductionCodes(id,shiftId,dailySelectedDate)).map(productCodeKey).filter(Boolean));
@@ -2477,6 +2498,62 @@
       } });
       integrationView.render();
     }
+
+    const ADMIN_ACCESS_LEVELS = ['viewer','operator','engineer','supervisor','admin'];
+    function canAdminister(){ return currentAccount?.capabilities?.administer === true; }
+    function adminUiText(pt,en){ return currentLanguage==='en-US' ? en : pt; }
+    function adminAccessLevelLabel(level){
+      const labels=currentLanguage==='en-US'
+        ? {viewer:'Viewer',operator:'Operator',engineer:'Engineer',supervisor:'Supervisor',admin:'Admin'}
+        : {viewer:'Viewer',operator:'Operador',engineer:'Engenheiro',supervisor:'Supervisor',admin:'Administrador'};
+      return labels[String(level||'').toLowerCase()] || String(level||'—');
+    }
+    function accountAccessLabel(account){
+      if(account?.generation==='v2')return adminAccessLevelLabel(account.accessLevel);
+      return canAdminister()?adminUiText('Administrador','Administrator'):adminUiText('Usuário legado','Legacy user');
+    }
+    function adminUserAccessMeta(user){
+      const v2=Number(user?.admission_version)===2;
+      if(!v2){
+        const state=user?.disabled?adminUiText('Desativado','Disabled'):(user?.role==='admin'?adminUiText('Administrador','Administrator'):adminUiText('Usuário legado','Legacy user'));
+        return {v2:false,label:adminUiText('Legado','Legacy')+' · '+state,className:user?.disabled?'waiting':'done'};
+      }
+      const level=adminAccessLevelLabel(user?.access_level);
+      const approval=String(user?.approval_state||'pending');
+      let state=adminUiText('Pendente','Pending'),className='waiting';
+      if(approval==='denied')state=adminUiText('Negado','Denied');
+      else if(user?.disabled)state=adminUiText('Desativado','Disabled');
+      else if(approval==='approved'){state=adminUiText('Aprovado','Approved');className='done';}
+      return {v2:true,label:state+' · '+level,className};
+    }
+    function adminAccessSelectHtml(user){
+      const encoded=encodeURIComponent(String(user?.docId||''));
+      const v2=Number(user?.admission_version)===2;
+      const current=v2&&ADMIN_ACCESS_LEVELS.includes(user?.access_level)?user.access_level:'';
+      const placeholder='<option value="" '+(current?'':'selected')+'>'+esc(adminUiText('Escolha o nível','Choose level'))+'</option>';
+      const options=ADMIN_ACCESS_LEVELS.map(level=>'<option value="'+level+'" '+(current===level?'selected':'')+'>'+esc(adminAccessLevelLabel(level))+'</option>').join('');
+      return '<select id="admin-access-'+encoded+'" class="admin-access-select" aria-label="'+esc(adminUiText('Nível de acesso','Access level'))+'">'+placeholder+options+'</select>';
+    }
+    function adminUserRowHtml(user){
+      const meta=adminUserAccessMeta(user),encoded=encodeURIComponent(String(user?.docId||''));
+      const self=user?.docId===currentAccount?.uid;
+      let actions='<span class="muted">'+esc(adminUiText('Sua conta · protegida','Your account · protected'))+'</span>';
+      if(!self){
+        const select=adminAccessSelectHtml(user);
+        if(!meta.v2){
+          actions=select+'<button class="button secondary" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'migrate\')">'+esc(adminUiText('Migrar acesso','Migrate access'))+'</button>';
+        }else if(user?.approval_state==='approved'&&!user?.disabled){
+          actions=select+'<button class="button secondary" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'change_level\')">'+esc(adminUiText('Aplicar nível','Apply level'))+'</button>'
+            +'<button class="button danger" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'deny\')">'+esc(adminUiText('Negar acesso','Deny access'))+'</button>';
+        }else{
+          const approveLabel=(user?.approval_state==='denied'||user?.disabled)?adminUiText('Reaprovar','Reapprove'):adminUiText('Aprovar','Approve');
+          actions=select+'<button class="button primary" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'approve\')">'+esc(approveLabel)+'</button>';
+          if(user?.approval_state!=='denied')actions+='<button class="button danger" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'deny\')">'+esc(adminUiText('Negar','Deny'))+'</button>';
+        }
+      }
+      return '<tr><td><span class="identifier">'+esc(user?.name||'')+'</span></td><td>'+esc(user?.email||'')+'</td><td><span class="status '+meta.className+'">'+esc(meta.label)+'</span></td><td><div class="user-actions">'+actions+'</div></td></tr>';
+    }
+
     function renderProfile() {
       renderIntegration();
       if (!currentAccount) return;
@@ -2508,26 +2585,12 @@
         document.querySelector('#userReportEmpty').classList.remove('hidden');
       }
 
-      const isAdmin = currentAccount.role === 'admin';
+      const isAdmin = canAdminister();
       const adminSection = document.querySelector('#adminUsersSection');
       adminSection.classList.toggle('hidden', !isAdmin);
 
       if (isAdmin) {
-        document.querySelector('#adminUserRows').innerHTML = users.map(u => `
-          <tr>
-            <td><span class="identifier">${esc(u.name)}</span></td>
-            <td>${esc(u.email)}</td>
-            <td><span class="status ${u.role === 'admin' ? 'done' : 'waiting'}">${u.role === 'admin' ? 'Administrador' : 'Usuário Normal'}</span></td>
-            <td>
-              <div class="user-actions">
-                ${u.email !== currentAccount.email && u.email !== ADMIN_EMAIL ? `
-                  <button class="button secondary" onclick="toggleUserRole('${u.email}')">${u.role === 'admin' ? 'Tornar Usuário' : 'Promover a Adm'}</button>
-                  <button class="button ${u.disabled ? 'secondary' : 'danger'}" onclick="toggleUserDisabled('${u.email}')">${u.disabled ? 'Reativar' : 'Desativar'}</button>
-                ` : '<span class="muted">(Conta protegida)</span>'}
-              </div>
-            </td>
-          </tr>
-        `).join('');
+        document.querySelector('#adminUserRows').innerHTML = users.map(adminUserRowHtml).join('');
       }
     }
 
@@ -2537,7 +2600,7 @@
       const accountScreenEl = document.querySelector('#accountScreen');
 
       if (currentAccount) {
-        const roleLabel = currentAccount.role === 'admin' ? 'Administrador' : 'Usuário Normal';
+        const roleLabel = accountAccessLabel(currentAccount);
         accountInfoEl.textContent = `${currentAccount.name} (${roleLabel}) · ${currentAccount.email}`;
       } else {
         accountInfoEl.textContent = 'Conta não configurada';
@@ -4593,7 +4656,7 @@ ${m.text}`).join('\n\n');
       host.innerHTML=rows.length?rows.sort((a,b)=>String(a.shift?.name||'').localeCompare(String(b.shift?.name||''))||String(a.scope.name||'').localeCompare(String(b.scope.name||''))).map(row=>`<div class="daily-admin-item"><div><strong>${esc(row.scope.name)}</strong><span>${esc(row.shift?.name||'Turno')} · ${esc(row.labels)}</span></div><div><button type="button" data-production-edit="1" data-scope-id="${esc(row.scope.docId)}" data-shift-id="${esc(row.shiftId)}">Editar</button></div></div>`).join(''):'<div class="daily-soft-empty">Nenhum CPH vinculado às linhas/escopos.</div>';
     }
     async function saveDailyProductionContext(form,{clear=false}={}){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form),shiftId=String(f.get('shiftId')||''),scopeId=String(f.get('scopeId')||'');
       if(!shiftId||!scopeId)return alert('Selecione turno e linha/escopo.');
       const scope=state.operationalScopes.find(x=>x.docId===scopeId),shift=state.workShifts.find(x=>x.docId===shiftId);
@@ -4681,7 +4744,7 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyExecutionVisibleToCurrent(execution){
-      if(currentAccount?.role==='admin') return true;
+      if(canAdminister()) return true;
       const uid=currentAuthUser?.uid;
       if(!uid) return false;
       return execution.assignedUserId===uid || (execution.expectedUserIds||[]).includes(uid) || (execution.participants||[]).some(p=>p.userId===uid);
@@ -4756,7 +4819,7 @@ ${m.text}`).join('\n\n');
       const statusLabel=dailyExecutionHistoryLabel(execution);
       const people=execution.executionPolicy==='each_user' ? execution.assignedUserName : (execution.expectedUserNames||[]).join(', ');
       const time=execution.plannedTime||t('Durante o turno');
-      const canAct=dailyExecutionVisibleToCurrent(execution)||currentAccount?.role==='admin';
+      const canAct=dailyExecutionVisibleToCurrent(execution)||canAdminister();
       const startedBy=execution.startedByName ? `${t('iniciada por')} ${execution.startedByName}` : '';
       let actions='';
       if(canAct && !['completed','missed','cancelled'].includes(execution.status) && timing.state!=='missed'){
@@ -4816,7 +4879,7 @@ ${m.text}`).join('\n\n');
         {selector:'#dailyHandoverPanel',title:t('Entregue a continuidade'),text:t('A passagem reúne automaticamente o que foi registrado no turno e o próximo time pode confirmar o recebimento.'),tip:t('Use a observação somente para o contexto que os dados não conseguem mostrar sozinhos.')},
         {selector:'#centralNotificationButton',title:t('Alertas do turno'),text:t('O sino reúne rotinas próximas do horário, atrasos e atividades com prazo.'),tip:t('Você pode ativar alertas do navegador e escolher a antecedência.')}
       ];
-      if(currentAccount?.role==='admin'){
+      if(canAdminister()){
         steps.push(
           {selector:'#dailyAdminToggle',title:t('Configuração administrativa'),text:t('Administradores usam esta área para turnos, escopos, matriz de alocação, rotinas e histórico.'),tip:t('O usuário comum não vê esta etapa.')},
           {selector:'#dailyConfigShiftsCard',adminPanel:true,adminTab:'config',title:t('Estruture os turnos'),text:t('Defina início e fim reais; a Central usa isso para saber qual período pertence a cada turno, inclusive quando atravessa a meia-noite.'),tip:'Ex.: 1º turno · 07:30 → 17:30.'},
@@ -4845,7 +4908,7 @@ ${m.text}`).join('\n\n');
     function dailyPrepareTourStep(step){
       if(!step)return;
       const panel=document.querySelector('#dailyAdminPanel');
-      if(step.adminPanel&&currentAccount?.role==='admin'&&panel){
+      if(step.adminPanel&&canAdminister()&&panel){
         panel.classList.remove('hidden');
         dailyAdminTab=step.adminTab||'config';
         renderDailyAdmin();
@@ -5070,7 +5133,7 @@ ${m.text}`).join('\n\n');
       const previousDoc=previous?dailyHandoverDoc(previous.dateKey,previous.shift.docId):null;
       const currentDoc=dailyHandoverDoc(dailySelectedDate,dailySelectedShiftId);
       const allocated=activeWorkAllocations().some(a=>a.userId===uid&&a.shiftId===dailySelectedShiftId);
-      const canPrepare=currentAccount?.role==='admin'||allocated;
+      const canPrepare=canAdminister()||allocated;
       const received=Boolean(previousDoc?.receivedBy?.some(x=>x.userId===uid));
       const receivedNames=(previousDoc?.receivedBy||[]).map(x=>x.name).filter(Boolean);
       let previousCard='';
@@ -5174,7 +5237,7 @@ ${m.text}`).join('\n\n');
       const view=document.querySelector('#dailyView'); if(!view) return;
       const shift=resolveDailySelection();
       const dateInput=document.querySelector('#dailyDate'); if(dateInput) dateInput.value=dailySelectedDate||localDateKey();
-      const isAdmin=currentAccount?.role==='admin';
+      const isAdmin=canAdminister();
       document.querySelector('#dailyAdminToggle')?.classList.toggle('hidden',!isAdmin);
       if(!isAdmin) document.querySelector('#dailyAdminPanel')?.classList.add('hidden');
 
@@ -5246,7 +5309,7 @@ ${m.text}`).join('\n\n');
 
     function renderDailyAdmin(){
       const adminPanel=document.querySelector('#dailyAdminPanel'); if(!adminPanel) return;
-      if(currentAccount?.role!=='admin') return;
+      if(!canAdminister()) return;
       populateDailyAdminControls();
       renderDailyAdminLists();
       renderDailyAdminHistory();
@@ -5333,7 +5396,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function dailySetMatrixAllocation(userId,shiftId,scopeId,checked){
-      if(currentAccount?.role!=='admin'||!userId||!shiftId||!scopeId)return;
+      if(!canAdminister()||!userId||!shiftId||!scopeId)return;
       const user=users.find(x=>x.docId===userId),shift=state.workShifts.find(x=>x.docId===shiftId);
       const existing=activeWorkAllocations().find(a=>a.userId===userId&&a.shiftId===shiftId);
       const scopes=new Set(existing?.scopeIds||[]);
@@ -5503,7 +5566,7 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyEditAdminItem(kind,id){
-      if(currentAccount?.role!=='admin') return;
+      if(!canAdminister()) return;
       if(kind==='shift'){
         const item=state.workShifts.find(x=>x.docId===id); if(!item)return;
         const f=document.querySelector('#dailyShiftForm'); f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.startTime.value=item.startTime||'';f.elements.endTime.value=item.endTime||'';f.elements.active.checked=item.active!==false;f.scrollIntoView({behavior:'smooth',block:'center'});
@@ -5525,7 +5588,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function dailyToggleAdminItem(kind,id){
-      if(currentAccount?.role!=='admin') return;
+      if(!canAdminister()) return;
       const map={shift:['workShifts',state.workShifts],scope:['operationalScopes',state.operationalScopes],routine:['routineTemplates',state.routineTemplates]};
       const entry=map[kind]; if(!entry)return; const item=entry[1].find(x=>x.docId===id);if(!item)return;
       const nextActive=item.active===false;
@@ -5535,7 +5598,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function dailyDeleteAllocation(id){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const item=activeWorkAllocations().find(x=>x.docId===id);if(!item)return;
       if(!confirm('Remover esta alocação atual? O histórico das execuções já realizadas será preservado.'))return;
       const event=dailyAdminHistoryEntry('removed',`Alocação de ${item.userName||'Pessoa'} removida.`,{userId:item.userId,shiftId:item.shiftId,scopeIds:item.scopeIds||[]});
@@ -5543,7 +5606,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function dailyDeleteRoutine(id){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const item=state.routineTemplates.find(x=>x.docId===id);if(!item)return;
       const retention=routineRetentionMeta(item),executions=retention.executions;
       if(retention.inProgress)return alert('Esta rotina possui execução em andamento. Conclua essa execução antes de arquivar a rotina.');
@@ -5682,7 +5745,7 @@ ${m.text}`).join('\n\n');
 
 
     async function saveDailyShift(form){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form), id=String(f.get('docId')||''), payload={name:String(f.get('name')||'').trim(),startTime:String(f.get('startTime')||''),endTime:String(f.get('endTime')||''),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
       if(!payload.name||!payload.startTime||!payload.endTime)return alert('Preencha nome, início e fim do turno.');
       const existing=id?state.workShifts.find(x=>x.docId===id):null;
@@ -5693,7 +5756,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function saveDailyScope(form){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form), id=String(f.get('docId')||''), payload={type:String(f.get('type')||'line'),name:String(f.get('name')||'').trim(),code:String(f.get('code')||'').trim(),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
       if(!payload.name)return alert('Informe o nome do escopo.');
       const existing=id?state.operationalScopes.find(x=>x.docId===id):null;
@@ -5704,7 +5767,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function saveDailyAllocation(form){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form), requestedId=String(f.get('docId')||''), userId=String(f.get('userId')||''), shiftId=String(f.get('shiftId')||''), scopeIds=f.getAll('scopeIds').filter(Boolean);
       if(!userId||!shiftId||!scopeIds.length)return alert('Selecione pessoa, turno e pelo menos um escopo.');
       const user=users.find(u=>u.docId===userId), shift=state.workShifts.find(s=>s.docId===shiftId);
@@ -5720,7 +5783,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function saveDailyRoutine(form){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form), id=String(f.get('docId')||'');
       let scheduleMap;try{scheduleMap=dailyRoutineSchedulePayload();}catch(error){return alert(error.message);}
       if(!Object.keys(scheduleMap).length)return alert('Selecione pelo menos um turno na agenda da rotina.');
@@ -5758,7 +5821,7 @@ ${m.text}`).join('\n\n');
 
     async function startDailyExecution(key){
       const execution=dailyFindExecution(key);if(!execution)return;
-      if(!dailyExecutionVisibleToCurrent(execution)&&currentAccount?.role!=='admin')return alert('Esta rotina não está atribuída a você.');
+      if(!dailyExecutionVisibleToCurrent(execution)&&!canAdminister())return alert('Esta rotina não está atribuída a você.');
       const timing=dailyExecutionTiming(execution);
       if(timing.state==='missed'){
         await setDoc(doc(db,'routineExecutions',key),{status:'missed',timeliness:'missed',latePolicy:'expire',missedAt:timing.deadline?.toISOString?.()||now(),missedDetectedAt:now(),missedReason:'window_expired_without_start',updatedAt:now()},{merge:true});
@@ -6136,10 +6199,10 @@ ${m.text}`).join('\n\n');
         timingBox.textContent=timingText;
       }
       const deleteBtn=document.querySelector('#deleteActivity'),canHardDelete=activityCanHardDelete(activity);
-      if(deleteBtn){deleteBtn.classList.toggle('hidden',currentAccount?.role!=='admin'||!canHardDelete);deleteBtn.textContent=t('Excluir teste');}
+      if(deleteBtn){deleteBtn.classList.toggle('hidden',!canAdminister()||!canHardDelete);deleteBtn.textContent=t('Excluir teste');}
       const cancelBtn=document.querySelector('#cancelActivity');
-      if(cancelBtn)cancelBtn.classList.toggle('hidden',currentAccount?.role!=='admin'||activityIsClosed(activity));
-      const cancelOption=document.querySelector('#activityDetailStatus option[value="cancelado"]');if(cancelOption)cancelOption.hidden=currentAccount?.role!=='admin';
+      if(cancelBtn)cancelBtn.classList.toggle('hidden',!canAdminister()||activityIsClosed(activity));
+      const cancelOption=document.querySelector('#activityDetailStatus option[value="cancelado"]');if(cancelOption)cancelOption.hidden=!canAdminister();
       document.querySelector('#structureActivity')?.classList.toggle('hidden',structured);
       document.querySelector('#activityStructuredSection')?.classList.toggle('hidden',!structured);
       if(structured){
@@ -6332,7 +6395,7 @@ ${m.text}`).join('\n\n');
       const ownerSelect=document.querySelector('#operationalOwnerSelect');
       if(ownerSelect){
         ownerSelect.value=currentAccount?.name||'';
-        ownerSelect.disabled=currentAccount?.role!=='admin';
+        ownerSelect.disabled=!canAdminister();
       }
       if(prefill.text)form.elements.issue.value=prefill.text;
       if(prefill.context)form.elements.description_context.value=prefill.context;
@@ -6457,7 +6520,7 @@ ${m.text}`).join('\n\n');
       document.querySelector('#opDetailSubtitle').textContent=`${failureScopeSummary(r)} · ${r.family||'Sem família'} · ${r.category||'Outro'} · ${r.linha||'Sem linha'}`;
       updateOwnerDropdowns();
       document.querySelector('#opDetailOwnerSelect').value=r.owner||'';
-      document.querySelector('#opDetailOwnerSelect').disabled=currentAccount?.role !== 'admin';
+      document.querySelector('#opDetailOwnerSelect').disabled=!canAdminister();
       document.querySelector('#opDetailIssue').textContent=r.issue||'';
       document.querySelector('#opMachineInfo').innerHTML = `<strong>Classificação</strong>: ${esc(failureClassificationLabel(r.classification||'NAO_DEFINIDO'))} · Certeza: ${esc(r.classificationConfidence||'MEDIA')}<br><strong>Escopo atual</strong>: ${esc(failureScopeSummary(r))} · <strong>Componente</strong>: ${esc(r.component||r.peca_danificada||'Não informado')}<br><strong>Máquina</strong>: ${esc(r.maquina||'Não informada')} · <strong>Posto</strong>: ${esc(r.estacao||'Não informado')} · <strong>Linha</strong>: ${esc(r.linha||'Não informada')}<br><strong>Processo</strong>: ${esc(r.processo||'Não informado')} · <strong>Detectado</strong>: ${esc(r.detection_moment_label||r.detectionMoment||'Desconhecido')} · <strong>Onde</strong>: ${esc(r.onde_detectado||'Não informado')}`;
       fillOperationalDetailProducts(r);
@@ -6646,7 +6709,7 @@ ${m.text}`).join('\n\n');
     document.querySelector('#dailyTourDisableAuto')?.addEventListener('change',e=>{if(e.target.checked)localStorage.setItem(dailyTourDisableKey(),'1');else localStorage.removeItem(dailyTourDisableKey());});
     window.addEventListener('resize',()=>{if(dailyTourIsOpen())positionDailyTour();});
     window.addEventListener('scroll',()=>{if(dailyTourIsOpen())positionDailyTour();},{capture:true,passive:true});
-    document.querySelector('#dailyAdminToggle')?.addEventListener('click',()=>{if(currentAccount?.role!=='admin')return;document.querySelector('#dailyAdminPanel').classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel').scrollIntoView({behavior:'smooth',block:'start'});});
+    document.querySelector('#dailyAdminToggle')?.addEventListener('click',()=>{if(!canAdminister())return;document.querySelector('#dailyAdminPanel').classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel').scrollIntoView({behavior:'smooth',block:'start'});});
     document.querySelector('#dailyAdminClose')?.addEventListener('click',()=>document.querySelector('#dailyAdminPanel').classList.add('hidden'));
     document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.addEventListener('click',()=>{dailyAdminTab=btn.dataset.dailyAdminTab||'config';renderDailyAdmin();}));
     document.querySelectorAll('.daily-filter').forEach(btn=>btn.addEventListener('click',()=>{dailyFilter=btn.dataset.dailyFilter||'all';document.querySelectorAll('.daily-filter').forEach(x=>x.classList.toggle('active',x===btn));renderDaily();}));
@@ -7144,7 +7207,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const notes=document.querySelector('#opDetailNotes').value.trim();
       const status=document.querySelector('#opDetailStatus').value;
       const owner=document.querySelector('#opDetailOwnerSelect').value;
-      if(currentAccount?.role!=='admin'&&owner!==r.owner){alert('Apenas administradores podem alterar o responsável.');return;}
+      if(!canAdminister()&&owner!==r.owner){alert('Apenas administradores podem alterar o responsável.');return;}
 
       const changes=[];
       if(owner!==r.owner)changes.push(`Responsável alterado para ${owner||'não definido'}.`);
@@ -7338,7 +7401,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     });
 
     document.querySelector('#deleteReport').addEventListener('click', async () => {
-      if (currentAccount?.role !== 'admin') { alert('Apenas administradores podem excluir registros.'); return; }
+      if (!canAdminister()) { alert('Apenas administradores podem excluir registros.'); return; }
       const r = selected();
       if (!r || !confirm(`Excluir ${r.id}? Esta ação não pode ser desfeita.`)) return;
       await deleteDoc(doc(db, "reports", r.docId));
@@ -7371,7 +7434,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     document.querySelector('#saveActivityChanges').addEventListener('click', async () => {
       const activity=selectedActivity();if(!activity)return;
       const status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value;
-      if(status==='cancelado'&&currentAccount?.role!=='admin')return alert('Apenas administradores podem cancelar atividades atribuídas.');
+      if(status==='cancelado'&&!canAdminister())return alert('Apenas administradores podem cancelar atividades atribuídas.');
       const structured=!document.querySelector('#activityStructuredSection').classList.contains('hidden');
       const typedNext=structured?document.querySelector('#activityNextAction').value.trim():(activity.nextAction||'');
       const autoCandidate=activityAutoNextAction(activity.steps||[]);
@@ -7424,12 +7487,12 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     document.querySelector('#saveActivityEvidence')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityEvidenceInput'),files=await readAttachments([...(input.files||[])]);if(!files.length)return alert('Selecione pelo menos um arquivo.');const evidence=[...evidenceEntries(activity.evidence),...files],updates=[...(activity.updates||[]),{text:`${files.length} arquivo(s)/evidência(s) adicionado(s).`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',evidence,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
 
     document.querySelector('#cancelActivity')?.addEventListener('click',()=>{
-      if(currentAccount?.role!=='admin')return alert('Apenas administradores podem cancelar atividades atribuídas.');
+      if(!canAdminister())return alert('Apenas administradores podem cancelar atividades atribuídas.');
       const select=document.querySelector('#activityDetailStatus');if(!select)return;select.value='cancelado';document.querySelector('#saveActivityChanges')?.click();
     });
 
     document.querySelector('#deleteActivity').addEventListener('click', async () => {
-      if (currentAccount?.role !== 'admin') { alert('Apenas administradores podem excluir atividades.'); return; }
+      if (!canAdminister()) { alert('Apenas administradores podem excluir atividades.'); return; }
       const activity = selectedActivity();
       if (!activity) return;
       if(!activityCanHardDelete(activity)){
@@ -7466,7 +7529,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     });
 
     document.querySelector('#deleteFlow').addEventListener('click', async () => {
-      if (currentAccount?.role !== 'admin') { alert('Apenas administradores podem excluir fluxos.'); return; }
+      if (!canAdminister()) { alert('Apenas administradores podem excluir fluxos.'); return; }
       const flow = selectedFlow();
       if (!flow || !confirm(`Excluir fluxo ${flow.id}? Esta ação não pode ser desfeita.`)) return;
       await deleteDoc(doc(db, "flows", flow.docId));
