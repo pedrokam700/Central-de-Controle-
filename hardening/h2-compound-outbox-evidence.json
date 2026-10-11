@@ -1,0 +1,27 @@
+{
+  "schema": "central-h2-compound-outbox-evidence-v1",
+  "code_commit": "c84280403d7bd940b0137c644728c060396bbb8e",
+  "status": "focused_green_full_ci_pending",
+  "focused_validation": {
+    "app_parse": "green",
+    "tests_passed": 12,
+    "tests_failed": 0,
+    "atomic_online_routine_failure_write": true,
+    "atomic_offline_replay_batch": true,
+    "deterministic_failure_document": true,
+    "routine_link_array_union": true,
+    "missing_routine_fails_batch_closed": true,
+    "ack_only_after_batch_commit": true,
+    "legacy_v2_outbox_compatible": true,
+    "service_worker_dependency_cached": true
+  },
+  "implementation": [
+    "core/offline-domain-write.mjs",
+    "core/offline-outbox.mjs",
+    "app.js",
+    "sw.js",
+    "scripts/ames-offline-domain-write.test.mjs",
+    "scripts/ames-offline-outbox.test.mjs"
+  ],
+  "promotion_note": "Do not mark offline_outbox_uid_idempotency GREEN until the full Central Quality Gate and Firestore E2E pass on a descendant containing code_commit."
+}
