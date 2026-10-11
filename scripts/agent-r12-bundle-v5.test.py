@@ -53,23 +53,43 @@ def local_imports(path: Path, local_names: set[str]) -> set[str]:
     return result
 
 
+def transitive_local_imports(entry: str) -> set[str]:
+    available = {path.stem for path in AGENT.glob("*.py") if path.is_file()}
+    seen = set()
+    pending = [entry]
+    while pending:
+        module = pending.pop()
+        if module in seen:
+            continue
+        seen.add(module)
+        path = AGENT / f"{module}.py"
+        if not path.is_file():
+            continue
+        for imported in local_imports(path, available):
+            if imported not in seen:
+                pending.append(imported)
+    return seen
+
+
 def test_builder_and_updater_runtime_contract_match_exactly():
     updater = assignment_tuple(AGENT / "update_candidate.py", "FILES")
     check(tuple(builder.RUNTIME_FILES) == updater, "builder/updater runtime files diverged")
     check(len(updater) == len(set(updater)), "runtime contract contains duplicate files")
+    check("operational_registry.py" in updater, "Python operational registry missing from update contract")
 
 
-def test_hardened_entrypoint_local_imports_are_closed_inside_bundle_contract():
-    local_names = {Path(name).stem for name in builder.RUNTIME_FILES}
-    required = local_imports(AGENT / "agent_hardened_entry.py", local_names)
+def test_hardened_entrypoint_transitive_local_imports_are_closed_inside_bundle_contract():
     included = {Path(name).stem for name in builder.RUNTIME_FILES}
-    check(not (required - included), f"missing hardened runtime imports: {sorted(required - included)}")
+    required = transitive_local_imports("agent_hardened_entry")
+    missing = required - included
+    check(not missing, f"missing transitive hardened runtime imports: {sorted(missing)}")
     expected = {
-        "agent_entry", "diagnostics", "disaster_recovery", "hardening", "local_security",
-        "migrations", "operational_calendar", "retention_policy", "support_diagnostics",
-        "workstation_identity",
+        "agent_hardened_entry", "agent_entry", "agent", "canonical", "diagnostics",
+        "disaster_recovery", "hardening", "local_security", "migrations", "operational_calendar",
+        "operational_registry", "process_r11", "process_timeline", "retention_policy", "store",
+        "support_diagnostics", "workstation_identity",
     }
-    check(expected <= required, f"test fixture no longer sees expected hardening imports: {sorted(expected - required)}")
+    check(expected <= required, f"transitive closure no longer sees expected runtime modules: {sorted(expected - required)}")
 
 
 def test_v5_bundle_is_complete_private_data_free_and_deterministic():
@@ -144,7 +164,7 @@ def test_bundle_does_not_modify_frozen_3028_hash_contract():
 if __name__ == "__main__":
     tests = [
         test_builder_and_updater_runtime_contract_match_exactly,
-        test_hardened_entrypoint_local_imports_are_closed_inside_bundle_contract,
+        test_hardened_entrypoint_transitive_local_imports_are_closed_inside_bundle_contract,
         test_v5_bundle_is_complete_private_data_free_and_deterministic,
         test_bundle_does_not_modify_frozen_3028_hash_contract,
     ]
