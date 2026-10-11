@@ -23,7 +23,7 @@ function discoveredRoutes(source){
   return [...found].sort();
 }
 
-test('CORA API dependency contract is explicitly non-promotable until backend identity exists',()=>{
+test('CORA API dependency contract stays non-promotable until authoritative backend identity exists',()=>{
   assert.equal(contract.schema,'central-cora-api-dependencies-v1');
   assert.equal(contract.status,'frontend_contract_only_backend_identity_pending');
   assert.equal(contract.backend.authoritative_source,null);
@@ -34,6 +34,16 @@ test('CORA API dependency contract is explicitly non-promotable until backend id
   assert.equal(contract.rules.backend_version_required_before_stable,true);
   assert.equal(contract.rules.backend_health_required_before_stable,true);
   assert.equal(contract.rules.backend_source_required_before_stable,true);
+});
+
+test('verified hosting discovery is recorded without pretending source inspection succeeded',()=>{
+  assert.equal(contract.backend.hosting.provider,'vercel');
+  assert.equal(contract.backend.hosting.project_name,'central-cora-v2');
+  assert.match(contract.backend.hosting.project_id,/^prj_/);
+  assert.match(contract.backend.hosting.team_id,/^team_/);
+  assert.equal(contract.backend.hosting.project_discovery_verified,true);
+  assert.equal(contract.backend.hosting.project_inspection_verified,false);
+  assert.match(contract.backend.hosting.inspection_blocker,/403/i);
 });
 
 test('every literal /api route used by app.js is registered in the frontend contract',()=>{
