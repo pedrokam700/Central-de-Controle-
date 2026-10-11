@@ -53,13 +53,27 @@
         "viewer read-only and operator MES/operational publish",
         "self-escalation blocked",
         "new v2 profile constrained to pending viewer",
+        "session admission guard with fail-closed pending/denied/unverified states",
+        "audited admin commands for approve/deny/access-level changes",
+        "explicit legacy-to-v2 migration with administrator-selected access level",
+        "append-only admin-only admission audit namespace",
         "Rules emulator coverage",
         "client access-policy contract"
       ],
-      "evidence": ["firestore.rules", "scripts/ames-rules.emulator.mjs", "core/access-policy.mjs", "scripts/ames-access-policy.test.mjs"],
+      "evidence": [
+        "firestore.rules",
+        "scripts/ames-rules.emulator.mjs",
+        "core/access-policy.mjs",
+        "scripts/ames-access-policy.test.mjs",
+        "core/session-admission.mjs",
+        "scripts/ames-session-admission.test.mjs",
+        "core/admission-admin.mjs",
+        "scripts/ames-admission-admin.test.mjs"
+      ],
       "remaining": [
-        "integrate newV2Profile and admission guard into actual app.js signup/login",
-        "admin approval UI and account-by-account migration",
+        "integrate buildSignupProfile/evaluateSessionAdmission into actual app.js signup/login",
+        "wire admin commands and admissionAudit write through the user-management UI",
+        "migrate active legacy accounts one-by-one with explicit access level",
         "remove legacy fallback only after every active account is migrated"
       ]
     },
