@@ -17,6 +17,11 @@ function requireTarget(targetProfile){
   return uid;
 }
 
+function requireLevel(accessLevel){
+  if(!ACCESS_LEVELS.includes(accessLevel))throw new Error('Nível de acesso inválido');
+  return accessLevel;
+}
+
 function audit({action,targetUid,actorUid,before,after,reason='',at=Date.now()}){
   return Object.freeze({
     schema:ADMISSION_AUDIT_SCHEMA,
@@ -30,6 +35,30 @@ function audit({action,targetUid,actorUid,before,after,reason='',at=Date.now()})
   });
 }
 
+export function migrateLegacyProfile({actorProfile,actorUid,targetProfile,accessLevel,reason='',at=Date.now(),actorEmailVerified=true}={}){
+  requireAdmin(actorProfile,{emailVerified:actorEmailVerified});
+  const targetUid=requireTarget(targetProfile),actor=clean(actorUid),level=requireLevel(accessLevel);
+  if(!actor)throw new TypeError('UID do administrador obrigatório');
+  if(actor===targetUid)throw new Error('Migração da própria conta exige fluxo administrativo separado');
+  if(profileGeneration(targetProfile)!=='legacy')throw new Error('Somente perfil legado pode usar este fluxo de migração');
+  const before={
+    generation:'legacy',
+    role:targetProfile.role==='admin'?'admin':'user',
+    disabled:Boolean(targetProfile.disabled)
+  };
+  const patch=Object.freeze({
+    role:'user',
+    admission_version:2,
+    access_level:level,
+    approval_state:'approved',
+    disabled:Boolean(targetProfile.disabled),
+    migrated_by:actor,
+    migrated_at:Number(at),
+    updatedAt:Number(at)
+  });
+  return Object.freeze({patch,audit:audit({action:'migrate_legacy_profile',targetUid,actorUid:actor,before,after:{generation:'v2',...patch},reason,at})});
+}
+
 export function approveV2Profile({actorProfile,actorUid,targetProfile,accessLevel,reason='',at=Date.now(),actorEmailVerified=true}={}){
   requireAdmin(actorProfile,{emailVerified:actorEmailVerified});
   const targetUid=requireTarget(targetProfile);
@@ -37,9 +66,9 @@ export function approveV2Profile({actorProfile,actorUid,targetProfile,accessLeve
   if(!actor)throw new TypeError('UID do administrador obrigatório');
   if(actor===targetUid)throw new Error('Autoaprovação/autoescalonamento não permitido');
   if(profileGeneration(targetProfile)!=='v2')throw new Error('Perfil legado deve ser migrado explicitamente antes da aprovação V2');
-  if(!ACCESS_LEVELS.includes(accessLevel))throw new Error('Nível de acesso inválido');
+  const level=requireLevel(accessLevel);
   const before={approval_state:targetProfile.approval_state,access_level:targetProfile.access_level,disabled:Boolean(targetProfile.disabled)};
-  const patch=Object.freeze({approval_state:'approved',access_level:accessLevel,disabled:false,approved_by:actor,approved_at:Number(at),updatedAt:Number(at)});
+  const patch=Object.freeze({approval_state:'approved',access_level:level,disabled:false,approved_by:actor,approved_at:Number(at),updatedAt:Number(at)});
   return Object.freeze({patch,audit:audit({action:'approve',targetUid,actorUid:actor,before,after:{...before,...patch},reason,at})});
 }
 
@@ -60,8 +89,8 @@ export function changeV2AccessLevel({actorProfile,actorUid,targetProfile,accessL
   if(!actor)throw new TypeError('UID do administrador obrigatório');
   if(actor===targetUid)throw new Error('Autoescalonamento não permitido');
   if(profileGeneration(targetProfile)!=='v2'||targetProfile.approval_state!=='approved')throw new Error('Somente perfil V2 aprovado pode trocar de nível');
-  if(!ACCESS_LEVELS.includes(accessLevel))throw new Error('Nível de acesso inválido');
+  const level=requireLevel(accessLevel);
   const before={approval_state:targetProfile.approval_state,access_level:targetProfile.access_level,disabled:Boolean(targetProfile.disabled)};
-  const patch=Object.freeze({access_level:accessLevel,updatedAt:Number(at)});
+  const patch=Object.freeze({access_level:level,updatedAt:Number(at)});
   return Object.freeze({patch,audit:audit({action:'change_access_level',targetUid,actorUid:actor,before,after:{...before,...patch},reason,at})});
 }
