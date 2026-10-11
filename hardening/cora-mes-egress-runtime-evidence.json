@@ -1,7 +1,7 @@
 {
   "schema": "central-cora-mes-egress-runtime-evidence-v1",
   "code_commit": "4099bf59dc6df28cb9a56f4af8f3d572f25363f9",
-  "status": "focused_green_full_ci_pending",
+  "status": "green_mes_boundary_full_ci_routes_pending",
   "focused_validation": {
     "exact_anchored_patch": "green",
     "app_parse": "green",
@@ -18,7 +18,7 @@
     "offline_dependencies_precached": true,
     "one_shot_write_workflow_removed": true
   },
-  "scope_limit": "This hardens only the MES block attached by the known CORA payload builders. It does not approve free-form conversation, images, audio, documents, memory, audit metadata or other local-only payloads for external egress.",
+  "scope_limit": "The real runtime MES block is sanitized before known external CORA payload construction. Full CORA egress enforcement remains pending for free-form conversation, images, audio, documents, memory, audit metadata and other local-only content.",
   "promotion": {
     "cora_external_data_policy_fully_green": false,
     "stable_allowed": false,
@@ -35,5 +35,11 @@
     "scripts/ames-cora-egress-transport.test.mjs",
     "scripts/ames-cora-external-projection.test.mjs",
     "scripts/ames-cora-mes-egress-app.test.mjs"
-  ]
+  ],
+  "full_ci": {
+    "run_id": 38157683195,
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  }
 }

@@ -219,21 +219,41 @@
     },
     "cora_external_data_policy": {
       "priority": "P1",
-      "status": "green_contract_enforcement_pending",
+      "status": "partial_runtime_enforcement",
       "green": [
         "credentials/session/raw MES classified never_external",
         "PCBA SN/Material SN/operator/images/comments/documents classified local_only by default",
         "technical context requires explicit allowlist",
         "allowlisted technical context still requires sanitization proof",
         "unknown fields default local_only",
-        "policy errors do not echo blocked values"
+        "policy errors do not echo blocked values",
+        "all known CORA /api routes have an explicit fail-closed client egress classification; unknown routes and methods are blocked by contract",
+        "failure-analysis external eligibility requires an explicitly sanitized structured technical payload",
+        "MES external projection removes PCBA SN, Material SN, operator, raw 2114/3074/3022 history, evidence refs and occurrence identifiers",
+        "MES external projection preserves exact CPH identity and absence semantics",
+        "runtime CORA payload builders replace only centralData.mes with the sanitized MES projection while retaining the full MES context locally",
+        "CORA egress policy, route transport and MES projection modules are available in the offline shell",
+        "runtime MES egress boundary passed Static Quality and Firestore Rules/cross-PC E2E"
       ],
       "evidence": [
         "core/cora-egress-policy.mjs",
-        "scripts/ames-cora-egress-policy.test.mjs"
+        "scripts/ames-cora-egress-policy.test.mjs",
+        "core/cora-egress-transport.mjs",
+        "ames/data/cora-external.mjs",
+        "scripts/ames-cora-egress-transport.test.mjs",
+        "scripts/ames-cora-external-projection.test.mjs",
+        "scripts/ames-cora-mes-egress-app.test.mjs",
+        "hardening/cora-mes-egress-runtime-evidence.json"
       ],
       "remaining": [
-        "integrate policy into actual external CORA /api request builders before payload leaves the browser"
+        "define route-specific local-only or sanitized external projections for free-form context, conversation, images, audio, documents, memory and audit metadata without weakening required CORA features",
+        "apply the route/payload guard to every actual external CORA request builder only after each route has an approved projection or an explicit local-only path",
+        "keep the backend version/health compatibility work separate and blocked until the authoritative CORA backend scope is accessible"
+      ],
+      "full_ci_runs": [
+        38157245123,
+        38157402697,
+        38157683195
       ]
     },
     "csp_inventory": {
