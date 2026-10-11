@@ -1,0 +1,31 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "app_modularization_user_profile_service",
+  "status": "focused_green_full_ci_pending",
+  "validated_parent": "c1f5e73fe18d667f93bbb0afa9856ebd50239cad",
+  "focused_run": 38183014794,
+  "assertions": [
+    "user profile load/create logic is extracted to core/user-profile-service.mjs",
+    "finishLogin orchestration and auth listeners remain in app.js unchanged",
+    "existing profile normalization preserves admission fields and legacy role compatibility",
+    "missing profiles are created through buildSignupProfile as V2 viewer pending",
+    "profile creation uses the extracted guarded Firestore setDoc path, preserving self-profile bootstrap policy",
+    "original 12 second validation/creation timeout labels are preserved",
+    "legacy name/display-name/email fallback order is preserved",
+    "offline shell caches the extracted user profile service",
+    "focused profile/admission/Firestore/cache/release tests passed before the functional commit",
+    "temporary one-shot write tooling was removed before the functional commit"
+  ],
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "full Static Quality on a normal descendant of the bot-produced extraction commit",
+    "full Firestore Rules/cross-PC E2E on the same descendant",
+    "reconcile app_modularization readiness after full CI",
+    "keep auth listener/UI orchestration in app.js until a separately tested slice is designed"
+  ]
+}
