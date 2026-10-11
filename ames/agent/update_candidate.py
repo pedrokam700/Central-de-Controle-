@@ -1,4 +1,4 @@
-"""Explicit update/rollback. Never delete files or reset the operational database."""
+"""Explicit update/rollback/frontend staging. Never delete operational data."""
 import argparse
 import hashlib
 import json
@@ -6,8 +6,10 @@ import os
 import shutil
 import socket
 import sqlite3
+import stat
 import uuid
-from pathlib import Path
+import zipfile
+from pathlib import Path, PurePosixPath
 FILES=(
     'agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py',
     'operational_calendar.py','operational_registry.py','diagnostics.py','migrations.py','disaster_recovery.py',
@@ -24,11 +26,19 @@ ORIGIN='https://central-cora-v2.vercel.app'
 PREVIEW_ORIGIN='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
 NETLIFY_PREVIEW_ORIGIN='https://deploy-preview-23--productcontrolcenter.netlify.app'
 ORIGINS=(ORIGIN,PREVIEW_ORIGIN,NETLIFY_PREVIEW_ORIGIN)
+FRONTEND_PACKAGE_SCHEMA='central-immutable-frontend-v1'
+FRONTEND_PACKAGE_MANIFEST='FRONTEND_PACKAGE_MANIFEST.json'
+FRONTEND_STAGE_SCHEMA='central-local-frontend-stage-v1'
+FRONTEND_STAGE_MARKER='_CENTRAL_FRONTEND_STAGE.json'
 
-def installation(path):
+def _package_target(path):
     target=Path(path).resolve()
     if (target/'ames-agent').is_dir():target=target/'ames-agent'
     if target.name!='ames-agent' or not (target/'agent.py').is_file():raise ValueError('Specify the existing installation or its ames-agent directory')
+    return target,target.parent
+
+def installation(path):
+    target,_=_package_target(path)
     for name,expected in HASHES.items():
         if hashlib.sha256((target/name).read_bytes()).hexdigest()!=expected:raise ValueError('Unexpected collector: '+name)
     cfg=json.loads((target/'config.json').read_text(encoding='utf-8-sig')) if (target/'config.json').exists() else {}
@@ -47,6 +57,99 @@ def _atomic_json(path,value):
     parsed=json.loads(tmp.read_text(encoding='utf-8'))
     if not isinstance(parsed,dict):raise ValueError('Invalid generated config')
     os.replace(tmp,path)
+
+def _sha256_bytes(data):return hashlib.sha256(data).hexdigest()
+def _sha256_file(path):
+    h=hashlib.sha256()
+    with Path(path).open('rb') as f:
+        for chunk in iter(lambda:f.read(1024*1024),b''):h.update(chunk)
+    return h.hexdigest()
+
+def _safe_zip_member(name):
+    pure=PurePosixPath(name)
+    if not name or name.startswith('/') or '\\' in name or '..' in pure.parts:return False
+    return True
+
+def _frontend_package_manifest(package_path,expected_sha):
+    expected=str(expected_sha or '').strip().lower()
+    if len(expected)!=40 or any(ch not in '0123456789abcdef' for ch in expected):raise ValueError('frontend SHA must be exact 40-hex commit SHA')
+    package_path=Path(package_path).resolve()
+    if not package_path.is_file():raise ValueError('Immutable frontend package not found')
+    with zipfile.ZipFile(package_path,'r') as archive:
+        infos=archive.infolist();names=[i.filename for i in infos]
+        if len(names)!=len(set(names)):raise ValueError('Duplicate member in immutable frontend package')
+        for info in infos:
+            if not _safe_zip_member(info.filename):raise ValueError('Unsafe member in immutable frontend package: '+info.filename)
+            mode=(info.external_attr>>16)&0o170000
+            if mode==stat.S_IFLNK:raise ValueError('Symlink refused in immutable frontend package: '+info.filename)
+        if FRONTEND_PACKAGE_MANIFEST not in names:raise ValueError('Immutable frontend manifest missing')
+        manifest=json.loads(archive.read(FRONTEND_PACKAGE_MANIFEST).decode('utf-8'))
+        if manifest.get('schema')!=FRONTEND_PACKAGE_SCHEMA:raise ValueError('Unsupported immutable frontend schema')
+        if str(manifest.get('frontend_sha') or '').lower()!=expected:raise ValueError('Immutable frontend package SHA mismatch')
+        files=manifest.get('files')
+        if not isinstance(files,list) or not files:raise ValueError('Immutable frontend file manifest empty')
+        expected_members={FRONTEND_PACKAGE_MANIFEST}
+        seen_paths=set()
+        for item in files:
+            rel=str(item.get('path') or '')
+            if not _safe_zip_member(rel) or rel in seen_paths:raise ValueError('Invalid/duplicate frontend path: '+rel)
+            seen_paths.add(rel);member='frontend/'+rel;expected_members.add(member)
+            try:data=archive.read(member)
+            except KeyError as exc:raise ValueError('Immutable frontend member missing: '+member) from exc
+            if len(data)!=int(item.get('bytes',-1)):raise ValueError('Immutable frontend size mismatch: '+member)
+            if _sha256_bytes(data)!=str(item.get('sha256') or ''):raise ValueError('Immutable frontend hash mismatch: '+member)
+        extra=set(names)-expected_members
+        if extra:raise ValueError('Unexpected immutable frontend members: '+','.join(sorted(extra)))
+        required={'frontend/release-build.json','frontend/release-identity.json','frontend/Central-de-Controle-/index.html'}
+        if not required<=expected_members:raise ValueError('Immutable frontend missing release/canonical files')
+        release=json.loads(archive.read('frontend/release-build.json').decode('utf-8'))
+        if str(release.get('sha') or '').lower()!=expected:raise ValueError('release-build SHA mismatch inside immutable frontend')
+        identity=archive.read('frontend/release-identity.json')
+        if _sha256_bytes(identity)!=str(manifest.get('release_identity_sha256') or ''):raise ValueError('release identity digest mismatch inside immutable frontend')
+    return manifest
+
+def _verify_staged_frontend(folder,manifest):
+    folder=Path(folder)
+    for item in manifest['files']:
+        path=folder/item['path']
+        if not path.is_file():raise ValueError('Staged frontend member missing: '+item['path'])
+        if path.stat().st_size!=int(item['bytes']):raise ValueError('Staged frontend size mismatch: '+item['path'])
+        if _sha256_file(path)!=item['sha256']:raise ValueError('Staged frontend hash mismatch: '+item['path'])
+    return True
+
+def stage_frontend(path,frontend_package,expected_sha):
+    _,package_root=_package_target(path)
+    package_path=Path(frontend_package).resolve();manifest=_frontend_package_manifest(package_path,expected_sha)
+    sha=str(manifest['frontend_sha']).lower();root=package_root/'frontend-packages';final=root/sha;marker=final/FRONTEND_STAGE_MARKER
+    package_digest=_sha256_file(package_path)
+    if final.exists():
+        if not marker.is_file():raise ValueError('Existing frontend stage has no activation marker; refusing overwrite')
+        state=json.loads(marker.read_text(encoding='utf-8'))
+        if state.get('schema')!=FRONTEND_STAGE_SCHEMA or state.get('frontend_sha')!=sha or state.get('package_sha256')!=package_digest:raise ValueError('Existing frontend stage identity mismatch; refusing overwrite')
+        _verify_staged_frontend(final,manifest)
+        return final
+    root.mkdir(parents=True,exist_ok=True);temp=root/(sha+'.stage.'+uuid.uuid4().hex)
+    temp.mkdir()
+    try:
+        with zipfile.ZipFile(package_path,'r') as archive:
+            for item in manifest['files']:
+                rel=item['path'];data=archive.read('frontend/'+rel);dst=temp/rel;dst.parent.mkdir(parents=True,exist_ok=True);dst.write_bytes(data)
+        _verify_staged_frontend(temp,manifest)
+        _atomic_json(temp/FRONTEND_STAGE_MARKER,{
+            'schema':FRONTEND_STAGE_SCHEMA,
+            'frontend_sha':sha,
+            'package_sha256':package_digest,
+            'release_identity_sha256':manifest.get('release_identity_sha256'),
+            'canonical_path':'/Central-de-Controle-/',
+            'activated':False,
+            'serving_origin':None,
+        })
+        os.replace(temp,final)
+    except BaseException:
+        shutil.rmtree(temp,ignore_errors=True)
+        raise
+    print('FRONTEND STAGED (not activated):',final)
+    return final
 
 def _restore_root(package,saved,manifest):
     for rel in manifest.get('root_files',[]):_copy_preserving(saved/'root'/rel,package/rel)
@@ -126,6 +229,9 @@ def rollback(path,saved=None):
     return before
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('operation',choices=['update','rollback']);p.add_argument('installation');p.add_argument('--backup');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('operation',choices=['update','rollback','stage-frontend']);p.add_argument('installation');p.add_argument('--backup');p.add_argument('--package');p.add_argument('--frontend-sha');args=p.parse_args()
     if args.operation=='update':update(args.installation)
-    else:rollback(args.installation,args.backup)
+    elif args.operation=='rollback':rollback(args.installation,args.backup)
+    else:
+        if not args.package or not args.frontend_sha:p.error('stage-frontend requires --package and --frontend-sha')
+        stage_frontend(args.installation,args.package,args.frontend_sha)
