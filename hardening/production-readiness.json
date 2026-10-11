@@ -71,8 +71,10 @@
     "cora_backend_version_contract": {
       "priority": "P0",
       "status": "blocked",
+      "green": ["frontend route inventory", "Vercel hosting project central-cora-v2 discovered and recorded"],
       "remaining": ["identify authoritative backend source/deploy", "/api/health", "/api/version", "frontend/backend compatibility contract"],
-      "blocker": "Vercel project is visible as Express but route/deployment inspection is outside current connection scope"
+      "blocker": "Vercel connection lists central-cora-v2 (prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI) but detailed project inspection returns HTTP 403 for scope pedrokam700-6477",
+      "evidence": ["hardening/cora-api-contract.json", "scripts/ames-cora-api-contract.test.mjs"]
     },
     "operational_calendar_semantics": {
       "priority": "P0",
@@ -102,11 +104,19 @@
       "status": "green",
       "evidence": ["ames/data/cloud-projection.mjs", "scripts/ames-cloud-projection.test.mjs", "scripts/ames-sync.test.mjs"]
     },
+    "csp_inventory": {
+      "priority": "P1",
+      "status": "green_inventory_only",
+      "green": ["frontend source inventory", "approved A-MES intranet HTTP classified explicitly", "unknown non-loopback HTTP remains blocking", "eval/inline blockers remain visible"],
+      "remaining": ["enforce blocking CSP only after reported inline/eval blockers are eliminated without breaking Firebase/CORA/A-MES"],
+      "evidence": ["scripts/csp-inventory.mjs", "scripts/ames-csp-inventory.test.mjs"]
+    },
     "operational_registry": {
       "priority": "P1",
       "status": "partial",
-      "green": ["site/timezone registry", "JS contract consumes registry", "parity test with Python and Rules"],
-      "remaining": ["migrate Python consumers", "migrate/generate Rules without changing TAN10101/TAN10102/TAN10103"]
+      "green": ["site/timezone registry", "JS contract consumes registry", "Python operational registry", "operational calendar consumes Python site timezone", "cross-check with Firestore Rules", "no friendly-label inference for MES identity"],
+      "evidence": ["ames/data/operational-registry.mjs", "ames/agent/operational_registry.py", "scripts/agent-operational-calendar.test.py"],
+      "remaining": ["migrate remaining Python consumers such as canonical.py", "migrate/generate Rules without changing TAN10101/TAN10102/TAN10103"]
     },
     "retention_lifecycle": {
       "priority": "P1",
