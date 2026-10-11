@@ -1,7 +1,7 @@
 {
   "schema": "central-session-admission-app-evidence-v1",
   "code_commit": "b9a32d7cad20dbd6ee308c456434dc92278e0dfa",
-  "status": "focused_green_full_ci_pending",
+  "status": "full_green",
   "focused_validation": {
     "anchored_patch": "green",
     "app_parse": "green",
@@ -23,5 +23,11 @@
     "scripts/ames-session-admission-app.test.mjs",
     "sw.js"
   ],
-  "promotion_note": "Do not mark frontend session admission GREEN until the full Central Quality Gate and Firestore E2E pass on a descendant containing code_commit."
+  "promotion_note": "Frontend session admission is GREEN internally. Legacy compatibility remains intentionally enabled until account-by-account migration is complete.",
+  "full_ci": {
+    "run_id": 38154172207,
+    "descendant_sha": "346422d8e3f5af46ed9a80ca289c7729ae9b23fd",
+    "static_quality": "success",
+    "firestore_e2e": "success"
+  }
 }

@@ -48,7 +48,8 @@ test('partial gates explain what remains instead of being treated as done',()=>{
       assert.ok(Array.isArray(gate.remaining)&&gate.remaining.length>0,`${key} needs an explicit remaining list`);
     }
   }
-  assert.match(readiness.gates.offline_outbox_uid_idempotency.remaining.join(' '),/routineExecution/i);
+  assert.equal(readiness.gates.offline_outbox_uid_idempotency.status,'green');
+  assert.equal(readiness.gates.offline_outbox_uid_idempotency.full_ci_run,38153144329);
   assert.match(readiness.gates.disaster_recovery.remaining.join(' '),/off-machine/i);
   assert.match(readiness.gates.multi_collector_authority.remaining.join(' '),/lease/i);
 });

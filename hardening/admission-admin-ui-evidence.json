@@ -1,7 +1,7 @@
 {
   "schema": "central-admission-admin-ui-evidence-v1",
   "code_commit": "1dc2b87e9d8858b2dbbb4c16ffae6d0fd662e7fc",
-  "status": "focused_green_full_ci_pending",
+  "status": "full_green",
   "focused_validation": {
     "app_parse": "green",
     "core_admin_command_tests": "green",
@@ -28,5 +28,11 @@
     "firestore.rules",
     "sw.js"
   ],
-  "promotion_note": "Do not mark the audited admin UI GREEN until the full Central Quality Gate and Firestore E2E pass on a descendant containing code_commit. Do not migrate legacy accounts automatically."
+  "promotion_note": "Audited admission admin UI is GREEN internally. Do not auto-migrate legacy accounts and do not publish production Rules without explicit promotion authorization.",
+  "full_ci": {
+    "run_id": 38154816019,
+    "descendant_sha": "790c7eeaef2e4af95f950602f08e4abc8ee0717c",
+    "static_quality": "success",
+    "firestore_e2e": "success"
+  }
 }

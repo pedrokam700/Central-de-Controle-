@@ -25,23 +25,49 @@
     "transactional_snapshots": {
       "priority": "P0",
       "status": "green",
-      "evidence": ["scripts/agent-hardening.test.py"]
+      "evidence": [
+        "scripts/agent-hardening.test.py"
+      ]
     },
     "offline_outbox_uid_idempotency": {
       "priority": "P0",
-      "status": "partial",
-      "green": ["reports", "operationalFailures", "uid isolation", "deterministic document id", "legacy quarantine"],
-      "remaining": ["compound routineExecution side effect must use merge-safe/domain-aware replay"]
+      "status": "green",
+      "green": [
+        "reports",
+        "operationalFailures",
+        "uid isolation",
+        "deterministic document id",
+        "legacy quarantine",
+        "typed compound routineExecution effect",
+        "failure document plus routine link commit atomically in one Firestore batch",
+        "routine link uses idempotent arrayUnion of business failure id",
+        "missing routine fails the whole batch closed",
+        "ACK only after the complete batch commits",
+        "online routine-origin failure uses the same atomic domain contract"
+      ],
+      "evidence": [
+        "hardening/h2-compound-outbox-evidence.json",
+        "core/offline-domain-write.mjs",
+        "core/offline-outbox.mjs",
+        "scripts/ames-offline-domain-write.test.mjs",
+        "scripts/ames-offline-outbox.test.mjs",
+        "scripts/ames-offline-central.test.mjs"
+      ],
+      "full_ci_run": 38153144329
     },
     "local_agent_pairing": {
       "priority": "P0",
       "status": "green",
-      "evidence": ["scripts/ames-agent-pairing.test.mjs"]
+      "evidence": [
+        "scripts/ames-agent-pairing.test.mjs"
+      ]
     },
     "legacy_browser_password_authority": {
       "priority": "P0",
       "status": "green",
-      "evidence": ["scripts/ames-auth-hardening.test.mjs"]
+      "evidence": [
+        "scripts/ames-auth-hardening.test.mjs"
+      ]
     },
     "admission_rbac": {
       "priority": "P0",
@@ -58,7 +84,16 @@
         "explicit legacy-to-v2 migration with administrator-selected access level",
         "append-only admin-only admission audit namespace",
         "Rules emulator coverage",
-        "client access-policy contract"
+        "client access-policy contract",
+        "actual app.js signup creates only V2 pending viewer profiles",
+        "signup never auto-promotes an email to admin",
+        "actual app.js login uses evaluateSessionAdmission fail-closed",
+        "live profile changes revalidate the active session",
+        "MES publication is gated by publish_mes capability",
+        "admin UI authority uses capabilities.administer instead of currentAccount.role",
+        "user-management UI supports explicit legacy migration, approve/reapprove, deny and access-level change",
+        "user profile patch and admissionAudit append commit atomically in one Firestore batch",
+        "admin UI blocks self-escalation and self-lockout"
       ],
       "evidence": [
         "firestore.rules",
@@ -68,55 +103,98 @@
         "core/session-admission.mjs",
         "scripts/ames-session-admission.test.mjs",
         "core/admission-admin.mjs",
-        "scripts/ames-admission-admin.test.mjs"
+        "scripts/ames-admission-admin.test.mjs",
+        "app.js",
+        "scripts/ames-session-admission-app.test.mjs",
+        "scripts/ames-admission-admin-app.test.mjs",
+        "hardening/session-admission-app-evidence.json",
+        "hardening/admission-admin-ui-evidence.json"
       ],
       "remaining": [
-        "integrate buildSignupProfile/evaluateSessionAdmission into actual app.js signup/login",
-        "wire admin commands and admissionAudit write through the user-management UI",
-        "migrate active legacy accounts one-by-one with explicit access level",
-        "remove legacy fallback only after every active account is migrated"
+        "inventory and migrate active legacy accounts one-by-one with explicit administrator-selected access level",
+        "make write controls capability-aware for viewer/operator/engineer UX while Rules remain server authority",
+        "remove legacy fallback only after every active account is migrated and regression evidence is green"
+      ],
+      "full_ci_runs": [
+        38154172207,
+        38154816019
       ]
     },
     "sqlite_migrations": {
       "priority": "P0",
       "status": "green",
-      "evidence": ["scripts/agent-migrations.test.py"]
+      "evidence": [
+        "scripts/agent-migrations.test.py"
+      ]
     },
     "cora_backend_version_contract": {
       "priority": "P0",
       "status": "blocked",
-      "green": ["frontend route inventory", "Vercel hosting project central-cora-v2 discovered and recorded"],
-      "remaining": ["identify authoritative backend source/deploy", "/api/health", "/api/version", "frontend/backend compatibility contract"],
+      "green": [
+        "frontend route inventory",
+        "Vercel hosting project central-cora-v2 discovered and recorded"
+      ],
+      "remaining": [
+        "identify authoritative backend source/deploy",
+        "/api/health",
+        "/api/version",
+        "frontend/backend compatibility contract"
+      ],
       "blocker": "Vercel connection lists central-cora-v2 (prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI) but detailed project inspection returns HTTP 403 for scope pedrokam700-6477",
-      "evidence": ["hardening/cora-api-contract.json", "scripts/ames-cora-api-contract.test.mjs"]
+      "evidence": [
+        "hardening/cora-api-contract.json",
+        "scripts/ames-cora-api-contract.test.mjs"
+      ]
     },
     "operational_calendar_semantics": {
       "priority": "P0",
       "status": "green",
-      "evidence": ["scripts/agent-operational-calendar.test.py"]
+      "evidence": [
+        "scripts/agent-operational-calendar.test.py"
+      ]
     },
     "published_preview_smoke": {
       "priority": "P0",
       "status": "partial",
-      "green": ["exact SHA", "release identity digest", "redirect bound", "canonical HTML", "factory gate"],
-      "remaining": ["run successfully against externally accessible preview"],
+      "green": [
+        "exact SHA",
+        "release identity digest",
+        "redirect bound",
+        "canonical HTML",
+        "factory gate"
+      ],
+      "remaining": [
+        "run successfully against externally accessible preview"
+      ],
       "blocker": "push runs skip preview smoke; earlier Netlify PR preview returned HTTP 401 to CI"
     },
     "mes_rules_authority": {
       "priority": "P1",
       "status": "green_code_not_published",
-      "evidence": ["scripts/ames-rules.emulator.mjs", "scripts/ames-e2e.emulator.mjs"],
-      "remaining": ["production publication only after explicit promotion authorization"]
+      "evidence": [
+        "scripts/ames-rules.emulator.mjs",
+        "scripts/ames-e2e.emulator.mjs"
+      ],
+      "remaining": [
+        "production publication only after explicit promotion authorization"
+      ]
     },
     "release_identity": {
       "priority": "P1",
       "status": "green",
-      "evidence": ["scripts/release-contract.test.mjs", "scripts/ames-release-build.test.mjs"]
+      "evidence": [
+        "scripts/release-contract.test.mjs",
+        "scripts/ames-release-build.test.mjs"
+      ]
     },
     "typed_cloud_allowlist": {
       "priority": "P1",
       "status": "green",
-      "evidence": ["ames/data/cloud-projection.mjs", "scripts/ames-cloud-projection.test.mjs", "scripts/ames-sync.test.mjs"]
+      "evidence": [
+        "ames/data/cloud-projection.mjs",
+        "scripts/ames-cloud-projection.test.mjs",
+        "scripts/ames-sync.test.mjs"
+      ]
     },
     "cora_external_data_policy": {
       "priority": "P1",
@@ -129,15 +207,30 @@
         "unknown fields default local_only",
         "policy errors do not echo blocked values"
       ],
-      "evidence": ["core/cora-egress-policy.mjs", "scripts/ames-cora-egress-policy.test.mjs"],
-      "remaining": ["integrate policy into actual external CORA /api request builders before payload leaves the browser"]
+      "evidence": [
+        "core/cora-egress-policy.mjs",
+        "scripts/ames-cora-egress-policy.test.mjs"
+      ],
+      "remaining": [
+        "integrate policy into actual external CORA /api request builders before payload leaves the browser"
+      ]
     },
     "csp_inventory": {
       "priority": "P1",
       "status": "green_inventory_only",
-      "green": ["frontend source inventory", "approved A-MES intranet HTTP classified explicitly", "unknown non-loopback HTTP remains blocking", "eval/inline blockers remain visible"],
-      "remaining": ["enforce blocking CSP only after reported inline/eval blockers are eliminated without breaking Firebase/CORA/A-MES"],
-      "evidence": ["scripts/csp-inventory.mjs", "scripts/ames-csp-inventory.test.mjs"]
+      "green": [
+        "frontend source inventory",
+        "approved A-MES intranet HTTP classified explicitly",
+        "unknown non-loopback HTTP remains blocking",
+        "eval/inline blockers remain visible"
+      ],
+      "remaining": [
+        "enforce blocking CSP only after reported inline/eval blockers are eliminated without breaking Firebase/CORA/A-MES"
+      ],
+      "evidence": [
+        "scripts/csp-inventory.mjs",
+        "scripts/ames-csp-inventory.test.mjs"
+      ]
     },
     "operational_registry": {
       "priority": "P1",
@@ -159,24 +252,41 @@
         "scripts/agent-operational-calendar.test.py",
         "scripts/agent-canonical.test.py"
       ],
-      "remaining": ["migrate/generate Rules registry without changing TAN10101/TAN10102/TAN10103"]
+      "remaining": [
+        "migrate/generate Rules registry without changing TAN10101/TAN10102/TAN10103"
+      ]
     },
     "retention_lifecycle": {
       "priority": "P1",
       "status": "partial",
-      "green": ["observe-only inventory", "dataset classification", "critical MES preserve-until-approved", "no destructive cleanup"],
-      "remaining": ["approve retention periods by data class before any deletion"]
+      "green": [
+        "observe-only inventory",
+        "dataset classification",
+        "critical MES preserve-until-approved",
+        "no destructive cleanup"
+      ],
+      "remaining": [
+        "approve retention periods by data class before any deletion"
+      ]
     },
     "disaster_recovery": {
       "priority": "P1",
       "status": "partial",
-      "green": ["verified local backup", "read-only quick_check", "non-destructive restore drill"],
-      "remaining": ["authorized encrypted off-machine backup target"]
+      "green": [
+        "verified local backup",
+        "read-only quick_check",
+        "non-destructive restore drill"
+      ],
+      "remaining": [
+        "authorized encrypted off-machine backup target"
+      ]
     },
     "support_diagnostics": {
       "priority": "P1",
       "status": "green",
-      "evidence": ["scripts/agent-support-diagnostics.test.py"]
+      "evidence": [
+        "scripts/agent-support-diagnostics.test.py"
+      ]
     },
     "immutable_frontend_distribution": {
       "priority": "P1",
@@ -259,13 +369,21 @@
         "bundle includes verified local frontend proof and activation-state tools",
         "bundle explicitly keeps local frontend launcher_default=false"
       ],
-      "remaining": ["new-PC fused package remains blocked until real R12 factory capture"]
+      "remaining": [
+        "new-PC fused package remains blocked until real R12 factory capture"
+      ]
     },
     "workstation_identity": {
       "priority": "P1",
       "status": "green_groundwork",
-      "green": ["stable random local id", "atomic persistence", "corruption fail-closed"],
-      "remaining": ["collector lease/fencing is not yet enforced on MES publication"]
+      "green": [
+        "stable random local id",
+        "atomic persistence",
+        "corruption fail-closed"
+      ],
+      "remaining": [
+        "collector lease/fencing is not yet enforced on MES publication"
+      ]
     },
     "multi_collector_authority": {
       "priority": "P1",
@@ -298,12 +416,19 @@
     "app_modularization": {
       "priority": "P1",
       "status": "pending",
-      "remaining": ["gradual extraction of auth/session/data/features without framework rewrite"]
+      "remaining": [
+        "gradual extraction of auth/session/data/features without framework rewrite"
+      ]
     },
     "r12_engine_consolidation": {
       "priority": "P1",
       "status": "factory_gate_pending",
-      "remaining": ["capture real R12", "compare behavior", "9/9", "then remove process_r11 compatibility bridge"]
+      "remaining": [
+        "capture real R12",
+        "compare behavior",
+        "9/9",
+        "then remove process_r11 compatibility bridge"
+      ]
     }
   }
 }
