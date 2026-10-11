@@ -2,7 +2,8 @@
 
 Keeps agent_entry.py as the R11/R12 compatibility boundary and layers database
 migrations, transactional snapshot visibility, atomic config handling, explicit
-operational calendar and loopback authorization on top.
+operational calendar, local authorization and non-destructive DR verification on
+top of the validated collector runtime.
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from urllib.parse import urlparse
 
 import agent_entry as entry
 import diagnostics
+import disaster_recovery
 import hardening
 import local_security
 import migrations
@@ -37,6 +39,37 @@ def _previous_day_window():
 
 entry.a.today_window = _today_window
 entry.a.previous_day_window = _previous_day_window
+
+# Every newly-created backup must prove that SQLite can open it and that the
+# minimum operational schema is present. This wraps backup only; no live DB restore
+# and no MES collector behavior changes.
+_original_create_backup = entry.a.create_backup
+
+
+def _verified_create_backup(reason="manual"):
+    info = _original_create_backup(reason)
+    verification = disaster_recovery.verify_backup(info["path"])
+    entry.a.STORE.record_audit(
+        "DATABASE_BACKUP_VERIFIED",
+        workstation=entry.a.WORKSTATION,
+        details={
+            "reason": reason,
+            "integrity": verification["integrity"],
+            "bytes": verification["bytes"],
+            "schema_version": verification["schema_version"],
+            "snapshot_count": verification["snapshot_count"],
+        },
+    )
+    return {
+        **info,
+        "verified": True,
+        "integrity": verification["integrity"],
+        "schema_version": verification["schema_version"],
+        "snapshot_count": verification["snapshot_count"],
+    }
+
+
+entry.a.create_backup = _verified_create_backup
 
 # ingest_3028_live builds its response dashboard before the hardening wrapper marks
 # the new snapshots complete. Refresh only that response projection afterwards;
@@ -99,6 +132,9 @@ class HardenedHandler(entry.Handler):
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         self.send_header("Cache-Control", "no-store")
 
+    def _dr_status(self):
+        return disaster_recovery.latest_status(entry.a.STORE, entry.a.BACKUP_DIR)
+
     def do_GET(self):
         path = urlparse(self.path).path
         if not self._authorized(path):
@@ -115,6 +151,7 @@ class HardenedHandler(entry.Handler):
                         "operational_calendar": operational_calendar.public_contract(entry.a.CONFIG),
                         "migration_registry": migrations.public_contract(),
                         "migration_state": MIGRATION_STATE,
+                        "backup": self._dr_status(),
                         "current_shift": operational_calendar.shift_for(entry.a.CONFIG),
                         **hardening.health(entry.a.STORE),
                     }
@@ -136,6 +173,7 @@ class HardenedHandler(entry.Handler):
                         entry.a,
                         hardening_health=hardening_health,
                         calendar=calendar,
+                        backup_status=self._dr_status(),
                     ),
                 })
             except Exception as exc:
@@ -147,6 +185,39 @@ class HardenedHandler(entry.Handler):
         path = urlparse(self.path).path
         if not self._authorized(path):
             self._reject_unauthorized()
+            return
+        if path == "/api/v1/backup/verify":
+            try:
+                backup = disaster_recovery.latest_backup_path(entry.a.STORE, entry.a.BACKUP_DIR)
+                if backup is None:
+                    self._send({"ok": False, "error": "backup_not_found"}, 404)
+                    return
+                result = disaster_recovery.verify_backup(backup, include_sha256=True)
+                self._send({"ok": True, "verification": result})
+            except Exception as exc:
+                self._send({"ok": False, "error": type(exc).__name__, "message": str(exc)}, 500)
+            return
+        if path == "/api/v1/backup/restore-drill":
+            try:
+                backup = disaster_recovery.latest_backup_path(entry.a.STORE, entry.a.BACKUP_DIR)
+                if backup is None:
+                    self._send({"ok": False, "error": "backup_not_found"}, 404)
+                    return
+                result = disaster_recovery.restore_drill(backup)
+                entry.a.STORE.record_audit(
+                    "DATABASE_RESTORE_DRILL",
+                    workstation=entry.a.WORKSTATION,
+                    details={
+                        "integrity": result["integrity"],
+                        "bytes": result["bytes"],
+                        "schema_version": result["schema_version"],
+                        "snapshot_count": result["snapshot_count"],
+                        "live_database_modified": result["live_database_modified"],
+                    },
+                )
+                self._send({"ok": True, "restore_drill": result})
+            except Exception as exc:
+                self._send({"ok": False, "error": type(exc).__name__, "message": str(exc)}, 500)
             return
         return super().do_POST()
 
