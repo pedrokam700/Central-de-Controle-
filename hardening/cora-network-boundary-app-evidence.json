@@ -2,9 +2,15 @@
   "schema": "central-hardening-evidence-v1",
   "branch": "hardening/p0-production-readiness",
   "subject": "cora_aiPostJSON_destination_boundary",
-  "status": "focused_green_full_ci_pending",
+  "status": "green",
   "validated_parent": "6354e88dfb62748af2d2002d2d3ce6aea1331753",
   "focused_run": 38181407100,
+  "full_ci_run": 38181467837,
+  "gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
   "assertions": [
     "aiPostJSON routes through prepareCoraNetworkRequest before fetch",
     "same-origin application Authorization may stay same-origin",
@@ -21,8 +27,8 @@
     "production_rules_publish_allowed": false
   },
   "remaining": [
-    "full Static Quality on a normal descendant of the bot-produced integration commit",
-    "full Firestore Rules/cross-PC E2E on the same descendant",
-    "guard the remaining direct CORA fetch request builders route-by-route without weakening local-only policy"
+    "guard the remaining direct CORA fetch request builders route-by-route without weakening local-only policy",
+    "keep external-provider approval static and explicit; do not derive it from browser runtime configuration",
+    "retain CSP/report-only and authoritative CORA backend gates as separate blockers"
   ]
 }
