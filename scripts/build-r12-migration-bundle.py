@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 AGENT=ROOT/'ames'/'agent'
 WORKSTATION=ROOT/'tools'/'ames-workstation'
-FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py')
+FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py')
 PREVIEW_URLS=(
     'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app',
     'https://deploy-preview-23--productcontrolcenter.netlify.app',
@@ -134,9 +134,9 @@ def build(destination:Path,frontend_sha:str):
         'preview_selection':'exact-sha-with-validated-offline-fallback',
         'pre_migration_capture':'best-effort-before-update',
         'rollback':'latest-candidate-backup',
-        'hardening':'H1-snapshot-lifecycle-migrations-atomic-config-workstation-token',
+        'hardening':'H1-snapshot-lifecycle-migrations-atomic-config-workstation-token-operational-calendar',
         'files':{name:digest(data) for name,data in sorted(payload.items())},
-        'notes':['does not contain A-MES credentials/session','does not contain runtime SQLite or workstation token','updater validates frozen 3028 hashes before update','launcher accepts only a preview whose release-build.json matches frontend_sha; after one valid check it may reuse that exact origin/SHA from cache state','update attempts a safe R12 engine capture before modifying the installation','rollback helper restores the newest candidate backup, removes migration-only agent files that did not previously exist and preserves operational SQLite','hardening H1 adds explicit SQLite migrations, hides incomplete snapshots from canonical/latest reads, uses atomic config writes and requires a local workstation token for hosted Central API access']
+        'notes':['does not contain A-MES credentials/session','does not contain runtime SQLite or workstation token','updater validates frozen 3028 hashes before update','launcher accepts only a preview whose release-build.json matches frontend_sha; after one valid check it may reuse that exact origin/SHA from cache state','update attempts a safe R12 engine capture before modifying the installation','rollback helper restores the newest candidate backup, removes migration-only agent files that did not previously exist and preserves operational SQLite','hardening H1 adds explicit SQLite migrations, hides incomplete snapshots from canonical/latest reads, uses atomic config writes, requires a local workstation token for hosted Central API access and separates production-day boundary from work-shift classification']
     }
     payload['MIGRATION_MANIFEST.json']=(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n').encode('utf-8')
     payload['LEIA_PRIMEIRO_R12.txt']=(
@@ -144,11 +144,12 @@ def build(destination:Path,frontend_sha:str):
         'Este bundle NAO e instalador para computador novo.\r\n'
         'Ele atualiza uma instalacao R12 existente depois de validar os coletores 3028.\r\n'
         'O updater cria backup do codigo/configuracao/SQLite antes da troca e nao apaga a base.\r\n'
-        'Hardening H1: migrations SQLite explicitas, snapshots incompletos nao viram latest, config atomica e token local do posto.\r\n'
+        'Hardening H1: migrations SQLite explicitas, snapshots incompletos nao viram latest, config atomica, token local do posto e calendario operacional explicito.\r\n'
         f'Frontend esperado neste bundle: {frontend_sha}\r\n'
         'O launcher testa Vercel/Netlify e abre somente um preview cujo release-build.json tenha exatamente esse SHA.\r\n'
         'Depois de uma validacao online bem-sucedida, a mesma origem/SHA pode ser reutilizada durante perda de internet para o shell offline.\r\n'
         'O token do agente e gerado somente no posto, nao vem dentro deste ZIP e nao e enviado ao Firebase/Vercel/Netlify.\r\n'
+        'Dia de producao e classificacao de turno sao configuracoes distintas; valores antigos de day_start continuam compatíveis.\r\n'
         '1. Pare agente/monitor da R12.\r\n'
         '2. Execute ATUALIZAR_R12_EXISTENTE.bat e informe a pasta da instalacao.\r\n'
         '   Antes de alterar a instalacao, o script tenta gerar R12_ENGINE_CAPTURE_PREMIGRATION.zip automaticamente.\r\n'
