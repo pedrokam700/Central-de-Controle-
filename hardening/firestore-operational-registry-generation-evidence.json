@@ -1,9 +1,13 @@
 {
   "schema": "central-firestore-operational-registry-generation-evidence-v1",
   "code_commit": "730da90b0bfa07d7916ec9e4018e155eca50897b",
-  "status": "focused_green_full_ci_pending",
+  "status": "green",
   "canonical_source": "ames/data/operational-registry.mjs",
-  "line_ids": ["TAN10101", "TAN10102", "TAN10103"],
+  "line_ids": [
+    "TAN10101",
+    "TAN10102",
+    "TAN10103"
+  ],
   "focused_validation": {
     "generator_check": "green",
     "operational_registry_tests": "green",
@@ -24,5 +28,11 @@
     "scripts/ames-firestore-operational-registry-generation.test.mjs",
     "firestore.rules"
   ],
-  "note": "This generates/verifies the mesLine() registry block in source control only. It does not publish Firestore Rules to production."
+  "note": "This generates/verifies the mesLine() registry block in source control only. It does not publish Firestore Rules to production.",
+  "full_ci": {
+    "run_id": 38158030493,
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  }
 }

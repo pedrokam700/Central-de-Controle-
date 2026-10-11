@@ -275,7 +275,7 @@
     },
     "operational_registry": {
       "priority": "P1",
-      "status": "partial",
+      "status": "green",
       "green": [
         "site/timezone registry",
         "JS contract consumes registry",
@@ -284,18 +284,23 @@
         "canonical.py consumes Python line registry",
         "canonical contract test pins exact TAN10101/TAN10102/TAN10103",
         "cross-check with Firestore Rules",
-        "no friendly-label inference for MES identity"
+        "no friendly-label inference for MES identity",
+        "Firestore mesLine() block is generated deterministically from the canonical JS operational registry",
+        "generator check fails on Rules/registry drift instead of inferring line identity from friendly labels",
+        "exact TAN10101/TAN10102/TAN10103 identity remains pinned across JS, Python and Firestore Rules",
+        "generated Firestore registry passed full Rules and cross-PC emulator E2E"
       ],
       "evidence": [
         "ames/data/operational-registry.mjs",
         "ames/agent/operational_registry.py",
         "ames/agent/canonical.py",
         "scripts/agent-operational-calendar.test.py",
-        "scripts/agent-canonical.test.py"
+        "scripts/agent-canonical.test.py",
+        "scripts/firestore-operational-registry.mjs",
+        "scripts/ames-firestore-operational-registry-generation.test.mjs",
+        "hardening/firestore-operational-registry-generation-evidence.json"
       ],
-      "remaining": [
-        "migrate/generate Rules registry without changing TAN10101/TAN10102/TAN10103"
-      ]
+      "full_ci_run": 38158030493
     },
     "retention_lifecycle": {
       "priority": "P1",
