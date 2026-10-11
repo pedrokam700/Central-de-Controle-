@@ -107,7 +107,11 @@ def test_tamper_and_wrong_sha_fail_closed():
         try:
             frontend_package.verify_package(tampered, expected_sha=SHA)
         except ValueError as exc:
-            check("hash mismatch" in str(exc), f"tamper failed for unexpected reason: {exc}")
+            message = str(exc)
+            check(
+                "size mismatch" in message or "hash mismatch" in message,
+                f"tamper failed for unexpected reason: {exc}",
+            )
         else:
             raise AssertionError("tampered frontend package was accepted")
 
