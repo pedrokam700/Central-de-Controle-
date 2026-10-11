@@ -33,6 +33,21 @@ jobs:
       - name: Run database and snapshot hardening tests
         run: python3 scripts/agent-hardening.test.py
 
+      - name: Run auth hardening contract
+        run: node --test scripts/ames-auth-hardening.test.mjs
+
+      - name: Run A-MES Node contract suites
+        run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' | sort)
+
+      - name: Run scheduler Python contract
+        run: python3 scripts/agent-scheduler.test.py
+
+      - name: Run canonical Python contract
+        run: python3 scripts/agent-canonical.test.py
+
+      - name: Run updater Python contract
+        run: python3 scripts/agent-update.test.py
+
       - name: Run Central quality gate
         env:
           PYTHON_BIN: python3
