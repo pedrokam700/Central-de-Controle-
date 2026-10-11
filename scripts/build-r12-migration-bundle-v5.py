@@ -57,6 +57,8 @@ ROOT_FILES = {
     "suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1": WORKSTATION / "DIAGNOSTICO_POSTO.ps1",
     "suporte/ames-workstation/CAPTURAR_MOTOR_R12_SEGURO.bat": WORKSTATION / "CAPTURAR_MOTOR_R12_SEGURO.bat",
     "suporte/ames-workstation/capture-r12-engine.py": WORKSTATION / "capture-r12-engine.py",
+    "suporte/ames-workstation/serve-staged-frontend.py": WORKSTATION / "serve-staged-frontend.py",
+    "suporte/ames-workstation/frontend-local-state.py": WORKSTATION / "frontend-local-state.py",
 }
 
 FORBIDDEN_ARCHIVE_MEMBERS = {
@@ -207,6 +209,7 @@ def _readme(frontend_sha: str) -> bytes:
         "Hardening: migrations ordenadas, snapshot transacional, config atomica, pairing local, calendario operacional, diagnostico sanitizado, verificacao de backup/restore drill, identidade estavel do posto e retencao observe-only.\r\n"
         f"Frontend esperado neste bundle: {frontend_sha}\r\n"
         "O launcher abre somente um preview cujo release-build.json tenha exatamente esse SHA.\r\n"
+        "O bundle tambem leva ferramentas de prova/ativacao local do frontend, mas elas NAO alteram o launcher automaticamente.\r\n"
         "Depois de uma validacao online bem-sucedida, a mesma origem/SHA pode ser reutilizada durante perda de internet para o shell offline.\r\n"
         "O token do agente e a identidade do posto sao gerados somente no computador de destino e NAO vem dentro deste ZIP.\r\n"
         "1. Pare agente/monitor da R12.\r\n"
@@ -282,12 +285,15 @@ def _payload(frontend_sha: str) -> dict[str, bytes]:
             "non_destructive_restore_drill": True,
             "stable_workstation_identity": True,
             "retention_mode": "observe_only",
+            "local_frontend_proof_tools": True,
+            "local_frontend_launcher_default": False,
         },
         "files": {name: digest(data) for name, data in sorted(payload.items())},
         "notes": [
             "does not contain A-MES credentials/session",
             "does not contain runtime SQLite, workstation token or workstation identity",
             "updater validates frozen 3028 hashes before update",
+            "local frontend proof/activation tools are shipped but not activated by launcher",
             "existing installation only; new-PC package remains blocked until factory R12 capture",
             "physical 9/9 remains mandatory before promotion",
         ],
