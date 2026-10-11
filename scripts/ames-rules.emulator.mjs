@@ -93,6 +93,16 @@ try{
   await assertFails(setDoc(doc(supervisor,'workShifts','shift-supervisor'),{name:'blocked'}));
   await assertSucceeds(setDoc(doc(admin,'workShifts','shift-admin'),{name:'allowed'}));
 
+  // Auditoria de admissão é append-only e somente admin pode criá-la/ler.
+  const audit={schema:'central-admission-audit-v1',action:'approve',target_uid:'viewerV2',actor_uid:'adminV2',at:123456,reason:'approved for operation',before:{approval_state:'pending',access_level:'viewer'},after:{approval_state:'approved',access_level:'operator'}};
+  await assertSucceeds(setDoc(doc(admin,'admissionAudit','audit-1'),audit));
+  await assertSucceeds(getDoc(doc(admin,'admissionAudit','audit-1')));
+  await assertFails(getDoc(doc(viewer,'admissionAudit','audit-1')));
+  await assertFails(setDoc(doc(operator,'admissionAudit','audit-2'),{...audit,actor_uid:'operatorV2'}));
+  await assertFails(setDoc(doc(admin,'admissionAudit','audit-3'),{...audit,actor_uid:'someone-else'}));
+  await assertFails(updateDoc(doc(admin,'admissionAudit','audit-1'),{reason:'tampered'}));
+  await assertFails(deleteDoc(doc(admin,'admissionAudit','audit-1')));
+
   // Um usuário v2 não pode promover a própria capacidade/admissão.
   await assertFails(updateDoc(doc(viewer,'users','viewerV2'),{access_level:'engineer'}));
   await assertFails(updateDoc(doc(viewer,'users','viewerV2'),{approval_state:'pending'}));
@@ -104,5 +114,5 @@ try{
   const escalated=auth('newEscalated','new2@example.test',true);
   await assertFails(setDoc(doc(escalated,'users','newEscalated'),{uid:'newEscalated',name:'Bad',...v2('new2@example.test','operator','approved')}));
 
-  console.log('PASS: legacy compatibility + v2 verified/approved admission + viewer/operator/engineer/supervisor/admin capabilities + MES authority');
+  console.log('PASS: legacy compatibility + v2 verified/approved admission + RBAC capabilities + append-only admission audit + MES authority');
 }finally{await env.cleanup();}
