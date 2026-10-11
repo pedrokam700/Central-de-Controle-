@@ -19,13 +19,15 @@ test('Auth e Firestore persistentes são preparados antes do app.js',()=>{
   assert.ok(boot.indexOf('initializeFirestore') < boot.indexOf('await import'));
 });
 
-test('build publicado troca entrada direta pelo bootstrap offline',()=>{
+test('build publicado troca entrada direta pelo bootstrap offline com guard externo',()=>{
   assert.match(build,/offline-bootstrap\.mjs/);
-  assert.match(build,/source\.replace\(appTag,bootGuard\+'\\n'\+bootstrapTag\)/);
+  assert.match(build,/const bootGuardTag='<script id="central-runtime-boot-guard" src="\/Central-de-Controle-\/central-runtime-boot-guard\.js\?v=15\.1\.13\.48"><\/script>'/);
+  assert.match(build,/source\.replace\(appTag,bootGuardTag\+'\\n'\+bootstrapTag\)/);
+  assert.doesNotMatch(build,/const bootGuard=`<script/);
 });
 
 test('service worker guarda shell nativo, outbox H2 composto e SDK Firebase exato, sem wildcard CDN',()=>{
-  for(const asset of ["BASE+'offline-bootstrap.mjs'","BASE+'app.js'","BASE+'core/offline-outbox.mjs'","BASE+'core/offline-domain-write.mjs'","BASE+'ames/console-view.mjs'","BASE+'ames/console-specialized-views.mjs'"]){
+  for(const asset of ["BASE+'offline-bootstrap.mjs'","BASE+'app.js'","BASE+'cora-build-guard.js'","BASE+'central-runtime-boot-guard.js'","BASE+'root-entry.js'","BASE+'core/offline-outbox.mjs'","BASE+'core/offline-domain-write.mjs'","BASE+'ames/console-view.mjs'","BASE+'ames/console-specialized-views.mjs'"]){
     assert.ok(sw.includes(asset),`asset offline ausente: ${asset}`);
   }
   for(const url of [
