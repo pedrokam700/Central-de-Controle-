@@ -16,6 +16,7 @@
     import {buildSignupProfile,evaluateSessionAdmission} from './core/session-admission.mjs';
     import {migrateLegacyProfile,approveV2Profile,denyV2Profile,changeV2AccessLevel} from './core/admission-admin.mjs';
     import {assertFirestoreWriteAllowed} from './core/firestore-write-policy.mjs';
+    import {legacyAccountMigrationInventory,legacyMigrationProgress} from './core/legacy-account-migration.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc as firebaseAddDoc, onSnapshot, doc, deleteDoc as firebaseDeleteDoc, updateDoc as firebaseUpdateDoc, setDoc as firebaseSetDoc, getDoc, getDocs, query, where, writeBatch as firebaseWriteBatch, runTransaction, arrayUnion
@@ -2591,6 +2592,49 @@
       if(account?.generation==='v2')return adminAccessLevelLabel(account.accessLevel);
       return canAdminister()?adminUiText('Administrador','Administrator'):adminUiText('Usuário legado','Legacy user');
     }
+    function renderLegacyMigrationStatus(adminSection){
+      if(!adminSection)return;
+      let host=adminSection.querySelector('#adminLegacyMigrationStatus');
+      if(!host){
+        host=document.createElement('div');
+        host.id='adminLegacyMigrationStatus';
+        host.className='panel';
+        host.style.marginBottom='12px';
+        adminSection.querySelector('.section-head')?.after(host);
+      }
+      const inventory=legacyAccountMigrationInventory(users);
+      const progress=legacyMigrationProgress(inventory);
+      let tone='var(--muted)',statusTitle,statusBody;
+      if(inventory.total===0){
+        statusTitle=adminUiText('Inventário ainda vazio','Inventory not loaded yet');
+        statusBody=adminUiText('Nenhuma conta foi carregada. A remoção do fallback permanece bloqueada.','No accounts are loaded. Fallback removal remains blocked.');
+      }else if(inventory.legacy_total>0){
+        tone='var(--warning, #9a6b00)';
+        statusTitle=adminUiText('Migração de acesso em andamento','Access migration in progress');
+        statusBody=currentLanguage==='en-US'
+          ? inventory.legacy_total+' legacy account(s) still require an explicit administrator decision ('+inventory.legacy_active+' active, '+inventory.legacy_disabled+' disabled). The legacy fallback remains required.'
+          : inventory.legacy_total+' conta(s) legada(s) ainda exigem decisão explícita do administrador ('+inventory.legacy_active+' ativa(s), '+inventory.legacy_disabled+' desativada(s)). O fallback legado continua obrigatório.';
+      }else if(inventory.v2_invalid>0){
+        tone='var(--danger)';
+        statusTitle=adminUiText('Perfis V2 inválidos encontrados','Invalid V2 profiles found');
+        statusBody=currentLanguage==='en-US'
+          ? inventory.v2_invalid+' invalid V2 profile(s) must be corrected before fallback removal can even be considered.'
+          : inventory.v2_invalid+' perfil(is) V2 inválido(s) precisam ser corrigidos antes de sequer considerar remover o fallback.';
+      }else{
+        tone='var(--success, #197244)';
+        statusTitle=adminUiText('Inventário sem contas legadas','No legacy accounts in inventory');
+        statusBody=adminUiText('Todas as contas carregadas estão em V2. Isso apenas libera a próxima validação; remover o fallback continua exigindo regressão GREEN e promoção separada.','All loaded accounts are V2. This only unlocks the next validation; removing the fallback still requires GREEN regression evidence and a separate promotion decision.');
+      }
+      host.innerHTML='<div style="padding:14px 16px;display:grid;gap:10px">'
+        +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">'
+          +'<div><strong>'+esc(statusTitle)+'</strong><div class="muted" style="font-size:11px;margin-top:4px">'+esc(statusBody)+'</div></div>'
+          +'<span class="status '+(inventory.fallback_removal_allowed?'done':'waiting')+'">'+esc(adminUiText('V2 '+inventory.v2_total+'/'+inventory.total,'V2 '+inventory.v2_total+'/'+inventory.total))+'</span>'
+        +'</div>'
+        +'<div style="height:7px;background:var(--soft);border-radius:999px;overflow:hidden"><div style="height:100%;width:'+progress+'%;background:'+tone+';transition:width .2s ease"></div></div>'
+        +'<div class="muted" style="font-size:10px">'+esc(adminUiText('Sem migração automática · sem nível sugerido · decisão por conta','No automatic migration · no suggested level · per-account decision'))+'</div>'
+      +'</div>';
+    }
+
     function adminUserAccessMeta(user){
       const v2=Number(user?.admission_version)===2;
       if(!v2){
@@ -2669,6 +2713,7 @@
       adminSection.classList.toggle('hidden', !isAdmin);
 
       if (isAdmin) {
+        renderLegacyMigrationStatus(adminSection);
         document.querySelector('#adminUserRows').innerHTML = users.map(adminUserRowHtml).join('');
       }
     }
