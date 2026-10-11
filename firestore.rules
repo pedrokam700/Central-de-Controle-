@@ -11,7 +11,8 @@ service cloud.firestore {
     }
 
     function isV2Profile() {
-      return userProfile().data.admission_version == 2;
+      return userProfile().data.keys().hasAny(['admission_version'])
+        && userProfile().data.admission_version == 2;
     }
 
     function validV2Access(level) {
@@ -68,7 +69,6 @@ service cloud.firestore {
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.disabled == false
         && (
-          // Compatibilidade: clientes atuais continuam criando o perfil legado.
           (
             !('admission_version' in request.resource.data)
             && (
@@ -80,7 +80,6 @@ service cloud.firestore {
             )
           )
           ||
-          // Novo fluxo: nasce pendente/viewer e só fica ativo após verificação + aprovação.
           (
             request.resource.data.admission_version == 2
             && request.resource.data.role == 'user'
@@ -98,8 +97,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Dados de trabalho compartilhados pela equipe autenticada. Perfis legados
-    // preservam o comportamento atual; perfis v2 passam a obedecer capacidades.
     match /products/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if canEngineerWrite();
@@ -133,8 +130,6 @@ service cloud.firestore {
       allow create, update, delete: if canOperationalWrite();
     }
 
-    // MES v2: cada usuário/posto só escreve no próprio namespace. As partes já
-    // sanitizadas podem ser lidas por qualquer usuário ativo da mesma Central.
     match /amesUsers/{ownerId}/lines/{lineId} {
       function owner() {
         return canOperationalWrite() && request.auth.uid == ownerId && mesLine(lineId);
@@ -161,8 +156,6 @@ service cloud.firestore {
       allow delete: if false;
 
       match /snapshots/{snapshotKey}/parts/{partId} {
-        // Leitura de dados já coletados/sanitizados é compartilhada; escrita
-        // continua restrita ao dono do namespace e exige capacidade operacional.
         allow read: if activeUser() && mesLine(lineId);
         allow create: if owner()
           && request.resource.data.keys().hasOnly(['owner_uid','line_id','key','index','data'])
@@ -176,8 +169,6 @@ service cloud.firestore {
       }
     }
 
-    // Ponte de leitura da equipe: um único head sanitizado por linha aponta para
-    // as partes do usuário/posto que publicou a evidência mais recente.
     match /amesTeamLines/{lineId} {
       function validTeamHead() {
         let d = request.resource.data;
