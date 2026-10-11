@@ -1,7 +1,7 @@
 {
   "schema": "central-rbac-readiness-reconciled-v1",
   "reconciliation_commit": "adafe0a2564f3f088e5d7e1f36365f103e93ae89",
-  "status": "full_ci_pending",
+  "status": "full_ci_superseded_by_capability_stage_green",
   "evidence": {
     "h2_full_ci_run": 38153144329,
     "session_admission_full_ci_run": 38154172207,
@@ -18,7 +18,7 @@
   },
   "remaining_admission_work": [
     "inventory and migrate active legacy accounts one-by-one with explicit administrator-selected access level",
-    "make write controls capability-aware for viewer/operator/engineer UX while Rules remain server authority",
     "remove legacy fallback only after every active account is migrated and regression evidence is green"
-  ]
+  ],
+  "capability_write_ui_full_ci_run": 38155936063
 }

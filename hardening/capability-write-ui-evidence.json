@@ -1,7 +1,7 @@
 {
   "schema": "central-capability-write-ui-evidence-v1",
   "code_commit": "2cddc15cbbe62e577b3e581440059a11fcae7778",
-  "status": "focused_green_full_ci_pending",
+  "status": "full_green",
   "focused_validation": {
     "app_parse": "green",
     "write_policy_unit_tests": "green",
@@ -32,5 +32,12 @@
     "firestore.rules",
     "sw.js"
   ],
-  "promotion_note": "Do not remove the RBAC capability-UX readiness item until the full Central Quality Gate and Firestore E2E pass on a descendant containing code_commit. Firestore Rules remain the server authority and are not published by this change."
+  "promotion_note": "Capability-aware client UX and write guards are GREEN internally. Firestore Rules remain final authority and were not published. RBAC stays partial until legacy-account migration is completed and the compatibility fallback can be removed safely.",
+  "full_ci": {
+    "run_id": 38155936063,
+    "descendant_sha": "558b1c4760ff524f1d94921c863d55ba98083a38",
+    "static_quality": "success",
+    "firestore_e2e": "success",
+    "preview_smoke": "skipped_push"
+  }
 }

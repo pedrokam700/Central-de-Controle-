@@ -93,7 +93,15 @@
         "admin UI authority uses capabilities.administer instead of currentAccount.role",
         "user-management UI supports explicit legacy migration, approve/reapprove, deny and access-level change",
         "user profile patch and admissionAudit append commit atomically in one Firestore batch",
-        "admin UI blocks self-escalation and self-lockout"
+        "admin UI blocks self-escalation and self-lockout",
+        "client Firestore write policy mirrors operational, technical and admin Rules capability classes",
+        "direct Firestore writes and write batches are capability-guarded client-side before network submission",
+        "unknown client write collections fail closed instead of inheriting permission",
+        "viewer write controls are read-only/hidden or blocked with capability feedback",
+        "operator UX permits operational writes but blocks technical/admin writes",
+        "engineer UX permits operational plus technical writes but blocks admin writes",
+        "command palette and primary write modals are capability-filtered",
+        "Firestore Rules remain final server authority"
       ],
       "evidence": [
         "firestore.rules",
@@ -108,16 +116,20 @@
         "scripts/ames-session-admission-app.test.mjs",
         "scripts/ames-admission-admin-app.test.mjs",
         "hardening/session-admission-app-evidence.json",
-        "hardening/admission-admin-ui-evidence.json"
+        "hardening/admission-admin-ui-evidence.json",
+        "core/firestore-write-policy.mjs",
+        "scripts/ames-firestore-write-policy.test.mjs",
+        "scripts/ames-capability-write-ui.test.mjs",
+        "hardening/capability-write-ui-evidence.json"
       ],
       "remaining": [
         "inventory and migrate active legacy accounts one-by-one with explicit administrator-selected access level",
-        "make write controls capability-aware for viewer/operator/engineer UX while Rules remain server authority",
         "remove legacy fallback only after every active account is migrated and regression evidence is green"
       ],
       "full_ci_runs": [
         38154172207,
-        38154816019
+        38154816019,
+        38155936063
       ]
     },
     "sqlite_migrations": {
