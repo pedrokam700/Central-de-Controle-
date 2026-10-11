@@ -1,4 +1,5 @@
 import process from 'node:process';
+import crypto from 'node:crypto';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -18,6 +19,7 @@ function args(argv){
 }
 
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const sha256=text=>crypto.createHash('sha256').update(text).digest('hex');
 
 export async function fetchBounded(url,{maxRedirects=4,fetcher=fetch}={}){
   let current=new URL(url),redirects=0;
@@ -48,6 +50,20 @@ async function probe(origin,expected,{fetcher=fetch,maxRedirects=4}={}){
   const manifest=await release.response.json();
   if(String(manifest.sha||'').toLowerCase()!==expected.toLowerCase())throw Error(`sha_mismatch:${manifest.sha||'missing'}`);
 
+  const identityResponse=await fetchBounded(`${base}/release-identity.json?smoke=${Date.now()}`,{fetcher,maxRedirects});
+  if(!identityResponse.response.ok)throw Error(`release_identity_http_${identityResponse.response.status}`);
+  const identityType=identityResponse.response.headers.get('content-type')||'';
+  if(!/json/i.test(identityType))throw Error(`release_identity_not_json:${identityType}`);
+  const identityText=await identityResponse.response.text();
+  let identity;
+  try{identity=JSON.parse(identityText);}catch{throw Error('release_identity_invalid_json');}
+  if(identity.schema!=='central-release-identity-v1')throw Error(`release_identity_schema:${identity.schema||'missing'}`);
+  if(String(identity.frontend_sha||'').toLowerCase()!==expected.toLowerCase())throw Error(`release_identity_sha_mismatch:${identity.frontend_sha||'missing'}`);
+  if(identity.factory_gate_required!==true)throw Error('release_identity_factory_gate_missing');
+  if(manifest.release_identity_schema!==identity.schema)throw Error('release_identity_manifest_schema_mismatch');
+  if(manifest.release_identity_sha256!==sha256(identityText))throw Error('release_identity_digest_mismatch');
+  if(String(manifest.build||'')!==String(identity.central_build||''))throw Error('release_identity_build_mismatch');
+
   const page=await fetchBounded(`${base}/Central-de-Controle-/`,{fetcher,maxRedirects});
   if(!page.response.ok)throw Error(`central_http_${page.response.status}`);
   const contentType=page.response.headers.get('content-type')||'';
@@ -57,7 +73,7 @@ async function probe(origin,expected,{fetcher=fetch,maxRedirects=4}={}){
   if(!/authLogin|Entrar na central|Central de trabalho/i.test(html))throw Error('central_shell_marker_missing');
   if(/ERR_TOO_MANY_REDIRECTS/i.test(html))throw Error('redirect_error_document');
 
-  return {origin:base,sha:manifest.sha,releaseRedirects:release.redirects,pageRedirects:page.redirects,finalUrl:page.url};
+  return {origin:base,sha:manifest.sha,releaseIdentitySha256:manifest.release_identity_sha256,releaseRedirects:release.redirects,identityRedirects:identityResponse.redirects,pageRedirects:page.redirects,finalUrl:page.url};
 }
 
 export async function waitForPreview(origins,expected,{waitMs=180000,maxRedirects=4,fetcher=fetch,log=console.log}={}){
