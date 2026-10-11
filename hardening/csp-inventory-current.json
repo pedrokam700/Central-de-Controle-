@@ -1,0 +1,37 @@
+{
+  "schema": "central-csp-inventory-v1",
+  "scanned_files": 73,
+  "external_origins": [
+    "http://127.0.0.1:8765",
+    "http://172.29.185.215",
+    "https://...",
+    "https://cdn.sheetjs.com",
+    "https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app",
+    "https://central.invalid",
+    "https://deploy-preview-23--productcontrolcenter.netlify.app",
+    "https://www.gstatic.com"
+  ],
+  "approved_operational_http_references": [
+    "http://172.29.185.215/asymes"
+  ],
+  "insecure_non_local_urls": [],
+  "inline_scripts": 1,
+  "inline_script_files": [
+    {
+      "file": "index.html",
+      "count": 1
+    }
+  ],
+  "inline_styles": 15,
+  "inline_style_files": [
+    {
+      "file": "index.html",
+      "count": 15
+    }
+  ],
+  "eval_like": 0,
+  "eval_files": [],
+  "dynamic_script_elements": 0,
+  "blocking_csp_ready": false,
+  "mode": "inventory_only"
+}
