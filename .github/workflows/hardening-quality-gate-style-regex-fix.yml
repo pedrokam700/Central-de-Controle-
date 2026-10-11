@@ -1,0 +1,71 @@
+name: One-shot quality gate stylesheet basename fix
+
+on:
+  push:
+    branches:
+      - hardening/p0-production-readiness
+    paths:
+      - .github/workflows/hardening-quality-gate-style-regex-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify exact branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hardening/p0-production-readiness
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
+      - name: Narrow styles.css guard to exact basename
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('scripts/quality-gate.mjs')
+          text=p.read_text()
+          old=r'''  !/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["'][^"']*styles\.css/i.test(index),'''
+          new=r'''  !/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["'](?:[^"']*\/)?styles\.css(?:[?#][^"']*)?["']/i.test(index),'''
+          if text.count(old)!=1:
+              raise SystemExit(f'expected exactly one legacy styles.css guard, found {text.count(old)}')
+          p.write_text(text.replace(old,new))
+      - name: Validate exact regression and CSP contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install openpyxl==3.1.5
+          PYTHON_BIN=python3 node scripts/quality-gate.mjs
+          node --test \
+            scripts/ames-csp-inventory.test.mjs \
+            scripts/ames-csp-script-extraction.test.mjs \
+            scripts/ames-csp-style-extraction.test.mjs
+          git diff --check
+      - name: Remove temporary diagnostics and write workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/hardening-quality-gate-diagnostic.yml
+          rm -f .github/workflows/hardening-quality-gate-style-regex-fix.yml
+          git diff --check
+      - name: Commit only after validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hardening/p0-production-readiness
+          test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo "No quality gate fix to commit"; exit 1; }
+          git commit -m "Hardening: narrow styles.css quality guard"
+          git push origin HEAD:hardening/p0-production-readiness
