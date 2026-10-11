@@ -13,6 +13,7 @@
     import {createOfflineOutbox,createBrowserOutboxStorage} from './core/offline-outbox.mjs';
     import {offlineWritePlan,routineFailureLinkEffect} from './core/offline-domain-write.mjs';
     import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
+    import {buildSignupProfile,evaluateSessionAdmission} from './core/session-admission.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction, arrayUnion
@@ -72,6 +73,7 @@
     // podem disparar juntos. Mantemos uma única inicialização por UID.
     let finishLoginPromise = null;
     let finishLoginUid = null;
+    let registrationInProgress = false;
     let authReady = false;
     let activeProduct = null;
     let activeView = 'home';
@@ -376,30 +378,33 @@
       const ref = doc(db, 'users', firebaseUser.uid);
       const snap = await withTimeout(getDoc(ref), 12000, 'Validação do perfil');
       const email = (firebaseUser.email || '').toLowerCase();
-      const isAdminEmail = email === ADMIN_EMAIL;
 
       if (snap.exists()) {
         const data = snap.data() || {};
         return {
+          ...data,
           docId: firebaseUser.uid,
+          uid: data.uid || firebaseUser.uid,
           name: data.name || legacy?.name || firebaseUser.displayName || email.split('@')[0],
           email: data.email || email,
-          role: data.role || (isAdminEmail ? 'admin' : 'user'),
+          role: data.role === 'admin' ? 'admin' : 'user',
           disabled: Boolean(data.disabled),
           createdAt: data.createdAt || now(),
           updatedAt: data.updatedAt || now()
         };
       }
 
+      const createdAt = now();
       const profile = {
-        name: legacy?.name || firebaseUser.displayName || email.split('@')[0],
-        email,
-        role: isAdminEmail ? 'admin' : 'user',
-        disabled: false,
-        createdAt: now(),
-        updatedAt: now()
+        ...buildSignupProfile({
+          uid: firebaseUser.uid,
+          email,
+          name: legacy?.name || firebaseUser.displayName || email.split('@')[0]
+        }),
+        createdAt,
+        updatedAt: createdAt
       };
-      await withTimeout(setDoc(ref, profile, { merge: true }), 12000, 'Criação do perfil');
+      await withTimeout(setDoc(ref, profile), 12000, 'Criação do perfil');
       return { docId: firebaseUser.uid, ...profile };
     }
 
@@ -463,10 +468,27 @@
       unsubscribeData.push(subscribeToSession(collection(db, 'users'), async snapshot => {
         users = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         const me = currentAuthUser ? users.find(u => u.docId === currentAuthUser.uid) : null;
-        if (me && currentAccount) {
-          currentAccount = { ...currentAccount, name: me.name, email: me.email, role: me.role };
-          if (me.disabled) {
-            alert('Sua conta foi desativada por um administrador.');
+        if (me && currentAccount && currentAuthUser) {
+          try {
+            const hadMesPublish = Boolean(currentAccount.capabilities?.publish_mes);
+            const admission = evaluateSessionAdmission({
+              firebaseUser: currentAuthUser,
+              profile: { ...me, uid: me.uid || me.docId }
+            });
+            currentAccount = {
+              ...currentAccount,
+              name: admission.name || me.name,
+              email: admission.email || me.email,
+              role: admission.role,
+              generation: admission.generation,
+              admissionState: admission.admission_state,
+              accessLevel: admission.access_level,
+              capabilities: admission.capabilities
+            };
+            if (admission.capabilities.publish_mes && !hadMesPublish) startMesSync(currentAuthUser.uid);
+            if (!admission.capabilities.publish_mes && hadMesPublish) mesSync?.stop();
+          } catch (error) {
+            console.warn('[Central] Sessão invalidada por alteração de admissão/RBAC:', error?.code || error?.message || error);
             await signOut(auth);
             return;
           }
@@ -1346,21 +1368,33 @@
       finishLoginUid = firebaseUser.uid;
       finishLoginPromise = (async () => {
         const profile = await ensureUserProfile(firebaseUser, legacyUser);
-        if (profile.disabled) {
-          await signOut(auth);
-          alert('Esta conta está desativada. Procure um administrador.');
-          return null;
+        let admission;
+        try {
+          admission = evaluateSessionAdmission({ firebaseUser, profile });
+        } catch (error) {
+          try { await signOut(auth); } catch {}
+          throw error;
         }
 
         if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();consoleMesView?.clear();clearSessionData(state);}
         currentAuthUser = firebaseUser;
-        currentAccount = { uid: firebaseUser.uid, name: profile.name, email: profile.email, role: profile.role };
+        currentAccount = {
+          uid: firebaseUser.uid,
+          name: admission.name || profile.name,
+          email: admission.email || profile.email,
+          role: admission.role,
+          generation: admission.generation,
+          admissionState: admission.admission_state,
+          accessLevel: admission.access_level,
+          capabilities: admission.capabilities
+        };
 
         // Desbloqueie a interface assim que a autenticação e o perfil forem válidos.
         // Migrações e sincronizações secundárias nunca podem prender a tela de login.
         authReady = true;
         syncFirestore();
-        startMesSync(firebaseUser.uid);
+        if (admission.capabilities.publish_mes) startMesSync(firebaseUser.uid);
+        else mesSync?.stop();
         renderAccount();
         render();
 
@@ -1443,17 +1477,26 @@
       const name = form.get('name').trim();
       const email = form.get('email').trim().toLowerCase();
       const password = form.get('password');
+      registrationInProgress = true;
       try {
         const credential = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, 'users', credential.user.uid), {
-          name, email, role: email === ADMIN_EMAIL ? 'admin' : 'user', disabled: false, createdAt: now(), updatedAt: now()
-        }, { merge: true });
+        const createdAt = now();
+        const profile = {
+          ...buildSignupProfile({ uid: credential.user.uid, email, name }),
+          createdAt,
+          updatedAt: createdAt
+        };
+        await setDoc(doc(db, 'users', credential.user.uid), profile);
         try { await sendEmailVerification(credential.user); } catch (verificationError) { console.warn('Não foi possível enviar verificação:', verificationError); }
-        await finishLogin(credential.user);
-        alert(email === ADMIN_EMAIL ? 'Conta de administrador criada e vinculada ao e-mail informado.' : 'Conta criada com sucesso.');
+        await signOut(auth);
+        alert('Conta criada. Confirme seu e-mail corporativo e aguarde a aprovação de um administrador para acessar a Central.');
         formElement.reset();
+        showAuthScreen('login');
       } catch (error) {
+        try { if (auth.currentUser) await signOut(auth); } catch {}
         alert(authErrorMessage(error));
+      } finally {
+        registrationInProgress = false;
       }
     });
 
@@ -1535,6 +1578,7 @@
     if (initialPasswordResetCode) showAuthScreen('reset');
 
     onAuthStateChanged(auth, async firebaseUser => {
+      if (firebaseUser && registrationInProgress) return;
       if (!firebaseUser) {
         authReady = true;
         clearDataListeners();
