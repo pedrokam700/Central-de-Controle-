@@ -510,10 +510,10 @@
     },
     "app_modularization": {
       "priority": "P1",
-      "status": "in_progress_first_slice_green",
+      "status": "in_progress_two_slices_green",
       "remaining": [
         "continue gradual extraction in small behavior-preserving slices without framework rewrite",
-        "prefer already-stabilized boundaries such as guarded Firestore client and auth/session orchestration before feature-heavy UI extraction",
+        "extract profile/auth services without moving listener/UI orchestration until each boundary is independently tested",
         "keep each extraction behind focused tests and full CI before starting the next slice"
       ],
       "green": [
@@ -523,17 +523,28 @@
         "app.js contains zero unqualified raw fetch primitives after extraction",
         "offline shell caches the extracted browser transport",
         "extraction preserved routes, auth token handling, GET/POST semantics, abort signals and backend error behavior",
-        "first modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E"
+        "first modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E",
+        "guarded Firestore client extracted from app.js into core/firestore-guarded-client.mjs",
+        "self-profile bootstrap remains allowed before currentAccount capabilities exist",
+        "capability checks execute before raw add/set/update/delete and batch mutations",
+        "unknown collections remain fail-closed and actor/capabilities are read dynamically",
+        "offline shell caches the extracted guarded Firestore client",
+        "second modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E"
       ],
       "evidence": [
         "core/cora-browser-transport.mjs",
         "scripts/ames-cora-browser-transport.test.mjs",
         "scripts/ames-cora-network-boundary-app.test.mjs",
         "scripts/ames-cora-direct-fetch-boundary-app.test.mjs",
-        "hardening/cora-browser-transport-modularization-evidence.json"
+        "hardening/cora-browser-transport-modularization-evidence.json",
+        "core/firestore-guarded-client.mjs",
+        "scripts/ames-firestore-guarded-client.test.mjs",
+        "scripts/ames-capability-write-ui.test.mjs",
+        "hardening/firestore-guarded-client-modularization-evidence.json"
       ],
       "full_ci_runs": [
-        38182402337
+        38182402337,
+        38182776966
       ]
     },
     "r12_engine_consolidation": {

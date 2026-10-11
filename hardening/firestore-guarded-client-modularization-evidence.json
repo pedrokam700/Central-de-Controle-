@@ -2,7 +2,7 @@
   "schema": "central-hardening-evidence-v1",
   "branch": "hardening/p0-production-readiness",
   "subject": "app_modularization_guarded_firestore_client",
-  "status": "focused_green_full_ci_pending",
+  "status": "green",
   "validated_parent": "b8c3b6ab04a81df4a2c9a3e125d465eb2553e4e1",
   "focused_run": 38182747659,
   "assertions": [
@@ -23,9 +23,12 @@
     "production_rules_publish_allowed": false
   },
   "remaining": [
-    "full Static Quality on a normal descendant of the bot-produced extraction commit",
-    "full Firestore Rules/cross-PC E2E on the same descendant",
-    "reconcile app_modularization readiness after full CI",
-    "continue gradual extraction only after this slice is GREEN"
-  ]
+    "continue modularization only in small behavior-preserving slices"
+  ],
+  "full_ci_run": 38182776966,
+  "gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  }
 }
