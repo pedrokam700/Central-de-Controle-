@@ -13,6 +13,9 @@ import hardening
 import local_security
 import operational_calendar
 
+HARDENED_CANDIDATE_VERSION = "0.5.25-rc1"
+entry.a.CANDIDATE_VERSION = HARDENED_CANDIDATE_VERSION
+
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
@@ -103,6 +106,7 @@ class HardenedHandler(entry.Handler):
                     {
                         "ok": True,
                         "hardening": "H1",
+                        "candidate_version": HARDENED_CANDIDATE_VERSION,
                         "local_security": local_security.public_status(AGENT_TOKEN_PATH),
                         "operational_calendar": operational_calendar.public_contract(entry.a.CONFIG),
                         "current_shift": operational_calendar.shift_for(entry.a.CONFIG),
