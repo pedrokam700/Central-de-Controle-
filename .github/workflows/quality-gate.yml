@@ -43,6 +43,9 @@ jobs:
       - name: Run stable workstation identity tests
         run: python3 scripts/agent-workstation-identity.test.py
 
+      - name: Run retention governance tests
+        run: python3 scripts/agent-retention-policy.test.py
+
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
 
