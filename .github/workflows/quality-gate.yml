@@ -69,6 +69,74 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  node-contract-diagnostics:
+    name: Node contracts · ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: core-data-sync
+            files: >-
+              scripts/ames-agent.test.mjs
+              scripts/ames-base-catalog.test.mjs
+              scripts/ames-cache.test.mjs
+              scripts/ames-capabilities.test.mjs
+              scripts/ames-data.test.mjs
+              scripts/ames-hardening.test.mjs
+              scripts/ames-offline-central.test.mjs
+              scripts/ames-offline-outbox.test.mjs
+              scripts/ames-sync.test.mjs
+          - group: native-ui
+            files: >-
+              scripts/ames-central-context.test.mjs
+              scripts/ames-console-mobile.test.mjs
+              scripts/ames-console-parity.test.mjs
+              scripts/ames-console.test.mjs
+              scripts/ames-cora.test.mjs
+              scripts/ames-daily.test.mjs
+              scripts/ames-dashboard.test.mjs
+              scripts/ames-evidence-shortcuts.test.mjs
+              scripts/ames-failures.test.mjs
+              scripts/ames-knowledge-architecture.test.mjs
+              scripts/ames-monitor-runtime.test.mjs
+              scripts/ames-product.test.mjs
+              scripts/ames-refresh-controls.test.mjs
+              scripts/ames-trace-copy.test.mjs
+          - group: process-trace-reuse
+            files: >-
+              scripts/ames-factory-gate.test.mjs
+              scripts/ames-failure-process.test.mjs
+              scripts/ames-process-capability.test.mjs
+              scripts/ames-process-r11.test.mjs
+              scripts/ames-process-scope.test.mjs
+              scripts/ames-provenance.test.mjs
+              scripts/ames-removed-defects.test.mjs
+              scripts/ames-reuse-drilldown.test.mjs
+              scripts/ames-sn-contract.test.mjs
+              scripts/ames-trace-scope.test.mjs
+              scripts/ames-trace.test.mjs
+          - group: deploy-workstation
+            files: >-
+              scripts/ames-candidate-preview.test.mjs
+              scripts/ames-deploy-routing.test.mjs
+              scripts/ames-offline-shell.test.mjs
+              scripts/ames-onboarding.test.mjs
+              scripts/ames-preview-origin.test.mjs
+              scripts/ames-r12-capture.test.mjs
+              scripts/ames-r12-migration-bundle.test.mjs
+              scripts/ames-release-build.test.mjs
+              scripts/ames-workstation-bootstrap.test.mjs
+              scripts/ames-workstation-config.test.mjs
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Run ${{ matrix.group }} contracts
+        run: node --test --test-isolation=none ${{ matrix.files }}
+
   sync-emulator:
     name: Agent and sync E2E with Firestore Rules
     runs-on: ubuntu-latest
