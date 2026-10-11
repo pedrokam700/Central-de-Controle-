@@ -482,7 +482,7 @@
     },
     "multi_collector_authority": {
       "priority": "P1",
-      "status": "partial_groundwork_not_enforced",
+      "status": "partial_fence_metadata_green_enforcement_not_active",
       "green": [
         "site/line lease contract with exact registered line identities",
         "stable workstation_id participates in collector identity",
@@ -491,7 +491,13 @@
         "Firestore Rules reject early takeover, stale generation, delete and invalid workstation identity",
         "transactional lease client supports acquire/renew/expired takeover",
         "expired same-workstation renewal retries once as takeover without infinite loop",
-        "Rules emulator and pure client tests are green"
+        "Rules emulator and pure client tests are green",
+        "publication fence contract validates exact line, owner, workstation, generation and deterministic fencing token",
+        "MES publication can carry optional collector_fence metadata while the default unfenced runtime remains backward-compatible",
+        "collector generation participates in fenced publication identity so takeover generations cannot silently reuse the same queued publication id",
+        "optional collectorFenceForLine recaptures unchanged MES content when collector authority generation changes",
+        "publication fence classifies current, stale, unknown and unfenced states without activating transport enforcement",
+        "offline shell precaches the publication-fence dependency chain including operational registry and collector authority"
       ],
       "evidence": [
         "ames/data/collector-authority.mjs",
@@ -499,13 +505,21 @@
         "firestore.rules",
         "scripts/ames-collector-authority.test.mjs",
         "scripts/ames-collector-lease-client.test.mjs",
-        "scripts/ames-rules.emulator.mjs"
+        "scripts/ames-rules.emulator.mjs",
+        "ames/data/publication-fence.mjs",
+        "ames/sync.mjs",
+        "scripts/ames-publication-fence.test.mjs",
+        "sw.js",
+        "hardening/mes-publication-fence-groundwork-evidence.json"
       ],
       "remaining": [
         "do not enforce lease on amesUsers/amesTeamLines publication until conflict scenarios are physically proven",
-        "bind generation/workstation fence to MES head publication",
+        "wire the live collector lease generation/workstation into collectorFenceForLine in an observe-only runtime path before any enforcement",
         "reject stale offline publisher after another workstation takes the line",
         "physical multi-PC same-line conflict and recovery test"
+      ],
+      "full_ci_runs": [
+        38185679744
       ]
     },
     "app_modularization": {
