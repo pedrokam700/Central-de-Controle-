@@ -7,6 +7,7 @@ const build=fs.readFileSync('scripts/build-static.mjs','utf8');
 const sw=fs.readFileSync('sw.js','utf8');
 const app=fs.readFileSync('app.js','utf8');
 const outbox=fs.readFileSync('core/offline-outbox.mjs','utf8');
+const domain=fs.readFileSync('core/offline-domain-write.mjs','utf8');
 
 test('Auth e Firestore persistentes são preparados antes do app.js',()=>{
   assert.match(boot,/setPersistence\(getAuth\(app\),browserLocalPersistence\)/);
@@ -23,8 +24,8 @@ test('build publicado troca entrada direta pelo bootstrap offline',()=>{
   assert.match(build,/source\.replace\(appTag,bootGuard\+'\\n'\+bootstrapTag\)/);
 });
 
-test('service worker guarda shell nativo, outbox H2 e SDK Firebase exato, sem wildcard CDN',()=>{
-  for(const asset of ["BASE+'offline-bootstrap.mjs'","BASE+'app.js'","BASE+'core/offline-outbox.mjs'","BASE+'ames/console-view.mjs'","BASE+'ames/console-specialized-views.mjs'"]){
+test('service worker guarda shell nativo, outbox H2 composto e SDK Firebase exato, sem wildcard CDN',()=>{
+  for(const asset of ["BASE+'offline-bootstrap.mjs'","BASE+'app.js'","BASE+'core/offline-outbox.mjs'","BASE+'core/offline-domain-write.mjs'","BASE+'ames/console-view.mjs'","BASE+'ames/console-specialized-views.mjs'"]){
     assert.ok(sw.includes(asset),`asset offline ausente: ${asset}`);
   }
   for(const url of [
@@ -37,16 +38,28 @@ test('service worker guarda shell nativo, outbox H2 e SDK Firebase exato, sem wi
   assert.match(sw,/credentials:'omit'/);
 });
 
-test('escritas operacionais offline usam outbox H2 por UID e replay idempotente',()=>{
+test('escritas operacionais offline usam outbox H2 por UID e replay composto atômico/idempotente',()=>{
   assert.match(app,/\.\/core\/offline-outbox\.mjs/);
+  assert.match(app,/\.\/core\/offline-domain-write\.mjs/);
   assert.match(app,/queueOfflineWrite\('reports'/);
   assert.match(app,/queueOfflineWrite\('operationalFailures'/);
   assert.match(app,/offlineOutbox\.replay\(\{uid,write,sessionIsCurrent\}\)/);
-  assert.match(app,/setDoc\(doc\(db,item\.collection,item\.documentId\),item\.payload\)/);
+  assert.match(app,/offlineWritePlan\(item\)/);
+  assert.match(app,/const plan=offlineWritePlan\(item\),batch=writeBatch\(db\)/);
+  assert.match(app,/batch\.set\(doc\(db,step\.collection,step\.documentId\),step\.payload\)/);
+  assert.match(app,/batch\.update\(doc\(db,step\.collection,step\.documentId\),\{\[step\.field\]:arrayUnion\(step\.value\),updatedAt:step\.updatedAt\}\)/);
+  assert.match(app,/routineFailureLinkEffect\(\{executionKey:origin\.executionKey,failureId:item\.id/);
+  assert.match(app,/queueOfflineWrite\('operationalFailures',item,\{effects:routineEffect\?\[routineEffect\]:\[\]\}\)/);
+  assert.match(app,/batch\.update\(doc\(db,'routineExecutions',routineEffect\.executionKey\),\{linkedFailureIds:arrayUnion\(routineEffect\.failureId\),updatedAt:routineEffect\.linkedAt\}\)/);
   assert.match(app,/window\.addEventListener\('online'/);
   assert.match(outbox,/dbApi\.open\(DB_NAME,DB_VERSION\)/);
   assert.match(outbox,/const DB_VERSION=2/);
   assert.match(outbox,/LEGACY_STORE='queue'/);
   assert.match(outbox,/item\.uid!==uid/);
+  assert.match(outbox,/normalizeOfflineEffects\(effects,base\)/);
+  assert.match(domain,/routine_failure_link/);
+  assert.match(domain,/failureId do efeito não corresponde à falha offline/);
+  assert.match(domain,/executionKey do efeito não corresponde à origem da falha/);
   assert.doesNotMatch(app,/addDoc\(collection\(db,item\.collection\),item\.payload\)/);
+  assert.equal(app.includes("const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedFailureIds||[]),item.id])]"),false);
 });
