@@ -1,0 +1,35 @@
+{
+  "schema": "central-cora-api-dependencies-v1",
+  "status": "frontend_contract_only_backend_identity_pending",
+  "frontend_release": "2.0.0-preview",
+  "backend": {
+    "authoritative_source": null,
+    "service_version": null,
+    "health_endpoint": "/api/health",
+    "version_endpoint": "/api/version",
+    "health_verified": false,
+    "version_verified": false,
+    "promotion_blocking": true
+  },
+  "routes": [
+    { "path": "/api/ai-audit", "methods": ["POST"], "domain": "governance" },
+    { "path": "/api/ai-memory", "methods": ["POST"], "domain": "knowledge" },
+    { "path": "/api/ai-memory/:id/promote", "methods": ["POST"], "domain": "knowledge" },
+    { "path": "/api/ai-metrics", "methods": ["GET"], "domain": "observability" },
+    { "path": "/api/chat-cognitive", "methods": ["POST"], "domain": "cora" },
+    { "path": "/api/failure-analysis", "methods": ["POST"], "domain": "cora" },
+    { "path": "/api/failure-analysis/stream", "methods": ["POST"], "domain": "cora" },
+    { "path": "/api/failure-intake", "methods": ["POST"], "domain": "cora" },
+    { "path": "/api/families/rename", "methods": ["POST"], "domain": "central" },
+    { "path": "/api/generate-image", "methods": ["POST"], "domain": "artifact" },
+    { "path": "/api/generate-slides", "methods": ["POST"], "domain": "artifact" },
+    { "path": "/api/investigation-artifact", "methods": ["POST"], "domain": "artifact" },
+    { "path": "/api/transcribe-audio", "methods": ["POST"], "domain": "media" }
+  ],
+  "rules": {
+    "unknown_frontend_route_is_ci_failure": true,
+    "backend_version_required_before_stable": true,
+    "backend_health_required_before_stable": true,
+    "backend_source_required_before_stable": true
+  }
+}
