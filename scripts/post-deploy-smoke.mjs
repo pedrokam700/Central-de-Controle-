@@ -1,4 +1,6 @@
 import process from 'node:process';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
 
 function args(argv){
   const out={origins:[],sha:'',waitMs:180000,maxRedirects:4};
@@ -46,8 +48,6 @@ async function probe(origin,expected,{fetcher=fetch,maxRedirects=4}={}){
   const manifest=await release.response.json();
   if(String(manifest.sha||'').toLowerCase()!==expected.toLowerCase())throw Error(`sha_mismatch:${manifest.sha||'missing'}`);
 
-  // Test the canonical route that previously produced ERR_TOO_MANY_REDIRECTS,
-  // not only /index.html which can mask routing failures.
   const page=await fetchBounded(`${base}/Central-de-Controle-/`,{fetcher,maxRedirects});
   if(!page.response.ok)throw Error(`central_http_${page.response.status}`);
   const contentType=page.response.headers.get('content-type')||'';
@@ -79,7 +79,8 @@ export async function waitForPreview(origins,expected,{waitMs=180000,maxRedirect
   throw Error(`Nenhum preview publicou e serviu o SHA esperado dentro do limite. ${last.join(' | ')}`);
 }
 
-if(import.meta.url===new URL(`file://${process.argv[1]}`).href){
+const invoked=process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href;
+if(invoked){
   const options=args(process.argv.slice(2));
   waitForPreview(options.origins,options.sha,{waitMs:options.waitMs,maxRedirects:options.maxRedirects})
     .catch(error=>{console.error('POST_DEPLOY_FAIL',error.message);process.exitCode=1;});
