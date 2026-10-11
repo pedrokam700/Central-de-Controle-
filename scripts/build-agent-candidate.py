@@ -6,7 +6,7 @@ from pathlib import Path,PurePosixPath
 import zipfile
 SOURCE_SHA='1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167'
 COLLECTORS={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
-FILES=['agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py']
+FILES=['agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py']
 PRODUCTION_URL='https://central-cora-v2.vercel.app'
 VERCEL_PREVIEW_URL='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
 PR_PREVIEW_URL='https://deploy-preview-23--productcontrolcenter.netlify.app'
@@ -16,6 +16,9 @@ def build(source,destination):
     if destination.exists() or source==destination:raise ValueError('New destination required')
     if hashlib.sha256(source.read_bytes()).hexdigest()!=SOURCE_SHA:raise ValueError('Original ZIP mismatch')
     root=Path(__file__).resolve().parents[1];files={}
+    updater=(root/'ames'/'agent'/'update_candidate.py').read_text(encoding='utf-8')
+    for required in FILES:
+        if f"'{required}'" not in updater:raise ValueError('Candidate/updater contract mismatch: '+required)
     with zipfile.ZipFile(source) as old:
         prefix=next(n[:-len('agent.py')] for n in old.namelist() if n.endswith('/ames-agent/agent.py'));base=prefix[:-len('ames-agent/')]
         for name,digest in COLLECTORS.items():
@@ -59,11 +62,12 @@ def build(source,destination):
             files[base+filename]=('@echo off\r\nsetlocal\r\nif "%~1"=="" (\r\n  echo Uso: '+filename+' "C:\\pasta\\instalacao-existente"\r\n  pause\r\n  exit /b 1\r\n)\r\nwhere py >nul 2>nul\r\nif errorlevel 1 (\r\n  python "%~dp0ames-agent\\update_candidate.py" '+action+' "%~1"\r\n) else (\r\n  py -3 "%~dp0ames-agent\\update_candidate.py" '+action+' "%~1"\r\n)\r\npause\r\n').encode('ascii')
         files[base+'ABRIR_CENTRAL_V2.bat']=('@echo off\r\nstart "" "'+PRODUCTION_URL+'/Central-de-Controle-/"\r\n').encode('ascii')
         files[base+'ABRIR_PREVIEW_PR23.bat']=('@echo off\r\nstart "" "'+VERCEL_PREVIEW_URL+'/Central-de-Controle-/"\r\n').encode('ascii')
+    if any('local_agent_token' in name for name in files):raise ValueError('Workstation token must never be embedded in candidate')
     with zipfile.ZipFile(destination,'x',compression=zipfile.ZIP_DEFLATED) as new:
         for name,data in sorted(files.items()):
             info=zipfile.ZipInfo(name,(2026,10,9,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;new.writestr(info,data)
     with zipfile.ZipFile(destination) as new:assert new.testzip() is None
     print('Candidate:',destination);print('SHA-256:',hashlib.sha256(destination.read_bytes()).hexdigest())
-    print('Exact 3028 retained; R11/R12 3022 contract required; hardening H1 and single-Central bootstrap included.')
+    print('Exact 3028 retained; R11/R12 3022 contract required; hardening H1, workstation token and single-Central bootstrap included.')
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('source');p.add_argument('destination');a=p.parse_args();build(a.source,a.destination)
