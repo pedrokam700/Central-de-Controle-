@@ -1,15 +1,21 @@
 import hashlib
+import importlib.util
 import json
 import pathlib
 import shutil
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ames'/'agent'))
 import update_candidate as updater
 from store import Store
+
+_frontend_spec=importlib.util.spec_from_file_location('frontend_package',ROOT/'scripts'/'frontend_package.py')
+assert _frontend_spec and _frontend_spec.loader
+frontend_package=importlib.util.module_from_spec(_frontend_spec);_frontend_spec.loader.exec_module(frontend_package)
 
 class UpdateTests(unittest.TestCase):
     def test_backup_update_and_rollback_preserve_database_collectors_workstation_and_frontend_gate(self):
@@ -62,5 +68,56 @@ class UpdateTests(unittest.TestCase):
             self.assertFalse((package/'FRONTEND_GATE.json').exists())
             for name in migration_only:self.assertFalse((target/name).exists())
             for name,value in updater.HASHES.items():self.assertEqual(hashlib.sha256((target/name).read_bytes()).hexdigest(),value)
+
+    def _frontend_package(self,root,sha='9'*40):
+        dist=root/'dist';(dist/'Central-de-Controle-').mkdir(parents=True)
+        identity=(json.dumps({'schema':'central-release-identity-v1','frontend_sha':sha},sort_keys=True,separators=(',',':'))+'\n').encode()
+        (dist/'release-identity.json').write_bytes(identity)
+        (dist/'release-build.json').write_text(json.dumps({'sha':sha,'build':'test','release_identity_schema':'central-release-identity-v1','release_identity_sha256':hashlib.sha256(identity).hexdigest()}))
+        (dist/'Central-de-Controle-'/'index.html').write_text('<!doctype html><title>Central</title>')
+        (dist/'Central-de-Controle-'/'app.js').write_text('export const ok=true;')
+        package=root/'frontend.zip';frontend_package.build_package(dist,package,sha)
+        return package,sha
+
+    def test_stage_frontend_verifies_extracts_atomically_and_never_activates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);install=root/'installed';target=install/'ames-agent';target.mkdir(parents=True);(target/'agent.py').write_text('# existing agent')
+            package,sha=self._frontend_package(root)
+            with patch.object(updater.socket,'create_connection') as network_probe:
+                staged=updater.stage_frontend(install,package,sha)
+                network_probe.assert_not_called()
+            self.assertEqual(staged,install/'frontend-packages'/sha)
+            self.assertTrue((staged/'Central-de-Controle-'/'index.html').is_file())
+            marker=json.loads((staged/updater.FRONTEND_STAGE_MARKER).read_text())
+            self.assertEqual(marker['schema'],updater.FRONTEND_STAGE_SCHEMA)
+            self.assertEqual(marker['frontend_sha'],sha)
+            self.assertFalse(marker['activated'])
+            self.assertIsNone(marker['serving_origin'])
+            self.assertEqual(marker['package_sha256'],hashlib.sha256(package.read_bytes()).hexdigest())
+            # Idempotente: staging do mesmo pacote/SHA reutiliza exatamente a mesma pasta.
+            self.assertEqual(updater.stage_frontend(target,package,sha),staged)
+
+    def test_stage_frontend_fails_closed_on_wrong_sha_tamper_or_existing_identity_conflict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);install=root/'installed';target=install/'ames-agent';target.mkdir(parents=True);(target/'agent.py').write_text('# existing agent')
+            package,sha=self._frontend_package(root)
+            with self.assertRaises(ValueError):updater.stage_frontend(install,package,'8'*40)
+            self.assertFalse((install/'frontend-packages'/('8'*40)).exists())
+
+            # Adultera um membro mantendo o manifesto original: verificação deve bloquear antes de extrair.
+            tampered=root/'tampered.zip'
+            with zipfile.ZipFile(package,'r') as src,zipfile.ZipFile(tampered,'w',compression=zipfile.ZIP_DEFLATED) as dst:
+                for info in src.infolist():
+                    data=src.read(info.filename)
+                    if info.filename=='frontend/Central-de-Controle-/index.html':data+=b' tampered'
+                    dst.writestr(info,data)
+            with self.assertRaises(ValueError):updater.stage_frontend(install,tampered,sha)
+            self.assertFalse((install/'frontend-packages'/sha).exists())
+
+            staged=updater.stage_frontend(install,package,sha)
+            marker=json.loads((staged/updater.FRONTEND_STAGE_MARKER).read_text());marker['package_sha256']='0'*64
+            (staged/updater.FRONTEND_STAGE_MARKER).write_text(json.dumps(marker))
+            with self.assertRaises(ValueError):updater.stage_frontend(install,package,sha)
+            self.assertTrue((staged/'Central-de-Controle-'/'index.html').is_file(),'identity conflict must not destructively replace staged frontend')
 
 if __name__=='__main__':unittest.main()
