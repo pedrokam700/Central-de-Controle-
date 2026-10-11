@@ -6,6 +6,7 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 
 const canonical='/Central-de-Controle-/';
+const inlineScripts=html=>[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>!(/\bsrc\s*=/.test(m[1]||'')));
 
 test('Netlify não usa redirect HTTP nem Pretty URLs no preview',()=>{
   const vercel=JSON.parse(fs.readFileSync('vercel.json','utf8'));
@@ -27,15 +28,23 @@ test('build estático publica entrada raiz real e Central no base path',()=>{
     assert.equal(fs.existsSync(path.join(base,'index.html')),true);
     assert.equal(fs.existsSync(path.join(base,'app.js')),true);
     assert.equal(fs.existsSync(path.join(base,'offline-bootstrap.mjs')),true);
+    assert.equal(fs.existsSync(path.join(base,'root-entry.js')),true);
+    assert.equal(fs.existsSync(path.join(base,'central-runtime-boot-guard.js')),true);
     const root=fs.readFileSync(path.join(out,'index.html'),'utf8');
+    const rootEntry=fs.readFileSync(path.join(base,'root-entry.js'),'utf8');
     const html=fs.readFileSync(path.join(base,'index.html'),'utf8');
+    const runtimeGuard=fs.readFileSync(path.join(base,'central-runtime-boot-guard.js'),'utf8');
     const bootstrap=fs.readFileSync(path.join(base,'offline-bootstrap.mjs'),'utf8');
-    assert.match(root,/location\.replace\('\/Central-de-Controle-\/'/);
+    assert.match(root,/src="\/Central-de-Controle-\/root-entry\.js\?v=15\.1\.13\.48"/);
     assert.match(root,/http-equiv="refresh" content="0; url=\/Central-de-Controle-\/"/);
+    assert.equal(inlineScripts(root).length,0,'entrada raiz não pode voltar a injetar script inline');
+    assert.match(rootEntry,/location\.replace\('\/Central-de-Controle-\/'\+location\.search\+location\.hash\)/);
     assert.match(html,/id="central-runtime-boot-guard"/);
-    assert.match(html,/window\.__centralLoginModuleReady/);
-    assert.match(html,/form\.addEventListener\('submit'/);
-    assert.match(html,/event\.preventDefault\(\)/);
+    assert.match(html,/src="\/Central-de-Controle-\/central-runtime-boot-guard\.js\?v=15\.1\.13\.48"/);
+    assert.equal(inlineScripts(html).length,0,'Central publicada não pode voltar a injetar script inline');
+    assert.match(runtimeGuard,/window\.__centralLoginModuleReady/);
+    assert.match(runtimeGuard,/form\.addEventListener\('submit'/);
+    assert.match(runtimeGuard,/event\.preventDefault\(\)/);
     assert.match(html,/src="\/Central-de-Controle-\/offline-bootstrap\.mjs\?v=15\.1\.13\.48"/);
     assert.doesNotMatch(html,/src="\/Central-de-Controle-\/app\.js\?v=15\.1\.13\.48"/);
     assert.match(bootstrap,/initializeFirestore/);
