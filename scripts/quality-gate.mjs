@@ -230,7 +230,7 @@ assertCheck(
 );
 
 assertCheck(
-  !/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["'][^"']*styles\.css/i.test(index),
+  !/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["'](?:[^"']*\/)?styles\.css(?:[?#][^"']*)?["']/i.test(index),
   'index.html: styles.css não foi religado diretamente',
   'index.html: styles.css foi ligado diretamente sem auditoria'
 );
