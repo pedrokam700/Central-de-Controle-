@@ -14,6 +14,13 @@ function remoteLease(current,line){
   return {...current,generation};
 }
 
+function unavailable(error){
+  const wrapped=new Error('Linha possui outro coletor autorizado ou lease ainda ativo.');
+  wrapped.code='collector/lease-unavailable';
+  wrapped.cause=error;
+  return wrapped;
+}
+
 export function createCollectorLeaseClient({doc,runTransaction,getDoc,serverTimestamp,db,currentUid,workstationId}={}){
   for(const [name,value] of Object.entries({doc,runTransaction,getDoc,serverTimestamp})){
     if(typeof value!=='function')throw new TypeError(`${name} obrigatório para collector lease client`);
@@ -29,10 +36,9 @@ export function createCollectorLeaseClient({doc,runTransaction,getDoc,serverTime
   };
   const leaseRef=line=>doc(db,'amesLineLeases',validateLeaseLine(line));
 
-  async function attempt(line,{forceTakeover=false}={}){
+  async function transact(line,{forceTakeover=false,onProposal}={}){
     const normalizedLine=validateLeaseLine(line),uid=session(),ref=leaseRef(normalizedLine);
-    let proposal=null;
-    const result=await runTransaction(db,async transaction=>{
+    return runTransaction(db,async transaction=>{
       const snapshot=await transaction.get(ref);
       const current=snapshot.exists()?remoteLease(snapshot.data(),normalizedLine):null;
       let action,generation,acquiredAt;
@@ -46,7 +52,12 @@ export function createCollectorLeaseClient({doc,runTransaction,getDoc,serverTime
           action='takeover';generation=current.generation+1;acquiredAt=serverTimestamp();
         }
       }
-      const payload={
+      const proposal=Object.freeze({
+        action,generation,line_id:normalizedLine,owner_uid:uid,workstation_id:workstation,
+        fence:fencingToken({line:normalizedLine,generation,workstationId:workstation})
+      });
+      onProposal?.(proposal);
+      transaction.set(ref,{
         schema:COLLECTOR_LEASE_SCHEMA,
         line_id:normalizedLine,
         owner_uid:uid,
@@ -55,72 +66,40 @@ export function createCollectorLeaseClient({doc,runTransaction,getDoc,serverTime
         acquired_at:acquiredAt,
         renewed_at:serverTimestamp(),
         status:'active'
-      };
-      transaction.set(ref,payload);
-      proposal=Object.freeze({action,generation,line_id:normalizedLine,owner_uid:uid,workstation_id:workstation,fence:fencingToken({line:normalizedLine,generation,workstationId:workstation})});
+      });
       return proposal;
     });
-    return result||proposal;
   }
 
   async function claim(line){
-    try{return await attempt(line);}
-    catch(error){
-      // Same workstation whose lease expired is the only safe retry case. Rules
-      // rejected renewal using server time; retry with generation+1 takeover.
-      if(permissionDenied(error)&&error?.collectorProposal?.action==='renew'){
-        return attempt(line,{forceTakeover:true});
-      }
-      if(permissionDenied(error)){
-        const wrapped=new Error('Linha possui outro coletor autorizado ou lease ainda ativo.');
-        wrapped.code='collector/lease-unavailable';wrapped.cause=error;throw wrapped;
-      }
-      throw error;
-    }
-  }
-
-  async function claimWithExpiryRecovery(line){
     let firstProposal=null;
     try{
-      return await attemptWithProposal(line,p=>{firstProposal=p;});
+      return await transact(line,{onProposal:proposal=>{firstProposal=proposal;}});
     }catch(error){
-      if(permissionDenied(error)&&firstProposal?.action==='renew')return attempt(line,{forceTakeover:true});
-      if(permissionDenied(error)){
-        const wrapped=new Error('Linha possui outro coletor autorizado ou lease ainda ativo.');
-        wrapped.code='collector/lease-unavailable';wrapped.cause=error;throw wrapped;
+      // If Rules reject a renewal, server time proved that the prior lease expired.
+      // The same workstation may then retry exactly once with generation+1.
+      if(permissionDenied(error)&&firstProposal?.action==='renew'){
+        try{return await transact(line,{forceTakeover:true});}
+        catch(retryError){if(permissionDenied(retryError))throw unavailable(retryError);throw retryError;}
       }
+      if(permissionDenied(error))throw unavailable(error);
       throw error;
     }
-  }
-
-  async function attemptWithProposal(line,onProposal,{forceTakeover=false}={}){
-    const normalizedLine=validateLeaseLine(line),uid=session(),ref=leaseRef(normalizedLine);
-    return runTransaction(db,async transaction=>{
-      const snapshot=await transaction.get(ref);
-      const current=snapshot.exists()?remoteLease(snapshot.data(),normalizedLine):null;
-      let action,generation,acquiredAt;
-      if(!current){action='acquire';generation=1;acquiredAt=serverTimestamp();}
-      else{
-        const same=current.owner_uid===uid&&current.workstation_id===workstation;
-        if(same&&!forceTakeover){action='renew';generation=current.generation;acquiredAt=current.acquired_at;}
-        else{action='takeover';generation=current.generation+1;acquiredAt=serverTimestamp();}
-      }
-      const proposal=Object.freeze({action,generation,line_id:normalizedLine,owner_uid:uid,workstation_id:workstation,fence:fencingToken({line:normalizedLine,generation,workstationId:workstation})});
-      onProposal?.(proposal);
-      transaction.set(ref,{schema:COLLECTOR_LEASE_SCHEMA,line_id:normalizedLine,owner_uid:uid,workstation_id:workstation,generation,acquired_at:acquiredAt,renewed_at:serverTimestamp(),status:'active'});
-      return proposal;
-    });
   }
 
   async function status(line){
     const normalizedLine=validateLeaseLine(line),snapshot=await getDoc(leaseRef(normalizedLine));
     if(!snapshot.exists())return null;
-    const current=remoteLease(snapshot.data(),normalizedLine);
-    return Object.freeze({...current,owned_by_this_session:current.owner_uid===session()&&current.workstation_id===workstation,fence:fencingToken({line:normalizedLine,generation:current.generation,workstationId:current.workstation_id})});
+    const current=remoteLease(snapshot.data(),normalizedLine),uid=session();
+    return Object.freeze({
+      ...current,
+      owned_by_this_session:current.owner_uid===uid&&current.workstation_id===workstation,
+      fence:fencingToken({line:normalizedLine,generation:current.generation,workstationId:current.workstation_id})
+    });
   }
 
   return Object.freeze({
-    claim:claimWithExpiryRecovery,
+    claim,
     status,
     workstation_id:workstation,
     activation:'lease-client-ready-head-enforcement-disabled'
