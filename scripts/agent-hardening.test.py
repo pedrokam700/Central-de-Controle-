@@ -12,6 +12,7 @@ sys.path.insert(0, str(AGENT))
 
 from store import Store  # noqa: E402
 import hardening  # noqa: E402
+import local_security  # noqa: E402
 
 
 def assert_true(value, message):
@@ -93,11 +94,30 @@ def test_atomic_config_refuses_corrupt_previous():
             raise AssertionError("config corrompido não pode ser sobrescrito silenciosamente")
 
 
+def test_local_agent_token_is_stable_and_exact():
+    class Headers(dict):
+        def get(self, key, default=None):
+            return super().get(key, default)
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        token1, path1 = local_security.ensure_token(root)
+        token2, path2 = local_security.ensure_token(root)
+        assert_true(token1 == token2, "token do posto deve ser estável entre reinícios")
+        assert_true(path1 == path2 and path1.is_file(), "token deve existir apenas localmente")
+        assert_true(len(token1) >= 32, "token precisa ter entropia suficiente")
+        assert_true(local_security.authorized(Headers({local_security.TOKEN_HEADER: token1}), token1, 8765), "token exato deve autorizar")
+        assert_true(not local_security.authorized(Headers({local_security.TOKEN_HEADER: token1 + "x"}), token1, 8765), "token divergente deve falhar")
+        assert_true(local_security.authorized(Headers({"Origin": "http://127.0.0.1:8765"}), token1, 8765), "UI local same-origin deve continuar compatível")
+        assert_true(not local_security.authorized(Headers({"Origin": "https://example.invalid"}), token1, 8765), "origem hospedada sem token não pode comandar o agente")
+
+
 if __name__ == "__main__":
     tests = [
         test_snapshot_lifecycle_and_restart_recovery,
         test_migration_checksum_fails_closed,
         test_atomic_config_refuses_corrupt_previous,
+        test_local_agent_token_is_stable_and_exact,
     ]
     for test in tests:
         test()
