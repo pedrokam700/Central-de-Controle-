@@ -18,7 +18,7 @@
     import {migrateLegacyProfile,approveV2Profile,denyV2Profile,changeV2AccessLevel} from './core/admission-admin.mjs';
     import {assertFirestoreWriteAllowed} from './core/firestore-write-policy.mjs';
     import {legacyAccountMigrationInventory,legacyMigrationProgress} from './core/legacy-account-migration.mjs';
-    import {prepareCoraNetworkRequest} from './core/cora-network-boundary.mjs';
+    import {createCoraBrowserTransport} from './core/cora-browser-transport.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc as firebaseAddDoc, onSnapshot, doc, deleteDoc as firebaseDeleteDoc, updateDoc as firebaseUpdateDoc, setDoc as firebaseSetDoc, getDoc, getDocs, query, where, writeBatch as firebaseWriteBatch, runTransaction, arrayUnion
@@ -41,6 +41,11 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
+    const coraBrowserTransport=createCoraBrowserTransport({
+      fetcher:globalThis.fetch.bind(globalThis),
+      getOrigin:()=>window.location.origin,
+      getToken:async()=>auth?.currentUser?await auth.currentUser.getIdToken():null
+    });
 
     function clientWriteActorUid(){ return auth.currentUser?.uid || currentAuthUser?.uid || ''; }
     function assertClientWrite(reference,operation){
@@ -3378,44 +3383,8 @@ function registerOfflineSupport(){
     function aiCanValidateMemory(){
       return ['admin','quality','engineer','specialist','especialista','engenheiro'].includes(String(currentAccount?.role||'').toLowerCase());
     }
-    async function aiPostJSON(url, payload){
-      const token=auth?.currentUser?await auth.currentUser.getIdToken():null;
-      const headers={'Content-Type':'application/json'}; if(token)headers.Authorization=`Bearer ${token}`;
-      const prepared=prepareCoraNetworkRequest({
-        url,
-        origin:window.location.origin,
-        method:'POST',
-        payload,
-        sanitized:false,
-        approvedExternalOrigins:[],
-        headers
-      });
-      const res=await fetch(prepared.url,{method:'POST',headers:prepared.headers,body:JSON.stringify(prepared.payload)});
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(data?.error||`HTTP ${res.status}`);
-      return data;
-    }
-    async function coraAppFetch(url, options={}){
-      const method=String(options.method||'GET').toUpperCase();
-      let payload;
-      if(Object.prototype.hasOwnProperty.call(options,'body')){
-        if(typeof options.body!=='string')throw new Error('CORA request body must be JSON text.');
-        try{payload=JSON.parse(options.body);}catch{throw new Error('CORA request body must contain valid JSON.');}
-      }
-      const prepared=prepareCoraNetworkRequest({
-        url,
-        origin:window.location.origin,
-        method,
-        payload,
-        sanitized:false,
-        approvedExternalOrigins:[],
-        headers:options.headers||{}
-      });
-      const request={...options,method,headers:prepared.headers};
-      if(payload===undefined)delete request.body;
-      else request.body=JSON.stringify(prepared.payload);
-      return fetch(prepared.url,request);
-    }
+    async function aiPostJSON(url,payload){ return coraBrowserTransport.postJSON(url,payload); }
+    async function coraAppFetch(url,options={}){ return coraBrowserTransport.fetch(url,options); }
     async function aiSaveCorrection(userText,previousAssistant){
       const payload={
         type:'user_correction',

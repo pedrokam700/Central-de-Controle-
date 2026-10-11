@@ -5,34 +5,32 @@ import fs from 'node:fs';
 const app=fs.readFileSync('app.js','utf8');
 const sw=fs.readFileSync('sw.js','utf8');
 
-function functionText(name){
+function fn(name){
   const marker='async function '+name+'(';
   const start=app.indexOf(marker);
   assert.ok(start>=0,name+' missing');
   const next=app.indexOf('\n    async function ',start+marker.length);
   const nextSync=app.indexOf('\n    function ',start+marker.length);
   const candidates=[next,nextSync].filter(x=>x>start);
-  return app.slice(start,candidates.length?Math.min(...candidates):start+3000);
+  return app.slice(start,candidates.length?Math.min(...candidates):start+1200);
 }
 
-test('aiPostJSON routes requests through destination boundary before fetch',()=>{
-  assert.match(app,/import \{prepareCoraNetworkRequest\} from ['"]\.\/core\/cora-network-boundary\.mjs['"]/);
-  const fn=functionText('aiPostJSON');
-  assert.match(fn,/prepareCoraNetworkRequest\(\{/);
-  assert.match(fn,/origin:window\.location\.origin/);
-  assert.match(fn,/method:['"]POST['"]/);
-  assert.ok(fn.includes('approvedExternalOrigins:[]'));
-  assert.match(fn,/headers\.Authorization=\x60Bearer \$\{token\}\x60/);
-  assert.match(fn,/fetch\(prepared\.url,\{method:['"]POST['"],headers:prepared\.headers,body:JSON\.stringify\(prepared\.payload\)\}\)/);
-  assert.doesNotMatch(fn,/fetch\(url,/);
+test('app delegates CORA browser networking to extracted transport',()=>{
+  assert.match(app,/import \{createCoraBrowserTransport\} from ['"]\.\/core\/cora-browser-transport\.mjs['"]/);
+  assert.doesNotMatch(app,/import \{prepareCoraNetworkRequest\}/);
+  assert.match(app,/createCoraBrowserTransport\(\{/);
+  assert.match(app,/fetcher:globalThis\.fetch\.bind\(globalThis\)/);
+  assert.match(app,/getOrigin:\(\)=>window\.location\.origin/);
+  assert.match(app,/getToken:async\(\)=>auth\?\.currentUser\?await auth\.currentUser\.getIdToken\(\):null/);
 });
 
-test('no mutable browser config can approve an external provider through aiPostJSON',()=>{
-  const fn=functionText('aiPostJSON');
-  assert.ok(fn.includes('approvedExternalOrigins:[]'));
-  assert.doesNotMatch(fn,/CORA_EXTERNAL_ORIGINS|FAILURE_AI_ENDPOINT|localStorage|sessionStorage/);
+test('aiPostJSON and coraAppFetch are thin delegates, not duplicate policy implementations',()=>{
+  assert.match(fn('aiPostJSON'),/return coraBrowserTransport\.postJSON\(url,payload\)/);
+  assert.match(fn('coraAppFetch'),/return coraBrowserTransport\.fetch\(url,options\)/);
+  assert.doesNotMatch(app,/prepareCoraNetworkRequest/);
 });
 
-test('offline shell contains destination boundary module',()=>{
+test('offline shell caches both destination boundary and browser transport modules',()=>{
   assert.match(sw,/core\/cora-network-boundary\.mjs/);
+  assert.match(sw,/core\/cora-browser-transport\.mjs/);
 });
