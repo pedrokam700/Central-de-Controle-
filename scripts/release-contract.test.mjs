@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { buildReleaseIdentity } from './release-identity.mjs';
 
 const read=path=>fs.readFileSync(path,'utf8');
 const json=path=>JSON.parse(read(path));
@@ -35,7 +36,26 @@ test('build do frontend é único entre shell, bootstrap e artefato estático',(
   const shellBuild=capture(index,/const\s+BUILD\s*=\s*["']([^"']+)["']/,'index BUILD');
   const bootstrapBuild=capture(offline,/const\s+BUILD\s*=\s*["']([^"']+)["']/,'offline bootstrap BUILD');
   assert.equal(bootstrapBuild,shellBuild,'offline bootstrap usa build diferente do shell');
-  assert.ok(build.includes(`build:'${shellBuild}'`)||build.includes(`build: '${shellBuild}'`),'build-static não publica o BUILD canônico');
+  assert.ok(build.includes('build:identity.central_build'),'build-static não publica o BUILD vindo da identidade canônica');
+  assert.match(build,/release-identity\.json/,'build-static deixou de publicar release-identity.json');
+});
+
+test('manifesto de identidade cobre componentes críticos do release',()=>{
+  const fakeSha='a'.repeat(40);
+  const identity=buildReleaseIdentity({frontendSha:fakeSha});
+  assert.equal(identity.schema,'central-release-identity-v1');
+  assert.equal(identity.central_version,pkg.version);
+  assert.equal(identity.frontend_sha,fakeSha);
+  assert.equal(identity.agent_candidate_version,latest.version);
+  assert.equal(identity.db_schema_version,1);
+  assert.equal(identity.canonical_schema,'central-ames-v2');
+  assert.equal(identity.release_status,latest.candidate_status);
+  assert.equal(identity.factory_gate_required,true,'release não pode esquecer o gate físico R12');
+  assert.match(identity.firestore_rules_sha256,/^[a-f0-9]{64}$/);
+  assert.match(identity.r12_bridge_sha256,/^[a-f0-9]{64}$/);
+  assert.equal(identity.collector_3028_source.path,'ames/agent/agent.py');
+  assert.match(identity.collector_3028_source.sha256,/^[a-f0-9]{64}$/);
+  assert.ok(identity.r12_engine_contract,'contrato R12/R11 derivado deve permanecer explícito');
 });
 
 test('package root não introduz dependências de runtime',()=>{
