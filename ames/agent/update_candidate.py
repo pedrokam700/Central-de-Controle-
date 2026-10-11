@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 FILES=(
     'agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py',
-    'operational_calendar.py','diagnostics.py','migrations.py','disaster_recovery.py',
+    'operational_calendar.py','operational_registry.py','diagnostics.py','migrations.py','disaster_recovery.py',
     'support_diagnostics.py','workstation_identity.py','retention_policy.py','engine_bridge.py',
     'store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py'
 )
