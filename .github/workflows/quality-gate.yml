@@ -61,6 +61,9 @@ jobs:
       - name: Run immutable frontend package tests
         run: python3 scripts/agent-frontend-package.test.py
 
+      - name: Run verified local frontend proof server tests
+        run: python3 scripts/agent-local-frontend-server.test.py
+
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
 
