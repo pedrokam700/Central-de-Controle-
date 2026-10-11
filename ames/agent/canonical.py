@@ -9,8 +9,10 @@ import json
 import uuid
 from datetime import datetime, timezone
 
+import operational_registry
+
 SCHEMA = 'central-ames-v2'
-LINES = ('TAN10101', 'TAN10102', 'TAN10103')
+LINES = operational_registry.LINE_IDS
 DATASETS = ('defects','pcba_history','material_reuse','history_contexts','process_timeline')
 TABLES = ('defect_observations','line_metrics','pcba_history','material_reuse','history_contexts','snapshot_payloads','mes_process_timeline')
 FIELDS = ('line','pcba_sn','current_pcba_sn','historical_pcba','current_pcba','product_model','defect_key','hist_seq','defect_code','defect_desc','defect_time','defect_oper','defect_location','defect_material_id','repair_status','repair_status_current','repair_state_current','defect_type','defect_type_current','defect_type_class','manual_or_auto','item_sn','item_type','material_sn','material_type','usage_status','previous_pcba_count','total_pcba_count_known_now','previous_pcbas_json','active_now_pcbas_json','inactive_now_pcbas_json','bind_time_utc','unbind_time_utc','context_kind','context_key','current_defect_key')
