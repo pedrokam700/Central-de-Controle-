@@ -40,6 +40,9 @@ jobs:
       - name: Run disaster recovery verification tests
         run: python3 scripts/agent-disaster-recovery.test.py
 
+      - name: Run stable workstation identity tests
+        run: python3 scripts/agent-workstation-identity.test.py
+
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
 
