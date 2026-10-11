@@ -117,8 +117,11 @@ service cloud.firestore {
           && d.hash is string && d.hash.matches('[a-f0-9]{64}')
           && d.parts is int && d.parts > 0 && d.parts <= 5000 && d.collected_at is string;
       }
+      function matchesPublisherHead() {
+        return getAfter(/databases/$(database)/documents/amesUsers/$(request.auth.uid)/lines/$(lineId)).data == request.resource.data;
+      }
       allow read: if activeUser() && mesLine(lineId);
-      allow create, update: if activeUser() && validTeamHead();
+      allow create, update: if activeUser() && validTeamHead() && matchesPublisherHead();
       allow delete: if false;
     }
 
