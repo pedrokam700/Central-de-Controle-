@@ -14,14 +14,17 @@ for(const [from,to] of replacements){
 fs.writeFileSync(file,text);
 await import('./patch-cora-browser-transport.mjs');
 
-// The patch generator writes a persistent test through a template literal. Escape
-// literal arrow-function parentheses after generation so the regex tests the
-// source text rather than treating () as an empty regex group.
+// The patch generator writes persistent tests through a template literal. Escape
+// literal arrow-function parentheses after generation so regexes test source text
+// instead of interpreting () as an empty regex group.
 const generated='scripts/ames-cora-network-boundary-app.test.mjs';
 let testText=fs.readFileSync(generated,'utf8');
-const from=String.raw`assert.match(app,/getOrigin:()=>window\.location\.origin/);`;
-const to=String.raw`assert.match(app,/getOrigin:\(\)=>window\.location\.origin/);`;
-const count=testText.split(from).length-1;
-if(count!==1)throw new Error(`expected one generated getOrigin assertion, found ${count}`);
-testText=testText.replace(from,to);
+for(const [from,to,label] of [
+  [String.raw`assert.match(app,/getOrigin:()=>window\.location\.origin/);`,String.raw`assert.match(app,/getOrigin:\(\)=>window\.location\.origin/);`,'getOrigin'],
+  [String.raw`assert.match(app,/getToken:async()=>auth\?\.currentUser\?await auth\.currentUser\.getIdToken\(\):null/);`,String.raw`assert.match(app,/getToken:async\(\)=>auth\?\.currentUser\?await auth\.currentUser\.getIdToken\(\):null/);`,'getToken']
+]){
+  const count=testText.split(from).length-1;
+  if(count!==1)throw new Error(`expected one generated ${label} assertion, found ${count}`);
+  testText=testText.replace(from,to);
+}
 fs.writeFileSync(generated,testText);
