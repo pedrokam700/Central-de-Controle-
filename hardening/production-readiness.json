@@ -180,7 +180,7 @@
     },
     "immutable_frontend_distribution": {
       "priority": "P1",
-      "status": "green_staging_not_activated",
+      "status": "green_tooling_not_launcher_default",
       "green": [
         "same build-static dist packaged without parallel frontend",
         "exact frontend SHA bound to release-build.json",
@@ -190,11 +190,17 @@
         "tamper/wrong-SHA/path/symlink failures are fail-closed",
         "GitHub Actions publishes central-frontend-<SHA> artifact",
         "stage-frontend extracts atomically to frontend-packages/<SHA>",
+        "full immutable package manifest is persisted beside the staged files and revalidated",
+        "post-extraction file tamper/size/hash mismatch prevents proof server startup",
         "staging is idempotent and records activated=false",
         "staging performs no network probe and does not require agent shutdown",
         "loopback proof server binds only 127.0.0.1",
-        "loopback proof server serves static shell with browser-safe MIME and blocks /api/* with 503",
-        "launcher remains unchanged"
+        "loopback proof server exposes exact-SHA/release-identity health and blocks /api/* with 503",
+        "internal _CENTRAL_* stage metadata is not HTTP-readable",
+        "local activation state is written atomically only after verified stage plus exact loopback health",
+        "deactivation/rollback changes state only and never mutates/deletes immutable staged frontend",
+        "R12 V5 bundle ships proof/activation tools but never ships a pre-activated state",
+        "launcher remains unchanged and local frontend is not the default"
       ],
       "evidence": [
         "scripts/frontend_package.py",
@@ -202,6 +208,11 @@
         "ames/agent/update_candidate.py",
         "scripts/agent-update.test.py",
         "tools/ames-workstation/serve-staged-frontend.py",
+        "scripts/agent-local-frontend-server.test.py",
+        "tools/ames-workstation/frontend-local-state.py",
+        "scripts/agent-local-frontend-state.test.py",
+        "scripts/build-r12-migration-bundle-v5.py",
+        "scripts/agent-r12-bundle-v5.test.py",
         ".github/workflows/quality-gate.yml"
       ],
       "remaining": [
@@ -209,7 +220,8 @@
         "validate Firebase Auth localhost/domain behavior and first-install SDK preparation",
         "decide whether Firebase SDK should be vendored for never-prepared-PC offline bootstrap",
         "validate Service Worker/local-origin lifecycle",
-        "only then consider preferring local origin in launcher"
+        "perform real Windows workstation proof of local serve/activate/deactivate",
+        "only then add explicit launcher consumption of active local state with fail-closed health recheck"
       ]
     },
     "offline_readiness": {
@@ -220,12 +232,14 @@
         "Firestore persistent-cache state",
         "Service Worker state",
         "offline_ready fail-closed",
-        "immutable frontend can be verified and staged locally without activation"
+        "immutable frontend can be verified and staged locally without activation",
+        "verified local frontend can be activated/deactivated through a separate atomic state contract without changing launcher"
       ],
       "remaining": [
         "local origin is not launcher default",
         "first local-origin preparation still depends on Firebase SDK availability from gstatic",
-        "CORA relative /api routes are intentionally blocked on proof server until backend contract is known"
+        "CORA relative /api routes are intentionally blocked on proof server until backend contract is known",
+        "real Windows local-origin lifecycle proof remains required"
       ]
     },
     "r12_existing_install_bundle": {
@@ -239,9 +253,11 @@
         "frozen 3028 exact hashes remain updater gate",
         "hash manifest",
         "rollback",
-        "no runtime DB/token/workstation identity",
+        "no runtime DB/token/workstation identity/local activation state",
         "exact frontend SHA gate",
-        "update_candidate includes non-activating immutable frontend staging command"
+        "update_candidate includes non-activating immutable frontend staging command",
+        "bundle includes verified local frontend proof and activation-state tools",
+        "bundle explicitly keeps local frontend launcher_default=false"
       ],
       "remaining": ["new-PC fused package remains blocked until real R12 factory capture"]
     },
@@ -249,12 +265,35 @@
       "priority": "P1",
       "status": "green_groundwork",
       "green": ["stable random local id", "atomic persistence", "corruption fail-closed"],
-      "remaining": ["collector lease/fencing authority is intentionally not active"]
+      "remaining": ["collector lease/fencing is not yet enforced on MES publication"]
     },
     "multi_collector_authority": {
       "priority": "P1",
-      "status": "pending",
-      "remaining": ["site/line collector lease", "generation/fencing", "server-serialized authority", "offline stale publisher rejection"]
+      "status": "partial_groundwork_not_enforced",
+      "green": [
+        "site/line lease contract with exact registered line identities",
+        "stable workstation_id participates in collector identity",
+        "fixed server-time TTL and server-time acquisition/renewal",
+        "generation increases on expired takeover and yields a fencing token",
+        "Firestore Rules reject early takeover, stale generation, delete and invalid workstation identity",
+        "transactional lease client supports acquire/renew/expired takeover",
+        "expired same-workstation renewal retries once as takeover without infinite loop",
+        "Rules emulator and pure client tests are green"
+      ],
+      "evidence": [
+        "ames/data/collector-authority.mjs",
+        "ames/collector-lease-client.mjs",
+        "firestore.rules",
+        "scripts/ames-collector-authority.test.mjs",
+        "scripts/ames-collector-lease-client.test.mjs",
+        "scripts/ames-rules.emulator.mjs"
+      ],
+      "remaining": [
+        "do not enforce lease on amesUsers/amesTeamLines publication until conflict scenarios are physically proven",
+        "bind generation/workstation fence to MES head publication",
+        "reject stale offline publisher after another workstation takes the line",
+        "physical multi-PC same-line conflict and recovery test"
+      ]
     },
     "app_modularization": {
       "priority": "P1",
