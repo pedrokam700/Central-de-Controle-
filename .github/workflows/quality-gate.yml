@@ -55,6 +55,9 @@ jobs:
       - name: Run export-safe support diagnostics contract
         run: python3 scripts/agent-support-diagnostics.test.py
 
+      - name: Run R12 migration bundle V5 closure tests
+        run: python3 scripts/agent-r12-bundle-v5.test.py
+
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
 
@@ -81,10 +84,10 @@ jobs:
           PYTHON_BIN: python3
         run: node scripts/quality-gate.mjs
 
-      - name: Build R12 existing-install migration bundle
+      - name: Build R12 existing-install migration bundle V5
         env:
           FRONTEND_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: python3 scripts/build-r12-migration-bundle.py "$RUNNER_TEMP/central-v2-r12-migration-${FRONTEND_SHA}.zip" --frontend-sha "$FRONTEND_SHA"
+        run: python3 scripts/build-r12-migration-bundle-v5.py "$RUNNER_TEMP/central-v2-r12-migration-${FRONTEND_SHA}.zip" --frontend-sha "$FRONTEND_SHA"
 
       - name: Upload R12 migration bundle
         uses: actions/upload-artifact@v6
