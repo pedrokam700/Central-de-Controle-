@@ -67,11 +67,11 @@ test('bootstrap nao armazena segredos A-MES e falha fechado em servico desconhec
   assert.match(starter,/nao se identificou como agente A-MES/i);
   assert.doesNotMatch(starter,/password|senha\s*=|cookie|wifi.*key/i);
   assert.match(diag,/nao le nem imprime senha A-MES/i);
-  assert.doesNotMatch(builder,/local_agent_token/);
 });
 
 test('candidate builder inclui ferramentas de posto, hardening e segurança local',()=>{
   for(const name of ['INICIAR_POSTO_CENTRAL_V2.bat','ROTA_AMES_APLICAR.bat','ROTA_AMES_REMOVER.bat','START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','agent_hardened_entry.py','hardening.py','local_security.py']){
     assert.ok(builder.includes(name),`builder nao inclui ${name}`);
   }
+  assert.match(builder,/if any\('local_agent_token' in name for name in files\):raise ValueError/);
 });
