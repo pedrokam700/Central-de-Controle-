@@ -1,4 +1,4 @@
-# retry with contiguous CORA transport block extraction
+# retry with unqualified fetch metric
 name: One-shot CORA browser transport extraction
 
 on:
@@ -30,7 +30,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
       - name: Extract CORA browser transport from app.js
-        run: node scripts/patch-cora-browser-transport.mjs
+        run: node scripts/run-cora-browser-transport-once.mjs
       - name: Validate extracted transport and unchanged CORA behavior
         shell: bash
         run: |
@@ -53,6 +53,7 @@ jobs:
           set -euo pipefail
           rm -f .github/workflows/hardening-cora-browser-transport.yml
           rm -f scripts/patch-cora-browser-transport.mjs
+          rm -f scripts/run-cora-browser-transport-once.mjs
           git diff --check
       - name: Commit extraction only after validation
         shell: bash
