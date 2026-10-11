@@ -2,8 +2,8 @@
 
 Keeps agent_entry.py as the R11/R12 compatibility boundary and layers database
 migrations, transactional snapshot visibility, atomic config handling, explicit
-operational calendar, local authorization and non-destructive DR verification on
-top of the validated collector runtime.
+operational calendar, local authorization, stable workstation identity and
+non-destructive DR verification on top of the validated collector runtime.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import local_security
 import migrations
 import operational_calendar
 import support_diagnostics
+import workstation_identity
 
 HARDENED_CANDIDATE_VERSION = "0.5.25-rc1"
 entry.a.CANDIDATE_VERSION = HARDENED_CANDIDATE_VERSION
@@ -27,6 +28,8 @@ HARDENING_STATE = {**HARDENING_STATE, "migration_registry": MIGRATION_STATE}
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)
+WORKSTATION_IDENTITY = workstation_identity.ensure(entry.a.DATA_DIR)
+entry.a.WORKSTATION_ID = WORKSTATION_IDENTITY["workstation_id"]
 
 # Preserve the validated 3028 collector itself. Only the time-window provider is
 # upgraded: production-day boundary is explicit and distinct from work shifts.
@@ -54,6 +57,7 @@ def _verified_create_backup(reason="manual"):
         "DATABASE_BACKUP_VERIFIED",
         workstation=entry.a.WORKSTATION,
         details={
+            "workstation_id": entry.a.WORKSTATION_ID,
             "reason": reason,
             "integrity": verification["integrity"],
             "bytes": verification["bytes"],
@@ -164,6 +168,7 @@ class HardenedHandler(entry.Handler):
                         "hardening": "H1",
                         "candidate_version": HARDENED_CANDIDATE_VERSION,
                         "local_security": local_security.public_status(AGENT_TOKEN_PATH),
+                        "workstation_identity": workstation_identity.public_status(WORKSTATION_IDENTITY),
                         "operational_calendar": operational_calendar.public_contract(entry.a.CONFIG),
                         "migration_registry": migrations.public_contract(),
                         "migration_state": MIGRATION_STATE,
@@ -217,6 +222,7 @@ class HardenedHandler(entry.Handler):
                     "DATABASE_RESTORE_DRILL",
                     workstation=entry.a.WORKSTATION,
                     details={
+                        "workstation_id": entry.a.WORKSTATION_ID,
                         "integrity": result["integrity"],
                         "bytes": result["bytes"],
                         "schema_version": result["schema_version"],
