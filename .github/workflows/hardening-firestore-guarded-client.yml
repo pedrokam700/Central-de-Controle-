@@ -1,3 +1,4 @@
+# retry with generated arrow-function assertions fixed
 name: One-shot guarded Firestore client extraction
 
 on:
@@ -29,7 +30,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git rev-parse origin/hardening/p0-production-readiness)" = "$GITHUB_SHA"
       - name: Extract guarded Firestore client from app.js
-        run: node scripts/patch-firestore-guarded-client.mjs
+        run: node scripts/run-firestore-guarded-client-once.mjs
       - name: Validate guarded Firestore client and capability behavior
         shell: bash
         run: |
@@ -51,6 +52,7 @@ jobs:
           set -euo pipefail
           rm -f .github/workflows/hardening-firestore-guarded-client.yml
           rm -f scripts/patch-firestore-guarded-client.mjs
+          rm -f scripts/run-firestore-guarded-client-once.mjs
           git diff --check
       - name: Commit extraction only after focused validation
         shell: bash
