@@ -97,6 +97,23 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /admissionAudit/{auditId} {
+      function validAdmissionAudit() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['schema','action','target_uid','actor_uid','at','reason','before','after'])
+          && d.schema == 'central-admission-audit-v1'
+          && d.action in ['approve','deny','change_access_level','migrate_legacy_profile']
+          && d.target_uid is string && d.target_uid.size() > 0 && d.target_uid.size() <= 128
+          && d.actor_uid == request.auth.uid
+          && d.at is int && d.at > 0
+          && d.reason is string && d.reason.size() <= 500
+          && d.before is map && d.after is map;
+      }
+      allow read: if isAdmin();
+      allow create: if isAdmin() && validAdmissionAudit();
+      allow update, delete: if false;
+    }
+
     match /products/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if canEngineerWrite();
