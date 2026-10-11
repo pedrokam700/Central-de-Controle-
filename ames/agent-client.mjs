@@ -2,13 +2,37 @@ import { AGENT_URL, SCHEDULER_POLICY, collectionScope, r12CompatibleBuild } from
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
 import {CANONICAL_SCHEMA,DATASETS} from './data/canonical.mjs';
 
+const AGENT_TOKEN_KEY='central.ames.agentToken.v1';
+function bootstrapAgentToken(explicit=''){
+  if(explicit)return String(explicit);
+  if(typeof window==='undefined')return '';
+  let token='';
+  try{
+    const raw=String(window.location?.hash||'').replace(/^#/,'');
+    const params=new URLSearchParams(raw);
+    token=params.get('ames_agent_token')||'';
+    if(token){
+      window.sessionStorage?.setItem(AGENT_TOKEN_KEY,token);
+      params.delete('ames_agent_token');
+      const rest=params.toString();
+      window.history?.replaceState?.(null,'',window.location.pathname+window.location.search+(rest?'#'+rest:''));
+    }else token=window.sessionStorage?.getItem(AGENT_TOKEN_KEY)||'';
+  }catch{}
+  return token;
+}
+
 // Transport belongs to the existing session; all operational data lives in store.
-export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now}={}) {
+export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
   let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false, lastPartial=-1,lastRefresh=0,pendingSubmission=null;
+  const workstationToken=bootstrapAgentToken(agentToken);
   const publish=patch=>{store.updateAgent(patch);changed();};
   async function request(path,body,blob=false) {
     const token=generation;
-    const response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30000)]),cache:'no-store',credentials:'omit'});
+    const headers={};
+    if(body!==undefined)headers['Content-Type']='application/json';
+    if(workstationToken)headers['X-Central-Agent-Token']=workstationToken;
+    const response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30000)]),cache:'no-store',credentials:'omit'});
+    if(response.status===401)throw new Error('Agente local não autorizado. Abra a Central pelo launcher deste posto.');
     if(!response.ok)throw new Error(`Agente: HTTP ${response.status}`);
     const data=blob?await response.blob():await response.json();
     if(token!==generation)throw new DOMException('Sessão encerrada','AbortError');
@@ -104,6 +128,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         if(candidate.schema===CANONICAL_SCHEMA&&candidate.native_console&&candidate.cursor&&candidate.revision)capabilities=candidate;
       } catch(error) {
         if(error.name==='AbortError')throw error;
+        if(String(error.message||'').includes('não autorizado'))throw error;
       }
       if(!capabilities){
         if(!r12CompatibleBuild(health))throw Error('Use o agente canônico 0.5.24-rc1 ou a automação local 3022-R12+ validada.');
