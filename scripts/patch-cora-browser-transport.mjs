@@ -5,6 +5,7 @@ let sw=fs.readFileSync('sw.js','utf8');
 
 if((app.match(/\bfetch\(/g)||[]).length!==2)throw new Error('expected two reviewed raw fetch primitives before transport extraction');
 if((app.match(/\bcoraAppFetch\(/g)||[]).length!==12)throw new Error('expected 11 guarded call sites plus coraAppFetch declaration');
+
 const oldImport="    import {prepareCoraNetworkRequest} from './core/cora-network-boundary.mjs';";
 if((app.split(oldImport).length-1)!==1)throw new Error('network boundary import anchor changed');
 app=app.replace(oldImport,"    import {createCoraBrowserTransport} from './core/cora-browser-transport.mjs';");
@@ -13,40 +14,27 @@ const authAnchor='    const auth = getAuth(app);';
 if((app.split(authAnchor).length-1)!==1)throw new Error('auth initialization anchor changed');
 app=app.replace(authAnchor,`${authAnchor}\n    const coraBrowserTransport=createCoraBrowserTransport({\n      fetcher:globalThis.fetch.bind(globalThis),\n      getOrigin:()=>window.location.origin,\n      getToken:async()=>auth?.currentUser?await auth.currentUser.getIdToken():null\n    });`);
 
-function functionRange(source,name){
-  const marker=`    async function ${name}(`;
-  const start=source.indexOf(marker);
-  if(start<0)throw new Error(`${name} missing`);
-  const open=source.indexOf('{',start);
-  let depth=0,state='code';
-  for(let i=open;i<source.length;i++){
-    const ch=source[i],next=source[i+1];
-    if(state==='single'){if(ch==='\\')i++;else if(ch==="'")state='code';continue;}
-    if(state==='double'){if(ch==='\\')i++;else if(ch==='"')state='code';continue;}
-    if(state==='template'){if(ch==='\\')i++;else if(ch==='`')state='code';continue;}
-    if(state==='lineComment'){if(ch==='\n')state='code';continue;}
-    if(state==='blockComment'){if(ch==='*'&&next==='/'){state='code';i++;}continue;}
-    if(ch==="'"){state='single';continue;} if(ch==='"'){state='double';continue;} if(ch==='`'){state='template';continue;}
-    if(ch==='/'&&next==='/'){state='lineComment';i++;continue;} if(ch==='/'&&next==='*'){state='blockComment';i++;continue;}
-    if(ch==='{')depth++; else if(ch==='}'&&--depth===0)return {start,end:i+1};
-  }
-  throw new Error(`${name} end missing`);
-}
-
-for(const [name,replacement] of [
-  ['aiPostJSON',"    async function aiPostJSON(url,payload){ return coraBrowserTransport.postJSON(url,payload); }"],
-  ['coraAppFetch',"    async function coraAppFetch(url,options={}){ return coraBrowserTransport.fetch(url,options); }"]
-]){
-  const range=functionRange(app,name);
-  app=app.slice(0,range.start)+replacement+app.slice(range.end);
-}
+const blockStart='    async function aiPostJSON(url, payload){';
+const blockEnd='    async function aiSaveCorrection(userText,previousAssistant){';
+if((app.split(blockStart).length-1)!==1)throw new Error('aiPostJSON block start changed');
+if((app.split(blockEnd).length-1)!==1)throw new Error('aiSaveCorrection block end changed');
+const start=app.indexOf(blockStart);
+const end=app.indexOf(blockEnd,start);
+if(end<=start)throw new Error('CORA transport block order invalid');
+const oldBlock=app.slice(start,end);
+if((oldBlock.match(/\bfetch\(/g)||[]).length!==2)throw new Error('expected both reviewed raw fetches inside CORA transport block');
+if((oldBlock.match(/prepareCoraNetworkRequest/g)||[]).length!==2)throw new Error('expected two boundary preparations inside CORA transport block');
+const replacement=`    async function aiPostJSON(url,payload){ return coraBrowserTransport.postJSON(url,payload); }\n    async function coraAppFetch(url,options={}){ return coraBrowserTransport.fetch(url,options); }\n`;
+app=app.slice(0,start)+replacement+app.slice(end);
 
 if((app.match(/\bfetch\(/g)||[]).length!==0)throw new Error('app.js must not retain raw fetch primitives after transport extraction');
 if((app.match(/\bcoraAppFetch\(/g)||[]).length!==12)throw new Error('CORA guarded call topology changed during extraction');
 if(app.includes('prepareCoraNetworkRequest'))throw new Error('app.js still depends on boundary implementation details');
+if((app.match(/createCoraBrowserTransport/g)||[]).length!==2)throw new Error('browser transport import/initialization contract changed');
 
 const swAnchor="BASE+'core/cora-network-boundary.mjs',";
 if((sw.split(swAnchor).length-1)!==1)throw new Error('service worker network boundary cache anchor changed');
+if(sw.includes("core/cora-browser-transport.mjs"))throw new Error('browser transport already cached');
 sw=sw.replace(swAnchor,`${swAnchor}BASE+'core/cora-browser-transport.mjs',`);
 
 fs.writeFileSync('app.js',app);
