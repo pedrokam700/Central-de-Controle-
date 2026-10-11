@@ -57,9 +57,11 @@ service cloud.firestore {
         );
     }
 
+    // CENTRAL_OPERATIONAL_REGISTRY_BEGIN — generated from ames/data/operational-registry.mjs
     function mesLine(lineId) {
       return lineId in ['TAN10101', 'TAN10102', 'TAN10103'];
     }
+    // CENTRAL_OPERATIONAL_REGISTRY_END
 
     match /users/{userId} {
       allow get: if (signedIn() && request.auth.uid == userId) || activeUser();
