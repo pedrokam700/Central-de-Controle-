@@ -1,0 +1,41 @@
+{
+  "schema": "central-csp-report-only-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "code_commit": "9a2e718c2baea466b06e8789ca9066d5e68b54b4",
+  "status": "green_internal_external_observation_pending",
+  "full_ci_run": 38180774012,
+  "gates": {
+    "static_quality": "success",
+    "central_quality_gate": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
+  "policy": {
+    "mode": "Content-Security-Policy-Report-Only",
+    "blocking_enforcement": false,
+    "netlify_and_vercel_policy_identical": true,
+    "unsafe_inline": false,
+    "unsafe_eval": false,
+    "inline_scripts": 0,
+    "inline_style_blocks": 0,
+    "inline_style_attributes": 0,
+    "eval_like": 0
+  },
+  "external_observation": {
+    "open_hardening_pr": false,
+    "status": "blocked_no_open_pr",
+    "reason": "Published preview smoke is PR-only. No open pull request currently uses hardening/p0-production-readiness as its head branch."
+  },
+  "promotion": {
+    "blocking_csp_enforced": false,
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "open or explicitly authorize a hardening preview PR when promotion semantics permit it",
+    "observe report-only violations on the externally reachable preview",
+    "add only runtime origins proven by report-only evidence",
+    "promote to blocking CSP only through a separate gated change after external observation is GREEN"
+  ]
+}
