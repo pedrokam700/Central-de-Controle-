@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { buildReleaseIdentity } from './release-identity.mjs';
 
 const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
 const names=['index.html','app.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest'];
@@ -51,5 +53,10 @@ fs.writeFileSync(path.join(out,'index.html'),rootEntry());
 const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
 const branch=process.env.VERCEL_GIT_COMMIT_REF||process.env.BRANCH||process.env.GITHUB_REF_NAME||null;
 const provider=process.env.VERCEL?'vercel':process.env.NETLIFY?'netlify':process.env.GITHUB_ACTIONS?'github-actions':'unknown';
-fs.writeFileSync(path.join(out,'release-build.json'),JSON.stringify({sha,branch,provider,build:'15.1.13.48',project:'central-cora-v2'}));
-console.log('Native integrated static assets:',new Set(names).size,'deployment sha:',sha||'unavailable');
+const identity=buildReleaseIdentity({frontendSha:sha});
+const identityText=JSON.stringify(identity);
+const identitySha256=crypto.createHash('sha256').update(identityText).digest('hex');
+fs.writeFileSync(path.join(out,'release-identity.json'),identityText);
+fs.writeFileSync(path.join(out,'Central-de-Controle-','release-identity.json'),identityText);
+fs.writeFileSync(path.join(out,'release-build.json'),JSON.stringify({sha,branch,provider,build:identity.central_build,project:'central-cora-v2',release_identity_schema:identity.schema,release_identity_sha256:identitySha256}));
+console.log('Native integrated static assets:',new Set(names).size,'deployment sha:',sha||'unavailable','release identity:',identitySha256);
