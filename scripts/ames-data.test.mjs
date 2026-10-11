@@ -152,7 +152,10 @@ test('logout clears all collection arrays and both MES sources', () => {
 
 test('actual shell listeners ignore late data/errors after logout and session replacement', () => {
   const source = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-  const clear = source.slice(source.indexOf('    function clearDataListeners()'), source.indexOf('    function legacyUsers()'));
+  const clearStart = source.indexOf('    function clearDataListeners()');
+  const clearEnd = source.indexOf('    const legacyUserMetadata=', clearStart);
+  assert.ok(clearStart >= 0 && clearEnd > clearStart, 'clearDataListeners boundary must precede auth-hardening bootstrap');
+  const clear = source.slice(clearStart, clearEnd);
   const sync = source.slice(source.indexOf('    function syncFirestore()'), source.indexOf('    function updateOwnerDropdowns()'));
   const listeners = [];
   const store = createAmesStore();
