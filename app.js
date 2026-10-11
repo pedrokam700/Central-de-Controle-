@@ -15,6 +15,7 @@
     import {offlineWritePlan,routineFailureLinkEffect} from './core/offline-domain-write.mjs';
     import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
     import {buildSignupProfile,evaluateSessionAdmission} from './core/session-admission.mjs';
+    import {createUserProfileService} from './core/user-profile-service.mjs';
     import {migrateLegacyProfile,approveV2Profile,denyV2Profile,changeV2AccessLevel} from './core/admission-admin.mjs';
     import {createGuardedFirestoreClient} from './core/firestore-guarded-client.mjs';
     import {legacyAccountMigrationInventory,legacyMigrationProgress} from './core/legacy-account-migration.mjs';
@@ -260,6 +261,9 @@
     }
 
     const now = () => new Date().toISOString();
+    const userProfileService=createUserProfileService({
+      db,doc,getDoc,setDoc,withTimeout,buildSignupProfile,now
+    });
     let dateFormat = new Intl.DateTimeFormat(currentLanguage, { dateStyle: 'short', timeStyle: 'short' });
     const esc = value => { const el = document.createElement('div'); el.textContent = value || ''; return el.innerHTML; };
     const formatDate = iso => iso ? dateFormat.format(new Date(iso)) : '—';
@@ -394,39 +398,7 @@
       catch { return null; }
     }
 
-    async function ensureUserProfile(firebaseUser, legacy = null) {
-      const ref = doc(db, 'users', firebaseUser.uid);
-      const snap = await withTimeout(getDoc(ref), 12000, 'Validação do perfil');
-      const email = (firebaseUser.email || '').toLowerCase();
-
-      if (snap.exists()) {
-        const data = snap.data() || {};
-        return {
-          ...data,
-          docId: firebaseUser.uid,
-          uid: data.uid || firebaseUser.uid,
-          name: data.name || legacy?.name || firebaseUser.displayName || email.split('@')[0],
-          email: data.email || email,
-          role: data.role === 'admin' ? 'admin' : 'user',
-          disabled: Boolean(data.disabled),
-          createdAt: data.createdAt || now(),
-          updatedAt: data.updatedAt || now()
-        };
-      }
-
-      const createdAt = now();
-      const profile = {
-        ...buildSignupProfile({
-          uid: firebaseUser.uid,
-          email,
-          name: legacy?.name || firebaseUser.displayName || email.split('@')[0]
-        }),
-        createdAt,
-        updatedAt: createdAt
-      };
-      await withTimeout(setDoc(ref, profile), 12000, 'Criação do perfil');
-      return { docId: firebaseUser.uid, ...profile };
-    }
+    async function ensureUserProfile(firebaseUser,legacy=null){ return userProfileService.ensure(firebaseUser,legacy); }
 
     async function migrateLegacyDataOnce() {
       const legacy = legacyState();

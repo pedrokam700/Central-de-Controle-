@@ -13,8 +13,10 @@ test('app usa contrato V2 de cadastro e admissão sem auto-admin por e-mail',()=
   assert.doesNotMatch(app,/await finishLogin\(credential\.user\)/);
 });
 
-test('perfil ausente nasce viewer pendente e sessão inválida falha fechada',()=>{
-  assert.match(app,/buildSignupProfile\(\{[\s\S]*uid: firebaseUser\.uid,[\s\S]*email,[\s\S]*name:/);
+test('perfil ausente delega criação V2 ao serviço de perfil e sessão inválida falha fechada',()=>{
+  assert.match(app,/import \{createUserProfileService\} from ['"]\.\/core\/user-profile-service\.mjs['"]/);
+  assert.match(app,/const userProfileService=createUserProfileService\(\{[\s\S]*db,doc,getDoc,setDoc,withTimeout,buildSignupProfile,now[\s\S]*\}\)/);
+  assert.match(app,/async function ensureUserProfile\(firebaseUser,legacy=null\)\{ return userProfileService\.ensure\(firebaseUser,legacy\); \}/);
   assert.match(app,/try \{ await signOut\(auth\); \} catch \{\}/);
   assert.match(app,/admissionState: admission\.admission_state/);
   assert.match(app,/accessLevel: admission\.access_level/);
@@ -34,7 +36,8 @@ test('cadastro bloqueia corrida do auth observer e explica aprovação',()=>{
   assert.match(app,/Confirme seu e-mail corporativo e aguarde a aprovação de um administrador/);
 });
 
-test('contratos de admissão ficam disponíveis no shell offline',()=>{
+test('contratos de admissão e serviço de perfil ficam disponíveis no shell offline',()=>{
   assert.match(sw,/core\/access-policy\.mjs/);
   assert.match(sw,/core\/session-admission\.mjs/);
+  assert.match(sw,/core\/user-profile-service\.mjs/);
 });
