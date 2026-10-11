@@ -1,11 +1,9 @@
 import {normalizeCanonical,CANONICAL_SCHEMA} from './data/canonical.mjs';
 import {LINE_IDS} from './data/contract.mjs';
+import {projectCanonicalForCloud} from './data/cloud-projection.mjs';
 const sha=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 export function sanitizeSnapshot(payload){
-  normalizeCanonical(payload);
-  const allowed=['schema','schema_version','source_id','snapshot_id','snapshot_revision','content_hash','line_id','collected_at','source_view','source_timestamp','summary','datasets','coverage','insights','capabilities'];
-  const clean=value=>Array.isArray(value)?value.map(clean):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([k])=>!/^_|password|senha|cookie|credential|authorization|token|raw_json|session/i.test(k)).map(([k,v])=>[k,clean(v)])):value;
-  return clean(Object.fromEntries(allowed.filter(k=>k in payload).map(k=>[k,payload[k]])));
+  return projectCanonicalForCloud(payload);
 }
 export async function publication(uid,payload){
   const safe=sanitizeSnapshot(payload),text=JSON.stringify(safe),hash=await sha(text);
