@@ -1,0 +1,28 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "cora_aiPostJSON_destination_boundary",
+  "status": "focused_green_full_ci_pending",
+  "validated_parent": "6354e88dfb62748af2d2002d2d3ce6aea1331753",
+  "focused_run": 38181407100,
+  "assertions": [
+    "aiPostJSON routes through prepareCoraNetworkRequest before fetch",
+    "same-origin application Authorization may stay same-origin",
+    "browser runtime cannot approve external provider origins through aiPostJSON",
+    "unknown and wrong-method CORA routes remain fail-closed",
+    "local-only routes cannot be redirected to approved external providers",
+    "external application authentication headers are blocked by the destination boundary",
+    "offline shell includes core/cora-network-boundary.mjs"
+  ],
+  "temporary_write_tooling_removed": true,
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "full Static Quality on a normal descendant of the bot-produced integration commit",
+    "full Firestore Rules/cross-PC E2E on the same descendant",
+    "guard the remaining direct CORA fetch request builders route-by-route without weakening local-only policy"
+  ]
+}
