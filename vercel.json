@@ -19,7 +19,8 @@
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "Permissions-Policy", "value": "geolocation=(), payment=(), usb=(), serial=()" }
+        { "key": "Permissions-Policy", "value": "geolocation=(), payment=(), usb=(), serial=()" },
+        { "key": "Content-Security-Policy-Report-Only", "value": "default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self' https://www.gstatic.com; style-src 'self'; style-src-attr 'none'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:8765 https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; frame-src https://central-de-controle-88962.firebaseapp.com; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' data: blob:; form-action 'self'; frame-ancestors 'none'" }
       ]
     },
     { "source": "/Central-de-Controle-/:path*.mjs", "headers": [{ "key": "Content-Type", "value": "text/javascript; charset=utf-8" }] },
