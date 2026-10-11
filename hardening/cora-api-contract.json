@@ -5,6 +5,15 @@
   "backend": {
     "authoritative_source": null,
     "service_version": null,
+    "hosting": {
+      "provider": "vercel",
+      "project_name": "central-cora-v2",
+      "project_id": "prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI",
+      "team_id": "team_UINddVtp80E0jYfiE2vbIhx6",
+      "project_discovery_verified": true,
+      "project_inspection_verified": false,
+      "inspection_blocker": "Vercel connection can list the project but GET project inspection returns HTTP 403 for scope pedrokam700-6477"
+    },
     "health_endpoint": "/api/health",
     "version_endpoint": "/api/version",
     "health_verified": false,
