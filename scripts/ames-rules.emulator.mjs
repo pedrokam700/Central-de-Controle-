@@ -23,8 +23,14 @@ try{
   await assertFails(getDoc(doc(disabled,...team)));await assertFails(getDoc(doc(disabled,...part)));
   await assertFails(setDoc(doc(b,...path),head));
   await assertFails(setDoc(doc(b,...team),head)); // B não pode alegar owner_uid A.
-  const bHead={...head,owner_uid:'B',source_id:'source-b',key:'b'.repeat(64),hash:'b'.repeat(64)};
+  const bKey='b'.repeat(64),bHead={...head,owner_uid:'B',source_id:'source-b',key:bKey,hash:bKey};
+  // Team head sem head privado correspondente deve falhar fechado.
+  await assertFails(setDoc(doc(b,...team),bHead));
+  await assertSucceeds(setDoc(doc(b,'amesUsers','B','lines',line,'snapshots',bKey,'parts','0'),{owner_uid:'B',line_id:line,key:bKey,index:0,data:'sanitized-b'}));
+  await assertSucceeds(setDoc(doc(b,'amesUsers','B','lines',line),bHead));
   await assertSucceeds(setDoc(doc(b,...team),bHead));
+  // Nem o próprio dono pode publicar um team head divergente do namespace privado.
+  await assertFails(setDoc(doc(b,...team),{...bHead,snapshot_revision:2}));
   await assertFails(setDoc(doc(a,...path),{...head,line_id:'TAN10102'}));
   await assertFails(setDoc(doc(a,...part),{owner_uid:'A',line_id:line,key,index:0,data:'changed'}));
   await assertSucceeds(setDoc(doc(a,...path),{...head,snapshot_revision:2}));await assertFails(setDoc(doc(a,...path),head));
@@ -33,5 +39,5 @@ try{
   await assertFails(setDoc(doc(a,'amesTeamLines','TAN99999'),{...head,line_id:'TAN99999'}));
   // Existing manual operations remain compatible.
   await assertSucceeds(setDoc(doc(a,'reports','test'),{description:'manual preserved'}));
-  console.log('PASS: owner writes stay isolated; active teammates read sanitized MES through team head; disabled/anonymous denied; manual regression preserved');
+  console.log('PASS: team head must match publisher namespace; active teammates read sanitized MES; disabled/anonymous denied; manual regression preserved');
 }finally{await env.cleanup();}
