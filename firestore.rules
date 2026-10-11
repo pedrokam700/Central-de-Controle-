@@ -212,7 +212,7 @@ service cloud.firestore {
       function validCollectorLease() {
         let d = request.resource.data;
         return mesLine(lineId)
-          && d.keys().hasOnly(['schema','line_id','owner_uid','workstation_id','generation','acquired_at','renewed_at','expires_at','status'])
+          && d.keys().hasOnly(['schema','line_id','owner_uid','workstation_id','generation','acquired_at','renewed_at','status'])
           && d.schema == 'central-collector-lease-v1'
           && d.line_id == lineId
           && d.owner_uid == request.auth.uid
@@ -220,14 +220,14 @@ service cloud.firestore {
           && d.generation is int && d.generation > 0
           && d.acquired_at is timestamp
           && d.renewed_at is timestamp
-          && d.expires_at is timestamp
-          && d.status == 'active'
-          && d.expires_at > request.time
-          && d.expires_at <= request.time + duration.value(15, 'm');
+          && d.status == 'active';
+      }
+      function leaseStillActive() {
+        return resource.data.renewed_at + duration.value(10, 'm') > request.time;
       }
       function sameCollectorRenewal() {
         let d = request.resource.data;
-        return resource.data.expires_at > request.time
+        return leaseStillActive()
           && d.owner_uid == resource.data.owner_uid
           && d.workstation_id == resource.data.workstation_id
           && d.generation == resource.data.generation
@@ -236,7 +236,7 @@ service cloud.firestore {
       }
       function expiredTakeover() {
         let d = request.resource.data;
-        return resource.data.expires_at <= request.time
+        return resource.data.renewed_at + duration.value(10, 'm') <= request.time
           && d.generation == resource.data.generation + 1
           && d.acquired_at == request.time
           && d.renewed_at == request.time;
