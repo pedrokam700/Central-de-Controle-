@@ -1,0 +1,18 @@
+{
+  "schema": "central-capability-ux-readiness-validation-v1",
+  "reconciliation_commit": "508bc2b7846c1f5e5c0f204f76a2cf1d58ab7df8",
+  "status": "full_ci_pending",
+  "source_full_ci_run": 38155936063,
+  "expected_state": {
+    "admission_rbac": "partial",
+    "remaining": [
+      "inventory and migrate active legacy accounts one-by-one with explicit administrator-selected access level",
+      "remove legacy fallback only after every active account is migrated and regression evidence is green"
+    ],
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false,
+    "published_preview_smoke": "partial",
+    "factory_9_of_9": "pending"
+  }
+}
