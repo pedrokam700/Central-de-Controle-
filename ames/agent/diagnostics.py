@@ -112,6 +112,7 @@ def build(
             "python": platform.python_version(),
             "platform": platform.system(),
             "workstation": str(agent.WORKSTATION),
+            "workstation_id": str(getattr(agent, "WORKSTATION_ID", "")),
             "pid": os.getpid(),
         },
         "database": {
@@ -150,6 +151,7 @@ def public_summary(payload: dict) -> dict:
         "generated_at": payload.get("generated_at"),
         "candidate_version": runtime.get("candidate_version"),
         "workstation": runtime.get("workstation"),
+        "workstation_id": runtime.get("workstation_id"),
         "sqlite_integrity": (database.get("hardening") or {}).get("integrity"),
         "ames_reachable": connectivity.get("ames_reachable"),
         "chrome_cdp_reachable": connectivity.get("chrome_cdp_reachable"),
