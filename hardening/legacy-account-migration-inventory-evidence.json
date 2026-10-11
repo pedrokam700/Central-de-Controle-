@@ -1,7 +1,8 @@
 {
   "schema": "central-legacy-account-migration-inventory-evidence-v1",
   "code_commit": "6a857191202513af952d750f69b5dd249387a6dc",
-  "status": "focused_green_full_ci_pending",
+  "validation_commit": "9f4bb14797d46809b423cd3ba4e5435b7e5975d3",
+  "status": "green_tooling_live_migration_pending",
   "focused_validation": {
     "inventory_contract_tests": "green",
     "app_parse": "green",
@@ -19,6 +20,12 @@
     "inventory_module_precached": true,
     "one_shot_write_workflow_removed": true
   },
+  "full_ci": {
+    "run_id": 38156414534,
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
   "evidence": [
     "core/legacy-account-migration.mjs",
     "scripts/ames-legacy-account-migration.test.mjs",
@@ -28,5 +35,5 @@
     "hardening/admission-admin-ui-evidence.json",
     "sw.js"
   ],
-  "promotion_note": "This proves only the inventory and assisted per-account migration tooling. It does not prove that production accounts have been migrated. Do not remove the legacy fallback until the live admin inventory reports zero legacy accounts and a separate regression/promotion gate is GREEN."
+  "promotion_note": "This proves only the inventory and assisted per-account migration tooling. It does not prove that production accounts have been migrated. Do not remove the legacy fallback until the live admin inventory reports zero legacy accounts, including disabled legacy accounts, and a separate regression/promotion gate is GREEN."
 }
