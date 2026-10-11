@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { publishOfflineReadiness } from "./core/offline-readiness.mjs";
 
 const BUILD='15.1.13.48';
 const firebaseConfig={
@@ -40,8 +41,21 @@ try{
   console.warn('[Central] Cache Firestore persistente indisponível:',error);
 }
 
+// Publica um estado único e auditável. A Central poder abrir não significa que o
+// posto está preparado para continuar offline: Auth local + Firestore persistente
+// + Service Worker registrado/controlando precisam estar disponíveis.
+await publishOfflineReadiness({windowRef:window,navigatorRef:navigator,build:BUILD});
+try{
+  navigator.serviceWorker?.addEventListener?.('controllerchange',()=>{
+    publishOfflineReadiness({windowRef:window,navigatorRef:navigator,build:BUILD}).catch(()=>{});
+  });
+}catch{}
+
 try{
   await import(`./app.js?v=${BUILD}`);
+  // O app pode registrar/ativar o Service Worker durante o bootstrap. Reavalie após
+  // carregar sem transformar readiness em requisito para abrir a aplicação.
+  await publishOfflineReadiness({windowRef:window,navigatorRef:navigator,build:BUILD});
 }catch(error){
   window.__centralAppImportError=String(error?.message||error);
   console.error('[Central] app.js não carregou:',error);
