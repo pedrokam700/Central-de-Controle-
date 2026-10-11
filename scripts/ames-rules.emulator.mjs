@@ -85,15 +85,18 @@ try{
   await assertFails(setDoc(doc(supervisor,'workShifts','shift-supervisor'),{name:'blocked'}));
   await assertSucceeds(setDoc(doc(admin,'workShifts','shift-admin'),{name:'allowed'}));
 
-  // Lease/fencing groundwork: autoridade de expiração depende apenas de request.time e renewed_at(server).
+  // Lease/fencing groundwork: cada escrita usa novos sentinels de tempo do servidor.
   const wsA='ws_'+'a'.repeat(32),wsB='ws_'+'b'.repeat(32),leaseRef=doc(operator,'amesLineLeases',line);
-  const leaseA={schema:'central-collector-lease-v1',line_id:line,owner_uid:'operatorV2',workstation_id:wsA,generation:1,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),status:'active'};
-  await assertSucceeds(setDoc(leaseRef,leaseA));
+  const leasePayload=({lineId=line,ownerUid='operatorV2',workstationId=wsA,generation=1})=>({
+    schema:'central-collector-lease-v1',line_id:lineId,owner_uid:ownerUid,workstation_id:workstationId,generation,
+    acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),status:'active'
+  });
+  await assertSucceeds(setDoc(leaseRef,leasePayload({})));
   await assertSucceeds(getDoc(doc(viewer,'amesLineLeases',line)));
   await assertFails(getDoc(doc(pending,'amesLineLeases',line)));
-  await assertFails(setDoc(doc(viewer,'amesLineLeases','TAN10102'),{...leaseA,line_id:'TAN10102',owner_uid:'viewerV2'}));
+  await assertFails(setDoc(doc(viewer,'amesLineLeases','TAN10102'),leasePayload({lineId:'TAN10102',ownerUid:'viewerV2'})));
   // Outro coletor não toma a linha antes do TTL do servidor, mesmo elevando a geração.
-  await assertFails(setDoc(doc(engineer,'amesLineLeases',line),{...leaseA,owner_uid:'engineerV2',workstation_id:wsB,generation:2,acquired_at:serverTimestamp(),renewed_at:serverTimestamp()}));
+  await assertFails(setDoc(doc(engineer,'amesLineLeases',line),leasePayload({ownerUid:'engineerV2',workstationId:wsB,generation:2})));
   const liveLease=(await getDoc(leaseRef)).data();
   await assertSucceeds(setDoc(leaseRef,{...liveLease,renewed_at:serverTimestamp()}));
   await assertFails(deleteDoc(leaseRef));
@@ -105,8 +108,7 @@ try{
       acquired_at:Timestamp.fromMillis(Date.now()-20*60*1000),renewed_at:Timestamp.fromMillis(Date.now()-11*60*1000),status:'active'
     });
   });
-  const takeover={schema:'central-collector-lease-v1',line_id:line,owner_uid:'engineerV2',workstation_id:wsB,generation:5,acquired_at:serverTimestamp(),renewed_at:serverTimestamp(),status:'active'};
-  await assertSucceeds(setDoc(doc(engineer,'amesLineLeases',line),takeover));
+  await assertSucceeds(setDoc(doc(engineer,'amesLineLeases',line),leasePayload({ownerUid:'engineerV2',workstationId:wsB,generation:5})));
 
   await env.withSecurityRulesDisabled(async c=>{
     await setDoc(doc(c.firestore(),'amesLineLeases','TAN10102'),{
@@ -114,8 +116,8 @@ try{
       acquired_at:Timestamp.fromMillis(Date.now()-20*60*1000),renewed_at:Timestamp.fromMillis(Date.now()-11*60*1000),status:'active'
     });
   });
-  await assertFails(setDoc(doc(engineer,'amesLineLeases','TAN10102'),{...takeover,line_id:'TAN10102',generation:9}));
-  await assertSucceeds(setDoc(doc(engineer,'amesLineLeases','TAN10102'),{...takeover,line_id:'TAN10102',generation:10}));
+  await assertFails(setDoc(doc(engineer,'amesLineLeases','TAN10102'),leasePayload({lineId:'TAN10102',ownerUid:'engineerV2',workstationId:wsB,generation:9})));
+  await assertSucceeds(setDoc(doc(engineer,'amesLineLeases','TAN10102'),leasePayload({lineId:'TAN10102',ownerUid:'engineerV2',workstationId:wsB,generation:10})));
 
   const audit={schema:'central-admission-audit-v1',action:'approve',target_uid:'viewerV2',actor_uid:'adminV2',at:123456,reason:'approved for operation',before:{approval_state:'pending',access_level:'viewer'},after:{approval_state:'approved',access_level:'operator'}};
   await assertSucceeds(setDoc(doc(admin,'admissionAudit','audit-1'),audit));
