@@ -9,6 +9,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 import agent_entry as entry
+import diagnostics
 import hardening
 import local_security
 import operational_calendar
@@ -115,6 +116,21 @@ class HardenedHandler(entry.Handler):
                 )
             except Exception as exc:
                 self._send({"ok": False, "hardening": "H1", "error": type(exc).__name__, "message": str(exc)}, 500)
+            return
+        if path == "/api/v1/diagnostics":
+            try:
+                hardening_health = hardening.health(entry.a.STORE)
+                calendar = operational_calendar.public_contract(entry.a.CONFIG)
+                self._send({
+                    "ok": True,
+                    "diagnostics": diagnostics.build(
+                        entry.a,
+                        hardening_health=hardening_health,
+                        calendar=calendar,
+                    ),
+                })
+            except Exception as exc:
+                self._send({"ok": False, "error": type(exc).__name__, "message": str(exc)}, 500)
             return
         return super().do_GET()
 
