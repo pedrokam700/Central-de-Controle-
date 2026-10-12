@@ -1,0 +1,88 @@
+name: One-shot fourth modularization readiness reconciliation
+
+on:
+  push:
+    branches:
+      - hardening/p0-production-readiness
+    paths:
+      - .github/workflows/hardening-reconcile-auth-session-flight.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: hardening/p0-production-readiness
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Reconcile fourth modularization slice
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('hardening/production-readiness.json')
+          data=json.loads(p.read_text(encoding='utf-8'))
+          gate=data['gates']['app_modularization']
+          assert gate['status']=='in_progress_three_slices_green'
+          gate['status']='in_progress_four_slices_green'
+          green=gate.setdefault('green',[])
+          additions=[
+            'auth finishLogin UID single-flight coordination extracted from app.js into core/auth-session-flight.mjs',
+            'same UID shares one exact in-flight initialization while a superseded UID cannot clear the newer session flight',
+            'finishLogin, onAuthStateChanged, profile revalidation, MES sync and UI orchestration remain in app.js; only concurrency state moved',
+            'auth session flight dependency is included in the offline Service Worker shell',
+            'fourth modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E'
+          ]
+          for item in additions:
+            if item not in green: green.append(item)
+          evidence=gate.setdefault('evidence',[])
+          for item in [
+            'core/auth-session-flight.mjs',
+            'scripts/ames-auth-session-flight.test.mjs',
+            'scripts/ames-auth-session-flight-app.test.mjs',
+            'hardening/auth-session-flight-modularization-evidence.json'
+          ]:
+            if item not in evidence: evidence.append(item)
+          runs=gate.setdefault('full_ci_runs',[])
+          if 38242601439 not in runs:runs.append(38242601439)
+          remaining=gate.setdefault('remaining',[])
+          required=[
+            'pause further extraction unless the next slice materially improves production readiness; do not modularize for its own sake',
+            'keep finishLogin/listener/UI orchestration in app.js until a separately justified boundary exists'
+          ]
+          for item in required:
+            if item not in remaining:remaining.append(item)
+          assert data['promotion']['stable_allowed'] is False
+          assert data['promotion']['main_merge_allowed'] is False
+          assert data['promotion']['production_rules_publish_allowed'] is False
+          p.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+      - name: Validate slice and promotion blockers
+        run: |
+          node --test scripts/ames-auth-session-flight.test.mjs scripts/ames-auth-session-flight-app.test.mjs
+          python3 - <<'PY'
+          import json
+          d=json.load(open('hardening/production-readiness.json',encoding='utf-8'))
+          g=d['gates']['app_modularization']
+          assert g['status']=='in_progress_four_slices_green'
+          assert 38242601439 in g['full_ci_runs']
+          assert 'hardening/auth-session-flight-modularization-evidence.json' in g['evidence']
+          assert d['promotion']['stable_allowed'] is False
+          assert d['promotion']['main_merge_allowed'] is False
+          assert d['promotion']['production_rules_publish_allowed'] is False
+          PY
+      - name: Remove one-shot tooling
+        run: git rm .github/workflows/hardening-reconcile-auth-session-flight.yml
+      - name: Commit validated readiness only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add hardening/production-readiness.json hardening/auth-session-flight-modularization-evidence.json
+          git commit -m 'Hardening: reconcile fourth app modularization slice'
+          git push origin HEAD:hardening/p0-production-readiness
