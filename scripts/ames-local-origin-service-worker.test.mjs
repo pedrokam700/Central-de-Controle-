@@ -16,7 +16,8 @@ test('app registration readiness lookup and Service Worker BASE share the exact 
   assert.ok(readiness.includes(`getRegistration?.('${CANONICAL_PATH}')`));
   assert.ok(sw.includes(`const BASE='${CANONICAL_PATH}';`));
   assert.doesNotMatch(app,/serviceWorker\.register\(['"]\/sw\.js/);
-  assert.doesNotMatch(readiness,/getRegistration\?\.\(['"]\/(?!Central-de-Controle\/)/);
+  const explicitScopes=[...readiness.matchAll(/getRegistration\?\.\((['"])(\/[^'"]*)\1\)/g)].map(match=>match[2]);
+  assert.deepEqual(explicitScopes,[CANONICAL_PATH]);
 });
 
 test('verified local server is loopback-only and advertises the same canonical path without becoming launcher default',()=>{
