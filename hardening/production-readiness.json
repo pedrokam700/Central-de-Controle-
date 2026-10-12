@@ -482,7 +482,7 @@
     },
     "multi_collector_authority": {
       "priority": "P1",
-      "status": "partial_observe_only_identity_and_lease_green_enforcement_not_active",
+      "status": "partial_server_confirm_green_runtime_observer_not_wired_enforcement_off",
       "green": [
         "site/line lease contract with exact registered line identities",
         "stable workstation_id participates in collector identity",
@@ -503,7 +503,12 @@
         "legacy or malformed workstation identity leaves the current MES path explicitly unfenced without breaking connectivity",
         "read-only collector lease observer uses status only and exposes no claim, renew, takeover or release API",
         "matching lease ownership produces only a non-authoritative candidate fence because a Firestore read cannot prove request-time lease liveness",
-        "held-by-other and read-failure observations do not expose remote collector identity or raw error detail and do not block the current unfenced publication path"
+        "held-by-other and read-failure observations do not expose remote collector identity or raw error detail and do not block the current unfenced publication path",
+        "server-authoritative confirmOwned renews only an existing lease owned by the same authenticated account and validated workstation",
+        "confirmOwned preserves generation and acquired_at and relies on Rules request.time acceptance of sameCollectorRenewal for liveness proof",
+        "vacant, different-collector and expired/not-current leases never become authority through confirmOwned",
+        "confirmOwned never retries as generation+1 takeover and contains no automatic takeover path",
+        "legacy lease-client activation contract remains stable while the dormant confirmation capability is exposed separately"
       ],
       "evidence": [
         "ames/data/collector-authority.mjs",
@@ -522,21 +527,25 @@
         "hardening/agent-workstation-identity-client-evidence.json",
         "ames/collector-lease-observer.mjs",
         "scripts/ames-collector-lease-observer.test.mjs",
-        "hardening/collector-lease-observer-evidence.json"
+        "hardening/collector-lease-observer-evidence.json",
+        "scripts/ames-collector-lease-confirm.test.mjs",
+        "scripts/ames-collector-confirm-rules.test.mjs",
+        "hardening/collector-own-lease-confirmation-evidence.json"
       ],
       "remaining": [
         "do not enforce lease on amesUsers/amesTeamLines publication until conflict scenarios are physically proven",
         "reject stale offline publisher after another workstation takes the line",
         "physical multi-PC same-line conflict and recovery test",
         "instantiate the read-only collector lease observer in runtime diagnostics using the authenticated account plus validated workstation identity; do not claim or take over",
-        "add a server-authoritative same-workstation lease confirmation/renew path that cannot acquire a vacant lease or take over another workstation, before any collectorFenceForLine runtime binding",
         "after server-authoritative confirmation is proven, wire only that confirmed fence into collectorFenceForLine while stale-publisher rejection remains disabled",
-        "reject stale offline publisher only after two-workstation physical conflict/takeover/recovery scenarios are GREEN"
+        "reject stale offline publisher only after two-workstation physical conflict/takeover/recovery scenarios are GREEN",
+        "after runtime observer diagnostics are proven, invoke confirmOwned only for same-workstation candidates and feed only successful server-confirmed fences into collectorFenceForLine while stale-publisher rejection remains disabled"
       ],
       "full_ci_runs": [
         38185679744,
         38186194411,
-        38186334738
+        38186334738,
+        38186650668
       ]
     },
     "app_modularization": {
