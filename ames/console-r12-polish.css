@@ -1,0 +1,487 @@
+/*
+ * Console MES — R12 visual polish layer.
+ *
+ * Keeps the native Central V2 architecture and the canonical 9 views while
+ * restoring the proportions, hierarchy and density that made the local
+ * V0.5.22/V0.5.23 interface easier to read in production.
+ */
+
+.ames-legacy-shell{
+  --ames-bg:#f4f4f2;
+  --ames-surface:#fff;
+  --ames-soft:#f0f0ee;
+  --ames-soft2:#fafafa;
+  --ames-text:#151515;
+  --ames-muted:#696966;
+  --ames-line:#dededb;
+  --ames-line2:#ececea;
+  --ames-dark:#0d0d0d;
+  --ames-dark2:#262626;
+  --ames-blue:#245782;
+  --ames-blue-soft:#eef5fa;
+  --ames-shadow:0 8px 26px rgba(0,0,0,.05);
+  grid-template-columns:228px minmax(0,1fr);
+  font-size:14px;
+  line-height:1.46;
+}
+
+.ames-legacy-sidebar{
+  padding:22px 13px 16px;
+}
+
+.ames-legacy-brand{
+  padding:0 10px 15px;
+}
+
+.ames-legacy-brand-row{
+  gap:10px;
+}
+
+.ames-legacy-mark{
+  width:31px;
+  height:31px;
+  border-radius:8px;
+  font-size:14px;
+}
+
+.ames-legacy-brand strong{
+  font-size:14px;
+}
+
+.ames-legacy-brand span{
+  margin-top:2px;
+  font-size:10px;
+}
+
+.ames-console-home{
+  width:100%;
+  min-height:38px;
+  margin:12px 0 2px;
+  padding:9px 10px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  border:1px solid #3a3a38;
+  border-radius:8px;
+  background:#191919;
+  color:#f4f4f1;
+  font-size:11px;
+  font-weight:760;
+  text-align:left;
+  transition:background .15s,border-color .15s,transform .15s;
+}
+
+.ames-console-home:hover{
+  background:#282828;
+  border-color:#50504d;
+  transform:translateY(-1px);
+}
+
+.ames-console-home span:first-child{
+  width:18px;
+  text-align:center;
+  font-size:16px;
+  line-height:1;
+}
+
+.ames-legacy-nav{
+  gap:3px;
+  margin:12px 0 15px;
+}
+
+.ames-legacy-nav button{
+  gap:9px;
+  min-height:38px;
+  padding:9px 10px;
+  border-radius:8px;
+  font-size:11.5px;
+}
+
+.ames-legacy-nav .ico{
+  width:20px;
+  font-size:11px;
+}
+
+.ames-legacy-foot{
+  padding:12px 10px 0;
+  font-size:9.5px;
+  line-height:1.5;
+}
+
+.ames-legacy-topbar{
+  min-height:76px;
+  padding:14px clamp(18px,3vw,42px);
+  gap:18px;
+  background:rgba(255,255,255,.95);
+}
+
+.ames-topbar-heading{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex:1 1 auto;
+}
+
+.ames-heading-copy{
+  min-width:0;
+}
+
+.ames-console-back-mobile{
+  display:none;
+}
+
+.ames-legacy-title{
+  font-size:20px;
+  line-height:1.16;
+  letter-spacing:-.025em;
+}
+
+.ames-legacy-sub{
+  margin-top:4px;
+  font-size:11px;
+  line-height:1.4;
+}
+
+.ames-legacy-actions{
+  gap:8px;
+}
+
+.ames-legacy-content{
+  max-width:1620px;
+  padding:22px clamp(18px,3vw,42px) 48px;
+}
+
+.ames-shell-banner{
+  min-height:38px;
+  margin:0 0 12px;
+  padding:9px 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  border:1px solid #dfe6eb;
+  border-radius:9px;
+  background:#f8fbfd;
+  color:#47565f;
+  font-size:10px;
+  line-height:1.45;
+}
+
+.ames-shell-banner strong{
+  color:#222;
+}
+
+.ames-shell-build{
+  flex:0 0 auto;
+  padding:4px 8px;
+  border:1px solid #cfe0ec;
+  border-radius:999px;
+  background:#eef6fb;
+  color:#255d83;
+  font-size:9px;
+  font-weight:800;
+}
+
+.ames-legacy-shell .button{
+  min-height:38px;
+  padding:8px 12px;
+  border-radius:8px;
+  font-size:11px;
+  font-weight:680;
+}
+
+.ames-legacy-shell .status,
+.ames-status-pill{
+  min-height:38px;
+  padding:7px 10px;
+  gap:7px;
+  font-size:10px;
+}
+
+.ames-agent-dot{
+  width:7px;
+  height:7px;
+}
+
+.ames-legacy-shell .panel,
+.ames-legacy-shell .mes-context-panel,
+.ames-legacy-shell .ames-console-form{
+  border-radius:12px;
+  box-shadow:var(--ames-shadow);
+}
+
+.ames-legacy-shell .mes-context-panel,
+.ames-legacy-shell .ames-console-form{
+  margin-bottom:12px;
+  padding:15px;
+}
+
+.ames-legacy-shell .mes-context-panel h2{
+  font-size:15px;
+}
+
+.ames-legacy-shell .mes-context-panel h3{
+  font-size:13px;
+}
+
+.ames-legacy-shell .mes-context-panel p,
+.ames-legacy-shell .section-head>div>p{
+  font-size:10px;
+}
+
+.ames-legacy-shell .section-head{
+  gap:14px;
+  margin-bottom:10px;
+}
+
+.ames-legacy-shell .ames-reuse-kpis,
+.ames-legacy-shell .ames-summary-grid{
+  gap:10px;
+  margin-bottom:12px;
+}
+
+.ames-legacy-shell .stat,
+.ames-legacy-shell .ames-kv{
+  padding:13px 14px;
+  border-radius:11px;
+}
+
+.ames-legacy-shell .stat-label,
+.ames-legacy-shell .ames-kv small{
+  font-size:9.5px;
+}
+
+.ames-legacy-shell .stat strong,
+.ames-legacy-shell .stat-value,
+.ames-legacy-shell .ames-kv b{
+  font-size:20px;
+  letter-spacing:-.03em;
+}
+
+.ames-legacy-shell .stat-note{
+  font-size:9.5px;
+  line-height:1.5;
+}
+
+.ames-legacy-shell .ames-kpi-button:hover{
+  border-color:#b9cad7;
+  background:#fbfdff;
+  box-shadow:0 7px 22px rgba(36,87,130,.07);
+}
+
+.ames-legacy-shell .ames-kpi-button.active{
+  outline:2px solid #111;
+  outline-offset:2px;
+}
+
+.ames-legacy-shell .mes-pagination{
+  gap:7px;
+}
+
+.ames-legacy-shell .mes-pagination>span{
+  font-size:10px;
+}
+
+.ames-legacy-shell .mes-filters{
+  gap:10px;
+  margin:10px 0;
+}
+
+.ames-legacy-shell label{
+  gap:5px;
+  font-size:9.5px;
+}
+
+.ames-legacy-shell input,
+.ames-legacy-shell select{
+  min-height:37px;
+  padding:7px 9px;
+  border-radius:8px;
+  font-size:10.5px;
+}
+
+.ames-legacy-shell fieldset{
+  margin-bottom:10px;
+  padding:11px;
+  border-radius:9px;
+  gap:8px;
+}
+
+.ames-legacy-shell legend{
+  font-size:10px;
+}
+
+.ames-legacy-shell .mes-opt-in{
+  padding:8px 10px;
+  border-radius:8px;
+}
+
+.ames-legacy-shell .notice,
+.ames-legacy-shell .info-note,
+.ames-legacy-shell [data-agent-status]{
+  font-size:10px;
+  line-height:1.5;
+}
+
+.ames-legacy-shell .notice{
+  padding:10px 12px;
+}
+
+.ames-legacy-shell .info-note,
+.ames-legacy-shell [data-agent-status]{
+  padding:10px 12px;
+}
+
+.ames-legacy-shell [data-agent-status] p,
+.ames-legacy-shell [data-trace-status] p,
+.ames-legacy-shell [data-sn-status] p{
+  font-size:9.5px;
+}
+
+.ames-legacy-shell .table-wrap{
+  border-radius:10px;
+  box-shadow:0 3px 14px rgba(0,0,0,.025);
+}
+
+.ames-legacy-shell table{
+  min-width:1040px;
+}
+
+.ames-legacy-shell th{
+  padding:10px 11px;
+  font-size:9px;
+}
+
+.ames-legacy-shell td{
+  padding:9px 11px;
+  font-size:10px;
+}
+
+.ames-legacy-shell tbody tr:nth-child(even){
+  background:#f7fbfe;
+}
+
+.ames-legacy-shell tbody tr:hover{
+  background:#edf5fa;
+}
+
+.ames-legacy-shell .ames-evidence-card{
+  margin:8px 0;
+  padding:12px;
+  border-radius:10px;
+}
+
+.ames-legacy-shell .ames-evidence-card-head div span{
+  font-size:10px;
+}
+
+.ames-legacy-shell .ames-prior-pcba{
+  margin-top:8px;
+  padding:9px;
+}
+
+.ames-legacy-shell summary{
+  font-size:10px;
+}
+
+.ames-legacy-shell .ames-collection-strip{
+  margin-bottom:12px;
+  padding:9px 12px;
+  border-radius:8px;
+  font-size:9.5px;
+}
+
+.ames-line-tabs{
+  gap:7px;
+  margin:10px 0 12px;
+}
+
+.ames-top3-grid{
+  gap:12px;
+}
+
+.ames-top3-meta{
+  gap:7px;
+  margin-bottom:12px;
+}
+
+.ames-top3-meta span{
+  min-height:30px;
+  padding:6px 9px;
+  font-size:9.5px;
+}
+
+.ames-top3-list{
+  gap:7px;
+}
+
+.ames-top3-item{
+  grid-template-columns:30px minmax(0,1fr) auto;
+  gap:9px;
+  padding:9px 10px;
+  border-radius:9px;
+}
+
+.ames-rank{
+  width:27px;
+  height:27px;
+  font-size:10px;
+}
+
+.ames-top3-item b{
+  font-size:10.5px;
+}
+
+.ames-top3-item small{
+  font-size:9px;
+}
+
+.ames-top3-item strong{
+  font-size:17px;
+}
+
+.ames-failure-summary{
+  gap:8px;
+  margin-top:10px;
+}
+
+.ames-failure-summary span{
+  padding:6px 9px;
+  font-size:9.5px;
+}
+
+@media(max-width:1180px){
+  .ames-legacy-shell{grid-template-columns:206px minmax(0,1fr)}
+}
+
+@media(max-width:760px){
+  .ames-legacy-shell{grid-template-columns:1fr;font-size:14px}
+  .ames-legacy-sidebar{width:min(86vw,286px);padding:20px 13px 16px}
+  .ames-console-home{min-height:42px;margin-top:12px;font-size:12px}
+  .ames-legacy-nav button{min-height:42px;font-size:12px}
+  .ames-legacy-topbar{min-height:64px;padding:9px 10px;gap:8px}
+  .ames-topbar-heading{gap:8px;min-width:0}
+  .ames-console-back-mobile{display:inline-flex!important;align-items:center;justify-content:center;min-width:68px;padding-inline:9px}
+  .ames-legacy-title{font-size:16px}
+  .ames-legacy-sub{font-size:10px}
+  .ames-legacy-actions{gap:6px}
+  .ames-status-pill{min-height:40px;font-size:9px}
+  .ames-legacy-content{padding:12px 10px max(28px,env(safe-area-inset-bottom))}
+  .ames-shell-banner{align-items:flex-start;margin-bottom:10px;padding:8px 10px;font-size:9px}
+  .ames-shell-build{display:none}
+  .ames-legacy-shell .ames-summary-grid,
+  .ames-legacy-shell .ames-reuse-kpis{gap:8px}
+  .ames-legacy-shell .stat,
+  .ames-legacy-shell .ames-kv{padding:12px}
+  .ames-legacy-shell .stat strong,
+  .ames-legacy-shell .stat-value,
+  .ames-legacy-shell .ames-kv b{font-size:18px}
+}
+
+@media(max-width:420px){
+  .ames-console-back-mobile{min-width:60px;font-size:10px}
+  .ames-legacy-title{font-size:15px}
+  .ames-status-pill{max-width:34vw}
+  .ames-shell-banner{display:none}
+}
