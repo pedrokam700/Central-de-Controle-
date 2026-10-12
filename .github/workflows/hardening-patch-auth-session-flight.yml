@@ -1,0 +1,98 @@
+name: One-shot auth session flight wiring
+
+on:
+  push:
+    branches:
+      - hardening/p0-production-readiness
+    paths:
+      - .github/workflows/hardening-patch-auth-session-flight.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: hardening/p0-production-readiness
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Apply exact auth session flight wiring
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app=Path('app.js')
+          text=app.read_text(encoding='utf-8')
+
+          replacements=[
+            (
+              "    import {createUserProfileService} from './core/user-profile-service.mjs';\n",
+              "    import {createUserProfileService} from './core/user-profile-service.mjs';\n    import {createAuthSessionFlight} from './core/auth-session-flight.mjs';\n"
+            ),
+            (
+              "    // Controle de concorrência da autenticação: criação/login e onAuthStateChanged\n    // podem disparar juntos. Mantemos uma única inicialização por UID.\n    let finishLoginPromise = null;\n    let finishLoginUid = null;\n",
+              "    // Coordena criação/login + onAuthStateChanged sem duplicar inicialização por UID.\n    const finishLoginFlight = createAuthSessionFlight();\n"
+            ),
+            (
+              "      // Evita duas inicializações simultâneas quando createUser/signIn dispara\n      // o onAuthStateChanged ao mesmo tempo em que o formulário chama finishLogin.\n      if (finishLoginPromise && finishLoginUid === firebaseUser.uid) {\n        return finishLoginPromise;\n      }\n\n      finishLoginUid = firebaseUser.uid;\n      finishLoginPromise = (async () => {\n",
+              "      // Formulário e auth observer podem chegar juntos; a coordenação fica isolada\n      // e uma sessão antiga nunca limpa o flight de um UID mais novo.\n      return finishLoginFlight.run(firebaseUser.uid, async () => {\n"
+            ),
+            (
+              "      })();\n\n      try {\n        return await finishLoginPromise;\n      } finally {\n        finishLoginPromise = null;\n        finishLoginUid = null;\n      }\n    }\n\n    // ================= AUTH BOOTSTRAP V14.8 =================\n",
+              "      });\n    }\n\n    // ================= AUTH BOOTSTRAP V14.8 =================\n"
+            )
+          ]
+
+          for old,new in replacements:
+            count=text.count(old)
+            if count!=1:
+              raise SystemExit(f'app.js anchor count {count}, expected 1: {old[:80]!r}')
+            text=text.replace(old,new,1)
+
+          if 'finishLoginPromise' in text or 'finishLoginUid' in text:
+            raise SystemExit('legacy finishLogin single-flight state remains in app.js')
+          if "createAuthSessionFlight} from './core/auth-session-flight.mjs'" not in text:
+            raise SystemExit('auth session flight import missing')
+          if 'return finishLoginFlight.run(firebaseUser.uid, async () => {' not in text:
+            raise SystemExit('finishLogin is not wired through coordinator')
+          app.write_text(text,encoding='utf-8')
+
+          sw=Path('sw.js')
+          sw_text=sw.read_text(encoding='utf-8')
+          old="BASE+'core/session-admission.mjs',BASE+'core/user-profile-service.mjs',"
+          new="BASE+'core/session-admission.mjs',BASE+'core/user-profile-service.mjs',BASE+'core/auth-session-flight.mjs',"
+          count=sw_text.count(old)
+          if count!=1:
+            raise SystemExit(f'sw.js anchor count {count}, expected 1')
+          sw_text=sw_text.replace(old,new,1)
+          if sw_text.count("BASE+'core/auth-session-flight.mjs'")!=1:
+            raise SystemExit('auth session flight precache count must be exactly one')
+          sw.write_text(sw_text,encoding='utf-8')
+          PY
+      - name: Validate focused auth flight contract
+        run: |
+          node --test scripts/ames-auth-session-flight.test.mjs
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const app=fs.readFileSync('app.js','utf8');
+          const sw=fs.readFileSync('sw.js','utf8');
+          if(!app.includes("import {createAuthSessionFlight} from './core/auth-session-flight.mjs';"))throw new Error('import missing');
+          if(!app.includes('const finishLoginFlight = createAuthSessionFlight();'))throw new Error('coordinator missing');
+          if(!app.includes('return finishLoginFlight.run(firebaseUser.uid, async () => {'))throw new Error('finishLogin wiring missing');
+          if(app.includes('finishLoginPromise')||app.includes('finishLoginUid'))throw new Error('legacy state remains');
+          if(!sw.includes("BASE+'core/auth-session-flight.mjs'"))throw new Error('offline shell missing module');
+          NODE
+      - name: Remove one-shot tooling
+        run: git rm .github/workflows/hardening-patch-auth-session-flight.yml
+      - name: Commit validated wiring
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js core/auth-session-flight.mjs scripts/ames-auth-session-flight.test.mjs
+          git commit -m 'Hardening: wire auth session single-flight coordinator'
+          git push origin HEAD:hardening/p0-production-readiness
