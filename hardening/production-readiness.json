@@ -413,7 +413,10 @@
         "launcher remains unchanged and local frontend is not the default",
         "current-origin offline readiness verifies all three exact Firebase 10.8.0 browser SDK modules are already present and valid in CacheStorage",
         "Service Worker precache now closes the offline-bootstrap -> offline-readiness -> firebase-sdk-preparation dependency chain",
-        "Firebase SDK preparation is origin-scoped and fail-closed; a registered Service Worker alone no longer proves the workstation can bootstrap offline"
+        "Firebase SDK preparation is origin-scoped and fail-closed; a registered Service Worker alone no longer proves the workstation can bootstrap offline",
+        "app Service Worker registration, readiness lookup and worker BASE share the exact /Central-de-Controle-/ scope contract",
+        "verified loopback proof server serves /Central-de-Controle-/sw.js from the immutable stage with JavaScript MIME and nosniff",
+        "local proof server remains loopback-only, launcher_default false and CORA /api blocked while Service Worker assets are served"
       ],
       "evidence": [
         "scripts/frontend_package.py",
@@ -430,18 +433,22 @@
         "core/firebase-sdk-preparation.mjs",
         "scripts/ames-firebase-sdk-preparation.test.mjs",
         "scripts/ames-offline-readiness.test.mjs",
-        "hardening/firebase-sdk-preparation-evidence.json"
+        "hardening/firebase-sdk-preparation-evidence.json",
+        "scripts/ames-local-origin-service-worker.test.mjs",
+        "hardening/local-origin-service-worker-evidence.json"
       ],
       "remaining": [
         "define authenticated CORA/API routing for local origin after backend identity/version is proven",
-        "validate Service Worker/local-origin lifecycle",
         "perform real Windows workstation proof of local serve/activate/deactivate",
         "only then add explicit launcher consumption of active local state with fail-closed health recheck",
         "validate live Firebase Auth authorized-domain behavior for localhost/127.0.0.1 before local origin can become a launcher candidate",
-        "choose and prove an explicit first-preparation strategy for a never-prepared local origin: online exact-SDK bootstrap or vendored exact Firebase SDK; no strategy is approved yet"
+        "choose and prove an explicit first-preparation strategy for a never-prepared local origin: online exact-SDK bootstrap or vendored exact Firebase SDK; no strategy is approved yet",
+        "validate real Chrome/Edge Service Worker registration, activation, control and update lifecycle on the Windows loopback origin"
       ],
       "full_ci_runs": [
-        38188754058
+        38188754058,
+        38188976132,
+        38189143551
       ]
     },
     "offline_readiness": {
@@ -456,7 +463,9 @@
         "verified local frontend can be activated/deactivated through a separate atomic state contract without changing launcher",
         "offline_ready requires exact Firebase SDK preparation in CacheStorage for the current origin",
         "missing/invalid Firebase SDK cache is reported explicitly instead of being inferred from Service Worker registration",
-        "offline readiness dependency modules are part of the static Service Worker shell"
+        "offline readiness dependency modules are part of the static Service Worker shell",
+        "canonical Service Worker path/scope is aligned across app registration, readiness lookup and worker BASE",
+        "verified loopback HTTP proof serves the staged Service Worker with JavaScript MIME and nosniff without changing launcher defaults"
       ],
       "remaining": [
         "local origin is not launcher default",
@@ -469,10 +478,15 @@
         "core/firebase-sdk-preparation.mjs",
         "scripts/ames-offline-readiness.test.mjs",
         "scripts/ames-firebase-sdk-preparation.test.mjs",
-        "hardening/firebase-sdk-preparation-evidence.json"
+        "hardening/firebase-sdk-preparation-evidence.json",
+        "scripts/ames-local-origin-service-worker.test.mjs",
+        "scripts/agent-local-frontend-server.test.py",
+        "hardening/local-origin-service-worker-evidence.json"
       ],
       "full_ci_runs": [
-        38188754058
+        38188754058,
+        38188976132,
+        38189143551
       ]
     },
     "r12_existing_install_bundle": {
