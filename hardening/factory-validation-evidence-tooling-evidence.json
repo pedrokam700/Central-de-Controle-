@@ -1,8 +1,9 @@
 {
   "schema": "central-factory-validation-tooling-evidence-v1",
-  "status": "focused_green_full_ci_pending",
+  "status": "green_internal_tooling_physical_execution_pending",
   "branch": "hardening/p0-production-readiness",
   "functional_commit": "1cbbe20895608f6d25a9428ab7e51c2f0607c339",
+  "validated_checkpoint": "e6f8bbbcfe9a4c400efe8e78595eac9d453beded",
   "physical_candidate": {
     "branch": "v2/console-parity-r12",
     "sha": "5e45127d3b61b37968a4c2b05596919670b307cb",
@@ -19,7 +20,12 @@
     "Factory Gate documentation preserves the frozen physical candidate and treats hardening as supplemental regression evidence",
     "launcher defaults, main, production Rules and physical candidate behavior remain unchanged"
   ],
-  "full_ci_run": null,
+  "full_ci_run": 38247474565,
+  "full_ci_gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "external_gate_separate"
+  },
   "not_proven": [
     "factory 9/9 GREEN",
     "real R12 capture GREEN",
