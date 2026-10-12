@@ -1,0 +1,25 @@
+{
+  "schema": "central-firebase-sdk-preparation-evidence-v1",
+  "status": "green_contract_not_first_install_solution",
+  "branch": "hardening/p0-production-readiness",
+  "validated_commit": "966a4856c5e8b1f6f5ed67912400a9d664525c94",
+  "full_ci_run": 38188754058,
+  "static_quality": "success",
+  "firestore_rules_cross_pc_e2e": "success",
+  "green": [
+    "offline readiness checks the exact Firebase 10.8.0 app/auth/firestore modules in CacheStorage for the current browser origin",
+    "missing, redirected, HTTP-error or non-JavaScript SDK responses fail preparation closed",
+    "CacheStorage unavailability is explicit and never treated as prepared",
+    "offline readiness now requires Firebase SDK preparation in addition to local Auth persistence, persistent Firestore cache and Service Worker state",
+    "Service Worker precaches core/offline-readiness.mjs and its firebase-sdk-preparation dependency",
+    "offline bootstrap, preparation contract and Service Worker are pinned by tests to the same three exact Firebase SDK URLs",
+    "the preparation evaluator is cache-only and never downloads or probes the network itself"
+  ],
+  "not_solved": [
+    "a never-prepared browser origin still needs network access to gstatic during initial preparation unless an explicit vendored/bootstrap strategy is approved",
+    "Firebase Auth authorized-domain behavior for localhost or 127.0.0.1 has not been proven against the live Firebase project",
+    "local-origin Service Worker lifecycle still requires dedicated browser/Windows validation",
+    "launcher default remains unchanged",
+    "CORA /api routing remains blocked on local proof origin until backend identity/version is proven"
+  ]
+}
