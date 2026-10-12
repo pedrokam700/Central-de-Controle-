@@ -21,6 +21,23 @@ function args(argv){
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const sha256=text=>crypto.createHash('sha256').update(text).digest('hex');
 
+export function classifyUnexpectedHtml(html){
+  const text=String(html||'').slice(0,131072);
+  if(/vercel authentication|authentication required|log in to vercel|security checkpoint|deployment protection/i.test(text))return 'provider_protection';
+  if(/central de controle|central de trabalho|offline-bootstrap\.mjs|id=["']authLogin["']/i.test(text))return 'central_html';
+  if(/<title[^>]*>\s*(?:404|not found)|\bNOT_FOUND\b/i.test(text))return 'not_found_html';
+  return 'html_unknown';
+}
+
+async function nonJsonReason(response,prefix,contentType){
+  if(/text\/html/i.test(contentType)){
+    let classification='html_unreadable';
+    try{classification=classifyUnexpectedHtml(await response.text());}catch{}
+    return `${prefix}_not_json:${contentType}:${classification}`;
+  }
+  return `${prefix}_not_json:${contentType}`;
+}
+
 export async function fetchBounded(url,{maxRedirects=4,fetcher=fetch}={}){
   let current=new URL(url),redirects=0;
   const visited=new Set();
@@ -46,14 +63,14 @@ async function probe(origin,expected,{fetcher=fetch,maxRedirects=4}={}){
   const release=await fetchBounded(`${base}/release-build.json?smoke=${Date.now()}`,{fetcher,maxRedirects});
   if(!release.response.ok)throw Error(`release_build_http_${release.response.status}`);
   const releaseType=release.response.headers.get('content-type')||'';
-  if(!/json/i.test(releaseType))throw Error(`release_build_not_json:${releaseType}`);
+  if(!/json/i.test(releaseType))throw Error(await nonJsonReason(release.response,'release_build',releaseType));
   const manifest=await release.response.json();
   if(String(manifest.sha||'').toLowerCase()!==expected.toLowerCase())throw Error(`sha_mismatch:${manifest.sha||'missing'}`);
 
   const identityResponse=await fetchBounded(`${base}/release-identity.json?smoke=${Date.now()}`,{fetcher,maxRedirects});
   if(!identityResponse.response.ok)throw Error(`release_identity_http_${identityResponse.response.status}`);
   const identityType=identityResponse.response.headers.get('content-type')||'';
-  if(!/json/i.test(identityType))throw Error(`release_identity_not_json:${identityType}`);
+  if(!/json/i.test(identityType))throw Error(await nonJsonReason(identityResponse.response,'release_identity',identityType));
   const identityText=await identityResponse.response.text();
   let identity;
   try{identity=JSON.parse(identityText);}catch{throw Error('release_identity_invalid_json');}
