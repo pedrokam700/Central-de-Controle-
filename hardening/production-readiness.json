@@ -689,6 +689,24 @@
         "compare behavior",
         "9/9",
         "then remove process_r11 compatibility bridge"
+      ],
+      "green": [
+        "sanitized factory validation evidence schema fixes the frozen physical candidate plus exact hardening SHA without collecting raw MES identifiers",
+        "factory evidence manifest fixes all 9 canonical views and Gates A-I and fails closed on unknown/sensitive-shaped fields",
+        "R12 capture evidence records only sanitized ZIP SHA-256 and file count",
+        "all-pass manifest yields ready_for_promotion_review only and never automatic GREEN/promotion",
+        "factory evidence validator ships as support tooling in the existing-install R12 bundle without entering agent runtime or changing launcher defaults",
+        "factory evidence tooling passed Static Quality and Firestore Rules/cross-PC E2E"
+      ],
+      "evidence": [
+        "tools/ames-workstation/factory-validation-evidence.py",
+        "scripts/ames-factory-validation-evidence.test.mjs",
+        "scripts/agent-r12-bundle-v5.test.py",
+        "docs/ames/FACTORY_GATE_R12.md",
+        "hardening/factory-validation-evidence-tooling-evidence.json"
+      ],
+      "full_ci_runs": [
+        38247474565
       ]
     }
   }
