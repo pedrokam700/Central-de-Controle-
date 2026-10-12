@@ -96,6 +96,8 @@ jobs:
       - name: Build immutable frontend package from exact dist
         env:
           FRONTEND_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
           CENTRAL_STATIC_OUT: ${{ runner.temp }}/central-static-${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           node scripts/build-static.mjs
