@@ -21,6 +21,20 @@ function unavailable(error){
   return wrapped;
 }
 
+function notOwned(reason){
+  const wrapped=new Error('Lease atual não pertence a esta sessão e workstation.');
+  wrapped.code='collector/lease-not-owned';
+  wrapped.reason=reason;
+  return wrapped;
+}
+
+function notCurrent(error){
+  const wrapped=new Error('Lease atual não pôde ser confirmado pelo servidor.');
+  wrapped.code='collector/lease-not-current';
+  wrapped.cause=error;
+  return wrapped;
+}
+
 export function createCollectorLeaseClient({doc,runTransaction,getDoc,serverTimestamp,db,currentUid,workstationId}={}){
   for(const [name,value] of Object.entries({doc,runTransaction,getDoc,serverTimestamp})){
     if(typeof value!=='function')throw new TypeError(`${name} obrigatório para collector lease client`);
@@ -87,6 +101,42 @@ export function createCollectorLeaseClient({doc,runTransaction,getDoc,serverTime
     }
   }
 
+  async function confirmOwned(line){
+    const normalizedLine=validateLeaseLine(line),uid=session(),ref=leaseRef(normalizedLine);
+    try{
+      return await runTransaction(db,async transaction=>{
+        const snapshot=await transaction.get(ref);
+        if(!snapshot.exists())throw notOwned('vacant');
+        const current=remoteLease(snapshot.data(),normalizedLine);
+        if(current.owner_uid!==uid||current.workstation_id!==workstation)throw notOwned('different_collector');
+        const generation=current.generation;
+        const confirmed=Object.freeze({
+          action:'confirm',
+          authoritative:true,
+          generation,
+          line_id:normalizedLine,
+          owner_uid:uid,
+          workstation_id:workstation,
+          fence:fencingToken({line:normalizedLine,generation,workstationId:workstation})
+        });
+        transaction.set(ref,{
+          schema:COLLECTOR_LEASE_SCHEMA,
+          line_id:normalizedLine,
+          owner_uid:uid,
+          workstation_id:workstation,
+          generation,
+          acquired_at:current.acquired_at,
+          renewed_at:serverTimestamp(),
+          status:'active'
+        });
+        return confirmed;
+      });
+    }catch(error){
+      if(permissionDenied(error))throw notCurrent(error);
+      throw error;
+    }
+  }
+
   async function status(line){
     const normalizedLine=validateLeaseLine(line),snapshot=await getDoc(leaseRef(normalizedLine));
     if(!snapshot.exists())return null;
@@ -100,8 +150,9 @@ export function createCollectorLeaseClient({doc,runTransaction,getDoc,serverTime
 
   return Object.freeze({
     claim,
+    confirmOwned,
     status,
     workstation_id:workstation,
-    activation:'lease-client-ready-head-enforcement-disabled'
+    activation:'lease-client-confirm-own-ready-runtime-not-wired-head-enforcement-disabled'
   });
 }
