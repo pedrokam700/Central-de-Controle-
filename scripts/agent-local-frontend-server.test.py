@@ -49,6 +49,7 @@ def make_stage(root: pathlib.Path) -> pathlib.Path:
     (canonical / "index.html").write_text("<!doctype html><title>Central Local</title>", encoding="utf-8")
     (canonical / "offline-bootstrap.mjs").write_text("export const localProof=true;", encoding="utf-8")
     (canonical / "app.js").write_text("export const localApp=true;", encoding="utf-8")
+    (canonical / "sw.js").write_text("self.addEventListener(\"fetch\",()=>{});", encoding="utf-8")
 
     package = root / "frontend.zip"
     frontend_package.build_package(dist, package, SHA)
@@ -116,6 +117,11 @@ def test_loopback_server_serves_verified_shell_health_and_blocks_api_metadata():
             status, headers, body = fetch(origin + "/Central-de-Controle-/offline-bootstrap.mjs")
             assert status == 200 and b"localProof" in body
             assert headers.get_content_type() == "text/javascript"
+
+            status, headers, body = fetch(origin + "/Central-de-Controle-/sw.js")
+            assert status == 200 and b"addEventListener" in body and b"fetch" in body
+            assert headers.get_content_type() == "text/javascript"
+            assert headers.get("X-Content-Type-Options") == "nosniff"
 
             status, _, body = fetch(origin + server_module.HEALTH_PATH)
             health = json.loads(body)
