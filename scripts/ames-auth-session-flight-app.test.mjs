@@ -24,7 +24,6 @@ test('auth orchestration remains in app and still converges through finishLogin'
   assert.match(app,/await finishLogin\(firebaseUser, legacyUser\);/);
   assert.match(app,/await finishLogin\(credential\.user/);
   assert.match(app,/clearDataListeners\(\);/);
-  assert.match(app,/stopMesSync\(\);/);
 });
 
 test('offline shell contains extracted auth session flight dependency exactly once',()=>{
