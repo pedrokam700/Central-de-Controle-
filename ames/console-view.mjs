@@ -28,6 +28,7 @@ const STYLE_HREF = new URL('./console-legacy.css', import.meta.url).href;
 const WAVE2_STYLE_HREF = new URL('./console-wave2.css', import.meta.url).href;
 const WAVE3_STYLE_HREF = new URL('./console-wave3.css', import.meta.url).href;
 const MOBILE_STYLE_HREF = new URL('./console-mobile-polish.css', import.meta.url).href;
+const POLISH_STYLE_HREF = new URL('./console-r12-polish.css', import.meta.url).href;
 
 // Fusão nativa definitiva do Console MES: uma sessão, um state.ames, um agent client.
 // A V0.5.22/V0.5.23/R12 permanece como referência visual/operacional, nunca como app paralelo.
@@ -42,6 +43,10 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     shell?.classList.toggle('menu-open',!!open);
     button?.setAttribute('aria-expanded',String(!!open));
   }
+  function backToCentral(){
+    setMenu(false);
+    document.querySelector('.main-nav [data-page="home"], [data-page="home"]')?.click();
+  }
   function openWorkstationSetup(){
     switchView('monitor');
     const pane=root.querySelector('[data-console-pane="monitor"]');
@@ -52,29 +57,29 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     requestAnimationFrame(()=>setup?.scrollIntoView({behavior:'smooth',block:'start'}));
   }
   function mount(){
-    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
+    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><link rel="stylesheet" href="${POLISH_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
       <aside class="ames-legacy-sidebar">
         <div class="ames-legacy-brand"><div class="ames-legacy-brand-row"><div class="ames-legacy-mark">Q</div><div><strong>Central de trabalho</strong><span>A-MES · motor local integrado</span></div></div></div>
+        <button type="button" class="ames-console-home" data-console-back aria-label="Voltar para a Central de Trabalho"><span aria-hidden="true">←</span><span>Voltar para a Central</span></button>
         <nav class="ames-legacy-nav" aria-label="Views da automação A-MES">${VIEWS.map(([id,icon,label])=>`<button type="button" data-console-view="${id}"${id===active?' class="active"':''}><span class="ico">${icon}</span>${label}</button>`).join('')}</nav>
         <div class="ames-legacy-foot"><b>Offline por padrão.</b><br>MES e banco permanecem no notebook. As 9 views usam o mesmo state.ames, o mesmo agente local e a mesma base operacional.<br><br><span data-console-build-foot>R12 · 9 views</span></div>
       </aside>
       <button type="button" class="ames-mobile-backdrop" data-console-menu-close aria-label="Fechar menu do Console MES"></button>
       <main class="ames-legacy-main">
-        <header class="ames-legacy-topbar"><div><h1 class="ames-legacy-title" data-console-title></h1><p class="ames-legacy-sub" data-console-sub></p></div><div class="ames-legacy-actions">
+        <header class="ames-legacy-topbar"><div class="ames-topbar-heading"><button class="button secondary ames-console-back-mobile" type="button" data-console-back aria-label="Voltar para a Central de Trabalho">← Central</button><div class="ames-heading-copy"><h1 class="ames-legacy-title" data-console-title></h1><p class="ames-legacy-sub" data-console-sub></p></div></div><div class="ames-legacy-actions">
           <button class="button secondary ames-mobile-menu" type="button" data-console-menu aria-expanded="false" aria-label="Abrir menu do Console MES" style="display:none">☰</button>
           <span class="ames-status-pill"><span class="ames-agent-dot" data-console-dot></span><span data-console-status>Agente local desconectado</span></span>
           <span class="ames-status-pill ames-hide-mobile"><span class="ames-agent-dot" data-console-process-dot></span><span data-console-process>3022 em lote indisponível</span></span>
           <button class="button secondary ames-hide-mobile" type="button" data-console-open-ames>Abrir A-MES</button>
           <button class="button secondary ames-hide-mobile" type="button" data-console-setup>Configurar posto</button>
           <button class="button secondary ames-hide-mobile" type="button" data-console-check>Verificar</button>
-          <button class="button secondary" type="button" data-console-back>Voltar à Central</button>
         </div></header>
         <div class="ames-legacy-content"><div class="ames-shell-banner"><div><strong>Console MES integrado</strong> · experiência operacional R12/V0.5.22 preservada sobre a arquitetura nativa da Central V2.</div><span class="ames-shell-build" data-console-build>MES local</span></div>${VIEWS.map(([id])=>`<section class="ames-console-pane" data-console-pane="${id}"${id===active?'':' hidden'}></section>`).join('')}</div>
       </main></div>`;
     for(const button of root.querySelectorAll('[data-console-view]'))button.addEventListener('click',()=>switchView(button.dataset.consoleView));
+    for(const button of root.querySelectorAll('[data-console-back]'))button.addEventListener('click',backToCentral);
     root.querySelector('[data-console-menu]')?.addEventListener('click',()=>setMenu(!root.querySelector('[data-ames-shell]')?.classList.contains('menu-open')));
     root.querySelector('[data-console-menu-close]')?.addEventListener('click',()=>setMenu(false));
-    root.querySelector('[data-console-back]')?.addEventListener('click',()=>document.querySelector('.main-nav [data-page="home"], [data-page="home"]')?.click());
     root.querySelector('[data-console-open-ames]')?.addEventListener('click',async()=>{try{if(store.agent().status!=='connected')await client.connect();await client.auxiliary('chrome');}catch(error){store.updateAgent({error:error.message});paintHeader();}});
     root.querySelector('[data-console-setup]')?.addEventListener('click',openWorkstationSetup);
     root.querySelector('[data-console-check]')?.addEventListener('click',async()=>{try{if(store.agent().status==='connected')await client.refresh();else await client.connect();}catch(error){store.updateAgent({error:error.message});paintHeader();}});
