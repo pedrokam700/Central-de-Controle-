@@ -1,0 +1,38 @@
+name: One-shot Firebase preparation readiness reconciliation
+
+on:
+  push:
+    branches:
+      - hardening/p0-production-readiness
+    paths:
+      - '.github/workflows/hardening-reconcile-firebase-preparation-readiness.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Reconcile Firebase preparation readiness
+        run: node scripts/hardening-reconcile-firebase-preparation-readiness.mjs
+      - name: Validate blockers remain explicit
+        run: |
+          node -e "const x=require('./hardening/production-readiness.json');const i=x.gates.immutable_frontend_distribution,o=x.gates.offline_readiness;if(x.promotion.stable_allowed||x.promotion.main_merge_allowed||x.promotion.production_rules_publish_allowed)process.exit(1);if(!i.remaining.some(v=>v.includes('never-prepared local origin')))process.exit(1);if(!o.remaining.some(v=>v.includes('never-prepared local origin')))process.exit(1);if(!i.remaining.some(v=>v.includes('Firebase Auth')))process.exit(1);"
+      - name: Remove one-shot tooling
+        run: rm scripts/hardening-reconcile-firebase-preparation-readiness.mjs .github/workflows/hardening-reconcile-firebase-preparation-readiness.yml
+      - name: Commit validated readiness only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add hardening/production-readiness.json scripts/hardening-reconcile-firebase-preparation-readiness.mjs .github/workflows/hardening-reconcile-firebase-preparation-readiness.yml
+          git diff --cached --quiet && { echo 'No validated readiness change'; exit 1; }
+          git commit -m 'Hardening: reconcile current-origin Firebase preparation readiness'
+          git push origin HEAD:hardening/p0-production-readiness
