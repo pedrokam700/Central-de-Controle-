@@ -1,0 +1,23 @@
+{
+  "schema": "central-local-origin-service-worker-evidence-v1",
+  "status": "validation_pending",
+  "branch": "hardening/p0-production-readiness",
+  "scope_contract_commit": "157594bf8d16ff8ad2e15c341fb74afb5a5f8fad",
+  "scope_contract_full_ci_run": 38188976132,
+  "loopback_http_test_commit": "aa5143bc27d5aca8a72de996737c3de897db5285",
+  "guarantees_under_test": [
+    "app registration, readiness lookup and Service Worker BASE use /Central-de-Controle-/ consistently",
+    "verified local proof server binds only to 127.0.0.1 and serves the canonical /Central-de-Controle-/ path",
+    "the staged Service Worker is HTTP-readable from /Central-de-Controle-/sw.js",
+    "the local server returns the Service Worker with JavaScript MIME and nosniff",
+    "local activation remains sidecar state only and does not change launcher default",
+    "CORA /api routes remain blocked on local proof origin"
+  ],
+  "not_proven": [
+    "real Chrome/Edge Service Worker registration and lifecycle on Windows loopback origin",
+    "Firebase Auth authorized-domain behavior for localhost/127.0.0.1",
+    "never-prepared local-origin first SDK preparation",
+    "launcher default switch",
+    "CORA backend routing on local origin"
+  ]
+}
