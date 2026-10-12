@@ -2,10 +2,18 @@
 const LINES=Object.freeze(['TAN10101','TAN10102','TAN10103']);
 const validLine=line=>{if(!LINES.includes(line))throw Error('Linha MES inválida');return line;};
 const collectedAt=head=>{const t=Date.parse(head?.collected_at||'');return Number.isFinite(t)?t:0;};
+const fenceGeneration=head=>Number(head?.collector_fence?.generation)||0;
+const sameSnapshotContent=(a,b)=>[
+  'schema','owner_uid','line_id','source_id','snapshot_id','snapshot_num','snapshot_revision','hash','parts','collected_at'
+].every(field=>a?.[field]===b?.[field]);
+const fenceMetadataAdvance=(oldHead,newHead)=>sameSnapshotContent(oldHead,newHead)
+  && !!newHead?.collector_fence
+  && fenceGeneration(newHead)>fenceGeneration(oldHead);
 function compareHead(a,b){
   const time=collectedAt(a)-collectedAt(b);if(time)return time;
   const rev=(Number(a?.snapshot_num)||0)-(Number(b?.snapshot_num)||0);if(rev)return rev;
   const sub=(Number(a?.snapshot_revision)||0)-(Number(b?.snapshot_revision)||0);if(sub)return sub;
+  const fence=fenceGeneration(a)-fenceGeneration(b);if(fence)return fence;
   return String(a?.key||'').localeCompare(String(b?.key||''));
 }
 export function firestoreTransport({db,auth,doc,collection,getDoc,setDoc,onSnapshot,runTransaction}){
@@ -28,12 +36,19 @@ export function firestoreTransport({db,auth,doc,collection,getDoc,setDoc,onSnaps
         if(old.exists()){
           const value=old.data();if(value.source_id!==head.source_id)throw Error('Esta linha pertence a outra instalação. Use o migration helper para preservar a identidade da base.');
           if(value.snapshot_num>head.snapshot_num||value.snapshot_num===head.snapshot_num&&value.snapshot_revision>head.snapshot_revision){accepted=false;writeOwner=false;}
-          else if(value.snapshot_num===head.snapshot_num&&value.snapshot_revision===head.snapshot_revision){if(value.hash!==head.hash)throw Error('Conflito de conteúdo na mesma revisão');writeOwner=false;}
+          else if(value.snapshot_num===head.snapshot_num&&value.snapshot_revision===head.snapshot_revision){
+            if(value.hash!==head.hash)throw Error('Conflito de conteúdo na mesma revisão');
+            if(value.key===head.key)writeOwner=false;
+            else if(fenceMetadataAdvance(value,head))writeOwner=true;
+            else if(sameSnapshotContent(value,head)&&fenceGeneration(head)<fenceGeneration(value)){accepted=false;writeOwner=false;}
+            else throw Error('Conflito de metadado na mesma revisão');
+          }
         }
         if(!accepted)return;
         if(writeOwner)transaction.set(ref,head);
         const teamValue=oldShared.exists()?oldShared.data():null;
         // Um snapshot que ficou na fila offline não substitui evidência coletada depois.
+        // Em conteúdo idêntico, uma geração de fence maior vence antes do key hash.
         if(!teamValue||compareHead(head,teamValue)>0||teamValue.owner_uid===uid&&teamValue.key===head.key)transaction.set(shared,head);
       });
     },
