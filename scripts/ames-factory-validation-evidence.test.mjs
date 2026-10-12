@@ -10,6 +10,7 @@ const TOOL='tools/ames-workstation/factory-validation-evidence.py';
 const PHYSICAL_SHA='5e45127d3b61b37968a4c2b05596919670b307cb';
 const HARDENING_SHA='35d1edd4ba499b360344f486737b6b1b0fa03a11';
 const VIEW_NAMES=['Monitoramento','Top 3 & FPY','Falhas','Consulta por SN','Rastreabilidade','Dashboards de reuso','Processo / 3022 & AT','Base local','CORA conhecimento'];
+const FACTORY_DOC=fs.readFileSync('docs/ames/FACTORY_GATE_R12.md','utf8');
 
 function run(args){return spawnSync(PY,[TOOL,...args],{encoding:'utf8'});}
 function temp(){return fs.mkdtempSync(path.join(os.tmpdir(),'central-factory-evidence-'));}
@@ -108,4 +109,14 @@ test('hardening cannot become promotion-review-ready without an exact SHA',()=>{
   }else{
     assert.match(result.stderr+result.stdout,/hardening|sha/i);
   }
+});
+
+
+test('factory gate documentation ships the sanitized evidence tool without replacing the frozen physical baseline',()=>{
+  assert.ok(FACTORY_DOC.includes('## 6. Evidência estruturada sanitizada'));
+  assert.ok(FACTORY_DOC.includes('5e45127d3b61b37968a4c2b05596919670b307cb'));
+  assert.ok(FACTORY_DOC.includes('suporte\\ames-workstation\\factory-validation-evidence.py'));
+  assert.ok(FACTORY_DOC.includes('ready_for_promotion_review'));
+  assert.match(FACTORY_DOC,/não substitui.*candidata física/i);
+  assert.match(FACTORY_DOC,/nunca GREEN automático/i);
 });

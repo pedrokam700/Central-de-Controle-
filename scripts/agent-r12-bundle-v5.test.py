@@ -121,6 +121,7 @@ def test_v5_bundle_is_complete_private_data_free_and_deterministic():
             check("ROLLBACK_R12_EXISTENTE.bat" in names, "rollback helper missing")
             check("suporte/ames-workstation/serve-staged-frontend.py" in names, "verified local frontend proof server missing")
             check("suporte/ames-workstation/frontend-local-state.py" in names, "local frontend activation state tool missing")
+            check("suporte/ames-workstation/factory-validation-evidence.py" in names, "sanitized factory validation evidence tool missing")
 
             forbidden = {
                 "ames-agent/config.json",

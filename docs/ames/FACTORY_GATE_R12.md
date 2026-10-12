@@ -149,3 +149,25 @@ Medir no posto, por linha e etapa: 3028, 3074, 2114, 3022 e total full. Comparar
 Somente após evidência dos gates acima: registrar diferenças reais; corrigir regressões; repetir gates afetados + regressão global; obter aprovação explícita do usuário; então decidir merge do PR #23; somente depois decidir publicação das novas `firestore.rules` e produção.
 
 CI verde e preview funcional são necessários, mas nunca suficientes para GREEN físico.
+
+## 6. Evidência estruturada sanitizada
+
+O gate visual e este documento continuam usando como **baseline física congelada** a branch `v2/console-parity-r12` no SHA `5e45127d3b61b37968a4c2b05596919670b307cb`. A branch `hardening/p0-production-readiness` é uma regressão suplementar: ela **não substitui** a candidata física e não transforma CI em evidência de fábrica.
+
+O bundle V5 inclui `suporte\ames-workstation\factory-validation-evidence.py` para gerar um manifesto JSON sanitizado do gate. Ele não executa A-MES, não coleta SN, não lê credenciais e não aprova promoção.
+
+No posto, depois de confirmar o SHA exato da hardening que está sendo avaliada:
+
+```bat
+py -3 suporte\ames-workstation\factory-validation-evidence.py template FACTORY_VALIDATION.json --hardening-sha <SHA_EXATO_HARDENING>
+```
+
+Preencher manualmente somente os estados `pending/pass/fail/blocked` conforme a evidência física. O arquivo contém exatamente as 9 views canônicas, Gates A–I, captura R12, hardening multiposto, local-origin e tempos numéricos. **Não adicionar campos livres**: SN/PCBA/Material SN, operador, comentário bruto, cookie, sessão, credencial ou payload MES fazem a validação falhar fechada.
+
+Para a captura R12, registrar apenas `status`, SHA-256 do ZIP sanitizado e quantidade de arquivos; o ZIP continua sendo gerado pela ferramenta de captura segura já existente. Para validar e normalizar o manifesto:
+
+```bat
+py -3 suporte\ames-workstation\factory-validation-evidence.py validate FACTORY_VALIDATION.json --output FACTORY_VALIDATION_VALIDATED.json
+```
+
+Mesmo quando todas as provas estão `pass` e a aprovação humana está `approved`, o máximo produzido é `ready_for_promotion_review`. Isso significa **pronto para revisão de promoção**, nunca GREEN automático, merge, publicação de Rules ou produção. Qualquer `fail`, `blocked`, ausência do SHA exato da hardening ou divergência da candidata física congelada impede esse estado.

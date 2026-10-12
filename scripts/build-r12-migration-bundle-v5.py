@@ -59,6 +59,7 @@ ROOT_FILES = {
     "suporte/ames-workstation/capture-r12-engine.py": WORKSTATION / "capture-r12-engine.py",
     "suporte/ames-workstation/serve-staged-frontend.py": WORKSTATION / "serve-staged-frontend.py",
     "suporte/ames-workstation/frontend-local-state.py": WORKSTATION / "frontend-local-state.py",
+    "suporte/ames-workstation/factory-validation-evidence.py": WORKSTATION / "factory-validation-evidence.py",
 }
 
 FORBIDDEN_ARCHIVE_MEMBERS = {
