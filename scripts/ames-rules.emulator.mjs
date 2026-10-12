@@ -119,6 +119,37 @@ try{
   await assertFails(setDoc(doc(engineer,'amesLineLeases','TAN10102'),leasePayload({lineId:'TAN10102',ownerUid:'engineerV2',workstationId:wsB,generation:9})));
   await assertSucceeds(setDoc(doc(engineer,'amesLineLeases','TAN10102'),leasePayload({lineId:'TAN10102',ownerUid:'engineerV2',workstationId:wsB,generation:10})));
 
+  // Fenced MES heads: servidor valida lease atual e impede stale publisher/downgrade.
+  const fencedLine='TAN10103',fencedLeaseRef=doc(operator,'amesLineLeases',fencedLine);
+  const fence=(generation,workstationId=wsA)=>({
+    schema:'central-mes-publication-fence-v1',line_id:fencedLine,owner_uid:'operatorV2',workstation_id:workstationId,generation,
+    fence:`${fencedLine}:${generation}:${workstationId}`
+  });
+  const fencedKey1='e'.repeat(64),fencedKey2='f'.repeat(64),fencedHash='9'.repeat(64);
+  const fencedHead={schema:'central-ames-v2',owner_uid:'operatorV2',line_id:fencedLine,source_id:'fenced-source',snapshot_id:'1',snapshot_num:1,snapshot_revision:1,key:fencedKey1,hash:fencedHash,parts:1,collected_at:'2026-10-09T10:00:00Z',collector_fence:fence(1)};
+  const fencedOwnerRef=doc(operator,'amesUsers','operatorV2','lines',fencedLine),fencedTeamRef=doc(operator,'amesTeamLines',fencedLine);
+  await assertSucceeds(setDoc(fencedLeaseRef,leasePayload({lineId:fencedLine})));
+  await assertSucceeds(setDoc(fencedOwnerRef,fencedHead));
+  await assertSucceeds(setDoc(fencedTeamRef,fencedHead));
+  await assertFails(setDoc(fencedOwnerRef,{...fencedHead,snapshot_revision:2,collector_fence:undefined},{merge:false}));
+  await assertFails(setDoc(fencedOwnerRef,{...fencedHead,key:fencedKey2,collector_fence:fence(1,wsB)}));
+
+  // Lease expirado invalida imediatamente o fence antigo pelo request.time do servidor.
+  await env.withSecurityRulesDisabled(async c=>{
+    await setDoc(doc(c.firestore(),'amesLineLeases',fencedLine),{
+      schema:'central-collector-lease-v1',line_id:fencedLine,owner_uid:'operatorV2',workstation_id:wsA,generation:1,
+      acquired_at:Timestamp.fromMillis(Date.now()-20*60*1000),renewed_at:Timestamp.fromMillis(Date.now()-11*60*1000),status:'active'
+    });
+  });
+  await assertFails(setDoc(fencedOwnerRef,{...fencedHead,key:fencedKey2}));
+  await assertSucceeds(setDoc(fencedLeaseRef,leasePayload({lineId:fencedLine,generation:2})));
+  const fencedHead2={...fencedHead,key:fencedKey2,collector_fence:fence(2)};
+  await assertSucceeds(setDoc(fencedOwnerRef,fencedHead2));
+  await assertSucceeds(setDoc(fencedTeamRef,fencedHead2));
+  await assertFails(setDoc(fencedOwnerRef,{...fencedHead,key:fencedKey1,collector_fence:fence(1)}));
+  const {collector_fence:ignoredFence,...unfencedHead}=fencedHead2;
+  await assertFails(setDoc(fencedOwnerRef,{...unfencedHead,snapshot_revision:2}));
+
   const audit={schema:'central-admission-audit-v1',action:'approve',target_uid:'viewerV2',actor_uid:'adminV2',at:123456,reason:'approved for operation',before:{approval_state:'pending',access_level:'viewer'},after:{approval_state:'approved',access_level:'operator'}};
   await assertSucceeds(setDoc(doc(admin,'admissionAudit','audit-1'),audit));
   await assertSucceeds(getDoc(doc(admin,'admissionAudit','audit-1')));
@@ -137,5 +168,5 @@ try{
   const escalated=auth('newEscalated','new2@example.test',true);
   await assertFails(setDoc(doc(escalated,'users','newEscalated'),{uid:'newEscalated',name:'Bad',...v2('new2@example.test','operator','approved')}));
 
-  console.log('PASS: legacy/V2 RBAC + admission audit + MES authority + server-time collector lease/fencing groundwork');
+  console.log('PASS: legacy/V2 RBAC + admission audit + MES authority + server-time collector lease/fencing enforcement');
 }finally{await env.cleanup();}
