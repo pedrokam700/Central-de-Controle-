@@ -1,0 +1,50 @@
+{
+  "schema": "central-legacy-account-migration-inventory-evidence-v1",
+  "code_commit": "6a857191202513af952d750f69b5dd249387a6dc",
+  "validation_commit": "9f4bb14797d46809b423cd3ba4e5435b7e5975d3",
+  "readiness_reconciliation_commit": "7f8b332bc898e7036cddcf2efc3241189b318d60",
+  "status": "green_tooling_live_migration_pending",
+  "focused_validation": {
+    "inventory_contract_tests": "green",
+    "app_parse": "green",
+    "admin_ui_integration_tests": "green",
+    "rbac_regression_tests": "green",
+    "capability_ui_regression_tests": "green",
+    "counts_legacy_active_and_disabled": true,
+    "no_bulk_migration": true,
+    "no_auto_migration": true,
+    "no_access_level_inference": true,
+    "disabled_legacy_blocks_fallback_removal": true,
+    "empty_inventory_blocks_fallback_removal": true,
+    "v2_invalid_blocks_fallback_removal": true,
+    "migration_remains_per_account": true,
+    "inventory_module_precached": true,
+    "one_shot_write_workflow_removed": true,
+    "readiness_reconciled_fail_closed": true,
+    "reconciliation_one_shot_removed": true
+  },
+  "full_ci": {
+    "run_id": 38156414534,
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
+  "readiness_validation": {
+    "status": "full_ci_pending_on_this_checkpoint",
+    "admission_rbac_expected": "partial",
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "evidence": [
+    "core/legacy-account-migration.mjs",
+    "scripts/ames-legacy-account-migration.test.mjs",
+    "app.js",
+    "scripts/ames-legacy-account-migration-app.test.mjs",
+    "core/admission-admin.mjs",
+    "hardening/admission-admin-ui-evidence.json",
+    "hardening/production-readiness.json",
+    "sw.js"
+  ],
+  "promotion_note": "This proves only the inventory and assisted per-account migration tooling. It does not prove that production accounts have been migrated. Do not remove the legacy fallback until the live admin inventory reports zero legacy accounts, including disabled legacy accounts, and a separate regression/promotion gate is GREEN."
+}

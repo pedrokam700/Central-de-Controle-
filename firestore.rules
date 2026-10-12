@@ -10,107 +10,230 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function isV2Profile() {
+      return userProfile().data.keys().hasAny(['admission_version'])
+        && userProfile().data.admission_version == 2;
+    }
+
+    function validV2Access(level) {
+      return level in ['viewer', 'operator', 'engineer', 'supervisor', 'admin'];
+    }
+
+    function v2Approved() {
+      return isV2Profile()
+        && request.auth.token.email_verified == true
+        && userProfile().data.approval_state == 'approved'
+        && validV2Access(userProfile().data.access_level);
+    }
+
     function activeUser() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userProfile().data.disabled != true;
+        && userProfile().data.disabled != true
+        && (!isV2Profile() || v2Approved());
     }
 
     function isAdmin() {
-      return activeUser() && userProfile().data.role == 'admin';
+      return activeUser()
+        && (
+          (!isV2Profile() && userProfile().data.role == 'admin')
+          || (isV2Profile() && userProfile().data.access_level == 'admin')
+        );
+    }
+
+    function canOperationalWrite() {
+      return activeUser()
+        && (
+          !isV2Profile()
+          || userProfile().data.access_level in ['operator', 'engineer', 'supervisor', 'admin']
+        );
+    }
+
+    function canEngineerWrite() {
+      return activeUser()
+        && (
+          !isV2Profile()
+          || userProfile().data.access_level in ['engineer', 'supervisor', 'admin']
+        );
+    }
+
+    // CENTRAL_OPERATIONAL_REGISTRY_BEGIN — generated from ames/data/operational-registry.mjs
+    function mesLine(lineId) {
+      return lineId in ['TAN10101', 'TAN10102', 'TAN10103'];
+    }
+    // CENTRAL_OPERATIONAL_REGISTRY_END
+
+    function hasCollectorFence(data) {
+      return 'collector_fence' in data;
+    }
+
+    function validCurrentCollectorFence(data, lineId, ownerId) {
+      let f = data.collector_fence;
+      let leasePath = /databases/$(database)/documents/amesLineLeases/$(lineId);
+      let lease = get(leasePath).data;
+      return f is map
+        && f.keys().hasOnly(['schema','line_id','owner_uid','workstation_id','generation','fence'])
+        && f.schema == 'central-mes-publication-fence-v1'
+        && f.line_id == lineId
+        && f.owner_uid == ownerId
+        && f.owner_uid == request.auth.uid
+        && f.workstation_id is string && f.workstation_id.matches('^ws_[0-9a-f]{32}$')
+        && f.generation is int && f.generation > 0
+        && f.fence is string && f.fence.matches('^TAN1010[123]:[0-9]+:ws_[0-9a-f]{32}$')
+        && exists(leasePath)
+        && lease.schema == 'central-collector-lease-v1'
+        && lease.line_id == lineId
+        && lease.owner_uid == ownerId
+        && lease.workstation_id == f.workstation_id
+        && lease.generation == f.generation
+        && lease.status == 'active'
+        && lease.renewed_at + duration.value(10, 'm') > request.time;
+    }
+
+    function validOptionalCollectorFence(data, lineId, ownerId) {
+      return !hasCollectorFence(data) || validCurrentCollectorFence(data, lineId, ownerId);
+    }
+
+    function sameMesHeadContent(a, b) {
+      return a.schema == b.schema
+        && a.owner_uid == b.owner_uid
+        && a.line_id == b.line_id
+        && a.source_id == b.source_id
+        && a.snapshot_id == b.snapshot_id
+        && a.snapshot_num == b.snapshot_num
+        && a.snapshot_revision == b.snapshot_revision
+        && a.hash == b.hash
+        && a.parts == b.parts
+        && a.collected_at == b.collected_at;
     }
 
     match /users/{userId} {
-      allow read: if activeUser();
-
-      // Bootstrap do próprio perfil após criar/login no Firebase Auth.
+      allow get: if (signedIn() && request.auth.uid == userId) || activeUser();
+      allow list: if activeUser();
       allow create: if signedIn()
         && request.auth.uid == userId
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.disabled == false
         && (
-          request.resource.data.role == 'user'
-          || (
-            request.resource.data.role == 'admin'
-            && request.auth.token.email == 'pedro.henrique@grupomultilaser.com.br'
+          (
+            !('admission_version' in request.resource.data)
+            && (
+              request.resource.data.role == 'user'
+              || (
+                request.resource.data.role == 'admin'
+                && request.auth.token.email == 'pedro.henrique@grupomultilaser.com.br'
+              )
+            )
+          )
+          ||
+          (
+            request.resource.data.admission_version == 2
+            && request.resource.data.role == 'user'
+            && request.resource.data.access_level == 'viewer'
+            && request.resource.data.approval_state == 'pending'
           )
         );
-
-      // O usuário pode atualizar o próprio perfil, mas não pode se promover
-      // nem alterar o estado disabled. Administração continua com o admin.
       allow update: if isAdmin() || (
         activeUser()
         && request.auth.uid == userId
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.disabled == resource.data.disabled
-        && request.resource.data.email == resource.data.email
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'disabled', 'email', 'admission_version', 'access_level', 'approval_state'
+        ])
       );
-
       allow delete: if isAdmin();
     }
 
-    // Dados de trabalho compartilhados pela equipe autenticada.
+    match /admissionAudit/{auditId} {
+      function validAdmissionAudit() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['schema','action','target_uid','actor_uid','at','reason','before','after'])
+          && d.schema == 'central-admission-audit-v1'
+          && d.action in ['approve','deny','change_access_level','migrate_legacy_profile']
+          && d.target_uid is string && d.target_uid.size() > 0 && d.target_uid.size() <= 128
+          && d.actor_uid == request.auth.uid
+          && d.at is int && d.at > 0
+          && d.reason is string && d.reason.size() <= 500
+          && d.before is map && d.after is map;
+      }
+      allow read: if isAdmin();
+      allow create: if isAdmin() && validAdmissionAudit();
+      allow update, delete: if false;
+    }
+
     match /products/{documentId} {
-      allow read, create, update, delete: if activeUser();
+      allow read: if activeUser();
+      allow create, update, delete: if canEngineerWrite();
     }
-
     match /reports/{documentId} {
-      allow read, create, update, delete: if activeUser();
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
     }
-
     match /operationalFailures/{documentId} {
-      allow read, create, update, delete: if activeUser();
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
     }
-
     match /activities/{documentId} {
-      allow read, create, update, delete: if activeUser();
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
     }
-
     match /flows/{documentId} {
-      allow read, create, update, delete: if activeUser();
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
     }
-
     match /failureAnalyses/{documentId} {
-      allow read, create, update, delete: if activeUser();
+      allow read: if activeUser();
+      allow create, update, delete: if canEngineerWrite();
     }
-
     match /aiKnowledge/{documentId} {
-      allow read, create, update, delete: if activeUser();
+      allow read: if activeUser();
+      allow create, update, delete: if canEngineerWrite();
     }
-
     match /aiConversations/{documentId} {
-      allow read, create, update, delete: if activeUser();
+      allow read: if activeUser();
+      allow create, update, delete: if canOperationalWrite();
     }
 
-    // MES v2: private publication namespace per authenticated owner and line.
-    // A second PC signs into the same account; no cross-user wildcard access.
     match /amesUsers/{ownerId}/lines/{lineId} {
       function owner() {
-        return activeUser() && request.auth.uid == ownerId
-          && lineId in ['TAN10101', 'TAN10102', 'TAN10103'];
+        return canOperationalWrite() && request.auth.uid == ownerId && mesLine(lineId);
       }
       function validHead() {
         let d = request.resource.data;
-        return d.keys().hasOnly(['schema','owner_uid','line_id','source_id','snapshot_id','snapshot_num','snapshot_revision','key','hash','parts','collected_at'])
+        return d.keys().hasOnly(['schema','owner_uid','line_id','source_id','snapshot_id','snapshot_num','snapshot_revision','key','hash','parts','collected_at','collector_fence'])
           && d.schema == 'central-ames-v2' && d.owner_uid == ownerId && d.line_id == lineId
           && d.source_id is string && d.source_id.size() <= 64
           && d.snapshot_id is string && d.snapshot_num is int && d.snapshot_num > 0
           && d.snapshot_revision is int && d.snapshot_revision > 0
           && d.key is string && d.key.matches('[a-f0-9]{64}')
           && d.hash is string && d.hash.matches('[a-f0-9]{64}')
-          && d.parts is int && d.parts > 0 && d.parts <= 5000 && d.collected_at is string;
+          && d.parts is int && d.parts > 0 && d.parts <= 5000 && d.collected_at is string
+          && validOptionalCollectorFence(d, lineId, ownerId);
+      }
+      function noFenceDowngrade() {
+        return !hasCollectorFence(resource.data) || hasCollectorFence(request.resource.data);
+      }
+      function validFenceAdvance() {
+        let d = request.resource.data;
+        return hasCollectorFence(d)
+          && validCurrentCollectorFence(d, lineId, ownerId)
+          && sameMesHeadContent(resource.data, d)
+          && (!hasCollectorFence(resource.data)
+            || d.collector_fence.generation > resource.data.collector_fence.generation);
       }
       allow read: if owner();
       allow create: if owner() && validHead();
       allow update: if owner() && validHead()
+        && noFenceDowngrade()
         && request.resource.data.source_id == resource.data.source_id
         && (request.resource.data.snapshot_num > resource.data.snapshot_num
           || (request.resource.data.snapshot_num == resource.data.snapshot_num
             && (request.resource.data.snapshot_revision > resource.data.snapshot_revision
-              || request.resource.data == resource.data)));
+              || request.resource.data == resource.data
+              || validFenceAdvance())));
       allow delete: if false;
+
       match /snapshots/{snapshotKey}/parts/{partId} {
-        allow read: if owner();
+        allow read: if activeUser() && mesLine(lineId);
         allow create: if owner()
           && request.resource.data.keys().hasOnly(['owner_uid','line_id','key','index','data'])
           && request.resource.data.owner_uid == ownerId && request.resource.data.line_id == lineId
@@ -123,36 +246,98 @@ service cloud.firestore {
       }
     }
 
-    // Configuração da Central do Dia: todos os usuários ativos podem ler,
-    // somente administradores alteram a estrutura operacional.
+    match /amesTeamLines/{lineId} {
+      function validTeamHead() {
+        let d = request.resource.data;
+        return mesLine(lineId)
+          && d.keys().hasOnly(['schema','owner_uid','line_id','source_id','snapshot_id','snapshot_num','snapshot_revision','key','hash','parts','collected_at','collector_fence'])
+          && d.schema == 'central-ames-v2' && d.line_id == lineId
+          && d.owner_uid is string && d.owner_uid == request.auth.uid
+          && d.source_id is string && d.source_id.size() <= 64
+          && d.snapshot_id is string && d.snapshot_num is int && d.snapshot_num > 0
+          && d.snapshot_revision is int && d.snapshot_revision > 0
+          && d.key is string && d.key.matches('[a-f0-9]{64}')
+          && d.hash is string && d.hash.matches('[a-f0-9]{64}')
+          && d.parts is int && d.parts > 0 && d.parts <= 5000 && d.collected_at is string
+          && validOptionalCollectorFence(d, lineId, request.auth.uid);
+      }
+      function matchesPublisherHead() {
+        return getAfter(/databases/$(database)/documents/amesUsers/$(request.auth.uid)/lines/$(lineId)).data == request.resource.data;
+      }
+      function noTeamFenceDowngrade() {
+        return !hasCollectorFence(resource.data) || hasCollectorFence(request.resource.data);
+      }
+      allow read: if activeUser() && mesLine(lineId);
+      allow create: if canOperationalWrite() && validTeamHead() && matchesPublisherHead();
+      allow update: if canOperationalWrite() && validTeamHead() && matchesPublisherHead() && noTeamFenceDowngrade();
+      allow delete: if false;
+    }
+
+    match /amesLineLeases/{lineId} {
+      function validCollectorLease() {
+        let d = request.resource.data;
+        return mesLine(lineId)
+          && d.keys().hasOnly(['schema','line_id','owner_uid','workstation_id','generation','acquired_at','renewed_at','status'])
+          && d.schema == 'central-collector-lease-v1'
+          && d.line_id == lineId
+          && d.owner_uid == request.auth.uid
+          && d.workstation_id is string && d.workstation_id.matches('^ws_[0-9a-f]{32}$')
+          && d.generation is int && d.generation > 0
+          && d.acquired_at is timestamp
+          && d.renewed_at is timestamp
+          && d.status == 'active';
+      }
+      function leaseStillActive() {
+        return resource.data.renewed_at + duration.value(10, 'm') > request.time;
+      }
+      function sameCollectorRenewal() {
+        let d = request.resource.data;
+        return leaseStillActive()
+          && d.owner_uid == resource.data.owner_uid
+          && d.workstation_id == resource.data.workstation_id
+          && d.generation == resource.data.generation
+          && d.acquired_at == resource.data.acquired_at
+          && d.renewed_at == request.time;
+      }
+      function expiredTakeover() {
+        let d = request.resource.data;
+        return resource.data.renewed_at + duration.value(10, 'm') <= request.time
+          && d.generation == resource.data.generation + 1
+          && d.acquired_at == request.time
+          && d.renewed_at == request.time;
+      }
+      allow read: if activeUser() && mesLine(lineId);
+      allow create: if canOperationalWrite() && validCollectorLease()
+        && request.resource.data.generation == 1
+        && request.resource.data.acquired_at == request.time
+        && request.resource.data.renewed_at == request.time;
+      allow update: if canOperationalWrite() && validCollectorLease()
+        && (sameCollectorRenewal() || expiredTakeover());
+      allow delete: if false;
+    }
+
     match /workShifts/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
-
     match /operationalScopes/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
-
     match /workAllocations/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
-
     match /routineTemplates/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();
     }
-
-    // Execuções são trabalho operacional: usuários autenticados ativos
-    // precisam iniciar e concluir as rotinas às quais têm acesso na interface.
     match /routineExecutions/{documentId} {
-      allow read, create, update: if activeUser();
+      allow read: if activeUser();
+      allow create, update: if canOperationalWrite();
       allow delete: if isAdmin();
     }
 
-    // Negação explícita para qualquer coleção não prevista.
     match /{document=**} {
       allow read, write: if false;
     }

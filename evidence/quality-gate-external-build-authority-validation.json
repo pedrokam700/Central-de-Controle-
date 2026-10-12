@@ -1,0 +1,23 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "quality_gate_external_build_authority",
+  "status": "green",
+  "validated_head_parent": "74ff57664256730ee2c6f58dce75ca4a615b881c",
+  "validated_checkpoint": "7ab207cf856475cc8b10fe7ccad568b539401349",
+  "one_shot_run": 38159101005,
+  "full_ci_run": 38160939760,
+  "gates": {
+    "static_quality": "success",
+    "central_quality_gate_step": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
+  "notes": [
+    "One-shot patch completed successfully on the exact parent SHA.",
+    "The prior failure on c7b86cca was isolated to Run Central quality gate.",
+    "The corrected workflow passed the previously failing Central quality gate step and completed Static Quality successfully.",
+    "Firestore Rules and cross-PC E2E also completed successfully on the same validation checkpoint.",
+    "Published preview smoke remains a PR-only external deployment gate and was not exercised by this push."
+  ]
+}

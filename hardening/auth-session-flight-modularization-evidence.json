@@ -1,0 +1,31 @@
+{
+  "schema": "central-auth-session-flight-modularization-evidence-v1",
+  "status": "green",
+  "branch": "hardening/p0-production-readiness",
+  "functional_commit": "492ebda6f3950fb1457e18257586fdcc29a3a976",
+  "validated_commit": "52baa08ad71b4e48f4939b11a83f5e9ccbbec122",
+  "full_ci_run": 38242601439,
+  "module": "core/auth-session-flight.mjs",
+  "tests": [
+    "scripts/ames-auth-session-flight.test.mjs",
+    "scripts/ames-auth-session-flight-app.test.mjs"
+  ],
+  "guarantees": [
+    "same UID shares one exact in-flight finishLogin initialization",
+    "a superseded UID settling later cannot clear the newer session flight",
+    "failed initialization clears only its own flight and can be retried",
+    "invalid UID/task fail closed before work starts",
+    "app.js no longer owns finishLoginPromise or finishLoginUid mutable concurrency state",
+    "finishLogin keeps admission, profile, data-listener, MES sync and UI orchestration in app.js",
+    "onAuthStateChanged and explicit login continue converging through finishLogin",
+    "the extracted module is part of the offline Service Worker shell"
+  ],
+  "intentionally_not_changed": [
+    "finishLogin orchestration",
+    "onAuthStateChanged orchestration",
+    "profile subscription revalidation",
+    "logout behavior",
+    "MES publication fencing activation",
+    "Firebase Rules or production configuration"
+  ]
+}

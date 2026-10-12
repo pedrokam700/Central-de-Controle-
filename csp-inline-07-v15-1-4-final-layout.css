@@ -1,0 +1,175 @@
+
+/* V15.1.4 — definitive UI overrides for the served web/index.html */
+
+/* Central sidebar: slightly narrower */
+.app{grid-template-columns:240px minmax(0,1fr)!important}
+.sidebar{width:240px!important}
+
+/* Product navigation hierarchy: quiet, compact, professional */
+.side-subnav{margin-top:4px!important;padding:0 0 4px!important}
+.nav-group-toggle .nav-chevron,.family-chevron,.base-chevron{display:inline-grid!important;place-items:center!important}
+.nav-chevron svg,.family-chevron svg,.base-chevron svg{width:14px!important;height:14px!important}
+.family-header{padding:2px 6px 2px 10px!important}
+.family-toggle,.base-toggle{background:transparent!important;border:0!important;color:#e7e7e3!important}
+.family-toggle:hover,.base-toggle:hover{background:#1c1c1c!important;color:#fff!important}
+.family-menu-button{width:28px!important;height:28px!important;border-radius:7px!important}
+.family-menu-button svg{width:16px!important;height:16px!important}
+.family-menu{min-width:170px!important;background:#1a1a19!important;border:1px solid #343431!important;border-radius:10px!important;padding:5px!important;box-shadow:0 14px 30px rgba(0,0,0,.35)!important}
+.family-menu button{width:100%!important;text-align:left!important;border:0!important;border-radius:7px!important;padding:8px 9px!important;background:transparent!important;color:#eee!important}
+.family-menu button:hover{background:#2a2a28!important}
+.sidebar-hidden-action{display:none!important}
+
+/* CORA: the LEFT PANE is fixed; ONLY chat content scrolls */
+body.cora-route-active{overflow:hidden!important}
+body.cora-route-active .app{display:block!important;min-height:100vh!important;height:100vh!important}
+body.cora-route-active .main{display:block!important;width:100%!important;height:100vh!important;min-height:0!important}
+body.cora-route-active .topbar{display:none!important}
+body.cora-route-active .content{height:100vh!important;min-height:0!important;max-height:none!important;padding:0!important;overflow:hidden!important}
+body.cora-route-active #aiAnalysisView{
+  display:block!important;
+  position:fixed!important;
+  inset:0!important;
+  width:100vw!important;
+  height:100vh!important;
+  margin:0!important;
+  padding:0!important;
+  background:#171716!important;
+  overflow:hidden!important;
+  z-index:50!important;
+}
+body:not(.dark).cora-route-active #aiAnalysisView{background:#fff!important}
+body.cora-route-active #aiAnalysisView .ai-app{
+  display:grid!important;
+  grid-template-columns:230px minmax(0,1fr)!important;
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:hidden!important;
+  border:0!important;
+  border-radius:0!important;
+}
+body.cora-route-active #aiAnalysisView .ai-side-panel{
+  position:relative!important;
+  height:100%!important;
+  min-height:0!important;
+  overflow:hidden!important;
+  background:#0b0b0b!important;
+  color:#f2f2ef!important;
+  border-right:1px solid #2d2d2b!important;
+}
+body.cora-route-active #aiAnalysisView .ai-chat-shell{
+  height:100%!important;
+  min-height:0!important;
+  display:grid!important;
+  grid-template-rows:auto minmax(0,1fr) auto!important;
+  background:#fff!important;
+  color:#111!important;
+  overflow:hidden!important;
+  border:0!important;
+  border-radius:0!important;
+}
+body.dark.cora-route-active #aiAnalysisView .ai-chat-shell{
+  background:#171716!important;
+  color:#f5f5f2!important;
+}
+body.cora-route-active #aiAnalysisView .ai-chat-head{
+  min-height:58px!important;
+  padding:10px 18px!important;
+  border-bottom:1px solid #e1e1dc!important;
+  background:inherit!important;
+}
+body.dark.cora-route-active #aiAnalysisView .ai-chat-head{border-bottom-color:#2b2b29!important}
+body.cora-route-active #aiAnalysisView #aiChatScroll{
+  min-height:0!important;
+  height:auto!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding:22px 28px 28px!important;
+  background:inherit!important;
+}
+body.cora-route-active #aiAnalysisView .ai-composer-wrap{
+  position:relative!important;
+  inset:auto!important;
+  min-height:0!important;
+  padding:8px 18px 12px!important;
+  background:inherit!important;
+  border-top:1px solid #ecece7!important;
+  box-shadow:none!important;
+  z-index:2!important;
+}
+body.dark.cora-route-active #aiAnalysisView .ai-composer-wrap{border-top-color:#292927!important}
+body.cora-route-active #aiAnalysisView .ai-composer{
+  width:100%!important;
+  max-width:none!important;
+  min-height:62px!important;
+  background:#fff!important;
+  color:#111!important;
+  border:1px solid #d9d9d3!important;
+  border-radius:14px!important;
+  box-shadow:0 4px 16px rgba(0,0,0,.06)!important;
+}
+body.dark.cora-route-active #aiAnalysisView .ai-composer{
+  background:#1c1c1b!important;
+  color:#f5f5f2!important;
+  border-color:#343432!important;
+}
+body.cora-route-active #aiAnalysisView .ai-composer-text textarea{
+  min-height:44px!important;
+  max-height:180px!important;
+}
+body.cora-route-active #aiAnalysisView .ai-head-title,
+body.cora-route-active #aiAnalysisView .ai-head-sub{display:none!important}
+body.cora-route-active #aiAnalysisView .ai-context-strip{
+  margin:0 0 10px!important;
+  min-height:auto!important;
+}
+body.cora-route-active #aiAnalysisView .ai-welcome{
+  padding-top:12px!important;
+}
+body.cora-route-active #aiAnalysisView .ai-welcome h2{font-size:clamp(26px,3vw,40px)!important}
+body.cora-route-active #aiAnalysisView .ai-welcome>p{max-width:760px!important}
+
+/* CORA sidebar theme */
+body.cora-route-active #aiAnalysisView .ai-side-panel *,
+body.cora-route-active #aiAnalysisView .ai-side-panel h1,
+body.cora-route-active #aiAnalysisView .ai-side-panel h2,
+body.cora-route-active #aiAnalysisView .ai-side-panel p,
+body.cora-route-active #aiAnalysisView .ai-side-panel button{color:#f2f2ef!important}
+body.cora-route-active #aiAnalysisView .ai-side-panel button:hover,
+body.cora-route-active #aiAnalysisView .ai-side-panel button.active{background:#242422!important}
+body:not(.dark).cora-route-active #aiAnalysisView .ai-side-panel{background:#0b0b0b!important;color:#f2f2ef!important}
+body.dark.cora-route-active #aiAnalysisView .ai-side-panel{background:#070707!important;color:#f2f2ef!important}
+
+/* Top-right controls */
+body.cora-route-active #aiAnalysisView .ai-head-actions{
+  display:flex!important;align-items:center!important;gap:8px!important;
+}
+body.cora-route-active #aiAnalysisView .ai-head-actions button,
+body.cora-route-active #aiAnalysisView .ai-language-wrap select,
+body.cora-route-active #aiAnalysisView .ai-compact-button{
+  min-height:38px!important;
+  height:38px!important;
+  border-radius:10px!important;
+}
+
+/* Mobile: central sidebar becomes drawer; CORA keeps its own left rail */
+@media(max-width:860px){
+  .app{grid-template-columns:1fr!important}
+  .sidebar{position:fixed!important;left:0!important;top:0!important;bottom:0!important;width:min(82vw,300px)!important;z-index:100!important;transform:translateX(-101%);transition:transform .22s ease}
+  body.sidebar-open .sidebar{transform:translateX(0)}
+  .main{width:100%!important}
+  body.cora-route-active #aiAnalysisView .ai-app{grid-template-columns:1fr!important}
+  body.cora-route-active #aiAnalysisView .ai-side-panel{position:absolute!important;left:0;top:0;bottom:0;width:min(82vw,300px)!important;z-index:5;transform:translateX(-101%);transition:transform .22s ease}
+  body.cora-route-active #aiAnalysisView .ai-side-panel.open{transform:translateX(0)}
+  body.cora-route-active #aiAnalysisView .ai-chat-shell{grid-column:1!important}
+  body.cora-route-active #aiAnalysisView #aiChatScroll{padding:16px 14px 20px!important}
+  body.cora-route-active #aiAnalysisView .ai-composer-wrap{padding:6px 10px 9px!important}
+}
+
+/* Product modal: visually makes existing-family flow the primary path */
+#productFamilySelect{min-height:42px!important}
+#productNewFamily{margin-top:8px!important}
+
+/* Remove legacy internal scroll on the central product tree */
+.sidebar .tree{overflow:visible!important;max-height:none!important}

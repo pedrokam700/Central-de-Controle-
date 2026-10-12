@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { createAmesStore } from '../ames/data/store.mjs';
 import { selectDashboard } from '../ames/data/dashboard.mjs';
 import { occurrenceList } from '../ames/evidence-view.mjs';
+import { normalizeAgentRead, r12CompatibleBuild } from '../ames/data/agent-contract.mjs';
 import { productFixture } from './ames-fixtures.mjs';
 const line_id = 'TAN10101';
 function setup() {
@@ -45,4 +46,71 @@ test('console shell entry uses same store, guards session/view and reuses render
   vm.runInContext("let currentAuthUser=null,activeView='mesConsole',currentLanguage='pt-BR';"+source.slice(source.indexOf('    let consoleMesView;'),source.indexOf('    let dashboardMesView;'))+'renderConsoleMes();',context);
   assert.equal(creates,0); vm.runInContext("currentAuthUser={uid:'A'};activeView='home';renderConsoleMes();activeView='mesConsole';renderConsoleMes();renderConsoleMes();",context);
   assert.equal(creates,1);assert.equal(renders,2);
+});
+
+test('native Console preserves the nine canonical automation views and no iframe', () => {
+  const source=fs.readFileSync('ames/console-view.mjs','utf8');
+  for(const label of ['Monitoramento','Top 3 & FPY','Falhas','Consulta por SN','Rastreabilidade','Dashboards de reuso','Processo / 3022 & AT','Base local','CORA conhecimento']) assert.match(source,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.doesNotMatch(source,/<iframe|createElement\(['"]iframe/i);
+  assert.match(source,/createAgentClient\(store/);
+});
+
+test('R12 local compatibility is explicit and does not accept arbitrary old agents', () => {
+  const base={agent_version:'0.5.23',auto_3022_ready:true,mes_scheduler:{policy:'fifo-monitor-skip-v1'}};
+  assert.equal(r12CompatibleBuild({...base,agent_build:'3022-R12'}),true);
+  assert.equal(r12CompatibleBuild({...base,agent_build:'3022-R18'}),true);
+  assert.equal(r12CompatibleBuild({...base,agent_build:'3022-R11'}),false);
+  assert.equal(r12CompatibleBuild({...base,agent_build:'legacy'}),false);
+  assert.equal(r12CompatibleBuild({...base,agent_build:'3022-R12',auto_3022_ready:false}),false);
+});
+
+test('legacy R12 projection keeps 3022 events and defect contexts isolated by line/snapshot', () => {
+  const legacy=productFixture(line_id,2).payload,sid=String(legacy.summary.snapshot_id);
+  const payload={legacy,datasets:{pcba_history:[],material_reuse:[],history_contexts:[],process_events:[
+    {line:line_id,snapshot_id:sid,pcba_sn:'SYNTHETIC-PCBA-0',operation_code:'A5162',operation_name:'Camera clean',event_time:'2026-10-08T10:00:00',event_group:'assembly'},
+    {line:'TAN10102',snapshot_id:sid,pcba_sn:'LEAK',operation_code:'A5700',event_time:'2026-10-08T11:00:00'}
+  ],process_defect_contexts:[
+    {line:line_id,snapshot_id:sid,pcba_sn:'SYNTHETIC-PCBA-0',defect_code:'D2',defect_time:'2026-10-08T12:00:00',registration_mode:'MANUAL',failure_family:'CAMERA',reference_station_code:'A5162',reference_event_time:'2026-10-08T10:00:00',status:'MAPPED'}
+  ]},insights:null};
+  const normalized=normalizeAgentRead(payload);
+  assert.equal(normalized.process_timeline.status,'partial');
+  assert.equal(normalized.process_timeline.events.length,1);
+  assert.equal(normalized.process_timeline.events[0].operation_code,'A5162');
+  assert.equal(normalized.process_timeline.contexts.length,1);
+  assert.equal(normalized.process_timeline.contexts[0].registration_mode,'MANUAL');
+});
+
+test('legacy R12 keeps operational failure fields already collected by 3028/repair refresh', () => {
+  const legacy=productFixture(line_id,1).payload,sid=String(legacy.summary.snapshot_id),source=legacy.defects[0];
+  Object.assign(source,{
+    snapshot_id:sid,manual_or_auto:'MANUAL',repair_status_current:'Y',defect_type_current:'MainBoard',repair_user:'AT01',
+    repair_comment:'troca confirmada',defect_reason_type:'incoming batch abnormal',defect_reason_desc:'material',
+    repair_code:'Failure Material device',repair_desc:'substituicao',work_shift:'1st Shift',present_in_3028:0,
+    raw_json:'NAO_PODE_VAZAR'
+  });
+  const normalized=normalizeAgentRead({legacy,datasets:{pcba_history:[],material_reuse:[],history_contexts:[],process_events:[],process_defect_contexts:[]},insights:null});
+  const row=normalized.occurrences[0];
+  assert.equal(row.registration_mode,'MANUAL');
+  assert.equal(row.manual_or_auto,'MANUAL');
+  assert.equal(row.repair_status,'Y');
+  assert.equal(row.defect_type,'MainBoard');
+  assert.equal(row.repair_user,'AT01');
+  assert.equal(row.repair_comment,'troca confirmada');
+  assert.equal(row.defect_reason_type,'incoming batch abnormal');
+  assert.equal(row.defect_reason_desc,'material');
+  assert.equal(row.repair_code,'Failure Material device');
+  assert.equal(row.repair_desc,'substituicao');
+  assert.equal(row.work_shift,'1st Shift');
+  assert.equal(row.present_in_3028,false);
+  assert.equal(row.raw_json,undefined);
+  assert.equal(row.raw_ref,null);
+  assert.equal(String(row.snapshot_id),sid);
+});
+
+test('agent client asks SN with 3022 and exposes full/process-only/reuse-only trace mode', () => {
+  const source=fs.readFileSync('ames/agent-client.mjs','utf8');
+  assert.match(source,/include_3022:true/);
+  assert.match(source,/process_only/);
+  assert.match(source,/reuse_only/);
+  assert.match(source,/trace_mode/);
 });

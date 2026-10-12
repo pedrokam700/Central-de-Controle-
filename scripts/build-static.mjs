@@ -1,8 +1,63 @@
 import fs from 'node:fs';
 import path from 'node:path';
-const out=path.resolve('dist');
-const names=['index.html','app.js','styles.css','mobile.css','sw.js','manifest.webmanifest','ames/releases/latest/release.json'];
-for(const dir of ['ames','ames/data','icons'])for(const name of fs.readdirSync(dir))if(/\.(mjs|css|svg|png)$/.test(name))names.push(dir+'/'+name);
-for(const name of names){const target=path.join(out,'Central-de-Controle-',name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(name,target);}
-fs.writeFileSync(path.join(out,'release-build.json'),JSON.stringify({sha:process.env.VERCEL_GIT_COMMIT_SHA||null,build:'15.1.13.48',project:'central-cora-v2'}));
-console.log('Native static assets:',names.length);
+import crypto from 'node:crypto';
+import { buildReleaseIdentity } from './release-identity.mjs';
+
+const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
+const names=['index.html','app.js','cora-build-guard.js','central-runtime-boot-guard.js','root-entry.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest'];
+for(const entry of fs.readdirSync('.')){if(/^csp-inline-\d{2}-[a-z0-9-]+\.css$/i.test(entry))names.push(entry);}
+const allowed=/\.(mjs|css|svg|png|json)$/;
+
+function collect(dir){
+  for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
+    const name=path.posix.join(dir,entry.name);
+    if(entry.isDirectory())collect(name);
+    else if(allowed.test(entry.name))names.push(name);
+  }
+}
+
+function deployedIndex(source){
+  const appTag='<script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.48"></script>';
+  const bootstrapTag='<script type="module" src="/Central-de-Controle-/offline-bootstrap.mjs?v=15.1.13.48"></script>';
+  if(!source.includes(appTag))throw new Error('Tag canônica de app.js não encontrada no index.html');
+  const bootGuardTag='<script id="central-runtime-boot-guard" src="/Central-de-Controle-/central-runtime-boot-guard.js?v=15.1.13.48"></script>';
+  return source.replace(appTag,bootGuardTag+'\n'+bootstrapTag);
+}
+
+function deployedApp(source){
+  const oldImport='import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";';
+  const newImport='import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";';
+  const oldInit='const app = initializeApp(firebaseConfig);';
+  const newInit='const app = getApps().length ? getApp() : initializeApp(firebaseConfig);';
+  if(!source.includes(oldImport)||!source.includes(oldInit))throw new Error('Bootstrap Firebase canônico não encontrado em app.js');
+  return source.replace(oldImport,newImport).replace(oldInit,newInit);
+}
+
+function rootEntry(){
+  return `<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<meta name="robots" content="noindex">\n<title>Central de Controle</title>\n<meta http-equiv="refresh" content="0; url=/Central-de-Controle-/">\n</head>\n<body>\n<p>Abrindo a Central… <a href="/Central-de-Controle-/">Continuar</a></p>\n<script src="/Central-de-Controle-/root-entry.js?v=15.1.13.48"></script>\n</body>\n</html>\n`;
+}
+
+collect('ames');
+collect('core');
+collect('icons');
+for(const name of [...new Set(names)]){
+  const target=path.join(out,'Central-de-Controle-',name);
+  fs.mkdirSync(path.dirname(target),{recursive:true});
+  if(name==='index.html')fs.writeFileSync(target,deployedIndex(fs.readFileSync(name,'utf8')));
+  else if(name==='app.js')fs.writeFileSync(target,deployedApp(fs.readFileSync(name,'utf8')));
+  else fs.copyFileSync(name,target);
+}
+// Entrada raiz é um arquivo real, não um redirect/rewrite do provedor. Isso evita
+// conflitos com Pretty URLs/canonicalização e mantém a Central no base path único.
+fs.mkdirSync(out,{recursive:true});
+fs.writeFileSync(path.join(out,'index.html'),rootEntry());
+const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
+const branch=process.env.VERCEL_GIT_COMMIT_REF||process.env.BRANCH||process.env.GITHUB_REF_NAME||null;
+const provider=process.env.VERCEL?'vercel':process.env.NETLIFY?'netlify':process.env.GITHUB_ACTIONS?'github-actions':'unknown';
+const identity=buildReleaseIdentity({frontendSha:sha});
+const identityText=JSON.stringify(identity);
+const identitySha256=crypto.createHash('sha256').update(identityText).digest('hex');
+fs.writeFileSync(path.join(out,'release-identity.json'),identityText);
+fs.writeFileSync(path.join(out,'Central-de-Controle-','release-identity.json'),identityText);
+fs.writeFileSync(path.join(out,'release-build.json'),JSON.stringify({sha,branch,provider,build:identity.central_build,project:'central-cora-v2',release_identity_schema:identity.schema,release_identity_sha256:identitySha256}));
+console.log('Native integrated static assets:',new Set(names).size,'deployment sha:',sha||'unavailable','release identity:',identitySha256);

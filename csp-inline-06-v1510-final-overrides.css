@@ -1,0 +1,107 @@
+
+/* V15.1.0 — CORA final interaction/layout correction + product navigation */
+:root{
+  --cora-black:#0b0b0b;
+  --cora-black-2:#121212;
+  --cora-white:#ffffff;
+  --cora-light:#f7f7f5;
+}
+/* Product navigation: compact, hierarchical and intentionally quiet. */
+.sidebar-hidden-action{display:none!important}
+.main-nav .nav-group-toggle{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important}
+.main-nav .nav-group-toggle .nav-chevron{width:16px!important;height:16px!important;display:grid!important;place-items:center!important;flex:0 0 16px!important;color:inherit!important}
+.main-nav .nav-group-toggle .nav-chevron svg{width:14px!important;height:14px!important;transition:transform .16s ease}
+.main-nav .nav-group-toggle[aria-expanded="true"] .nav-chevron svg{transform:rotate(180deg)}
+.side-subnav{display:grid;gap:5px;padding:2px 0 6px 9px;margin:0}
+.side-subnav.hidden{display:none!important}
+.side-subnav .all-reports{font-size:11px!important;padding:8px 10px!important}
+.tree{display:grid!important;gap:3px!important;max-height:none!important;overflow:visible!important;padding:0 1px 3px 0!important}
+.tree-heading{margin:9px 10px 4px!important;font-size:9px!important;opacity:.65!important}
+.family{display:block!important;padding:0!important;margin:0!important}
+.family-header{display:flex!important;align-items:center!important;gap:5px!important;padding:0!important}
+.family-toggle{width:100%!important;min-height:34px!important;border:0!important;border-radius:8px!important;background:transparent!important;color:#d7d7d2!important;padding:7px 8px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;font-size:11px!important;font-weight:700!important;cursor:pointer!important;text-align:left!important}
+.family-toggle:hover,.family-toggle.active{background:#202020!important;color:#fff!important}
+.family-toggle .family-chevron{width:15px!important;height:15px!important;display:grid!important;place-items:center!important;flex:0 0 15px!important;color:inherit!important}
+.family-toggle .family-chevron svg{width:13px!important;height:13px!important;transition:transform .16s ease}
+.family-toggle[aria-expanded="true"] .family-chevron svg{transform:rotate(90deg)}
+.family-menu-wrap{position:relative!important;flex:0 0 auto!important}
+.family-menu-button{width:28px!important;height:28px!important;border:0!important;border-radius:8px!important;background:transparent!important;color:#92928d!important;display:grid!important;place-items:center!important;cursor:pointer!important;opacity:.0;transition:opacity .12s ease,background .12s ease,color .12s ease!important}
+.family-header:hover .family-menu-button,.family-menu-button:focus-visible{opacity:1!important}
+.family-menu-button:hover{background:#242424!important;color:#fff!important}
+.family-menu{position:absolute!important;right:0!important;top:32px!important;min-width:150px!important;padding:5px!important;background:#161616!important;color:#fff!important;border:1px solid #3a3a37!important;border-radius:10px!important;box-shadow:0 16px 40px rgba(0,0,0,.38)!important;z-index:80!important;display:none!important}
+.family-menu.open{display:grid!important}
+.family-menu button{width:100%!important;border:0!important;background:transparent!important;color:#ecece8!important;border-radius:7px!important;padding:8px 9px!important;text-align:left!important;font-size:10px!important;cursor:pointer!important}
+.family-menu button:hover{background:#262624!important}
+.base-group{display:block!important;margin:0 0 2px 7px!important;padding:0 0 0 9px!important;border-left:1px solid #2b2b29!important}
+.base-toggle{width:100%!important;min-height:31px!important;border:0!important;border-radius:7px!important;background:transparent!important;color:#c9c9c4!important;padding:6px 8px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;font-size:10.5px!important;font-weight:700!important;cursor:pointer!important;text-align:left!important}
+.base-toggle:hover,.base-toggle.active{background:#1e1e1d!important;color:#fff!important}
+.base-toggle .base-chevron svg{width:12px!important;height:12px!important;transition:transform .16s ease}
+.base-toggle[aria-expanded="true"] .base-chevron svg{transform:rotate(90deg)}
+.base-variants{display:grid!important;gap:2px!important;padding:0 0 3px 7px!important}
+.product-btn{width:100%!important;min-height:33px!important;border:0!important;border-radius:7px!important;background:transparent!important;color:#bdbdb8!important;padding:6px 8px!important;text-align:left!important;cursor:pointer!important;font-size:10.5px!important}
+.product-btn:hover{background:#202020!important;color:#fff!important}
+.product-btn.active{background:#fff!important;color:#111!important}
+.product-btn small{font-size:9px!important;color:#8e8e88!important}
+.product-btn.active small{color:#666!important}
+.variant-color{margin-left:5px!important;color:#8f8f89!important;font-size:9px!important}
+/* CORA: one fixed sidebar; only the conversation viewport moves. Sidebar is dark in both themes. */
+html.cora-route-active,body.cora-route-active{height:100%!important;min-height:100%!important;overflow:hidden!important;background:var(--bg)!important}
+body.cora-route-active .app{display:none!important}
+body.cora-route-active #aiAnalysisView{display:block!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;min-height:100vh!important;margin:0!important;padding:0!important;background:var(--bg)!important;z-index:999!important;overflow:hidden!important}
+body.cora-route-active #aiAnalysisView .ai-app{display:grid!important;grid-template-columns:252px minmax(0,1fr)!important;width:100%!important;height:100%!important;min-height:100%!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:hidden!important;background:var(--cora-light)!important}
+body.cora-route-active #aiAnalysisView .ai-side-panel{position:relative!important;top:auto!important;left:auto!important;height:100%!important;min-height:100%!important;width:252px!important;padding:16px 14px 14px!important;background:var(--cora-black)!important;color:#f3f3ef!important;border:0!important;border-right:1px solid #292927!important;overflow:hidden!important;z-index:30!important}
+body.cora-route-active #aiAnalysisView .cora-side-brand{padding:0 0 14px!important;border-bottom:1px solid #262624!important}
+body.cora-route-active #aiAnalysisView .cora-side-name strong{color:#fff!important}
+body.cora-route-active #aiAnalysisView .cora-side-name span{color:#979792!important}
+body.cora-route-active #aiAnalysisView .ai-focus-back{width:40px!important;height:40px!important;border:1px solid #353532!important;border-radius:11px!important;background:#0f0f0f!important;color:#f3f3ef!important}
+body.cora-route-active #aiAnalysisView .ai-focus-back:hover{background:#20201f!important;border-color:#4a4a45!important;transform:none!important}
+body.cora-route-active #aiAnalysisView .ai-side-links{display:grid!important;gap:3px!important}
+body.cora-route-active #aiAnalysisView .ai-side-link{min-height:40px!important;color:#a9a9a3!important;padding:0 10px!important;border-radius:9px!important;background:transparent!important}
+body.cora-route-active #aiAnalysisView .ai-side-link:hover,body.cora-route-active #aiAnalysisView .ai-side-link.active{background:#1f1f1e!important;color:#fff!important}
+body.cora-route-active #aiAnalysisView .ai-new-chat{background:#0f0f0f!important;color:#f2f2ee!important;border-color:#343431!important}
+body.cora-route-active #aiAnalysisView .ai-new-chat:hover{background:#1c1c1b!important}
+body.cora-route-active #aiAnalysisView .ai-how{border-top:1px solid #262624!important}
+body.cora-route-active #aiAnalysisView .ai-how summary{color:#fff!important}
+body.cora-route-active #aiAnalysisView .ai-how-body{background:#151515!important;border-color:#2c2c29!important;color:#a9a9a3!important}
+body.cora-route-active #aiAnalysisView .ai-chat-shell{display:grid!important;grid-template-rows:56px minmax(0,1fr) auto!important;height:100%!important;min-height:100%!important;overflow:hidden!important;background:var(--surface)!important;color:var(--text)!important}
+body.cora-route-active #aiAnalysisView .ai-chat-head{height:56px!important;min-height:56px!important;padding:8px 18px!important;border-bottom:1px solid var(--line)!important;background:var(--surface)!important}
+body.cora-route-active #aiAnalysisView .ai-head-main{display:none!important}
+body.cora-route-active #aiAnalysisView .ai-head-actions{margin-left:auto!important;display:flex!important;align-items:center!important;gap:8px!important}
+body.cora-route-active #aiAnalysisView .ai-language-wrap{gap:6px!important}
+body.cora-route-active #aiAnalysisView .ai-language-wrap select{height:36px!important;background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--line)!important}
+body.cora-route-active #aiAnalysisView .ai-compact-button{width:38px!important;height:38px!important;background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--line)!important;border-radius:10px!important}
+body.cora-route-active #aiAnalysisView .ai-compact-button:hover{background:var(--soft)!important}
+body.cora-route-active #aiAnalysisView #aiChatScroll{min-height:0!important;height:auto!important;overflow-y:auto!important;overflow-x:hidden!important;padding:26px clamp(22px,6vw,86px) 28px!important;background:var(--surface)!important;scrollbar-gutter:stable!important}
+body.cora-route-active #aiAnalysisView #aiChatScroll::-webkit-scrollbar{width:10px!important}
+body.cora-route-active #aiAnalysisView #aiChatScroll::-webkit-scrollbar-thumb{background:rgba(127,127,120,.5)!important;border:3px solid transparent!important;border-radius:10px!important;background-clip:padding-box!important}
+body.cora-route-active #aiAnalysisView .ai-welcome{max-width:900px!important;margin:11vh auto 28px!important}
+body.cora-route-active #aiAnalysisView .ai-welcome h2{font-size:30px!important}
+body.cora-route-active #aiAnalysisView .ai-message{width:min(940px,100%)!important;margin:0 auto 20px!important}
+body.cora-route-active #aiAnalysisView .ai-message-bubble{font-size:14px!important;line-height:1.7!important;border-radius:15px!important}
+body.cora-route-active #aiAnalysisView .ai-message.assistant .ai-message-bubble{background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--line)!important}
+body.cora-route-active #aiAnalysisView .ai-message.user .ai-message-bubble{background:var(--text)!important;color:var(--surface)!important;border:1px solid transparent!important}
+body.cora-route-active #aiAnalysisView .ai-result-stack{display:none!important}
+/* Keep work status as a tiny live indicator above the composer, never as a block of text. */
+body.cora-route-active #aiAnalysisView .ai-composer-wrap{position:relative!important;z-index:40!important;background:var(--surface)!important;border-top:1px solid var(--line)!important;padding:10px clamp(22px,6vw,86px) 12px!important}
+body.cora-route-active #aiAnalysisView .ai-composer{width:min(940px,100%)!important;background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--line)!important;box-shadow:0 8px 26px rgba(0,0,0,.12)!important;border-radius:17px!important}
+body.cora-route-active #aiAnalysisView .ai-composer-text textarea{background:transparent!important;color:var(--text)!important}
+body.cora-route-active #aiAnalysisView .ai-tool{background:transparent!important;color:var(--muted)!important;border-color:var(--line)!important}
+body.cora-route-active #aiAnalysisView .ai-tool:hover{background:var(--soft)!important;color:var(--text)!important}
+body.cora-route-active #aiAnalysisView .ai-send{background:var(--text)!important;color:var(--surface)!important}
+body.dark.cora-route-active #aiAnalysisView .ai-app{background:#171716!important}
+body.dark.cora-route-active #aiAnalysisView .ai-chat-shell,body.dark.cora-route-active #aiAnalysisView .ai-chat-head,body.dark.cora-route-active #aiAnalysisView #aiChatScroll,body.dark.cora-route-active #aiAnalysisView .ai-composer-wrap{background:#171716!important}
+body.dark.cora-route-active #aiAnalysisView .ai-composer{background:#1f1f1e!important}
+body.dark.cora-route-active #aiAnalysisView .ai-message.assistant .ai-message-bubble{background:#171716!important}
+body.dark.cora-route-active #aiAnalysisView .ai-message.user .ai-message-bubble{background:#f1f1ec!important;color:#111!important}
+body.dark.cora-route-active #aiAnalysisView #aiChatScroll::-webkit-scrollbar-thumb{background:rgba(176,176,168,.42)!important}
+/* Light theme: chat surface stays white, CORA sidebar remains deep black for separation. */
+body:not(.dark).cora-route-active #aiAnalysisView .ai-chat-shell,body:not(.dark).cora-route-active #aiAnalysisView .ai-chat-head,body:not(.dark).cora-route-active #aiAnalysisView #aiChatScroll,body:not(.dark).cora-route-active #aiAnalysisView .ai-composer-wrap{background:#fff!important}
+body:not(.dark).cora-route-active #aiAnalysisView .ai-composer{background:#fff!important}
+/* Do not allow mobile overrides to create a second sidebar in CORA. */
+@media(max-width:900px){
+  body.cora-route-active #aiAnalysisView .ai-app{grid-template-columns:224px minmax(0,1fr)!important}
+}
+@media(max-width:720px){
+  body.cora-route-active #aiAnalysisView .ai-app{grid-template-columns:1fr!important}
+  body.cora-route-active #aiAnalysisView .ai-side-panel{display:none!important}
+}

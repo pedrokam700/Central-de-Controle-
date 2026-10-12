@@ -1,0 +1,33 @@
+{
+  "schema": "central-session-admission-app-evidence-v1",
+  "code_commit": "b9a32d7cad20dbd6ee308c456434dc92278e0dfa",
+  "status": "full_green",
+  "focused_validation": {
+    "anchored_patch": "green",
+    "app_parse": "green",
+    "session_admission_contract_tests": "green",
+    "new_profile_v2_pending_viewer": true,
+    "no_email_auto_admin_on_signup": true,
+    "login_uses_evaluate_session_admission": true,
+    "legacy_profile_compatibility_preserved": true,
+    "mes_publish_gated_by_capability": true,
+    "live_profile_change_revalidates_session": true,
+    "registration_auth_race_guarded": true,
+    "offline_contracts_precached": true
+  },
+  "evidence": [
+    "app.js",
+    "core/access-policy.mjs",
+    "core/session-admission.mjs",
+    "scripts/ames-session-admission.test.mjs",
+    "scripts/ames-session-admission-app.test.mjs",
+    "sw.js"
+  ],
+  "promotion_note": "Frontend session admission is GREEN internally. Legacy compatibility remains intentionally enabled until account-by-account migration is complete.",
+  "full_ci": {
+    "run_id": 38154172207,
+    "descendant_sha": "346422d8e3f5af46ed9a80ca289c7729ae9b23fd",
+    "static_quality": "success",
+    "firestore_e2e": "success"
+  }
+}

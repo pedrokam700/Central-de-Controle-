@@ -20,9 +20,23 @@ export function normalizeCanonical(payload){
   const legacy={schema:'central-v2-ames-line-v1',line,summary:{...payload.summary,line,snapshot_id:sid},defects:datasets.defects};
   const base=normalizeAgentRead({legacy,datasets,insights:payload.insights});
   const occurrences=base.occurrences.map((row,i)=>({...row,occurrence_id:datasets.defects[i].occurrence_id,identity_kind:'durable_local_observation',evidence_ref:JSON.stringify([payload.source_id,sid,revision,datasets.defects[i].record_id]),snapshot_revision:revision,raw_ref:datasets.defects[i].raw_ref,provenance:datasets.defects[i].provenance}));
+  const processEvents=payload.capabilities?.process_timeline?datasets.process_timeline:[];
+  const contextMap=new Map();
+  for(const event of processEvents){
+    const contexts=event?.provenance?.adapter?.defect_contexts;
+    if(!Array.isArray(contexts))continue;
+    for(const raw of contexts){
+      if(!raw||typeof raw!=='object')continue;
+      const ctx={...raw,line:raw.line||line,snapshot_id:sid,pcba_sn:raw.pcba_sn||event.pcba_sn,source:'3022'};
+      if(ctx.line!==line||!ctx.pcba_sn)continue;
+      const key=String(ctx.defect_key||JSON.stringify([ctx.pcba_sn,ctx.defect_time,ctx.defect_code]));
+      if(!contextMap.has(key))contextMap.set(key,ctx);
+    }
+  }
+  const processContexts=[...contextMap.values()];
   return immutable({...base,source_schema:CANONICAL_SCHEMA,revision,snapshot_revision:revision,source_id:payload.source_id,content_hash:payload.content_hash,
     occurrences,pcba_history:{status:'partial',records:datasets.pcba_history},material_trace:{status:'partial',records:datasets.material_reuse},history_contexts:datasets.history_contexts,
-    process_timeline:{status:payload.capabilities?.process_timeline?'partial':'not_collected',events:payload.capabilities?.process_timeline?datasets.process_timeline:[]},
+    process_timeline:{status:payload.capabilities?.process_timeline?'partial':'not_collected',events:processEvents,contexts:processContexts},
     coverage:{...base.coverage,datasets:payload.coverage,reasons:['Source coverage remains partial; transport covers the stored revision']},canonical:payload});
 }
 export function sourceRecords(snapshot,{product,pcba_sn,material_sn}={}){

@@ -1,0 +1,56 @@
+{
+  "schema": "central-cora-mes-egress-runtime-evidence-v1",
+  "code_commit": "4099bf59dc6df28cb9a56f4af8f3d572f25363f9",
+  "readiness_reconciliation_commit": "0e7434d8ef6f728cddd58f272483e45f98205347",
+  "status": "green_mes_boundary_full_ci_routes_pending",
+  "focused_validation": {
+    "exact_anchored_patch": "green",
+    "app_parse": "green",
+    "egress_policy_tests": "green",
+    "route_transport_tests": "green",
+    "mes_external_projection_tests": "green",
+    "runtime_integration_tests": "green",
+    "raw_mes_context_preserved_local": true,
+    "external_mes_block_uses_sanitized_projection": true,
+    "pcba_sn_not_in_external_mes_projection": true,
+    "material_sn_not_in_external_mes_projection": true,
+    "exact_cph_preserved": true,
+    "absence_not_coerced_to_mes_zero": true,
+    "offline_dependencies_precached": true,
+    "one_shot_write_workflow_removed": true,
+    "readiness_reconciled_fail_closed": true,
+    "reconciliation_one_shot_removed": true
+  },
+  "scope_limit": "The real runtime MES block is sanitized before known external CORA payload construction. Full CORA egress enforcement remains pending for free-form conversation, images, audio, documents, memory, audit metadata and other local-only content.",
+  "promotion": {
+    "cora_external_data_policy_fully_green": false,
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "evidence": [
+    "core/cora-egress-policy.mjs",
+    "core/cora-egress-transport.mjs",
+    "ames/data/cora-external.mjs",
+    "app.js",
+    "sw.js",
+    "scripts/ames-cora-egress-policy.test.mjs",
+    "scripts/ames-cora-egress-transport.test.mjs",
+    "scripts/ames-cora-external-projection.test.mjs",
+    "scripts/ames-cora-mes-egress-app.test.mjs",
+    "hardening/production-readiness.json"
+  ],
+  "full_ci": {
+    "run_id": 38157683195,
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
+  "readiness_validation": {
+    "status": "full_ci_pending_on_this_checkpoint",
+    "cora_external_data_policy_expected": "partial_runtime_enforcement",
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  }
+}

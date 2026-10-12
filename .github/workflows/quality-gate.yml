@@ -7,10 +7,13 @@ on:
   push:
     branches:
       - main
+      - 'hardening/**'
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
 
 jobs:
   static-quality:
@@ -30,10 +33,104 @@ jobs:
       - name: Install test-only Excel reader
         run: python3 -m pip install openpyxl==3.1.5
 
+      - name: Run database and snapshot hardening tests
+        run: python3 scripts/agent-hardening.test.py
+
+      - name: Run ordered SQLite migration registry tests
+        run: python3 scripts/agent-migrations.test.py
+
+      - name: Run disaster recovery verification tests
+        run: python3 scripts/agent-disaster-recovery.test.py
+
+      - name: Run stable workstation identity tests
+        run: python3 scripts/agent-workstation-identity.test.py
+
+      - name: Run retention governance tests
+        run: python3 scripts/agent-retention-policy.test.py
+
+      - name: Run operational calendar tests
+        run: python3 scripts/agent-operational-calendar.test.py
+
+      - name: Run sanitized diagnostics contract
+        run: python3 scripts/agent-diagnostics.test.py
+
+      - name: Run export-safe support diagnostics contract
+        run: python3 scripts/agent-support-diagnostics.test.py
+
+      - name: Run R12 migration bundle V5 closure tests
+        run: python3 scripts/agent-r12-bundle-v5.test.py
+
+      - name: Run immutable frontend package tests
+        run: python3 scripts/agent-frontend-package.test.py
+
+      - name: Run verified local frontend proof server tests
+        run: python3 scripts/agent-local-frontend-server.test.py
+
+      - name: Run local frontend activation state tests
+        run: python3 scripts/agent-local-frontend-state.test.py
+
+      - name: Run auth hardening contract
+        run: node --test scripts/ames-auth-hardening.test.mjs
+
+      - name: Run unified release identity contract
+        run: node --test scripts/release-contract.test.mjs
+
+      - name: Run local agent pairing contract
+        run: node --test scripts/ames-agent-pairing.test.mjs
+
+      - name: Run A-MES Node contract suites
+        run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
+
+      - name: Run scheduler Python contract
+        run: python3 scripts/agent-scheduler.test.py
+
+      - name: Run canonical Python contract
+        run: python3 scripts/agent-canonical.test.py
+
+      - name: Run updater Python contract
+        run: python3 scripts/agent-update.test.py
+
       - name: Run Central quality gate
         env:
           PYTHON_BIN: python3
         run: node scripts/quality-gate.mjs
+
+      - name: Build immutable frontend package from exact dist
+        env:
+          FRONTEND_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          CENTRAL_STATIC_OUT: ${{ runner.temp }}/central-static-${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node scripts/build-static.mjs
+          python3 scripts/frontend_package.py build \
+            --dist "$CENTRAL_STATIC_OUT" \
+            --output "$RUNNER_TEMP/central-frontend-${FRONTEND_SHA}.zip" \
+            --sha "$FRONTEND_SHA"
+          sha256sum "$RUNNER_TEMP/central-frontend-${FRONTEND_SHA}.zip" > "$RUNNER_TEMP/central-frontend-${FRONTEND_SHA}.zip.sha256"
+
+      - name: Upload immutable frontend package
+        uses: actions/upload-artifact@v6
+        with:
+          name: central-frontend-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/central-frontend-${{ github.event.pull_request.head.sha || github.sha }}.zip
+            ${{ runner.temp }}/central-frontend-${{ github.event.pull_request.head.sha || github.sha }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Build R12 existing-install migration bundle V5
+        env:
+          FRONTEND_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/build-r12-migration-bundle-v5.py "$RUNNER_TEMP/central-v2-r12-migration-${FRONTEND_SHA}.zip" --frontend-sha "$FRONTEND_SHA"
+
+      - name: Upload R12 migration bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: central-v2-r12-migration-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/central-v2-r12-migration-${{ github.event.pull_request.head.sha || github.sha }}.zip
+          if-no-files-found: error
+          retention-days: 7
 
   sync-emulator:
     name: Agent and sync E2E with Firestore Rules
@@ -58,3 +155,39 @@ jobs:
         run: |
           export FIREBASE_TEST_MODULES="$RUNNER_TEMP/ames-tests/node_modules"
           "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs'
+
+  post-deploy-smoke:
+    name: Published preview smoke
+    if: github.event_name == 'pull_request'
+    needs: static-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Discover trusted Vercel PR preview
+        id: preview-origins
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          VERCEL_ORIGIN="$(node scripts/preview-origin-discovery.mjs --repository "$GITHUB_REPOSITORY" --pr "$PR_NUMBER")"
+          echo "vercel_origin=$VERCEL_ORIGIN" >> "$GITHUB_OUTPUT"
+      - name: Verify exact SHA and canonical route on deployed preview
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          VERCEL_ORIGIN: ${{ steps.preview-origins.outputs.vercel_origin }}
+        run: |
+          args=(--origin "https://deploy-preview-${PR_NUMBER}--productcontrolcenter.netlify.app")
+          if [ -n "$VERCEL_ORIGIN" ]; then
+            args+=(--origin "$VERCEL_ORIGIN")
+          fi
+          node scripts/post-deploy-smoke.mjs \
+            "${args[@]}" \
+            --sha "$EXPECTED_SHA" \
+            --wait-ms 180000 \
+            --max-redirects 4

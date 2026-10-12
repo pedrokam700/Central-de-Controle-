@@ -1,0 +1,235 @@
+Defaulting to user installation because normal site-packages is not writeable
+Collecting openpyxl==3.1.5
+  Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+Collecting et-xmlfile (from openpyxl==3.1.5)
+  Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 250.9/250.9 kB 4.6 MB/s eta 0:00:00
+Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+Installing collected packages: et-xmlfile, openpyxl
+Successfully installed et-xmlfile-2.0.0 openpyxl-3.1.5
+✔ offline native imports and versioned CSS resolve canonical static precache (56.533232ms)
+✔ primeiro install sem Firebase SDK não substitui worker anterior (7.431836ms)
+✔ install failure retains previous worker; activation deletes only own old builds (4.685112ms)
+✔ cache excludes user URLs, unknown versions, API requests, other origins and writes (1.354049ms)
+✔ HTTP errors, redirected login and HTML masquerading as JS never poison cached modules (18.336677ms)
+✔ CSP inventory scans the real frontend surface without enforcing policy (1.697704ms)
+✔ factory A-MES HTTP is classified explicitly while arbitrary insecure HTTP stays blocked (0.84757ms)
+✔ blocking CSP readiness is computed from real blockers instead of declared optimistically (0.190082ms)
+✔ source index has no inline script blocker and keeps parser-blocking external build guard (14.114195ms)
+✔ build and offline shell include all external guard scripts (0.384984ms)
+✔ built base page and root entry contain zero inline scripts (84.927253ms)
+✔ all 45 static style attributes are externalized with one-to-one tokens (2.523484ms)
+✔ runtime has no CSP-blocked style attribute/cssText write APIs (8.527146ms)
+✔ CSP inventory is free of inline script/style forms after attribute extraction (14.002769ms)
+✔ offline shell and immutable build include extracted style-attribute stylesheet (83.240855ms)
+✔ all former inline style blocks are externalized in original order (5.252377ms)
+✔ CSP inventory keeps style attributes explicit after style-block extraction (15.714619ms)
+✔ static build publishes every extracted stylesheet and keeps base page style-block free (96.995674ms)
+✔ build estático grava SHA/branch/provider reais e identidade completa do release (90.403347ms)
+✔ release candidata do agente coincide com manifesto latest (1.189994ms)
+✔ identidade do produto e release permanecem explicitamente separadas (0.206222ms)
+✔ build do frontend é único entre shell, bootstrap e artefato estático (0.285379ms)
+✔ manifesto de identidade cobre componentes críticos do release (1.252971ms)
+✔ package root não introduz dependências de runtime (0.186716ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 365.883756
+............
+----------------------------------------------------------------------
+Ran 12 tests in 0.761s
+
+OK
+
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.194s
+
+OK
+
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.172s
+
+OK
+
+
+CENTRAL QUALITY GATE
+BUILD: 15.1.13.48
+Checks OK: 166
+✓ ames/data/agent-contract.mjs: arquivo ativo presente
+✓ ames/agent-client.mjs: arquivo ativo presente
+✓ ames/automation-view.mjs: arquivo ativo presente
+✓ ames/agent-evidence-view.mjs: arquivo ativo presente
+✓ scripts/ames-agent.test.mjs: arquivo ativo presente
+✓ scripts/agent-scheduler.test.py: arquivo ativo presente
+✓ index.html: arquivo ativo presente
+✓ cora-build-guard.js: arquivo ativo presente
+✓ app.js: arquivo ativo presente
+✓ sw.js: arquivo ativo presente
+✓ mobile.css: arquivo ativo presente
+✓ manifest.webmanifest: arquivo ativo presente
+✓ firestore.rules: arquivo ativo presente
+✓ firebase.json: arquivo ativo presente
+✓ ames/console-view.mjs: arquivo ativo presente
+✓ ames/capability-view.mjs: arquivo ativo presente
+✓ ames/data/capabilities.mjs: arquivo ativo presente
+✓ scripts/ames-console.test.mjs: arquivo ativo presente
+✓ scripts/ames-capabilities.test.mjs: arquivo ativo presente
+✓ scripts/ames-cache.test.mjs: arquivo ativo presente
+✓ ames/data/contract.mjs: arquivo ativo presente
+✓ ames/data/store.mjs: arquivo ativo presente
+✓ ames/data/dashboard.mjs: arquivo ativo presente
+✓ ames/dashboard-view.mjs: arquivo ativo presente
+✓ ames/occurrence-view.mjs: arquivo ativo presente
+✓ ames/data/failures.mjs: arquivo ativo presente
+✓ ames/data/trace.mjs: arquivo ativo presente
+✓ ames/trace-view.mjs: arquivo ativo presente
+✓ ames/data/daily.mjs: arquivo ativo presente
+✓ ames/daily-view.mjs: arquivo ativo presente
+✓ ames/data/cora.mjs: arquivo ativo presente
+✓ ames/cora-view.mjs: arquivo ativo presente
+✓ ames/data/onboarding.mjs: arquivo ativo presente
+✓ ames/onboarding-view.mjs: arquivo ativo presente
+✓ scripts/ames-trace.test.mjs: arquivo ativo presente
+✓ scripts/ames-daily.test.mjs: arquivo ativo presente
+✓ scripts/ames-cora.test.mjs: arquivo ativo presente
+✓ scripts/ames-onboarding.test.mjs: arquivo ativo presente
+✓ scripts/ames-sprint.browser.mjs: arquivo ativo presente
+✓ scripts/ames-failures.test.mjs: arquivo ativo presente
+✓ scripts/ames-failures.browser.mjs: arquivo ativo presente
+✓ ames/dashboard.css: arquivo ativo presente
+✓ scripts/ames-dashboard.test.mjs: arquivo ativo presente
+✓ scripts/ames-dashboard.browser.mjs: arquivo ativo presente
+✓ scripts/ames-fixtures.mjs: arquivo ativo presente
+✓ ames/data/product.mjs: arquivo ativo presente
+✓ ames/product-view.mjs: arquivo ativo presente
+✓ ames/evidence-view.mjs: arquivo ativo presente
+✓ ames/product.css: arquivo ativo presente
+✓ scripts/ames-product.test.mjs: arquivo ativo presente
+✓ scripts/ames-product.browser.mjs: arquivo ativo presente
+✓ scripts/ames-data.test.mjs: arquivo ativo presente
+✓ app.js: sintaxe JS válida
+✓ ames/data/agent-contract.mjs: sintaxe JS válida
+✓ ames/agent-client.mjs: sintaxe JS válida
+✓ ames/automation-view.mjs: sintaxe JS válida
+✓ ames/agent-evidence-view.mjs: sintaxe JS válida
+✓ ames/data/canonical.mjs: sintaxe JS válida
+✓ ames/data/process-timeline.mjs: sintaxe JS válida
+✓ ames/advanced-view.mjs: sintaxe JS válida
+✓ ames/sync.mjs: sintaxe JS válida
+✓ ames/firebase-sync.mjs: sintaxe JS válida
+✓ Agente: concorrência, endpoints, Excel original e hashes 3028
+✓ Agente: concorrência, endpoints, Excel original e hashes 3028
+✓ Agente: concorrência, endpoints, Excel original e hashes 3028
+✓ sw.js: sintaxe JS válida
+✓ ames/console-view.mjs: sintaxe JS válida
+✓ ames/capability-view.mjs: sintaxe JS válida
+✓ ames/data/capabilities.mjs: sintaxe JS válida
+✓ ames/data/contract.mjs: sintaxe JS válida
+✓ ames/data/store.mjs: sintaxe JS válida
+✓ ames/data/dashboard.mjs: sintaxe JS válida
+✓ ames/dashboard-view.mjs: sintaxe JS válida
+✓ ames/occurrence-view.mjs: sintaxe JS válida
+✓ ames/data/failures.mjs: sintaxe JS válida
+✓ ames/data/trace.mjs: sintaxe JS válida
+✓ ames/trace-view.mjs: sintaxe JS válida
+✓ ames/data/daily.mjs: sintaxe JS válida
+✓ ames/daily-view.mjs: sintaxe JS válida
+✓ ames/data/cora.mjs: sintaxe JS válida
+✓ ames/cora-view.mjs: sintaxe JS válida
+✓ ames/data/onboarding.mjs: sintaxe JS válida
+✓ ames/onboarding-view.mjs: sintaxe JS válida
+✓ scripts/ames-sprint.browser.mjs: sintaxe JS válida
+✓ scripts/ames-failures.browser.mjs: sintaxe JS válida
+✓ scripts/ames-dashboard.browser.mjs: sintaxe JS válida
+✓ ames/data/product.mjs: sintaxe JS válida
+✓ ames/product-view.mjs: sintaxe JS válida
+✓ ames/evidence-view.mjs: sintaxe JS válida
+✓ scripts/ames-product.browser.mjs: sintaxe JS válida
+✓ A-MES: testes de contrato/store/sessão/Dashboard/Produto/Falhas passaram
+✓ index.html: nenhum ID duplicado
+✓ app.js: nenhuma declaração function duplicada
+✓ cora-build-guard.js: BUILD detectado
+✓ index.html: manifest.webmanifest usa BUILD 15.1.13.48
+✓ index.html: mobile.css usa BUILD 15.1.13.48
+✓ index.html: ames/dashboard.css usa BUILD 15.1.13.48
+✓ index.html: ames/product.css usa BUILD 15.1.13.48
+✓ index.html: app.js usa BUILD 15.1.13.48
+✓ app.js: listener do Service Worker usa BUILD 15.1.13.48
+✓ app.js: guard de reload usa BUILD 15.1.13.48
+✓ sw.js: mensagem de cache usa BUILD 15.1.13.48
+✓ sw.js: nome do cache contém versão normalizada 15-1-13-48
+✓ index.html: mobile.css permanece carregado
+✓ index.html: styles.css não foi religado diretamente
+✓ index.html: view essencial #homeView presente
+✓ index.html: view essencial #dailyView presente
+✓ index.html: view essencial #dashboardView presente
+✓ index.html: view essencial #allReportsView presente
+✓ index.html: view essencial #operationsView presente
+✓ index.html: view essencial #workView presente
+✓ index.html: view essencial #flowView presente
+✓ index.html: view essencial #aiAnalysisView presente
+✓ index.html: view essencial #mesConsoleView presente
+✓ index.html: view essencial #profileView presente
+✓ app.js: infraestrutura principal de idioma presente
+✓ app.js: pt-BR e en-US continuam suportados
+✓ index.html: seletores de idioma da Central e CORA presentes
+✓ app.js: CORA recebe diretiva explícita de idioma
+✓ firestore.rules: coleção users coberta
+✓ firestore.rules: coleção products coberta
+✓ firestore.rules: coleção reports coberta
+✓ firestore.rules: coleção operationalFailures coberta
+✓ firestore.rules: coleção activities coberta
+✓ firestore.rules: coleção flows coberta
+✓ firestore.rules: coleção failureAnalyses coberta
+✓ firestore.rules: coleção aiKnowledge coberta
+✓ firestore.rules: coleção aiConversations coberta
+✓ firestore.rules: coleção workShifts coberta
+✓ firestore.rules: coleção operationalScopes coberta
+✓ firestore.rules: coleção workAllocations coberta
+✓ firestore.rules: coleção routineTemplates coberta
+✓ firestore.rules: coleção routineExecutions coberta
+✓ firebase.json: aponta para firestore.rules
+✓ sw.js: asset BASE+'ames/data/agent-contract.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/agent-client.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/automation-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/agent-evidence-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'index.html' permanece na lista de cache
+✓ sw.js: asset BASE+'app.js' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/console-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/capability-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/capabilities.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/store.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/contract.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/dashboard.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/dashboard-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/occurrence-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/failures.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/trace.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/trace-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/daily.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/daily-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/cora.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/cora-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/onboarding.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/onboarding-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/releases/latest/release.json' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/dashboard.css' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/data/product.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/product-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/evidence-view.mjs' permanece na lista de cache
+✓ sw.js: asset BASE+'ames/product.css' permanece na lista de cache
+✓ sw.js: asset BASE+'styles.css' permanece na lista de cache
+✓ sw.js: asset BASE+'mobile.css' permanece na lista de cache
+✓ sw.js: asset BASE+'manifest.webmanifest' permanece na lista de cache
+
+Avisos:
+⚠ app.js: 1 uso(s) de locale pt-BR hardcoded detectado(s); revisar gradualmente para currentLanguage.
+
+Resultado: PASS (checks estáticos e contratos). V2/V0.5.23/3022 dependem de validação real em fábrica.

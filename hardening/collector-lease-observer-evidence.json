@@ -1,0 +1,35 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "collector_lease_observer",
+  "status": "green_observe_only",
+  "validated_sha": "46436970cd89130c92777da7a3a4c0623095fcc9",
+  "full_ci_run": 38186334738,
+  "gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
+  "assertions": [
+    "observer uses leaseClient.status only and exposes no claim, renew, takeover or release API",
+    "vacant lease is observed without acquiring authority",
+    "matching owner/workstation yields only a non-authoritative candidate fence",
+    "publication_fence remains null because a read cannot prove Firestore request-time lease liveness",
+    "lease held by another collector does not expose holder UID or workstation identity",
+    "lease read failure is sanitized and does not block the current unfenced publication path",
+    "invalid friendly line labels fail before any remote read"
+  ],
+  "activation": "observe_only_no_claim_no_publication_fence_no_enforcement",
+  "explicitly_not_proven": [
+    "server-authoritative same-workstation lease confirmation",
+    "automatic renewal or takeover",
+    "collectorFenceForLine runtime binding",
+    "stale publisher rejection",
+    "physical two-workstation same-line conflict and recovery"
+  ],
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  }
+}

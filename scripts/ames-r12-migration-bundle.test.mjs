@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+test('bundle V5 atualiza apenas R12 existente, fixa frontend, fecha runtime hardened e preserva rollback/gate físico',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'r12-migration-'));
+  const out=path.join(dir,'bundle.zip'),frontendSha='1'.repeat(40);
+  const python=process.env.PYTHON_BIN||(process.platform==='win32'?'python':'python3');
+  try{
+    const build=spawnSync(python,['scripts/build-r12-migration-bundle-v5.py',out,'--frontend-sha',frontendSha],{encoding:'utf8'});
+    assert.equal(build.status,0,(build.stdout||'')+(build.stderr||''));
+    const inspect=`import hashlib,json,sys,zipfile\nz=zipfile.ZipFile(sys.argv[1]);n=set(z.namelist());m=json.loads(z.read('MIGRATION_MANIFEST.json'));g=json.loads(z.read('FRONTEND_GATE.json'));u=z.read('ATUALIZAR_R12_EXISTENTE.bat').decode('ascii',errors='replace');r=z.read('ROLLBACK_R12_EXISTENTE.bat').decode('ascii',errors='replace');assert m['schema']=='central-r12-migration-bundle-v5';assert m['purpose']=='update-existing-r12-only';assert m['new_pc_supported'] is False;assert m['factory_gate_required'] is True;assert m['frontend_sha']==sys.argv[2];assert m['pre_migration_capture']=='best-effort-before-update';assert m['rollback']=='latest-candidate-backup';assert m['hardening']['snapshot_lifecycle'] is True;assert m['hardening']['ordered_sqlite_migrations'] is True;assert m['hardening']['atomic_config'] is True;assert m['hardening']['workstation_pairing_token'] is True;assert m['hardening']['operational_calendar'] is True;assert m['hardening']['sanitized_diagnostics'] is True;assert m['hardening']['backup_verification'] is True;assert m['hardening']['non_destructive_restore_drill'] is True;assert m['hardening']['stable_workstation_identity'] is True;assert m['hardening']['retention_mode']=='observe_only';assert g['expected_sha']==sys.argv[2];assert g['factory_gate_required'] is True;assert g['release_identity_path']=='/release-identity.json';assert len(g['preview_urls'])>=2;required=['agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','diagnostics.py','migrations.py','disaster_recovery.py','support_diagnostics.py','workstation_identity.py','retention_policy.py','process_r11.py'];[(__import__('builtins').exec("")) for name in []];assert all(('ames-agent/'+x) in n for x in required);assert set(m['runtime_contract'])<=set(x.split('/',1)[1] for x in n if x.startswith('ames-agent/') and x.endswith('.py'));assert 'ATUALIZAR_R12_EXISTENTE.bat' in n;assert 'ROLLBACK_R12_EXISTENTE.bat' in n;assert 'suporte/ames-workstation/capture-r12-engine.py' in n;assert 'FRONTEND_GATE.json' in n;assert 'R12_ENGINE_CAPTURE_PREMIGRATION.zip' in u;assert 'capture-r12-engine.py' in u;assert 'update_candidate.py' in u and ' update ' in u;assert 'update_candidate.py' in r and ' rollback ' in r;assert 'candidate-backups' in r;cf=json.loads(z.read('ames-agent/candidate-files.json'));assert set(cf)==set(m['runtime_contract']);assert all(hashlib.sha256(z.read('ames-agent/'+name)).hexdigest()==sha for name,sha in cf.items());assert not any(x.endswith(('.sqlite3','.db','.log')) for x in n);assert not any('local_agent_token' in x for x in n);assert not any('workstation_identity.json' in x for x in n);print('ok')`;
+    const check=spawnSync(python,['-c',inspect,out,frontendSha],{encoding:'utf8'});
+    assert.equal(check.status,0,(check.stdout||'')+(check.stderr||''));
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});

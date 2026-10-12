@@ -40,6 +40,7 @@ const requiredFiles = [
   'scripts/ames-agent.test.mjs',
   'scripts/agent-scheduler.test.py',
   'index.html',
+  'cora-build-guard.js',
   'app.js',
   'sw.js',
   'mobile.css',
@@ -101,6 +102,7 @@ if (errors.length) {
 }
 
 const index = read('index.html');
+const buildGuard = read('cora-build-guard.js');
 const app = read('app.js');
 const sw = read('sw.js');
 const firestoreRules = read('firestore.rules');
@@ -170,9 +172,9 @@ syntaxCheck('scripts/ames-product.browser.mjs');
 }
 
 // 3) Versão/runtime sincronizada entre index, assets, app e Service Worker.
-const buildMatch = index.match(/\bconst\s+BUILD\s*=\s*['"]([^'"]+)['"]/);
+const buildMatch = buildGuard.match(/\bconst\s+BUILD\s*=\s*['"]([^'"]+)['"]/);
 const build = buildMatch && buildMatch[1];
-assertCheck(Boolean(build), 'index.html: BUILD detectado', 'index.html: BUILD não detectado');
+assertCheck(Boolean(build), 'cora-build-guard.js: BUILD detectado', 'cora-build-guard.js: BUILD não detectado');
 
 if (build) {
   const escaped = build.replace(/[.*+?^$()|[\]\\{}]/g, '\\$&');
@@ -228,7 +230,7 @@ assertCheck(
 );
 
 assertCheck(
-  !/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["'][^"']*styles\.css/i.test(index),
+  !/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["'](?:[^"']*\/)?styles\.css(?:[?#][^"']*)?["']/i.test(index),
   'index.html: styles.css não foi religado diretamente',
   'index.html: styles.css foi ligado diretamente sem auditoria'
 );

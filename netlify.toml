@@ -1,0 +1,46 @@
+[build]
+  command = "node scripts/build-static.mjs"
+  publish = "dist"
+
+# Evita qualquer canonicalização/redirect HTTP do próprio Netlify no preview.
+# O build publica dist/index.html (entrada raiz estática) e
+# dist/Central-de-Controle-/index.html (Central real).
+[build.processing.html]
+  pretty_urls = false
+
+# Baseline de segurança que não interfere com Firebase/CORA/agente local.
+# A CSP abaixo e somente Report-Only nesta wave: observa sem bloquear runtime.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "geolocation=(), payment=(), usb=(), serial=()"
+    Content-Security-Policy-Report-Only = "default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self' https://www.gstatic.com; style-src 'self'; style-src-attr 'none'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:8765 https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com; frame-src https://central-de-controle-88962.firebaseapp.com; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' data: blob:; form-action 'self'; frame-ancestors 'none'"
+
+[[headers]]
+  for = "/Central-de-Controle-/*.mjs"
+  [headers.values]
+    Content-Type = "text/javascript; charset=utf-8"
+
+[[headers]]
+  for = "/Central-de-Controle-/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# Identidade de release nunca pode ficar presa em cache e mascarar SHA antigo.
+[[headers]]
+  for = "/release-build.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
+  for = "/release-identity.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+
+[[headers]]
+  for = "/Central-de-Controle-/release-identity.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"

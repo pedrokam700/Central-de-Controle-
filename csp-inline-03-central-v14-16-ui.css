@@ -1,0 +1,11 @@
+/* V14.18 — chat com rolagem isolada */
+body:has(#aiAnalysisView:not(.hidden)){overflow:hidden}
+.content:has(#aiAnalysisView:not(.hidden)){height:calc(100vh - 88px);overflow:hidden;padding-bottom:18px}
+#aiAnalysisView:not(.hidden){height:100%;min-height:0}
+#aiAnalysisView:not(.hidden) .ai-app{height:100%;min-height:0;max-height:none;overflow:hidden}
+#aiAnalysisView:not(.hidden) .ai-chat-scroll{min-height:0;height:100%;overflow-y:auto;scrollbar-color:#aaa transparent}
+#aiAnalysisView:not(.hidden) .ai-chat-scroll::-webkit-scrollbar{width:12px}
+#aiAnalysisView:not(.hidden) .ai-chat-scroll::-webkit-scrollbar-track{background:transparent}
+#aiAnalysisView:not(.hidden) .ai-chat-scroll::-webkit-scrollbar-thumb{background:#b7b7b2;border-radius:10px;border:3px solid #fff}
+.ai-message-bubble.ai-markdown{white-space:normal}
+.ai-markdown p{margin:0 0 8px}.ai-markdown p:last-child{margin-bottom:0}.ai-markdown ul,.ai-markdown ol{margin:5px 0 9px 20px;padding:0}.ai-markdown li{margin:3px 0}.ai-markdown h2,.ai-markdown h3,.ai-markdown h4{margin:0 0 8px;font-size:13px}.ai-markdown code{padding:1px 4px;border-radius:4px;background:#e9e9e5;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em}

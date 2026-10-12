@@ -1,0 +1,28 @@
+{
+  "schema": "central-fenced-mes-head-rules-evidence-v1",
+  "status": "green",
+  "branch": "hardening/p0-production-readiness",
+  "rules_commit": "f344d2fd627fe870f46e2c0474fc5787fa8c4941",
+  "emulator_test_commit": "4e5d36594ba451bd6b0c2b98bf2567548c21dd4e",
+  "harness_fix_commit": "d385b9f6b147df74e9b06078d9d7cfee6352ba49",
+  "validated_checkpoint_commit": "30338a201c616d7d2c21ad91f8410a153d8bef37",
+  "full_ci_run": 38188308176,
+  "static_quality": "success",
+  "firestore_rules_cross_pc_e2e": "success",
+  "green": [
+    "legacy unfenced heads remain temporarily compatible before runtime fence binding",
+    "fenced MES heads require the current active server-time lease for the exact line, owner, workstation and generation",
+    "expired leases reject the old publication fence",
+    "same-content publication may advance only to a higher current fence generation",
+    "a fenced owner head cannot downgrade back to unfenced",
+    "team heads must equal the publisher head and carry the same current fence"
+  ],
+  "still_not_enabled": [
+    "production Firestore Rules publication",
+    "automatic lease acquisition",
+    "automatic takeover",
+    "collectorFenceForLine runtime binding",
+    "global rejection of legacy unfenced publications"
+  ],
+  "note": "The first emulator attempt failed before Firestore Rules because the Firebase SDK rejects an explicit undefined field. The invalid harness assertion was removed while preserving the real field-removal downgrade assertion. Run 38188308176 then passed the full internal Quality Gate and Firestore Rules/cross-PC E2E."
+}

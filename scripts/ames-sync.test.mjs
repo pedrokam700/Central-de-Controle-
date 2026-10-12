@@ -26,13 +26,19 @@ test('publication strips credential fields and is idempotent',async()=>{
   const p=canonicalFixture();p.cookie='secret';p.datasets.defects[0].raw_json='secret';p.datasets.defects[0].password='secret';
   const a=await publication('A',p),b=await publication('A',p);assert.equal(a.id,b.id);assert(!a.parts.join('').includes('secret'));assert.equal(a.head.owner_uid,'A');assert.notEqual(a.id,(await publication('B',p)).id);
 });
-test('offline/reconnect publishes once per identity, second PC reads same revision, user isolation and logout',async()=>{
+test('offline/reconnect publishes once; active teammates read sanitized latest line; logout clears state',async()=>{
   let online=false,watcher;const pending=new Map(),parts=new Map(),heads=new Map(),writes=[];let fail=true;
   const queue={put:async e=>pending.set(e.id,e),list:async uid=>[...pending.values()].filter(e=>e.uid===uid),remove:async id=>pending.delete(id)};
-  const remote={putPart:async(u,h,i,data)=>{if(fail){fail=false;throw Error('offline');}parts.set(u+h.key+i,data);writes.push(u);},commitHead:async(u,h)=>heads.set(u+h.line_id,h),getPart:async(u,h,i)=>parts.get(u+h.key+i),watch:(u,cb)=>{watcher=()=>cb([...heads.values()].filter(h=>h.owner_uid===u));watcher();return ()=>{};}};
+  const remote={
+    putPart:async(u,h,i,data)=>{if(fail){fail=false;throw Error('offline');}parts.set(u+h.key+i,data);writes.push(u);},
+    commitHead:async(u,h)=>heads.set(h.line_id,h),
+    getPart:async(owner,h,i)=>parts.get(owner+h.key+i),
+    watch:(_u,cb)=>{watcher=()=>cb([...heads.values()]);watcher();return ()=>{};}
+  };
   const store=createAmesStore();store.replaceLocalSnapshots([canonicalFixture()]);store.setLocalConnected(true);
   const sync=createMesSync(store,remote,{queue,online:()=>online,schedule:()=>0,unschedule:()=>{}});sync.start('A');await sync.capture();assert.equal(pending.size,1);assert.equal(writes.length,0);
   online=true;await sync.retry();assert.equal(pending.size,1);await sync.retry();assert.equal(pending.size,0);assert.equal(heads.size,1);await sync.capture();assert.equal(writes.length,1);
-  const second=createAmesStore(),reader=createMesSync(second,remote,{queue,online:()=>false});reader.start('A');await new Promise(r=>setTimeout(r,30));assert.equal(second.read('TAN10101').snapshot.revision,1);
-  reader.stop();second.clear();reader.start('B');await new Promise(r=>setTimeout(r,10));assert.equal(second.read('TAN10101').snapshot,null);reader.stop();sync.stop();
+  const sameAccount=createAmesStore(),readerA=createMesSync(sameAccount,remote,{queue,online:()=>false});readerA.start('A');await new Promise(r=>setTimeout(r,30));assert.equal(sameAccount.read('TAN10101').snapshot.revision,1);readerA.stop();
+  const teammate=createAmesStore(),readerB=createMesSync(teammate,remote,{queue,online:()=>false});readerB.start('B');await new Promise(r=>setTimeout(r,30));assert.equal(teammate.read('TAN10101').snapshot.revision,1);assert.equal(teammate.read('TAN10101').source,'remote');
+  readerB.stop();teammate.clear();assert.equal(teammate.read('TAN10101').snapshot,null);sync.stop();
 });

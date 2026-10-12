@@ -1,6 +1,7 @@
 
     import { createAmesStore, clearSessionData } from './ames/data/store.mjs';
     import {createMesSync} from './ames/sync.mjs';
+    import {createCollectorAuthorityRuntime} from './ames/collector-authority-runtime.mjs';
     import {firestoreTransport} from './ames/firebase-sync.mjs';
     import { createConsoleView } from './ames/console-view.mjs';
     import { createDashboardView } from './ames/dashboard-view.mjs';
@@ -9,10 +10,21 @@
     import { createDailyView } from './ames/daily-view.mjs';
     import { createCoraView } from './ames/cora-view.mjs';
     import { MES_REASONING_RULES } from './ames/data/cora.mjs';
+    import {projectCoraMesExternalContext} from './ames/data/cora-external.mjs';
     import { createOnboardingView, savedIntegrationMode } from './ames/onboarding-view.mjs';
+    import {createOfflineOutbox,createBrowserOutboxStorage} from './core/offline-outbox.mjs';
+    import {offlineWritePlan,routineFailureLinkEffect} from './core/offline-domain-write.mjs';
+    import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
+    import {buildSignupProfile,evaluateSessionAdmission} from './core/session-admission.mjs';
+    import {createUserProfileService} from './core/user-profile-service.mjs';
+    import {createAuthSessionFlight} from './core/auth-session-flight.mjs';
+    import {migrateLegacyProfile,approveV2Profile,denyV2Profile,changeV2AccessLevel} from './core/admission-admin.mjs';
+    import {createGuardedFirestoreClient} from './core/firestore-guarded-client.mjs';
+    import {legacyAccountMigrationInventory,legacyMigrationProgress} from './core/legacy-account-migration.mjs';
+    import {createCoraBrowserTransport} from './core/cora-browser-transport.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
-      getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction
+      getFirestore, collection, addDoc as firebaseAddDoc, onSnapshot, doc, deleteDoc as firebaseDeleteDoc, updateDoc as firebaseUpdateDoc, setDoc as firebaseSetDoc, getDoc, getDocs, query, where, writeBatch as firebaseWriteBatch, runTransaction, serverTimestamp, arrayUnion
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import {
       getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -32,6 +44,11 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
+    const coraBrowserTransport=createCoraBrowserTransport({
+      fetcher:globalThis.fetch.bind(globalThis),
+      getOrigin:()=>window.location.origin,
+      getToken:async()=>auth?.currentUser?await auth.currentUser.getIdToken():null
+    });
 
     window.__centralLoginModuleReady = true;
     window.addEventListener('error', event => console.error('[Central] Erro global:', event.error || event.message));
@@ -63,12 +80,26 @@
     let users = [];
     let currentAccount = null;
     let currentAuthUser = null;
+    const guardedFirestore=createGuardedFirestoreClient({
+      rawAddDoc:firebaseAddDoc,
+      rawSetDoc:firebaseSetDoc,
+      rawUpdateDoc:firebaseUpdateDoc,
+      rawDeleteDoc:firebaseDeleteDoc,
+      rawWriteBatch:firebaseWriteBatch,
+      getActorUid:()=>auth.currentUser?.uid || currentAuthUser?.uid || '',
+      getCapabilities:()=>currentAccount?.capabilities||null
+    });
+    const {addDoc,setDoc,updateDoc,deleteDoc,writeBatch}=guardedFirestore;
+    const collectorAuthorityRuntime=createCollectorAuthorityRuntime(state.ames,{
+      db,doc,getDoc,runTransaction,serverTimestamp,
+      currentUid:()=>currentAuthUser?.uid||'',
+      changed(){if(currentAuthUser)renderConsoleMes();}
+    });
     let unsubscribeData = [];
     let dataSessionGeneration = 0;
-    // Controle de concorrência da autenticação: criação/login e onAuthStateChanged
-    // podem disparar juntos. Mantemos uma única inicialização por UID.
-    let finishLoginPromise = null;
-    let finishLoginUid = null;
+    // Coordena criação/login + onAuthStateChanged sem duplicar inicialização por UID.
+    const finishLoginFlight = createAuthSessionFlight();
+    let registrationInProgress = false;
     let authReady = false;
     let activeProduct = null;
     let activeView = 'home';
@@ -120,7 +151,7 @@
       'Meu perfil de usuário':'My user profile','Resumo de suas atividades, reports subidos e configurações de conta.':'Summary of your activities, uploaded reports, and account settings.','Reports subidos':'Reports uploaded','Registrados por você':'Registered by you','Reports concluídos':'Reports completed','Finalizados com sucesso':'Successfully completed','Reports pendentes':'Pending reports','Precisam ser finalizados':'Need to be completed','Atividades & Fluxos':'Activities & Flows','Atribuídos a você':'Assigned to you','Meus Reports Enviados':'My Submitted Reports','Reports de produto registradas sob a sua autoria.':'Product failures registered by you.','Registro':'Record','Produto / Família':'Product / Family','Componente / Falha':'Component / Failure','Links':'Links','Status':'Status','Você ainda não subiu nenhum report.':'You have not uploaded any reports yet.','Gestão de Usuários (Acesso do Administrador)':'User Management (Administrator Access)','Gerencie quem tem acesso ao sistema e eleve privilégios de usuário.':'Manage who has access to the system and grant user privileges.','Nome':'Name','E-mail':'Email','Nível de Acesso':'Access Level','Ações':'Actions','Administrador':'Administrator','Usuário Normal':'Standard User','Tornar Usuário':'Make User','Promover a Adm':'Promote to Admin','Excluir':'Delete','Desativar':'Disable','Reativar':'Enable','(Sua conta)':'(Your account)',
       'Visão Geral do Produto':'Product Overview','Todas as informações conectadas a este único produto.':'All information connected to this single product.','Visão Geral':'Overview','Falhas':'Failures','Atividades':'Activities','Histórico':'History','Falhas de Produto':'Product Failures','Falhas Operacionais':'Operational Failures','Atividades Relacionadas':'Related Activities','Fluxos Relacionados':'Related Flows','Filtro:':'Filter:','Falhas':'Operational / Machines','Buscar falha':'Search failure','Material ou descrição':'Material or description','Componente':'Component','Todos':'All','Pendente':'Pending','Concluído':'Completed','Componente / falha':'Component / failure','Material':'Material','Responsável':'Owner','Pendências':'Pending items','Ainda não há falhas para este produto.':'There are no failures for this product yet.','Nenhuma atividade vinculada a este produto.':'No activities linked to this product.','Fluxo':'Flow','Escopo':'Scope','Criado Por':'Created By','Seguimento':'Follow-up','Nenhum fluxo vinculado a este produto.':'No flows linked to this product.','Nenhum histórico registrado ainda.':'No history recorded yet.',
       'Visão geral de todos os produtos e famílias.':'Overview of all products and families.','Buscar':'Search','Família':'Family','Todas':'All','Produto, componente ou material':'Product, component, or material','Atualização':'Update','Nenhum report encontrado.':'No report found.','Título, área ou descrição':'Title, area, or description','Nenhuma atividade encontrada.':'No activity found.','Produto, retrabalho ou descrição':'Product, rework, or description','Responsável pelo seguimento':'Follow-up owner','Etapas':'Steps','Nenhum fluxo encontrado.':'No flow found.','Formulário e e-mail, folha de rosto e seguimento organizados em três etapas.':'Form, email, cover sheet, and follow-up organized into three steps.',
-      'Entrar na central':'Sign in to Work Center','Acesse com seu e-mail e senha corporativos.':'Sign in with your corporate email and password.','E-mail corporativo':'Corporate email','Senha':'Password','Esqueci minha senha':'Forgot my password','Criar uma conta':'Create an account','Entrar':'Sign in','Criar nova conta':'Create a new account','Cadastre-se para acessar a central. Novas contas iniciam como Usuário Normal.':'Register to access the work center. New accounts start as Standard User.','Seu nome':'Your name','Já tenho uma conta':'I already have an account','Cadastrar conta':'Create account','Recuperar senha':'Reset password','Informe seu e-mail e enviaremos um link seguro para criar uma nova senha.':'Enter your email and we will send a secure link to create a new password.','Nova senha':'New password','Digite a nova senha':'Enter the new password','Repetir nova senha':'Repeat new password','Digite a senha novamente':'Enter the password again','As duas senhas precisam ser exatamente iguais.':'Both passwords must be exactly the same.','As senhas não coincidem. Digite a mesma senha nos dois campos.':'The passwords do not match. Enter the same password in both fields.','As duas senhas coincidem.':'The passwords match.','Voltar para o login':'Back to sign in','Redefinir senha':'Reset password','Enviar link de recuperação':'Send recovery link','Trocar senha':'Change password','Finalizar troca de senha':'Finish password change','Salvando...':'Saving...','Se a conta existir, o Firebase enviará um link seguro para redefinição da senha. Abra o link recebido para escolher e confirmar a nova senha.':'If the account exists, Firebase will send a secure password reset link. Open the link to choose and confirm the new password.','Senha alterada com sucesso. Agora você pode entrar com a nova senha.':'Password changed successfully. You can now sign in with the new password.','O link de recuperação é inválido ou expirou. Solicite um novo link pelo login.':'The recovery link is invalid or expired. Request a new link from the login.','Este link de recuperação expirou. Solicite um novo link.':'This recovery link has expired. Request a new link.','Este link de recuperação é inválido. Solicite um novo link.':'This recovery link is invalid. Request a new link.',
+      'Entrar na central':'Sign in to Work Center','Acesse com seu e-mail e senha corporativos.':'Sign in with your corporate email and password.','E-mail corporativo':'Corporate email','Senha':'Password','Esqueci minha senha':'Forgot my password','Criar uma conta':'Create an account','Entrar':'Sign in','Criar nova conta':'Create a new account','Cadastre-se para acessar a central. Novas contas iniciam como Viewer e aguardam aprovação.':'Register to access the work center. New accounts start as Viewer and await approval.','Seu nome':'Your name','Já tenho uma conta':'I already have an account','Cadastrar conta':'Create account','Recuperar senha':'Reset password','Informe seu e-mail e enviaremos um link seguro para criar uma nova senha.':'Enter your email and we will send a secure link to create a new password.','Nova senha':'New password','Digite a nova senha':'Enter the new password','Repetir nova senha':'Repeat new password','Digite a senha novamente':'Enter the password again','As duas senhas precisam ser exatamente iguais.':'Both passwords must be exactly the same.','As senhas não coincidem. Digite a mesma senha nos dois campos.':'The passwords do not match. Enter the same password in both fields.','As duas senhas coincidem.':'The passwords match.','Voltar para o login':'Back to sign in','Redefinir senha':'Reset password','Enviar link de recuperação':'Send recovery link','Trocar senha':'Change password','Finalizar troca de senha':'Finish password change','Salvando...':'Saving...','Se a conta existir, o Firebase enviará um link seguro para redefinição da senha. Abra o link recebido para escolher e confirmar a nova senha.':'If the account exists, Firebase will send a secure password reset link. Open the link to choose and confirm the new password.','Senha alterada com sucesso. Agora você pode entrar com a nova senha.':'Password changed successfully. You can now sign in with the new password.','O link de recuperação é inválido ou expirou. Solicite um novo link pelo login.':'The recovery link is invalid or expired. Request a new link from the login.','Este link de recuperação expirou. Solicite um novo link.':'This recovery link has expired. Request a new link.','Este link de recuperação é inválido. Solicite um novo link.':'This recovery link is invalid. Request a new link.',
       'Excluir família':'Delete family','Esta ação não poderá ser desfeita.':'This action cannot be undone.','Deseja realmente apagar esta família?':'Are you sure you want to delete this family?','Cancelar':'Cancel','Salvar falha':'Save failure','Nova atividade geral':'New general activity','E-mails, análises e tarefas organizadas.':'Organized emails, analyses, and tasks.','Título da atividade':'Activity title','Tipo':'Type','Área / assunto':'Area / subject','Prazo':'Due date','Descrição / contexto':'Description / context','Detalhes da atividade...':'Activity details...','Link relacionado':'Related link','Salvar atividade':'Save activity','Novo fluxo':'New flow','Acompanhamento de processos em três etapas.':'Three-step process follow-up.','Produto relacionado':'Related product','Não relacionado a produto':'Not related to a product','Tipo de retrabalho':'Rework type','Retrabalho de embalagem':'Packaging rework','Retrabalho de montagem':'Assembly rework','Embalagem e montagem':'Packaging and assembly','Outro fluxo':'Other flow','Link do e-mail enviado':'Sent email link','Explique por que o fluxo foi aberto.':'Explain why the flow was opened.','Formulário do fluxo':'Flow form','Salvar fluxo':'Save flow',
       'Descrição':'Description','Links do report':'Report links','Atualizar links e evidências':'Update links and evidence','Link do seu report':'Your report link','Link da resposta do fornecedor':'Supplier response link','Adicionar fotos/evidências':'Add photos/evidence','Salvar links e evidências':'Save links and evidence','Evidências registradas':'Recorded evidence','Nenhuma evidência anexada ainda.':'No evidence attached yet.','Atualização da falha':'Failure update','Adicionar atualização':'Add update','Histórico de atualizações':'Update history','Pendências automáticas':'Automatic pending items','Status calculated':'Calculated status','Excluir registro':'Delete record','Contexto':'Context','Salvar alterações':'Save changes','Excluir atividade':'Delete activity','Situação':'Situation','Etapa 1 · Formulário e e-mail':'Step 1 · Form and email','Etapa 2 · Folha de rosto':'Step 2 · Cover sheet','Etapa 3 · Seguimento no fluxo':'Step 3 · Flow follow-up','Folha de rosto':'Cover sheet','Link / arquivo da folha de rosto':'Cover sheet link / file','Link ou registro do seguimento':'Follow-up link or record','Salvar etapas':'Save steps','Selecione':'Select','Arquivos e links':'Files and links','Andamento do fluxo':'Flow progress','Status calculado':'Calculated status','Excluir fluxo':'Delete flow',
       'Cadastre o primeiro produto.':'Register the first product.','Sem pendências':'No pending items','em aberto':'open','Abrir link':'Open link','Abrir link relacionado':'Open related link','E-mail enviado':'Email sent','Folha de rosto':'Cover sheet','Registro de seguimento':'Follow-up record','Meu report':'My report','Resposta':'Response','Sem atualização':'No update','Geral':'General','Operacional':'Operational','Máquina':'Machine','Linha':'Line','Nenhum produto cadastrado':'No product registered','Cadastre uma família e um produto para começar.':'Register a family and a product to get started.','Consulta geral por família, produto e componente.':'General search by family, product, and component.','E-mails, análises, alinhamentos e tarefas que precisam acontecer.':'Emails, analyses, alignments, and tasks that need to happen.','Formulário, e-mail, folha de rosto e seguimento em um processo único.':'Form, email, cover sheet, and follow-up in one process.','Prioridades, reports de produto e atividades gerais em um só lugar.':'Priorities, product reports, and general activities in one place.','Visão executiva e indicadores gerais de falhas de produtos.':'Executive view and general product failure indicators.','E-mails, análises, alinhamentos e outras tarefas que não pertencem a uma falha de produto.':'Emails, analyses, alignments, and other tasks that do not belong to a product failure.'
@@ -235,6 +266,9 @@
     }
 
     const now = () => new Date().toISOString();
+    const userProfileService=createUserProfileService({
+      db,doc,getDoc,setDoc,withTimeout,buildSignupProfile,now
+    });
     let dateFormat = new Intl.DateTimeFormat(currentLanguage, { dateStyle: 'short', timeStyle: 'short' });
     const esc = value => { const el = document.createElement('div'); el.textContent = value || ''; return el.innerHTML; };
     const formatDate = iso => iso ? dateFormat.format(new Date(iso)) : '—';
@@ -361,46 +395,15 @@
       unsubscribeData = [];
     }
 
-    function legacyUsers() {
-      try { return JSON.parse(localStorage.getItem('controleFalhas.users.v1') || '[]') || []; }
-      catch { return []; }
-    }
+    const legacyUserMetadata=sanitizeLegacyUserMetadata(localStorage);
+    function legacyUsers() { return legacyUserMetadata; }
 
     function legacyState() {
       try { return JSON.parse(localStorage.getItem('controleFalhas.v2') || 'null'); }
       catch { return null; }
     }
 
-    async function ensureUserProfile(firebaseUser, legacy = null) {
-      const ref = doc(db, 'users', firebaseUser.uid);
-      const snap = await withTimeout(getDoc(ref), 12000, 'Validação do perfil');
-      const email = (firebaseUser.email || '').toLowerCase();
-      const isAdminEmail = email === ADMIN_EMAIL;
-
-      if (snap.exists()) {
-        const data = snap.data() || {};
-        return {
-          docId: firebaseUser.uid,
-          name: data.name || legacy?.name || firebaseUser.displayName || email.split('@')[0],
-          email: data.email || email,
-          role: data.role || (isAdminEmail ? 'admin' : legacy?.role || 'user'),
-          disabled: Boolean(data.disabled),
-          createdAt: data.createdAt || now(),
-          updatedAt: data.updatedAt || now()
-        };
-      }
-
-      const profile = {
-        name: legacy?.name || firebaseUser.displayName || email.split('@')[0],
-        email,
-        role: isAdminEmail ? 'admin' : (legacy?.role || 'user'),
-        disabled: false,
-        createdAt: now(),
-        updatedAt: now()
-      };
-      await withTimeout(setDoc(ref, profile, { merge: true }), 12000, 'Criação do perfil');
-      return { docId: firebaseUser.uid, ...profile };
-    }
+    async function ensureUserProfile(firebaseUser,legacy=null){ return userProfileService.ensure(firebaseUser,legacy); }
 
     async function migrateLegacyDataOnce() {
       const legacy = legacyState();
@@ -462,10 +465,27 @@
       unsubscribeData.push(subscribeToSession(collection(db, 'users'), async snapshot => {
         users = snapshot.docs.map(item => ({ docId: item.id, ...item.data() }));
         const me = currentAuthUser ? users.find(u => u.docId === currentAuthUser.uid) : null;
-        if (me && currentAccount) {
-          currentAccount = { ...currentAccount, name: me.name, email: me.email, role: me.role };
-          if (me.disabled) {
-            alert('Sua conta foi desativada por um administrador.');
+        if (me && currentAccount && currentAuthUser) {
+          try {
+            const hadMesPublish = Boolean(currentAccount.capabilities?.publish_mes);
+            const admission = evaluateSessionAdmission({
+              firebaseUser: currentAuthUser,
+              profile: { ...me, uid: me.uid || me.docId }
+            });
+            currentAccount = {
+              ...currentAccount,
+              name: admission.name || me.name,
+              email: admission.email || me.email,
+              role: admission.role,
+              generation: admission.generation,
+              admissionState: admission.admission_state,
+              accessLevel: admission.access_level,
+              capabilities: admission.capabilities
+            };
+            if (admission.capabilities.publish_mes && !hadMesPublish) startMesSync(currentAuthUser.uid);
+            if (!admission.capabilities.publish_mes && hadMesPublish) mesSync?.stop();
+          } catch (error) {
+            console.warn('[Central] Sessão invalidada por alteração de admissão/RBAC:', error?.code || error?.message || error);
             await signOut(auth);
             return;
           }
@@ -687,7 +707,7 @@
       const root=document.querySelector(rootSelector), select=document.querySelector(selectId);
       if(!root || !select) return;
       const radios=[...root.querySelectorAll('input[name="assignment_mode"]')];
-      const isAdmin=currentAccount?.role==='admin';
+      const isAdmin=canAdminister();
       const currentMode=radios.find(r=>r.checked)?.value || 'private';
       select.disabled=!isAdmin || currentMode==='open';
       if (!isAdmin) {
@@ -706,7 +726,7 @@
       const root=document.querySelector(rootSelector), select=document.querySelector(selectId);
       if(!root || !select) return;
       const mode=root.querySelector('input[name="assignment_mode"]:checked')?.value || 'private';
-      const isAdmin=currentAccount?.role==='admin';
+      const isAdmin=canAdminister();
       select.disabled=!isAdmin || mode==='open';
       select.multiple=mode!=='private';
       if(mode==='open') [...select.options].forEach(o=>o.selected=false);
@@ -725,7 +745,7 @@
       const root=formElement.querySelector('.assignment-box');
       const mode=root?.querySelector('input[name="assignment_mode"]:checked')?.value || 'private';
       let assignees=selectedNames('#'+root.querySelector('select').id);
-      if(currentAccount?.role!=='admin') assignees=[currentAccount?.name || fallbackOwner].filter(Boolean);
+      if(!canAdminister()) assignees=[currentAccount?.name || fallbackOwner].filter(Boolean);
       if(mode==='private') assignees=assignees.slice(0,1);
       if(mode==='open') assignees=[];
       return {
@@ -751,7 +771,7 @@
       return (item?.collaborationRequests || []).filter(r => r.status === 'pending');
     }
     function canManageParticipation(item) {
-      return currentAccount && (currentAccount.role === 'admin' || isAssignedToCurrentUser(item));
+      return currentAccount && (canAdminister() || isAssignedToCurrentUser(item));
     }
     async function requestParticipation(kind, id) {
       if (!currentAccount) return;
@@ -964,7 +984,7 @@
       return activity?.dueDate?`${t('Prazo')}: ${activity.dueDate}`:'';
     }
     function activityCanHardDelete(activity){
-      if(!activity||currentAccount?.role!=='admin')return false;
+      if(!activity||!canAdminister())return false;
       const assignment=normalizeAssignment(activity);
       const assignedOthers=(assignment.assignees||[]).some(name=>name&&name!==activity.openedBy&&name!==currentAccount?.name);
       const hasOperationalHistory=(activity.updates||[]).length>0||(activity.steps||[]).some(step=>step.done)||evidenceEntries(activity.evidence).length>0||Boolean(activity.originRoutineExecutionId)||activityEffectiveStatus(activity)!=='pendente';
@@ -1156,18 +1176,18 @@
       const q=String(query||'').trim().toLowerCase(),items=[];
       const add=(title,sub,kind,fn,searchText='')=>{if(!q||[title,sub,kind,searchText].join(' ').toLowerCase().includes(q))items.push({title,sub,kind,fn});};
       add(t('Abrir Central do Dia'),currentLanguage==='en-US'?'Current shift, routines and assignments':'Turno atual, rotinas e alocações',t('Ação'),()=>show('daily'),'central rotina turno');
-      add(t('Nova atividade'),currentLanguage==='en-US'?'Create a task or structured activity':'Criar tarefa ou atividade estruturada',t('Ação'),()=>openActivityModal(),'atividade tarefa');
-      add(t('Registrar falha'),currentLanguage==='en-US'?'Register an operational occurrence':'Registrar ocorrência operacional',t('Ação'),()=>openOperationalFailureModal(),'falha ocorrência');
-      add(t('Cadastrar produto'),currentLanguage==='en-US'?'Add product / CPH':'Adicionar produto / CPH',t('Ação'),()=>openProductModal(),'produto cph');
+      if(hasCapability('write_operational'))add(t('Nova atividade'),currentLanguage==='en-US'?'Create a task or structured activity':'Criar tarefa ou atividade estruturada',t('Ação'),()=>openActivityModal(),'atividade tarefa');
+      if(hasCapability('write_operational'))add(t('Registrar falha'),currentLanguage==='en-US'?'Register an operational occurrence':'Registrar ocorrência operacional',t('Ação'),()=>openOperationalFailureModal(),'falha ocorrência');
+      if(hasCapability('write_technical'))add(t('Cadastrar produto'),currentLanguage==='en-US'?'Add product / CPH':'Adicionar produto / CPH',t('Ação'),()=>openProductModal(),'produto cph');
       add(t('Abrir saúde dos dados'),currentLanguage==='en-US'?'Review incomplete or inconsistent records':'Revisar registros incompletos ou inconsistentes',t('Ação'),()=>openDataHealth(),'saúde dados');
-      if(currentAccount?.role==='admin')add(t('Configurar operação'),currentLanguage==='en-US'?'Shifts, scopes, assignment matrix and routines':'Turnos, escopos, matriz e rotinas',t('Admin'),()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel')?.scrollIntoView({behavior:'smooth',block:'start'});},80);},'admin matriz');
+      if(canAdminister())add(t('Configurar operação'),currentLanguage==='en-US'?'Shifts, scopes, assignment matrix and routines':'Turnos, escopos, matriz e rotinas',t('Admin'),()=>{show('daily');setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel')?.scrollIntoView({behavior:'smooth',block:'start'});},80);},'admin matriz');
       const match=(...v)=>!q||v.flat(Infinity).filter(Boolean).join(' ').toLowerCase().includes(q);
       state.products.filter(p=>match(p.code,p.family,p.name,p.commercialName,p.components)).slice(0,8).forEach(p=>add(productDisplayCode(p.code),`Produto · ${p.family||'—'}`,t('Produto'),()=>{activeProduct=p.code;activeFamily='';show('product');},[p.code,p.family,p.components].join(' ')));
       state.reports.filter(r=>match(r.id,r.product,r.family,r.component,r.issue,r.material)).slice(0,8).forEach(r=>add(`${r.id} · ${r.component||'Report'}`,r.issue||failureScopeSummary(r),t('Report'),()=>openDetail(r.id),[r.id,r.product,r.issue].join(' ')));
       state.operationalFailures.filter(r=>match(r.id,r.issue,r.owner,r.maquina,r.linha,r.estacao)).slice(0,8).forEach(r=>add(`${r.id} · ${r.issue||'Falha'}`,failureScopeSummary(r),t('Falha'),()=>{show('operations');openOperationalDetail(r.id);},[r.id,r.issue,r.maquina,r.linha].join(' ')));
       state.activities.filter(a=>match(a.id,a.title,a.area,a.description,a.nextAction)).slice(0,8).forEach(a=>add(`${a.id} · ${a.title}`,a.nextAction?`Próxima: ${a.nextAction}`:a.area,t('Atividade'),()=>{show('work');openActivityDetail(a.id);},[a.id,a.title,a.area,a.nextAction].join(' ')));
       state.flows.filter(f=>match(f.id,f.scope,f.description,f.product)).slice(0,6).forEach(f=>add(`${f.id} · ${f.scope}`,f.description||'',t('Fluxo'),()=>{show('flow');openFlowDetail(f.id);},[f.id,f.scope,f.product].join(' ')));
-      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(currentAccount?.role==='admin')setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},120);},[r.name,r.description,r.checklistTemplate].join(' ')));
+      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(canAdminister())setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},120);},[r.name,r.description,r.checklistTemplate].join(' ')));
       return items.slice(0,32);
     }
     function renderCommandPalette(query=''){
@@ -1336,30 +1356,37 @@
         return currentAccount;
       }
 
-      // Evita duas inicializações simultâneas quando createUser/signIn dispara
-      // o onAuthStateChanged ao mesmo tempo em que o formulário chama finishLogin.
-      if (finishLoginPromise && finishLoginUid === firebaseUser.uid) {
-        return finishLoginPromise;
-      }
-
-      finishLoginUid = firebaseUser.uid;
-      finishLoginPromise = (async () => {
+      // Formulário e auth observer podem chegar juntos; a coordenação fica isolada
+      // e uma sessão antiga nunca limpa o flight de um UID mais novo.
+      return finishLoginFlight.run(firebaseUser.uid, async () => {
         const profile = await ensureUserProfile(firebaseUser, legacyUser);
-        if (profile.disabled) {
-          await signOut(auth);
-          alert('Esta conta está desativada. Procure um administrador.');
-          return null;
+        let admission;
+        try {
+          admission = evaluateSessionAdmission({ firebaseUser, profile });
+        } catch (error) {
+          try { await signOut(auth); } catch {}
+          throw error;
         }
 
-        if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();consoleMesView?.clear();clearSessionData(state);}
+        if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();collectorAuthorityRuntime.clear();consoleMesView?.clear();clearSessionData(state);}
         currentAuthUser = firebaseUser;
-        currentAccount = { uid: firebaseUser.uid, name: profile.name, email: profile.email, role: profile.role };
+        currentAccount = {
+          uid: firebaseUser.uid,
+          name: admission.name || profile.name,
+          email: admission.email || profile.email,
+          role: admission.role,
+          generation: admission.generation,
+          admissionState: admission.admission_state,
+          accessLevel: admission.access_level,
+          capabilities: admission.capabilities
+        };
 
         // Desbloqueie a interface assim que a autenticação e o perfil forem válidos.
         // Migrações e sincronizações secundárias nunca podem prender a tela de login.
         authReady = true;
         syncFirestore();
-        startMesSync(firebaseUser.uid);
+        if (admission.capabilities.publish_mes) startMesSync(firebaseUser.uid);
+        else mesSync?.stop();
         renderAccount();
         render();
 
@@ -1369,14 +1396,7 @@
           .catch(migrationError=>console.warn('Migração dos dados antigos não concluída:', migrationError));
 
         return currentAccount;
-      })();
-
-      try {
-        return await finishLoginPromise;
-      } finally {
-        finishLoginPromise = null;
-        finishLoginUid = null;
-      }
+      });
     }
 
     // ================= AUTH BOOTSTRAP V14.8 =================
@@ -1409,19 +1429,8 @@
         }
         setLoginStatus('Validando acesso...', 'info');
         try {
-          let credential;
-          try {
-            credential = await signInWithEmailAndPassword(auth, email, password);
-          } catch (error) {
-            const legacy = legacyUsers().find(u => String(u.email || '').toLowerCase() === email);
-            if (['auth/user-not-found','auth/invalid-credential','auth/invalid-login-credentials'].includes(error?.code)
-                && legacy && legacy.password === password) {
-              credential = await createUserWithEmailAndPassword(auth, email, password);
-            } else {
-              throw error;
-            }
-          }
-          const legacy = legacyUsers().find(u => String(u.email || '').toLowerCase() === email);
+          const credential = await signInWithEmailAndPassword(auth, email, password);
+          const legacy = findLegacyUserMetadata(legacyUsers(), email);
           const account = await finishLogin(credential.user, legacy);
           if (!account || currentAccount?.uid !== credential.user.uid) {
             const sessionError = new Error('O Firebase autenticou a conta, mas a sessão da Central não foi concluída.');
@@ -1453,17 +1462,26 @@
       const name = form.get('name').trim();
       const email = form.get('email').trim().toLowerCase();
       const password = form.get('password');
+      registrationInProgress = true;
       try {
         const credential = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, 'users', credential.user.uid), {
-          name, email, role: email === ADMIN_EMAIL ? 'admin' : 'user', disabled: false, createdAt: now(), updatedAt: now()
-        }, { merge: true });
+        const createdAt = now();
+        const profile = {
+          ...buildSignupProfile({ uid: credential.user.uid, email, name }),
+          createdAt,
+          updatedAt: createdAt
+        };
+        await setDoc(doc(db, 'users', credential.user.uid), profile);
         try { await sendEmailVerification(credential.user); } catch (verificationError) { console.warn('Não foi possível enviar verificação:', verificationError); }
-        await finishLogin(credential.user);
-        alert(email === ADMIN_EMAIL ? 'Conta de administrador criada e vinculada ao e-mail informado.' : 'Conta criada com sucesso.');
+        await signOut(auth);
+        alert('Conta criada. Confirme seu e-mail corporativo e aguarde a aprovação de um administrador para acessar a Central.');
         formElement.reset();
+        showAuthScreen('login');
       } catch (error) {
+        try { if (auth.currentUser) await signOut(auth); } catch {}
         alert(authErrorMessage(error));
+      } finally {
+        registrationInProgress = false;
       }
     });
 
@@ -1545,6 +1563,7 @@
     if (initialPasswordResetCode) showAuthScreen('reset');
 
     onAuthStateChanged(auth, async firebaseUser => {
+      if (firebaseUser && registrationInProgress) return;
       if (!firebaseUser) {
         authReady = true;
         clearDataListeners();
@@ -1552,6 +1571,7 @@
         currentAccount = null;
         users = [];
         mesSync?.stop();
+        collectorAuthorityRuntime.clear();
         clearSessionData(state);
         consoleMesView?.clear();
         dashboardMesView?.clear();
@@ -1567,7 +1587,7 @@
         return;
       }
       try {
-        const legacyUser = legacyUsers().find(u => (u.email || '').toLowerCase() === (firebaseUser.email || '').toLowerCase());
+        const legacyUser = findLegacyUserMetadata(legacyUsers(), firebaseUser.email);
         await finishLogin(firebaseUser, legacyUser);
       } catch (error) {
         console.error(error);
@@ -1580,7 +1600,7 @@
     });
 
     function requestDeleteFamily(familyName) {
-      if (currentAccount?.role !== 'admin') {
+      if (!canAdminister()) {
         alert('Apenas usuários administradores podem excluir famílias e produtos.');
         return;
       }
@@ -1604,7 +1624,7 @@
     }
 
     function requestRenameFamily(familyName) {
-      if (currentAccount?.role !== 'admin') {
+      if (!canAdminister()) {
         alert('Apenas usuários administradores podem renomear famílias.');
         return;
       }
@@ -1627,7 +1647,7 @@
       const oldFamily = familyToRename;
       const next = String(newFamilyName || '').trim();
       if (!oldFamily || !next) return;
-      if (currentAccount?.role !== 'admin') return alert('Apenas usuários administradores podem renomear famílias.');
+      if (!canAdminister()) return alert('Apenas usuários administradores podem renomear famílias.');
       if (next === oldFamily) { closeFamilyRenameModal(); return; }
       const collision = state.products.some(p => productFamily(p) !== oldFamily && productFamily(p).toLocaleLowerCase() === next.toLocaleLowerCase());
       if (collision) {
@@ -1680,7 +1700,7 @@
       const oldFamily = familyToRename;
       const next = String(newFamilyName || '').trim();
       if (!oldFamily || !next) return;
-      if (currentAccount?.role !== 'admin') return alert('Apenas administradores podem renomear famílias.');
+      if (!canAdminister()) return alert('Apenas administradores podem renomear famílias.');
       if (next === oldFamily) { closeFamilyRenameModal(); return; }
 
       const collision = state.products.some(p => productFamily(p) !== oldFamily && productFamily(p).toLocaleLowerCase() === next.toLocaleLowerCase());
@@ -1735,20 +1755,40 @@
       closeConfirmModal();
     }
 
-    window.toggleUserRole = async function(email) {
-      if (currentAccount?.role !== 'admin') return alert('Apenas administradores podem alterar permissões.');
-      const u = users.find(user => user.email === email);
-      if (!u || u.email === ADMIN_EMAIL) return;
-      const newRole = u.role === 'admin' ? 'user' : 'admin';
-      await updateDoc(doc(db, 'users', u.docId), { role: newRole, updatedAt: now() });
-    };
-
-    window.toggleUserDisabled = async function(email) {
-      if (currentAccount?.role !== 'admin') return alert('Apenas administradores podem desativar contas.');
-      const u = users.find(user => user.email === email);
-      if (!u || u.email === ADMIN_EMAIL) return;
-      const nextDisabled = !Boolean(u.disabled);
-      await updateDoc(doc(db, 'users', u.docId), { disabled: nextDisabled, updatedAt: now() });
+    window.applyAdmissionAdminAction = async function(encodedUid, action) {
+      if (!canAdminister()) return alert(adminUiText('Apenas administradores ativos podem alterar admissão e níveis de acesso.','Only active administrators can change admission and access levels.'));
+      const targetUid=decodeURIComponent(String(encodedUid||''));
+      if(!targetUid||targetUid===currentAccount?.uid)return alert(adminUiText('A própria conta é protegida contra autoescalonamento e autobloqueio.','Your own account is protected against self-escalation and self-lockout.'));
+      const actor=users.find(user=>user.docId===currentAccount?.uid);
+      const target=users.find(user=>user.docId===targetUid);
+      if(!actor||!target)return alert(adminUiText('Não foi possível localizar o perfil de acesso.','Access profile could not be found.'));
+      const accessLevel=document.getElementById('admin-access-'+encodedUid)?.value||'';
+      if(['migrate','approve','change_level'].includes(action)&&!ADMIN_ACCESS_LEVELS.includes(accessLevel))return alert(adminUiText('Escolha explicitamente o nível de acesso antes de continuar.','Choose the access level explicitly before continuing.'));
+      const at=Date.now();
+      const common={
+        actorProfile:{...actor,uid:actor.uid||actor.docId},
+        actorUid:currentAuthUser?.uid,
+        targetProfile:{...target,uid:target.uid||target.docId},
+        reason:'Central admin UI',
+        at,
+        actorEmailVerified:currentAuthUser?.emailVerified===true
+      };
+      let command;
+      try {
+        if(action==='migrate')command=migrateLegacyProfile({...common,accessLevel});
+        else if(action==='approve')command=approveV2Profile({...common,accessLevel});
+        else if(action==='deny')command=denyV2Profile(common);
+        else if(action==='change_level')command=changeV2AccessLevel({...common,accessLevel});
+        else throw new Error('Ação administrativa de admissão inválida.');
+        const batch=writeBatch(db);
+        batch.update(doc(db,'users',targetUid),command.patch);
+        batch.set(doc(collection(db,'admissionAudit')),command.audit);
+        await withTimeout(batch.commit(),15000,'Atualização auditada de acesso');
+        showSaveToast(adminUiText('Acesso atualizado com trilha de auditoria.','Access updated with an audit trail.'),'success');
+      } catch (error) {
+        console.error('[Central] Falha ao aplicar admissão/RBAC:',error);
+        alert(error?.message||adminUiText('Não foi possível atualizar o acesso.','Access could not be updated.'));
+      }
     };
 
     function renderTree() {
@@ -1757,7 +1797,7 @@
         (acc[family] ??= []).push(p);
         return acc;
       }, {});
-      const isAdmin = currentAccount?.role === 'admin';
+      const isAdmin = canAdminister();
       const chevron = () => `<span class="family-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
       const menuIcon = `<svg viewBox="0 0 24 24"><path d="M12 6.5a1.4 1.4 0 1 0 0 .01M12 12a1.4 1.4 0 1 0 0 .01M12 17.5a1.4 1.4 0 1 0 0 .01" fill="currentColor"/></svg>`;
       const html = Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)).map(([family, products]) => {
@@ -2085,8 +2125,8 @@
     }
     function dailyRelevantRecurrences(){
       const shiftId=dailySelectedShiftId,uid=currentAuthUser?.uid||'';
-      const allocations=currentAccount?.role==='admin'?activeWorkAllocations().filter(a=>a.shiftId===shiftId):activeWorkAllocations().filter(a=>a.shiftId===shiftId&&a.userId===uid);
-      const productionScopeIds=currentAccount?.role==='admin'?state.operationalScopes.filter(scope=>dailyProductionCodes(scope.docId,shiftId).length).map(scope=>scope.docId):[];
+      const allocations=canAdminister()?activeWorkAllocations().filter(a=>a.shiftId===shiftId):activeWorkAllocations().filter(a=>a.shiftId===shiftId&&a.userId===uid);
+      const productionScopeIds=canAdminister()?state.operationalScopes.filter(scope=>dailyProductionCodes(scope.docId,shiftId).length).map(scope=>scope.docId):[];
       const scopeIds=[...new Set([...allocations.flatMap(a=>a.scopeIds||[]),...productionScopeIds])];
       const lines=new Set(scopeIds.flatMap(id=>{const scope=state.operationalScopes.find(s=>s.docId===id);return [recurrenceNorm(scope?.name||''),recurrenceNorm(scope?.code||'')];}).filter(Boolean));
       const codes=new Set(scopeIds.flatMap(id=>dailyProductionCodes(id,shiftId,dailySelectedDate)).map(productCodeKey).filter(Boolean));
@@ -2345,12 +2385,14 @@
         renderDashboardMes();renderProductMes();renderFailuresMes();renderDailyMes();renderCoraMes();renderConsoleMes();
       }});
       mesSync.start(uid);
+      collectorAuthorityRuntime.refresh({force:true}).catch(()=>{});
     }
     function renderConsoleMes() {
       if (!currentAuthUser || activeView !== 'mesConsole') return;
       consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, { locale: () => currentLanguage, onChange() {
         if (!currentAuthUser) return;
         renderDashboardMes(); renderProductMes(); renderFailuresMes(); renderDailyMes(); renderCoraMes();
+        collectorAuthorityRuntime.refresh().catch(()=>{});
         mesSync?.capture().catch(error=>{state.ames.updateAgent({sync:{status:'error',error:error.message}});});
       } });
       consoleMesView.render();
@@ -2443,6 +2485,156 @@
       } });
       integrationView.render();
     }
+
+    const ADMIN_ACCESS_LEVELS = ['viewer','operator','engineer','supervisor','admin'];
+    function hasCapability(name){ return currentAccount?.capabilities?.active === true && currentAccount.capabilities?.[name] === true; }
+    function canAdminister(){ return hasCapability('administer'); }
+    function capabilityDeniedMessage(name){
+      const labels={write_operational:'operacional',write_technical:'técnica',administer:'administrativa'};
+      return currentLanguage==='en-US'
+        ? 'Your access level does not allow this action.'
+        : 'Seu nível de acesso não permite esta ação '+(labels[name]||'')+'.';
+    }
+    function requireCapability(name){
+      if(hasCapability(name))return true;
+      showSaveToast(capabilityDeniedMessage(name),'error');
+      return false;
+    }
+    const CAPABILITY_FORM_MAP=Object.freeze({
+      productForm:'write_technical',componentForm:'write_technical',
+      failureForm:'write_operational',operationalFailureForm:'write_operational',activityForm:'write_operational',flowForm:'write_operational',routineExecutionForm:'write_operational',
+      dailyShiftForm:'administer',dailyScopeForm:'administer',dailyProductionContextForm:'administer',dailyAllocationForm:'administer',dailyRoutineForm:'administer',familyRenameForm:'administer'
+    });
+    const CAPABILITY_CLICK_RULES=Object.freeze([
+      {capability:'write_technical',hide:true,selector:'#newProduct,#headerNewProduct,#newComponent,#aiSaveInvestigation'},
+      {capability:'write_operational',hide:true,selector:'#newFailure,#newOperationalFailure,#headerNewOperationalFailure,#quickOperationalFailure,#newActivity,#newFlow,#quickActivity,#quickFailure,#quickFlow'},
+      {capability:'write_operational',hide:false,selector:'#saveArtifacts,#saveAnalysis,#saveQuantity,#saveDetailPage,#editFailureName,#saveFailureName,#addUpdate,#saveOperationalEvidence,#saveOperationalDetail,#deleteOperationalDetail,#convertOperationalToProductReport,#saveActivityChanges,#saveActivityEvidence,#structureActivity,#activitySteps input,#saveFlowChanges,#saveRoutineExecutionButton,#saveShiftHandover'},
+      {capability:'administer',hide:false,selector:'#deleteReport,#deleteActivity,#cancelActivity,#deleteFlow,.delete-family-btn'}
+    ]);
+    function applyCapabilityControl(rule){
+      const allowed=hasCapability(rule.capability);
+      document.querySelectorAll(rule.selector).forEach(el=>{
+        if(rule.hide){
+          if(!allowed){el.dataset.capabilityHidden='1';el.style.setProperty('display','none','important');}
+          else if(el.dataset.capabilityHidden==='1'){el.style.removeProperty('display');delete el.dataset.capabilityHidden;}
+        }else if('disabled' in el){
+          if(!allowed){if(el.dataset.capabilityDisabled!=='1')el.dataset.capabilityWasDisabled=el.disabled?'1':'0';el.dataset.capabilityDisabled='1';el.disabled=true;el.title=capabilityDeniedMessage(rule.capability);}
+          else if(el.dataset.capabilityDisabled==='1'){el.disabled=el.dataset.capabilityWasDisabled==='1';delete el.dataset.capabilityDisabled;delete el.dataset.capabilityWasDisabled;if(el.title===capabilityDeniedMessage(rule.capability))el.removeAttribute('title');}
+        }
+      });
+    }
+    function applyCapabilityUi(){
+      if(!currentAccount)return;
+      CAPABILITY_CLICK_RULES.forEach(applyCapabilityControl);
+      document.documentElement.dataset.centralAccessLevel=currentAccount.accessLevel||currentAccount.generation||'unknown';
+    }
+    document.addEventListener('submit',event=>{
+      const capability=CAPABILITY_FORM_MAP[event.target?.id];
+      if(!capability||hasCapability(capability))return;
+      event.preventDefault();event.stopImmediatePropagation();showSaveToast(capabilityDeniedMessage(capability),'error');
+    },true);
+    document.addEventListener('click',event=>{
+      for(const rule of CAPABILITY_CLICK_RULES){
+        if(!event.target?.closest?.(rule.selector)||hasCapability(rule.capability))continue;
+        event.preventDefault();event.stopImmediatePropagation();showSaveToast(capabilityDeniedMessage(rule.capability),'error');return;
+      }
+    },true);
+    function adminUiText(pt,en){ return currentLanguage==='en-US' ? en : pt; }
+    function adminAccessLevelLabel(level){
+      const labels=currentLanguage==='en-US'
+        ? {viewer:'Viewer',operator:'Operator',engineer:'Engineer',supervisor:'Supervisor',admin:'Admin'}
+        : {viewer:'Viewer',operator:'Operador',engineer:'Engenheiro',supervisor:'Supervisor',admin:'Administrador'};
+      return labels[String(level||'').toLowerCase()] || String(level||'—');
+    }
+    function accountAccessLabel(account){
+      if(account?.generation==='v2')return adminAccessLevelLabel(account.accessLevel);
+      return canAdminister()?adminUiText('Administrador','Administrator'):adminUiText('Usuário legado','Legacy user');
+    }
+    function renderLegacyMigrationStatus(adminSection){
+      if(!adminSection)return;
+      let host=adminSection.querySelector('#adminLegacyMigrationStatus');
+      if(!host){
+        host=document.createElement('div');
+        host.id='adminLegacyMigrationStatus';
+        host.className='panel';
+        host.style.marginBottom='12px';
+        adminSection.querySelector('.section-head')?.after(host);
+      }
+      const inventory=legacyAccountMigrationInventory(users);
+      const progress=legacyMigrationProgress(inventory);
+      let tone='var(--muted)',statusTitle,statusBody;
+      if(inventory.total===0){
+        statusTitle=adminUiText('Inventário ainda vazio','Inventory not loaded yet');
+        statusBody=adminUiText('Nenhuma conta foi carregada. A remoção do fallback permanece bloqueada.','No accounts are loaded. Fallback removal remains blocked.');
+      }else if(inventory.legacy_total>0){
+        tone='var(--warning, #9a6b00)';
+        statusTitle=adminUiText('Migração de acesso em andamento','Access migration in progress');
+        statusBody=currentLanguage==='en-US'
+          ? inventory.legacy_total+' legacy account(s) still require an explicit administrator decision ('+inventory.legacy_active+' active, '+inventory.legacy_disabled+' disabled). The legacy fallback remains required.'
+          : inventory.legacy_total+' conta(s) legada(s) ainda exigem decisão explícita do administrador ('+inventory.legacy_active+' ativa(s), '+inventory.legacy_disabled+' desativada(s)). O fallback legado continua obrigatório.';
+      }else if(inventory.v2_invalid>0){
+        tone='var(--danger)';
+        statusTitle=adminUiText('Perfis V2 inválidos encontrados','Invalid V2 profiles found');
+        statusBody=currentLanguage==='en-US'
+          ? inventory.v2_invalid+' invalid V2 profile(s) must be corrected before fallback removal can even be considered.'
+          : inventory.v2_invalid+' perfil(is) V2 inválido(s) precisam ser corrigidos antes de sequer considerar remover o fallback.';
+      }else{
+        tone='var(--success, #197244)';
+        statusTitle=adminUiText('Inventário sem contas legadas','No legacy accounts in inventory');
+        statusBody=adminUiText('Todas as contas carregadas estão em V2. Isso apenas libera a próxima validação; remover o fallback continua exigindo regressão GREEN e promoção separada.','All loaded accounts are V2. This only unlocks the next validation; removing the fallback still requires GREEN regression evidence and a separate promotion decision.');
+      }
+      host.innerHTML='<div style="padding:14px 16px;display:grid;gap:10px">'
+        +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">'
+          +'<div><strong>'+esc(statusTitle)+'</strong><div class="muted" style="font-size:11px;margin-top:4px">'+esc(statusBody)+'</div></div>'
+          +'<span class="status '+(inventory.fallback_removal_allowed?'done':'waiting')+'">'+esc(adminUiText('V2 '+inventory.v2_total+'/'+inventory.total,'V2 '+inventory.v2_total+'/'+inventory.total))+'</span>'
+        +'</div>'
+        +'<div style="height:7px;background:var(--soft);border-radius:999px;overflow:hidden"><div style="height:100%;width:'+progress+'%;background:'+tone+';transition:width .2s ease"></div></div>'
+        +'<div class="muted" style="font-size:10px">'+esc(adminUiText('Sem migração automática · sem nível sugerido · decisão por conta','No automatic migration · no suggested level · per-account decision'))+'</div>'
+      +'</div>';
+    }
+
+    function adminUserAccessMeta(user){
+      const v2=Number(user?.admission_version)===2;
+      if(!v2){
+        const state=user?.disabled?adminUiText('Desativado','Disabled'):(user?.role==='admin'?adminUiText('Administrador','Administrator'):adminUiText('Usuário legado','Legacy user'));
+        return {v2:false,label:adminUiText('Legado','Legacy')+' · '+state,className:user?.disabled?'waiting':'done'};
+      }
+      const level=adminAccessLevelLabel(user?.access_level);
+      const approval=String(user?.approval_state||'pending');
+      let state=adminUiText('Pendente','Pending'),className='waiting';
+      if(approval==='denied')state=adminUiText('Negado','Denied');
+      else if(user?.disabled)state=adminUiText('Desativado','Disabled');
+      else if(approval==='approved'){state=adminUiText('Aprovado','Approved');className='done';}
+      return {v2:true,label:state+' · '+level,className};
+    }
+    function adminAccessSelectHtml(user){
+      const encoded=encodeURIComponent(String(user?.docId||''));
+      const v2=Number(user?.admission_version)===2;
+      const current=v2&&ADMIN_ACCESS_LEVELS.includes(user?.access_level)?user.access_level:'';
+      const placeholder='<option value="" '+(current?'':'selected')+'>'+esc(adminUiText('Escolha o nível','Choose level'))+'</option>';
+      const options=ADMIN_ACCESS_LEVELS.map(level=>'<option value="'+level+'" '+(current===level?'selected':'')+'>'+esc(adminAccessLevelLabel(level))+'</option>').join('');
+      return '<select id="admin-access-'+encoded+'" class="admin-access-select" aria-label="'+esc(adminUiText('Nível de acesso','Access level'))+'">'+placeholder+options+'</select>';
+    }
+    function adminUserRowHtml(user){
+      const meta=adminUserAccessMeta(user),encoded=encodeURIComponent(String(user?.docId||''));
+      const self=user?.docId===currentAccount?.uid;
+      let actions='<span class="muted">'+esc(adminUiText('Sua conta · protegida','Your account · protected'))+'</span>';
+      if(!self){
+        const select=adminAccessSelectHtml(user);
+        if(!meta.v2){
+          actions=select+'<button class="button secondary" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'migrate\')">'+esc(adminUiText('Migrar acesso','Migrate access'))+'</button>';
+        }else if(user?.approval_state==='approved'&&!user?.disabled){
+          actions=select+'<button class="button secondary" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'change_level\')">'+esc(adminUiText('Aplicar nível','Apply level'))+'</button>'
+            +'<button class="button danger" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'deny\')">'+esc(adminUiText('Negar acesso','Deny access'))+'</button>';
+        }else{
+          const approveLabel=(user?.approval_state==='denied'||user?.disabled)?adminUiText('Reaprovar','Reapprove'):adminUiText('Aprovar','Approve');
+          actions=select+'<button class="button primary" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'approve\')">'+esc(approveLabel)+'</button>';
+          if(user?.approval_state!=='denied')actions+='<button class="button danger" onclick="applyAdmissionAdminAction(\''+encoded+'\',\'deny\')">'+esc(adminUiText('Negar','Deny'))+'</button>';
+        }
+      }
+      return '<tr><td><span class="identifier">'+esc(user?.name||'')+'</span></td><td>'+esc(user?.email||'')+'</td><td><span class="status '+meta.className+'">'+esc(meta.label)+'</span></td><td><div class="user-actions">'+actions+'</div></td></tr>';
+    }
+
     function renderProfile() {
       renderIntegration();
       if (!currentAccount) return;
@@ -2474,26 +2666,13 @@
         document.querySelector('#userReportEmpty').classList.remove('hidden');
       }
 
-      const isAdmin = currentAccount.role === 'admin';
+      const isAdmin = canAdminister();
       const adminSection = document.querySelector('#adminUsersSection');
       adminSection.classList.toggle('hidden', !isAdmin);
 
       if (isAdmin) {
-        document.querySelector('#adminUserRows').innerHTML = users.map(u => `
-          <tr>
-            <td><span class="identifier">${esc(u.name)}</span></td>
-            <td>${esc(u.email)}</td>
-            <td><span class="status ${u.role === 'admin' ? 'done' : 'waiting'}">${u.role === 'admin' ? 'Administrador' : 'Usuário Normal'}</span></td>
-            <td>
-              <div class="user-actions">
-                ${u.email !== currentAccount.email && u.email !== ADMIN_EMAIL ? `
-                  <button class="button secondary" onclick="toggleUserRole('${u.email}')">${u.role === 'admin' ? 'Tornar Usuário' : 'Promover a Adm'}</button>
-                  <button class="button ${u.disabled ? 'secondary' : 'danger'}" onclick="toggleUserDisabled('${u.email}')">${u.disabled ? 'Reativar' : 'Desativar'}</button>
-                ` : '<span class="muted">(Conta protegida)</span>'}
-              </div>
-            </td>
-          </tr>
-        `).join('');
+        renderLegacyMigrationStatus(adminSection);
+        document.querySelector('#adminUserRows').innerHTML = users.map(adminUserRowHtml).join('');
       }
     }
 
@@ -2503,7 +2682,7 @@
       const accountScreenEl = document.querySelector('#accountScreen');
 
       if (currentAccount) {
-        const roleLabel = currentAccount.role === 'admin' ? 'Administrador' : 'Usuário Normal';
+        const roleLabel = accountAccessLabel(currentAccount);
         accountInfoEl.textContent = `${currentAccount.name} (${roleLabel}) · ${currentAccount.email}`;
       } else {
         accountInfoEl.textContent = 'Conta não configurada';
@@ -2906,6 +3085,10 @@ const aiPilot = {
     function currentCoraMesContext() {
       return currentAuthUser ? coraMesView?.context() || { status: 'not_selected' } : { status: 'signed_out' };
     }
+    function aiBuildExternalCentralContext(){
+      const local=aiBuildDynamicCentralContext();
+      return {...local,mes:projectCoraMesExternalContext(local?.mes||{status:'not_selected'})};
+    }
     function renderAIAnalysis(){
       renderCoraMes();
       const modeButtons=document.querySelectorAll('[data-ai-mode]'); modeButtons.forEach(b=>b.classList.toggle('active',b.dataset.aiMode===aiPilot.mode));
@@ -2940,7 +3123,7 @@ const aiPilot = {
         const payload={mode:aiPilot.mode,perspective:aiPilot.perspective,context:aiPilot.context,rows:aiPilot.rows,tasks:aiTasks(),instructions:{factsOnly:true,separateHypothesisFromConfirmedCause:true,use6M:true,allowMultipleCauses:true,askMissingData:true,suggestTests:true,compareHistory:true}};
         let result=null;
         const endpoint=window.FAILURE_AI_ENDPOINT||'/api/failure-analysis';
-        try{const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(res.ok)result=await res.json();}catch(e){console.warn('Endpoint de IA indisponível; usando análise local do piloto.',e);}
+        try{const res=await coraAppFetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(res.ok)result=await res.json();}catch(e){console.warn('Endpoint de IA indisponível; usando análise local do piloto.',e);}
         if(!result) result=aiLocalAnalysis();
         aiPilot.lastResult=result; aiRenderResult(result); showSaveToast(result?.aiUnavailable?'IA externa indisponível; resultado local exibido.':'Análise concluída.','success');
       }catch(err){console.error(err);showSaveToast('Não foi possível analisar: '+err.message,'error');}
@@ -2955,25 +3138,55 @@ const aiPilot = {
     function aiLoadHistory(id){const x=(state.failureAnalyses||[]).find(a=>(a.docId||a.id)===id);if(!x)return;aiPilot.mode=x.mode||'data';aiPilot.perspective=x.perspective||'COMPLETA';aiPilot.context=x.problem||'';aiPilot.source=x.source||'Histórico';aiPilot.rows=[];aiPilot.columns=[];const c=document.querySelector('#aiContext');if(c)c.value=aiPilot.context;aiRenderResult(x.result||{});renderAIAnalysis();}
 
     // ==================== V15V — OFFLINE / AUDIT / LLMOPS / EXPORT ====================
-    const OFFLINE_DB_NAME='central-trabalho-offline'; const OFFLINE_DB_VERSION=1; const OFFLINE_STORE='queue';
-    let offlineDbPromise=null;
-    function offlineDb(){
-      if(offlineDbPromise) return offlineDbPromise;
-      offlineDbPromise=new Promise((resolve,reject)=>{const req=indexedDB.open(OFFLINE_DB_NAME,OFFLINE_DB_VERSION);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(OFFLINE_STORE))db.createObjectStore(OFFLINE_STORE,{keyPath:'id'});};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
-      return offlineDbPromise;
+    // H2: outbox isolada por UID. A fila V1 sem dono permanece em quarentena e
+    // nunca e atribuida automaticamente ao usuario que estiver logado depois.
+    const offlineOutbox=createOfflineOutbox({storage:createBrowserOutboxStorage()});
+    let offlineSyncPromise=null;
+    async function queueOfflineWrite(collectionName,payload,{effects=[]}={}){
+      const uid=currentAuthUser?.uid;
+      if(!uid)throw new Error('Sessao autenticada obrigatoria para salvar offline.');
+      return offlineOutbox.enqueue({uid,collection:collectionName,payload,effects});
     }
-    async function queueOfflineWrite(collectionName,payload){const item={id:(crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`),collection:collectionName,payload,createdAt:now()};try{const dbx=await offlineDb();await new Promise((res,rej)=>{const tx=dbx.transaction(OFFLINE_STORE,'readwrite');tx.objectStore(OFFLINE_STORE).put(item);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch{const k='centralAI.offline.queue.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push(item);localStorage.setItem(k,JSON.stringify(arr.slice(-50)));}return item;}
-    async function listOfflineQueue(){let out=[];try{const dbx=await offlineDb();out=await new Promise((res,rej)=>{const tx=dbx.transaction(OFFLINE_STORE,'readonly');const r=tx.objectStore(OFFLINE_STORE).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);});}catch{}const localKey='centralAI.offline.queue.v1';try{out=[...out,...JSON.parse(localStorage.getItem(localKey)||'[]')];}catch{}const unique=[...new Map(out.map(x=>[x.id,x])).values()];return unique;}
-    async function removeOfflineQueue(id){try{const dbx=await offlineDb();await new Promise((res,rej)=>{const tx=dbx.transaction(OFFLINE_STORE,'readwrite');tx.objectStore(OFFLINE_STORE).delete(id);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch{}try{const k='centralAI.offline.queue.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]').filter(x=>x.id!==id);localStorage.setItem(k,JSON.stringify(arr));}catch{}}
-    async function syncOfflineQueue(){if(!navigator.onLine||!currentAccount)return;const items=await listOfflineQueue().catch(()=>[]);for(const item of items){try{await addDoc(collection(db,item.collection),item.payload);await removeOfflineQueue(item.id);}catch(err){console.warn('Fila offline ainda pendente:',err.message);break;}}if(items.length)showSaveToast('Sincronização offline concluída quando a conexão voltou.','success');}
+    async function listOfflineQueue(){return currentAuthUser?.uid?offlineOutbox.pending(currentAuthUser.uid):[];}
+    async function removeOfflineQueue(id){return currentAuthUser?.uid?offlineOutbox.ack(currentAuthUser.uid,id):false;}
+    async function syncOfflineQueue(){
+      if(!navigator.onLine||!currentAccount||!currentAuthUser)return {synced:0,failed:0,remaining:0,stopped:false,legacy_quarantined:0};
+      if(offlineSyncPromise)return offlineSyncPromise;
+      const uid=currentAuthUser.uid;
+      const sessionIsCurrent=()=>currentAuthUser?.uid===uid;
+      const write=async item=>{
+        const plan=offlineWritePlan(item),batch=writeBatch(db);
+        for(const step of plan){
+          if(step.kind==='set_document'){
+            batch.set(doc(db,step.collection,step.documentId),step.payload);
+          }else if(step.kind==='routine_failure_link'){
+            batch.update(doc(db,step.collection,step.documentId),{[step.field]:arrayUnion(step.value),updatedAt:step.updatedAt});
+          }else{
+            throw new Error('Operacao offline nao suportada: '+String(step.kind||''));
+          }
+        }
+        const request=batch.commit();
+        let timer;
+        const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Timeout ao confirmar escrita offline no Firestore')),15000);});
+        try{return await Promise.race([request,timeout]);}finally{clearTimeout(timer);}
+      };
+      offlineSyncPromise=offlineOutbox.replay({uid,write,sessionIsCurrent}).then(result=>{
+        window.__centralOfflineLegacyPending=result.legacy_quarantined;
+        if(result.legacy_quarantined)console.warn(`[Central] ${result.legacy_quarantined} item(ns) da fila offline V1 permanecem em quarentena sem UID; nenhum foi reenviado automaticamente.`);
+        if(result.synced)showSaveToast(`${result.synced} registro(s) offline sincronizado(s) com seguranca.`,'success');
+        return result;
+      }).finally(()=>{offlineSyncPromise=null;});
+      return offlineSyncPromise;
+    }
+    offlineOutbox.legacyPendingCount().then(count=>{window.__centralOfflineLegacyPending=count;if(count)console.warn(`[Central] ${count} item(ns) offline V1 em quarentena aguardam recuperacao explicita.`);}).catch(error=>console.warn('Diagnostico da fila offline legada indisponivel:',error.message));
     let offlineSupportRegistered=false;
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
   window.addEventListener('online',()=>{mesSync?.retry();syncOfflineQueue().catch(()=>{});});window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.48'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.48'){localStorage.setItem('cora.sw.loaded','15.1.13.48');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
-    async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
-    async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
+    async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await coraAppFetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
+    async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await coraAppFetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
     function aiExportInvestigation(kind){const r=aiPilot.lastResult||{};const messages=aiPilot.conversation||[];const problem=aiPilot.context||messages.find(m=>m.role==='user')?.text||'Investigação CORA';const title=problem.split(/[.!?\n]/)[0].slice(0,120)||'Investigação CORA';const facts=(r.facts||r.summary||[]);const hypotheses=(r.hypotheses||r.possibleCauses||[]);const tests=(r.tests||r.nextSteps||[]);const cause=r.strongestHypothesis||r.rootCause||r.cause||'Em investigação';
       const escDoc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       let body='';
@@ -2986,16 +3199,17 @@ function registerOfflineSupport(){
       const bytes=Uint8Array.from(atob(file.data),c=>c.charCodeAt(0));const blob=new Blob([bytes],{type:file.mime||'application/octet-stream'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=file.name||'CORA-artefato';a.click();setTimeout(()=>URL.revokeObjectURL(url),500);
     }
     function aiArtifactRequestPayload(){
-      return {kind:'8d',context:aiPilot.context,result:aiPilot.lastResult||{},images:aiPilot.images.map(x=>({name:x.name,type:x.type,dataUrl:x.dataUrl})),currentReport:aiBuildDynamicCentralContext().currentReport,currentOperationalFailure:aiBuildDynamicCentralContext().currentOperationalFailure,activeProduct:aiBuildDynamicCentralContext().activeProduct,centralData:aiBuildDynamicCentralContext(),conversation:(aiPilot.conversation||[]).slice(-20)};
+      const centralData=aiBuildExternalCentralContext();
+      return {kind:'8d',context:aiPilot.context,result:aiPilot.lastResult||{},images:aiPilot.images.map(x=>({name:x.name,type:x.type,dataUrl:x.dataUrl})),currentReport:centralData.currentReport,currentOperationalFailure:centralData.currentOperationalFailure,activeProduct:centralData.activeProduct,centralData,conversation:(aiPilot.conversation||[]).slice(-20)};
     }
     async function aiGenerateArtifact(kind){
       const payload=aiArtifactRequestPayload();payload.kind=kind;aiSetThinking(true,`Verificando dados para ${kind.toUpperCase()}…`);
-      try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;const res=await fetch('/api/investigation-artifact',{method:'POST',headers,body:JSON.stringify(payload)});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||`Erro HTTP ${res.status}`);if(!data.ready){aiSetThinking(false);const missing=(data.missing||[]);const questions=(data.questions||[]);const plan=Array.isArray(questions)&&questions.length?`\n\nPróximas perguntas:\n${questions.slice(0,4).map((q,i)=>`${i+1}. ${q}`).join('\n')}`:'';const sources=Array.isArray(data.summary?.sourceRefs)&&data.summary.sourceRefs.length?`\n\nEncontrei ${data.summary.sourceRefs.length} fonte(s) interna(s) potencialmente relevante(s), que serão usadas quando as lacunas forem resolvidas.`:'';aiSetMessage('assistant',`Antes de gerar o ${kind.toUpperCase()}, a CORA revisou a investigação e encontrou lacunas que podem mudar o documento.\n\nAinda falta: ${missing.length?missing.join('; '):'informação suficiente para concluir com segurança'}${plan}${sources}\n\nNão vou inventar esses dados. Podemos completar a investigação e gerar o artefato depois.`);aiScrollChat();return;}aiSetThinking(true,'Gerando documentos, apresentação e diagrama…');Object.values(data.files||{}).forEach(aiDownloadBase64File);aiSetThinking(false);aiSetMessage('assistant',`Pronto. O ${kind.toUpperCase()} foi preparado a partir da investigação atual, das evidências e dos registros internos relevantes. Gerei HTML, Word e PowerPoint sem substituir hipóteses por fatos.`);await auditAI('investigation_artifact',{kind,sourceCount:data.summary?.sourceRefs?.length||0});aiScrollChat();}catch(err){aiSetThinking(false);showSaveToast(err.message||'Falha ao gerar artefato.','error');}
+      try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;const res=await coraAppFetch('/api/investigation-artifact',{method:'POST',headers,body:JSON.stringify(payload)});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||`Erro HTTP ${res.status}`);if(!data.ready){aiSetThinking(false);const missing=(data.missing||[]);const questions=(data.questions||[]);const plan=Array.isArray(questions)&&questions.length?`\n\nPróximas perguntas:\n${questions.slice(0,4).map((q,i)=>`${i+1}. ${q}`).join('\n')}`:'';const sources=Array.isArray(data.summary?.sourceRefs)&&data.summary.sourceRefs.length?`\n\nEncontrei ${data.summary.sourceRefs.length} fonte(s) interna(s) potencialmente relevante(s), que serão usadas quando as lacunas forem resolvidas.`:'';aiSetMessage('assistant',`Antes de gerar o ${kind.toUpperCase()}, a CORA revisou a investigação e encontrou lacunas que podem mudar o documento.\n\nAinda falta: ${missing.length?missing.join('; '):'informação suficiente para concluir com segurança'}${plan}${sources}\n\nNão vou inventar esses dados. Podemos completar a investigação e gerar o artefato depois.`);aiScrollChat();return;}aiSetThinking(true,'Gerando documentos, apresentação e diagrama…');Object.values(data.files||{}).forEach(aiDownloadBase64File);aiSetThinking(false);aiSetMessage('assistant',`Pronto. O ${kind.toUpperCase()} foi preparado a partir da investigação atual, das evidências e dos registros internos relevantes. Gerei HTML, Word e PowerPoint sem substituir hipóteses por fatos.`);await auditAI('investigation_artifact',{kind,sourceCount:data.summary?.sourceRefs?.length||0});aiScrollChat();}catch(err){aiSetThinking(false);showSaveToast(err.message||'Falha ao gerar artefato.','error');}
     }
     async function aiGenerateSlidesFromChat(){
-      const title=(aiPilot.context||'Investigação CORA').split(/[.!?\n]/)[0].slice(0,120);const facts=aiPilot.lastResult?.facts||[];const hyps=aiPilot.lastResult?.hypotheses||aiPilot.lastResult?.possibleCauses||[];const actions=aiPilot.lastResult?.tests||aiPilot.lastResult?.nextSteps||[];const slides=[{title,body:`Contexto\n${aiPilot.context||'Investigação CORA'}`},{title:'Fatos e evidências',body:(Array.isArray(facts)?facts:['Nenhum fato estruturado ainda.']).slice(0,8).map(x=>'• '+x).join('\n')},{title:'Hipóteses',body:(Array.isArray(hyps)?hyps:['Nenhuma hipótese estruturada ainda.']).slice(0,8).map(x=>'• '+x).join('\n')},{title:'Próximos passos',body:(Array.isArray(actions)?actions:['Definir teste discriminatório.']).slice(0,8).map(x=>'• '+x).join('\n')}];aiSetThinking(true,'Gerando apresentação…');try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;const res=await fetch('/api/generate-slides',{method:'POST',headers,body:JSON.stringify({title,slides})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Falha ao gerar slides.');aiDownloadBase64File(data.file);aiSetMessage('assistant','A apresentação PowerPoint foi gerada com base na investigação atual.');await auditAI('slides.generate',{count:slides.length});}catch(err){showSaveToast(err.message||'Falha ao gerar slides.','error');}finally{aiSetThinking(false);}}
+      const title=(aiPilot.context||'Investigação CORA').split(/[.!?\n]/)[0].slice(0,120);const facts=aiPilot.lastResult?.facts||[];const hyps=aiPilot.lastResult?.hypotheses||aiPilot.lastResult?.possibleCauses||[];const actions=aiPilot.lastResult?.tests||aiPilot.lastResult?.nextSteps||[];const slides=[{title,body:`Contexto\n${aiPilot.context||'Investigação CORA'}`},{title:'Fatos e evidências',body:(Array.isArray(facts)?facts:['Nenhum fato estruturado ainda.']).slice(0,8).map(x=>'• '+x).join('\n')},{title:'Hipóteses',body:(Array.isArray(hyps)?hyps:['Nenhuma hipótese estruturada ainda.']).slice(0,8).map(x=>'• '+x).join('\n')},{title:'Próximos passos',body:(Array.isArray(actions)?actions:['Definir teste discriminatório.']).slice(0,8).map(x=>'• '+x).join('\n')}];aiSetThinking(true,'Gerando apresentação…');try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;const res=await coraAppFetch('/api/generate-slides',{method:'POST',headers,body:JSON.stringify({title,slides})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Falha ao gerar slides.');aiDownloadBase64File(data.file);aiSetMessage('assistant','A apresentação PowerPoint foi gerada com base na investigação atual.');await auditAI('slides.generate',{count:slides.length});}catch(err){showSaveToast(err.message||'Falha ao gerar slides.','error');}finally{aiSetThinking(false);}}
     async function aiGenerateImageFromChat(){
-      const prompt=aiPilot.context||'Crie uma visualização técnica da investigação atual, limpa, profissional e adequada para relatório industrial.';aiSetThinking(true,'Gerando imagem…');try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;const res=await fetch('/api/generate-image',{method:'POST',headers,body:JSON.stringify({prompt,images:aiPilot.images.slice(0,4),aspectRatio:'16:9',imageSize:'2K'})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Falha ao gerar imagem.');const src=`data:${data.mime||'image/png'};base64,${data.data}`;aiSetMessage('assistant',`Imagem gerada pela CORA. <a href="${src}" download="cora-geracao.png">Abrir / salvar imagem</a>`);await auditAI('image.generate',{model:data.model});}catch(err){showSaveToast(err.message||'Falha ao gerar imagem.','error');}finally{aiSetThinking(false);}}
+      const prompt=aiPilot.context||'Crie uma visualização técnica da investigação atual, limpa, profissional e adequada para relatório industrial.';aiSetThinking(true,'Gerando imagem…');try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;const res=await coraAppFetch('/api/generate-image',{method:'POST',headers,body:JSON.stringify({prompt,images:aiPilot.images.slice(0,4),aspectRatio:'16:9',imageSize:'2K'})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Falha ao gerar imagem.');const src=`data:${data.mime||'image/png'};base64,${data.data}`;aiSetMessage('assistant',`Imagem gerada pela CORA. <a href="${src}" download="cora-geracao.png">Abrir / salvar imagem</a>`);await auditAI('image.generate',{model:data.model});}catch(err){showSaveToast(err.message||'Falha ao gerar imagem.','error');}finally{aiSetThinking(false);}}
 
     async function organizeFailureWithCora(){
       const form=document.querySelector('#operationalFailureForm');if(!form)return;
@@ -3007,7 +3221,7 @@ function registerOfflineSupport(){
       const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;
       const button=document.querySelector('#organizeFailureWithCora');if(button){button.disabled=true;button.textContent='Organizando…';}
       try{
-        const res=await fetch('/api/failure-intake',{method:'POST',headers,body:JSON.stringify({text:recentUser,conversation:context,images:[...imageFiles,...coraImages]})});
+        const res=await coraAppFetch('/api/failure-intake',{method:'POST',headers,body:JSON.stringify({text:recentUser,conversation:context,images:[...imageFiles,...coraImages]})});
         const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||`Erro HTTP ${res.status}`);
         const f=form.elements;const set=(name,val)=>{if(f[name]&&val!=null&&String(val).trim())f[name].value=String(val);};
         set('issue',data.issue);set('description_context',data.contextSummary);set('component',data.component);set('material',data.material);set('maquina',data.machine);set('linha',data.line);set('estacao',data.station);set('processo',data.process);set('onde_detectado',data.detectedAt);set('detection_moment',data.detectionMoment);set('quando_inicio',data.startDate);set('quantidade_afetada',data.quantity);set('hipotese_causa',data.hypothesis);set('testes_realizados',data.tests);set('acao_corretiva',data.correctiveAction);set('observacoes',data.notes);set('category_label',data.defectType);
@@ -3120,14 +3334,8 @@ function registerOfflineSupport(){
     function aiCanValidateMemory(){
       return ['admin','quality','engineer','specialist','especialista','engenheiro'].includes(String(currentAccount?.role||'').toLowerCase());
     }
-    async function aiPostJSON(url, payload){
-      const token=auth?.currentUser?await auth.currentUser.getIdToken():null;
-      const headers={'Content-Type':'application/json'}; if(token)headers.Authorization=`Bearer ${token}`;
-      const res=await fetch(url,{method:'POST',headers,body:JSON.stringify(payload)});
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(data?.error||`HTTP ${res.status}`);
-      return data;
-    }
+    async function aiPostJSON(url,payload){ return coraBrowserTransport.postJSON(url,payload); }
+    async function coraAppFetch(url,options={}){ return coraBrowserTransport.fetch(url,options); }
     async function aiSaveCorrection(userText,previousAssistant){
       const payload={
         type:'user_correction',
@@ -3390,7 +3598,7 @@ function registerOfflineSupport(){
       try{
         let res;
         try{
-          res=await fetch('/api/failure-analysis/stream',{method:'POST',headers,body:JSON.stringify({...payload,systemPrompt:AI_SYSTEM_PROMPT,prompt:aiBuildPromptText(payload),stream:true}),signal:controller.signal});
+          res=await coraAppFetch('/api/failure-analysis/stream',{method:'POST',headers,body:JSON.stringify({...payload,systemPrompt:AI_SYSTEM_PROMPT,prompt:aiBuildPromptText(payload),stream:true}),signal:controller.signal});
         }catch(err){
           if(err?.name==='AbortError'){
             const e=new Error(controller._userCancelled?'Execução cancelada pelo usuário.':'A execução excedeu o tempo limite do cliente.');
@@ -3641,7 +3849,7 @@ ${rowsText.slice(0,50000)}`;
         const token=auth?.currentUser?await auth.currentUser.getIdToken():null;
         const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;
         const payload=sessionId?{sessionId,observation:{name:aiPilot.uiLastToolName||'interact_with_page',callId:aiPilot.uiLastCallId||'',result:aiPilot.uiLastObservation||{}},pageState:aiPageState()}:{message,pageState:aiPageState(),model:aiPilot.model};
-        const res=await fetch('/api/chat-cognitive',{method:'POST',headers,body:JSON.stringify(payload)});
+        const res=await coraAppFetch('/api/chat-cognitive',{method:'POST',headers,body:JSON.stringify(payload)});
         const data=await res.json().catch(()=>({}));
         if(!res.ok)throw new Error(data.error||`Agente de interface HTTP ${res.status}`);
         sessionId=data.sessionId;aiPilot.uiSessionId=sessionId;
@@ -3657,7 +3865,7 @@ ${rowsText.slice(0,50000)}`;
     }
     function aiBuildPayload(){
       const memory=aiBuildMemoryContext(aiPilot.context);
-      const centralData=aiBuildDynamicCentralContext();
+      const centralData=aiBuildExternalCentralContext();
       return {
         mode:aiPilot.mode,
         perspective:aiPilot.perspective,
@@ -3768,7 +3976,7 @@ ${rowsText.slice(0,50000)}`;
        const controller=new AbortController();
       const timer=setTimeout(()=>controller.abort(),Number(80000));
       let res;
-      try{res=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(requestPayload),signal:controller.signal});}
+      try{res=await coraAppFetch(endpoint,{method:'POST',headers,body:JSON.stringify(requestPayload),signal:controller.signal});}
       catch(err){if(err?.name==='AbortError')throw new Error('A chamada à IA excedeu o tempo limite do cliente.');throw err;}
       finally{clearTimeout(timer);}
       const data=await res.json().catch(()=>null);
@@ -3817,7 +4025,7 @@ ${rowsText.slice(0,50000)}`;
       const token=auth?.currentUser?await auth.currentUser.getIdToken():null;
       const headers={'Content-Type':'application/json'};
       if(token)headers.Authorization=`Bearer ${token}`;
-      const res=await fetch('/api/transcribe-audio',{method:'POST',headers,body:JSON.stringify({audioDataUrl:dataUrl,mimeType:blob.type||'audio/webm'})});
+      const res=await coraAppFetch('/api/transcribe-audio',{method:'POST',headers,body:JSON.stringify({audioDataUrl:dataUrl,mimeType:blob.type||'audio/webm'})});
       const data=await res.json().catch(()=>null);
       if(!res.ok)throw new Error(data?.error||'Não foi possível transcrever o áudio.');
       return String(data?.text||'').trim();
@@ -4529,7 +4737,7 @@ ${m.text}`).join('\n\n');
       host.innerHTML=rows.length?rows.sort((a,b)=>String(a.shift?.name||'').localeCompare(String(b.shift?.name||''))||String(a.scope.name||'').localeCompare(String(b.scope.name||''))).map(row=>`<div class="daily-admin-item"><div><strong>${esc(row.scope.name)}</strong><span>${esc(row.shift?.name||'Turno')} · ${esc(row.labels)}</span></div><div><button type="button" data-production-edit="1" data-scope-id="${esc(row.scope.docId)}" data-shift-id="${esc(row.shiftId)}">Editar</button></div></div>`).join(''):'<div class="daily-soft-empty">Nenhum CPH vinculado às linhas/escopos.</div>';
     }
     async function saveDailyProductionContext(form,{clear=false}={}){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form),shiftId=String(f.get('shiftId')||''),scopeId=String(f.get('scopeId')||'');
       if(!shiftId||!scopeId)return alert('Selecione turno e linha/escopo.');
       const scope=state.operationalScopes.find(x=>x.docId===scopeId),shift=state.workShifts.find(x=>x.docId===shiftId);
@@ -4617,7 +4825,7 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyExecutionVisibleToCurrent(execution){
-      if(currentAccount?.role==='admin') return true;
+      if(canAdminister()) return true;
       const uid=currentAuthUser?.uid;
       if(!uid) return false;
       return execution.assignedUserId===uid || (execution.expectedUserIds||[]).includes(uid) || (execution.participants||[]).some(p=>p.userId===uid);
@@ -4692,7 +4900,7 @@ ${m.text}`).join('\n\n');
       const statusLabel=dailyExecutionHistoryLabel(execution);
       const people=execution.executionPolicy==='each_user' ? execution.assignedUserName : (execution.expectedUserNames||[]).join(', ');
       const time=execution.plannedTime||t('Durante o turno');
-      const canAct=dailyExecutionVisibleToCurrent(execution)||currentAccount?.role==='admin';
+      const canAct=dailyExecutionVisibleToCurrent(execution)||canAdminister();
       const startedBy=execution.startedByName ? `${t('iniciada por')} ${execution.startedByName}` : '';
       let actions='';
       if(canAct && !['completed','missed','cancelled'].includes(execution.status) && timing.state!=='missed'){
@@ -4752,7 +4960,7 @@ ${m.text}`).join('\n\n');
         {selector:'#dailyHandoverPanel',title:t('Entregue a continuidade'),text:t('A passagem reúne automaticamente o que foi registrado no turno e o próximo time pode confirmar o recebimento.'),tip:t('Use a observação somente para o contexto que os dados não conseguem mostrar sozinhos.')},
         {selector:'#centralNotificationButton',title:t('Alertas do turno'),text:t('O sino reúne rotinas próximas do horário, atrasos e atividades com prazo.'),tip:t('Você pode ativar alertas do navegador e escolher a antecedência.')}
       ];
-      if(currentAccount?.role==='admin'){
+      if(canAdminister()){
         steps.push(
           {selector:'#dailyAdminToggle',title:t('Configuração administrativa'),text:t('Administradores usam esta área para turnos, escopos, matriz de alocação, rotinas e histórico.'),tip:t('O usuário comum não vê esta etapa.')},
           {selector:'#dailyConfigShiftsCard',adminPanel:true,adminTab:'config',title:t('Estruture os turnos'),text:t('Defina início e fim reais; a Central usa isso para saber qual período pertence a cada turno, inclusive quando atravessa a meia-noite.'),tip:'Ex.: 1º turno · 07:30 → 17:30.'},
@@ -4781,7 +4989,7 @@ ${m.text}`).join('\n\n');
     function dailyPrepareTourStep(step){
       if(!step)return;
       const panel=document.querySelector('#dailyAdminPanel');
-      if(step.adminPanel&&currentAccount?.role==='admin'&&panel){
+      if(step.adminPanel&&canAdminister()&&panel){
         panel.classList.remove('hidden');
         dailyAdminTab=step.adminTab||'config';
         renderDailyAdmin();
@@ -5006,7 +5214,7 @@ ${m.text}`).join('\n\n');
       const previousDoc=previous?dailyHandoverDoc(previous.dateKey,previous.shift.docId):null;
       const currentDoc=dailyHandoverDoc(dailySelectedDate,dailySelectedShiftId);
       const allocated=activeWorkAllocations().some(a=>a.userId===uid&&a.shiftId===dailySelectedShiftId);
-      const canPrepare=currentAccount?.role==='admin'||allocated;
+      const canPrepare=canAdminister()||allocated;
       const received=Boolean(previousDoc?.receivedBy?.some(x=>x.userId===uid));
       const receivedNames=(previousDoc?.receivedBy||[]).map(x=>x.name).filter(Boolean);
       let previousCard='';
@@ -5110,7 +5318,7 @@ ${m.text}`).join('\n\n');
       const view=document.querySelector('#dailyView'); if(!view) return;
       const shift=resolveDailySelection();
       const dateInput=document.querySelector('#dailyDate'); if(dateInput) dateInput.value=dailySelectedDate||localDateKey();
-      const isAdmin=currentAccount?.role==='admin';
+      const isAdmin=canAdminister();
       document.querySelector('#dailyAdminToggle')?.classList.toggle('hidden',!isAdmin);
       if(!isAdmin) document.querySelector('#dailyAdminPanel')?.classList.add('hidden');
 
@@ -5182,7 +5390,7 @@ ${m.text}`).join('\n\n');
 
     function renderDailyAdmin(){
       const adminPanel=document.querySelector('#dailyAdminPanel'); if(!adminPanel) return;
-      if(currentAccount?.role!=='admin') return;
+      if(!canAdminister()) return;
       populateDailyAdminControls();
       renderDailyAdminLists();
       renderDailyAdminHistory();
@@ -5269,7 +5477,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function dailySetMatrixAllocation(userId,shiftId,scopeId,checked){
-      if(currentAccount?.role!=='admin'||!userId||!shiftId||!scopeId)return;
+      if(!canAdminister()||!userId||!shiftId||!scopeId)return;
       const user=users.find(x=>x.docId===userId),shift=state.workShifts.find(x=>x.docId===shiftId);
       const existing=activeWorkAllocations().find(a=>a.userId===userId&&a.shiftId===shiftId);
       const scopes=new Set(existing?.scopeIds||[]);
@@ -5439,7 +5647,7 @@ ${m.text}`).join('\n\n');
     }
 
     function dailyEditAdminItem(kind,id){
-      if(currentAccount?.role!=='admin') return;
+      if(!canAdminister()) return;
       if(kind==='shift'){
         const item=state.workShifts.find(x=>x.docId===id); if(!item)return;
         const f=document.querySelector('#dailyShiftForm'); f.elements.docId.value=item.docId;f.elements.name.value=item.name||'';f.elements.startTime.value=item.startTime||'';f.elements.endTime.value=item.endTime||'';f.elements.active.checked=item.active!==false;f.scrollIntoView({behavior:'smooth',block:'center'});
@@ -5461,7 +5669,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function dailyToggleAdminItem(kind,id){
-      if(currentAccount?.role!=='admin') return;
+      if(!canAdminister()) return;
       const map={shift:['workShifts',state.workShifts],scope:['operationalScopes',state.operationalScopes],routine:['routineTemplates',state.routineTemplates]};
       const entry=map[kind]; if(!entry)return; const item=entry[1].find(x=>x.docId===id);if(!item)return;
       const nextActive=item.active===false;
@@ -5471,7 +5679,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function dailyDeleteAllocation(id){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const item=activeWorkAllocations().find(x=>x.docId===id);if(!item)return;
       if(!confirm('Remover esta alocação atual? O histórico das execuções já realizadas será preservado.'))return;
       const event=dailyAdminHistoryEntry('removed',`Alocação de ${item.userName||'Pessoa'} removida.`,{userId:item.userId,shiftId:item.shiftId,scopeIds:item.scopeIds||[]});
@@ -5479,7 +5687,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function dailyDeleteRoutine(id){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const item=state.routineTemplates.find(x=>x.docId===id);if(!item)return;
       const retention=routineRetentionMeta(item),executions=retention.executions;
       if(retention.inProgress)return alert('Esta rotina possui execução em andamento. Conclua essa execução antes de arquivar a rotina.');
@@ -5618,7 +5826,7 @@ ${m.text}`).join('\n\n');
 
 
     async function saveDailyShift(form){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form), id=String(f.get('docId')||''), payload={name:String(f.get('name')||'').trim(),startTime:String(f.get('startTime')||''),endTime:String(f.get('endTime')||''),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
       if(!payload.name||!payload.startTime||!payload.endTime)return alert('Preencha nome, início e fim do turno.');
       const existing=id?state.workShifts.find(x=>x.docId===id):null;
@@ -5629,7 +5837,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function saveDailyScope(form){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form), id=String(f.get('docId')||''), payload={type:String(f.get('type')||'line'),name:String(f.get('name')||'').trim(),code:String(f.get('code')||'').trim(),active:f.get('active')==='on',updatedAt:now(),updatedBy:currentAccount.email};
       if(!payload.name)return alert('Informe o nome do escopo.');
       const existing=id?state.operationalScopes.find(x=>x.docId===id):null;
@@ -5640,7 +5848,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function saveDailyAllocation(form){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form), requestedId=String(f.get('docId')||''), userId=String(f.get('userId')||''), shiftId=String(f.get('shiftId')||''), scopeIds=f.getAll('scopeIds').filter(Boolean);
       if(!userId||!shiftId||!scopeIds.length)return alert('Selecione pessoa, turno e pelo menos um escopo.');
       const user=users.find(u=>u.docId===userId), shift=state.workShifts.find(s=>s.docId===shiftId);
@@ -5656,7 +5864,7 @@ ${m.text}`).join('\n\n');
     }
 
     async function saveDailyRoutine(form){
-      if(currentAccount?.role!=='admin')return;
+      if(!canAdminister())return;
       const f=new FormData(form), id=String(f.get('docId')||'');
       let scheduleMap;try{scheduleMap=dailyRoutineSchedulePayload();}catch(error){return alert(error.message);}
       if(!Object.keys(scheduleMap).length)return alert('Selecione pelo menos um turno na agenda da rotina.');
@@ -5694,7 +5902,7 @@ ${m.text}`).join('\n\n');
 
     async function startDailyExecution(key){
       const execution=dailyFindExecution(key);if(!execution)return;
-      if(!dailyExecutionVisibleToCurrent(execution)&&currentAccount?.role!=='admin')return alert('Esta rotina não está atribuída a você.');
+      if(!dailyExecutionVisibleToCurrent(execution)&&!canAdminister())return alert('Esta rotina não está atribuída a você.');
       const timing=dailyExecutionTiming(execution);
       if(timing.state==='missed'){
         await setDoc(doc(db,'routineExecutions',key),{status:'missed',timeliness:'missed',latePolicy:'expire',missedAt:timing.deadline?.toISOString?.()||now(),missedDetectedAt:now(),missedReason:'window_expired_without_start',updatedAt:now()},{merge:true});
@@ -5911,6 +6119,7 @@ ${m.text}`).join('\n\n');
       }
       renderSafely('Console MES', renderConsoleMes);
       renderSafely('tradução', translatePage);
+      renderSafely('permissões da interface', applyCapabilityUi);
 
       // Reaplica no final para garantir consistência mesmo se algum módulo
       // tiver alterado o DOM durante a atualização.
@@ -5995,7 +6204,7 @@ ${m.text}`).join('\n\n');
       if (creating) input?.focus();
       else if (input) input.value = '';
     }
-    function openProductModal() {
+    function openProductModal() { if(!requireCapability('write_technical'))return;
       const preferredFamily = expandedProductFamily || activeData()?.family || '';
       document.querySelector('#productModal').classList.remove('hidden');
       fillProductFamilySelector(preferredFamily);
@@ -6008,10 +6217,11 @@ ${m.text}`).join('\n\n');
       syncProductFamilyInput();
       updateProductCodePreview();
     }
-    function openComponentModal(returnToFailure = false) { if (!activeData()) return openProductModal(); continueToFailureAfterComponent = returnToFailure; document.querySelector('#componentModalSubtitle').textContent = `Produto selecionado: ${productDisplayCode(activeData().code)} · ${activeData().family}`; document.querySelector('#componentModal').classList.remove('hidden'); document.querySelector('#componentForm input').focus(); }
+    function openComponentModal(returnToFailure = false) { if(!requireCapability('write_technical'))return; if (!activeData()) return openProductModal(); continueToFailureAfterComponent = returnToFailure; document.querySelector('#componentModalSubtitle').textContent = `Produto selecionado: ${productDisplayCode(activeData().code)} · ${activeData().family}`; document.querySelector('#componentModal').classList.remove('hidden'); document.querySelector('#componentForm input').focus(); }
     function closeComponentModal() { document.querySelector('#componentModal').classList.add('hidden'); document.querySelector('#componentForm').reset(); continueToFailureAfterComponent = false; }
     function fillFailureComponents() { const components = activeData()?.components || []; document.querySelector('#failureComponent').innerHTML = '<option value="">Selecione</option>' + components.sort((a, b) => a.localeCompare(b)).map(component => `<option value="${esc(component)}">${esc(component)}</option>`).join(''); }
     function openFailureModal() {
+      if(!requireCapability('write_operational'))return;
       if (!activeData()) return openProductModal();
       if (!(activeData().components || []).length) return openComponentModal(true);
       fillFailureComponents();
@@ -6023,7 +6233,7 @@ ${m.text}`).join('\n\n');
     function closeFailureModal() { document.querySelector('#failureModal').classList.add('hidden'); document.querySelector('#failureForm').reset(); }
     function fillActivityProducts(){ const select=document.querySelector('#activityProduct'); if(!select)return; const current=select.value; select.innerHTML='<option value="">Não relacionado a produto</option>'+state.products.sort((a,b)=>productDisplayCode(a.code).localeCompare(productDisplayCode(b.code))).map(p=>`<option value="${esc(p.code)}">${esc(productDisplayCode(p.code))} · ${esc(p.family)}</option>`).join(''); select.value=current||activeProduct||''; }
     function syncActivityModeUI(){const form=document.querySelector('#activityForm');if(!form)return;const structured=form.elements.activityMode?.value==='structured';document.querySelector('#activityStructuredCreate')?.classList.toggle('hidden',!structured);}
-    function openActivityModal(prefill={}) {fillActivityProducts();updateOwnerDropdowns();const form=document.querySelector('#activityForm');if(prefill.title)form.elements.title.value=prefill.title;if(prefill.area)form.elements.area.value=prefill.area;if(prefill.description)form.elements.description.value=prefill.description;if(prefill.activityMode)form.elements.activityMode.value=prefill.activityMode;syncActivityModeUI();translatePage();document.querySelector('#activityModal').classList.remove('hidden');document.querySelector('#activityForm [name="title"]').focus();}
+    function openActivityModal(prefill={}) {if(!requireCapability('write_operational'))return;fillActivityProducts();updateOwnerDropdowns();const form=document.querySelector('#activityForm');if(prefill.title)form.elements.title.value=prefill.title;if(prefill.area)form.elements.area.value=prefill.area;if(prefill.description)form.elements.description.value=prefill.description;if(prefill.activityMode)form.elements.activityMode.value=prefill.activityMode;syncActivityModeUI();translatePage();document.querySelector('#activityModal').classList.remove('hidden');document.querySelector('#activityForm [name="title"]').focus();}
     function closeActivityModal() {document.querySelector('#activityModal').classList.add('hidden');document.querySelector('#activityForm').reset();syncActivityModeUI();pendingOriginContext=null;}
     function openDetail(id) { selectedId = id; renderDetail(); document.querySelector('#detailModal').classList.remove('hidden'); }
     function closeDetail() { document.querySelector('#detailModal').classList.add('hidden'); selectedId = null; }
@@ -6072,10 +6282,10 @@ ${m.text}`).join('\n\n');
         timingBox.textContent=timingText;
       }
       const deleteBtn=document.querySelector('#deleteActivity'),canHardDelete=activityCanHardDelete(activity);
-      if(deleteBtn){deleteBtn.classList.toggle('hidden',currentAccount?.role!=='admin'||!canHardDelete);deleteBtn.textContent=t('Excluir teste');}
+      if(deleteBtn){deleteBtn.classList.toggle('hidden',!canAdminister()||!canHardDelete);deleteBtn.textContent=t('Excluir teste');}
       const cancelBtn=document.querySelector('#cancelActivity');
-      if(cancelBtn)cancelBtn.classList.toggle('hidden',currentAccount?.role!=='admin'||activityIsClosed(activity));
-      const cancelOption=document.querySelector('#activityDetailStatus option[value="cancelado"]');if(cancelOption)cancelOption.hidden=currentAccount?.role!=='admin';
+      if(cancelBtn)cancelBtn.classList.toggle('hidden',!canAdminister()||activityIsClosed(activity));
+      const cancelOption=document.querySelector('#activityDetailStatus option[value="cancelado"]');if(cancelOption)cancelOption.hidden=!canAdminister();
       document.querySelector('#structureActivity')?.classList.toggle('hidden',structured);
       document.querySelector('#activityStructuredSection')?.classList.toggle('hidden',!structured);
       if(structured){
@@ -6094,7 +6304,7 @@ ${m.text}`).join('\n\n');
     }
 
     function fillFlowProducts() { const select = document.querySelector('#flowProduct'); select.innerHTML = `<option value="">${esc(t('Não relacionado a produto'))}</option>` + state.products.sort((a, b) => a.code.localeCompare(b.code)).map(product => `<option value="${esc(product.code)}">${esc(product.code)} · ${esc(product.family)}</option>`).join(''); }
-    function openFlowModal() { fillFlowProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#flowModal').classList.remove('hidden'); document.querySelector('#flowForm select').focus(); }
+    function openFlowModal() { if(!requireCapability('write_operational'))return; fillFlowProducts(); updateOwnerDropdowns(); translatePage(); document.querySelector('#flowModal').classList.remove('hidden'); document.querySelector('#flowForm select').focus(); }
     function closeFlowModal() { document.querySelector('#flowModal').classList.add('hidden'); document.querySelector('#flowForm').reset(); }
     function openFlowDetail(id) { selectedFlowId = id; renderFlowDetail(); document.querySelector('#flowDetailModal').classList.remove('hidden'); }
     function closeFlowDetail() { document.querySelector('#flowDetailModal').classList.add('hidden'); selectedFlowId = null; }
@@ -6231,6 +6441,7 @@ ${m.text}`).join('\n\n');
       preview.innerHTML=''; [...(input.files||[])].filter(f=>f.type.startsWith('image/')).slice(0,8).forEach(file=>{const reader=new FileReader();reader.onload=e=>{const box=document.createElement('div');box.className='preview-thumb';box.innerHTML=`<img src="${e.target.result}" alt="Prévia da evidência">`;preview.appendChild(box);};reader.readAsDataURL(file);});
     }
     function openOperationalFailureModal(prefill={}){
+      if(!requireCapability('write_operational'))return;
       updateOwnerDropdowns();
       const form=document.querySelector('#operationalFailureForm');
       form.reset();
@@ -6268,7 +6479,7 @@ ${m.text}`).join('\n\n');
       const ownerSelect=document.querySelector('#operationalOwnerSelect');
       if(ownerSelect){
         ownerSelect.value=currentAccount?.name||'';
-        ownerSelect.disabled=currentAccount?.role!=='admin';
+        ownerSelect.disabled=!canAdminister();
       }
       if(prefill.text)form.elements.issue.value=prefill.text;
       if(prefill.context)form.elements.description_context.value=prefill.context;
@@ -6393,7 +6604,7 @@ ${m.text}`).join('\n\n');
       document.querySelector('#opDetailSubtitle').textContent=`${failureScopeSummary(r)} · ${r.family||'Sem família'} · ${r.category||'Outro'} · ${r.linha||'Sem linha'}`;
       updateOwnerDropdowns();
       document.querySelector('#opDetailOwnerSelect').value=r.owner||'';
-      document.querySelector('#opDetailOwnerSelect').disabled=currentAccount?.role !== 'admin';
+      document.querySelector('#opDetailOwnerSelect').disabled=!canAdminister();
       document.querySelector('#opDetailIssue').textContent=r.issue||'';
       document.querySelector('#opMachineInfo').innerHTML = `<strong>Classificação</strong>: ${esc(failureClassificationLabel(r.classification||'NAO_DEFINIDO'))} · Certeza: ${esc(r.classificationConfidence||'MEDIA')}<br><strong>Escopo atual</strong>: ${esc(failureScopeSummary(r))} · <strong>Componente</strong>: ${esc(r.component||r.peca_danificada||'Não informado')}<br><strong>Máquina</strong>: ${esc(r.maquina||'Não informada')} · <strong>Posto</strong>: ${esc(r.estacao||'Não informado')} · <strong>Linha</strong>: ${esc(r.linha||'Não informada')}<br><strong>Processo</strong>: ${esc(r.processo||'Não informado')} · <strong>Detectado</strong>: ${esc(r.detection_moment_label||r.detectionMoment||'Desconhecido')} · <strong>Onde</strong>: ${esc(r.onde_detectado||'Não informado')}`;
       fillOperationalDetailProducts(r);
@@ -6582,7 +6793,7 @@ ${m.text}`).join('\n\n');
     document.querySelector('#dailyTourDisableAuto')?.addEventListener('change',e=>{if(e.target.checked)localStorage.setItem(dailyTourDisableKey(),'1');else localStorage.removeItem(dailyTourDisableKey());});
     window.addEventListener('resize',()=>{if(dailyTourIsOpen())positionDailyTour();});
     window.addEventListener('scroll',()=>{if(dailyTourIsOpen())positionDailyTour();},{capture:true,passive:true});
-    document.querySelector('#dailyAdminToggle')?.addEventListener('click',()=>{if(currentAccount?.role!=='admin')return;document.querySelector('#dailyAdminPanel').classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel').scrollIntoView({behavior:'smooth',block:'start'});});
+    document.querySelector('#dailyAdminToggle')?.addEventListener('click',()=>{if(!canAdminister())return;document.querySelector('#dailyAdminPanel').classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();document.querySelector('#dailyAdminPanel').scrollIntoView({behavior:'smooth',block:'start'});});
     document.querySelector('#dailyAdminClose')?.addEventListener('click',()=>document.querySelector('#dailyAdminPanel').classList.add('hidden'));
     document.querySelectorAll('.daily-admin-tab').forEach(btn=>btn.addEventListener('click',()=>{dailyAdminTab=btn.dataset.dailyAdminTab||'config';renderDailyAdmin();}));
     document.querySelectorAll('.daily-filter').forEach(btn=>btn.addEventListener('click',()=>{dailyFilter=btn.dataset.dailyFilter||'all';document.querySelectorAll('.daily-filter').forEach(x=>x.classList.toggle('active',x===btn));renderDaily();}));
@@ -6899,7 +7110,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
           updates: []
         };
 
-        if(!navigator.onLine){const localId=`offline-${Date.now()}`;report.docId=localId;await queueOfflineWrite('reports',report);state.reports=[...state.reports,report];showSaveToast('Sem conexão. Report salvo no dispositivo e aguardará sincronização.','success');} else { await addDoc(collection(db, "reports"), report); }
+        if(!navigator.onLine){const queued=await queueOfflineWrite('reports',report);report.docId=queued.documentId;state.reports=[...state.reports,report];showSaveToast('Sem conexão. Report salvo no dispositivo e aguardará sincronização.','success');} else { await addDoc(collection(db, "reports"), report); }
         closeFailureModal();
         show('product');
         openDetail(report.id);
@@ -6999,9 +7210,22 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[],
         originType:operationalContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:operationalContext?.scopeId||'',originScopeName:operationalContext?.scopeName||'',originScopeCode:operationalContext?.scopeCode||'',originScopeType:operationalContext?.scopeType||'',originShiftId:operationalContext?.shiftId||'',originShiftName:operationalContext?.shiftName||'',originDateKey:operationalContext?.dateKey||'',productionProductCodes:operationalContext?.productionProductCodes?.length?operationalContext.productionProductCodes:productCodes,productionProductLabels:operationalContext?.productionProductLabels?.length?operationalContext.productionProductLabels:productCodes.map(productDisplayCode),productionFamilies:operationalContext?.productionFamilies||[],productionBaseCodes:operationalContext?.productionBaseCodes||[],autoContextLinked:Boolean(inferredProduction)
       };
-      if(!navigator.onLine){item.docId=`offline-${Date.now()}`;await queueOfflineWrite('operationalFailures',item);state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
       const origin=pendingOriginContext;
-      if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedFailureIds||[]),item.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedFailureIds:linked,updatedAt:now()},{merge:true});}
+      const routineEffect=origin?.type==='routineExecution'
+        ? routineFailureLinkEffect({executionKey:origin.executionKey,failureId:item.id,linkedAt:item.createdAt||now()})
+        : null;
+      if(!navigator.onLine){
+        const queued=await queueOfflineWrite('operationalFailures',item,{effects:routineEffect?[routineEffect]:[]});
+        item.docId=queued.documentId;state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');
+      }else if(routineEffect){
+        const batch=writeBatch(db),failureRef=doc(collection(db,'operationalFailures'));
+        batch.set(failureRef,item);
+        batch.update(doc(db,'routineExecutions',routineEffect.executionKey),{linkedFailureIds:arrayUnion(routineEffect.failureId),updatedAt:routineEffect.linkedAt});
+        await withTimeout(batch.commit(),15000,'Registro da falha e vinculo da rotina');
+        item.docId=failureRef.id;
+      }else{
+        item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;
+      }
       pendingOriginContext=null;
       closeOperationalFailureModal();show('operations');openOperationalDetail(item.id);
     });
@@ -7067,7 +7291,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
       const notes=document.querySelector('#opDetailNotes').value.trim();
       const status=document.querySelector('#opDetailStatus').value;
       const owner=document.querySelector('#opDetailOwnerSelect').value;
-      if(currentAccount?.role!=='admin'&&owner!==r.owner){alert('Apenas administradores podem alterar o responsável.');return;}
+      if(!canAdminister()&&owner!==r.owner){alert('Apenas administradores podem alterar o responsável.');return;}
 
       const changes=[];
       if(owner!==r.owner)changes.push(`Responsável alterado para ${owner||'não definido'}.`);
@@ -7261,7 +7485,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     });
 
     document.querySelector('#deleteReport').addEventListener('click', async () => {
-      if (currentAccount?.role !== 'admin') { alert('Apenas administradores podem excluir registros.'); return; }
+      if (!canAdminister()) { alert('Apenas administradores podem excluir registros.'); return; }
       const r = selected();
       if (!r || !confirm(`Excluir ${r.id}? Esta ação não pode ser desfeita.`)) return;
       await deleteDoc(doc(db, "reports", r.docId));
@@ -7294,7 +7518,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     document.querySelector('#saveActivityChanges').addEventListener('click', async () => {
       const activity=selectedActivity();if(!activity)return;
       const status=document.querySelector('#activityDetailStatus').value,dueDate=document.querySelector('#activityDetailDue').value;
-      if(status==='cancelado'&&currentAccount?.role!=='admin')return alert('Apenas administradores podem cancelar atividades atribuídas.');
+      if(status==='cancelado'&&!canAdminister())return alert('Apenas administradores podem cancelar atividades atribuídas.');
       const structured=!document.querySelector('#activityStructuredSection').classList.contains('hidden');
       const typedNext=structured?document.querySelector('#activityNextAction').value.trim():(activity.nextAction||'');
       const autoCandidate=activityAutoNextAction(activity.steps||[]);
@@ -7347,12 +7571,12 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     document.querySelector('#saveActivityEvidence')?.addEventListener('click',async()=>{const activity=selectedActivity();if(!activity)return;const input=document.querySelector('#activityEvidenceInput'),files=await readAttachments([...(input.files||[])]);if(!files.length)return alert('Selecione pelo menos um arquivo.');const evidence=[...evidenceEntries(activity.evidence),...files],updates=[...(activity.updates||[]),{text:`${files.length} arquivo(s)/evidência(s) adicionado(s).`,date:now()}];await updateDoc(doc(db,'activities',activity.docId),{activityMode:'structured',evidence,updates,lastMovedAt:now()});input.value='';renderActivityDetail();});
 
     document.querySelector('#cancelActivity')?.addEventListener('click',()=>{
-      if(currentAccount?.role!=='admin')return alert('Apenas administradores podem cancelar atividades atribuídas.');
+      if(!canAdminister())return alert('Apenas administradores podem cancelar atividades atribuídas.');
       const select=document.querySelector('#activityDetailStatus');if(!select)return;select.value='cancelado';document.querySelector('#saveActivityChanges')?.click();
     });
 
     document.querySelector('#deleteActivity').addEventListener('click', async () => {
-      if (currentAccount?.role !== 'admin') { alert('Apenas administradores podem excluir atividades.'); return; }
+      if (!canAdminister()) { alert('Apenas administradores podem excluir atividades.'); return; }
       const activity = selectedActivity();
       if (!activity) return;
       if(!activityCanHardDelete(activity)){
@@ -7389,7 +7613,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     });
 
     document.querySelector('#deleteFlow').addEventListener('click', async () => {
-      if (currentAccount?.role !== 'admin') { alert('Apenas administradores podem excluir fluxos.'); return; }
+      if (!canAdminister()) { alert('Apenas administradores podem excluir fluxos.'); return; }
       const flow = selectedFlow();
       if (!flow || !confirm(`Excluir fluxo ${flow.id}? Esta ação não pode ser desfeita.`)) return;
       await deleteDoc(doc(db, "flows", flow.docId));

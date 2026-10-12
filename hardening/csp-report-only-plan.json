@@ -1,0 +1,60 @@
+{
+  "schema": "central-csp-report-only-plan-v1",
+  "mode": "report_only_candidate",
+  "enforcement": false,
+  "header_name": "Content-Security-Policy-Report-Only",
+  "directives": {
+    "default-src": ["'self'"],
+    "base-uri": ["'none'"],
+    "object-src": ["'none'"],
+    "script-src": ["'self'", "https://www.gstatic.com"],
+    "style-src": ["'self'"],
+    "style-src-attr": ["'none'"],
+    "img-src": ["'self'", "data:", "blob:"],
+    "font-src": ["'self'", "data:"],
+    "connect-src": [
+      "'self'",
+      "http://127.0.0.1:8765",
+      "https://identitytoolkit.googleapis.com",
+      "https://securetoken.googleapis.com",
+      "https://firestore.googleapis.com"
+    ],
+    "frame-src": ["https://central-de-controle-88962.firebaseapp.com"],
+    "worker-src": ["'self'", "blob:"],
+    "manifest-src": ["'self'"],
+    "media-src": ["'self'", "data:", "blob:"],
+    "form-action": ["'self'"],
+    "frame-ancestors": ["'none'"]
+  },
+  "runtime_evidence": {
+    "firebase_browser_modules": "https://www.gstatic.com/firebasejs/10.8.0/",
+    "firebase_auth_services": [
+      "identitytoolkit.googleapis.com",
+      "securetoken.googleapis.com"
+    ],
+    "firestore_service": "firestore.googleapis.com",
+    "firebase_auth_domain": "central-de-controle-88962.firebaseapp.com",
+    "local_agent": "http://127.0.0.1:8765/api/v1",
+    "cora_api": "same-origin /api/* routes"
+  },
+  "excluded_or_unresolved": {
+    "http://172.29.185.215": "A-MES factory host is an agent-side operational dependency, not a browser connect-src dependency.",
+    "https://cdn.sheetjs.com": "Present in broad source inventory but not promoted until an active runtime loader is proven on the current hardening tree.",
+    "https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app": "CORA authoritative backend scope remains unresolved; current client API calls are same-origin /api/*.",
+    "https://central.invalid": "Test/example origin only.",
+    "https://...": "Placeholder only.",
+    "https://deploy-preview-23--productcontrolcenter.netlify.app": "Deployment target is represented by 'self', never hard-coded into application policy."
+  },
+  "promotion": {
+    "blocking_csp_enforced": false,
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "observe report-only violations on an externally reachable preview",
+    "add only runtime origins proven by report-only evidence",
+    "confirm no Firebase Auth/Firestore/CORA/local-agent path is blocked",
+    "promote to blocking CSP only in a separate gated change"
+  ]
+}

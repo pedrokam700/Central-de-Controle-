@@ -1,0 +1,74 @@
+
+/* V15.1.7 — authoritative CORA shell. This block intentionally comes last. */
+html.cora-route-active,
+body.cora-route-active{height:100%!important;min-height:100%!important;overflow:hidden!important}
+body.cora-route-active{background:#fff!important;color:#111!important}
+body.dark.cora-route-active{background:#0a0a0a!important;color:#f5f5f2!important}
+body.cora-route-active .app{display:none!important}
+body.cora-route-active #aiAnalysisView{position:fixed!important;inset:0!important;z-index:99999!important;display:block!important;width:100vw!important;height:100vh!important;min-height:100vh!important;max-height:100vh!important;margin:0!important;padding:0!important;overflow:hidden!important;background:#fff!important;color:#111!important}
+body.dark.cora-route-active #aiAnalysisView{background:#0a0a0a!important;color:#f5f5f2!important}
+body.cora-route-active #aiAnalysisView .ai-app{display:grid!important;grid-template-columns:214px minmax(0,1fr)!important;grid-template-rows:1fr!important;width:100%!important;height:100%!important;min-height:100%!important;max-height:100%!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:hidden!important;background:#fff!important}
+body.dark.cora-route-active #aiAnalysisView .ai-app{background:#0a0a0a!important}
+body.cora-route-active #aiAnalysisView .ai-side-panel{grid-column:1!important;grid-row:1!important;position:relative!important;inset:auto!important;width:auto!important;height:100%!important;min-height:0!important;max-height:none!important;overflow:hidden!important;border:0!important;border-right:1px solid #222!important;border-radius:0!important;background:#050505!important;color:#f5f5f2!important}
+body.cora-route-active #aiAnalysisView .ai-side-panel *{color:inherit}
+body.cora-route-active #aiAnalysisView .ai-side-panel .ai-new-chat{background:#050505!important;color:#f5f5f2!important;border-color:#2c2c2c!important}
+body.cora-route-active #aiAnalysisView .ai-side-panel .ai-side-link{color:#c7c7c2!important}
+body.cora-route-active #aiAnalysisView .ai-side-panel .ai-side-link:hover,
+body.cora-route-active #aiAnalysisView .ai-side-panel .ai-side-link.active{background:#222!important;color:#fff!important}
+body.cora-route-active #aiAnalysisView .ai-chat-shell{grid-column:2!important;grid-row:1!important;display:grid!important;grid-template-rows:minmax(0,1fr) auto!important;height:100%!important;min-height:0!important;max-height:none!important;overflow:hidden!important;background:#fff!important;color:#111!important}
+body.dark.cora-route-active #aiAnalysisView .ai-chat-shell{background:#101010!important;color:#f5f5f2!important}
+/* No header strip. Controls float over the chat. */
+body.cora-route-active #aiAnalysisView .ai-chat-head{position:fixed!important;top:12px!important;right:14px!important;z-index:100000!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;padding:0!important;margin:0!important;border:0!important;background:transparent!important;box-shadow:none!important;display:block!important;overflow:visible!important;pointer-events:none!important}
+body.cora-route-active #aiAnalysisView .ai-head-main{display:none!important}
+body.cora-route-active #aiAnalysisView .ai-head-actions{display:flex!important;align-items:center!important;gap:8px!important;pointer-events:auto!important}
+body.cora-route-active #aiAnalysisView .ai-language-wrap{display:flex!important;align-items:center!important;gap:8px!important}
+body.cora-route-active #aiAnalysisView .ai-language-wrap>span{font-size:16px!important;line-height:1!important}
+body.cora-route-active #aiAnalysisView .ai-compact-button,
+body.cora-route-active #aiAnalysisView .ai-language-wrap select{height:42px!important;min-height:42px!important;border-radius:12px!important;border:1px solid #d7d7d1!important;background:#fff!important;color:#111!important;box-shadow:0 4px 16px rgba(0,0,0,.05)!important}
+body.cora-route-active #aiAnalysisView .ai-language-wrap select{padding:0 34px 0 13px!important;font-size:12px!important}
+body.dark.cora-route-active #aiAnalysisView .ai-compact-button,
+body.dark.cora-route-active #aiAnalysisView .ai-language-wrap select{border-color:#30302d!important;background:#151515!important;color:#f5f5f2!important;box-shadow:0 4px 18px rgba(0,0,0,.25)!important}
+/* Context strip is part of the old page shell and must not consume chat space. */
+body.cora-route-active #aiAnalysisView .ai-context-strip{display:none!important}
+/* Exactly one scrolling region: the chat. */
+body.cora-route-active #aiAnalysisView .ai-chat-scroll{grid-row:1!important;min-height:0!important;height:auto!important;overflow-y:auto!important;overflow-x:hidden!important;padding:42px clamp(22px,6vw,96px) 24px!important;background:#fff!important;color:#111!important;scrollbar-gutter:stable!important;overscroll-behavior:contain!important}
+body.cora-route-active #aiAnalysisView .ai-chat-scroll::-webkit-scrollbar{width:11px!important}
+body.cora-route-active #aiAnalysisView .ai-chat-scroll::-webkit-scrollbar-track{background:transparent!important}
+body.cora-route-active #aiAnalysisView .ai-chat-scroll::-webkit-scrollbar-thumb{background:#b8b8b3!important;border:3px solid #fff!important;border-radius:10px!important}
+body.dark.cora-route-active #aiAnalysisView .ai-chat-scroll{background:#101010!important;color:#f5f5f2!important}
+body.dark.cora-route-active #aiAnalysisView .ai-chat-scroll::-webkit-scrollbar-thumb{background:#474742!important;border-color:#101010!important}
+/* Natural chat width; composer does NOT create a separate band. */
+body.cora-route-active #aiAnalysisView .ai-composer-wrap{grid-row:2!important;position:relative!important;left:auto!important;right:auto!important;bottom:auto!important;width:100%!important;padding:8px clamp(22px,6vw,96px) 12px!important;background:transparent!important;border:0!important;z-index:20!important}
+body.cora-route-active #aiAnalysisView .ai-composer{width:min(860px,100%)!important;max-width:860px!important;margin:0 auto!important;padding:8px 10px!important;border:1px solid #d4d4ce!important;border-radius:24px!important;background:#fff!important;color:#111!important;box-shadow:0 4px 18px rgba(0,0,0,.06)!important}
+body.dark.cora-route-active #aiAnalysisView .ai-composer{border-color:#333!important;background:#171717!important;color:#f5f5f2!important;box-shadow:0 6px 20px rgba(0,0,0,.22)!important}
+body.cora-route-active #aiAnalysisView .ai-composer-text textarea{min-height:30px!important;height:30px!important;max-height:160px!important;padding:3px 6px!important;background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important;color:#111!important;font-size:13px!important;line-height:1.45!important;resize:none!important}
+body.dark.cora-route-active #aiAnalysisView .ai-composer-text textarea{color:#f5f5f2!important}
+body.cora-route-active #aiAnalysisView .ai-tool{width:34px!important;height:34px!important;border-radius:10px!important;border:1px solid #d8d8d2!important;background:transparent!important;color:#5f5f5a!important;display:grid!important;place-items:center!important}
+body.dark.cora-route-active #aiAnalysisView .ai-tool{border-color:#363633!important;color:#c8c8c2!important}
+body.cora-route-active #aiAnalysisView .ai-voice{display:grid!important;visibility:visible!important;opacity:1!important}
+body.cora-route-active #aiAnalysisView .ai-voice-icon{display:grid!important;place-items:center!important;width:18px!important;height:18px!important}
+body.cora-route-active #aiAnalysisView .ai-voice-icon svg{display:block!important;width:18px!important;height:18px!important}
+body.cora-route-active #aiAnalysisView .ai-send{width:38px!important;height:38px!important;border-radius:11px!important;background:#111!important;color:#fff!important}
+body.dark.cora-route-active #aiAnalysisView .ai-send{background:#f5f5f2!important;color:#111!important}
+body.cora-route-active #aiAnalysisView .ai-composer-meta{max-width:860px!important;margin:3px auto 0!important;padding:0 4px!important;color:#8b8b86!important;font-size:8px!important}
+body.cora-route-active #aiAnalysisView .ai-options{width:min(860px,100%)!important;margin:3px auto 0!important;border:0!important;background:transparent!important;box-shadow:none!important;color:#8b8b86!important}
+/* Welcome state stays centered, but does not reserve a fake header. */
+body.cora-route-active #aiAnalysisView .ai-welcome{max-width:760px!important;margin:10vh auto 30px!important}
+body.cora-route-active #aiAnalysisView .ai-welcome-mark{width:46px!important;height:46px!important;background:#111!important;color:#fff!important}
+body.cora-route-active #aiAnalysisView .ai-welcome h2{font-size:28px!important;color:#111!important}
+body.cora-route-active #aiAnalysisView .ai-welcome>p{color:#777!important}
+body.dark.cora-route-active #aiAnalysisView .ai-welcome-mark{background:#f5f5f2!important;color:#111!important}
+body.dark.cora-route-active #aiAnalysisView .ai-welcome h2{color:#f5f5f2!important}
+body.dark.cora-route-active #aiAnalysisView .ai-welcome>p{color:#aaa!important}
+/* Messages are allowed to use the available chat width. */
+body.cora-route-active #aiAnalysisView .ai-message{width:min(980px,100%)!important;margin:0 auto 16px!important}
+@media(max-width:760px){
+@media(max-width:760px){
+  body.cora-route-active #aiAnalysisView .ai-app{grid-template-columns:1fr!important}
+  body.cora-route-active #aiAnalysisView .ai-side-panel{position:fixed!important;left:0!important;top:0!important;bottom:0!important;z-index:100001!important;width:min(286px,86vw)!important;transform:translateX(-102%)!important;transition:transform .2s ease!important;box-shadow:12px 0 30px rgba(0,0,0,.22)!important}
+  body.cora-route-active #aiAnalysisView .ai-chat-shell{grid-column:1!important}
+  body.cora-route-active #aiAnalysisView .ai-chat-scroll{padding:38px 12px 18px!important}
+  body.cora-route-active #aiAnalysisView .ai-composer-wrap{padding:7px 10px 9px!important}
+  body.cora-route-active #aiAnalysisView .ai-head-actions{gap:5px!important}
+  body.cora-route-active #aiAnalysisView .ai-language-wrap select{max-width:122px!important}
+}

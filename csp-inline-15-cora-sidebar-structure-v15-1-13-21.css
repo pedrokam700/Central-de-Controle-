@@ -1,0 +1,30 @@
+
+/* The rail owns its height. Only the history track can consume remaining space. */
+body.cora-route-active #aiAnalysisView .ai-side-panel {
+  display:grid;
+  grid-template-rows:auto auto auto minmax(0,1fr) auto;
+  align-content:stretch;
+  row-gap:10px;
+}
+body.cora-route-active #aiAnalysisView .ai-side-panel > .cora-side-brand,
+body.cora-route-active #aiAnalysisView .ai-side-panel > .ai-new-chat,
+body.cora-route-active #aiAnalysisView .ai-side-panel > .ai-side-links,
+body.cora-route-active #aiAnalysisView .ai-side-panel > .ai-how { min-width:0; }
+body.cora-route-active #aiAnalysisView #aiSidebarHistory {
+  min-height:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  padding:2px 2px 4px;
+}
+body.cora-route-active #aiAnalysisView .ai-how {
+  margin:0;
+  min-height:0;
+  max-height:42vh;
+  overflow:auto;
+}
+body.cora-route-active #aiAnalysisView .ai-how-body { max-height:30vh; overflow:auto; }
+@media (max-width:760px) {
+  body.cora-route-active #aiAnalysisView .ai-side-panel { grid-template-rows:auto auto auto minmax(0,1fr) auto; }
+}

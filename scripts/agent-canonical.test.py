@@ -8,6 +8,7 @@ import threading
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'ames'/'agent'))
 from store import Store
 import canonical
+import operational_registry
 import process_timeline
 
 def seed(store):
@@ -22,6 +23,9 @@ class ContractTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.store=Store(pathlib.Path(self.tmp.name)/'data.sqlite');self.sid=seed(self.store)
     def tearDown(self):self.tmp.cleanup()
+    def test_lines_are_sourced_from_operational_registry(self):
+        self.assertEqual(canonical.LINES,operational_registry.LINE_IDS)
+        self.assertEqual(canonical.LINES,('TAN10101','TAN10102','TAN10103'))
     def test_revisions_ids_restart_and_idempotent_export(self):
         a=canonical.export_revision(self.store,self.sid,'TAN10101');b=canonical.export_revision(self.store,self.sid,'TAN10101');self.assertEqual(a,b)
         self.assertEqual(a['snapshot_revision'],1);ident=a['datasets']['defects'][0]['occurrence_id']

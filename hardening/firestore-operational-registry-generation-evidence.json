@@ -1,0 +1,48 @@
+{
+  "schema": "central-firestore-operational-registry-generation-evidence-v1",
+  "code_commit": "730da90b0bfa07d7916ec9e4018e155eca50897b",
+  "readiness_reconciliation_commit": "c049013c9f917fb477ddb34e03a51e65df4feea2",
+  "status": "green",
+  "canonical_source": "ames/data/operational-registry.mjs",
+  "line_ids": [
+    "TAN10101",
+    "TAN10102",
+    "TAN10103"
+  ],
+  "focused_validation": {
+    "generator_check": "green",
+    "operational_registry_tests": "green",
+    "generated_rules_tests": "green",
+    "exact_line_identity_drift_refused": true,
+    "friendly_label_identity_inference_refused": true,
+    "firestore_mes_line_generated_block_present": true,
+    "one_shot_write_workflow_removed": true,
+    "readiness_reconciled_fail_closed": true,
+    "reconciliation_one_shot_removed": true
+  },
+  "publication": {
+    "firestore_rules_published": false,
+    "production_rules_publish_allowed": false
+  },
+  "evidence": [
+    "ames/data/operational-registry.mjs",
+    "scripts/firestore-operational-registry.mjs",
+    "scripts/ames-operational-registry.test.mjs",
+    "scripts/ames-firestore-operational-registry-generation.test.mjs",
+    "firestore.rules",
+    "hardening/production-readiness.json"
+  ],
+  "note": "This generates/verifies the mesLine() registry block in source control only. It does not publish Firestore Rules to production.",
+  "full_ci": {
+    "run_id": 38158030493,
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
+  "readiness_validation": {
+    "status": "full_ci_pending_on_this_checkpoint",
+    "operational_registry_expected": "green",
+    "mes_rules_authority_expected": "green_code_not_published",
+    "production_rules_publish_allowed": false
+  }
+}

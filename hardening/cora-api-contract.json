@@ -1,0 +1,63 @@
+{
+  "schema": "central-cora-api-dependencies-v1",
+  "status": "frontend_contract_only_backend_identity_pending",
+  "frontend_release": "2.0.0-preview",
+  "backend": {
+    "authoritative_source": null,
+    "service_version": null,
+    "hosting": {
+      "provider": "vercel",
+      "project_name": "central-cora-v2",
+      "project_id": "prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI",
+      "team_id": "team_UINddVtp80E0jYfiE2vbIhx6",
+      "project_discovery_verified": true,
+      "project_inspection_verified": false,
+      "inspection_blocker": "Vercel connection can list central-cora-v2 and resolve its team/project IDs, but project, domains, production deployments and project routes each return HTTP 403 for scope pedrokam700-6477"
+    },
+    "source_discovery": {
+      "github_owner": "pedrokam700",
+      "accessible_repositories_checked": [
+        "pedrokam700/Central-de-Controle-",
+        "pedrokam700/Testedacentral",
+        "pedrokam700/ACN"
+      ],
+      "central_repository_backend_found": false,
+      "testedacentral_backend_found": false,
+      "separate_cora_repository_found": false,
+      "vercel_reads_attempted": [
+        "project",
+        "domains",
+        "production_deployments",
+        "project_routes"
+      ],
+      "vercel_reads_authorized": false,
+      "conclusion": "No authoritative CORA backend source is accessible from the current GitHub connection, and Vercel deployment/source inspection is permission-blocked. Do not infer or create an authoritative backend identity from frontend route usage."
+    },
+    "health_endpoint": "/api/health",
+    "version_endpoint": "/api/version",
+    "health_verified": false,
+    "version_verified": false,
+    "promotion_blocking": true
+  },
+  "routes": [
+    { "path": "/api/ai-audit", "methods": ["POST"], "domain": "governance" },
+    { "path": "/api/ai-memory", "methods": ["POST"], "domain": "knowledge" },
+    { "path": "/api/ai-memory/:id/promote", "methods": ["POST"], "domain": "knowledge" },
+    { "path": "/api/ai-metrics", "methods": ["GET"], "domain": "observability" },
+    { "path": "/api/chat-cognitive", "methods": ["POST"], "domain": "cora" },
+    { "path": "/api/failure-analysis", "methods": ["POST"], "domain": "cora" },
+    { "path": "/api/failure-analysis/stream", "methods": ["POST"], "domain": "cora" },
+    { "path": "/api/failure-intake", "methods": ["POST"], "domain": "cora" },
+    { "path": "/api/families/rename", "methods": ["POST"], "domain": "central" },
+    { "path": "/api/generate-image", "methods": ["POST"], "domain": "artifact" },
+    { "path": "/api/generate-slides", "methods": ["POST"], "domain": "artifact" },
+    { "path": "/api/investigation-artifact", "methods": ["POST"], "domain": "artifact" },
+    { "path": "/api/transcribe-audio", "methods": ["POST"], "domain": "media" }
+  ],
+  "rules": {
+    "unknown_frontend_route_is_ci_failure": true,
+    "backend_version_required_before_stable": true,
+    "backend_health_required_before_stable": true,
+    "backend_source_required_before_stable": true
+  }
+}

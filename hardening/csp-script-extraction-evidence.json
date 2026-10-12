@@ -1,0 +1,42 @@
+{
+  "schema": "central-csp-script-extraction-evidence-v1",
+  "code_commit": "98e5fdd2302804651713ae18f9c96a349ad7a1d8",
+  "status": "focused_green_full_ci_pending",
+  "focused_validation": {
+    "source_inline_scripts": 0,
+    "built_base_inline_scripts": 0,
+    "built_root_inline_scripts": 0,
+    "eval_like": 0,
+    "unexpected_insecure_http": 0,
+    "external_build_guard": true,
+    "external_preview_boot_guard": true,
+    "external_root_redirect": true,
+    "release_identity_reads_external_build_guard": true,
+    "release_contract_green": true,
+    "offline_shell_precaches_guards": true,
+    "one_shot_write_workflow_removed": true
+  },
+  "remaining": {
+    "inline_styles": 15,
+    "blocking_csp_enforced": false,
+    "note": "Inline styles remain visible debt. Do not enforce a blocking CSP until Firebase/CORA/A-MES runtime origins and style policy are explicitly proven compatible."
+  },
+  "promotion": {
+    "csp_inventory_fully_green": false,
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "evidence": [
+    "index.html",
+    "cora-build-guard.js",
+    "central-runtime-boot-guard.js",
+    "root-entry.js",
+    "scripts/build-static.mjs",
+    "scripts/release-identity.mjs",
+    "scripts/release-contract.test.mjs",
+    "scripts/csp-inventory.mjs",
+    "scripts/ames-csp-script-extraction.test.mjs",
+    "sw.js"
+  ]
+}
