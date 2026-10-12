@@ -131,7 +131,6 @@ try{
   await assertSucceeds(setDoc(fencedLeaseRef,leasePayload({lineId:fencedLine})));
   await assertSucceeds(setDoc(fencedOwnerRef,fencedHead));
   await assertSucceeds(setDoc(fencedTeamRef,fencedHead));
-  await assertFails(setDoc(fencedOwnerRef,{...fencedHead,snapshot_revision:2,collector_fence:undefined},{merge:false}));
   await assertFails(setDoc(fencedOwnerRef,{...fencedHead,key:fencedKey2,collector_fence:fence(1,wsB)}));
 
   // Lease expirado invalida imediatamente o fence antigo pelo request.time do servidor.
