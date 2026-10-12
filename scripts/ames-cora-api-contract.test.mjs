@@ -46,6 +46,26 @@ test('verified hosting discovery is recorded without pretending source inspectio
   assert.match(contract.backend.hosting.inspection_blocker,/403/i);
 });
 
+test('backend source discovery remains explicit and fail-closed after GitHub and Vercel inspection',()=>{
+  const discovery=contract.backend.source_discovery;
+  assert.deepEqual(discovery.accessible_repositories_checked,[
+    'pedrokam700/Central-de-Controle-',
+    'pedrokam700/Testedacentral',
+    'pedrokam700/ACN'
+  ]);
+  assert.equal(discovery.central_repository_backend_found,false);
+  assert.equal(discovery.testedacentral_backend_found,false);
+  assert.equal(discovery.separate_cora_repository_found,false);
+  assert.deepEqual(discovery.vercel_reads_attempted,[
+    'project','domains','production_deployments','project_routes'
+  ]);
+  assert.equal(discovery.vercel_reads_authorized,false);
+  assert.match(discovery.conclusion,/Do not infer or create an authoritative backend identity/i);
+  assert.equal(contract.backend.authoritative_source,null);
+  assert.equal(contract.backend.health_verified,false);
+  assert.equal(contract.backend.version_verified,false);
+});
+
 test('every literal /api route used by app.js is registered in the frontend contract',()=>{
   const declared=contract.routes.map(route=>route.path).sort();
   const discovered=discoveredRoutes(app);
