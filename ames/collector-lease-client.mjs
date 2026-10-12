@@ -153,6 +153,7 @@ export function createCollectorLeaseClient({doc,runTransaction,getDoc,serverTime
     confirmOwned,
     status,
     workstation_id:workstation,
-    activation:'lease-client-confirm-own-ready-runtime-not-wired-head-enforcement-disabled'
+    activation:'lease-client-ready-head-enforcement-disabled',
+    confirmation:'server-authoritative-own-lease-ready-runtime-not-wired'
   });
 }
