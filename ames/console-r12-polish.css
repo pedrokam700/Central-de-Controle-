@@ -1,9 +1,8 @@
 /*
- * Console MES — R12 visual polish layer.
+ * Console MES — fidelidade visual da automação V0.5.22/R12.
  *
- * Keeps the native Central V2 architecture and the canonical 9 views while
- * restoring the proportions, hierarchy and density that made the local
- * V0.5.22/V0.5.23 interface easier to read in production.
+ * Esta camada não inventa um novo design. Ela reaplica as proporções e a
+ * hierarquia do ames-offline-v2 original sobre as 9 views nativas da Central.
  */
 
 .ames-legacy-shell{
@@ -18,170 +17,49 @@
   --ames-dark:#0d0d0d;
   --ames-dark2:#262626;
   --ames-blue:#245782;
-  --ames-blue-soft:#eef5fa;
+  --ames-ok:#197244;
+  --ames-warn:#a96500;
+  --ames-danger:#c7352d;
   --ames-shadow:0 8px 26px rgba(0,0,0,.05);
-  grid-template-columns:228px minmax(0,1fr);
+  grid-template-columns:238px minmax(0,1fr);
+  background:var(--ames-bg);
+  color:var(--ames-text);
   font-size:14px;
-  line-height:1.46;
+  line-height:1.45;
 }
 
 .ames-legacy-sidebar{
   padding:22px 13px 16px;
 }
-
 .ames-legacy-brand{
-  padding:0 10px 15px;
+  padding:0 10px 18px;
+  border-bottom:1px solid #2f2f2d;
 }
-
-.ames-legacy-brand-row{
-  gap:10px;
-}
-
+.ames-legacy-brand-row{gap:10px}
 .ames-legacy-mark{
-  width:31px;
-  height:31px;
-  border-radius:8px;
-  font-size:14px;
+  width:31px;height:31px;border-radius:8px;font-size:14px;font-weight:800;
 }
-
-.ames-legacy-brand strong{
-  font-size:14px;
-}
-
-.ames-legacy-brand span{
-  margin-top:2px;
-  font-size:10px;
-}
-
-.ames-console-home{
-  width:100%;
-  min-height:38px;
-  margin:12px 0 2px;
-  padding:9px 10px;
-  display:flex;
-  align-items:center;
-  gap:9px;
-  border:1px solid #3a3a38;
-  border-radius:8px;
-  background:#191919;
-  color:#f4f4f1;
-  font-size:11px;
-  font-weight:760;
-  text-align:left;
-  transition:background .15s,border-color .15s,transform .15s;
-}
-
-.ames-console-home:hover{
-  background:#282828;
-  border-color:#50504d;
-  transform:translateY(-1px);
-}
-
-.ames-console-home span:first-child{
-  width:18px;
-  text-align:center;
-  font-size:16px;
-  line-height:1;
-}
-
-.ames-legacy-nav{
-  gap:3px;
-  margin:12px 0 15px;
-}
-
+.ames-legacy-brand strong{font-size:14px}
+.ames-legacy-brand span{font-size:10px;margin-top:2px;color:#989893}
+.ames-legacy-nav{gap:3px;margin:15px 0}
 .ames-legacy-nav button{
-  gap:9px;
-  min-height:38px;
-  padding:9px 10px;
-  border-radius:8px;
-  font-size:11.5px;
+  gap:9px;min-height:38px;border-radius:8px;padding:9px 10px;font-size:12px;
 }
-
-.ames-legacy-nav .ico{
-  width:20px;
-  font-size:11px;
-}
-
-.ames-legacy-foot{
-  padding:12px 10px 0;
-  font-size:9.5px;
-  line-height:1.5;
-}
+.ames-legacy-nav .ico{width:20px;font-size:11px;color:#8d8d88}
+.ames-legacy-foot{padding:12px 10px 0;font-size:9.5px;line-height:1.5;color:#888883}
+.ames-legacy-foot b{color:#bbb}
 
 .ames-legacy-topbar{
   min-height:76px;
-  padding:14px clamp(18px,3vw,42px);
+  padding:15px clamp(18px,3vw,42px);
   gap:18px;
-  background:rgba(255,255,255,.95);
+  background:rgba(255,255,255,.94);
 }
-
-.ames-topbar-heading{
-  min-width:0;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  flex:1 1 auto;
-}
-
-.ames-heading-copy{
-  min-width:0;
-}
-
-.ames-console-back-mobile{
-  display:none;
-}
-
-.ames-legacy-title{
-  font-size:20px;
-  line-height:1.16;
-  letter-spacing:-.025em;
-}
-
-.ames-legacy-sub{
-  margin-top:4px;
-  font-size:11px;
-  line-height:1.4;
-}
-
-.ames-legacy-actions{
-  gap:8px;
-}
-
-.ames-legacy-content{
-  max-width:1620px;
-  padding:22px clamp(18px,3vw,42px) 48px;
-}
-
-.ames-shell-banner{
-  min-height:38px;
-  margin:0 0 12px;
-  padding:9px 12px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  border:1px solid #dfe6eb;
-  border-radius:9px;
-  background:#f8fbfd;
-  color:#47565f;
-  font-size:10px;
-  line-height:1.45;
-}
-
-.ames-shell-banner strong{
-  color:#222;
-}
-
-.ames-shell-build{
-  flex:0 0 auto;
-  padding:4px 8px;
-  border:1px solid #cfe0ec;
-  border-radius:999px;
-  background:#eef6fb;
-  color:#255d83;
-  font-size:9px;
-  font-weight:800;
-}
+.ames-legacy-title{font-size:20px;letter-spacing:-.025em;line-height:1.15}
+.ames-legacy-sub{margin:4px 0 0;font-size:11px;line-height:1.4}
+.ames-legacy-actions{gap:8px;flex-wrap:wrap}
+.ames-legacy-content{padding:22px clamp(18px,3vw,42px) 48px;max-width:1620px}
+.ames-shell-banner{display:none!important}
 
 .ames-legacy-shell .button{
   min-height:38px;
@@ -190,298 +68,194 @@
   font-size:11px;
   font-weight:680;
 }
-
-.ames-legacy-shell .status,
+.ames-legacy-shell .button:hover:not(:disabled){transform:none;filter:brightness(.98)}
 .ames-status-pill{
-  min-height:38px;
-  padding:7px 10px;
-  gap:7px;
-  font-size:10px;
+  min-height:38px;padding:7px 10px;border-radius:999px;font-size:10px;font-weight:700;gap:7px;
 }
-
-.ames-agent-dot{
-  width:7px;
-  height:7px;
-}
+.ames-agent-dot{width:7px;height:7px}
 
 .ames-legacy-shell .panel,
 .ames-legacy-shell .mes-context-panel,
 .ames-legacy-shell .ames-console-form{
+  border:1px solid var(--ames-line);
   border-radius:12px;
+  background:#fff;
   box-shadow:var(--ames-shadow);
 }
-
 .ames-legacy-shell .mes-context-panel,
-.ames-legacy-shell .ames-console-form{
-  margin-bottom:12px;
+.ames-legacy-shell .ames-console-form{padding:16px;margin:0 0 12px}
+.ames-legacy-shell .section-head{gap:14px;margin-bottom:10px;align-items:flex-end}
+.ames-legacy-shell .section-head h2{font-size:14px}
+.ames-legacy-shell .section-head h3{font-size:13px}
+.ames-legacy-shell .section-head p,
+.ames-legacy-shell .mes-context-panel p{font-size:10px;line-height:1.45}
+
+/* Os três cards iniciais seguem a automação original. */
+.ames-legacy-shell .ames-monitor-actions{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+  margin:0 0 16px;
+}
+.ames-legacy-shell .ames-monitor-actions .stat{
+  min-height:142px;
   padding:15px;
+  border:1px solid var(--ames-line);
+  border-radius:12px;
+  background:#fff;
+  display:grid;
+  gap:11px;
+  align-content:start;
+  box-shadow:none;
 }
-
-.ames-legacy-shell .mes-context-panel h2{
-  font-size:15px;
+.ames-legacy-shell .ames-monitor-actions .stat:first-child{
+  border-color:#cddbe6;
+  background:linear-gradient(180deg,#fff,#f7fbfe);
 }
-
-.ames-legacy-shell .mes-context-panel h3{
-  font-size:13px;
+.ames-legacy-shell .ames-monitor-actions .stat-label{
+  margin:0;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.07em;
+  font-weight:760;
+  color:var(--ames-muted);
 }
-
-.ames-legacy-shell .mes-context-panel p,
-.ames-legacy-shell .section-head>div>p{
+.ames-legacy-shell .ames-monitor-actions .stat strong{
+  font-size:16px;
+  line-height:1.25;
+  letter-spacing:0;
+}
+.ames-legacy-shell .ames-monitor-actions .stat-note{
+  margin:0;
   font-size:10px;
+  line-height:1.5;
+  color:var(--ames-muted);
 }
+.ames-legacy-shell .ames-monitor-actions .mes-pagination{margin-top:auto}
 
-.ames-legacy-shell .section-head{
-  gap:14px;
-  margin-bottom:10px;
+/* A configuração continua disponível, mas não ocupa a tela principal. */
+.ames-monitor-config{padding:0!important;overflow:hidden}
+.ames-monitor-config>summary{
+  padding:11px 13px;
+  font-size:10px!important;
+  font-weight:800!important;
+  background:#fafafa;
+  border:0;
+  cursor:pointer;
 }
+.ames-monitor-config[open]>summary{border-bottom:1px solid var(--ames-line)}
+.ames-monitor-config-body{padding:13px 14px 14px}
+.ames-collection-strip{margin:-4px 0 12px!important;padding:9px 12px!important;font-size:9.5px!important}
 
-.ames-legacy-shell .ames-reuse-kpis,
-.ames-legacy-shell .ames-summary-grid{
-  gap:10px;
-  margin-bottom:12px;
-}
-
-.ames-legacy-shell .stat,
-.ames-legacy-shell .ames-kv{
-  padding:13px 14px;
+/* Central das Linhas mantém foco em uma linha por vez. */
+.ames-line-center{margin-top:16px!important}
+.ames-line-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.ames-line-tabs .button{min-width:150px}
+.ames-line-summary{
+  grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  gap:0!important;
+  margin:0!important;
+  border:1px solid var(--ames-line);
   border-radius:11px;
+  overflow:hidden;
 }
+.ames-line-summary .stat{
+  min-width:0;
+  padding:15px 14px!important;
+  border:0!important;
+  border-right:1px solid var(--ames-line2)!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
+.ames-line-summary .stat:last-child{border-right:0!important}
+.ames-line-summary .stat-label{font-size:8.5px!important}
+.ames-line-summary .stat-value{font-size:23px!important;letter-spacing:-.04em!important}
+.ames-small-value{font-size:10px!important;letter-spacing:0!important;overflow-wrap:anywhere}
 
+/* Execução / estado do motor: o mesmo par visual da automação. */
+.ames-monitor-runtime{margin-top:16px}
+.ames-runtime-grid{gap:12px!important;grid-template-columns:minmax(0,1.4fr) minmax(300px,.6fr)!important}
+.ames-runtime-grid>.mes-context-panel{margin:0!important}
+.ames-runtime-pipeline{gap:7px!important}
+.ames-runtime-stage{
+  border:1px solid var(--ames-line)!important;
+  border-radius:8px!important;
+  background:#fafafa!important;
+  padding:9px 10px!important;
+}
+.ames-runtime-stage>div:first-child b{font-size:10px!important}
+.ames-runtime-stage small{font-size:9px!important;color:var(--ames-muted)!important}
+.ames-runtime-bar{height:7px!important;border-radius:999px!important;background:#e8e8e5!important}
+.ames-runtime-kv{grid-template-columns:125px minmax(0,1fr)!important;gap:7px 10px!important;font-size:10px!important}
+.ames-runtime-kv span{color:var(--ames-muted)}
+.ames-runtime-diagnostics{margin-top:10px!important}
+.ames-runtime-diagnostics>summary{padding:9px 2px;font-size:9.5px!important;color:#666}
+.ames-runtime-diagnostics-body{padding-top:8px}
+.ames-runtime-lines{margin:0 0 10px!important}
+.ames-factory-gate{margin:0!important;box-shadow:none!important}
+
+/* KPIs / filtros / tabelas seguem a densidade do arquivo original. */
+.ames-legacy-shell .ames-summary-grid,
+.ames-legacy-shell .ames-reuse-kpis{gap:10px;margin-bottom:10px}
+.ames-legacy-shell .stat,
+.ames-legacy-shell .ames-kv{padding:13px 14px;border-radius:11px}
 .ames-legacy-shell .stat-label,
-.ames-legacy-shell .ames-kv small{
-  font-size:9.5px;
-}
-
+.ames-legacy-shell .ames-kv small{font-size:9.5px}
 .ames-legacy-shell .stat strong,
 .ames-legacy-shell .stat-value,
-.ames-legacy-shell .ames-kv b{
-  font-size:20px;
-  letter-spacing:-.03em;
-}
-
-.ames-legacy-shell .stat-note{
-  font-size:9.5px;
-  line-height:1.5;
-}
-
-.ames-legacy-shell .ames-kpi-button:hover{
-  border-color:#b9cad7;
-  background:#fbfdff;
-  box-shadow:0 7px 22px rgba(36,87,130,.07);
-}
-
-.ames-legacy-shell .ames-kpi-button.active{
-  outline:2px solid #111;
-  outline-offset:2px;
-}
-
-.ames-legacy-shell .mes-pagination{
-  gap:7px;
-}
-
-.ames-legacy-shell .mes-pagination>span{
-  font-size:10px;
-}
-
-.ames-legacy-shell .mes-filters{
-  gap:10px;
-  margin:10px 0;
-}
-
-.ames-legacy-shell label{
-  gap:5px;
-  font-size:9.5px;
-}
-
+.ames-legacy-shell .ames-kv b{font-size:24px;letter-spacing:-.04em}
+.ames-legacy-shell .stat-note{font-size:9px}
+.ames-legacy-shell .mes-filters{gap:10px;margin:8px 0}
+.ames-legacy-shell label{gap:5px;font-size:9.5px}
 .ames-legacy-shell input,
-.ames-legacy-shell select{
-  min-height:37px;
-  padding:7px 9px;
-  border-radius:8px;
-  font-size:10.5px;
-}
-
-.ames-legacy-shell fieldset{
-  margin-bottom:10px;
-  padding:11px;
-  border-radius:9px;
-  gap:8px;
-}
-
-.ames-legacy-shell legend{
-  font-size:10px;
-}
-
-.ames-legacy-shell .mes-opt-in{
-  padding:8px 10px;
-  border-radius:8px;
-}
-
+.ames-legacy-shell select{min-height:37px;padding:7px 9px;border-radius:8px;font-size:10px}
+.ames-legacy-shell fieldset{padding:10px;border-radius:9px;gap:8px}
+.ames-legacy-shell legend{font-size:9.5px}
 .ames-legacy-shell .notice,
-.ames-legacy-shell .info-note,
-.ames-legacy-shell [data-agent-status]{
-  font-size:10px;
-  line-height:1.5;
-}
+.ames-legacy-shell .info-note{font-size:10px;line-height:1.5}
+.ames-legacy-shell .table-wrap{max-height:650px;border-radius:8px}
+.ames-legacy-shell table{min-width:1100px}
+.ames-legacy-shell th{padding:10px 11px;font-size:9px}
+.ames-legacy-shell td{padding:9px 11px;font-size:10px}
+.ames-legacy-shell tbody tr:nth-child(even){background:#f7fbfe}
+.ames-legacy-shell tbody tr:hover{background:#edf5fa}
 
-.ames-legacy-shell .notice{
-  padding:10px 12px;
-}
+.ames-top3-grid{gap:12px}
+.ames-top3-meta span{min-height:30px;padding:6px 9px;font-size:9px}
+.ames-top3-item{padding:8px 10px;border-radius:8px}
+.ames-top3-item b{font-size:10px}
+.ames-top3-item small{font-size:9px}
+.ames-top3-item strong{font-size:16px}
+.ames-rank{width:24px;height:24px;border-radius:6px}
+.ames-failure-summary{margin-top:8px}
+.ames-failure-summary span{font-size:9px}
 
-.ames-legacy-shell .info-note,
-.ames-legacy-shell [data-agent-status]{
-  padding:10px 12px;
-}
-
-.ames-legacy-shell [data-agent-status] p,
-.ames-legacy-shell [data-trace-status] p,
-.ames-legacy-shell [data-sn-status] p{
-  font-size:9.5px;
-}
-
-.ames-legacy-shell .table-wrap{
-  border-radius:10px;
-  box-shadow:0 3px 14px rgba(0,0,0,.025);
-}
-
-.ames-legacy-shell table{
-  min-width:1040px;
-}
-
-.ames-legacy-shell th{
-  padding:10px 11px;
-  font-size:9px;
-}
-
-.ames-legacy-shell td{
-  padding:9px 11px;
-  font-size:10px;
-}
-
-.ames-legacy-shell tbody tr:nth-child(even){
-  background:#f7fbfe;
-}
-
-.ames-legacy-shell tbody tr:hover{
-  background:#edf5fa;
-}
-
-.ames-legacy-shell .ames-evidence-card{
-  margin:8px 0;
-  padding:12px;
-  border-radius:10px;
-}
-
-.ames-legacy-shell .ames-evidence-card-head div span{
-  font-size:10px;
-}
-
-.ames-legacy-shell .ames-prior-pcba{
-  margin-top:8px;
-  padding:9px;
-}
-
-.ames-legacy-shell summary{
-  font-size:10px;
-}
-
-.ames-legacy-shell .ames-collection-strip{
-  margin-bottom:12px;
-  padding:9px 12px;
-  border-radius:8px;
-  font-size:9.5px;
-}
-
-.ames-line-tabs{
-  gap:7px;
-  margin:10px 0 12px;
-}
-
-.ames-top3-grid{
-  gap:12px;
-}
-
-.ames-top3-meta{
-  gap:7px;
-  margin-bottom:12px;
-}
-
-.ames-top3-meta span{
-  min-height:30px;
-  padding:6px 9px;
-  font-size:9.5px;
-}
-
-.ames-top3-list{
-  gap:7px;
-}
-
-.ames-top3-item{
-  grid-template-columns:30px minmax(0,1fr) auto;
-  gap:9px;
-  padding:9px 10px;
-  border-radius:9px;
-}
-
-.ames-rank{
-  width:27px;
-  height:27px;
-  font-size:10px;
-}
-
-.ames-top3-item b{
-  font-size:10.5px;
-}
-
-.ames-top3-item small{
-  font-size:9px;
-}
-
-.ames-top3-item strong{
-  font-size:17px;
-}
-
-.ames-failure-summary{
-  gap:8px;
-  margin-top:10px;
-}
-
-.ames-failure-summary span{
-  padding:6px 9px;
-  font-size:9.5px;
-}
-
-@media(max-width:1180px){
-  .ames-legacy-shell{grid-template-columns:206px minmax(0,1fr)}
+@media(max-width:1150px){
+  .ames-legacy-shell{grid-template-columns:210px minmax(0,1fr)}
+  .ames-legacy-shell .ames-monitor-actions{grid-template-columns:1fr 1fr}
+  .ames-line-summary{grid-template-columns:repeat(3,1fr)!important}
+  .ames-runtime-grid{grid-template-columns:1fr!important}
 }
 
 @media(max-width:760px){
-  .ames-legacy-shell{grid-template-columns:1fr;font-size:14px}
-  .ames-legacy-sidebar{width:min(86vw,286px);padding:20px 13px 16px}
-  .ames-console-home{min-height:42px;margin-top:12px;font-size:12px}
-  .ames-legacy-nav button{min-height:42px;font-size:12px}
-  .ames-legacy-topbar{min-height:64px;padding:9px 10px;gap:8px}
-  .ames-topbar-heading{gap:8px;min-width:0}
-  .ames-console-back-mobile{display:inline-flex!important;align-items:center;justify-content:center;min-width:68px;padding-inline:9px}
-  .ames-legacy-title{font-size:16px}
-  .ames-legacy-sub{font-size:10px}
+  .ames-legacy-shell{grid-template-columns:1fr}
+  .ames-legacy-sidebar{width:min(86vw,286px);padding:22px 13px 16px}
+  .ames-legacy-topbar{position:sticky;top:0;min-height:64px;padding:10px 11px;gap:8px}
+  .ames-legacy-title{font-size:17px}
+  .ames-legacy-sub{display:none}
   .ames-legacy-actions{gap:6px}
-  .ames-status-pill{min-height:40px;font-size:9px}
-  .ames-legacy-content{padding:12px 10px max(28px,env(safe-area-inset-bottom))}
-  .ames-shell-banner{align-items:flex-start;margin-bottom:10px;padding:8px 10px;font-size:9px}
-  .ames-shell-build{display:none}
+  .ames-status-pill{max-width:44vw;overflow:hidden}
+  .ames-status-pill>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ames-legacy-content{padding:13px 11px max(28px,env(safe-area-inset-bottom))}
+  .ames-legacy-shell .ames-monitor-actions{grid-template-columns:1fr}
+  .ames-legacy-shell .ames-monitor-actions .stat{min-height:0}
+  .ames-line-tabs{display:flex;overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px}
+  .ames-line-tabs .button{min-width:72vw}
+  .ames-line-summary{grid-template-columns:repeat(2,1fr)!important}
+  .ames-line-summary .stat{border-bottom:1px solid var(--ames-line2)!important}
+  .ames-line-summary .stat:nth-child(2n){border-right:0!important}
   .ames-legacy-shell .ames-summary-grid,
-  .ames-legacy-shell .ames-reuse-kpis{gap:8px}
-  .ames-legacy-shell .stat,
-  .ames-legacy-shell .ames-kv{padding:12px}
-  .ames-legacy-shell .stat strong,
-  .ames-legacy-shell .stat-value,
-  .ames-legacy-shell .ames-kv b{font-size:18px}
-}
-
-@media(max-width:420px){
-  .ames-console-back-mobile{min-width:60px;font-size:10px}
-  .ames-legacy-title{font-size:15px}
-  .ames-status-pill{max-width:34vw}
-  .ames-shell-banner{display:none}
+  .ames-legacy-shell .ames-reuse-kpis,
+  .ames-legacy-shell .mes-filters{grid-template-columns:1fr}
+  .ames-legacy-shell table{min-width:780px}
 }
