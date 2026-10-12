@@ -1,0 +1,41 @@
+{
+  "schema": "central-published-preview-smoke-evidence-v1",
+  "status": "blocked_external_preview",
+  "branch": "hardening/p0-production-readiness",
+  "pull_request": 24,
+  "validated_head": "5745bfe89eb6ea1994fbead20e6b32f9796ef09a",
+  "workflow_run": 38244959294,
+  "internal_gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "failure"
+  },
+  "providers": {
+    "netlify": {
+      "preview_origin": "https://deploy-preview-24--productcontrolcenter.netlify.app",
+      "release_build_http_status": 401,
+      "classification": "provider_access_protected"
+    },
+    "vercel": {
+      "preview_origin": "https://central-cora-v2-git-hardening-p0-produc-30b354-pedrokam700-6477.vercel.app",
+      "project": "central-cora-v2",
+      "release_build_content_type": "text/html; charset=utf-8",
+      "release_build_classification": "html_unknown_not_central_release_build",
+      "connector_scope": "pedrokam700-6477",
+      "connector_project_inspection": "http_403",
+      "accessible_teams_in_current_connection": 0
+    }
+  },
+  "conclusions": [
+    "The Central static build contract remains fail-closed: release-build.json must be JSON and bind the exact SHA.",
+    "Netlify preview is not externally usable by CI because release-build.json returns HTTP 401.",
+    "The Vercel PR deployment is associated with project central-cora-v2 and does not expose the Central release-build.json artifact at the discovered alias.",
+    "The current Vercel connection cannot inspect or repair that project/team because the deployment scope returns HTTP 403 and no accessible team context is available.",
+    "No smoke assertion was weakened and no provider HTML was accepted as a valid Central build."
+  ],
+  "not_proven": [
+    "externally reachable preview serving the exact Central static build",
+    "external CSP Report-Only runtime observation",
+    "published preview exact-SHA smoke GREEN"
+  ]
+}

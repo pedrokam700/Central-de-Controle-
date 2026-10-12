@@ -179,18 +179,26 @@
     },
     "published_preview_smoke": {
       "priority": "P0",
-      "status": "partial",
+      "status": "partial_blocked_external_preview",
       "green": [
         "exact SHA",
         "release identity digest",
         "redirect bound",
         "canonical HTML",
-        "factory gate"
+        "factory gate",
+        "PR #24 internal Static Quality and Firestore Rules/cross-PC E2E are GREEN on the exact hardening head while the preview-only gate remains external-blocked",
+        "preview discovery keeps exact-SHA release-build.json validation fail-closed and sanitizes HTML diagnostics"
       ],
       "remaining": [
-        "run successfully against externally accessible preview"
+        "obtain an externally reachable PR preview that serves the Central static build and JSON release-build.json for the exact hardening SHA",
+        "rerun Published preview smoke until exact SHA, canonical route, release identity and CSP Report-Only checks are GREEN on that Central preview"
       ],
-      "blocker": "push runs skip preview smoke; earlier Netlify PR preview returned HTTP 401 to CI"
+      "blocker": "PR #24 external preview is not currently valid for Central smoke: Netlify release-build.json returns HTTP 401; the discovered Vercel deployment belongs to project central-cora-v2 and returns text/html instead of the Central release-build.json JSON artifact; the current Vercel connection cannot inspect/repair that team project because its scope returns HTTP 403.",
+      "evidence": [
+        "hardening/published-preview-smoke-evidence.json"
+      ],
+      "pr": 24,
+      "last_external_validation_run": 38244959294
     },
     "mes_rules_authority": {
       "priority": "P1",
@@ -304,7 +312,7 @@
         "CSP Report-Only candidate passed Static Quality and Firestore Rules/cross-PC E2E"
       ],
       "remaining": [
-        "create/use an explicitly authorized hardening preview PR before external CSP observation; no open PR currently uses hardening/p0-production-readiness as head",
+        "PR #24 is open as the authorized hardening validation PR, but its current Netlify/Vercel previews do not expose a valid externally reachable Central static build; obtain a correct Central preview before CSP Report-Only runtime observation",
         "observe Content-Security-Policy-Report-Only violations on the externally reachable preview",
         "add only origins proven necessary by report-only runtime evidence",
         "exercise Firebase Auth, Firestore, same-origin CORA routes and local-agent connectivity under the report-only candidate",
@@ -322,7 +330,8 @@
         "hardening/csp-report-only-evidence.json",
         "scripts/ames-csp-report-only.test.mjs",
         "netlify.toml",
-        "vercel.json"
+        "vercel.json",
+        "hardening/published-preview-smoke-evidence.json"
       ],
       "full_ci_runs": [
         38179802958,
