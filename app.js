@@ -1,6 +1,7 @@
 
     import { createAmesStore, clearSessionData } from './ames/data/store.mjs';
     import {createMesSync} from './ames/sync.mjs';
+    import {createCollectorAuthorityRuntime} from './ames/collector-authority-runtime.mjs';
     import {firestoreTransport} from './ames/firebase-sync.mjs';
     import { createConsoleView } from './ames/console-view.mjs';
     import { createDashboardView } from './ames/dashboard-view.mjs';
@@ -22,7 +23,7 @@
     import {createCoraBrowserTransport} from './core/cora-browser-transport.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
-      getFirestore, collection, addDoc as firebaseAddDoc, onSnapshot, doc, deleteDoc as firebaseDeleteDoc, updateDoc as firebaseUpdateDoc, setDoc as firebaseSetDoc, getDoc, getDocs, query, where, writeBatch as firebaseWriteBatch, runTransaction, arrayUnion
+      getFirestore, collection, addDoc as firebaseAddDoc, onSnapshot, doc, deleteDoc as firebaseDeleteDoc, updateDoc as firebaseUpdateDoc, setDoc as firebaseSetDoc, getDoc, getDocs, query, where, writeBatch as firebaseWriteBatch, runTransaction, serverTimestamp, arrayUnion
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import {
       getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -88,6 +89,11 @@
       getCapabilities:()=>currentAccount?.capabilities||null
     });
     const {addDoc,setDoc,updateDoc,deleteDoc,writeBatch}=guardedFirestore;
+    const collectorAuthorityRuntime=createCollectorAuthorityRuntime(state.ames,{
+      db,doc,getDoc,runTransaction,serverTimestamp,
+      currentUid:()=>currentAuthUser?.uid||'',
+      changed(){if(currentAuthUser)renderConsoleMes();}
+    });
     let unsubscribeData = [];
     let dataSessionGeneration = 0;
     // Controle de concorrência da autenticação: criação/login e onAuthStateChanged
@@ -1368,7 +1374,7 @@
           throw error;
         }
 
-        if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();consoleMesView?.clear();clearSessionData(state);}
+        if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();collectorAuthorityRuntime.clear();consoleMesView?.clear();clearSessionData(state);}
         currentAuthUser = firebaseUser;
         currentAccount = {
           uid: firebaseUser.uid,
@@ -1578,6 +1584,7 @@
         currentAccount = null;
         users = [];
         mesSync?.stop();
+        collectorAuthorityRuntime.clear();
         clearSessionData(state);
         consoleMesView?.clear();
         dashboardMesView?.clear();
@@ -2391,12 +2398,14 @@
         renderDashboardMes();renderProductMes();renderFailuresMes();renderDailyMes();renderCoraMes();renderConsoleMes();
       }});
       mesSync.start(uid);
+      collectorAuthorityRuntime.refresh({force:true}).catch(()=>{});
     }
     function renderConsoleMes() {
       if (!currentAuthUser || activeView !== 'mesConsole') return;
       consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, { locale: () => currentLanguage, onChange() {
         if (!currentAuthUser) return;
         renderDashboardMes(); renderProductMes(); renderFailuresMes(); renderDailyMes(); renderCoraMes();
+        collectorAuthorityRuntime.refresh().catch(()=>{});
         mesSync?.capture().catch(error=>{state.ames.updateAgent({sync:{status:'error',error:error.message}});});
       } });
       consoleMesView.render();
