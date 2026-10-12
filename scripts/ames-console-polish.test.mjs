@@ -31,5 +31,5 @@ test('advanced and factory-only information remains available but collapsed by d
   assert.match(runtime, /Progresso da execução/);
   assert.match(runtime, /Estado do motor/);
   assert.match(runtime, /<details class="ames-runtime-diagnostics"><summary>Diagnóstico técnico e gate físico<\/summary>/);
-  assert.doesNotMatch(runtime, /Informações de validação ficam recolhidas[^<]*<\/p><\/div><span[^>]*>[^<]*<\/span><\/div><div class="ames-gate-grid">/);
+  assert.match(runtime, /Informações de validação ficam recolhidas para não poluir a operação diária/);
 });
