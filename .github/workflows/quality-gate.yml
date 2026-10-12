@@ -12,6 +12,8 @@ on:
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
 
 jobs:
   static-quality:
@@ -165,13 +167,27 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Discover trusted Vercel PR preview
+        id: preview-origins
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          VERCEL_ORIGIN="$(node scripts/preview-origin-discovery.mjs --repository "$GITHUB_REPOSITORY" --pr "$PR_NUMBER")"
+          echo "vercel_origin=$VERCEL_ORIGIN" >> "$GITHUB_OUTPUT"
       - name: Verify exact SHA and canonical route on deployed preview
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: >-
-          node scripts/post-deploy-smoke.mjs
-          --origin "https://deploy-preview-${PR_NUMBER}--productcontrolcenter.netlify.app"
-          --sha "$EXPECTED_SHA"
-          --wait-ms 180000
-          --max-redirects 4
+          VERCEL_ORIGIN: ${{ steps.preview-origins.outputs.vercel_origin }}
+        run: |
+          args=(--origin "https://deploy-preview-${PR_NUMBER}--productcontrolcenter.netlify.app")
+          if [ -n "$VERCEL_ORIGIN" ]; then
+            args+=(--origin "$VERCEL_ORIGIN")
+          fi
+          node scripts/post-deploy-smoke.mjs \
+            "${args[@]}" \
+            --sha "$EXPECTED_SHA" \
+            --wait-ms 180000 \
+            --max-redirects 4
