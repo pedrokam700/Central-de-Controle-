@@ -153,7 +153,9 @@
       "status": "blocked",
       "green": [
         "frontend route inventory",
-        "Vercel hosting project central-cora-v2 discovered and recorded"
+        "Vercel hosting project central-cora-v2 discovered and recorded",
+        "GitHub backend source discovery exhausted across all currently accessible pedrokam700 repositories without finding authoritative CORA API source",
+        "Vercel central-cora-v2 project and team IDs are verified, while project, domains, production deployments and project routes each return HTTP 403 under the current connection scope"
       ],
       "remaining": [
         "identify authoritative backend source/deploy",
@@ -161,11 +163,12 @@
         "/api/version",
         "frontend/backend compatibility contract"
       ],
-      "blocker": "Vercel connection lists central-cora-v2 (prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI) but detailed project inspection returns HTTP 403 for scope pedrokam700-6477",
+      "blocker": "Authoritative CORA backend source/deployment remains inaccessible: no backend source exists in the currently accessible GitHub repositories, and Vercel project/domains/deployments/routes each return HTTP 403 for scope pedrokam700-6477 even with verified project/team IDs.",
       "evidence": [
         "hardening/cora-api-contract.json",
         "scripts/ames-cora-api-contract.test.mjs"
-      ]
+      ],
+      "full_ci_run": 38241684334
     },
     "operational_calendar_semantics": {
       "priority": "P0",
