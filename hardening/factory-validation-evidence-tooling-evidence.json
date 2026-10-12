@@ -1,0 +1,30 @@
+{
+  "schema": "central-factory-validation-tooling-evidence-v1",
+  "status": "focused_green_full_ci_pending",
+  "branch": "hardening/p0-production-readiness",
+  "functional_commit": "1cbbe20895608f6d25a9428ab7e51c2f0607c339",
+  "physical_candidate": {
+    "branch": "v2/console-parity-r12",
+    "sha": "5e45127d3b61b37968a4c2b05596919670b307cb",
+    "unchanged": true
+  },
+  "focused_guarantees": [
+    "factory validation evidence accepts real Git SHA identities while keeping R12 capture SHA-256 strict",
+    "nine canonical views and Gates A-I are fixed and fail closed on drift",
+    "unknown or sensitive-shaped fields are rejected",
+    "R12 capture PASS requires only sanitized SHA-256 plus file count evidence",
+    "hardening PASS requires an exact commit SHA",
+    "all-pass evidence yields ready_for_promotion_review, never automatic GREEN",
+    "tool ships only as workstation support in the R12 existing-install bundle and does not enter the agent runtime contract",
+    "Factory Gate documentation preserves the frozen physical candidate and treats hardening as supplemental regression evidence",
+    "launcher defaults, main, production Rules and physical candidate behavior remain unchanged"
+  ],
+  "full_ci_run": null,
+  "not_proven": [
+    "factory 9/9 GREEN",
+    "real R12 capture GREEN",
+    "physical two-workstation enforcement GREEN",
+    "real Windows local-origin lifecycle GREEN",
+    "promotion approval"
+  ]
+}
