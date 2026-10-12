@@ -1,3 +1,5 @@
+import {evaluateFirebaseSdkPreparation} from './firebase-sdk-preparation.mjs';
+
 export const OFFLINE_READINESS_SCHEMA='central-offline-readiness-v1';
 
 async function serviceWorkerState(navigatorRef){
@@ -13,25 +15,32 @@ async function serviceWorkerState(navigatorRef){
   return {supported:true,registered,controlled,state};
 }
 
-export async function evaluateOfflineReadiness({windowRef=globalThis.window,navigatorRef=globalThis.navigator,build=''}={}){
+export async function evaluateOfflineReadiness({windowRef=globalThis.window,navigatorRef=globalThis.navigator,cachesRef=globalThis.caches,build=''}={}){
   const authPersistence=String(windowRef?.__centralAuthPersistence||'unknown');
   const firestoreCache=String(windowRef?.__centralFirestoreCache||'unknown');
-  const serviceWorker=await serviceWorkerState(navigatorRef);
+  const [serviceWorker,firebaseSdk]=await Promise.all([
+    serviceWorkerState(navigatorRef),
+    evaluateFirebaseSdkPreparation({cachesRef})
+  ]);
   const authReady=authPersistence==='local';
   const firestoreReady=firestoreCache==='persistent';
   const serviceWorkerReady=serviceWorker.registered||serviceWorker.controlled;
+  const firebaseSdkReady=firebaseSdk.prepared===true;
   const reasons=[];
   if(!authReady)reasons.push('auth_persistence_not_local');
   if(!firestoreReady)reasons.push('firestore_cache_not_persistent');
   if(!serviceWorker.supported)reasons.push('service_worker_unsupported');
   else if(!serviceWorkerReady)reasons.push('service_worker_not_registered');
+  if(!firebaseSdk.supported)reasons.push('firebase_sdk_cache_storage_unavailable');
+  else if(!firebaseSdkReady)reasons.push('firebase_sdk_not_prepared_for_current_origin');
   return Object.freeze({
     schema:OFFLINE_READINESS_SCHEMA,
     build:String(build||''),
     auth_persistence:authPersistence,
     firestore_cache:firestoreCache,
     service_worker:serviceWorker,
-    offline_ready:authReady&&firestoreReady&&serviceWorkerReady,
+    firebase_sdk:firebaseSdk,
+    offline_ready:authReady&&firestoreReady&&serviceWorkerReady&&firebaseSdkReady,
     reasons:Object.freeze(reasons)
   });
 }
