@@ -1,0 +1,33 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "collector_fence_confirmation_coordinator",
+  "status": "green_dormant_runtime_not_wired",
+  "validated_sha": "691f58e5ec7215a958054f2f9cabb76beda3c8cb",
+  "full_ci_run": 38187170233,
+  "gates": {
+    "static_quality": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
+  "assertions": [
+    "only same_workstation_candidate observations invoke confirmOwned",
+    "vacant, held_by_other and unavailable observations cause zero confirmation writes",
+    "successful server confirmation returns a normalized publication fence",
+    "not-current and not-owned confirmation results yield no fence and no retry",
+    "infrastructure errors and malformed confirmation fences fail closed without leaking raw error detail",
+    "coordinator exposes no claim, takeover or renew API"
+  ],
+  "activation": "gated_same_workstation_confirmation_no_claim_no_takeover_runtime_not_wired",
+  "enforcement": false,
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "integrate confirmation into collector-authority-runtime only after same-workstation observation",
+    "keep confirmed fence private to runtime until a separate collectorFenceForLine binding slice",
+    "physical two-workstation same-line conflict and recovery before stale-publisher enforcement"
+  ]
+}
