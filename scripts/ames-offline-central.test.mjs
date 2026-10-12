@@ -26,8 +26,8 @@ test('build publicado troca entrada direta pelo bootstrap offline com guard exte
   assert.doesNotMatch(build,/const bootGuard=`<script/);
 });
 
-test('service worker guarda shell nativo, outbox H2 composto e SDK Firebase exato, sem wildcard CDN',()=>{
-  for(const asset of ["BASE+'offline-bootstrap.mjs'","BASE+'app.js'","BASE+'cora-build-guard.js'","BASE+'central-runtime-boot-guard.js'","BASE+'root-entry.js'","BASE+'core/offline-outbox.mjs'","BASE+'core/offline-domain-write.mjs'","BASE+'ames/console-view.mjs'","BASE+'ames/console-specialized-views.mjs'"]){
+test('service worker guarda shell nativo, readiness completo, outbox H2 e SDK Firebase exato, sem wildcard CDN',()=>{
+  for(const asset of ["BASE+'offline-bootstrap.mjs'","BASE+'app.js'","BASE+'cora-build-guard.js'","BASE+'central-runtime-boot-guard.js'","BASE+'root-entry.js'","BASE+'core/offline-readiness.mjs'","BASE+'core/firebase-sdk-preparation.mjs'","BASE+'core/offline-outbox.mjs'","BASE+'core/offline-domain-write.mjs'","BASE+'ames/console-view.mjs'","BASE+'ames/console-specialized-views.mjs'"]){
     assert.ok(sw.includes(asset),`asset offline ausente: ${asset}`);
   }
   for(const url of [
