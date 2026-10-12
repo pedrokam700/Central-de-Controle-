@@ -52,16 +52,19 @@ rem instalacao interrompida pode deixar o .venv sem Playwright/openpyxl/etc.
 echo [2/7] Validando dependencias criticas do motor...
 call :depscheck
 if errorlevel 1 (
+  echo       Ambiente incompleto detectado. Reparando automaticamente...
   if exist "%ROOT%09_REPARAR_DEPENDENCIAS.bat" (
-    echo       Ambiente incompleto detectado. Reparando automaticamente...
     call "%ROOT%09_REPARAR_DEPENDENCIAS.bat" /auto
-    if errorlevel 1 goto :fail
-    call :depscheck
-    if errorlevel 1 goto :fail
   ) else (
-    echo [ERRO] Dependencias incompletas e 09_REPARAR_DEPENDENCIAS.bat ausente.
-    goto :fail
+    rem O bundle de migracao deve conseguir recuperar um posto mesmo que a R12
+    rem antiga nao possua o reparador separado. Mantemos o mesmo reparo da R11
+    rem embutido como fallback para nunca repetir o venv-existe/Playwright-ausente.
+    call :depsrepair
   )
+  if errorlevel 1 goto :fail
+  call :depscheck
+  if errorlevel 1 goto :fail
+  echo       pandas/openpyxl/playwright/pyautogui/pyperclip: OK apos reparo
 ) else (
   echo       pandas/openpyxl/playwright/pyautogui/pyperclip: OK
 )
@@ -130,6 +133,14 @@ exit /b 0
 :depscheck
 "%ROOT%.venv\Scripts\python.exe" -c "import pandas,openpyxl,playwright,pyautogui,pyperclip; from playwright.sync_api import sync_playwright" >nul 2>nul
 exit /b %errorlevel%
+
+:depsrepair
+"%ROOT%.venv\Scripts\python.exe" -m ensurepip --upgrade >nul 2>nul
+"%ROOT%.venv\Scripts\python.exe" -m pip install --disable-pip-version-check --upgrade pip
+if errorlevel 1 exit /b 1
+"%ROOT%.venv\Scripts\python.exe" -m pip install --disable-pip-version-check "pandas>=2.2" "openpyxl>=3.1" "playwright>=1.55" "pyautogui>=0.9.54" "pyperclip>=1.9"
+if errorlevel 1 exit /b 1
+exit /b 0
 
 :probe
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=New-Object Net.Sockets.TcpClient;try{$a=$c.BeginConnect('172.29.185.215',80,$null,$null);if(-not $a.AsyncWaitHandle.WaitOne(2500,$false)){exit 1};$c.EndConnect($a);exit 0}catch{exit 1}finally{$c.Close()}" >nul 2>nul
