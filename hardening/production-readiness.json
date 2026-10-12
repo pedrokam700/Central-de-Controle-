@@ -614,7 +614,7 @@
     },
     "app_modularization": {
       "priority": "P1",
-      "status": "in_progress_three_slices_green",
+      "status": "in_progress_four_slices_green",
       "remaining": [
         "pause further extraction unless the next slice materially improves production readiness; do not modularize for its own sake",
         "keep finishLogin/listener/UI orchestration in app.js until a separately justified boundary exists",
@@ -639,7 +639,12 @@
         "missing profiles still use buildSignupProfile and start as V2 viewer pending",
         "profile creation continues through the guarded Firestore setDoc path and self-profile bootstrap policy",
         "finishLogin, auth listeners and signup orchestration remain in app.js unchanged",
-        "third modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E"
+        "third modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E",
+        "auth finishLogin UID single-flight coordination extracted from app.js into core/auth-session-flight.mjs",
+        "same UID shares one exact in-flight initialization while a superseded UID cannot clear the newer session flight",
+        "finishLogin, onAuthStateChanged, profile revalidation, MES sync and UI orchestration remain in app.js; only concurrency state moved",
+        "auth session flight dependency is included in the offline Service Worker shell",
+        "fourth modularization slice passed focused tests plus full Static Quality and Firestore Rules/cross-PC E2E"
       ],
       "evidence": [
         "core/cora-browser-transport.mjs",
@@ -654,12 +659,17 @@
         "core/user-profile-service.mjs",
         "scripts/ames-user-profile-service.test.mjs",
         "scripts/ames-session-admission-app.test.mjs",
-        "hardening/user-profile-service-modularization-evidence.json"
+        "hardening/user-profile-service-modularization-evidence.json",
+        "core/auth-session-flight.mjs",
+        "scripts/ames-auth-session-flight.test.mjs",
+        "scripts/ames-auth-session-flight-app.test.mjs",
+        "hardening/auth-session-flight-modularization-evidence.json"
       ],
       "full_ci_runs": [
         38182402337,
         38182776966,
-        38183041134
+        38183041134,
+        38242601439
       ]
     },
     "r12_engine_consolidation": {
