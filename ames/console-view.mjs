@@ -59,25 +59,24 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   function mount(){
     root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><link rel="stylesheet" href="${POLISH_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
       <aside class="ames-legacy-sidebar">
-        <div class="ames-legacy-brand"><div class="ames-legacy-brand-row"><div class="ames-legacy-mark">Q</div><div><strong>Central de trabalho</strong><span>A-MES · motor local integrado</span></div></div></div>
-        <button type="button" class="ames-console-home" data-console-back aria-label="Voltar para a Central de Trabalho"><span aria-hidden="true">←</span><span>Voltar para a Central</span></button>
+        <div class="ames-legacy-brand"><div class="ames-legacy-brand-row"><div class="ames-legacy-mark">Q</div><div><strong>Central de trabalho</strong><span>A-MES · motor local</span></div></div></div>
         <nav class="ames-legacy-nav" aria-label="Views da automação A-MES">${VIEWS.map(([id,icon,label])=>`<button type="button" data-console-view="${id}"${id===active?' class="active"':''}><span class="ico">${icon}</span>${label}</button>`).join('')}</nav>
-        <div class="ames-legacy-foot"><b>Offline por padrão.</b><br>MES e banco permanecem no notebook. As 9 views usam o mesmo state.ames, o mesmo agente local e a mesma base operacional.<br><br><span data-console-build-foot>R12 · 9 views</span></div>
+        <div class="ames-legacy-foot"><b>Offline por padrão.</b><br>MES e banco ficam no notebook. O Console usa o mesmo agente local, SQLite e estado da Central.<br><br><span data-console-build-foot>R12 · 9 views</span></div>
       </aside>
       <button type="button" class="ames-mobile-backdrop" data-console-menu-close aria-label="Fechar menu do Console MES"></button>
       <main class="ames-legacy-main">
-        <header class="ames-legacy-topbar"><div class="ames-topbar-heading"><button class="button secondary ames-console-back-mobile" type="button" data-console-back aria-label="Voltar para a Central de Trabalho">← Central</button><div class="ames-heading-copy"><h1 class="ames-legacy-title" data-console-title></h1><p class="ames-legacy-sub" data-console-sub></p></div></div><div class="ames-legacy-actions">
+        <header class="ames-legacy-topbar"><div><h1 class="ames-legacy-title" data-console-title></h1><p class="ames-legacy-sub" data-console-sub></p></div><div class="ames-legacy-actions">
           <button class="button secondary ames-mobile-menu" type="button" data-console-menu aria-expanded="false" aria-label="Abrir menu do Console MES" style="display:none">☰</button>
           <span class="ames-status-pill"><span class="ames-agent-dot" data-console-dot></span><span data-console-status>Agente local desconectado</span></span>
-          <span class="ames-status-pill ames-hide-mobile"><span class="ames-agent-dot" data-console-process-dot></span><span data-console-process>3022 em lote indisponível</span></span>
           <button class="button secondary ames-hide-mobile" type="button" data-console-open-ames>Abrir A-MES</button>
           <button class="button secondary ames-hide-mobile" type="button" data-console-setup>Configurar posto</button>
           <button class="button secondary ames-hide-mobile" type="button" data-console-check>Verificar</button>
+          <button class="button secondary" type="button" data-console-back>Voltar à Central</button>
         </div></header>
-        <div class="ames-legacy-content"><div class="ames-shell-banner"><div><strong>Console MES integrado</strong> · experiência operacional R12/V0.5.22 preservada sobre a arquitetura nativa da Central V2.</div><span class="ames-shell-build" data-console-build>MES local</span></div>${VIEWS.map(([id])=>`<section class="ames-console-pane" data-console-pane="${id}"${id===active?'':' hidden'}></section>`).join('')}</div>
+        <div class="ames-legacy-content">${VIEWS.map(([id])=>`<section class="ames-console-pane" data-console-pane="${id}"${id===active?'':' hidden'}></section>`).join('')}</div>
       </main></div>`;
     for(const button of root.querySelectorAll('[data-console-view]'))button.addEventListener('click',()=>switchView(button.dataset.consoleView));
-    for(const button of root.querySelectorAll('[data-console-back]'))button.addEventListener('click',backToCentral);
+    root.querySelector('[data-console-back]')?.addEventListener('click',backToCentral);
     root.querySelector('[data-console-menu]')?.addEventListener('click',()=>setMenu(!root.querySelector('[data-ames-shell]')?.classList.contains('menu-open')));
     root.querySelector('[data-console-menu-close]')?.addEventListener('click',()=>setMenu(false));
     root.querySelector('[data-console-open-ames]')?.addEventListener('click',async()=>{try{if(store.agent().status!=='connected')await client.connect();await client.auxiliary('chrome');}catch(error){store.updateAgent({error:error.message});paintHeader();}});
@@ -90,13 +89,13 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     if(views.has(id))return views.get(id);
     const pane=root.querySelector(`[data-console-pane="${id}"]`);let view;
     if(id==='monitor'){
-      pane.innerHTML='<section data-monitor-main></section><section data-monitor-runtime></section><section data-monitor-lines></section><section data-monitor-tools></section>';
+      pane.innerHTML='<section data-monitor-main></section><section data-monitor-lines></section><section data-monitor-runtime></section><section data-monitor-tools></section>';
       const monitorRoot=pane.querySelector('[data-monitor-main]');
       const primary=createAutomationView(monitorRoot,store,client);
-      const runtime=createMonitorRuntimeView(pane.querySelector('[data-monitor-runtime]'),store);
       const lineBoard=createLineOverview(pane.querySelector('[data-monitor-lines]'),store,client);
+      const runtime=createMonitorRuntimeView(pane.querySelector('[data-monitor-runtime]'),store);
       const tools=createAdvancedView(pane.querySelector('[data-monitor-tools]'),store,client);
-      view={render(){primary.render();applyMonitorProcessCapability(monitorRoot,store);runtime.render();lineBoard.render();tools.render();},clear(){primary.clear?.();runtime.clear?.();lineBoard.clear?.();tools.clear?.();pane.replaceChildren();}};
+      view={render(){primary.render();applyMonitorProcessCapability(monitorRoot,store);lineBoard.render();runtime.render();tools.render();},clear(){primary.clear?.();lineBoard.clear?.();runtime.clear?.();tools.clear?.();pane.replaceChildren();}};
     }
     else if(id==='top3'){
       pane.innerHTML='<section data-top3-main></section><section data-top3-trend></section>';
@@ -126,14 +125,12 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
 
   function paintHeader(){
     if(!mounted)return;const a=store.agent(),m=meta();
-    const title=root.querySelector('[data-console-title]'),sub=root.querySelector('[data-console-sub]'),status=root.querySelector('[data-console-status]'),build=root.querySelector('[data-console-build]'),foot=root.querySelector('[data-console-build-foot]'),dot=root.querySelector('[data-console-dot]'),process=root.querySelector('[data-console-process]'),processDot=root.querySelector('[data-console-process-dot]');
+    const title=root.querySelector('[data-console-title]'),sub=root.querySelector('[data-console-sub]'),status=root.querySelector('[data-console-status]'),foot=root.querySelector('[data-console-build-foot]'),dot=root.querySelector('[data-console-dot]');
     if(title)title.textContent=m[3];if(sub)sub.textContent=m[4];
-    const connected=a.status==='connected',processReady=connected&&a.capabilities?.process_timeline===true;
+    const connected=a.status==='connected';
     if(status)status.textContent=connected?`Agente local conectado${a.agent_build?' · '+a.agent_build:''}`:'Agente local desconectado';
     dot?.classList.toggle('ok',connected);
-    if(process)process.textContent=processReady?'3022 em lote disponível':'3022 em lote indisponível';
-    processDot?.classList.toggle('ok',processReady);
-    const buildText=a.agent_build||a.capabilities?.agent_build||'MES local';if(build)build.textContent=buildText;if(foot)foot.textContent=`${buildText} · 9 views`;
+    if(foot)foot.textContent=`${a.agent_build||a.capabilities?.agent_build||'MES local'} · 9 views`;
   }
 
   function switchView(id){
