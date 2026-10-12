@@ -1,0 +1,32 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "collector_authority_runtime_observer",
+  "status": "focused_green_full_ci_pending",
+  "validated_parent": "5881bf74cb315d776ea5efd845541e53d92156a3",
+  "focused_run": 38186997412,
+  "assertions": [
+    "runtime reads collector lease status only for authenticated sessions with a stable validated workstation identity and configured MES lines",
+    "runtime state stores only line_id, status, reason and non-authoritative flags; candidate fence, owner UID and remote workstation identity are not retained",
+    "runtime performs zero lease transactions and zero serverTimestamp calls",
+    "repeated agent progress changes are throttled to avoid excessive Firestore reads",
+    "account or workstation changes rebuild the observer context",
+    "login and agent changes refresh diagnostics; logout and account switch clear diagnostics",
+    "app.js contains no collector claim, confirmOwned, takeover or renew call",
+    "Monitoramento labels the feature as observation only with no enforcement",
+    "offline shell precaches collector lease client, observer and runtime modules"
+  ],
+  "activation": "runtime_observer_only_no_claim_no_confirm_no_fence_no_enforcement",
+  "enforcement": false,
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  },
+  "remaining": [
+    "full CI on a normal descendant commit",
+    "invoke confirmOwned only for same-workstation candidates in a separate gated slice",
+    "wire only successful server-confirmed fence into collectorFenceForLine while stale rejection remains disabled",
+    "physical two-workstation same-line conflict and recovery before stale-publisher enforcement"
+  ]
+}
