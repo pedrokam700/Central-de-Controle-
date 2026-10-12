@@ -62,3 +62,13 @@ test('build estático grava SHA/branch/provider reais e identidade completa do r
     fs.rmSync(out,{recursive:true,force:true});
   }
 });
+
+test('PR workflow keeps merge-ref checkout but binds published artifacts to pull-request head identity',()=>{
+  const workflow=fs.readFileSync('.github/workflows/quality-gate.yml','utf8');
+  assert.match(workflow,/FRONTEND_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow,/COMMIT: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow,/BRANCH: \$\{\{ github\.event\.pull_request\.head\.ref \|\| github\.ref_name \}\}/);
+  assert.match(workflow,/EXPECTED_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.doesNotMatch(workflow,/ref:\s*\$\{\{\s*github\.event\.pull_request\.head\.sha/,
+    'checkout deve continuar validando o merge sintético do PR; somente a identidade do artefato usa o head real');
+});
