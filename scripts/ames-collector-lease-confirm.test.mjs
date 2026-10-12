@@ -77,7 +77,9 @@ test('non-permission infrastructure errors are not disguised as lease authority 
   assert.equal(h.attempts(),1);
 });
 
-test('client activation states confirmation is ready but runtime/head enforcement remains disabled',()=>{
+test('client preserves legacy activation contract while exposing dormant confirmation capability',()=>{
   const h=harness();
-  assert.equal(h.client.activation,'lease-client-confirm-own-ready-runtime-not-wired-head-enforcement-disabled');
+  assert.equal(h.client.activation,'lease-client-ready-head-enforcement-disabled');
+  assert.equal(h.client.confirmation,'server-authoritative-own-lease-ready-runtime-not-wired');
+  assert.equal(typeof h.client.confirmOwned,'function');
 });
