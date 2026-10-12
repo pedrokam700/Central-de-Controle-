@@ -1,0 +1,39 @@
+{
+  "schema": "central-hardening-evidence-v1",
+  "branch": "hardening/p0-production-readiness",
+  "subject": "collector_own_lease_server_confirmation",
+  "status": "green_dormant_runtime_not_wired",
+  "validated_sha": "35d491e8eed1e4cdc5803badd4aba9dc8c8852b5",
+  "full_ci_run": 38186650668,
+  "gates": {
+    "static_quality": "success",
+    "ames_node_contract_suites": "success",
+    "firestore_rules_cross_pc_e2e": "success",
+    "published_preview_smoke": "skipped_on_push"
+  },
+  "assertions": [
+    "confirmOwned requires an existing lease owned by the same authenticated account and the same validated workstation",
+    "successful confirmation preserves generation and acquired_at and only renews renewed_at with a server timestamp",
+    "vacant lease is never acquired by confirmOwned",
+    "lease owned by another account or workstation is never written by confirmOwned",
+    "permission-denied same-generation renewal becomes collector/lease-not-current and never retries as takeover",
+    "confirmOwned contains no generation+1 path",
+    "sameCollectorRenewal remains guarded by server request.time leaseStillActive semantics",
+    "expiredTakeover remains a separate generation+1 Rules branch",
+    "legacy lease client activation string remains unchanged; confirmation capability is exposed separately"
+  ],
+  "activation": "server-authoritative-own-lease-ready-runtime-not-wired",
+  "enforcement": false,
+  "explicitly_not_proven": [
+    "runtime invocation of confirmOwned",
+    "collectorFenceForLine binding from confirmed lease",
+    "stale publisher rejection",
+    "automatic or operator-triggered takeover",
+    "physical two-workstation same-line conflict and recovery"
+  ],
+  "promotion": {
+    "stable_allowed": false,
+    "main_merge_allowed": false,
+    "production_rules_publish_allowed": false
+  }
+}
