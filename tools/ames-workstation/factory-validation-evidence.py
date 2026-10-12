@@ -12,7 +12,8 @@ PHYSICAL_SHA = '5e45127d3b61b37968a4c2b05596919670b307cb'
 HARDENING_BRANCH = 'hardening/p0-production-readiness'
 STATUS = {'pending', 'pass', 'fail', 'blocked'}
 APPROVAL = {'pending', 'approved', 'rejected'}
-HEX64 = re.compile(r'^[0-9a-f]{64}$', re.I)
+GIT_SHA = re.compile(r'^(?:[0-9a-f]{40}|[0-9a-f]{64})$', re.I)
+SHA256 = re.compile(r'^[0-9a-f]{64}$', re.I)
 
 VIEWS = [
     ('monitoring', 'Monitoramento'),
@@ -44,8 +45,8 @@ def now_iso() -> str:
 
 
 def template(hardening_sha: str | None) -> dict:
-    if hardening_sha is not None and not HEX64.fullmatch(hardening_sha):
-        raise SystemExit('hardening SHA deve conter exatamente 64 caracteres hexadecimais')
+    if hardening_sha is not None and not GIT_SHA.fullmatch(hardening_sha):
+        raise SystemExit('hardening SHA deve conter 40 ou 64 caracteres hexadecimais')
     return {
         'schema': SCHEMA,
         'created_at_utc': now_iso(),
@@ -138,9 +139,11 @@ def validate(doc: dict) -> dict:
     exact_keys(hardening, {'branch', 'sha', 'validation'}, 'hardening_candidate')
     if hardening['branch'] != HARDENING_BRANCH:
         raise ValueError('branch de hardening inválida')
-    if hardening['sha'] is not None and not HEX64.fullmatch(str(hardening['sha'])):
+    if hardening['sha'] is not None and not GIT_SHA.fullmatch(str(hardening['sha'])):
         raise ValueError('hardening_candidate.sha inválido')
     hardening['validation'] = status(hardening['validation'], 'hardening_candidate.validation')
+    if hardening['validation'] == 'pass' and hardening['sha'] is None:
+        raise ValueError('hardening_candidate PASS exige SHA exato')
 
     views = doc['views_9_of_9']
     if not isinstance(views, list) or len(views) != len(VIEWS):
@@ -163,7 +166,7 @@ def validate(doc: dict) -> dict:
     capture = doc['r12_capture']
     exact_keys(capture, {'status', 'sha256', 'file_count'}, 'r12_capture')
     capture['status'] = status(capture['status'], 'r12_capture.status')
-    if capture['sha256'] is not None and not HEX64.fullmatch(str(capture['sha256'])):
+    if capture['sha256'] is not None and not SHA256.fullmatch(str(capture['sha256'])):
         raise ValueError('r12_capture.sha256 inválido')
     if capture['file_count'] is not None and (not isinstance(capture['file_count'], int) or capture['file_count'] <= 0):
         raise ValueError('r12_capture.file_count deve ser inteiro positivo')
@@ -214,7 +217,7 @@ def validate(doc: dict) -> dict:
         overall = 'failed'
     elif 'blocked' in statuses:
         overall = 'blocked'
-    elif all(value == 'pass' for value in statuses) and doc['human_approval'] == 'approved':
+    elif all(value == 'pass' for value in statuses) and doc['human_approval'] == 'approved' and hardening['sha'] is not None:
         overall = 'ready_for_promotion_review'
     else:
         overall = 'pending'
