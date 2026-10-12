@@ -35,7 +35,9 @@ export function extractVercelPreview(comments){
     const comment=comments[i];
     if(comment?.user?.login!=='vercel[bot]')continue;
     const body=String(comment?.body||'');
-    const matches=body.match(/https:\/\/[^\s)\]<>"']+\.vercel\.app(?:\/)?/gi)||[];
+    // Extract the complete URL token first. Never truncate a lookalike host
+    // such as preview.vercel.app.evil.example into an apparently valid origin.
+    const matches=body.match(/https?:\/\/[^\s)\]<>"']+/gi)||[];
     for(const candidate of matches){
       const normalized=normalizeVercelPreview(candidate);
       if(normalized)return normalized;
