@@ -17,6 +17,7 @@
     import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
     import {buildSignupProfile,evaluateSessionAdmission} from './core/session-admission.mjs';
     import {createUserProfileService} from './core/user-profile-service.mjs';
+    import {createAuthSessionFlight} from './core/auth-session-flight.mjs';
     import {migrateLegacyProfile,approveV2Profile,denyV2Profile,changeV2AccessLevel} from './core/admission-admin.mjs';
     import {createGuardedFirestoreClient} from './core/firestore-guarded-client.mjs';
     import {legacyAccountMigrationInventory,legacyMigrationProgress} from './core/legacy-account-migration.mjs';
@@ -96,10 +97,8 @@
     });
     let unsubscribeData = [];
     let dataSessionGeneration = 0;
-    // Controle de concorrência da autenticação: criação/login e onAuthStateChanged
-    // podem disparar juntos. Mantemos uma única inicialização por UID.
-    let finishLoginPromise = null;
-    let finishLoginUid = null;
+    // Coordena criação/login + onAuthStateChanged sem duplicar inicialização por UID.
+    const finishLoginFlight = createAuthSessionFlight();
     let registrationInProgress = false;
     let authReady = false;
     let activeProduct = null;
@@ -1357,14 +1356,9 @@
         return currentAccount;
       }
 
-      // Evita duas inicializações simultâneas quando createUser/signIn dispara
-      // o onAuthStateChanged ao mesmo tempo em que o formulário chama finishLogin.
-      if (finishLoginPromise && finishLoginUid === firebaseUser.uid) {
-        return finishLoginPromise;
-      }
-
-      finishLoginUid = firebaseUser.uid;
-      finishLoginPromise = (async () => {
+      // Formulário e auth observer podem chegar juntos; a coordenação fica isolada
+      // e uma sessão antiga nunca limpa o flight de um UID mais novo.
+      return finishLoginFlight.run(firebaseUser.uid, async () => {
         const profile = await ensureUserProfile(firebaseUser, legacyUser);
         let admission;
         try {
@@ -1402,14 +1396,7 @@
           .catch(migrationError=>console.warn('Migração dos dados antigos não concluída:', migrationError));
 
         return currentAccount;
-      })();
-
-      try {
-        return await finishLoginPromise;
-      } finally {
-        finishLoginPromise = null;
-        finishLoginUid = null;
-      }
+      });
     }
 
     // ================= AUTH BOOTSTRAP V14.8 =================
