@@ -119,6 +119,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CENTRAL_AMES_FASTLANE_3012_TESTE_${{ github.sha }}
-          path: dist/CENTRAL_AMES_FASTLANE_3012_TESTE_${{ github.sha }}.zip
+          path: dist/CENTRAL_AMES_FASTLANE_3012_TESTE_*.zip
           if-no-files-found: error
           retention-days: 7
