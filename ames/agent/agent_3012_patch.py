@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 import ames_3012_live
 import repair_3012
+import local_sn
 
 
 def install(a, BaseHandler, canonical):
@@ -113,6 +114,12 @@ def install(a, BaseHandler, canonical):
                     self._send({"ok":True,"rows":rows,"count":len(rows),"source":"LOCAL_SQLITE_3012"})
                 except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
                 return
+            if u.path=="/api/v1/local/sn":
+                try:
+                    q=parse_qs(u.query);sn=(q.get("sn") or [""])[0];limit=int((q.get("limit") or [5000])[0])
+                    self._send(local_sn.lookup(a.STORE,sn,limit=limit))
+                except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
+                return
             return super().do_GET()
 
         def do_POST(self):
@@ -128,12 +135,11 @@ def install(a, BaseHandler, canonical):
                 return
             return super().do_POST()
 
-    # Expose non-GREEN capability metadata without pretending factory validation.
     original_get=Handler.do_GET
     def do_get_with_capability(self):
         u=urlparse(self.path)
         if u.path=="/api/v1/3012/capability":
-            self._send({"implemented":True,"factory_validated":False,"source":"AWIP3012_DIRECT_EXTJS","local":repair_3012.stats(a.STORE)})
+            self._send({"implemented":True,"factory_validated":False,"source":"AWIP3012_DIRECT_EXTJS","local":repair_3012.stats(a.STORE),"offline_sn":True})
             return
         return original_get(self)
     Handler.do_GET=do_get_with_capability
