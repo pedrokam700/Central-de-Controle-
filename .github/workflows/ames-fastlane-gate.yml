@@ -21,8 +21,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
       - name: Compile Python agent
         run: python -m compileall -q ames/agent
+
       - name: Check fastlane JavaScript syntax
         run: |
           node --check ames/console-view.mjs
@@ -30,6 +32,7 @@ jobs:
           node --check ames/console-network-fastlane.mjs
           node --check ames/console-sn-offline-fastlane.mjs
           node --check ames/console-3012-fastlane.mjs
+
       - name: Verify frozen 3028 hashes
         run: |
           python - <<'PY'
@@ -44,6 +47,7 @@ jobs:
               print(name,got)
               if got!=want: raise SystemExit(f'FROZEN 3028 HASH MISMATCH: {name}')
           PY
+
       - name: Test 3012 normalization and local persistence
         working-directory: ames/agent
         run: |
@@ -78,34 +82,42 @@ jobs:
               assert local['summary']['repair_3012']==1
           print('3012 normalization/persistence/offline lookup OK')
           PY
-      - name: Assert 3012 remains a physical gate
+
+      - name: Assert physical gates and lightweight readiness contract
         run: |
           grep -q 'factory_validated":False' ames/agent/agent_3012_patch.py
           grep -q 'gate físico ainda pendente' ames/console-3012-fastlane.mjs
-      - name: Build safe CLEAN V3 fastlane overlay
+          grep -q '/api/v1/ready' ames/agent/fastlane_runtime_guard.py
+          grep -q 'ConnectionAbortedError' ames/agent/fastlane_runtime_guard.py
+
+      - name: Build exact CLEAN V3 fastlane overlay
         run: python scripts/build-ames-fastlane-test-overlay.py "${GITHUB_SHA}"
-      - name: Harden generated Windows scripts and repack
+
+      - name: Harden exact generated artifact
+        run: python scripts/harden-ames-fastlane-package.py "${GITHUB_SHA}"
+
+      - name: Parse generated PowerShell and inspect artifact contract
+        shell: pwsh
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import zipfile
-          head='${{ github.sha }}'
-          root=Path('dist/ames-fastlane-test')
-          updater=root/'APLICAR_FASTLANE_TESTE.ps1'
-          text=updater.read_text(encoding='utf-8-sig')
-          text=text.replace("Copy-Item -LiteralPath (Join-Path $payloadAgent '*')", "Copy-Item -Path (Join-Path $payloadAgent '*')")
-          updater.write_text(text,encoding='utf-8-sig')
-          launch=root/'payload'/'INICIAR_FASTLANE_TESTE.ps1'
-          text=launch.read_text(encoding='utf-8-sig')
-          text=text.replace("$cfg.ames_wifi_profile='TAXXX_5G'", "$cfg | Add-Member -NotePropertyName ames_wifi_profile -NotePropertyValue 'TAXXX_5G' -Force")
-          launch.write_text(text,encoding='utf-8-sig')
-          zip_path=Path('dist')/f'CENTRAL_AMES_FASTLANE_3012_TESTE_{head[:8]}.zip'
-          if zip_path.exists(): zip_path.unlink()
-          with zipfile.ZipFile(zip_path,'w',zipfile.ZIP_DEFLATED) as z:
-              for p in sorted(root.rglob('*')):
-                  if p.is_file(): z.write(p,p.relative_to(root.parent))
-          print(zip_path)
-          PY
+          $files = @(
+            'dist/ames-fastlane-test/APLICAR_FASTLANE_TESTE.ps1',
+            'dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              throw "PowerShell parse failed: $file"
+            }
+          }
+          $launcher = Get-Content 'dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1' -Raw
+          if ($launcher -notmatch '/api/v1/ready') { throw 'launcher does not use /ready' }
+          if ($launcher -match "api/v1/health' -TimeoutSec 2") { throw 'launcher still polls heavy /health with 2s' }
+          if (($launcher | Select-String -Pattern '/api/v1/health' -AllMatches).Matches.Count -ne 1) { throw 'launcher must call /health exactly once' }
+          if (-not (Test-Path 'dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py')) { throw 'runtime guard missing from exact artifact' }
+
       - name: Inspect fastlane overlay
         run: |
           unzip -l dist/CENTRAL_AMES_FASTLANE_3012_TESTE_${GITHUB_SHA::8}.zip
@@ -113,8 +125,10 @@ jobs:
           test -f dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.bat
           test -f dist/ames-fastlane-test/payload/ames-agent/agent_3012_patch.py
           test -f dist/ames-fastlane-test/payload/ames-agent/network_watch.py
-          grep -q 'Copy-Item -Path' dist/ames-fastlane-test/APLICAR_FASTLANE_TESTE.ps1
-          grep -q 'ames_wifi_profile' dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1
+          test -f dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py
+          grep -q 'fastlane_runtime_guard.install()' dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw
+          grep -q '/api/v1/ready' dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1
+
       - name: Upload fastlane test package
         uses: actions/upload-artifact@v4
         with:
@@ -122,3 +136,43 @@ jobs:
           path: dist/CENTRAL_AMES_FASTLANE_3012_TESTE_*.zip
           if-no-files-found: error
           retention-days: 7
+
+  windows-artifact-contract:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build and harden exact artifact on Windows
+        shell: powershell
+        run: |
+          python scripts/build-ames-fastlane-test-overlay.py "${{ github.sha }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/harden-ames-fastlane-package.py "${{ github.sha }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Windows PowerShell parser and startup handshake contract
+        shell: powershell
+        run: |
+          $launcherPath = 'dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1'
+          $updaterPath = 'dist/ames-fastlane-test/APLICAR_FASTLANE_TESTE.ps1'
+          foreach ($file in @($launcherPath,$updaterPath)) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Host $_.Message -ForegroundColor Red }
+              throw "Windows PowerShell parse failed: $file"
+            }
+          }
+          $launcher = Get-Content $launcherPath -Raw
+          if ($launcher -notmatch '/api/v1/ready') { throw 'Missing lightweight readiness endpoint' }
+          if ($launcher -match "api/v1/health' -TimeoutSec 2") { throw 'Heavy health is still used as startup poll' }
+          if (($launcher | Select-String -Pattern '/api/v1/health' -AllMatches).Matches.Count -ne 1) { throw 'Full health must run exactly once after readiness' }
+          if (-not (Test-Path 'dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py')) { throw 'Runtime guard missing' }
+          $bootstrap = Get-Content 'dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw' -Raw
+          if ($bootstrap -notmatch 'fastlane_runtime_guard\.install\(\)') { throw 'Runtime guard not installed by bootstrap' }
+          Write-Host 'Windows artifact contract OK' -ForegroundColor Green
