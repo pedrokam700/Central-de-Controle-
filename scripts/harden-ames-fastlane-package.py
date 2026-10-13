@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -9,12 +10,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
 PACKAGE = DIST / "ames-fastlane-test"
 PAYLOAD = PACKAGE / "payload"
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    if old not in text:
-        raise SystemExit(f"fastlane hardener: contract not found: {label}")
-    return text.replace(old, new, 1)
 
 
 def assert_no_bad_controls(path: Path) -> None:
@@ -35,7 +30,7 @@ def main() -> None:
     if not PACKAGE.is_dir():
         raise SystemExit("dist/ames-fastlane-test missing; run builder first")
 
-    # Runtime guard is deliberately fastlane-only: the validated CLEAN V3 collectors stay untouched.
+    # Runtime guard is fastlane-only. Validated CLEAN V3 collectors remain untouched.
     guard_src = ROOT / "ames" / "agent" / "fastlane_runtime_guard.py"
     guard_dst = PAYLOAD / "ames-agent" / "fastlane_runtime_guard.py"
     if not guard_src.is_file():
@@ -44,15 +39,16 @@ def main() -> None:
 
     bootstrap = PAYLOAD / "agent_fastlane_bootstrap.pyw"
     b = bootstrap.read_text(encoding="utf-8")
-    marker = "if str(BASE) not in sys.path:\n    sys.path.insert(0, str(BASE))\ntry:\n"
-    replacement = (
-        "if str(BASE) not in sys.path:\n"
-        "    sys.path.insert(0, str(BASE))\n"
-        "import fastlane_runtime_guard\n"
-        "fastlane_runtime_guard.install()\n"
-        "try:\n"
-    )
-    b = replace_once(b, marker, replacement, "bootstrap runtime guard install")
+    if "fastlane_runtime_guard.install()" not in b:
+        needle = "try:\n    runpy.run_path(str(BASE / 'agent_hardened_entry.py'), run_name='__main__')\n"
+        insertion = (
+            "import fastlane_runtime_guard\n"
+            "fastlane_runtime_guard.install()\n"
+            + needle
+        )
+        if needle not in b:
+            raise SystemExit("fastlane hardener: bootstrap runpy anchor not found")
+        b = b.replace(needle, insertion, 1)
     bootstrap.write_text(b, encoding="utf-8")
 
     updater = PACKAGE / "APLICAR_FASTLANE_TESTE.ps1"
@@ -66,26 +62,7 @@ def main() -> None:
     launcher = PAYLOAD / "INICIAR_FASTLANE_TESTE.ps1"
     text = launcher.read_text(encoding="utf-8-sig")
 
-    old = """    L '[6/7] Aguardando agente CANONICAL-R11-BATCH...'
-    $health = $null
-    for ($i = 0; $i -lt 45; $i++) {
-        Start-Sleep -Seconds 1
-        try {
-            $h = Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 2
-            if ($h.ok -and [string]$h.agent_build -eq 'CANONICAL-R11-BATCH') { $health = $h; break }
-        } catch {}
-    }
-    if (-not $health) {
-        $stderr = Join-Path $Root 'logs\\agent_fastlane_stderr.log'
-        $stdout = Join-Path $Root 'logs\\agent_fastlane_stdout.log'
-        if (Test-Path $stderr) { Get-Content -LiteralPath $stderr -Tail 80 | ForEach-Object { L $_ Yellow } }
-        if (Test-Path $stdout) { Get-Content -LiteralPath $stdout -Tail 80 | ForEach-Object { L $_ Yellow } }
-        F 'Agente fastlane nao respondeu.'
-    }
-    L ('      Agente OK | A-MES=' + $health.ames_reachable + ' | CDP=' + $health.chrome_cdp_reachable) Green
-"""
-
-    new = """    L '[6/7] Aguardando agente CANONICAL-R11-BATCH...'
+    new_handshake = """    L '[6/7] Aguardando agente CANONICAL-R11-BATCH...'
     # Startup readiness MUST be lightweight. /health performs the full preflight and
     # can legitimately take longer than a short launcher timeout on factory PCs.
     $ready = $null
@@ -105,8 +82,8 @@ def main() -> None:
     }
     L ('      Agente pronto | PID=' + $ready.pid + ' | build=' + $ready.agent_build) Green
 
-    # Full health is diagnostic, not a startup gate. Run it once with a generous
-    # timeout; if it is slow, keep going and let the interface show the diagnostics.
+    # Full health is diagnostic, not a startup gate. Run it only once with a generous
+    # timeout. If slow, continue; the interface can refresh detailed diagnostics later.
     $health = $null
     try {
         $health = Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 20
@@ -116,9 +93,19 @@ def main() -> None:
     if ($health) {
         L ('      Diagnostico | A-MES=' + $health.ames_reachable + ' | CDP=' + $health.chrome_cdp_reachable) Green
     }
+
 """
 
-    text = replace_once(text, old, new, "launcher readiness handshake")
+    # Replace the generated startup handshake structurally, from stage [6/7] up to
+    # (but not including) the token step. This survives harmless formatting changes
+    # in the builder and fails closed if the anchors disappear.
+    pattern = re.compile(
+        r"    L '\[6/7\] Aguardando agente CANONICAL-R11-BATCH\.\.\.'\r?\n.*?(?=    \$tokenPath =)",
+        re.DOTALL,
+    )
+    text, count = pattern.subn(new_handshake, text, count=1)
+    if count != 1:
+        raise SystemExit(f"fastlane hardener: readiness block replacements={count}, expected 1")
     launcher.write_text(text, encoding="utf-8-sig")
 
     # Package-level contracts. These are intentionally strict because this is the
