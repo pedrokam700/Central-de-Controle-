@@ -162,7 +162,7 @@ def build(destination:Path,frontend_sha:str):
     destination.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(destination,'x',compression=zipfile.ZIP_DEFLATED) as z:
         for name,data in sorted(payload.items()):
-            info=zipfile.ZipInfo(name,(2026,10,10,0,0,0));info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;z.writestr(info,data)
+            info=zipfile.ZipInfo(name,(2026,10,10,0,0,0));info.create_system=3;info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=0o644<<16;z.writestr(info,data)
     with zipfile.ZipFile(destination) as z:
         if z.testzip() is not None:raise ValueError('Corrupt bundle')
     print(destination)
