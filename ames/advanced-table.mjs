@@ -1,6 +1,6 @@
 import {escapeHtml as esc} from './evidence-view.mjs';
 const text=v=>v==null?'':Array.isArray(v)?v.join(', '):typeof v==='object'?JSON.stringify(v):String(v);
-const exactKeys=new Set(['line','product','product_model','family','usage','production_shift']);
+const exactKeys=new Set(['line','product','product_model','family','component_group','usage','production_shift']);
 const norm=v=>text(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 export function filterRows(rows,{query='',filters={},from='',to=''}={}){return rows.filter(r=>(!query||norm(Object.entries(r).filter(([k])=>!k.startsWith('_')).map(([,v])=>text(v)).join(' ')).includes(norm(query)))&&Object.entries(filters).every(([k,v])=>!v||(exactKeys.has(k)?norm(r[k])===norm(v):norm(r[k]).includes(norm(v))))&&(!from||(r.defect_time&&String(r.defect_time).slice(0,10)>=from))&&(!to||(r.defect_time&&String(r.defect_time).slice(0,10)<=to)));}
 export function orderRows(rows,sort={}){if(!sort.key)return [...rows];return [...rows].sort((a,b)=>{const av=a[sort.key],bv=b[sort.key];if(av==null)return bv==null?0:1;if(bv==null)return -1;return (typeof av==='number'&&typeof bv==='number'?av-bv:text(av).localeCompare(text(bv),undefined,{numeric:true}))*(sort.desc?-1:1);});}
@@ -13,9 +13,9 @@ export function createAdvancedTable(root,{rows,columns,key,presets=[],project=r=
  function save(){try{storage?.setItem('central.table.v1.'+key,JSON.stringify(state));}catch{}}
  function download(content,name){const url=URL.createObjectURL(new Blob([content],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),0);}
  function body(){const filtered=filterRows(rows,state),visible=state.order.filter(k=>!state.hidden.includes(k)).map(k=>columns.find(c=>c.key===k)),display=orderRows(project(filtered,state.preset),state.sort);onRows(filtered);
- const host=root.querySelector('[data-table-body]');host.innerHTML=`<div class="table-wrap"><table><thead><tr>${visible.map(c=>`<th style="min-width:${Number(state.widths[c.key])||140}px"><button data-sort="${esc(c.key)}">${esc(en()?c.en||c.label:c.label)} ${state.sort.key===c.key?(state.sort.desc?'↓':'↑'):''}</button></th>`).join('')}</tr></thead><tbody>${display.slice(0,500).map((r,i)=>`<tr>${visible.map((c,j)=>`<td>${onOpen&&j===0?`<button class="button secondary" data-open="${i}">${esc(text(r[c.key])||'—')}</button>`:esc(text(r[c.key])||'—')}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p>${display.length} ${t('registros; exibição limitada a 500. Exportação inclui toda a seleção.','rows; display limited to 500. Export includes the entire selection.')}</p>`;
+ const host=root.querySelector('[data-table-body]');if(!host)return;host.innerHTML=`<div class="table-wrap"><table><thead><tr>${visible.map(c=>`<th style="min-width:${Number(state.widths[c.key])||140}px"><button data-sort="${esc(c.key)}">${esc(en()?c.en||c.label:c.label)} ${state.sort.key===c.key?(state.sort.desc?'↓':'↑'):''}</button></th>`).join('')}</tr></thead><tbody>${display.slice(0,500).map((r,i)=>`<tr>${visible.map((c,j)=>`<td>${onOpen&&j===0?`<button class="button secondary" data-open="${i}">${esc(text(r[c.key])||'—')}</button>`:esc(text(r[c.key])||'—')}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p>${display.length} ${t('registros; exibição limitada a 500. Exportação inclui toda a seleção.','rows; display limited to 500. Export includes the entire selection.')}</p>`;
  host.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{state.sort={key:b.dataset.sort,desc:state.sort.key===b.dataset.sort?!state.sort.desc:false};save();body();});host.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>onOpen(display[Number(b.dataset.open)]));
- root.querySelector('[data-export]').onclick=()=>download(csv(display,visible),'central-visao.csv');
+ const exportButton=root.querySelector('[data-export]');if(exportButton)exportButton.onclick=()=>download(csv(display,visible),'central-visao.csv');
  const full=root.querySelector('[data-full-export]');if(full)full.onclick=()=>download(csv(rows,columns),'central-dados-carregados.csv');
  }
  function render(){root.setAttribute('data-no-i18n','');root.classList.add('ames-advanced-table');root.innerHTML=`<div class="ames-table-toolbar"><label>${t('Busca geral','Search')}<input data-query value="${esc(state.query)}"></label><label>${t('Visualização','View')}<select data-preset>${presets.map(p=>`<option value="${esc(p.id)}" ${state.preset===p.id?'selected':''}>${esc(en()?p.en:p.label)}</option>`).join('')}</select></label><label>${t('De','From')}<input type="date" data-from value="${esc(state.from)}"></label><label>${t('Até','To')}<input type="date" data-to value="${esc(state.to)}"></label><button class="button secondary" data-export>${t('Exportar visão filtrada','Export filtered view')}</button>${allowFullExport?`<button class="button secondary" data-full-export>${t('Exportar dados carregados','Export loaded data')}</button>`:''}<button class="button secondary" data-reset>${t('Restaurar padrão','Reset view')}</button></div>
@@ -28,5 +28,12 @@ export function createAdvancedTable(root,{rows,columns,key,presets=[],project=r=
  root.querySelector('[data-preset]').onchange=e=>{state.preset=e.target.value;const p=presets.find(p=>p.id===state.preset);if(p?.columns){state.order=[...p.columns,...columns.map(c=>c.key).filter(k=>!p.columns.includes(k))];state.hidden=columns.map(c=>c.key).filter(k=>!p.columns.includes(k));}save();render();};
  root.querySelector('[data-reset]').onclick=()=>{state=initial();save();render();};body();
  }
- render();return {render,update(next){rows=next;body();},clear(){root.replaceChildren();}};
+ render();return {
+   render,
+   update(next){rows=next;body();},
+   setFilter(filterKey,value){state.filters={...state.filters,[filterKey]:value||''};save();render();},
+   clearFilter(filterKey){if(filterKey){state.filters={...state.filters,[filterKey]:''};}else state.filters={};save();render();},
+   state:()=>JSON.parse(JSON.stringify(state)),
+   clear(){root.replaceChildren();}
+ };
 }
