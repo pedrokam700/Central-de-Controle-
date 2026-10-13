@@ -13,8 +13,16 @@ import agent as a
 import canonical
 import process_r11
 import preflight
+import network_watch
 
 process_r11.patch_store(a.STORE)
+
+NETWORK_GUARDIAN = network_watch.NetworkGuardian(
+    host=a.CONFIG.get("ames_host", "172.29.185.215"),
+    port=int(a.CONFIG.get("ames_port", 80)),
+    expected_ssid=a.CONFIG.get("ames_wifi_profile", "TAXXX_5G"),
+    log_path=a.DATA_DIR / "network_health.jsonl",
+)
 
 
 def _process_support():
@@ -108,6 +116,14 @@ def start_deep_trace_job(cfg):
     return a._launch_mes_job("deep_trace",cfg,_run_deep_trace_job)
 
 
+def _network_snapshot():
+    return network_watch.snapshot(
+        a.CONFIG.get("ames_host", "172.29.185.215"),
+        int(a.CONFIG.get("ames_port", 80)),
+        a.CONFIG.get("ames_wifi_profile", "TAXXX_5G"),
+    )
+
+
 class Handler(a.Handler):
     def do_GET(self):
         u=urlparse(self.path)
@@ -117,26 +133,31 @@ class Handler(a.Handler):
                 self._send({"schema":canonical.SCHEMA,"candidate_version":a.CANDIDATE_VERSION,"source_id":canonical.source_id(a.STORE),
                             "package_root":str(a.BASE_DIR.parent.resolve()),"scheduler":a.MES.snapshot(),"process_timeline":bool(support.get("ready")),
                             "process_contract":"R11_DERIVED_R12_FACTORY_GATE","process_support":support,"cursor":True,"revision":True,
-                            "durable_local_ids":True,"native_console":True})
+                            "durable_local_ids":True,"native_console":True,"network_guardian":True})
             except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
             return
         if u.path=="/api/v1/health":
             try:
                 engine=a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR);support=process_r11.engine_support(engine)
+                network=_network_snapshot()
                 self._send({"ok":True,"preflight":preflight.check(a.DB_PATH),"agent_version":a.AGENT_VERSION,"candidate_version":a.CANDIDATE_VERSION,"agent_build":"CANONICAL-R11-BATCH",
                             "package_root":str(a.BASE_DIR.parent.resolve()),"mes_scheduler":a.MES.snapshot(),"db":str(a.DB_PATH),
                             "engine_found":bool(engine),"engine_dir":str(engine) if engine else None,
                             "chrome_cdp":a.CONFIG.get("chrome_cdp"),"chrome_cdp_reachable":a._tcp_probe("127.0.0.1",9222,timeout=.5),
                             "ames_host":a.CONFIG.get("ames_host","172.29.185.215"),"ames_port":int(a.CONFIG.get("ames_port",80)),
-                            "ames_reachable":a._tcp_probe(a.CONFIG.get("ames_host","172.29.185.215"),int(a.CONFIG.get("ames_port",80)),timeout=1.0),
+                            "ames_reachable":bool(network.get("reachable")),"network":network,"network_guardian":NETWORK_GUARDIAN.state(),
                             "auto_3028_ready":bool((a.CONFIG.get("auto_3028") or {}).get("ready")),"auto_3022_ready":bool(support.get("ready")),
                             "process_contract":"R11_DERIVED_R12_FACTORY_GATE","latest_snapshot_id":a.STORE.latest_snapshot_id(),
                             "configured_lines":a.CONFIG.get("configured_lines") or [],"day_start":a.CONFIG.get("day_start","07:00"),
                             "monitor_interval_minutes":int(a.CONFIG.get("monitor_interval_minutes",30)),"setup_complete":bool(a.CONFIG.get("setup_complete")),
                             "latest_backup":a.STORE.latest_backup_info(a.BACKUP_DIR),"workstation":a.WORKSTATION,
                             "readiness":{"agent":True,"engine":bool(engine),"chrome":a._tcp_probe("127.0.0.1",9222,timeout=.5),
-                                         "ames_network":a._tcp_probe(a.CONFIG.get("ames_host","172.29.185.215"),int(a.CONFIG.get("ames_port",80)),timeout=1.0),
+                                         "ames_network":bool(network.get("reachable")),"ames_wifi_expected":bool(network.get("wifi_expected")),
                                          "auto_3028":bool((a.CONFIG.get("auto_3028") or {}).get("ready")),"auto_3022":bool(support.get("ready"))}})
+            except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
+            return
+        if u.path=="/api/v1/network/status":
+            try:self._send({"ok":True,"network":_network_snapshot(),"guardian":NETWORK_GUARDIAN.state()})
             except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
             return
         return super().do_GET()
@@ -153,6 +174,17 @@ class Handler(a.Handler):
                                                  "trace_mode":mode}),202)
             except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
             return
+        if u.path=="/api/v1/network/repair":
+            try:
+                result=network_watch.repair(
+                    a.CONFIG.get("ames_host", "172.29.185.215"),
+                    int(a.CONFIG.get("ames_port", 80)),
+                    a.CONFIG.get("ames_wifi_profile", "TAXXX_5G"),
+                )
+                a.STORE.record_audit("NETWORK_REPAIR",workstation=a.WORKSTATION,details=result)
+                self._send(result,200 if result.get("ok") else 503)
+            except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
+            return
         return super().do_POST()
 
 
@@ -162,12 +194,13 @@ def main():
     a.STORE.record_audit("AGENT_START",workstation=a.WORKSTATION,details={"agent_version":a.AGENT_VERSION,"entry":"agent_entry.py","process_contract":"R11_DERIVED_R12_FACTORY_GATE","package_root":str(a.BASE_DIR.parent.resolve())})
     ap=argparse.ArgumentParser(description="A-MES Local Agent - Central V2")
     ap.add_argument("--host",default=a.CONFIG.get("host","127.0.0.1"));ap.add_argument("--port",type=int,default=int(a.CONFIG.get("port",8765)));args=ap.parse_args()
-    server=a.ThreadingHTTPServer((args.host,args.port),Handler);a.recover_jobs();a.ensure_monitor_thread()
+    server=a.ThreadingHTTPServer((args.host,args.port),Handler);a.recover_jobs();a.ensure_monitor_thread();NETWORK_GUARDIAN.start()
     print(f"A-MES Canonical Agent {a.CANDIDATE_VERSION} · 3022 R11-derived / R12 gate")
     print(f"Package root: {a.BASE_DIR.parent.resolve()}")
     print(f"API: http://{args.host}:{args.port}/api/v1/health")
+    print("Network guardian: ativo · apenas Wi-Fi A-MES + rota host /32")
     try:server.serve_forever(poll_interval=.4)
     except KeyboardInterrupt:pass
-    finally:a.MONITOR_STOP.set();server.server_close()
+    finally:NETWORK_GUARDIAN.stop();a.MONITOR_STOP.set();server.server_close()
 
 if __name__=="__main__":main()
