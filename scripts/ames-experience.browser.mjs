@@ -68,7 +68,9 @@ try{
       await page.getByText('Daily failures · operational view',{exact:true}).waitFor();
       await page.locator('[data-console-view=process]').click();
       await page.getByText('A-MES historical start',{exact:true}).waitFor();
+      await page.getByText('Used by default for exact-SN queries. This is a workstation setting, not a year hardcoded in code.',{exact:true}).waitFor();
       await page.getByText('Exact SN: history from AMES_START_DATE',{exact:true}).waitFor();
+      await page.getByText('Manual period: the query follows the selected dates.',{exact:true}).waitFor();
     }
     await page.locator('[data-console-view=monitor]').click();
     await page.screenshot({path:path.join(out,'console-'+lang+'-'+(dark?'dark':'light')+'.png'),fullPage:true});
@@ -102,5 +104,5 @@ try{
   }
   assert.equal(await page.locator('[data-login-central]').getAttribute('href'),'/Central-de-Controle-/');
   assert.deepEqual(errors,[]);
-  console.log('PASS: 9 views × PT/EN × light/dark; self-translated analytics; shared viewer; agent; first-run; period history; CORA; mobile; back; login focus/caret.');
+  console.log('PASS: 9 views × PT/EN × light/dark; self-translated analytics and 3012 history controls; shared viewer; agent; first-run; period history; CORA; mobile; back; login focus/caret.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}
