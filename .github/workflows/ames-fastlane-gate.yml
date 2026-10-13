@@ -1,0 +1,62 @@
+name: A-MES Fastlane Gate
+
+on:
+  push:
+    branches:
+      - ui/ames-fastlane-sn-reuse-20261013
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fastlane-static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile Python agent
+        run: python -m compileall -q ames/agent
+      - name: Check fastlane JavaScript syntax
+        run: |
+          node --check ames/console-view.mjs
+          node --check ames/console-fastlane-sn-reuse.mjs
+          node --check ames/console-network-fastlane.mjs
+          node --check ames/console-sn-offline-fastlane.mjs
+      - name: Verify frozen 3028 hashes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          expected={
+            'ames/agent/ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1',
+            'ames/agent/ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2',
+          }
+          for name,want in expected.items():
+              got=hashlib.sha256(Path(name).read_bytes()).hexdigest()
+              print(name,got)
+              if got!=want: raise SystemExit(f'FROZEN 3028 HASH MISMATCH: {name}')
+          PY
+      - name: Test 3012 normalization contract
+        working-directory: ames/agent
+        run: |
+          python - <<'PY'
+          from ames_3012_live import normalize_3012_row
+          row=normalize_3012_row({
+            'Lot Id':'002527TEST', 'Defect Code':'GN01-T002', 'Defect Desc':'Antenna test failed',
+            'Repair User':'BRM00068', 'Repair Comment':'analysis comment', 'Repair Code':'H01',
+            'Repair Time':'2026-10-13 09:31:00', 'Defect Entry Time':'2026-10-13 09:20:00'
+          })
+          assert row['pcba_sn']=='002527TEST'
+          assert row['defect_code']=='GN01-T002'
+          assert row['repair_user']=='BRM00068'
+          assert row['repair_comment']=='analysis comment'
+          assert row['row_key']
+          print('3012 normalization OK')
+          PY
