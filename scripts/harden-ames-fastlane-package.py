@@ -12,7 +12,11 @@ PACKAGE = DIST / "ames-fastlane-test"
 PAYLOAD = PACKAGE / "payload"
 TEMPLATES = ROOT / "scripts" / "templates"
 
-PREVIEW = "https://central-cora-v2-git-ui-ames-fastlane-sn-2ae6e4-pedrokam700-6477.vercel.app/central-de-Controle/"
+# IMPORTANT: the Central app lives under /central-de-Controle-/ (trailing hyphen).
+# The previous package used /central-de-Controle/ and opened a Vercel 404 even when
+# the agent itself was healthy. Keep the branch preview explicit and make the
+# launcher fall back to the local console if this hosted route is unavailable.
+PREVIEW = "https://central-cora-v2-git-ui-ames-fastlane-sn-2ae6e4-pedrokam700-6477.vercel.app/central-de-Controle-/"
 ORIGIN = "https://central-cora-v2-git-ui-ames-fastlane-sn-2ae6e4-pedrokam700-6477.vercel.app"
 
 
@@ -53,8 +57,13 @@ def main() -> None:
 
     launcher = PAYLOAD / "INICIAR_FASTLANE_TESTE.ps1"
     launcher_text = launcher_src.read_text(encoding="utf-8")
-    launcher_text = launcher_text.replace("__ORIGIN__", ORIGIN).replace("__PREVIEW__", PREVIEW)
-    if "__ORIGIN__" in launcher_text or "__PREVIEW__" in launcher_text:
+    launcher_text = (
+        launcher_text
+        .replace("__ORIGIN__", ORIGIN)
+        .replace("__PREVIEW__", PREVIEW)
+        .replace("__HEAD8__", head[:8])
+    )
+    if any(x in launcher_text for x in ("__ORIGIN__", "__PREVIEW__", "__HEAD8__")):
         raise SystemExit("unresolved launcher placeholder")
     launcher.write_text(launcher_text, encoding="utf-8-sig")
 
@@ -85,6 +94,16 @@ def main() -> None:
         raise SystemExit("generated launcher must call full /health exactly once")
     if "HTTP 401" not in launch_text:
         raise SystemExit("launcher must fail fast on readiness authorization mismatch")
+
+    # Preview route contract: the repository folder/route has a trailing hyphen.
+    if "/central-de-Controle-/" not in launch_text:
+        raise SystemExit("launcher preview route lost trailing hyphen")
+    if "/central-de-Controle/" in launch_text:
+        raise SystemExit("launcher contains the obsolete 404 preview route")
+    if "http://127.0.0.1:8765/?build=FASTLANE-" not in launch_text:
+        raise SystemExit("launcher has no local-console fallback")
+    if "Preview HTTP 404" not in launch_text:
+        raise SystemExit("launcher does not diagnose hosted 404 explicitly")
 
     if "fastlane_runtime_guard.install(hardened.entry)" not in boot_text:
         raise SystemExit("bootstrap must install guard on final hardened entry")
