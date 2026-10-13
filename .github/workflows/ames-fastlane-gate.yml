@@ -189,13 +189,19 @@ jobs:
           if ($bootstrap -match 'runpy\.run_path') { throw 'Bootstrap still runs old pre-hardening patch order' }
           Write-Host 'Windows static artifact contract OK' -ForegroundColor Green
 
-      - name: Windows live artifact readiness smoke
+      - name: Windows live installed-layout readiness smoke
         shell: powershell
         run: |
           $payload = Resolve-Path 'dist/ames-fastlane-test/payload'
-          $bootstrap = Resolve-Path 'dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw'
+          $installed = Join-Path $env:RUNNER_TEMP 'ames-fastlane-installed'
+          if (Test-Path $installed) { Remove-Item -Recurse -Force $installed }
+          New-Item -ItemType Directory -Force -Path (Join-Path $installed 'ames-agent') | Out-Null
+          Copy-Item -Path (Join-Path $payload 'ames-agent\*') -Destination (Join-Path $installed 'ames-agent') -Recurse -Force
+          Copy-Item -LiteralPath (Join-Path $payload 'agent_fastlane_bootstrap.pyw') -Destination (Join-Path $installed 'ames-agent\agent_fastlane_bootstrap.pyw') -Force
+
+          $bootstrap = Join-Path $installed 'ames-agent\agent_fastlane_bootstrap.pyw'
           $port = 18765
-          $proc = Start-Process -FilePath 'python' -ArgumentList @("`"$bootstrap`"", '--host', '127.0.0.1', '--port', "$port") -WorkingDirectory $payload -PassThru
+          $proc = Start-Process -FilePath 'python' -ArgumentList @("`"$bootstrap`"", '--host', '127.0.0.1', '--port', "$port") -WorkingDirectory $installed -PassThru
           try {
             $ready = $null
             for ($i = 0; $i -lt 45; $i++) {
@@ -214,7 +220,7 @@ jobs:
               }
             }
             if (-not $ready) {
-              Get-ChildItem 'dist/ames-fastlane-test/payload/logs' -ErrorAction SilentlyContinue | ForEach-Object {
+              Get-ChildItem (Join-Path $installed 'logs') -ErrorAction SilentlyContinue | ForEach-Object {
                 Write-Host "--- $($_.Name) ---"
                 Get-Content $_.FullName -Tail 120 -ErrorAction SilentlyContinue
               }
@@ -233,7 +239,7 @@ jobs:
             }
             if ($protectedStatus -ne 401) { throw "Protected endpoint must remain 401 without token; got $protectedStatus" }
 
-            Write-Host "LIVE artifact readiness OK: PID=$($ready.pid) build=$($ready.agent_build)" -ForegroundColor Green
+            Write-Host "LIVE installed artifact readiness OK: PID=$($ready.pid) build=$($ready.agent_build)" -ForegroundColor Green
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
           }
