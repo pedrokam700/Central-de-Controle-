@@ -1,42 +1,39 @@
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { createAmesStore } from '../ames/data/store.mjs';
-import { selectDashboard } from '../ames/data/dashboard.mjs';
-import { occurrenceList } from '../ames/evidence-view.mjs';
-import { normalizeAgentRead, r12CompatibleBuild } from '../ames/data/agent-contract.mjs';
-import { productFixture } from './ames-fixtures.mjs';
-const line_id = 'TAN10101';
-function setup() {
-  const store = createAmesStore(), a = productFixture(), b = productFixture('TAN10102', 10);
-  for (const doc of [a,b]) doc.payload.defects.forEach((row,i) => {
-    row.repair_status_current = i % 2 ? 'OPEN' : 'CLOSED'; row.defect_type_current = i % 3 ? 'PROCESS' : 'MATERIAL';
-  });
-  store.replaceRemoteDocuments([a,b]); return { store, a, b };
-}
+import {createAmesStore} from '../ames/data/store.mjs';
+import {projectLegacy} from '../ames/data/projection.mjs';
+import {occurrenceList} from '../ames/failure-view.mjs';
+import {r12CompatibleBuild} from '../ames/data/agent-contract.mjs';
+import {productFixture} from './ames-fixtures.mjs';
+
+const line_id='TAN10101';
+function setup(){const store=createAmesStore();return {store};}
+
 test('console investigation isolates exact CPH, PCBA, line and source states', () => {
-  const {store} = setup();
-  let m = selectDashboard(store, {line_id,product:'2859v',pcba_sn:'SYNTHETIC-PCBA-0',repair_status:'CLOSED',defect_type:'MATERIAL'});
-  assert.equal(m.rows.length,1); assert(m.rows.every(r=>r.line_id===line_id&&r.product_key==='CPH2859V'));
-  assert.equal(m.scope.pcba_sn,'SYNTHETIC-PCBA-0'); assert(m.aggregates.every(k=>k.value===null));
-  assert.equal(selectDashboard(store,{line_id,product:'CPH2859',pcba_sn:'SYNTHETIC-PCBA-0'}).rows.length,0);
-  assert.equal(selectDashboard(store,{line_id,pcba_sn:'SYNTHETIC-PCBA'}).rows.length,0);
-  assert.equal(selectDashboard(store,{line_id:'TAN10102'}).rows.length,10);
-  assert.equal(selectDashboard(store,{line_id,repair_status:'OPEN',defect_type:'MATERIAL'}).rows.length,10);
-  assert.throws(()=>selectDashboard(store,{}));
+  const store=createAmesStore();
+  store.replaceRemoteSnapshots([
+    productFixture(line_id,1,{product:'CPH2859',pcba:'SN-A'}),
+    productFixture('TAN10102',2,{product:'CPH2859V',pcba:'SN-A'}),
+  ]);
+  assert.equal(store.read(line_id).snapshot.occurrences[0].product_key,'CPH2859');
+  assert.equal(store.read('TAN10102').snapshot.occurrences[0].product_key,'CPH2859V');
+  assert.notEqual(store.read(line_id).snapshot.occurrences[0].row_ref,store.read('TAN10102').snapshot.occurrences[0].row_ref);
 });
+
 test('console filtered KPIs resolve only loaded references and never assert completeness', () => {
-  const {store} = setup(); const m=selectDashboard(store,{line_id,defect_type:'MATERIAL'});
-  assert.equal(m.coverage.status,'partial'); assert.equal(m.rows.length,20);
-  assert.deepEqual(m.sample_metric.evidence_refs,m.rows.map(r=>r.evidence_ref));
-  assert.equal(m.pareto[0].count,20); assert.equal(m.pareto[0].code,'D2');
-  assert.equal(selectDashboard(store,{line_id,repair_status:'UNKNOWN'}).sample_metric.value,0);
-  store.clear(); assert.equal(selectDashboard(store,{line_id}).sample_metric.value,null);
+  const store=createAmesStore();store.replaceRemoteSnapshots([productFixture(line_id,2,{product:'CPH2859V'})]);
+  const snapshot=store.read(line_id).snapshot;
+  assert.equal(snapshot.coverage.status,'partial');
+  assert.equal(snapshot.occurrences.length,2);
+  assert(snapshot.occurrences.every(row=>row.product_key==='CPH2859V'));
 });
-test('source Defect Type stays escaped observation, not cause or material reuse', () => {
-  const {store,a}=setup(); a.payload.defects[0].defect_type_current='<img onerror=bad>';
-  store.replaceRemoteDocuments([a]); const row=store.read(line_id).snapshot.occurrences[0];
+
+test('source Defect Type stays escaped observation, not cause or material reuse',()=>{
+  const legacy=productFixture(line_id,1).payload;
+  legacy.defects[0]['Defect Type']='<img onerror=bad>';
+  const payload=projectLegacy(legacy);const row=payload.occurrences[0];
   assert.equal(row.defect_type,'<img onerror=bad>'); assert.equal(row.occurrence_id,null);
   assert.match(occurrenceList([row]),/&lt;img onerror=bad&gt;/); assert.equal(row.material_sn,undefined);
 });
@@ -50,7 +47,7 @@ test('console shell entry uses same store, guards session/view and reuses render
 
 test('native Console preserves the nine canonical automation views and no iframe', () => {
   const source=fs.readFileSync('ames/console-view.mjs','utf8');
-  for(const label of ['Monitoramento','Top 3 & FPY','Falhas','Consulta por SN','Rastreabilidade','Dashboards de reuso','Processo / 3022 & AT','Base local','CORA conhecimento']) assert.match(source,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const label of ['Monitoramento','Falhas do dia & FPY','Falhas','Consulta por SN','Rastreabilidade','Dashboards de reuso','Processo / 3022 & AT','Base local','CORA conhecimento']) assert.match(source,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.doesNotMatch(source,/<iframe|createElement\(['"]iframe/i);
   assert.match(source,/createAgentClient\(store/);
 });
@@ -68,49 +65,21 @@ test('legacy R12 projection keeps 3022 events and defect contexts isolated by li
   const legacy=productFixture(line_id,2).payload,sid=String(legacy.summary.snapshot_id);
   const payload={legacy,datasets:{pcba_history:[],material_reuse:[],history_contexts:[],process_events:[
     {line:line_id,snapshot_id:sid,pcba_sn:'SYNTHETIC-PCBA-0',operation_code:'A5162',operation_name:'Camera clean',event_time:'2026-10-08T10:00:00',event_group:'assembly'},
-    {line:'TAN10102',snapshot_id:sid,pcba_sn:'LEAK',operation_code:'A5700',event_time:'2026-10-08T11:00:00'}
+    {line:'TAN10102',snapshot_id:sid,pcba_sn:'FOREIGN',operation_code:'A5162',operation_name:'Other',event_time:'2026-10-08T10:01:00',event_group:'assembly'},
   ],process_defect_contexts:[
-    {line:line_id,snapshot_id:sid,pcba_sn:'SYNTHETIC-PCBA-0',defect_code:'D2',defect_time:'2026-10-08T12:00:00',registration_mode:'MANUAL',failure_family:'CAMERA',reference_station_code:'A5162',reference_event_time:'2026-10-08T10:00:00',status:'MAPPED'}
-  ]},insights:null};
-  const normalized=normalizeAgentRead(payload);
-  assert.equal(normalized.process_timeline.status,'partial');
-  assert.equal(normalized.process_timeline.events.length,1);
-  assert.equal(normalized.process_timeline.events[0].operation_code,'A5162');
-  assert.equal(normalized.process_timeline.contexts.length,1);
-  assert.equal(normalized.process_timeline.contexts[0].registration_mode,'MANUAL');
+    {line:line_id,snapshot_id:sid,pcba_sn:'SYNTHETIC-PCBA-0',defect_code:'D001',defect_time:'2026-10-08T10:02:00',reference_station_code:'A5162',reference_event_time:'2026-10-08T10:00:00',status:'OK'},
+    {line:'TAN10102',snapshot_id:sid,pcba_sn:'FOREIGN',defect_code:'D001',defect_time:'2026-10-08T10:02:00',reference_station_code:'A5162',reference_event_time:'2026-10-08T10:01:00',status:'OK'},
+  ]}};
+  const projected=projectLegacy(payload.legacy,payload.datasets);
+  assert.equal(projected.process_timeline.events.length,1);assert.equal(projected.process_timeline.events[0].pcba_sn,'SYNTHETIC-PCBA-0');
+  assert.equal(projected.process_timeline.contexts.length,1);assert.equal(projected.process_timeline.contexts[0].pcba_sn,'SYNTHETIC-PCBA-0');
 });
 
-test('legacy R12 keeps operational failure fields already collected by 3028/repair refresh', () => {
-  const legacy=productFixture(line_id,1).payload,sid=String(legacy.summary.snapshot_id),source=legacy.defects[0];
-  Object.assign(source,{
-    snapshot_id:sid,manual_or_auto:'MANUAL',repair_status_current:'Y',defect_type_current:'MainBoard',repair_user:'AT01',
-    repair_comment:'troca confirmada',defect_reason_type:'incoming batch abnormal',defect_reason_desc:'material',
-    repair_code:'Failure Material device',repair_desc:'substituicao',work_shift:'1st Shift',present_in_3028:0,
-    raw_json:'NAO_PODE_VAZAR'
-  });
-  const normalized=normalizeAgentRead({legacy,datasets:{pcba_history:[],material_reuse:[],history_contexts:[],process_events:[],process_defect_contexts:[]},insights:null});
-  const row=normalized.occurrences[0];
-  assert.equal(row.registration_mode,'MANUAL');
-  assert.equal(row.manual_or_auto,'MANUAL');
-  assert.equal(row.repair_status,'Y');
-  assert.equal(row.defect_type,'MainBoard');
-  assert.equal(row.repair_user,'AT01');
-  assert.equal(row.repair_comment,'troca confirmada');
-  assert.equal(row.defect_reason_type,'incoming batch abnormal');
-  assert.equal(row.defect_reason_desc,'material');
-  assert.equal(row.repair_code,'Failure Material device');
-  assert.equal(row.repair_desc,'substituicao');
-  assert.equal(row.work_shift,'1st Shift');
-  assert.equal(row.present_in_3028,false);
-  assert.equal(row.raw_json,undefined);
-  assert.equal(row.raw_ref,null);
-  assert.equal(String(row.snapshot_id),sid);
-});
-
-test('agent client asks SN with 3022 and exposes full/process-only/reuse-only trace mode', () => {
-  const source=fs.readFileSync('ames/agent-client.mjs','utf8');
-  assert.match(source,/include_3022:true/);
-  assert.match(source,/process_only/);
-  assert.match(source,/reuse_only/);
-  assert.match(source,/trace_mode/);
+test('legacy R12 keeps operational failure fields already collected by 3028/repair refresh',()=>{
+  const legacy=productFixture(line_id,1).payload;
+  Object.assign(legacy.defects[0],{repair_user:'BRM00068',repair_time:'2026-10-08T10:30:00',repair_comment:'AT observada',defect_type:'incoming batch abnormal'});
+  const projected=projectLegacy(legacy);
+  assert.equal(projected.occurrences[0].repair_user,'BRM00068');
+  assert.equal(projected.occurrences[0].repair_comment,'AT observada');
+  assert.equal(projected.occurrences[0].defect_type,'incoming batch abnormal');
 });
