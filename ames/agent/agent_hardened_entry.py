@@ -12,6 +12,7 @@ from pathlib import Path
 
 import agent_entry as entry
 import agent_3012_patch
+import candidate_config
 import hardening
 import local_security
 import operational_calendar
@@ -84,8 +85,6 @@ class HardenedHandler(entry.Handler):
         )
 
     def _cors(self):
-        # Preserve the exact origin allowlist from the canonical agent, adding only
-        # the local capability header required by hosted Central builds.
         origin = self.headers.get("Origin")
         port = self._active_port()
         allowed = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
@@ -138,7 +137,6 @@ class HardenedHandler(entry.Handler):
             except (ValueError,RuntimeError) as exc:self._send({'error':str(exc)},400)
             return
         if path == "/api/v1/ready":
-            # Minimal by design: no paths, MES data, tokens or workstation secrets.
             self._send(
                 {
                     "ok": True,
@@ -149,7 +147,6 @@ class HardenedHandler(entry.Handler):
                     "pid": os.getpid(),
                 }
             )
-
             return
         if path == "/api/v1/hardening/health":
             try:
@@ -160,6 +157,7 @@ class HardenedHandler(entry.Handler):
                         "local_security": local_security.public_status(AGENT_TOKEN_PATH),
                         "operational_calendar": operational_calendar.public_contract(entry.a.CONFIG),
                         "current_shift": operational_calendar.shift_for(entry.a.CONFIG),
+                        "ames_start_date": entry.a.CONFIG.get("ames_start_date") or None,
                         **hardening.health(entry.a.STORE),
                     }
                 )
@@ -173,11 +171,17 @@ class HardenedHandler(entry.Handler):
         if not self._authorized(path):
             self._reject_unauthorized()
             return
+        if path == "/api/v1/config":
+            try:
+                self._send(candidate_config.apply(entry.a, self._body()))
+            except ValueError as exc:
+                self._send({"error": "invalid_config", "message": str(exc)}, 400)
+            except Exception as exc:
+                self._send({"error": type(exc).__name__, "message": str(exc)}, 500)
+            return
         return super().do_POST()
 
 
-# entry.main resolves Handler at runtime, so this preserves the original main and
-# server lifecycle while making the hardened runtime explicitly detectable.
 entry.Handler = HardenedHandler
 import fastlane_runtime_guard
 fastlane_runtime_guard.install(entry)
