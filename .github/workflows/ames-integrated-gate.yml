@@ -25,8 +25,24 @@ jobs:
       - name: Compile local agent
         run: python -m compileall -q ames/agent ames/factory-engine
 
+      - name: Protect validated base agent
+        run: |
+          test "$(git hash-object ames/agent/agent.py)" = "193b2701ec34cdb1c2ff045f0a033755f1c9792a"
+
       - name: Integrated Python contracts
-        run: python scripts/agent-integrated-v5.test.py
+        run: |
+          python scripts/agent-integrated-v5.test.py
+          PYTHONPATH=ames/agent python - <<'PY'
+          import candidate_config
+          assert candidate_config.normalize_start_date('2026-01-01') == '2026-01-01'
+          try:
+              candidate_config.normalize_start_date('not-a-date')
+          except ValueError:
+              pass
+          else:
+              raise AssertionError('invalid AMES start date was accepted')
+          print('candidate config contract OK')
+          PY
 
       - name: Integrated JS contracts
         run: node --test scripts/ames-integrated-v5.test.mjs scripts/ames-daily-failure-analytics.test.mjs
@@ -37,7 +53,9 @@ jobs:
           node --check ames/console-legacy-parity.mjs
           node --check ames/console-specialized-views.mjs
           node --check ames/console-wave3-views.mjs
+          node --check ames/daily-failure-summary.mjs
           node --check ames/daily-failure-analytics.mjs
+          node --check ames/console-3012-fastlane.mjs
           node --check ames/data/reuse-analysis.mjs
           node --check ames/reuse-table-view.mjs
 
@@ -56,6 +74,12 @@ jobs:
               if got!=want:
                   raise SystemExit(f'FROZEN 3028 HASH MISMATCH: {path}')
           PY
+
+      - name: Assert historical 3012 configuration
+        run: |
+          grep -q '"ames_start_date": "2026-01-01"' ames/agent/config.example.json
+          grep -q 'exact_sn_cache' ames/agent/agent_3012_patch.py
+          grep -q 'repair_coverage_3012' ames/agent/repair_3012.py
 
       - name: Build integrated candidate
         run: python scripts/build-integrated-candidate.py "$RUNNER_TEMP/central-ames-integrated.zip"
