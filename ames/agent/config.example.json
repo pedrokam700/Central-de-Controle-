@@ -18,9 +18,9 @@
   "setup_complete": false,
   "backup_retention": 10,
   "auto_backup_on_start": true,
-  "3012_individual_lookback_days": 180,
+  "ames_start_date": "2026-01-01",
   "3012_individual_max_pcbas": 25,
-  "3012_sn_chunk_days": 120,
+  "3012_sn_chunk_days": 90,
   "allowed_origins": [
     "https://central-cora-v2-pedrokam700-6477.vercel.app",
     "https://central-cora-v2.vercel.app",
