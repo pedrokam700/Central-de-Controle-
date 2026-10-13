@@ -82,3 +82,19 @@ jobs:
         run: |
           grep -q 'factory_validated":False' ames/agent/agent_3012_patch.py
           grep -q 'gate físico ainda pendente' ames/console-3012-fastlane.mjs
+      - name: Build safe CLEAN V3 fastlane overlay
+        run: python scripts/build-ames-fastlane-test-overlay.py "${GITHUB_SHA}"
+      - name: Inspect fastlane overlay
+        run: |
+          unzip -l dist/CENTRAL_AMES_FASTLANE_3012_TESTE_${GITHUB_SHA::8}.zip
+          test -f dist/ames-fastlane-test/00_CRIAR_COPIA_FASTLANE_TESTE.bat
+          test -f dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.bat
+          test -f dist/ames-fastlane-test/payload/ames-agent/agent_3012_patch.py
+          test -f dist/ames-fastlane-test/payload/ames-agent/network_watch.py
+      - name: Upload fastlane test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: CENTRAL_AMES_FASTLANE_3012_TESTE_${{ github.sha }}
+          path: dist/CENTRAL_AMES_FASTLANE_3012_TESTE_${{ github.sha }}.zip
+          if-no-files-found: error
+          retention-days: 7
