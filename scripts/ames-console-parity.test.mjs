@@ -12,11 +12,13 @@ test('Console MES is one native full-screen shell over state.ames',()=>{
   assert.match(source,/createAutomationView/);
   assert.match(source,/createAdvancedView/);
   assert.match(source,/createLineOverview/);
-  assert.match(source,/createTop3ParityView/);
+  assert.match(source,/createDailyFailureSummary/);
+  assert.match(source,/createDailyFailureAnalytics/);
   assert.match(source,/createTrendAddon/);
   assert.match(source,/createFailuresParityView/);
   assert.match(source,/withProcessCapability/);
   for(const fn of ['createSnConsoleView','createTraceConsoleView','createReuseConsoleView','createProcessConsoleView','createBaseConsoleView','createKnowledgeConsoleView']) assert.match(source,new RegExp(fn));
+  assert.match(source,/id==='top3'[\s\S]*createDailyFailureSummary[\s\S]*createDailyFailureAnalytics/);
   assert.match(css,/\.ames-legacy-shell\{[^}]*position:fixed;inset:0;z-index:1200/);
   assert.match(css,/grid-template-columns:176px minmax\(0,1fr\)/);
   assert.doesNotMatch(source,/mountV0523|v0523-loader|new Function|<iframe|createElement\(['"]iframe|127\.0\.0\.1:8765/i);
@@ -24,7 +26,7 @@ test('Console MES is one native full-screen shell over state.ames',()=>{
 
 test('all nine canonical views are mounted natively through one client',()=>{
   const source=fs.readFileSync('ames/console-view.mjs','utf8');
-  for(const text of ['Monitoramento','Top 3 & FPY','Falhas','Consulta por SN','Rastreabilidade','Dashboards de reuso','Processo / 3022 & AT','Base local','CORA conhecimento']) assert.match(source,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['Monitoramento','Top 3 & FPY','Falhas do dia & FPY','Falhas','Consulta por SN','Rastreabilidade','Dashboards de reuso','Processo / 3022 & AT','Base local','CORA conhecimento']) assert.match(source,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.equal((source.match(/createAgentClient\(/g)||[]).length,1);
   assert.match(source,/const client=createAgentClient\(store/);
   assert.match(source,/console-wave3-views\.mjs/);
