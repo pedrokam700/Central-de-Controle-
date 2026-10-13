@@ -1,0 +1,68 @@
+name: A-MES Integrated Candidate Gate
+
+on:
+  push:
+    branches:
+      - work/ames-integrated-clean-v5-20261013
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integrated-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Compile local agent
+        run: python -m compileall -q ames/agent ames/factory-engine
+
+      - name: Integrated Python contracts
+        run: python scripts/agent-integrated-v5.test.py
+
+      - name: Integrated JS contracts
+        run: node --test scripts/ames-integrated-v5.test.mjs
+
+      - name: Check console module syntax
+        run: |
+          node --check ames/console-view.mjs
+          node --check ames/console-legacy-parity.mjs
+          node --check ames/console-specialized-views.mjs
+          node --check ames/console-wave3-views.mjs
+          node --check ames/data/reuse-analysis.mjs
+          node --check ames/reuse-table-view.mjs
+
+      - name: Verify frozen 3028 hashes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          expected={
+            'ames/agent/ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1',
+            'ames/agent/ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2',
+          }
+          for path,want in expected.items():
+              got=hashlib.sha256(Path(path).read_bytes()).hexdigest()
+              print(path, got)
+              if got!=want:
+                  raise SystemExit(f'FROZEN 3028 HASH MISMATCH: {path}')
+          PY
+
+      - name: Build integrated candidate
+        run: python scripts/build-integrated-candidate.py "$RUNNER_TEMP/central-ames-integrated.zip"
+
+      - name: Upload integrated candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-ames-integrated-${{ github.sha }}
+          path: ${{ runner.temp }}/central-ames-integrated.zip
+          if-no-files-found: error
+          retention-days: 7
