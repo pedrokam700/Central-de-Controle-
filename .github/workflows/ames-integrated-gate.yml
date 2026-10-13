@@ -29,7 +29,7 @@ jobs:
         run: python scripts/agent-integrated-v5.test.py
 
       - name: Integrated JS contracts
-        run: node --test scripts/ames-integrated-v5.test.mjs
+        run: node --test scripts/ames-integrated-v5.test.mjs scripts/ames-daily-failure-analytics.test.mjs
 
       - name: Check console module syntax
         run: |
@@ -37,6 +37,7 @@ jobs:
           node --check ames/console-legacy-parity.mjs
           node --check ames/console-specialized-views.mjs
           node --check ames/console-wave3-views.mjs
+          node --check ames/daily-failure-analytics.mjs
           node --check ames/data/reuse-analysis.mjs
           node --check ames/reuse-table-view.mjs
 
