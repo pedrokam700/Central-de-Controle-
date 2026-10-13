@@ -29,6 +29,7 @@ jobs:
           node --check ames/console-fastlane-sn-reuse.mjs
           node --check ames/console-network-fastlane.mjs
           node --check ames/console-sn-offline-fastlane.mjs
+          node --check ames/console-3012-fastlane.mjs
       - name: Verify frozen 3028 hashes
         run: |
           python - <<'PY'
@@ -43,11 +44,16 @@ jobs:
               print(name,got)
               if got!=want: raise SystemExit(f'FROZEN 3028 HASH MISMATCH: {name}')
           PY
-      - name: Test 3012 normalization contract
+      - name: Test 3012 normalization and local persistence
         working-directory: ames/agent
         run: |
           python - <<'PY'
+          import tempfile
+          from pathlib import Path
           from ames_3012_live import normalize_3012_row
+          from store import Store
+          import repair_3012, local_sn
+
           row=normalize_3012_row({
             'Lot Id':'002527TEST', 'Defect Code':'GN01-T002', 'Defect Desc':'Antenna test failed',
             'Repair User':'BRM00068', 'Repair Comment':'analysis comment', 'Repair Code':'H01',
@@ -58,5 +64,21 @@ jobs:
           assert row['repair_user']=='BRM00068'
           assert row['repair_comment']=='analysis comment'
           assert row['row_key']
-          print('3012 normalization OK')
+
+          with tempfile.TemporaryDirectory() as td:
+              store=Store(Path(td)/'ames.sqlite3')
+              store.initialize()
+              out=repair_3012.ingest(store,{'query':{'sn':'002527TEST'},'rows':[row]},workstation='CI')
+              assert out['inserted']==1
+              hist=repair_3012.history(store,sn='002527TEST')
+              assert len(hist)==1 and hist[0]['repair_comment']=='analysis comment'
+              local=local_sn.lookup(store,'002527TEST')
+              assert local['offline'] is True
+              assert local['coverage']['3012'] is True
+              assert local['summary']['repair_3012']==1
+          print('3012 normalization/persistence/offline lookup OK')
           PY
+      - name: Assert 3012 remains a physical gate
+        run: |
+          grep -q 'factory_validated":False' ames/agent/agent_3012_patch.py
+          grep -q 'gate físico ainda pendente' ames/console-3012-fastlane.mjs
