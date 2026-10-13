@@ -26,7 +26,8 @@ test('Console MES is one native full-screen shell over state.ames',()=>{
 
 test('all nine canonical views are mounted natively through one client',()=>{
   const source=fs.readFileSync('ames/console-view.mjs','utf8');
-  for(const text of ['Monitoramento','Top 3 & FPY','Falhas do dia & FPY','Falhas','Consulta por SN','Rastreabilidade','Dashboards de reuso','Processo / 3022 & AT','Base local','CORA conhecimento']) assert.match(source,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['Monitoramento','Falhas do dia & FPY','Falhas','Consulta por SN','Rastreabilidade','Dashboards de reuso','Processo / 3022 & AT','Base local','CORA conhecimento']) assert.match(source,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(source,/\['top3','↗','Falhas do dia & FPY'/);
   assert.equal((source.match(/createAgentClient\(/g)||[]).length,1);
   assert.match(source,/const client=createAgentClient\(store/);
   assert.match(source,/console-wave3-views\.mjs/);
