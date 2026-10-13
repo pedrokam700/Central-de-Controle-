@@ -4,6 +4,7 @@ import { createAdvancedView } from './advanced-view.mjs';
 import { createLineOverview, createTop3ParityView, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
 import { createSnConsoleView, createTraceConsoleView, createProcessConsoleView } from './console-specialized-views.mjs';
 import { createReuseConsoleView, createBaseConsoleView, createKnowledgeConsoleView } from './console-wave3-views.mjs';
+import { withFastlaneSnEnhancements, withFastlaneReuseEnhancements } from './console-fastlane-sn-reuse.mjs';
 import { withProcessCapability, applyMonitorProcessCapability } from './console-capability-guard.mjs';
 import { createMonitorRuntimeView } from './console-monitor-runtime.mjs';
 import { withKnowledgeArchitecture } from './console-knowledge-architecture.mjs';
@@ -32,6 +33,7 @@ const WAVE2_STYLE_HREF = new URL('./console-wave2.css', import.meta.url).href;
 const WAVE3_STYLE_HREF = new URL('./console-wave3.css', import.meta.url).href;
 const MOBILE_STYLE_HREF = new URL('./console-mobile-polish.css', import.meta.url).href;
 const POLISH_STYLE_HREF = new URL('./console-r12-polish.css', import.meta.url).href;
+const FASTLANE_STYLE_HREF = new URL('./console-fastlane.css', import.meta.url).href;
 
 // Fusão nativa definitiva do Console MES: uma sessão, um state.ames, um agent client.
 // A V0.5.22/V0.5.23/R12 permanece como referência visual/operacional, nunca como app paralelo.
@@ -56,7 +58,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     root.querySelector('[data-console-preparation]')?.scrollIntoView({block:'start'});
   }
   function mount(){
-    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><link rel="stylesheet" href="${POLISH_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
+    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><link rel="stylesheet" href="${POLISH_STYLE_HREF}"><link rel="stylesheet" href="${FASTLANE_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
       <aside class="ames-legacy-sidebar">
         <div class="ames-legacy-brand"><div class="ames-legacy-brand-row"><div class="ames-legacy-mark">Q</div><div><strong>Central de trabalho</strong><span>A-MES · motor local</span></div></div></div>
         <nav class="ames-legacy-nav" aria-label="Views da automação A-MES">${VIEWS.map(([id,icon,label])=>`<button type="button" data-console-view="${id}"${id===active?' class="active"':''}><span class="ico">${icon}</span>${label}</button>`).join('')}</nav>
@@ -114,12 +116,12 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       const process=createFailureProcessAddon(pane.querySelector('[data-failures-process]'),store,failureRoot);
       view={render(){primary.render();process.render();},clear(){primary.clear?.();process.clear?.();pane.replaceChildren();}};
     }
-    else if(id==='sn')view=withProcessCapability(createSnConsoleView(pane,store,client),pane,store,'sn');
+    else if(id==='sn')view=withProcessCapability(withFastlaneSnEnhancements(createSnConsoleView(pane,store,client),pane,store),pane,store,'sn');
     else if(id==='trace'){
       const base=withTraceSelectionHelper(withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace'),pane,store);
       view=withAgentRefresh(base,pane,store,client,{label:'Atualizar tela'});
     }
-    else if(id==='reuse')view=withAgentRefresh(createReuseConsoleView(pane,store),pane,store,client,{label:'Atualizar'});
+    else if(id==='reuse')view=withAgentRefresh(withFastlaneReuseEnhancements(createReuseConsoleView(pane,store),pane,store),pane,store,client,{label:'Atualizar'});
     else if(id==='process')view=withAgentRefresh(withProcessCapability(createProcessConsoleView(pane,store),pane,store,'process'),pane,store,client,{label:'Atualizar'});
     else if(id==='base'){
       pane.innerHTML='<section data-base-history></section><section data-base-local></section>';
@@ -157,5 +159,3 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     clear(){disposed=true;preparation?.clear();translator?.clear();for(const view of views.values())view?.clear?.();views.clear();client.clear();root?.replaceChildren();mounted=false;}
   });
 }
-
-export { VIEWS as CANONICAL_VIEWS };
