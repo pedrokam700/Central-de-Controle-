@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-import os
-from urllib.parse import urlparse
 
+def install(entry_module):
+    """Install fastlane-only transport guards on the FINAL hardened handler.
 
-def install():
-    """Install fastlane-only runtime hardening without changing validated collectors.
+    This function intentionally receives ``agent_entry`` after
+    ``agent_hardened_entry`` has finished replacing ``entry.Handler`` with the
+    security-aware HardenedHandler. Installing earlier patches the wrong class
+    and can leave the final handler unchanged.
 
-    - /api/v1/ready is intentionally lightweight and is the only endpoint a launcher
-      should poll while waiting for the local agent to bind.
-    - Client disconnects are normal when a browser/launcher cancels an HTTP request;
-      do not turn WinError 10053/10054 or BrokenPipe into a second HTTP 500.
+    /api/v1/ready itself is owned by HardenedHandler. This guard is only for
+    benign client disconnects so a cancelled browser/launcher request does not
+    become a second HTTP 500.
     """
-    import agent as a
+    handler = entry_module.Handler
 
-    if getattr(a.Handler, "_fastlane_runtime_guard_installed", False):
+    if getattr(handler, "_fastlane_runtime_guard_installed", False):
         return
 
-    original_send = a.Handler._send
-    original_get = a.Handler.do_GET
+    original_send = handler._send
 
     def safe_send(self, obj, status=200):
         try:
@@ -30,21 +30,5 @@ def install():
                 return None
             raise
 
-    def guarded_get(self):
-        if urlparse(self.path).path == "/api/v1/ready":
-            return self._send(
-                {
-                    "ok": True,
-                    "ready": True,
-                    "agent_build": "CANONICAL-R11-BATCH",
-                    "agent_version": a.AGENT_VERSION,
-                    "candidate_version": a.CANDIDATE_VERSION,
-                    "pid": os.getpid(),
-                    "package_root": str(a.BASE_DIR.parent.resolve()),
-                }
-            )
-        return original_get(self)
-
-    a.Handler._send = safe_send
-    a.Handler.do_GET = guarded_get
-    a.Handler._fastlane_runtime_guard_installed = True
+    handler._send = safe_send
+    handler._fastlane_runtime_guard_installed = True
