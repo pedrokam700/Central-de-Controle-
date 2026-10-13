@@ -6,9 +6,11 @@ operational calendar and loopback authorization on top.
 """
 from __future__ import annotations
 
+import os
 from urllib.parse import urlparse
 
 import agent_entry as entry
+import agent_3012_patch
 import hardening
 import local_security
 import operational_calendar
@@ -17,6 +19,10 @@ HARDENING_STATE = hardening.install(entry.a, entry.canonical)
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)
+
+# Layer 3012 after the canonical R11/R12 entry has loaded and before the security
+# handler subclasses it. This preserves all validated 3028/3074/2114/3022 code.
+entry.Handler = agent_3012_patch.install(entry.a, entry.Handler, entry.canonical)
 
 # Preserve the validated 3028 collector itself. Only the time-window provider is
 # upgraded: production-day boundary is explicit and distinct from work shifts.
@@ -51,7 +57,10 @@ entry.a.ingest_3028_live = _hardened_live_ingest
 
 
 class HardenedHandler(entry.Handler):
-    _PUBLIC_API = {"/api/v1/health", "/api/v1/hardening/health"}
+    # /ready is a deliberately tiny loopback startup contract. It must remain
+    # public just like /health; otherwise the launcher cannot distinguish a live
+    # agent from an agent that merely requires the workstation token.
+    _PUBLIC_API = {"/api/v1/ready", "/api/v1/health", "/api/v1/hardening/health"}
 
     def _active_port(self):
         return int(getattr(self.server, "server_port", entry.a.CONFIG.get("port", 8765)))
@@ -96,6 +105,19 @@ class HardenedHandler(entry.Handler):
         path = urlparse(self.path).path
         if not self._authorized(path):
             self._reject_unauthorized()
+            return
+        if path == "/api/v1/ready":
+            # Minimal by design: no paths, MES data, tokens or workstation secrets.
+            self._send(
+                {
+                    "ok": True,
+                    "ready": True,
+                    "agent_build": "CANONICAL-R11-BATCH",
+                    "agent_version": entry.a.AGENT_VERSION,
+                    "candidate_version": entry.a.CANDIDATE_VERSION,
+                    "pid": os.getpid(),
+                }
+            )
             return
         if path == "/api/v1/hardening/health":
             try:

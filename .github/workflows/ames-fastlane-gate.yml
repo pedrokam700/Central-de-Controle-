@@ -1,0 +1,245 @@
+name: A-MES Fastlane Gate
+
+on:
+  push:
+    branches:
+      - ui/ames-fastlane-sn-reuse-20261013
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fastlane-static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Compile Python agent
+        run: python -m compileall -q ames/agent
+
+      - name: Check fastlane JavaScript syntax
+        run: |
+          node --check ames/console-view.mjs
+          node --check ames/console-fastlane-sn-reuse.mjs
+          node --check ames/console-network-fastlane.mjs
+          node --check ames/console-sn-offline-fastlane.mjs
+          node --check ames/console-3012-fastlane.mjs
+
+      - name: Verify frozen 3028 hashes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          expected={
+            'ames/agent/ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1',
+            'ames/agent/ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2',
+          }
+          for name,want in expected.items():
+              got=hashlib.sha256(Path(name).read_bytes()).hexdigest()
+              print(name,got)
+              if got!=want: raise SystemExit(f'FROZEN 3028 HASH MISMATCH: {name}')
+          PY
+
+      - name: Test 3012 normalization and local persistence
+        working-directory: ames/agent
+        run: |
+          python - <<'PY'
+          import tempfile
+          from pathlib import Path
+          from ames_3012_live import normalize_3012_row
+          from store import Store
+          import repair_3012, local_sn
+
+          row=normalize_3012_row({
+            'Lot Id':'002527TEST', 'Defect Code':'GN01-T002', 'Defect Desc':'Antenna test failed',
+            'Repair User':'BRM00068', 'Repair Comment':'analysis comment', 'Repair Code':'H01',
+            'Repair Time':'2026-10-13 09:31:00', 'Defect Entry Time':'2026-10-13 09:20:00'
+          })
+          assert row['pcba_sn']=='002527TEST'
+          assert row['defect_code']=='GN01-T002'
+          assert row['repair_user']=='BRM00068'
+          assert row['repair_comment']=='analysis comment'
+          assert row['row_key']
+
+          with tempfile.TemporaryDirectory() as td:
+              store=Store(Path(td)/'ames.sqlite3')
+              store.initialize()
+              out=repair_3012.ingest(store,{'query':{'sn':'002527TEST'},'rows':[row]},workstation='CI')
+              assert out['inserted']==1
+              hist=repair_3012.history(store,sn='002527TEST')
+              assert len(hist)==1 and hist[0]['repair_comment']=='analysis comment'
+              local=local_sn.lookup(store,'002527TEST')
+              assert local['offline'] is True
+              assert local['coverage']['3012'] is True
+              assert local['summary']['repair_3012']==1
+          print('3012 normalization/persistence/offline lookup OK')
+          PY
+
+      - name: Assert physical gates and final readiness ownership
+        run: |
+          grep -q 'factory_validated":False' ames/agent/agent_3012_patch.py
+          grep -q 'gate físico ainda pendente' ames/console-3012-fastlane.mjs
+          grep -q '"/api/v1/ready"' ames/agent/agent_hardened_entry.py
+          grep -q 'if path == "/api/v1/ready"' ames/agent/agent_hardened_entry.py
+          grep -q 'def install(entry_module)' ames/agent/fastlane_runtime_guard.py
+          grep -q 'ConnectionAbortedError' ames/agent/fastlane_runtime_guard.py
+
+      - name: Build exact CLEAN V3 fastlane overlay
+        run: python scripts/build-ames-fastlane-test-overlay.py "${GITHUB_SHA}"
+
+      - name: Harden exact generated artifact
+        run: python scripts/harden-ames-fastlane-package.py "${GITHUB_SHA}"
+
+      - name: Parse generated PowerShell and inspect artifact contract
+        shell: pwsh
+        run: |
+          $files = @(
+            'dist/ames-fastlane-test/APLICAR_FASTLANE_TESTE.ps1',
+            'dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              throw "PowerShell parse failed: $file"
+            }
+          }
+          $launcher = Get-Content 'dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1' -Raw
+          if ($launcher -notmatch '/api/v1/ready') { throw 'launcher does not use /ready' }
+          if ($launcher -match "api/v1/health'\s+-TimeoutSec\s+2([^0-9]|$)") { throw 'launcher still polls heavy /health with 2s' }
+          if (($launcher | Select-String -Pattern '/api/v1/health' -AllMatches).Matches.Count -ne 1) { throw 'launcher must call /health exactly once' }
+          if ($launcher -notmatch 'HTTP 401') { throw 'launcher does not fail fast on readiness auth mismatch' }
+          if (-not (Test-Path 'dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py')) { throw 'runtime guard missing from exact artifact' }
+
+      - name: Inspect fastlane overlay
+        run: |
+          unzip -l dist/CENTRAL_AMES_FASTLANE_3012_TESTE_${GITHUB_SHA::8}.zip
+          test -f dist/ames-fastlane-test/00_CRIAR_COPIA_FASTLANE_TESTE.bat
+          test -f dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.bat
+          test -f dist/ames-fastlane-test/payload/ames-agent/agent_3012_patch.py
+          test -f dist/ames-fastlane-test/payload/ames-agent/network_watch.py
+          test -f dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py
+          grep -q 'fastlane_runtime_guard.install(hardened.entry)' dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw
+          grep -q 'import agent_hardened_entry as hardened' dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw
+          grep -q 'if path == "/api/v1/ready"' dist/ames-fastlane-test/payload/ames-agent/agent_hardened_entry.py
+          grep -q '/api/v1/ready' dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1
+
+      - name: Upload fastlane test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: CENTRAL_AMES_FASTLANE_3012_TESTE_${{ github.sha }}
+          path: dist/CENTRAL_AMES_FASTLANE_3012_TESTE_*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-artifact-contract:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install agent Python dependencies
+        shell: powershell
+        run: |
+          python -m pip install --disable-pip-version-check -r ames/agent/requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build and harden exact artifact on Windows
+        shell: powershell
+        run: |
+          python scripts/build-ames-fastlane-test-overlay.py "${{ github.sha }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/harden-ames-fastlane-package.py "${{ github.sha }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Windows PowerShell parser and startup contract
+        shell: powershell
+        run: |
+          $launcherPath = 'dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1'
+          $updaterPath = 'dist/ames-fastlane-test/APLICAR_FASTLANE_TESTE.ps1'
+          foreach ($file in @($launcherPath,$updaterPath)) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Host $_.Message -ForegroundColor Red }
+              throw "Windows PowerShell parse failed: $file"
+            }
+          }
+          $launcher = Get-Content $launcherPath -Raw
+          if ($launcher -notmatch '/api/v1/ready') { throw 'Missing lightweight readiness endpoint' }
+          if ($launcher -match "api/v1/health'\s+-TimeoutSec\s+2([^0-9]|$)") { throw 'Heavy health is still used as startup poll' }
+          if (($launcher | Select-String -Pattern '/api/v1/health' -AllMatches).Matches.Count -ne 1) { throw 'Full health must run exactly once after readiness' }
+          if ($launcher -notmatch 'HTTP 401') { throw 'Launcher does not fail fast on readiness authorization mismatch' }
+          $bootstrap = Get-Content 'dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw' -Raw
+          if ($bootstrap -notmatch 'fastlane_runtime_guard\.install\(hardened\.entry\)') { throw 'Runtime guard is not installed on final hardened handler' }
+          if ($bootstrap -match 'runpy\.run_path') { throw 'Bootstrap still runs old pre-hardening patch order' }
+          Write-Host 'Windows static artifact contract OK' -ForegroundColor Green
+
+      - name: Windows live installed-layout readiness smoke
+        shell: powershell
+        run: |
+          $payload = Resolve-Path 'dist/ames-fastlane-test/payload'
+          $installed = Join-Path $env:RUNNER_TEMP 'ames-fastlane-installed'
+          if (Test-Path $installed) { Remove-Item -Recurse -Force $installed }
+          New-Item -ItemType Directory -Force -Path (Join-Path $installed 'ames-agent') | Out-Null
+          Copy-Item -Path (Join-Path $payload 'ames-agent\*') -Destination (Join-Path $installed 'ames-agent') -Recurse -Force
+          Copy-Item -LiteralPath (Join-Path $payload 'agent_fastlane_bootstrap.pyw') -Destination (Join-Path $installed 'ames-agent\agent_fastlane_bootstrap.pyw') -Force
+
+          $bootstrap = Join-Path $installed 'ames-agent\agent_fastlane_bootstrap.pyw'
+          $port = 18765
+          $proc = Start-Process -FilePath 'python' -ArgumentList @("`"$bootstrap`"", '--host', '127.0.0.1', '--port', "$port") -WorkingDirectory $installed -PassThru
+          try {
+            $ready = $null
+            for ($i = 0; $i -lt 45; $i++) {
+              Start-Sleep -Seconds 1
+              if ($proc.HasExited) { break }
+              try {
+                $response = Invoke-WebRequest "http://127.0.0.1:$port/api/v1/ready" -UseBasicParsing -TimeoutSec 3
+                if ($response.StatusCode -eq 200) {
+                  $ready = $response.Content | ConvertFrom-Json
+                  break
+                }
+              } catch {
+                $status = $null
+                try { $status = [int]$_.Exception.Response.StatusCode } catch {}
+                if ($status -eq 401) { throw 'LIVE CONTRACT FAILURE: /api/v1/ready returned HTTP 401' }
+              }
+            }
+            if (-not $ready) {
+              Get-ChildItem (Join-Path $installed 'logs') -ErrorAction SilentlyContinue | ForEach-Object {
+                Write-Host "--- $($_.Name) ---"
+                Get-Content $_.FullName -Tail 120 -ErrorAction SilentlyContinue
+              }
+              if ($proc.HasExited) { throw "Agent exited before readiness: $($proc.ExitCode)" }
+              throw 'LIVE CONTRACT FAILURE: /api/v1/ready never returned HTTP 200'
+            }
+            if (-not $ready.ok -or -not $ready.ready) { throw 'LIVE CONTRACT FAILURE: invalid readiness body' }
+            if ([string]$ready.agent_build -ne 'CANONICAL-R11-BATCH') { throw "Unexpected build: $($ready.agent_build)" }
+
+            $protectedStatus = $null
+            try {
+              Invoke-WebRequest "http://127.0.0.1:$port/api/v1/network/status" -UseBasicParsing -TimeoutSec 3 | Out-Null
+              $protectedStatus = 200
+            } catch {
+              try { $protectedStatus = [int]$_.Exception.Response.StatusCode } catch {}
+            }
+            if ($protectedStatus -ne 401) { throw "Protected endpoint must remain 401 without token; got $protectedStatus" }
+
+            Write-Host "LIVE installed artifact readiness OK: PID=$($ready.pid) build=$($ready.agent_build)" -ForegroundColor Green
+          } finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+          }
