@@ -75,6 +75,7 @@ def main() -> None:
     boot_text = bootstrap.read_text(encoding="utf-8")
     hard_text = hardened_entry.read_text(encoding="utf-8")
     guard_text = guard_dst.read_text(encoding="utf-8")
+    updater_text = updater.read_text(encoding="utf-8-sig")
 
     if "/api/v1/ready" not in launch_text:
         raise SystemExit("generated launcher does not use lightweight /ready")
@@ -96,15 +97,23 @@ def main() -> None:
         raise SystemExit("final hardened handler does not expose /ready as public startup contract")
     if 'if path == "/api/v1/ready"' not in hard_text:
         raise SystemExit("final hardened handler does not implement /ready directly")
-    if '"package_root"' in hard_text[hard_text.find('if path == "/api/v1/ready"'):hard_text.find('if path == "/api/v1/hardening/health"')]:
+    ready_slice = hard_text[hard_text.find('if path == "/api/v1/ready"'):hard_text.find('if path == "/api/v1/hardening/health"')]
+    if '"package_root"' in ready_slice:
         raise SystemExit("/ready leaks package path")
 
     if "def install(entry_module):" not in guard_text:
         raise SystemExit("runtime guard must target the final entry module")
     if "original_get" in guard_text or "guarded_get" in guard_text:
         raise SystemExit("runtime guard must not own readiness routing")
-    if not guard_dst.is_file():
-        raise SystemExit("runtime guard missing from payload")
+
+    # The bootstrap is authored in payload/, but the updater MUST install it next
+    # to agent_hardened_entry.py inside ames-agent/. The live smoke mirrors this.
+    if "-Destination (Join-Path $agent 'agent_fastlane_bootstrap.pyw')" not in updater_text:
+        raise SystemExit("updater does not install bootstrap inside ames-agent")
+    if "-Destination (Join-Path $target 'INICIAR_FASTLANE_TESTE.ps1')" not in updater_text:
+        raise SystemExit("updater does not install launcher at workstation root")
+    if "Copy-Item -Path (Join-Path $payloadAgent '*') -Destination $agent" not in updater_text:
+        raise SystemExit("updater does not install fastlane agent payload")
 
     zip_path = DIST / f"CENTRAL_AMES_FASTLANE_3012_TESTE_{head[:8]}.zip"
     if zip_path.exists():
