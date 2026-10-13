@@ -54,10 +54,15 @@ test('agente ativo precisa ser da mesma pasta, build canonico, H1 e segurança l
   assert.match(localSecurity,/secrets\.token_urlsafe\(32\)/);
 });
 
-test('rota A-MES e temporaria e nao troca gateway padrao',()=>{
+test('rota A-MES persiste, e auto-reparada e nao troca gateway padrao',()=>{
   assert.match(route,/172\.29\.185\.215\/32/);
+  assert.match(route,/PolicyStore PersistentStore/);
   assert.match(route,/PolicyStore ActiveStore/);
-  assert.match(route,/New-NetRoute/);
+  assert.match(route,/New-NetRoute -DestinationPrefix \$target -InterfaceIndex \$ifIndex -NextHop \$gw -RouteMetric 1/);
+  assert.doesNotMatch(route,/New-NetRoute[^\r\n]*-PolicyStore\s+ActiveStore/i);
+  assert.match(route,/Start-Process[^\r\n]*-Wait -PassThru/i);
+  assert.match(launcher,/garantindo rota persistente A-MES/i);
+  assert.match(launcher,/ROTA_AMES_APLICAR\.bat/);
   assert.doesNotMatch(route,/Set-NetIPInterface|Set-DnsClientServerAddress|route\s+delete\s+0\.0\.0\.0/i);
 });
 
