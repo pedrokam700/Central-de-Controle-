@@ -14,8 +14,8 @@ function collect(dir){
 }
 
 function deployedIndex(source){
-  const appTag='<script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.48"></script>';
-  const bootstrapTag='<script type="module" src="/Central-de-Controle-/offline-bootstrap.mjs?v=15.1.13.48"></script>';
+  const appTag='<script type="module" src="/Central-de-Controle-/app.js?v=15.1.13.49"></script>';
+  const bootstrapTag='<script type="module" src="/Central-de-Controle-/offline-bootstrap.mjs?v=15.1.13.49"></script>';
   if(!source.includes(appTag))throw new Error('Tag canônica de app.js não encontrada no index.html');
   const bootGuard=`<script id="central-runtime-boot-guard">\n(()=>{\n  const form=document.querySelector('#loginForm');\n  const status=document.querySelector('#authLoginStatus');\n  const button=document.querySelector('#loginButton');\n  if(!form)return;\n  const fail=()=>{\n    if(window.__centralLoginModuleReady)return false;\n    if(status){status.textContent='A aplicação não carregou completamente neste preview. Recarregue a página ou use um deploy validado.';status.className='auth-status error';}\n    if(button){button.disabled=true;button.textContent='Aplicação indisponível';}\n    return true;\n  };\n  form.addEventListener('submit',event=>{if(fail()){event.preventDefault();event.stopImmediatePropagation();}},true);\n  setTimeout(fail,5000);\n})();\n</script>`;
   return source.replace(appTag,bootGuard+'\n'+bootstrapTag);
@@ -51,5 +51,5 @@ fs.writeFileSync(path.join(out,'index.html'),rootEntry());
 const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
 const branch=process.env.VERCEL_GIT_COMMIT_REF||process.env.BRANCH||process.env.GITHUB_REF_NAME||null;
 const provider=process.env.VERCEL?'vercel':process.env.NETLIFY?'netlify':process.env.GITHUB_ACTIONS?'github-actions':'unknown';
-fs.writeFileSync(path.join(out,'release-build.json'),JSON.stringify({sha,branch,provider,build:'15.1.13.48',project:'central-cora-v2'}));
+fs.writeFileSync(path.join(out,'release-build.json'),JSON.stringify({sha,branch,provider,build:'15.1.13.49',project:'central-cora-v2'}));
 console.log('Native integrated static assets:',new Set(names).size,'deployment sha:',sha||'unavailable');

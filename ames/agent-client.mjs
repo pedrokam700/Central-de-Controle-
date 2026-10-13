@@ -31,7 +31,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     const headers={};
     if(body!==undefined)headers['Content-Type']='application/json';
     if(workstationToken)headers['X-Central-Agent-Token']=workstationToken;
-    const response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30000)]),cache:'no-store',credentials:'omit'});
+    const response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(path==='/health'?4000:30000)]),cache:'no-store',credentials:'omit'});
     if(response.status===401)throw new Error('Agente local não autorizado. Abra a Central pelo launcher deste posto.');
     if(!response.ok)throw new Error(`Agente: HTTP ${response.status}`);
     const data=blob?await response.blob():await response.json();
@@ -111,15 +111,15 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(!done&&token===generation)timer=schedule(()=>poll(id,token),850);
     }catch(e){if(token===generation){publish({error:'Leitura do job interrompida: '+e.message});timer=schedule(()=>poll(id,token),850);}}
   }
-  async function action(work) {
+  async function action(work,{quiet=false}={}) {
     if(busy)throw new Error('Uma solicitação já está em andamento.');
     busy=true;const token=generation;
     try {publish({error:''});const result=await work();if(token!==generation)throw new DOMException('Sessão encerrada','AbortError');return result;}
-    catch(e){if(token===generation)publish({error:e.message});throw e;}
+    catch(e){if(token===generation){if(quiet){store.setLocalConnected(false);publish({status:'disconnected',readiness:null,error:''});}else publish({error:e.message});}throw e;}
     finally{if(token===generation)busy=false;}
   }
   return Object.freeze({
-    connect:()=>action(async()=>{
+    connect:(options={})=>action(async()=>{
       const health=await request('/health');
       if(health.agent_version!=='0.5.23'||health.mes_scheduler?.policy!==SCHEDULER_POLICY)throw new Error('Instale o patch de serialização com scheduler FIFO antes de conectar o Console.');
       let capabilities=null;
@@ -136,10 +136,10 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       }
       const cfg=await request('/config');
       const config=publicConfig(cfg);
-      publish({status:'connected',config,capabilities,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.playwright_ready!==false},agent_build:health.agent_build||'',error:''});
+      publish({status:'connected',config,capabilities,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.preflight?.playwright??health.playwright_ready??null,python:health.preflight?.python??null,dependencies:health.preflight?.dependencies??null,sqlite:health.preflight?.sqlite??null,session:null},agent_build:health.agent_build||'',error:''});
       const monitor=await request('/monitor');publish({monitor:{enabled:!!monitor.enabled,interval_minutes:monitor.interval_minutes,next_run_at:monitor.next_run_at}});
       await refresh();
-    }),
+    },options),
     refresh:()=>action(refresh),
     saveConfig:value=>action(async()=>{check();const scope=collectionScope(value);const cfg={configured_lines:scope.lines,performance:scope.performance};await request('/config',cfg);publish({config:{...store.agent().config,...cfg}});}),
     collect:(type,value)=>action(async()=>{

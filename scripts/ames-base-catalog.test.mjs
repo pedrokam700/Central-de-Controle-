@@ -21,8 +21,11 @@ test('atalho Configurar posto restaura acesso direto da automação local sem se
   const shell=fs.readFileSync('ames/console-view.mjs','utf8');
   assert.match(shell,/data-console-setup>Configurar posto/);
   assert.match(shell,/openWorkstationSetup/);
-  assert.match(shell,/switchView\('monitor'\)/);
-  assert.match(shell,/Configuração do posto/);
+  assert.match(shell,/preparation\?\.open\(\)/);
+  const preparation=fs.readFileSync('ames/console-preparation.mjs','utf8');
+  assert.match(preparation,/createOnboardingView/);
+  assert.match(preparation,/workstationChecks/);
+  assert.match(preparation,/Usar somente dados compartilhados/);
   assert.match(shell,/data-monitor-tools/);
   assert.doesNotMatch(shell,/iframe|new Function|attachShadow/);
 });

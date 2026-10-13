@@ -14,6 +14,15 @@ try{
   await assertSucceeds(setDoc(doc(a,...part),{owner_uid:'A',line_id:line,key,index:0,data:'sanitized'}));
   await assertSucceeds(setDoc(doc(a,...path),head));
   await assertSucceeds(setDoc(doc(a,...team),head));
+  const history=['amesTeamLines',line,'history','A_'+key],record={...head,period_start:'2026-10-09T07:00',period_end:'2026-10-09T17:00',products:'CPH2859V'};
+  await assertSucceeds(setDoc(doc(a,...history),record));
+  await assertSucceeds(getDoc(doc(b,...history)));
+  await assertFails(getDoc(doc(guest,...history)));await assertFails(getDoc(doc(disabled,...history)));
+  await assertFails(setDoc(doc(b,...history),record));
+  await assertFails(setDoc(doc(a,...history),{...record,products:'tampered'}));
+  await assertFails(setDoc(doc(a,'amesTeamLines',line,'history','A_'+'c'.repeat(64)),{...record,key:'c'.repeat(64),password:'secret'}));
+  await assertFails(setDoc(doc(a,'amesTeamLines',line,'history','A_'+'c'.repeat(64)),{...record,key:'c'.repeat(64)}));
+  await assertFails(deleteDoc(doc(a,...history)));
   await assertSucceeds(getDoc(doc(a,...path)));
   // Head privado continua do publicador; equipe lê somente a ponte e partes sanitizadas.
   await assertFails(getDoc(doc(b,...path)));

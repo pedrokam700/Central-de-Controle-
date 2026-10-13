@@ -36,6 +36,9 @@ jobs:
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
 
+      - name: Run read-only workstation preflight tests
+        run: python3 scripts/agent-preflight.test.py
+
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
 
@@ -95,6 +98,30 @@ jobs:
         run: |
           export FIREBASE_TEST_MODULES="$RUNNER_TEMP/ames-tests/node_modules"
           "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs'
+
+  console-experience:
+    name: Console themes, languages and mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install isolated browser test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/console-tests" playwright@1.62.1
+          "$RUNNER_TEMP/console-tests/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify the nine Console views
+        run: |
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/console-tests/node_modules/playwright/index.mjs"
+          export BROWSER_OUTPUT="$RUNNER_TEMP/console-evidence"
+          node scripts/ames-experience.browser.mjs
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: console-experience-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/console-evidence
 
   post-deploy-smoke:
     name: Published preview smoke

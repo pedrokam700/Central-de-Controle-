@@ -19,8 +19,8 @@ test('build publicado inicializa persistência antes do app e mantém base path'
     const app=fs.readFileSync(path.join(base,'app.js'),'utf8');
     const bootstrap=fs.readFileSync(path.join(base,'offline-bootstrap.mjs'),'utf8');
     const sw=fs.readFileSync(path.join(base,'sw.js'),'utf8');
-    assert.match(index,/offline-bootstrap\.mjs\?v=15\.1\.13\.48/);
-    assert.doesNotMatch(index,/src="\/Central-de-Controle-\/app\.js\?v=15\.1\.13\.48"/);
+    assert.match(index,/offline-bootstrap\.mjs\?v=15\.1\.13\.49/);
+    assert.doesNotMatch(index,/src="\/Central-de-Controle-\/app\.js\?v=15\.1\.13\.49"/);
     assert.match(app,/getApps\(\)\.length\s*\?\s*getApp\(\)\s*:\s*initializeApp\(firebaseConfig\)/);
     assert.match(bootstrap,/browserLocalPersistence/);
     assert.match(bootstrap,/persistentLocalCache/);

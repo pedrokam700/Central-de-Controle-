@@ -10,9 +10,9 @@ const sha=git('rev-parse','HEAD').toString().trim();
 const names=git('ls-tree','-r','--name-only',sha).toString().trim().split('\n').filter(f=>['index.html','app.js','styles.css','mobile.css','sw.js','manifest.webmanifest'].includes(f)||f.startsWith('icons/')||/^ames\/.+\.(mjs|css)$/.test(f)||f==='ames/releases/latest/release.json');
 const out=path.join(stage,'.vercel/output'),overrides={};
 for(const name of names){const file=path.join(out,'static/Central-de-Controle-',name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,git('show',`${sha}:${name}`));if(name.endsWith('.mjs'))overrides['Central-de-Controle-/'+name]={contentType:'text/javascript; charset=utf-8'};}
-fs.writeFileSync(path.join(out,'static/release-build.json'),JSON.stringify({sha,build:'15.1.13.48',project:'central-cora-v2'}));
+fs.writeFileSync(path.join(out,'static/release-build.json'),JSON.stringify({sha,build:'15.1.13.49',project:'central-cora-v2'}));
 fs.writeFileSync(path.join(out,'config.json'),JSON.stringify({version:3,routes:[
- {src:'/(.*)',headers:{'X-Central-Commit':sha,'X-Central-Build':'15.1.13.48'},continue:true},
+ {src:'/(.*)',headers:{'X-Central-Commit':sha,'X-Central-Build':'15.1.13.49'},continue:true},
  {src:'/',status:307,headers:{Location:'/Central-de-Controle-/'}},
  {src:'/Central-de-Controle-',status:307,headers:{Location:'/Central-de-Controle-/'}},
  {src:'/Central-de-Controle-/',dest:'/Central-de-Controle-/index.html'},

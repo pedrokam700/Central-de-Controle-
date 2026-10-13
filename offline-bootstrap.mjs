@@ -2,7 +2,7 @@ import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebase
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getAuth, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-const BUILD='15.1.13.48';
+const BUILD='15.1.13.49';
 const firebaseConfig={
   apiKey:"AIzaSyBi8ll-uiEh9L9sPBXQZhqIbFxgLfnTjeM",
   authDomain:"central-de-controle-88962.firebaseapp.com",

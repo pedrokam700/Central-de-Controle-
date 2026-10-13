@@ -49,6 +49,7 @@ try{
  const sameAccount=createAmesStore(),sameReader=createMesSync(sameAccount,remoteA,{queue,online:()=>false});sameReader.start('E2E');await eventually(()=>!!sameAccount.read(scope.lines[0]).snapshot,'same-account remote PC');assert.equal(sameAccount.read(scope.lines[0]).snapshot.revision,after.revision);sameReader.stop();
  const authB={currentUser:{uid:'OTHER'}},dbB=env.authenticatedContext('OTHER').firestore(),remoteB=firestoreTransport({...fb,db:dbB,auth:authB});
  const teammate=createAmesStore();reader=createMesSync(teammate,remoteB,{queue,online:()=>false});reader.start('OTHER');await eventually(()=>!!teammate.read(scope.lines[0]).snapshot,'teammate remote PC');assert.equal(teammate.read(scope.lines[0]).snapshot.revision,after.revision);assert.equal(teammate.read(scope.lines[0]).source,'remote');
+ const history=await reader.listHistory(scope.lines[0]);assert.equal(history.length,1);const historical=await reader.openHistory(history[0]);assert.equal(historical.snapshot_id,after.snapshot_id);assert.equal(historical.line_id,scope.lines[0]);assert.equal(historical.source_id,after.source_id);
  reader.stop();teammate.clear();assert.equal(teammate.read(scope.lines[0]).snapshot,null);
  const id=first.id;await stop();await start();const restored=await api('/sn-lookup',request);assert.equal(restored.id,id);assert.equal((await api('/v2/capabilities')).source_id,after.source_id);
  client.clear();state.ames.clear();assert.equal(state.ames.read(scope.lines[0]).snapshot,null);assert.deepEqual(state.reports,[{id:'manual'}]);

@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 import agent as a
 import canonical
 import process_r11
+import preflight
 
 process_r11.patch_store(a.STORE)
 
@@ -122,7 +123,7 @@ class Handler(a.Handler):
         if u.path=="/api/v1/health":
             try:
                 engine=a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR);support=process_r11.engine_support(engine)
-                self._send({"ok":True,"agent_version":a.AGENT_VERSION,"candidate_version":a.CANDIDATE_VERSION,"agent_build":"CANONICAL-R11-BATCH",
+                self._send({"ok":True,"preflight":preflight.check(a.DB_PATH),"agent_version":a.AGENT_VERSION,"candidate_version":a.CANDIDATE_VERSION,"agent_build":"CANONICAL-R11-BATCH",
                             "package_root":str(a.BASE_DIR.parent.resolve()),"mes_scheduler":a.MES.snapshot(),"db":str(a.DB_PATH),
                             "engine_found":bool(engine),"engine_dir":str(engine) if engine else None,
                             "chrome_cdp":a.CONFIG.get("chrome_cdp"),"chrome_cdp_reachable":a._tcp_probe("127.0.0.1",9222,timeout=.5),

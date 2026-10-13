@@ -24,10 +24,11 @@ test('Console native shell restores R12 desktop proportions and keeps mobile dra
 test('3022 capability and visual assets are available offline',()=>{
   const view=fs.readFileSync('ames/console-view.mjs','utf8');
   const sw=fs.readFileSync('sw.js','utf8');
-  assert.match(view,/data-console-process/);
-  assert.match(view,/process_timeline===true/);
-  assert.match(view,/3022 em lote disponível/);
-  assert.match(view,/3022 em lote indisponível/);
+  const guard=fs.readFileSync('ames/console-capability-guard.mjs','utf8');
+  assert.match(view,/withProcessCapability/);
+  assert.match(guard,/radio\.disabled=!ready/);
+  assert.match(guard,/3022 indisponível/);
+  assert.match(sw,/ames\/console-capability-guard\.mjs/);
   assert.match(sw,/ames\/console-mobile-polish\.css/);
   assert.match(sw,/ames\/console-r12-fidelity\.css/);
 });

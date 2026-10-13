@@ -8,7 +8,7 @@ function compareHead(a,b){
   const sub=(Number(a?.snapshot_revision)||0)-(Number(b?.snapshot_revision)||0);if(sub)return sub;
   return String(a?.key||'').localeCompare(String(b?.key||''));
 }
-export function firestoreTransport({db,auth,doc,collection,getDoc,setDoc,onSnapshot,runTransaction}){
+export function firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction}){
   const session=()=>{const uid=auth.currentUser?.uid;if(!uid)throw Error('Sessão de sincronização encerrada');return uid;};
   const ownerScope=(uid,line)=>{if(session()!==uid)throw Error('Sessão de sincronização encerrada');return ['amesUsers',uid,'lines',validLine(line)];};
   const readableScope=(ownerUid,line)=>{session();if(!ownerUid||typeof ownerUid!=='string')throw Error('Publicador MES inválido');return ['amesUsers',ownerUid,'lines',validLine(line)];};
@@ -16,6 +16,11 @@ export function firestoreTransport({db,auth,doc,collection,getDoc,setDoc,onSnaps
   const readablePart=(ownerUid,h,i)=>doc(db,...readableScope(ownerUid,h.line_id),'snapshots',h.key,'parts',String(i));
   const teamHead=line=>doc(db,'amesTeamLines',validLine(line));
   return {
+    async listHistory(line){session();const rows=await getDocs(collection(db,'amesTeamLines',validLine(line),'history'));session();return rows.docs.map(d=>d.data()).sort((a,b)=>compareHead(b,a));},
+    async commitHistory(uid,head,metadata){
+      ownerScope(uid,head.line_id);
+      await setDoc(doc(db,'amesTeamLines',head.line_id,'history',uid+'_'+head.key),{...head,...metadata});
+    },
     async putPart(uid,h,i,data){const ref=ownerPart(uid,h,i);await setDoc(ref,{owner_uid:uid,line_id:h.line_id,key:h.key,index:i,data});},
     async getPart(ownerUid,h,i){const row=await getDoc(readablePart(ownerUid,h,i));if(!row.exists())throw Error('Parte remota ausente');return row.data().data;},
     async commitHead(uid,head){

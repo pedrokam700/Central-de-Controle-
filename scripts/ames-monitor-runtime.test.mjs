@@ -9,7 +9,7 @@ test('Monitoramento keeps R12 pipeline and motor status without a second app',()
   const sw=fs.readFileSync('sw.js','utf8');
   assert.match(view,/createMonitorRuntimeView/);
   for(const stage of ['3028','3074','2114','3022']) assert.match(runtime,new RegExp(stage));
-  for(const label of ['Pipeline da execução','Estado do motor','Chrome CDP','Rede A-MES','3022 em lote']) assert.match(runtime,new RegExp(label));
+  for(const label of ['Progresso da execução','Estado do motor','Chrome A-MES','Rede A-MES','3022 em lote']) assert.match(runtime,new RegExp(label));
   assert.match(runtime,/LINE_IDS\.map/);
   assert.match(runtime,/process_timeline===true/);
   assert.match(css,/\.ames-runtime-pipeline/);

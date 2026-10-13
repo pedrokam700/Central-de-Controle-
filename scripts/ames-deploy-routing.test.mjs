@@ -36,8 +36,8 @@ test('build estático publica entrada raiz real e Central no base path',()=>{
     assert.match(html,/window\.__centralLoginModuleReady/);
     assert.match(html,/form\.addEventListener\('submit'/);
     assert.match(html,/event\.preventDefault\(\)/);
-    assert.match(html,/src="\/Central-de-Controle-\/offline-bootstrap\.mjs\?v=15\.1\.13\.48"/);
-    assert.doesNotMatch(html,/src="\/Central-de-Controle-\/app\.js\?v=15\.1\.13\.48"/);
+    assert.match(html,/src="\/Central-de-Controle-\/offline-bootstrap\.mjs\?v=15\.1\.13\.49"/);
+    assert.doesNotMatch(html,/src="\/Central-de-Controle-\/app\.js\?v=15\.1\.13\.49"/);
     assert.match(bootstrap,/initializeFirestore/);
     assert.match(bootstrap,/persistentLocalCache/);
     assert.match(bootstrap,/await import\(`\.\/app\.js\?v=\$\{BUILD\}`\)/);

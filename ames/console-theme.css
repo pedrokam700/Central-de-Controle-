@@ -1,0 +1,36 @@
+/* Uses the Central's body.dark state; no separate preference or theme control. */
+.ames-legacy-shell { color-scheme:light; --ames-focus:#245782; }
+.ames-agent-dot:not(.ok) { background:var(--ames-muted); }
+body.dark .ames-legacy-shell {
+  color-scheme:dark; --ames-bg:#11161c; --ames-surface:#1b222a;
+  --ames-soft:#252e38; --ames-soft2:#202831; --ames-text:#edf2f7;
+  --ames-muted:#b4beca; --ames-line:#526071; --ames-line2:#36414e;
+  --ames-dark:#0c1117; --ames-dark2:#2b3541; --ames-blue:#91c8f1;
+  --ames-ok:#83d8ab; --ames-warn:#ffca77; --ames-danger:#ffaaa3;
+  --ames-focus:#91c8f1;
+}
+body.dark .ames-legacy-shell :is(.ames-legacy-topbar,.panel,.mes-context-panel,.ames-console-form,.stat,.ames-kv,.table-wrap,table,.ames-evidence-card,.ames-top3-meta span,.ames-status-pill,.status,.ames-base-action,.ames-knowledge-card,.ames-factory-gate) { background:var(--ames-surface)!important; color:var(--ames-text)!important; border-color:var(--ames-line)!important; }
+body.dark .ames-legacy-shell :is(h1,h2,h3,h4,strong,b,legend,label,td,.stat-value,.ames-top3-item) { color:var(--ames-text)!important; }
+body.dark .ames-legacy-shell :is(p,small,.stat-label,.stat-note,.ames-empty,.ames-runtime-diagnostics>summary,.ames-native-provenance) { color:var(--ames-muted)!important; }
+body.dark .ames-legacy-shell :is(input,select,textarea,option,.button.secondary) { background:var(--ames-bg)!important; color:var(--ames-text)!important; border-color:var(--ames-line)!important; caret-color:var(--ames-text)!important; }
+body.dark .ames-legacy-shell :is(th,summary,.ames-top3-item,.ames-prior-pcba,.mes-opt-in,.notice,.info-note,.ames-collection-strip,.ames-runtime-stage,.ames-runtime-lines>*,.ames-native-provenance,.ames-failure-summary span,.ames-evidence-hero,fieldset,[data-agent-status]) { background:var(--ames-soft2)!important; color:var(--ames-text)!important; border-color:var(--ames-line)!important; }
+body.dark .ames-legacy-shell :is(.button.primary,.ames-rank) { background:#dce9f5!important; color:#11161c!important; }
+body.dark .ames-legacy-shell tbody tr:nth-child(even) { background:var(--ames-soft2)!important; }
+body.dark .ames-legacy-shell :is(tbody tr:hover,.ames-top3-item:hover,.ames-base-action:hover,.button.secondary:hover) { background:var(--ames-soft)!important; }
+body.dark .ames-legacy-shell :is(.ames-evidence-hit,.ames-selected-evidence) { background:#3c341c!important; color:#fff1b8!important; }
+body.dark .ames-legacy-shell .ames-runtime-bar { background:var(--ames-line2)!important; }
+body.dark .ames-legacy-shell .ames-runtime-job { background:var(--ames-soft)!important; color:var(--ames-text)!important; border-color:var(--ames-line)!important; }
+body.dark .ames-legacy-shell .ames-runtime-bar>span { background:var(--ames-blue)!important; }
+body.dark .ames-legacy-shell :is(.notice.warn,.ames-text-danger) { color:var(--ames-warn)!important; }
+body.dark .ames-legacy-shell .ames-legacy-sidebar { background:var(--ames-dark); }
+body.dark .ames-legacy-shell .ames-legacy-nav button { color:#c7d0dc; }
+body.dark .ames-legacy-shell .ames-legacy-nav button.active { background:var(--ames-dark2); color:#fff; }
+.ames-legacy-shell :is(input,select,textarea) { caret-color:var(--ames-text); }
+.ames-legacy-shell :is(button,a,input,select,textarea,summary):focus-visible { outline:3px solid var(--ames-focus)!important; outline-offset:3px; }
+.ames-legacy-shell input::placeholder,.ames-legacy-shell textarea::placeholder { color:var(--ames-muted); opacity:1; }
+.ames-preparation { margin:0 0 14px; padding:10px 12px; background:var(--ames-soft2); border:1px solid var(--ames-line); border-radius:8px; font-size:12px; }
+.ames-preparation p { margin:5px 0 10px; }
+.ames-preparation li { margin:8px 0; }
+.ames-preparation [data-check-state=ok] { color:var(--ames-ok); }
+.ames-preparation [data-check-state=missing] { color:var(--ames-warn); }
+@media(max-width:760px) { .ames-preparation .mes-pagination { display:flex; flex-wrap:wrap; } .ames-preparation button { min-height:44px!important; white-space:normal!important; } }

@@ -87,7 +87,16 @@ export function createBaseConsoleView(root,store,client){
     try{
       if(name==='excel'){const blob=await client.excel(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='AMES_EQUIPE_LINHAS.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;}
       const value={line,snapshot_id:store.read(line).snapshot?.snapshot_id,dataset:root.querySelector('[data-base-dataset]')?.value,q:root.querySelector('[data-base-q]')?.value?.trim()||''};
-      const r=await client.auxiliary(name,value);result={title:BASE_ACTIONS.find(x=>x[0]===name)?.[2]||name,...(Array.isArray(r)?{rows:r}:r)};
+      let r;
+      if(store.agent().status!=='connected'){
+        const snapshot=store.read(line).snapshot, datasets=snapshot?.canonical?.datasets||{defects:snapshot?.occurrences||[],pcba_history:snapshot?.pcba_history?.records||[],material_reuse:snapshot?.material_trace?.records||[],process_timeline:snapshot?.process_timeline?.events||[]};
+        if(!snapshot)throw Error('Sem dados compartilhados para esta linha.');
+        if(name==='dataset')r={rows:datasets[value.dataset==='process_events'?'process_timeline':value.dataset]||[]};
+        else if(name==='catalog')r={rows:Object.entries(datasets).map(([dataset,rows])=>({dataset,rows:rows.length}))};
+        else if(name==='search')r={rows:Object.values(datasets).flat().filter(row=>JSON.stringify(row).toLowerCase().includes(value.q.toLowerCase()))};
+        else throw Error('Dados disponíveis para consulta; coleta local indisponível.');
+      }else r=await client.auxiliary(name,value);
+      result={title:BASE_ACTIONS.find(x=>x[0]===name)?.[2]||name,...(Array.isArray(r)?{rows:r}:r)};
     }catch(error){result={title:'Erro',rows:[{erro:error.message}]};}
     finally{busy=false;resultView();}
   }
@@ -104,7 +113,7 @@ export function createBaseConsoleView(root,store,client){
 const kindClass=kind=>{const value=String(kind||'').toLowerCase();if(value.includes('causa')||value.includes('confirmed'))return'cause';if(value.includes('hip')||value.includes('hyp'))return'hypothesis';if(value.includes('corr'))return'correlation';return'fact';};
 const kindLabel=kind=>{const cls=kindClass(kind);return cls==='cause'?'Causa confirmada':cls==='hypothesis'?'Hipótese':cls==='correlation'?'Correlação':'Fato / evidência';};
 
-export function createKnowledgeConsoleView(root,client){
+export function createKnowledgeConsoleView(root,client,store){
   let mounted=false,line=LINE_IDS[0],result=[],query='',busy=false,error='';
   function paint(){
     const host=root.querySelector('[data-knowledge-result]');if(!host)return;
@@ -114,7 +123,13 @@ export function createKnowledgeConsoleView(root,client){
     if(!result.length){host.innerHTML='<div class="ames-empty ames-empty-large"><span>⌕</span><h3>Nenhum resultado nesta leitura</h3><p>Isso não prova ausência no MES; significa apenas que a base local disponível não retornou correspondência.</p></div>';return;}
     host.innerHTML=`<div class="ames-knowledge-summary"><span><b>${result.length}</b> resultado(s)</span><span>Linha <b>${esc(line)}</b></span><span>Busca <b>${esc(query)}</b></span></div><div class="ames-knowledge-list">${result.map(row=>{const cls=kindClass(row.kind);return`<article class="ames-knowledge-card ${cls}"><div class="ames-knowledge-card-head"><span class="ames-knowledge-kind">${esc(kindLabel(row.kind))}</span><small>${esc(row.source||'fonte local')}</small></div><h3>${esc(row.defect_code||row.pcba_sn||row.item_sn||row.kind||'Evidência')}</h3><p>${esc(row.text||row.defect_desc||row.description||'')}</p><div class="ames-knowledge-meta">${row.pcba_sn?`<span>PCBA <b>${esc(row.pcba_sn)}</b></span>`:''}${row.line?`<span>Linha <b>${esc(row.line)}</b></span>`:''}${row.defect_desc?`<span>${esc(row.defect_desc)}</span>`:''}</div></article>`}).join('')}</div>`;
   }
-  async function search(){query=root.querySelector('[data-knowledge-q]').value.trim();error='';if(!query){result=[];paint();return;}busy=true;paint();try{const r=await client.auxiliary('search',{line,q:query});result=r.results||r.rows||[];}catch(err){result=[];error=err.message;}finally{busy=false;paint();}}
+  async function search(){query=root.querySelector('[data-knowledge-q]').value.trim();error='';if(!query){result=[];paint();return;}busy=true;paint();try{
+    if(store&&store.agent().status!=='connected'){
+      const snapshot=store.read(line).snapshot;
+      if(!snapshot)throw Error('Sem dados compartilhados para esta linha.');
+      result=(snapshot.occurrences||[]).filter(r=>JSON.stringify([r.pcba_sn,r.defect_code,r.defect_desc,r.product_key]).toLowerCase().includes(query.toLowerCase())).map(r=>({...r,kind:'fact',source:'3028 · snapshot',text:r.defect_desc}));
+    }else{const r=await client.auxiliary('search',{line,q:query});result=r.results||r.rows||[];}
+  }catch(err){result=[];error=err.message;}finally{busy=false;paint();}}
   function render(){
     if(!mounted){root.innerHTML=`<section class="mes-context-panel ames-knowledge-search">${sectionHead('CORA · conhecimento A-MES','Busca estruturada na mesma base operacional. Causa só é exibida como confirmada quando a fonte a classifica assim.')}<div class="ames-knowledge-query"><label>Linha<select data-knowledge-line>${lineOptions(line)}</select></label><label>Buscar<input data-knowledge-q placeholder="PCBA, Material SN, falha, CPH, processo..."></label><button class="button primary" data-knowledge-run>Buscar</button></div><div class="ames-knowledge-legend"><span class="fact">Fato / evidência</span><span class="correlation">Correlação</span><span class="hypothesis">Hipótese</span><span class="cause">Causa confirmada</span></div></section><section data-knowledge-result></section>`;mounted=true;root.querySelector('[data-knowledge-line]').addEventListener('change',e=>{line=e.target.value;result=[];error='';query='';root.querySelector('[data-knowledge-q]').value='';paint();});root.querySelector('[data-knowledge-run]').addEventListener('click',search);root.querySelector('[data-knowledge-q]').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();search();}});paint();}
   }

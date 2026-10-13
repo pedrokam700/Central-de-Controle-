@@ -3,6 +3,8 @@
     import {createMesSync} from './ames/sync.mjs';
     import {firestoreTransport} from './ames/firebase-sync.mjs';
     import { createConsoleView } from './ames/console-view.mjs';
+    import { installLoginReturn } from './core/login-navigation.mjs';
+    installLoginReturn(document,window.location);
     import { createDashboardView } from './ames/dashboard-view.mjs';
     import { createProductView } from './ames/product-view.mjs';
     import { createOccurrenceView } from './ames/occurrence-view.mjs';
@@ -211,7 +213,7 @@
       let node;
       while (node = walker.nextNode()) {
         const parent = node.parentElement;
-        if (!parent || ['SCRIPT','STYLE'].includes(parent.tagName)) continue;
+        if (!parent || ['SCRIPT','STYLE'].includes(parent.tagName) || parent.closest('[data-ames-shell]')) continue;
         if (!originalTextNodes.has(node)) originalTextNodes.set(node, node.nodeValue);
         const original = originalTextNodes.get(node);
         const trimmed = original.trim();
@@ -224,6 +226,7 @@
         }
       }
       root.querySelectorAll('input,textarea,select,button,a,[title],[aria-label]').forEach(el => {
+        if(el.closest('[data-ames-shell]'))return;
         ['placeholder','title','aria-label'].forEach(attr => {
           if (!el.hasAttribute(attr)) return;
           if (!originalAttrs.has(el)) originalAttrs.set(el, {});
@@ -1351,7 +1354,7 @@
           return null;
         }
 
-        if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();consoleMesView?.clear();clearSessionData(state);}
+        if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();consoleMesView?.clear();consoleMesView=undefined;clearSessionData(state);}
         currentAuthUser = firebaseUser;
         currentAccount = { uid: firebaseUser.uid, name: profile.name, email: profile.email, role: profile.role };
 
@@ -1542,7 +1545,7 @@
         users = [];
         mesSync?.stop();
         clearSessionData(state);
-        consoleMesView?.clear();
+        consoleMesView?.clear();consoleMesView=undefined;
         dashboardMesView?.clear();
         productMesView?.clear();
         failuresMesView?.clear();
@@ -2329,7 +2332,7 @@
     let consoleMesView;
     let mesSync;
     function startMesSync(uid){
-      mesSync ||= createMesSync(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,setDoc,onSnapshot,runTransaction}),{changed(){
+      mesSync ||= createMesSync(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction}),{changed(){
         if(!currentAuthUser)return;
         renderDashboardMes();renderProductMes();renderFailuresMes();renderDailyMes();renderCoraMes();renderConsoleMes();
       }});
@@ -2337,7 +2340,7 @@
     }
     function renderConsoleMes() {
       if (!currentAuthUser || activeView !== 'mesConsole') return;
-      consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, { locale: () => currentLanguage, onChange() {
+      consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, { locale: () => currentLanguage, history:{list:line=>mesSync.listHistory(line),open:head=>mesSync.openHistory(head)}, onChange() {
         if (!currentAuthUser) return;
         renderDashboardMes(); renderProductMes(); renderFailuresMes(); renderDailyMes(); renderCoraMes();
         mesSync?.capture().catch(error=>{state.ames.updateAgent({sync:{status:'error',error:error.message}});});
@@ -2979,7 +2982,7 @@ const aiPilot = {
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>{mesSync?.retry();syncOfflineQueue().catch(()=>{});});window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.48'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.48'){localStorage.setItem('cora.sw.loaded','15.1.13.48');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>{mesSync?.retry();syncOfflineQueue().catch(()=>{});});window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.49'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.49'){localStorage.setItem('cora.sw.loaded','15.1.13.49');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -6749,9 +6752,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
 
     document.querySelector('#mesConsole')?.addEventListener('click', event => {
       if (!event.target.closest('[data-console-setup]')) return;
-      show('profile');
-      document.querySelector('#amesSetupCollector')?.focus();
-      document.querySelector('#amesIntegration')?.scrollIntoView({ block: 'start' });
+      // Preparation is handled inside the Console, using the same agent/store.
     });
     document.querySelector('[data-open-integration]')?.addEventListener('click', () => {
       show('profile');
@@ -7454,5 +7455,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.48'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.48'){localStorage.setItem('cora.sw.loaded','15.1.13.48');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.49'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.49'){localStorage.setItem('cora.sw.loaded','15.1.13.49');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}

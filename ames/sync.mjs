@@ -1,10 +1,11 @@
 import {normalizeCanonical,CANONICAL_SCHEMA} from './data/canonical.mjs';
 import {LINE_IDS} from './data/contract.mjs';
+import {historyMetadata} from './data/history.mjs';
 const sha=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 export function sanitizeSnapshot(payload){
   normalizeCanonical(payload);
   const allowed=['schema','schema_version','source_id','snapshot_id','snapshot_revision','content_hash','line_id','collected_at','source_view','source_timestamp','summary','datasets','coverage','insights','capabilities'];
-  const clean=value=>Array.isArray(value)?value.map(clean):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([k])=>!/^_|password|senha|cookie|credential|authorization|token|raw_json|session/i.test(k)).map(([k,v])=>[k,clean(v)])):value;
+  const clean=value=>Array.isArray(value)?value.map(clean):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([k])=>!/^_|password|senha|cookie|credential|authorization|token|raw_json|session|cdp|wi.?fi|secret/i.test(k)).map(([k,v])=>[k,clean(v)])):value;
   return clean(Object.fromEntries(allowed.filter(k=>k in payload).map(k=>[k,payload[k]])));
 }
 export async function publication(uid,payload){
@@ -12,7 +13,7 @@ export async function publication(uid,payload){
   const key=await sha(JSON.stringify([safe.source_id,safe.snapshot_id,safe.snapshot_revision,hash]));
   const parts=[];for(let i=0;i<text.length;){let end=Math.min(i+150000,text.length);if(end<text.length&&/[\uD800-\uDBFF]/.test(text[end-1]))end--;parts.push(text.slice(i,end));i=end;}
   const head={schema:CANONICAL_SCHEMA,owner_uid:uid,line_id:safe.line_id,source_id:safe.source_id,snapshot_id:safe.snapshot_id,snapshot_num:Number(safe.snapshot_id),snapshot_revision:safe.snapshot_revision,key,hash,parts:parts.length,collected_at:safe.collected_at};
-  return {id:uid+':'+safe.line_id+':'+key,uid,head,parts};
+  return {id:uid+':'+safe.line_id+':'+key,uid,head,parts,history:historyMetadata(safe)};
 }
 export function indexedQueue(){
   let db;
@@ -31,12 +32,21 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       while(entries.length&&alive(u,g)){
       // Drop superseded queued revisions only after the newer head is committed.
       entries.sort((a,b)=>b.head.snapshot_num-a.head.snapshot_num||b.head.snapshot_revision-a.head.snapshot_revision);
+      let historyError;
       for(const entry of entries){
         if(!alive(u,g))return;
         for(let i=0;i<entry.parts.length;i++){if(!alive(u,g))return;await remote.putPart(u,entry.head,i,entry.parts[i]);}
         if(!alive(u,g))return;await remote.commitHead(u,entry.head);
+        if(!alive(u,g))return;
+        // Unpublished history rules must not block CURRENT updates for other lines.
+        // Keep denied history in the outbox for retry after rules are approved.
+        if(remote.commitHistory){
+          try{await remote.commitHistory(u,entry.head,entry.history||historyMetadata(JSON.parse(entry.parts.join(''))));}
+          catch(error){historyError=error;continue;}
+        }
         if(!alive(u,g))return;await queue.remove(entry.id);
       }
+      if(historyError)throw historyError;
       entries=await queue.list(u);
       }
       retry=1000;if(alive(u,g))status({status:'synchronized',pending:0,error:''});
@@ -58,6 +68,24 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
   }
   return {
+    async listHistory(line){
+      if(!uid||!remote.listHistory)throw Error('History unavailable');
+      const u=uid,g=generation,rows=await remote.listHistory(line);
+      if(!alive(u,g))throw Error('Session ended');
+      if(rows.some(h=>h.line_id!==line||!h.owner_uid||h.schema!==CANONICAL_SCHEMA))throw Error('Invalid history scope');
+      return rows;
+    },
+    async openHistory(h){
+      if(!uid||!LINE_IDS.includes(h.line_id)||!h.owner_uid||!Number.isInteger(h.parts)||h.parts<1||h.parts>5000)throw Error('Invalid history scope');
+      const u=uid,g=generation,parts=[];
+      for(let i=0;i<h.parts;i++){if(!alive(u,g))throw Error('Session ended');parts.push(await remote.getPart(h.owner_uid,h,i));}
+      const text=parts.join('');if(await sha(text)!==h.hash)throw Error('Incomplete history');
+      const payload=JSON.parse(text);normalizeCanonical(payload);
+      if(!alive(u,g)||payload.line_id!==h.line_id||payload.source_id!==h.source_id||payload.snapshot_id!==h.snapshot_id||payload.snapshot_revision!==h.snapshot_revision)throw Error('History mismatch');
+      const metadata=historyMetadata(payload);
+      if(['period_start','period_end','products'].some(key=>metadata[key]!==h[key]))throw Error('History metadata mismatch');
+      return sanitizeSnapshot(payload);
+    },
     start(user){this.stop();uid=user;const u=uid,g=generation;unwatch=remote.watch(u,heads=>{if(!alive(u,g))return;const key=JSON.stringify(heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort());if(key===headsKey)return;headsKey=key;lastHeads=heads;receive(heads);},error=>{if(alive(u,g))status({read_status:'error',read_error:error.message});});flush();},
     async capture(){
       if(!uid)return;const u=uid,g=generation,payloads=store.localCanonical();

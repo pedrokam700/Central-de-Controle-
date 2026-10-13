@@ -34,7 +34,7 @@ test('build estático grava SHA/branch/provider reais do deploy sem depender da 
       sha,
       branch:'v2/console-parity-r12',
       provider:'netlify',
-      build:'15.1.13.48',
+      build:'15.1.13.49',
       project:'central-cora-v2'
     });
     assert.ok(fs.existsSync(path.join(out,'Central-de-Controle-','index.html')));

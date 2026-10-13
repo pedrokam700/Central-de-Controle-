@@ -1,16 +1,24 @@
 import { AGENT_CAPABILITIES } from './data/capabilities.mjs';
 import { readRelease, integrationMode, INTEGRATION_MODE_KEY } from './data/onboarding.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
+import { migrationDownload } from './migration-download.mjs';
 
 export function savedIntegrationMode() {
   try { return integrationMode(localStorage.getItem(INTEGRATION_MODE_KEY)); } catch { return null; }
 }
-export function createOnboardingView(root, { onChoice = () => {}, loadRelease = async signal => {
+export function createOnboardingView(root, { onChoice = () => {}, loadMigration=migrationDownload, loadRelease = async signal => {
   const response = await fetch(new URL('./releases/latest/release.json', import.meta.url), { signal, cache: 'no-cache' });
   if (!response.ok) throw new Error('Release indisponível');
   return response.json();
 } } = {}) {
   let mode = savedIntegrationMode(), release, error = '', started = false, generation = 0, controller, volatile = false;
+  let migration=null,migrationStarted=false;
+  async function resolveMigration(){
+    if(mode!=='collector'||migrationStarted)return;migrationStarted=true;
+    const token=generation;
+    try{const result=await loadMigration(controller?.signal);if(token!==generation)return;migration=result;}catch{/* exact candidate not available yet */}
+    if(token===generation)paint();
+  }
   function collectorPanel(){
     if(!release)return `<p role="status">${error || 'Consultando o estado do pacote local…'}</p>${error ? '<button type="button" class="button secondary" data-release-retry>Tentar novamente</button>' : ''}`;
     const runtime=release.local_runtime;
@@ -21,7 +29,8 @@ export function createOnboardingView(root, { onChoice = () => {}, loadRelease = 
     const existingBlock=existing
       ? `<div class="mes-context-panel"><h3>Este computador já possui a automação R12</h3><p>Esse é o caminho de migração suportado para o gate atual. Preserve a pasta R12 como rollback, aplique o candidato canônico e inicie pelo <code>${esc(runtime?.start_file || 'INICIAR_POSTO_CENTRAL_V2.bat')}</code>. A interface operacional continua sendo esta Central; o agente local permanece em <code>${esc(runtime?.agent_health_url || 'http://127.0.0.1:8765/api/v1/health')}</code>.</p><p>O login do A-MES continua manual. A Central não recebe senha A-MES, cookies, CDP nem senha Wi-Fi.</p><details><summary>O que ainda precisa ser provado no posto</summary><ul>${AGENT_CAPABILITIES.missing.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details></div>`
       : '';
-    return `${existingBlock}${packageBlock}`;
+    const migrationBlock=migration?`<p><a class="button secondary" href="${esc(migration.url)}" target="_blank" rel="noopener noreferrer">Abrir pacote de migração R12</a></p><p>O pacote é exclusivo para computadores que já possuem R12. Preserve o backup e use o launcher incluído.</p><p>Frontend SHA: <code>${esc(migration.sha)}</code></p>`:'<p>Pacote deste frontend ainda não disponível no Actions.</p>';
+    return `${existingBlock}${migrationBlock}${packageBlock}`;
   }
   function paint() {
     const focusId = root.contains(root.ownerDocument.activeElement) ? root.ownerDocument.activeElement.id : '';
@@ -39,7 +48,7 @@ export function createOnboardingView(root, { onChoice = () => {}, loadRelease = 
     started = true; controller = new AbortController(); const token = generation;
     try { const result = readRelease(await loadRelease(controller.signal)); if (token !== generation) return; release = result; error = ''; }
     catch (e) { if (token !== generation) return; error = 'Manifesto indisponível ou inválido. Nenhum pacote será sugerido sem manifesto válido.'; }
-    if (token === generation) paint();
+    if (token === generation) {paint();void resolveMigration();}
   }
   root?.addEventListener('click', event => {
     const button = event.target.closest('[data-integration-mode], [data-release-retry]');
@@ -47,7 +56,7 @@ export function createOnboardingView(root, { onChoice = () => {}, loadRelease = 
     if (button.hasAttribute('data-release-retry')) { started = false; error = ''; render(); return; }
     mode = integrationMode(button.dataset.integrationMode);
     try { localStorage.setItem(INTEGRATION_MODE_KEY, mode); volatile = false; } catch { volatile = true; }
-    paint(); onChoice(mode);
+    paint(); onChoice(mode);void resolveMigration();
   });
   return Object.freeze({ render, clear() { generation++; controller?.abort(); started = false; release = undefined; error = ''; mode = savedIntegrationMode(); root?.replaceChildren(); } });
 }

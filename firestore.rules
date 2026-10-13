@@ -125,6 +125,34 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Immutable sanitized history index. Parts remain in the original publisher
+    // namespace. This rule is exercised only in the emulator until approved.
+    match /amesTeamLines/{lineId}/history/{historyId} {
+      function validHistory() {
+        let d = request.resource.data;
+        return activeUser() && mesLine(lineId)
+          && d.keys().hasOnly(['schema','owner_uid','line_id','source_id','snapshot_id','snapshot_num','snapshot_revision','key','hash','parts','collected_at','period_start','period_end','products'])
+          && d.schema == 'central-ames-v2' && d.line_id == lineId
+          && d.owner_uid == request.auth.uid
+          && d.source_id is string && d.source_id.size() <= 64
+          && d.snapshot_id is string && d.snapshot_num is int && d.snapshot_num > 0
+          && d.snapshot_revision is int && d.snapshot_revision > 0
+          && d.key is string && d.key.matches('[a-f0-9]{64}')
+          && d.hash is string && d.hash.matches('[a-f0-9]{64}')
+          && historyId == request.auth.uid + '_' + d.key
+          && d.parts is int && d.parts > 0 && d.parts <= 5000
+          && d.collected_at is string
+          && d.period_start is string && d.period_start.size() <= 40
+          && d.period_end is string && d.period_end.size() <= 40
+          && d.products is string && d.products.size() <= 2000
+          && getAfter(/databases/$(database)/documents/amesUsers/$(request.auth.uid)/lines/$(lineId)/snapshots/$(d.key)/parts/0).data.key == d.key;
+      }
+      allow read: if activeUser() && mesLine(lineId);
+      allow create: if validHistory();
+      allow update: if validHistory() && request.resource.data == resource.data;
+      allow delete: if false;
+    }
+
     match /workShifts/{documentId} {
       allow read: if activeUser();
       allow create, update, delete: if isAdmin();

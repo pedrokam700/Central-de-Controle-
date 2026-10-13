@@ -11,6 +11,9 @@ import { withAgentRefresh } from './console-refresh-decorator.mjs';
 import { withTraceSelectionHelper } from './console-trace-scope.mjs';
 import { createFailureProcessAddon } from './console-failure-process.mjs';
 import { withBaseCatalog } from './console-base-catalog.mjs';
+import { createPreparationView } from './console-preparation.mjs';
+import { createConsoleTranslator } from './console-i18n.mjs';
+import { createHistoryView } from './console-history.mjs';
 
 const VIEWS = Object.freeze([
   ['monitor','◉','Monitoramento','Monitoramento A-MES','Poucos cliques na frente; coleta, snapshots e correlações por trás.'],
@@ -32,8 +35,9 @@ const POLISH_STYLE_HREF = new URL('./console-r12-polish.css', import.meta.url).h
 
 // Fusão nativa definitiva do Console MES: uma sessão, um state.ames, um agent client.
 // A V0.5.22/V0.5.23/R12 permanece como referência visual/operacional, nunca como app paralelo.
-export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {} } = {}) {
+export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {}, history } = {}) {
   let active='monitor', mounted=false, disposed=false;
+  let preparation, translator;
   const views=new Map();
   const client=createAgentClient(store,{...transport,changed(){if(disposed)return;renderActive();paintHeader();onChange();}});
 
@@ -48,13 +52,8 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     document.querySelector('.main-nav [data-page="home"], [data-page="home"]')?.click();
   }
   function openWorkstationSetup(){
-    switchView('monitor');
-    const pane=root.querySelector('[data-console-pane="monitor"]');
-    const details=pane?.querySelector('[data-monitor-tools] details');
-    if(details)details.open=true;
-    const fieldsets=[...(pane?.querySelectorAll('[data-monitor-tools] fieldset')||[])];
-    const setup=fieldsets.find(fieldset=>/Configuração do posto/i.test(fieldset.querySelector('legend')?.textContent||''))||details;
-    requestAnimationFrame(()=>setup?.scrollIntoView({behavior:'smooth',block:'start'}));
+    preparation?.open();
+    root.querySelector('[data-console-preparation]')?.scrollIntoView({block:'start'});
   }
   function mount(){
     root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><link rel="stylesheet" href="${POLISH_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell>
@@ -73,7 +72,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
           <button class="button secondary ames-hide-mobile" type="button" data-console-check>Verificar</button>
           <button class="button secondary" type="button" data-console-back>Voltar à Central</button>
         </div></header>
-        <div class="ames-legacy-content">${VIEWS.map(([id])=>`<section class="ames-console-pane" data-console-pane="${id}"${id===active?'':' hidden'}></section>`).join('')}</div>
+        <div class="ames-legacy-content"><section data-console-preparation></section>${VIEWS.map(([id])=>`<section class="ames-console-pane" data-console-pane="${id}"${id===active?'':' hidden'}></section>`).join('')}</div>
       </main></div>`;
     for(const button of root.querySelectorAll('[data-console-view]'))button.addEventListener('click',()=>switchView(button.dataset.consoleView));
     root.querySelector('[data-console-back]')?.addEventListener('click',backToCentral);
@@ -82,7 +81,11 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     root.querySelector('[data-console-open-ames]')?.addEventListener('click',async()=>{try{if(store.agent().status!=='connected')await client.connect();await client.auxiliary('chrome');}catch(error){store.updateAgent({error:error.message});paintHeader();}});
     root.querySelector('[data-console-setup]')?.addEventListener('click',openWorkstationSetup);
     root.querySelector('[data-console-check]')?.addEventListener('click',async()=>{try{if(store.agent().status==='connected')await client.refresh();else await client.connect();}catch(error){store.updateAgent({error:error.message});paintHeader();}});
-    mounted=true;paintHeader();
+    const theme=document.createElement('link');theme.rel='stylesheet';theme.href=new URL('./console-theme.css',import.meta.url).href;root.append(theme);
+    mounted=true;
+    translator=createConsoleTranslator(root,locale);
+    preparation=createPreparationView(root.querySelector('[data-console-preparation]'),store,client);
+    preparation.render();paintHeader();
   }
 
   function ensure(id){
@@ -118,8 +121,14 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     }
     else if(id==='reuse')view=withAgentRefresh(createReuseConsoleView(pane,store),pane,store,client,{label:'Atualizar'});
     else if(id==='process')view=withAgentRefresh(withProcessCapability(createProcessConsoleView(pane,store),pane,store,'process'),pane,store,client,{label:'Atualizar'});
-    else if(id==='base')view=withBaseCatalog(createBaseConsoleView(pane,store,client),pane,store,client);
-    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client),pane);
+    else if(id==='base'){
+      pane.innerHTML='<section data-base-history></section><section data-base-local></section>';
+      const local=pane.querySelector('[data-base-local]');
+      const base=withBaseCatalog(createBaseConsoleView(local,store,client),local,store,client);
+      const periods=createHistoryView(pane.querySelector('[data-base-history]'),store,client,history);
+      view={render(){periods.render();base.render();},clear(){periods.clear();base.clear();}};
+    }
+    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);
     views.set(id,view);return view;
   }
 
@@ -128,23 +137,24 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     const title=root.querySelector('[data-console-title]'),sub=root.querySelector('[data-console-sub]'),status=root.querySelector('[data-console-status]'),foot=root.querySelector('[data-console-build-foot]'),dot=root.querySelector('[data-console-dot]');
     if(title)title.textContent=m[3];if(sub)sub.textContent=m[4];
     const connected=a.status==='connected';
-    if(status)status.textContent=connected?`Agente local conectado${a.agent_build?' · '+a.agent_build:''}`:'Agente local desconectado';
+    if(status)status.textContent=connected?`Agente local conectado${a.agent_build?' · '+a.agent_build:''}`:'MES local não disponível neste computador';
     dot?.classList.toggle('ok',connected);
     if(foot)foot.textContent=`${a.agent_build||a.capabilities?.agent_build||'MES local'} · 9 views`;
   }
 
   function switchView(id){
     if(!VIEWS.some(([key])=>key===id))return;active=id;setMenu(false);
+    if(id!=='monitor')preparation?.collapse();
     for(const button of root.querySelectorAll('[data-console-view]'))button.classList.toggle('active',button.dataset.consoleView===id);
     for(const pane of root.querySelectorAll('[data-console-pane]'))pane.hidden=pane.dataset.consolePane!==id;
     renderActive();
   }
 
-  function renderActive(){if(!mounted)mount();ensure(active)?.render();paintHeader();}
+  function renderActive(){if(!mounted)mount();ensure(active)?.render();paintHeader();preparation?.render();translator?.render();}
 
   return Object.freeze({
     render(){if(!root||disposed)return;if(!mounted)mount();renderActive();},
-    clear(){disposed=true;for(const view of views.values())view?.clear?.();views.clear();client.clear();root?.replaceChildren();mounted=false;}
+    clear(){disposed=true;preparation?.clear();translator?.clear();for(const view of views.values())view?.clear?.();views.clear();client.clear();root?.replaceChildren();mounted=false;}
   });
 }
 
