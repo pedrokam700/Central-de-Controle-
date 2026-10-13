@@ -67,20 +67,42 @@ def main() -> None:
     updater.write_text(u, encoding="utf-8-sig")
 
     # Package-level contracts run against the exact files that go into the ZIP.
-    for p in (launcher, updater, bootstrap, guard_dst):
+    hardened_entry = PAYLOAD / "ames-agent" / "agent_hardened_entry.py"
+    for p in (launcher, updater, bootstrap, guard_dst, hardened_entry):
         assert_no_bad_controls(p)
 
     launch_text = launcher.read_text(encoding="utf-8-sig")
     boot_text = bootstrap.read_text(encoding="utf-8")
+    hard_text = hardened_entry.read_text(encoding="utf-8")
+    guard_text = guard_dst.read_text(encoding="utf-8")
+
     if "/api/v1/ready" not in launch_text:
         raise SystemExit("generated launcher does not use lightweight /ready")
-    # Numeric boundary matters: TimeoutSec 20 must NOT be mistaken for TimeoutSec 2.
     if re.search(r"api/v1/health'\s+-TimeoutSec\s+2(?!\d)", launch_text):
         raise SystemExit("generated launcher still polls heavy /health with 2s timeout")
     if launch_text.count("/api/v1/health") != 1:
         raise SystemExit("generated launcher must call full /health exactly once")
-    if "fastlane_runtime_guard.install()" not in boot_text:
-        raise SystemExit("generated bootstrap does not install runtime guard")
+    if "HTTP 401" not in launch_text:
+        raise SystemExit("launcher must fail fast on readiness authorization mismatch")
+
+    if "fastlane_runtime_guard.install(hardened.entry)" not in boot_text:
+        raise SystemExit("bootstrap must install guard on final hardened entry")
+    if "runpy.run_path" in boot_text:
+        raise SystemExit("bootstrap must not install guard before HardenedHandler exists")
+    if "import agent_hardened_entry as hardened" not in boot_text:
+        raise SystemExit("bootstrap does not import final hardened entry explicitly")
+
+    if '"/api/v1/ready"' not in hard_text or "_PUBLIC_API" not in hard_text:
+        raise SystemExit("final hardened handler does not expose /ready as public startup contract")
+    if 'if path == "/api/v1/ready"' not in hard_text:
+        raise SystemExit("final hardened handler does not implement /ready directly")
+    if '"package_root"' in hard_text[hard_text.find('if path == "/api/v1/ready"'):hard_text.find('if path == "/api/v1/hardening/health"')]:
+        raise SystemExit("/ready leaks package path")
+
+    if "def install(entry_module):" not in guard_text:
+        raise SystemExit("runtime guard must target the final entry module")
+    if "original_get" in guard_text or "guarded_get" in guard_text:
+        raise SystemExit("runtime guard must not own readiness routing")
     if not guard_dst.is_file():
         raise SystemExit("runtime guard missing from payload")
 
