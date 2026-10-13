@@ -112,6 +112,11 @@ def export_revision(store,sid,line,insight_builder=None):
                 row.update(record_id=ident,line=line,line_id=line,snapshot_id=str(sid),product=products[0] if len(products)==1 else None,product_candidates=products,source_view=view,source_timestamp=raw.get('defect_time') or raw.get('event_time'),collected_at=snap['collected_at'],raw_ref=f'sqlite:{source}:{dataset}:{sid}:{key}',provenance={'identity_scope':'agent_snapshot_observation','source_id':source,'line_candidates':candidates,'line_ambiguous':len(candidates)>1,'contexts':selected})
                 if dataset=='defects':row['occurrence_id']=ident
                 if dataset=='material_reuse':
+                    try:
+                        material_raw=json.loads(raw.get('raw_json') or '{}')
+                        item_row=material_raw.get('row') or material_raw
+                        row['part_number']=next((item_row[k] for k in ('Part Number','Part No','Material ID','Material Id') if isinstance(item_row,dict) and item_row.get(k)),None)
+                    except (ValueError,TypeError):pass
                     row['material_sn']=raw.get('item_sn');row['bind_id']=str(uuid.uuid5(uuid.UUID(ident),'bind:'+str(raw.get('bind_time_utc')))) if raw.get('bind_time_utc') else None
                     row['unbind_id']=str(uuid.uuid5(uuid.UUID(ident),'unbind:'+str(raw.get('unbind_time_utc')))) if raw.get('unbind_time_utc') else None
                 if dataset=='process_timeline':

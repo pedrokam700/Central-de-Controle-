@@ -1,5 +1,6 @@
+import {sessionAmes} from './core/ames-session.mjs';
 
-    import { createAmesStore, clearSessionData } from './ames/data/store.mjs';
+    import { clearSessionData } from './ames/data/store.mjs';
     import {createMesSync} from './ames/sync.mjs';
     import {firestoreTransport} from './ames/firebase-sync.mjs';
     import { createConsoleView } from './ames/console-view.mjs';
@@ -48,7 +49,7 @@
     const ADMIN_EMAIL = 'pedro.henrique@grupomultilaser.com.br';
 
     let state = {
-      ames: createAmesStore(),
+      ames: sessionAmes,
       products: [],
       reports: [],
       operationalFailures: [],

@@ -8,7 +8,7 @@ import socket
 import sqlite3
 import uuid
 from pathlib import Path
-FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py')
+FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py')
 ROOT_FILES=('INICIAR_POSTO_CENTRAL_V2.bat','00_INICIAR_AQUI.bat','INICIAR_CENTRAL_AMES.cmd',
             'suporte/ames-workstation/ROTA_AMES_APLICAR.bat','suporte/ames-workstation/ROTA_AMES_REMOVER.bat',
             'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1',
@@ -58,14 +58,14 @@ def _restore_agent(target,saved,manifest):
         path=target/name
         if path.is_file():path.unlink()
 
-def backup(target):
+def backup(target, extra_root=()):
     package=target.parent
     folder=package/'candidate-backups'/uuid.uuid4().hex;folder.mkdir(parents=True)
     agent_files=[];agent_absent=[];root_files=[];root_absent=[]
     for name in (*FILES,'config.json'):
         if (target/name).exists():_copy_preserving(target/name,folder/'ames-agent'/name);agent_files.append(name)
         else:agent_absent.append(name)
-    for rel in (*ROOT_FILES,*OPTIONAL_ROOT_FILES):
+    for rel in dict.fromkeys((*ROOT_FILES,*OPTIONAL_ROOT_FILES,*extra_root)):
         if (package/rel).exists():_copy_preserving(package/rel,folder/'root'/rel);root_files.append(rel)
         else:root_absent.append(rel)
     db=target/'data'/'ames_local.sqlite3'
@@ -85,12 +85,22 @@ def update(path,source=None):
         if hashlib.sha256((source/name).read_bytes()).hexdigest()!=manifest[name]:raise ValueError('Candidate hash mismatch: '+name)
     for rel in ROOT_FILES:
         if not (source_root/rel).is_file():raise ValueError('Candidate workstation file missing: '+rel)
-    saved=backup(target)
+    extras={}
+    local_manifest=source_root/'LOCAL_BUNDLE_MANIFEST.json'
+    if local_manifest.is_file():
+        extras=json.loads(local_manifest.read_text(encoding='utf-8'))['files']
+        for rel,expected in extras.items():
+            candidate=(source_root/rel).resolve()
+            if source_root.resolve() not in candidate.parents or not (rel.startswith(('frontend/','factory-engine/','network/')) or rel in ('START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat')):raise ValueError('Invalid local bundle path')
+            if hashlib.sha256(candidate.read_bytes()).hexdigest()!=expected:raise ValueError('Local asset hash mismatch: '+rel)
+    saved=backup(target,extras)
     try:
         for name in FILES:shutil.copy2(source/name,target/name)
         for rel in ROOT_FILES:_copy_preserving(source_root/rel,package/rel)
         for rel in OPTIONAL_ROOT_FILES:
             if (source_root/rel).is_file():_copy_preserving(source_root/rel,package/rel)
+        for rel in extras:_copy_preserving(source_root/rel,package/rel)
+        if extras:cfg['engine_dir']=str((package/'factory-engine').resolve())
         cfg['allowed_origins']=list(dict.fromkeys([*(cfg.get('allowed_origins') or []),*ORIGINS]))
         _atomic_json(target/'config.json',cfg)
     except BaseException:

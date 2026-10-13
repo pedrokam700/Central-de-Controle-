@@ -1,4 +1,12 @@
 export const EXTRA_EN=Object.fromEntries(`
+Relação histórica|Historical relation
+Defect Code antigo|Prior defect code
+Defect Description antigo|Prior defect description
+Defect Time antigo|Prior defect time
+Operador / 3022|Operator / 3022
+Operador|Operator
+Campos retornados pela fonte; não confirma causa raiz.|Fields returned by the source; does not confirm root cause.
+
 Iniciar monitoramento|Start monitoring
 Chrome dedicado / CDP · 9222|Dedicated Chrome / CDP · 9222
 Chrome dedicado / CDP|Dedicated Chrome / CDP

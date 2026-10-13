@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from mes_scheduler import MES, session_object
 
+from operator_evidence import operator_evidence
+
 import importlib
 import json
 import os
@@ -18,6 +20,7 @@ def discover_engine(config: Dict[str, Any], agent_dir: Path) -> Optional[Path]:
     if config.get("engine_dir"):
         candidates.append(Path(config["engine_dir"]))
     candidates.extend([
+        agent_dir.parent / "factory-engine",
         agent_dir.parent / "AMES_Automacao_V0_16_PADRAO_VALIDADO",
         agent_dir.parent.parent / "AMES_Automacao_V0_16_PADRAO_VALIDADO",
         Path.cwd() / "AMES_Automacao_V0_16_PADRAO_VALIDADO",
@@ -304,6 +307,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
     tela3074_mod = importlib.import_module("ames.tela_3074")
     tela2114_mod = importlib.import_module("ames.tela_2114")
     tela3022_mod = importlib.import_module("ames.tela_3022")
+    correlacao_mod = importlib.import_module("core.correlacao_falhas")
 
     query = str(sn or "").strip()
     if not query:
@@ -322,6 +326,44 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         # A 3074 pode ser consultada tanto por PCBA quanto por Material SN.
         components = tela3074_mod.componentes_serializados(rows3074, pcba_consultada=query)
         historical_pcbas = tela3074_mod.pcbas_historicas(rows3074)
+
+        # Consulta individual deve responder também quais componentes estão em 2º+
+        # uso e por quais PCBAs passaram. Para isso, quando a SN consultada é uma
+        # PCBA, consultamos cada Material SN serializado na própria 3074. É a mesma
+        # evidência usada pela análise profunda, apenas sob demanda.
+        component_usage = []
+        for idx, comp in enumerate(components, start=1):
+            item_sn = str((comp or {}).get("item_sn") or "").strip()
+            if not item_sn:
+                continue
+            try:
+                if line_callback:
+                    line_callback("3074", min(32, 12 + int(20 * idx / max(1, len(components)))), f"Material {idx}/{len(components)} · {item_sn}")
+                item_query = tela3074.consultar(item_sn)
+                item_pcbas = tela3074_mod.pcbas_historicas(item_query.get("rows") or [])
+                previous = [x for x in item_pcbas if x and x != query]
+                component_usage.append({
+                    "item_sn": item_sn,
+                    "item_type": (comp or {}).get("item_type") or "",
+                    "known_pcbas": item_pcbas,
+                    "known_use_count": len(item_pcbas),
+                    "reuse_count": max(0, len(item_pcbas) - 1),
+                    "is_reused": len(previous) > 0,
+                    "previous_pcbas": previous,
+                    "query": item_query,
+                })
+                for pc in previous:
+                    if pc not in historical_pcbas:
+                        historical_pcbas.append(pc)
+            except Exception as exc:
+                component_usage.append({
+                    "item_sn": item_sn, "item_type": (comp or {}).get("item_type") or "",
+                    "known_pcbas": [], "known_use_count": None, "reuse_count": None,
+                    "is_reused": None, "previous_pcbas": [],
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+                warnings.append(f"3074 material {item_sn}: {type(exc).__name__}: {exc}")
+
         pcba_candidates = []
         seen = set()
         # Always try the scanned SN in 2114; material SN simply returns no-data.
@@ -339,6 +381,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             try:
                 if line_callback:
                     line_callback("2114", min(72, 35 + int(37*i/max(1,len(pcba_candidates)))), f"Histórico {i}/{len(pcba_candidates)} · {pcba}")
+                shift = nav.ensure_current_shift_2114(p2114)
                 rr = tela2114.consultar(pcba)
                 histories.append({"pcba_sn": pcba, "status": "COMPLETE", "result": rr, "error": None})
             except Exception as exc:
@@ -366,7 +409,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                     if process and not any(p.get("status") == "COMPLETE" for p in process):
                         warnings.append("3022 abriu, mas ainda não retornou dados legíveis neste teste.")
                 except Exception as exc:
-                    warnings.append(f"3022 ainda pendente de validação real: {type(exc).__name__}: {exc}")
+                    warnings.append(f"3022 indisponível nesta execução: {type(exc).__name__}: {exc}")
 
         all_hist_rows = []
         for h in histories:
@@ -377,12 +420,77 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         repair_n = sum(1 for r in all_hist_rows if str(r.get("Repair Status") or "").strip().upper() == "N")
         repair_y = sum(1 for r in all_hist_rows if str(r.get("Repair Status") or "").strip().upper() == "Y")
 
+        # Structure current vs previous PCBA failures and relate historical PCBAs
+        # from reused components to the current failure. The relation is evidence
+        # only (same code/family/different), never an automatic root cause.
+        current_pcba_rows = []
+        for h in histories:
+            if h.get("pcba_sn") == query and h.get("status") == "COMPLETE":
+                current_pcba_rows = list(((h.get("result") or {}).get("rows") or []))
+                break
+        sel = correlacao_mod.selecionar_ocorrencia_atual("", "", current_pcba_rows)
+        current_failure_2114 = sel.get("current_history")
+        previous_failures_2114 = list(sel.get("prior_histories") or [])
+        for hist in previous_failures_2114:
+            hist["relation"] = correlacao_mod.comparar_falhas((current_failure_2114 or {}).get("Defect Code", ""), (current_failure_2114 or {}).get("Defect Description", ""), hist.get("Defect Code", ""), hist.get("Defect Description", "")).get("relation") if current_failure_2114 else "SEM_FALHA_ATUAL"
+        history_by_pcba = {}
+        for h in histories:
+            if h.get("status") == "COMPLETE":
+                history_by_pcba[h.get("pcba_sn")] = list(((h.get("result") or {}).get("rows") or []))
+        reused_components = []
+        for comp in component_usage:
+            if not comp.get("is_reused"):
+                continue
+            evidence = []
+            strongest = "SEM_HISTORICO"
+            for old_pcba in comp.get("previous_pcbas") or []:
+                old_rows = history_by_pcba.get(old_pcba) or []
+                rels = []
+                for hist in old_rows:
+                    if current_failure_2114:
+                        cmp = correlacao_mod.comparar_falhas(
+                            current_failure_2114.get("Defect Code", ""), current_failure_2114.get("Defect Description", ""),
+                            hist.get("Defect Code", ""), hist.get("Defect Description", ""))
+                        rel = cmp.get("relation") or "FALHA_DIFERENTE"
+                        reason = cmp.get("reason") or ""
+                    else:
+                        rel, reason = "SEM_FALHA_ATUAL", "Falha atual da PCBA não confirmada na 2114"
+                    rels.append(rel)
+                    evidence.append({"pcba_sn":old_pcba,"relation":rel,"reason":reason,"history":hist})
+                if "MESMA_FALHA" in rels:
+                    strongest = "MESMA_FALHA"
+                elif strongest != "MESMA_FALHA" and "FALHA_SIMILAR" in rels:
+                    strongest = "FALHA_SIMILAR"
+                elif strongest not in ("MESMA_FALHA","FALHA_SIMILAR") and rels:
+                    strongest = "FALHA_DIFERENTE"
+            reused_components.append({
+                "item_sn":comp.get("item_sn"),"item_type":comp.get("item_type"),
+                "known_use_count":comp.get("known_use_count"),"reuse_count":comp.get("reuse_count"),
+                "previous_pcbas":comp.get("previous_pcbas") or [],"relation_to_current_failure":strongest,
+                "previous_pcba_evidence":evidence,"error":comp.get("error"),
+            })
+
         process_rows = []
+        process_focus_rows = []
+        process_post_test_rows = []
+        process_passages = []
+        process_focus_meta = []
         for p in process:
             rr = p.get("result") or {}
             for row in rr.get("rows") or []:
                 item = dict(row); item["PCBA Consultada"] = p.get("pcba_sn")
                 process_rows.append(item)
+            for row in rr.get("focus_rows") or []:
+                item = dict(row); item["PCBA Consultada"] = p.get("pcba_sn")
+                process_focus_rows.append(item)
+            for row in rr.get("post_test_rows") or []:
+                item = dict(row); item["PCBA Consultada"] = p.get("pcba_sn")
+                process_post_test_rows.append(item)
+            for row in rr.get("process_passages") or []:
+                item = dict(row); item["pcba_sn"] = p.get("pcba_sn"); item.update(operator_evidence(row.get("raw") or {}))
+                process_passages.append(item)
+            if rr.get("process_focus"):
+                process_focus_meta.append({"pcba_sn": p.get("pcba_sn"), **dict(rr.get("process_focus") or {})})
 
         model = ""
         line = ""
@@ -396,7 +504,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         return {
             "version": "0.5.23-individual",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "query_sn": query,
+            "query_sn": query, "sn": query,
             "detected_type": detected_type,
             "line": line,
             "product_model": model,
@@ -405,18 +513,38 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 "3074_rows": len(rows3074),
                 "serialized_components": len(components),
                 "related_pcbas": len(historical_pcbas),
+                "reused_components": len(reused_components),
+                "pcba_previous_failures": len(previous_failures_2114),
                 "2114_histories": len(all_hist_rows),
                 "repair_n": repair_n,
                 "repair_y": repair_y,
-                "3022_events": len(process_rows),
+                "3022_events": len(process_rows) if any(p["status"] == "COMPLETE" for p in process) else None,
+                "3022_focus_events": len(process_focus_rows),
+                "3022_post_test_events": len(process_post_test_rows),
+                "3022_process_passages": len(process_passages),
             },
             "trace_3074": {
                 "query": r3074,
                 "components": components,
+                "component_usage": component_usage,
+                "reused_components": reused_components,
                 "related_pcbas": historical_pcbas,
             },
-            "trace_2114": {"pcbas": histories, "rows": all_hist_rows},
-            "trace_3022": {"pcbas": process, "rows": process_rows},
+            "trace_2114": {
+                "pcbas": histories, "rows": all_hist_rows,
+                "current_failure": current_failure_2114,
+                "previous_failures": previous_failures_2114 if any(h["pcba_sn"] == query and h["status"] == "COMPLETE" for h in histories) else None,
+            },
+            "trace_3022": {
+                "pcbas": process,
+                "rows": process_rows,
+                "focus_rows": process_focus_rows,
+                "post_test_rows": process_post_test_rows,
+                "process_passages": process_passages if any(p["status"] == "COMPLETE" for p in process) else None,
+                "operator_evidence": [{**operator_evidence(row), "pcba_sn": row.get("PCBA Consultada")} for row in process_rows if operator_evidence(row)["operator_fields"]],
+                "focus_meta": process_focus_meta,
+                "default_scope": "MONTAGEM_TESTE_ATE_A5700",
+            },
             "warnings": warnings,
         }
     finally:

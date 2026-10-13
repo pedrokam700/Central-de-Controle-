@@ -1,0 +1,95 @@
+{
+  "3074": {
+    "sn_labels": [
+      "Barcode",
+      "SN",
+      "Serial Number"
+    ],
+    "sn_name_contains": [
+      "barcode",
+      "sn",
+      "serial"
+    ],
+    "view_texts": [
+      "View",
+      "Search",
+      "Query"
+    ],
+    "expected_headers": [
+      "Barcode",
+      "Sn Type",
+      "Batch Id",
+      "Sn Seq",
+      "Batch Count",
+      "Line Id",
+      "Product Model",
+      "Product Id",
+      "Whether to use",
+      "Iss Status",
+      "Create Time"
+    ]
+  },
+  "3012": {
+    "sn_labels": [
+      "SN",
+      "Barcode",
+      "Serial Number"
+    ],
+    "sn_name_contains": [
+      "sn",
+      "barcode",
+      "serial"
+    ],
+    "start_labels": [
+      "Defect Time Start",
+      "Start Date",
+      "Date Start"
+    ],
+    "end_labels": [
+      "Defect Time End",
+      "End Date",
+      "Date End"
+    ],
+    "view_texts": [
+      "View",
+      "Search",
+      "Query"
+    ],
+    "expected_headers": [
+      "Defect Code",
+      "Defect Desc",
+      "Defect Time",
+      "Repair User",
+      "Repair Time",
+      "Repair Comment",
+      "Defect Reason Type",
+      "Defect Reason Desc"
+    ]
+  },
+  "3022": {
+    "sn_labels": [
+      "SN / IMEI / A-S",
+      "SN",
+      "Barcode"
+    ],
+    "sn_name_contains": [
+      "sn",
+      "imei",
+      "barcode"
+    ],
+    "view_texts": [
+      "View",
+      "Search",
+      "Query"
+    ],
+    "expected_headers": [
+      "Current Oper Code",
+      "Current Oper",
+      "Working Oper",
+      "Station",
+      "Tran User Id",
+      "Tran Time",
+      "Shift Desc"
+    ]
+  }
+}

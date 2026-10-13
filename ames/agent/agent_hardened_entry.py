@@ -6,7 +6,8 @@ operational calendar and loopback authorization on top.
 """
 from __future__ import annotations
 
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote, parse_qs
+from pathlib import Path
 
 import agent_entry as entry
 import hardening
@@ -94,8 +95,38 @@ class HardenedHandler(entry.Handler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        static_root = (entry.a.BASE_DIR.parent / "frontend").resolve()
+        if path == "/" and static_root.is_dir():
+            path = "/Central-de-Controle-/index.html"
+        if path == "/Central-de-Controle-/":
+            path += "index.html"
+        if path.startswith("/Central-de-Controle-/") or path == "/release-build.json":
+            target = (static_root / unquote(path).lstrip("/")).resolve()
+            if static_root in target.parents and target.is_file() and target.suffix in {".html", ".js", ".mjs", ".css", ".json", ".svg", ".png", ".webmanifest"}:
+                self._send_static(target)
+            else:
+                self._send({"error":"static_not_found"},404)
+            return
         if not self._authorized(path):
             self._reject_unauthorized()
+            return
+        if path == "/api/v1/local-history":
+            q=parse_qs(urlparse(self.path).query);line=(q.get('line') or [''])[0]
+            if line not in entry.canonical.LINES:
+                self._send({'error':'invalid_line'},400);return
+            sid=(q.get('snapshot_id') or [None])[0]
+            try:
+                if sid:
+                    self._send(entry.canonical.export_revision(entry.a.STORE,int(sid),line,entry.a.trace_insights))
+                else:
+                    with entry.a.STORE.connect() as con:
+                        rows=con.execute("SELECT DISTINCT s.id,s.collected_at,w.start_at,w.end_at FROM snapshots s LEFT JOIN analysis_windows w ON w.id=s.window_id WHERE s.status='complete' AND (EXISTS(SELECT 1 FROM line_metrics m WHERE m.snapshot_id=s.id AND m.line=?) OR EXISTS(SELECT 1 FROM defect_observations d WHERE d.snapshot_id=s.id AND d.line=?)) ORDER BY s.id DESC",(line,line)).fetchall()
+                        out=[]
+                        for r in rows:
+                            products=[x[0] for x in con.execute("SELECT DISTINCT product_model FROM defect_observations WHERE snapshot_id=? AND line=?",(r['id'],line)) if x[0]]
+                            out.append({'snapshot_id':r['id'],'line_id':line,'collected_at':r['collected_at'],'period_start':r['start_at'],'period_end':r['end_at'],'products':','.join(products),'source_id':entry.canonical.source_id(entry.a.STORE)})
+                    self._send(out)
+            except (ValueError,RuntimeError) as exc:self._send({'error':str(exc)},400)
             return
         if path == "/api/v1/hardening/health":
             try:

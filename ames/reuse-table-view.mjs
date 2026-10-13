@@ -1,0 +1,21 @@
+import {createAdvancedTable} from './advanced-table.mjs';
+import {reuseLinks,aggregatePcbas,reuseKpis} from './data/reuse-analysis.mjs';
+import {escapeHtml as esc} from './evidence-view.mjs';
+export const REUSE_COLUMNS=[['pcba','PCBA atual','Current PCBA'],['line','Linha','Line'],['product','CPH / modelo','CPH / model'],['material','Material SN','Material SN'],['part_number','Part Number','Part Number'],['family','Família do componente','Component family'],['item_type','Tipo do item','Item type'],['usage','Uso material','Material use'],['defect_code','Defect Code','Defect Code'],['defect_desc','Defect Description','Defect Description'],['defect_time','Defect Time','Defect Time'],['relations','Relação histórica','Historical relation'],['previous_pcbas','PCBAs anteriores','Previous PCBAs'],['history_code','Defect Code antigo','Prior defect code'],['history_desc','Falha antiga','Prior defect'],['materials','Materiais reutilizados','Reused materials'],['links','Vínculos','Links'],['historical_pcbas','PCBAs históricas','Historical PCBAs'],['station','Posto 3022','3022 station'],['operation','Processo 3022','3022 operation'],['operator','Operador/analisador','Operator / analyst']].map(([key,label,en])=>({key,label,en}));
+export const REUSE_PRESETS=[
+ {id:'pcbas',label:'PCBAs AFETADAS',en:'AFFECTED PCBAs',columns:['pcba','line','product','materials','family','historical_pcbas','relations','defect_time']},
+ {id:'default',label:'PADRÃO',en:'DEFAULT',columns:['pcba','material','family','defect_code','relations']},
+ {id:'materials',label:'MATERIAIS REUTILIZADOS',en:'REUSED MATERIALS',columns:['pcba','material','part_number','family','usage','previous_pcbas']},
+ {id:'history',label:'FALHA HISTÓRICA',en:'HISTORICAL FAILURE',columns:['pcba','material','previous_pcbas','defect_code','history_code','history_desc','relations']},
+ {id:'process',label:'PROCESSO / 3022',en:'PROCESS / 3022',columns:['pcba','material','station','operation','operator','defect_time']}
+];
+export function mountReuseTable(root,snapshot){
+ const en=document.documentElement.lang.startsWith('en'),t=(pt,eng)=>en?eng:pt;
+ if(!document.querySelector('[data-advanced-table-style]')){const l=document.createElement('link');l.rel='stylesheet';l.href=new URL('./advanced-table.css',import.meta.url);l.dataset.advancedTableStyle='';document.head.append(l);}
+ root.setAttribute('data-no-i18n','');root.innerHTML=`<h3>${t('PCBAs afetadas e vínculos de material','Affected PCBAs and material links')}</h3><p>${t('Filtros combinados são aplicados aos vínculos antes de agregar PCBAs. Clique na PCBA para ver os SNs exatos.','Combined filters apply to links before grouping PCBAs. Click a PCBA to inspect its exact SNs.')}</p><div class="ames-reuse-kpi-strip" data-link-kpis></div><div data-link-table></div><div class="ames-table-drill" data-link-detail hidden></div>`;
+ const rows=reuseLinks(snapshot),available=Boolean(snapshot?.insights||snapshot?.material_trace?.records?.length);
+ createAdvancedTable(root.querySelector('[data-link-table]'),{rows,columns:REUSE_COLUMNS,key:'reuse',presets:REUSE_PRESETS,allowFullExport:true,project:(r,p)=>p==='pcbas'?aggregatePcbas(r):r,
+ onRows(filtered){const k=reuseKpis(filtered);root.querySelector('[data-link-kpis]').innerHTML=[['pcbas',t('PCBAs únicas afetadas','Unique affected PCBAs')],['materials',t('Material SN únicos','Unique material SNs')],['links',t('Vínculos encontrados','Material links')],['same',t('PCBAs com mesma falha','PCBAs with same defect')],['family',t('PCBAs com mesma família','PCBAs with same family')],['other',t('PCBAs com outra falha','PCBAs with other defect')]].map(([key,label])=>`<span>${label}<b>${available?k[key]:'—'}</b></span>`).join('');},
+ onOpen(row){const target=root.querySelector('[data-link-detail]');target.hidden=false;target.innerHTML=`<h4>${esc(row.pcba)}</h4><button data-close>${t('Fechar','Close')}</button><div data-detail-table></div>`;target.querySelector('[data-close]').onclick=()=>target.hidden=true;createAdvancedTable(target.querySelector('[data-detail-table]'),{rows:row._links||[row],columns:REUSE_COLUMNS,key:'reuse-detail',presets:REUSE_PRESETS.filter(p=>p.id!=='pcbas'),allowFullExport:true});}
+ });
+}

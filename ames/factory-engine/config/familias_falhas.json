@@ -1,0 +1,90 @@
+{
+  "CONNECTIVITY_RF": [
+    "antenna",
+    "ant0",
+    "ant1",
+    "ant2",
+    "ant7",
+    "gps",
+    "wifi",
+    "wireless",
+    "bluetooth",
+    "rf test",
+    "network"
+  ],
+  "CAMERA": [
+    "camera",
+    "rear camera",
+    "front camera",
+    "camera offset",
+    "camera failed"
+  ],
+  "AUDIO": [
+    "speaker",
+    "receiver",
+    "earpiece",
+    "microphone",
+    "headset",
+    "audio"
+  ],
+  "DISPLAY_LCD": [
+    "display",
+    "screen",
+    "lcd",
+    "black screen",
+    "protective film"
+  ],
+  "SENSOR": [
+    "sensor",
+    "light perception",
+    "proximity",
+    "p sensor"
+  ],
+  "NFC": [
+    "nfc"
+  ],
+  "BUTTON": [
+    "button",
+    "power key",
+    "volume key"
+  ],
+  "FINGERPRINT": [
+    "fingerprint"
+  ],
+  "USB_CHARGING": [
+    "usb",
+    "charging",
+    "charger"
+  ],
+  "BATTERY_POWER": [
+    "battery",
+    "power"
+  ],
+  "MECHANICAL_STRUCTURE": [
+    "middle frame",
+    "frame",
+    "top cover",
+    "bottom cover",
+    "cover",
+    "deformation",
+    "crack",
+    "scratch",
+    "dent"
+  ],
+  "VIBRATION": [
+    "vibration",
+    "motor"
+  ],
+  "SIM": [
+    "sim card",
+    "sim tray"
+  ],
+  "PROCESS_SOFTWARE": [
+    "process",
+    "software",
+    "standard error",
+    "scheme",
+    "work order",
+    "version"
+  ]
+}

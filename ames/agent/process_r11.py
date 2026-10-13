@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 from mes_scheduler import session_object
+from operator_evidence import operator_evidence
 import canonical
 import process_timeline
 
@@ -52,6 +53,11 @@ def engine_support(engine_dir: Path | None) -> Dict[str, Any]:
 def ensure_schema(store) -> None:
     with store.connect() as con:
         con.executescript("""
+        CREATE TABLE IF NOT EXISTS process_raw_events(
+          snapshot_id INTEGER NOT NULL, pcba_sn TEXT NOT NULL, row_index INTEGER NOT NULL,
+          raw_json TEXT NOT NULL, source TEXT NOT NULL DEFAULT '3022',
+          PRIMARY KEY(snapshot_id,pcba_sn,row_index)
+        );
         CREATE TABLE IF NOT EXISTS process_defect_contexts(
           snapshot_id INTEGER NOT NULL,
           line TEXT NOT NULL,
@@ -241,6 +247,9 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                 if line_callback: line_callback(f"3022 [{i}/{len(targets)}] {pcba}")
                 rr = tela.consultar(pcba)
                 rows = rr.get("rows") or []
+                with store.connect() as con:
+                    con.execute("DELETE FROM process_raw_events WHERE snapshot_id=? AND pcba_sn=?", (snapshot_id,pcba))
+                    con.executemany("INSERT INTO process_raw_events(snapshot_id,pcba_sn,row_index,raw_json) VALUES(?,?,?,?)", [(snapshot_id,pcba,i,_json(r)) for i,r in enumerate(rows)])
                 passages = list(rr.get("process_passages") or tela3022_mod.extrair_passagens_processo(rows))
                 contexts=[]
                 context_by_pass={}
@@ -256,9 +265,14 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                 _persist_legacy_events(store,snapshot_id,pcba,passages)
                 _persist_contexts(store,snapshot_id,contexts)
                 products=sorted({canonical.cph(r.get("product_model")) for r in by_pcba.get(pcba,[]) if canonical.cph(r.get("product_model"))})
+                evidence_passages=list(passages)
+                for raw in rows:
+                    op=operator_evidence(raw)
+                    if op['operator_fields'] and op['station'] and op['event_time'] and not any(p.get('raw')==raw for p in passages):
+                        evidence_passages.append({**op,'operation_code':op['station'],'raw':raw,'completion_confirmed':False})
                 for product in products:
                     events=[]
-                    for p in passages:
+                    for p in evidence_passages:
                         event_time=_event_time_utc(engine_dir,p.get("event_time"),grid_offset)
                         if not event_time: continue
                         hist=p.get("hist_seq")
@@ -270,13 +284,15 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                             "contract":"R11_DERIVED_REQUIRES_R12_FACTORY_GATE","hist_seq":hist,
                             "current_operation_code":p.get("current_operation_code"),"event_group":p.get("event_group"),
                             "defect_contexts":context_by_pass.get(event_time,[]),
+                            "operator_evidence":operator_evidence(p.get("raw") or {}),
+                            "operator_events":[operator_evidence(p.get("raw") or {})] if operator_evidence(p.get("raw") or {})["operator_fields"] else [],
                         }
                         events.append({
                             "event_id":event_id,"line_id":line,"product":product,"pcba_sn":pcba,
                             "process":p.get("operation_name") or op,"station":op,"event_time":event_time,"source_view":"3022",
                             "snapshot_id":int(snapshot_id),"snapshot_revision":1,
                             "provenance":adapter,"raw_ref":f"sqlite:3022:{snapshot_id}:{pcba}:{hist}:{event_id}",
-                            "coverage":{"status":"partial","source_complete":False},"valid":True,
+                            "coverage":{"status":"partial","source_complete":False},"valid":p.get("completion_confirmed",True),
                         })
                     if events:
                         process_timeline.ingest(store,events);event_count += len(events)

@@ -1,0 +1,845 @@
+import json
+import re
+import time
+import fnmatch
+import unicodedata
+from pathlib import Path
+
+from ames.ui_helpers import find_text_input, find_button, extract_best_grid
+from core.normalizacao import normalizar_sn, normalizar_texto, parse_datetime
+from core.temporal_3074 import defect_time_to_utc, grid_time_to_utc
+
+
+# Confirmado em fábrica: A5700 é o último posto da linha de montagem/teste.
+# O histórico bruto da 3022 continua integralmente preservado. Esta regra serve
+# apenas para separar a visão operacional principal do trecho de packing.
+DEFAULT_TEST_END_CODE = "A5700"
+
+
+# Eventos que representam passagem concluída por um posto. A evidência real
+# observada na 3022 usa END LOT para as etapas de montagem/teste e packing.
+PROCESS_PASS_DESCS = {"END LOT"}
+
+
+def _row_value(row, aliases):
+    """Read a value tolerating header variations between MES releases."""
+    if not isinstance(row, dict):
+        return ""
+    for alias in aliases:
+        if alias in row and str(row.get(alias) or "").strip():
+            return row.get(alias)
+    wanted = [normalizar_texto(a) for a in aliases]
+    for key, value in row.items():
+        nk = normalizar_texto(str(key).split("__", 1)[0])
+        if any(nk == a or a in nk or nk in a for a in wanted if a and nk):
+            if str(value or "").strip():
+                return value
+    return ""
+
+
+def normalizar_evento_3022(row):
+    """Canonical projection without discarding any original 3022 columns.
+
+    Important semantic distinction observed in real factory histories:
+      * Working Oper = the operation represented by the event / just executed;
+      * Current Oper = the operation the unit is in / moves to after the event.
+
+    For process-pass correlation we therefore prefer Working Oper on END LOT.
+    """
+    hist_seq_raw = _row_value(row, ("Hist Seq", "History Seq", "Sequence", "Seq"))
+    try:
+        hist_seq = int(str(hist_seq_raw).strip()) if str(hist_seq_raw or "").strip() else None
+    except Exception:
+        hist_seq = None
+    return {
+        "operation_code": str(_row_value(row, (
+            "Current Oper Code", "Current Operation Code", "Oper Code", "Operation Code"
+        )) or "").strip(),
+        "operation_name": str(_row_value(row, (
+            "Current Oper", "Current Operation", "Operation", "Operação"
+        )) or "").strip(),
+        "working_oper_code": str(_row_value(row, (
+            "Working Oper Code", "Working Operation Code"
+        )) or "").strip(),
+        "working_oper": str(_row_value(row, (
+            "Working Oper", "Working Operation"
+        )) or "").strip(),
+        "station": str(_row_value(row, (
+            "Station", "Station Code", "Work Station", "Workstation"
+        )) or "").strip(),
+        "event_time": str(_row_value(row, (
+            "Tran Time", "Transaction Time", "Event Time", "Create Time", "Update Time"
+        )) or "").strip(),
+        "hist_seq": hist_seq,
+        "shift_desc": str(_row_value(row, (
+            "Shift Desc", "Shift", "Shift Description", "Shift English"
+        )) or "").strip(),
+        "tran_user_id": str(_row_value(row, (
+            "Tran User Id", "Tran User", "Transaction User", "User Id"
+        )) or "").strip(),
+        "tran_desc": str(_row_value(row, ("Tran Desc", "Transaction Desc", "Transaction")) or "").strip(),
+        "tran_desc_english": str(_row_value(row, ("Tran Desc English", "Transaction Desc English")) or "").strip(),
+        "tran_cmf3": str(_row_value(row, ("TRAN CMF3", "Tran Cmf3", "CMF3")) or "").strip(),
+        "line_code": str(_row_value(row, ("Line Code", "Line")) or "").strip(),
+        "imei": str(_row_value(row, ("IMEI", "Lot Cmf2")) or "").strip(),
+        "material_id": str(_row_value(row, ("Mat Id", "Material Id")) or "").strip(),
+        "raw": dict(row or {}),
+    }
+
+
+def _code_matches(value, code):
+    target = str(code or "").strip().upper()
+    txt = str(value or "").strip().upper()
+    return bool(target and txt and (txt == target or txt.startswith(target)))
+
+
+def _event_codes(ev):
+    """All operation/station codes represented by one transition."""
+    out = []
+    for value in (ev.get("working_oper_code"), ev.get("operation_code"), ev.get("station")):
+        txt = str(value or "").strip().upper()
+        if txt and txt not in out:
+            out.append(txt)
+    return out
+
+
+def _event_reaches_code(ev, code):
+    return any(_code_matches(txt, code) for txt in _event_codes(ev))
+
+
+def _event_completes_code(ev, code):
+    """Strong evidence that a station was actually completed.
+
+    Current Oper=A5700 alone only means the unit reached/entered A5700. It does
+    NOT prove A5700 was completed. Real factory examples show completion as
+    Working Oper=A5700 + END LOT, often with Current Oper already K6070.
+    """
+    if not _code_matches(ev.get("working_oper_code"), code):
+        return False
+    desc = str(ev.get("tran_desc") or "").strip().upper()
+    current = str(ev.get("operation_code") or "").strip().upper()
+    if desc in PROCESS_PASS_DESCS:
+        return True
+    # Defensive fallback for releases that omit END LOT but clearly transition
+    # away from A5700. This remains stronger than Current Oper=A5700 alone.
+    if current and not _code_matches(current, code):
+        return True
+    return False
+
+
+def _event_order_key(ev):
+    """Chronological order with Hist Seq as deterministic tie-breaker."""
+    dt = ev.get("_dt")
+    seq = ev.get("hist_seq")
+    return (dt, seq if seq is not None else -1)
+
+
+def _normalize_for_order(rows):
+    normalized = []
+    for idx, row in enumerate(rows or []):
+        ev = normalizar_evento_3022(row)
+        ev["_index"] = idx
+        ev["_dt"] = parse_datetime(ev.get("event_time"))
+        normalized.append(ev)
+    return normalized
+
+
+def extrair_passagens_processo(rows, test_end_code=DEFAULT_TEST_END_CODE):
+    """Extract actual process-pass evidence from the full 3022 history.
+
+    Only END LOT is treated as a completed production/test passage. CHANGE CMF,
+    REPAIR, REPAIR END, MO_MAPPING, RECEIVE and similar history records remain in
+    the raw history but are not mislabeled as process stations.
+    """
+    focus = preparar_foco_montagem_teste(rows, test_end_code=test_end_code, include_passages=False)
+    boundary_dt = parse_datetime(focus.get("boundary_event_time")) if focus.get("boundary_event_time") else None
+    boundary_seq = focus.get("boundary_hist_seq")
+    out = []
+    for ev in _normalize_for_order(rows):
+        if str(ev.get("tran_desc") or "").strip().upper() not in PROCESS_PASS_DESCS:
+            continue
+        code = str(ev.get("working_oper_code") or "").strip()
+        name = str(ev.get("working_oper") or "").strip()
+        if not code and not name:
+            continue
+        scope = "FOCO_MONTAGEM_TESTE"
+        if focus.get("boundary_found") and ev.get("_dt") and boundary_dt:
+            key = (ev.get("_dt"), ev.get("hist_seq") if ev.get("hist_seq") is not None else -1)
+            bkey = (boundary_dt, boundary_seq if boundary_seq is not None else -1)
+            if key > bkey:
+                scope = "POS_A5700_PACKING"
+        out.append({
+            "operation_code": code,
+            "operation_name": name,
+            "current_operation_code": str(ev.get("operation_code") or "").strip(),
+            "current_operation_name": str(ev.get("operation_name") or "").strip(),
+            "station": str(ev.get("station") or "").strip(),
+            "event_time": str(ev.get("event_time") or "").strip(),
+            "hist_seq": ev.get("hist_seq"),
+            "event_group": scope,
+            "source": "3022",
+            "raw": dict(ev.get("raw") or {}),
+        })
+    return out
+
+
+def preparar_foco_montagem_teste(rows, test_end_code=DEFAULT_TEST_END_CODE, include_passages=True):
+    """Split full 3022 history into assembly/test focus and post-test/packing.
+
+    Rules hardened from multiple real factory examples:
+      * A5700 is the last assembly/test station.
+      * Current Oper=A5700 means the unit reached A5700, not that it completed it.
+      * Completion boundary requires Working Oper=A5700 with END LOT (or a clear
+        transition away from A5700 when END LOT is absent).
+      * Hist Seq resolves same-second handoffs.
+      * If completion is not proven, nothing is hidden as packing.
+    """
+    normalized = _normalize_for_order(rows)
+
+    reached_candidates = [
+        ev for ev in normalized
+        if _event_reaches_code(ev, test_end_code) and ev.get("_dt")
+    ]
+    completed_candidates = [
+        ev for ev in normalized
+        if _event_completes_code(ev, test_end_code) and ev.get("_dt")
+    ]
+    reached = max(reached_candidates, key=_event_order_key) if reached_candidates else None
+    boundary = max(completed_candidates, key=_event_order_key) if completed_candidates else None
+
+    focus_rows, post_rows, annotated = [], [], []
+    for ev in normalized:
+        raw = dict(ev["raw"])
+        if boundary and ev.get("_dt"):
+            # Same-second transition is resolved with Hist Seq from the MES grid.
+            if _event_order_key(ev) <= _event_order_key(boundary):
+                scope = "FOCO_MONTAGEM_TESTE_ATE_A5700"
+                focus_rows.append(raw)
+            else:
+                scope = "POS_A5700_PACKING"
+                post_rows.append(raw)
+        else:
+            # No completed A5700 => do not guess or hide any history.
+            scope = "SEM_LIMITE_A5700_CONCLUIDO"
+            focus_rows.append(raw)
+        raw["_analysis_scope"] = scope
+        annotated.append(raw)
+
+    post_count = len(post_rows)
+    if boundary:
+        phase_status = "AFTER_A5700" if post_count else "A5700_COMPLETED"
+    elif reached:
+        phase_status = "AT_A5700"
+    else:
+        phase_status = "BEFORE_A5700"
+
+    out = {
+        "test_end_code": str(test_end_code or DEFAULT_TEST_END_CODE),
+        "boundary_event": dict(boundary["raw"]) if boundary else None,
+        "boundary_event_time": boundary.get("event_time") if boundary else None,
+        "boundary_hist_seq": boundary.get("hist_seq") if boundary else None,
+        "a5700_reached": bool(reached),
+        "a5700_reached_event_time": reached.get("event_time") if reached else None,
+        "a5700_reached_hist_seq": reached.get("hist_seq") if reached else None,
+        "a5700_completed": bool(boundary),
+        "phase_status": phase_status,
+        "all_rows": annotated,
+        "focus_rows": focus_rows,
+        "post_test_rows": post_rows,
+        "all_count": len(annotated),
+        "focus_count": len(focus_rows),
+        "post_test_count": len(post_rows),
+        # Compatibility with R2/R3 consumers. From R4 it means COMPLETED A5700.
+        "boundary_found": bool(boundary),
+    }
+    if include_passages:
+        # Avoid recursion by asking the extractor not to request passages again.
+        out["process_passages"] = extrair_passagens_processo(rows, test_end_code=test_end_code)
+    return out
+
+
+def selecionar_processo_anterior(
+    eventos,
+    defect_time,
+    *,
+    defect_local_offset_hours=-3,
+    event_naive_offset_hours=0,
+    test_end_code=DEFAULT_TEST_END_CODE,
+    limit_to_test=True,
+):
+    """Select the last completed process passage at/before Defect Time.
+
+    3028 Defect Time is factory local time (default UTC-3). 3022 Tran Time was
+    observed in the real grid as UTC-aware. All comparisons are normalized to
+    UTC, avoiding naive/aware datetime errors and silent 3-hour shifts.
+
+    This function intentionally ignores CHANGE CMF/REPAIR metadata and uses the
+    completed Working Oper from END LOT as process evidence. It does NOT infer
+    root cause; it only identifies the previous completed process passage.
+    """
+    defect_utc = defect_time_to_utc(defect_time, defect_local_offset_hours)
+    if defect_utc is None:
+        return {
+            "status": "INVALID_DEFECT_TIME",
+            "defect_time": str(defect_time or ""),
+            "defect_time_utc": None,
+            "process": None,
+        }
+
+    passages = extrair_passagens_processo(eventos, test_end_code=test_end_code)
+    candidates = []
+    for p in passages:
+        if limit_to_test and p.get("event_group") == "POS_A5700_PACKING":
+            continue
+        dt = grid_time_to_utc(p.get("event_time"), event_naive_offset_hours)
+        if not dt or dt > defect_utc:
+            continue
+        seq = p.get("hist_seq")
+        candidates.append((dt, seq if seq is not None else -1, p))
+
+    if not candidates:
+        return {
+            "status": "NO_PRIOR_PROCESS",
+            "defect_time": str(defect_time or ""),
+            "defect_time_utc": defect_utc.isoformat(),
+            "process": None,
+        }
+
+    candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    dt, _, chosen = candidates[0]
+    process = dict(chosen)
+    process["event_time_utc"] = dt.isoformat()
+    return {
+        "status": "COMPLETE",
+        "defect_time": str(defect_time or ""),
+        "defect_time_utc": defect_utc.isoformat(),
+        "process": process,
+    }
+
+
+def _norm_rule_text(value):
+    txt = unicodedata.normalize("NFKD", str(value or ""))
+    txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
+    txt = re.sub(r"[^a-zA-Z0-9]+", " ", txt).strip().lower()
+    return re.sub(r"\s+", " ", txt)
+
+
+def normalizar_modo_registro(value):
+    """Normalize 3028/2114 Manual/Automatic semantics.
+
+    3028 can expose a Manually Input Or Not style flag (Y/N) while 2114 may
+    expose literal Manual/Automatic.  This function accepts both without
+    changing the original value, which remains preserved in evidence.
+    """
+    raw = str(value or "").strip()
+    n = _norm_rule_text(raw)
+    if not n:
+        return "UNKNOWN"
+    if n in {"y", "yes", "sim", "1", "true"} or "manual" in n or "by hand" in n or n == "hand":
+        return "MANUAL"
+    if n in {"n", "no", "nao", "0", "false"} or "automatic" in n or n == "auto" or "testtools" in n or "test tools" in n:
+        return "AUTOMATIC"
+    return "UNKNOWN"
+
+
+def _load_json(path, default):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def carregar_regras_processo_3022(base_dir):
+    base = Path(base_dir)
+    rules = _load_json(base / "config" / "regras_processo_3022.json", {})
+    families = _load_json(base / "config" / "familias_falhas.json", {})
+    return rules or {}, families or {}
+
+
+def classificar_familia_falha(defect_code, defect_desc, families_cfg):
+    hay = _norm_rule_text(f"{defect_code or ''} {defect_desc or ''}")
+    if not hay:
+        return "UNKNOWN"
+    for family, keywords in (families_cfg or {}).items():
+        for kw in keywords or []:
+            nk = _norm_rule_text(kw)
+            if nk and nk in hay:
+                return str(family)
+    return "UNKNOWN"
+
+
+def _match_model(model, patterns):
+    pats = patterns or ["*"]
+    m = str(model or "").strip().upper()
+    return any(fnmatch.fnmatch(m, str(p or "*").strip().upper()) for p in pats)
+
+
+def resolver_regra_referencia(base_dir, *, product_model="", defect_code="", defect_desc="", manual_or_auto=""):
+    """Resolve CPH/model + failure family/mode into a reference station rule.
+
+    A returned rule is evidence-selection metadata, not a root-cause claim.
+    Specific model rules can be added to config/regras_processo_3022.json later
+    without changing Python code.
+    """
+    rules_cfg, families_cfg = carregar_regras_processo_3022(base_dir)
+    registration_mode = normalizar_modo_registro(manual_or_auto)
+    family = classificar_familia_falha(defect_code, defect_desc, families_cfg)
+    hay = _norm_rule_text(f"{defect_code or ''} {defect_desc or ''} {family}")
+    candidates = []
+    for rule in rules_cfg.get("rules") or []:
+        if not _match_model(product_model, rule.get("product_models")):
+            continue
+        modes = [str(x).upper() for x in (rule.get("registration_modes") or [])]
+        if modes and registration_mode not in modes:
+            continue
+        fams = [str(x).upper() for x in (rule.get("families") or [])]
+        if fams and str(family).upper() not in fams:
+            continue
+        codes = [str(x).upper() for x in (rule.get("defect_codes") or [])]
+        if codes and not any(fnmatch.fnmatch(str(defect_code or "").upper(), pat) for pat in codes):
+            continue
+        all_kw = [_norm_rule_text(x) for x in (rule.get("all_keywords") or []) if _norm_rule_text(x)]
+        any_kw = [_norm_rule_text(x) for x in (rule.get("any_keywords") or []) if _norm_rule_text(x)]
+        if all_kw and not all(k in hay for k in all_kw):
+            continue
+        if any_kw and not any(k in hay for k in any_kw):
+            continue
+        candidates.append(rule)
+    candidates.sort(key=lambda r: (int(r.get("priority") or 0), len([x for x in (r.get("product_models") or []) if x != "*"])), reverse=True)
+    chosen = dict(candidates[0]) if candidates else None
+    if chosen:
+        return {
+            "registration_mode": registration_mode,
+            "failure_family": family,
+            "analysis_kind": chosen.get("analysis_kind") or "REFERENCE_STATION",
+            "rule_id": chosen.get("id") or "CONFIG_RULE",
+            "reference_stations": list(chosen.get("reference_stations") or []),
+            "reference_confidence": chosen.get("confidence") or "CONFIGURED",
+            "reason": chosen.get("reason") or "Regra configurada.",
+            "station_semantics": rules_cfg.get("station_semantics") or {},
+        }
+    return {
+        "registration_mode": registration_mode,
+        "failure_family": family,
+        "analysis_kind": "FUNCTIONAL_AUTOMATIC_UNMAPPED" if registration_mode == "AUTOMATIC" else "UNMAPPED",
+        "rule_id": None,
+        "reference_stations": [],
+        "reference_confidence": "UNMAPPED",
+        "reason": (
+            "Falha automatica/funcional sem posto de montagem mapeado para este CPH/familia; "
+            "o ultimo processo concluido antes da falha fica apenas como contexto, nao como origem."
+            if registration_mode == "AUTOMATIC" else
+            "Nao existe regra CPH/familia/posto configurada para esta ocorrencia; ultimo processo anterior e apenas contexto."
+        ),
+        "station_semantics": rules_cfg.get("station_semantics") or {},
+    }
+
+
+def selecionar_passagem_referencia(eventos, defect_time, postos, *, defect_local_offset_hours=-3, event_naive_offset_hours=0, test_end_code=DEFAULT_TEST_END_CODE):
+    """Pick the latest completed passage through a mapped station before THIS defect.
+
+    This is the core rule for repeated A5162/A5201 loops: every defect gets the
+    latest qualifying pass <= its own Defect Time, so a later rework cycle cannot
+    be used to explain an earlier failure.
+    """
+    defect_utc = defect_time_to_utc(defect_time, defect_local_offset_hours)
+    if defect_utc is None:
+        return {"status":"INVALID_DEFECT_TIME","process":None,"next_process":None,"prior_count":0,"defect_time_utc":None}
+    targets = [str(x or "").strip().upper() for x in (postos or []) if str(x or "").strip()]
+    passages = extrair_passagens_processo(eventos, test_end_code=test_end_code)
+    before, after = [], []
+    for p in passages:
+        code = str(p.get("operation_code") or "").strip().upper()
+        station = str(p.get("station") or "").strip().upper()
+        if targets and not any(_code_matches(code, t) or _code_matches(station, t) for t in targets):
+            continue
+        dt = grid_time_to_utc(p.get("event_time"), event_naive_offset_hours)
+        if not dt:
+            continue
+        seq = p.get("hist_seq") if p.get("hist_seq") is not None else -1
+        item = (dt, seq, p)
+        if dt <= defect_utc:
+            before.append(item)
+        else:
+            after.append(item)
+    before.sort(key=lambda x:(x[0],x[1]), reverse=True)
+    after.sort(key=lambda x:(x[0],x[1]))
+    chosen = before[0] if before else None
+    nxt = after[0] if after else None
+    proc = dict(chosen[2]) if chosen else None
+    if proc: proc["event_time_utc"] = chosen[0].isoformat()
+    next_proc = dict(nxt[2]) if nxt else None
+    if next_proc: next_proc["event_time_utc"] = nxt[0].isoformat()
+    return {
+        "status":"COMPLETE" if proc else "NO_PRIOR_REFERENCE_PASSAGE",
+        "defect_time_utc":defect_utc.isoformat(),
+        "process":proc,
+        "next_process":next_proc,
+        "prior_count":len(before),
+        "future_count":len(after),
+    }
+
+
+def _is_defect_registration_event(ev):
+    raw_text = " ".join(str(ev.get(k) or "") for k in ("tran_desc", "tran_desc_english", "tran_cmf3"))
+    text = _norm_rule_text(raw_text)
+    manual = any(x in text for x in ("manually enter bad", "manual defect", "manual bad", "manual")) or "手动" in raw_text
+    automatic = any(x in text for x in ("automatic defect", "testing tools", "auto defect")) or "自动" in raw_text
+    return str(ev.get("tran_desc") or "").strip().upper() == "CHANGE CMF" and (manual or automatic)
+
+
+def analisar_ciclo_reparo_apos_falha(eventos, defect_time, *, reference_stations=None, defect_local_offset_hours=-3, event_naive_offset_hours=0):
+    """Describe the first AT/rework cycle after a defect without changing origin selection.
+
+    Phone_Bat_Cover is highlighted because it removes/reworks the old battery
+    cover and the unit returns through A5201 before a new A5162 cycle.  The full
+    raw 3022 history is still preserved.
+    """
+    defect_utc = defect_time_to_utc(defect_time, defect_local_offset_hours)
+    if defect_utc is None:
+        return {"status":"INVALID_DEFECT_TIME"}
+    normalized = _normalize_for_order(eventos)
+    future=[]
+    for ev in normalized:
+        dt = grid_time_to_utc(ev.get("event_time"), event_naive_offset_hours)
+        if dt and dt > defect_utc:
+            future.append((dt, ev.get("hist_seq") if ev.get("hist_seq") is not None else -1, ev))
+    future.sort(key=lambda x:(x[0],x[1]))
+    # Do not let a repair belonging to a later defect be attached to this defect.
+    next_defect_registration = next((item for item in future if _is_defect_registration_event(item[2])), None)
+    cycle_end_dt = next_defect_registration[0] if next_defect_registration else None
+    repair_candidates=[]
+    for item in future:
+        if cycle_end_dt is not None and item[0] >= cycle_end_dt:
+            break
+        ev=item[2]
+        if str(ev.get("tran_desc") or "").strip().upper() == "REPAIR":
+            repair_candidates.append(item)
+    preferred=[]
+    for item in repair_candidates:
+        cmf=_norm_rule_text(item[2].get("tran_cmf3"))
+        if "phone bat cover" in cmf or "phone battery cover" in cmf:
+            preferred.append(item)
+    repair = (preferred or repair_candidates)[0] if (preferred or repair_candidates) else None
+    start_dt = repair[0] if repair else defect_utc
+
+    passages = extrair_passagens_processo(eventos)
+    def first_pass(codes):
+        found=[]
+        for p in passages:
+            dt=grid_time_to_utc(p.get("event_time"), event_naive_offset_hours)
+            if not dt or dt <= start_dt: continue
+            if cycle_end_dt is not None and dt >= cycle_end_dt: continue
+            code=str(p.get("operation_code") or "").strip().upper(); st=str(p.get("station") or "").strip().upper()
+            if any(_code_matches(code,c) or _code_matches(st,c) for c in codes):
+                found.append((dt,p.get("hist_seq") if p.get("hist_seq") is not None else -1,p))
+        found.sort(key=lambda x:(x[0],x[1]))
+        if not found: return None
+        x=dict(found[0][2]); x["event_time_utc"]=found[0][0].isoformat(); return x
+
+    rep_ev=None
+    if repair:
+        rep_ev=normalizar_evento_3022(repair[2].get("raw") or repair[2])
+        rep_ev["event_time_utc"]=repair[0].isoformat()
+    action = str((rep_ev or {}).get("tran_cmf3") or "").strip()
+    action_norm=_norm_rule_text(action)
+    action_class = "PHONE_BAT_COVER" if ("phone bat cover" in action_norm or "phone battery cover" in action_norm) else ("OTHER_REPAIR" if repair else "")
+    # A5201 -> A5162 is a confirmed return pattern only for Phone_Bat_Cover.
+    # Other repair types have their own routes and must not inherit this rule.
+    return_a5201=first_pass(["A5201"]) if action_class == "PHONE_BAT_COVER" else None
+    next_ref=(first_pass([str(x).upper() for x in (reference_stations or [])]) if reference_stations else None) if action_class == "PHONE_BAT_COVER" else None
+    return {
+        "status":"COMPLETE" if repair else "NO_REPAIR_AFTER_DEFECT",
+        "repair_action":action,
+        "repair_action_class":action_class,
+        "repair_event":rep_ev,
+        "return_a5201":return_a5201,
+        "next_reference_passage":next_ref,
+        "next_defect_registration_time": (next_defect_registration[2].get("event_time") if next_defect_registration else None),
+    }
+
+
+def correlacionar_falha_3022(base_dir, eventos, defect_record, *, registration_value=None, registration_source="3028", defect_local_offset_hours=-3, event_naive_offset_hours=0):
+    """Build a defect-specific temporal context from 3022.
+
+    Keeps two different concepts explicit:
+      1) previous_process = last completed process before detection (context only)
+      2) reference_process = mapped assembly/control station for the failure type
+    The second is selected by CPH/family/mode and always uses the latest valid
+    pass before the CURRENT Defect Time, which is essential with repeated rework.
+    """
+    rec = dict(defect_record or {})
+    reg_raw = registration_value if registration_value not in (None, "") else rec.get("manual_or_auto")
+    rule = resolver_regra_referencia(
+        base_dir,
+        product_model=rec.get("product_model"), defect_code=rec.get("defect_code"),
+        defect_desc=rec.get("defect_desc"), manual_or_auto=reg_raw,
+    )
+    generic = selecionar_processo_anterior(
+        eventos, rec.get("defect_time"), defect_local_offset_hours=defect_local_offset_hours,
+        event_naive_offset_hours=event_naive_offset_hours, limit_to_test=True,
+    )
+    refsel = selecionar_passagem_referencia(
+        eventos, rec.get("defect_time"), rule.get("reference_stations") or [],
+        defect_local_offset_hours=defect_local_offset_hours, event_naive_offset_hours=event_naive_offset_hours,
+    ) if rule.get("reference_stations") else {"status":"RULE_NOT_MAPPED","process":None,"next_process":None,"prior_count":0,"future_count":0,"defect_time_utc":generic.get("defect_time_utc")}
+    cycle = analisar_ciclo_reparo_apos_falha(
+        eventos, rec.get("defect_time"), reference_stations=rule.get("reference_stations") or [],
+        defect_local_offset_hours=defect_local_offset_hours, event_naive_offset_hours=event_naive_offset_hours,
+    )
+    if rule.get("reference_stations"):
+        status = "COMPLETE_REFERENCE" if refsel.get("process") else refsel.get("status")
+    else:
+        status = "GENERIC_ONLY_RULE_NOT_MAPPED" if generic.get("process") else generic.get("status")
+    return {
+        "status":status,
+        "defect_time_utc":generic.get("defect_time_utc") or refsel.get("defect_time_utc"),
+        "registration_mode":rule.get("registration_mode"),
+        "registration_mode_source":registration_source,
+        "failure_family":rule.get("failure_family"),
+        "analysis_kind":rule.get("analysis_kind"),
+        "reference_rule_id":rule.get("rule_id"),
+        "reference_confidence":rule.get("reference_confidence"),
+        "reference_stations":rule.get("reference_stations") or [],
+        "reference_reason":rule.get("reason"),
+        "station_semantics":rule.get("station_semantics") or {},
+        "reference_selection":refsel,
+        "reference_process":refsel.get("process"),
+        "previous_process":generic.get("process"),
+        "repair_cycle":cycle,
+        "rule":rule,
+    }
+
+
+class Tela3022:
+    """Read-only adapter for AWIP3022-Vw View Lot History."""
+
+    def __init__(self, browser, base_dir: Path):
+        self.browser = browser
+        self.base_dir = Path(base_dir)
+        cfg = json.loads((self.base_dir / "config" / "selectors.json").read_text(encoding="utf-8"))
+        self.cfg = cfg["3022"]
+
+    def _page(self):
+        for hint in ("VwViewLotHistoryView", "AWIP3022", "3022"):
+            try:
+                p = self.browser.choose_active_page(hint)
+                if hint.lower() in (p.url or "").lower():
+                    return p
+                try:
+                    body = (p.locator("body").inner_text(timeout=700) or "").lower()
+                    if "awip3022" in body or "view lot history" in body:
+                        return p
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        return self.browser.choose_active_page("3022")
+
+    def _query_control(self, page):
+        js = r"""
+        () => {
+          if (!window.Ext || !Ext.ComponentQuery) return null;
+          const fs = Ext.ComponentQuery.query('field');
+          const f = fs.find(c => {
+            const t = [c.fieldLabel,c.name,c.itemId,c.id].filter(Boolean).join(' ').toLowerCase();
+            return (t.includes('sn') && t.includes('imei')) || t.includes('a-s');
+          });
+          if (!f) return null;
+          return {inputId:String(f.inputId||''), id:String(f.id||''), name:String(f.name||'')};
+        }
+        """
+        for frame in page.frames:
+            try:
+                meta = frame.evaluate(js)
+                if not meta:
+                    continue
+                selectors = []
+                if meta.get("inputId"):
+                    selectors.append(f"#{meta['inputId']}")
+                if meta.get("name"):
+                    selectors.append(f'input[name="{meta["name"]}"]')
+                for sel in selectors:
+                    loc = frame.locator(sel)
+                    if loc.count() and loc.first.is_visible(timeout=400):
+                        return loc.first
+            except Exception:
+                pass
+
+        _, campo, _ = find_text_input(
+            page,
+            labels=self.cfg.get("sn_labels") or ("SN / IMEI / A-S", "SN"),
+            name_contains=self.cfg.get("sn_name_contains") or ("sn", "imei"),
+            frame_hints=("3022", "View Lot History"),
+        )
+        return campo
+
+    def _header_fields(self, page):
+        """Best-effort read of visible ExtJS fields shown above the history grid."""
+        js = r"""
+        () => {
+          if (!window.Ext || !Ext.ComponentQuery) return [];
+          return Ext.ComponentQuery.query('field').map(f => {
+            let value = null, raw = null;
+            try { value = f.getValue ? f.getValue() : null; } catch(e) {}
+            try { raw = f.getRawValue ? f.getRawValue() : null; } catch(e) {}
+            return {label:String(f.fieldLabel||''), name:String(f.name||''), itemId:String(f.itemId||''), value:value, raw:raw};
+          }).filter(x => String(x.raw??x.value??'').trim() !== '');
+        }
+        """
+        out = []
+        for frame in page.frames:
+            try:
+                for item in frame.evaluate(js) or []:
+                    if item not in out:
+                        out.append(item)
+            except Exception:
+                pass
+        return out
+
+    def consultar(self, pcba_sn, timeout_s=18.0, empty_confirm_s=3.0):
+        pcba_sn = normalizar_sn(pcba_sn)
+        if not pcba_sn:
+            raise ValueError("SN vazio.")
+        page = self._page()
+        campo = self._query_control(page)
+        _, view, _ = find_button(
+            page,
+            texts=self.cfg["view_texts"],
+            frame_hints=("3022", "View Lot History")
+        )
+        campo.click(timeout=3000)
+        campo.fill(pcba_sn, timeout=3000)
+        view.click(timeout=5000)
+
+        inicio = time.time()
+        ultima_exc = None
+        empty_since = None
+        last_grid = None
+        while time.time() - inicio < timeout_s:
+            try:
+                grid = extract_best_grid(
+                    page,
+                    expected_headers=self.cfg["expected_headers"],
+                    frame_hints=("3022", "Current Oper", "Tran Time", "View Lot History")
+                )
+                last_grid = grid
+                rows = grid.get("rows") or []
+                loading = grid.get("store_loading")
+                if rows:
+                    focus = preparar_foco_montagem_teste(rows)
+                    return {
+                        "query_sn": pcba_sn,
+                        "headers": grid.get("headers") or [],
+                        "rows": rows,
+                        "focus_rows": focus["focus_rows"],
+                        "post_test_rows": focus["post_test_rows"],
+                        "process_passages": focus.get("process_passages") or [],
+                        "process_focus": {
+                            "rule": "A5700 é o último posto da linha de teste; packing só começa após A5700 concluído",
+                            "test_end_code": focus["test_end_code"],
+                            "boundary_found": focus["boundary_found"],
+                            "boundary_event_time": focus["boundary_event_time"],
+                            "boundary_hist_seq": focus["boundary_hist_seq"],
+                            "a5700_reached": focus["a5700_reached"],
+                            "a5700_reached_event_time": focus["a5700_reached_event_time"],
+                            "a5700_reached_hist_seq": focus["a5700_reached_hist_seq"],
+                            "a5700_completed": focus["a5700_completed"],
+                            "phase_status": focus["phase_status"],
+                            "all_count": focus["all_count"],
+                            "focus_count": focus["focus_count"],
+                            "post_test_count": focus["post_test_count"],
+                            "process_passage_count": len(focus.get("process_passages") or []),
+                        },
+                        "header_fields": self._header_fields(page),
+                        "no_data": False,
+                    }
+                if loading is not True:
+                    if empty_since is None:
+                        empty_since = time.time()
+                    if time.time() - empty_since >= empty_confirm_s:
+                        return {
+                            "query_sn": pcba_sn,
+                            "headers": grid.get("headers") or [],
+                            "rows": [],
+                            "focus_rows": [],
+                            "post_test_rows": [],
+                            "process_passages": [],
+                            "process_focus": {
+                                "rule": "A5700 é o último posto da linha de teste; packing só começa após A5700 concluído",
+                                "test_end_code": DEFAULT_TEST_END_CODE,
+                                "boundary_found": False,
+                                "boundary_event_time": None,
+                                "boundary_hist_seq": None,
+                                "a5700_reached": False,
+                                "a5700_reached_event_time": None,
+                                "a5700_reached_hist_seq": None,
+                                "a5700_completed": False,
+                                "phase_status": "NO_DATA",
+                                "all_count": 0,
+                                "focus_count": 0,
+                                "post_test_count": 0,
+                                "process_passage_count": 0,
+                            },
+                            "header_fields": self._header_fields(page),
+                            "no_data": True,
+                        }
+                else:
+                    empty_since = None
+            except Exception as exc:
+                ultima_exc = exc
+            time.sleep(0.4)
+        count = len((last_grid or {}).get("rows") or [])
+        raise RuntimeError(
+            f"A 3022 não confirmou dados para {pcba_sn}. Última grade: {count}. Último erro: {ultima_exc}"
+        )
+
+
+def selecionar_passagem_anterior(eventos, defect_time, posto_codigo=None, posto_nome=None):
+    """Compatibility helper used by older tests/modules.
+
+    Without station filters it now delegates to the stronger completed-process
+    selector. With a filter, it retains the legacy row-selection behavior while
+    checking both Working Oper and Current Oper to tolerate MES transition rows.
+    """
+    if not posto_codigo and not posto_nome:
+        selected = selecionar_processo_anterior(
+            eventos, defect_time,
+            defect_local_offset_hours=0,
+            event_naive_offset_hours=0,
+            limit_to_test=False,
+        )
+        return (selected.get("process") or {}).get("raw") if selected.get("process") else None
+
+    alvo = parse_datetime(defect_time)
+    if not alvo:
+        return None
+
+    candidatos = []
+    for ev in eventos:
+        canon = normalizar_evento_3022(ev)
+        dt = parse_datetime(canon.get("event_time"))
+        if not dt:
+            continue
+        # Legacy helper may receive all-naive synthetic timestamps.
+        try:
+            if dt > alvo:
+                continue
+        except TypeError:
+            # Normalize through UTC if one side is timezone-aware.
+            dt_utc = grid_time_to_utc(canon.get("event_time"), 0)
+            alvo_utc = defect_time_to_utc(defect_time, 0)
+            if not dt_utc or not alvo_utc or dt_utc > alvo_utc:
+                continue
+        codes = [canon.get("working_oper_code") or "", canon.get("operation_code") or ""]
+        names = [canon.get("working_oper") or "", canon.get("operation_name") or ""]
+        if posto_codigo and not any(str(posto_codigo).lower() in str(c).lower() for c in codes):
+            continue
+        if posto_nome and not any(str(posto_nome).lower() in str(n).lower() for n in names):
+            continue
+        candidatos.append((dt, canon.get("hist_seq") if canon.get("hist_seq") is not None else -1, ev))
+
+    if not candidatos:
+        return None
+    candidatos.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return candidatos[0][2]
