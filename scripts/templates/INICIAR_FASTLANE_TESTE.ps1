@@ -17,6 +17,13 @@ function F([string]$Message) {
     exit 1
 }
 
+function Show-AgentTail {
+    $stderr = Join-Path $Root 'logs\agent_fastlane_stderr.log'
+    $stdout = Join-Path $Root 'logs\agent_fastlane_stdout.log'
+    if (Test-Path $stderr) { Get-Content -LiteralPath $stderr -Tail 80 | ForEach-Object { L $_ Yellow } }
+    if (Test-Path $stdout) { Get-Content -LiteralPath $stdout -Tail 80 | ForEach-Object { L $_ Yellow } }
+}
+
 function Test-Ames {
     try {
         $c = New-Object Net.Sockets.TcpClient
@@ -137,26 +144,38 @@ try {
     if (-not (Test-Path $Bootstrap)) { F ('Bootstrap fastlane ausente: ' + $Bootstrap) }
     $PythonW = Join-Path $Root '.venv\Scripts\pythonw.exe'
     if (-not (Test-Path $PythonW)) { $PythonW = $Python }
-    Start-Process -FilePath $PythonW -ArgumentList @("`"$Bootstrap`"") -WorkingDirectory $Root | Out-Null
+    $AgentProcess = Start-Process -FilePath $PythonW -ArgumentList @("`"$Bootstrap`"") -WorkingDirectory $Root -PassThru
 
     L '[6/7] Aguardando agente CANONICAL-R11-BATCH...'
     $ready = $null
+    $readyUnauthorized = $false
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Seconds 1
+        if ($AgentProcess.HasExited) { break }
         try {
             $r = Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 3
             if ($r.ok -and $r.ready -and [string]$r.agent_build -eq 'CANONICAL-R11-BATCH') {
                 $ready = $r
                 break
             }
-        } catch {}
+        } catch {
+            $status = $null
+            try { $status = [int]$_.Exception.Response.StatusCode } catch {}
+            if ($status -eq 401) {
+                $readyUnauthorized = $true
+                break
+            }
+        }
     }
 
     if (-not $ready) {
-        $stderr = Join-Path $Root 'logs\agent_fastlane_stderr.log'
-        $stdout = Join-Path $Root 'logs\agent_fastlane_stdout.log'
-        if (Test-Path $stderr) { Get-Content -LiteralPath $stderr -Tail 80 | ForEach-Object { L $_ Yellow } }
-        if (Test-Path $stdout) { Get-Content -LiteralPath $stdout -Tail 80 | ForEach-Object { L $_ Yellow } }
+        Show-AgentTail
+        if ($readyUnauthorized) {
+            F 'Contrato de readiness negado pelo hardening (HTTP 401). Pacote inconsistente; nao continuar.'
+        }
+        if ($AgentProcess.HasExited) {
+            F ('Agente encerrou antes do readiness. ExitCode=' + $AgentProcess.ExitCode)
+        }
         F 'Agente fastlane nao respondeu ao readiness leve.'
     }
 
