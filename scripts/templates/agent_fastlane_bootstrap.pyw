@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import runpy
 import sys
 import traceback
 from datetime import datetime
@@ -20,12 +19,15 @@ os.chdir(BASE)
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-import fastlane_runtime_guard
-
-fastlane_runtime_guard.install()
-
 try:
-    runpy.run_path(str(BASE / "agent_hardened_entry.py"), run_name="__main__")
+    # Importing hardened entry builds the FINAL security-aware Handler first.
+    import agent_hardened_entry as hardened
+    import fastlane_runtime_guard
+
+    # Only now install transport guards. Installing against agent.Handler before
+    # HardenedHandler exists leaves the class actually served by HTTP unpatched.
+    fastlane_runtime_guard.install(hardened.entry)
+    hardened.main()
 except BaseException:
     traceback.print_exc()
     raise
