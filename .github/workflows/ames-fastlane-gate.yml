@@ -114,7 +114,7 @@ jobs:
           }
           $launcher = Get-Content 'dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1' -Raw
           if ($launcher -notmatch '/api/v1/ready') { throw 'launcher does not use /ready' }
-          if ($launcher -match "api/v1/health' -TimeoutSec 2") { throw 'launcher still polls heavy /health with 2s' }
+          if ($launcher -match "api/v1/health'\s+-TimeoutSec\s+2([^0-9]|$)") { throw 'launcher still polls heavy /health with 2s' }
           if (($launcher | Select-String -Pattern '/api/v1/health' -AllMatches).Matches.Count -ne 1) { throw 'launcher must call /health exactly once' }
           if (-not (Test-Path 'dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py')) { throw 'runtime guard missing from exact artifact' }
 
@@ -170,7 +170,7 @@ jobs:
           }
           $launcher = Get-Content $launcherPath -Raw
           if ($launcher -notmatch '/api/v1/ready') { throw 'Missing lightweight readiness endpoint' }
-          if ($launcher -match "api/v1/health' -TimeoutSec 2") { throw 'Heavy health is still used as startup poll' }
+          if ($launcher -match "api/v1/health'\s+-TimeoutSec\s+2([^0-9]|$)") { throw 'Heavy health is still used as startup poll' }
           if (($launcher | Select-String -Pattern '/api/v1/health' -AllMatches).Matches.Count -ne 1) { throw 'Full health must run exactly once after readiness' }
           if (-not (Test-Path 'dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py')) { throw 'Runtime guard missing' }
           $bootstrap = Get-Content 'dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw' -Raw
