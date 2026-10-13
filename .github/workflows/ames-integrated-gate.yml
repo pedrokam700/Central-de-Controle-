@@ -58,6 +58,7 @@ jobs:
           node --check ames/console-3012-fastlane.mjs
           node --check ames/data/reuse-analysis.mjs
           node --check ames/reuse-table-view.mjs
+          node --check ames/advanced-table.mjs
 
       - name: Verify frozen 3028 hashes
         run: |
@@ -81,8 +82,25 @@ jobs:
           grep -q 'exact_sn_cache' ames/agent/agent_3012_patch.py
           grep -q 'repair_coverage_3012' ames/agent/repair_3012.py
 
-      - name: Build integrated candidate
-        run: python scripts/build-integrated-candidate.py "$RUNNER_TEMP/central-ames-integrated.zip"
+      - name: Build standalone clean integrated candidate
+        run: |
+          python scripts/build-integrated-candidate.py "$RUNNER_TEMP/central-ames-integrated.zip"
+          python - <<'PY'
+          import json, os, zipfile
+          from pathlib import Path
+          z=Path(os.environ['RUNNER_TEMP'])/'central-ames-integrated.zip'
+          with zipfile.ZipFile(z) as f:
+              names=set(f.namelist())
+              required={'00_INICIAR_AQUI.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','ames-agent/agent_hardened_entry.py','frontend/Central-de-Controle-/index.html','CANDIDATE_MANIFEST.json'}
+              missing=required-names
+              assert not missing, f'missing clean bundle files: {missing}'
+              assert 'ames-agent/config.json' not in names
+              assert not any(n.startswith('ames-agent/data/') for n in names)
+              manifest=json.loads(f.read('CANDIDATE_MANIFEST.json'))
+              assert manifest['standalone_clean'] is True
+              assert manifest['physical_gate']=='PENDING'
+          print('standalone clean ZIP contract OK')
+          PY
 
       - name: Upload integrated candidate
         uses: actions/upload-artifact@v4
@@ -91,3 +109,75 @@ jobs:
           path: ${{ runner.temp }}/central-ames-integrated.zip
           if-no-files-found: error
           retention-days: 7
+
+  windows-clean-artifact:
+    needs: integrated-contract
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: central-ames-integrated-${{ github.sha }}
+          path: artifact
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Extract exact uploaded artifact
+        shell: powershell
+        run: |
+          $zip=(Get-ChildItem artifact -Filter '*.zip' | Select-Object -First 1).FullName
+          if(-not $zip){throw 'Integrated ZIP artifact not found'}
+          Expand-Archive -LiteralPath $zip -DestinationPath package -Force
+          if(-not (Test-Path 'package\ames-agent\config.example.json')){throw 'config.example.json missing from exact artifact'}
+          if(Test-Path 'package\ames-agent\config.json'){throw 'Clean artifact must not contain workstation config.json'}
+          if(Test-Path 'package\ames-agent\data\ames_local.sqlite3'){throw 'Clean artifact must not contain operational SQLite'}
+
+      - name: Parse Windows launchers from exact artifact
+        shell: powershell
+        run: |
+          foreach($file in @('package\START_LOCAL_CANDIDATE.ps1','package\suporte\ames-workstation\START_AGENT_CANONICAL.ps1','package\network\ensure_ames_route.ps1')){
+            $tokens=$null;$errors=$null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors)|Out-Null
+            if($errors.Count){$errors|ForEach-Object{Write-Host $_.Message -ForegroundColor Red};throw "PowerShell parse failed: $file"}
+          }
+          Write-Host 'Windows launcher syntax OK' -ForegroundColor Green
+
+      - name: Install agent dependencies
+        shell: powershell
+        run: |
+          python -m pip install --disable-pip-version-check -r package\ames-agent\requirements.txt
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+
+      - name: Live smoke from extracted clean ZIP
+        shell: powershell
+        run: |
+          Copy-Item package\ames-agent\config.example.json package\ames-agent\config.json
+          $proc=Start-Process -FilePath 'python' -ArgumentList @('agent_hardened_entry.py') -WorkingDirectory (Resolve-Path 'package\ames-agent') -PassThru
+          try {
+            $ready=$null
+            for($i=0;$i -lt 50;$i++){
+              Start-Sleep -Milliseconds 500
+              if($proc.HasExited){break}
+              try{$ready=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 3;if($ready.ready){break}}catch{}
+            }
+            if(-not $ready -or -not $ready.ready){
+              if($proc.HasExited){throw "Agent exited before readiness: $($proc.ExitCode)"}
+              throw 'Exact clean ZIP agent never became ready'
+            }
+            if([string]$ready.agent_build -ne 'CANONICAL-R11-BATCH'){throw "Unexpected build: $($ready.agent_build)"}
+            $health=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 25
+            if(-not $health.ok){throw 'Health endpoint not OK'}
+            $html=Invoke-WebRequest 'http://127.0.0.1:8765/Central-de-Controle-/' -UseBasicParsing -TimeoutSec 5
+            if($html.StatusCode -ne 200 -or $html.Content -notmatch 'Central'){throw 'Local frontend not served from exact ZIP'}
+            $token=(Get-Content package\ames-agent\data\local_agent_token -Raw).Trim()
+            $headers=@{'X-Central-Agent-Token'=$token}
+            $cap=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/3012/capability' -Headers $headers -TimeoutSec 5
+            if(-not $cap.implemented -or $cap.factory_validated){throw '3012 capability/gate contract invalid'}
+            $body=@{ames_start_date='2026-02-01'}|ConvertTo-Json
+            $saved=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/config' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 5
+            if([string]$saved.config.ames_start_date -ne '2026-02-01'){throw 'ames_start_date did not persist through hardened config'}
+            Write-Host "LIVE CLEAN ZIP OK: PID=$($ready.pid) build=$($ready.agent_build)" -ForegroundColor Green
+          } finally {
+            if($proc -and -not $proc.HasExited){Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue}
+          }
