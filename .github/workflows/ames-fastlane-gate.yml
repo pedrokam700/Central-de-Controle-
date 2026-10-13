@@ -84,6 +84,28 @@ jobs:
           grep -q 'gate físico ainda pendente' ames/console-3012-fastlane.mjs
       - name: Build safe CLEAN V3 fastlane overlay
         run: python scripts/build-ames-fastlane-test-overlay.py "${GITHUB_SHA}"
+      - name: Harden generated Windows scripts and repack
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          head='${{ github.sha }}'
+          root=Path('dist/ames-fastlane-test')
+          updater=root/'APLICAR_FASTLANE_TESTE.ps1'
+          text=updater.read_text(encoding='utf-8-sig')
+          text=text.replace("Copy-Item -LiteralPath (Join-Path $payloadAgent '*')", "Copy-Item -Path (Join-Path $payloadAgent '*')")
+          updater.write_text(text,encoding='utf-8-sig')
+          launch=root/'payload'/'INICIAR_FASTLANE_TESTE.ps1'
+          text=launch.read_text(encoding='utf-8-sig')
+          text=text.replace("$cfg.ames_wifi_profile='TAXXX_5G'", "$cfg | Add-Member -NotePropertyName ames_wifi_profile -NotePropertyValue 'TAXXX_5G' -Force")
+          launch.write_text(text,encoding='utf-8-sig')
+          zip_path=Path('dist')/f'CENTRAL_AMES_FASTLANE_3012_TESTE_{head[:8]}.zip'
+          if zip_path.exists(): zip_path.unlink()
+          with zipfile.ZipFile(zip_path,'w',zipfile.ZIP_DEFLATED) as z:
+              for p in sorted(root.rglob('*')):
+                  if p.is_file(): z.write(p,p.relative_to(root.parent))
+          print(zip_path)
+          PY
       - name: Inspect fastlane overlay
         run: |
           unzip -l dist/CENTRAL_AMES_FASTLANE_3012_TESTE_${GITHUB_SHA::8}.zip
@@ -91,6 +113,8 @@ jobs:
           test -f dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.bat
           test -f dist/ames-fastlane-test/payload/ames-agent/agent_3012_patch.py
           test -f dist/ames-fastlane-test/payload/ames-agent/network_watch.py
+          grep -q 'Copy-Item -Path' dist/ames-fastlane-test/APLICAR_FASTLANE_TESTE.ps1
+          grep -q 'ames_wifi_profile' dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1
       - name: Upload fastlane test package
         uses: actions/upload-artifact@v4
         with:
