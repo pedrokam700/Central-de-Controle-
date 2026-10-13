@@ -14,7 +14,7 @@ A branch `v2/console-parity-r12` / PR #23 incorpora o polimento do PR #25, mante
 
 ## Evidência local
 
-165 contratos Node, seis suítes Python existentes, gate estático, Rules + E2E de sincronização em emulador e navegador com nove views × dois idiomas × dois temas. Navegador inclui ausência/presença de agente, histórico, CORA, mobile, retorno e login. Dados MES usados nesses testes são sintéticos; não substituem a fábrica. Actions repete os testes e publica evidência visual e bundle por SHA.
+166 contratos Node, sete suítes Python, gate estático, Rules + E2E de sincronização em emulador e navegador com nove views × dois idiomas × dois temas. Navegador inclui ausência/presença de agente, histórico, CORA, mobile, retorno e login. Dados MES usados nesses testes são sintéticos; não substituem a fábrica. Actions repete os testes e publica evidência visual e bundle por SHA.
 
 ## Limitações explícitas
 
@@ -36,3 +36,8 @@ A branch `v2/console-parity-r12` / PR #23 incorpora o polimento do PR #25, mante
 ## Primeiro uso de outro funcionário
 
 Entrar na Central → Console MES → Usar somente dados compartilhados. Para coletar, usar Preparar este computador em um posto R12 validado e fazer login A-MES manual. Computador novo continua aguardando o pacote validado na fábrica.
+
+
+## Publicação alternativa
+
+O caminho prebuilt usa a mesma construção do preview normal a partir de fontes confirmadas no Git. Inclui offline-bootstrap e core/login/Auth, verifica os imports publicados e exclui configurações/sessões ignoradas pelo Git. O teste também rejeita código local não confirmado.

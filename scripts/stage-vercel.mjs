@@ -7,10 +7,13 @@ if(fs.existsSync(stage))throw Error('Use a new staging directory');
 const git=(...args)=>execFileSync('git',['-c',`safe.directory=${repo.replaceAll('\\','/')}`,...args],{cwd:repo});
 if(git('status','--porcelain').toString().trim())throw Error('Commit pending work before staging');
 const sha=git('rev-parse','HEAD').toString().trim();
-const names=git('ls-tree','-r','--name-only',sha).toString().trim().split('\n').filter(f=>['index.html','app.js','styles.css','mobile.css','sw.js','manifest.webmanifest'].includes(f)||f.startsWith('icons/')||/^ames\/.+\.(mjs|css)$/.test(f)||f==='ames/releases/latest/release.json');
+const names=git('ls-tree','-r','--name-only',sha).toString().trim().split('\n').filter(f=>['index.html','app.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest','scripts/build-static.mjs'].includes(f)||/^icons\/.+\.(svg|png)$/.test(f)||/^(?:ames|core)\/.+\.(mjs|css)$/.test(f)||f==='ames/releases/latest/release.json');
 const out=path.join(stage,'.vercel/output'),overrides={};
-for(const name of names){const file=path.join(out,'static/Central-de-Controle-',name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,git('show',`${sha}:${name}`));if(name.endsWith('.mjs'))overrides['Central-de-Controle-/'+name]={contentType:'text/javascript; charset=utf-8'};}
-fs.writeFileSync(path.join(out,'static/release-build.json'),JSON.stringify({sha,build:'15.1.13.49',project:'central-cora-v2'}));
+// Reuse the normal build against committed sources only. Ignored local config,
+// SQLite, sessions and runtime outputs must never enter a staged deployment.
+const source=path.join(stage,'build-source');
+for(const name of names){const file=path.join(source,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,git('show',`${sha}:${name}`));if(name.endsWith('.mjs'))overrides['Central-de-Controle-/'+name]={contentType:'text/javascript; charset=utf-8'};}
+execFileSync(process.execPath,[path.join(source,'scripts/build-static.mjs')],{cwd:source,env:{...process.env,CENTRAL_STATIC_OUT:path.join(out,'static'),VERCEL:'1',VERCEL_GIT_COMMIT_SHA:sha,VERCEL_GIT_COMMIT_REF:git('branch','--show-current').toString().trim()},stdio:'pipe'});
 fs.writeFileSync(path.join(out,'config.json'),JSON.stringify({version:3,routes:[
  {src:'/(.*)',headers:{'X-Central-Commit':sha,'X-Central-Build':'15.1.13.49'},continue:true},
  {src:'/',status:307,headers:{Location:'/Central-de-Controle-/'}},
