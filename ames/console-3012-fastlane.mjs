@@ -14,11 +14,17 @@ async function request(path,body){
 }
 function isoDate(date){return date.toISOString().slice(0,10);}
 export function create3012FastlaneView(root,store){
-  let mounted=false,pollTimer=null,rows=[],statusText=t('Pronto','Ready'),capability=null,amesStartDate='',startDateDirty=false;
+  let mounted=false,pollTimer=null,rows=[],statusText=t('Pronto','Ready'),capability=null,amesStartDate='',startDateDirty=false,lastLang='';
   function formValues(){
     const f=root.querySelector('[data-3012-form]'),data=new FormData(f),sn=String(data.get('sn')||'').trim(),fullHistory=Boolean(sn&&root.querySelector('[data-3012-full-history]')?.checked);
     const start=fullHistory?(amesStartDate||String(data.get('start_at')||'')):String(data.get('start_at')||'');
     return {sn,start_at:start?start+'T00:00:00':'',end_at:String(data.get('end_at')||'')+'T23:59:59',line:String(data.get('line')||''),model:String(data.get('model')||''),defect_code:String(data.get('defect_code')||''),repair_code:String(data.get('repair_code')||''),defect_type:String(data.get('defect_type')||''),chunk_days:sn?90:31};
+  }
+  function preserveForm(){
+    if(!mounted)return null;
+    const f=root.querySelector('[data-3012-form]');if(!f)return null;
+    const data=Object.fromEntries(new FormData(f));
+    return {...data,fullHistory:Boolean(root.querySelector('[data-3012-full-history]')?.checked),amesStartDateInput:String(root.querySelector('[data-ames-start-date]')?.value||'')};
   }
   function syncHistoryMode(){
     const sn=String(root.querySelector('[name="sn"]')?.value||'').trim(),box=root.querySelector('[data-3012-full-history]'),start=root.querySelector('[name="start_at"]'),hint=root.querySelector('[data-3012-history-hint]');
@@ -49,14 +55,22 @@ export function create3012FastlaneView(root,store){
   }
   async function readCapability(){try{capability=await request('/3012/capability');amesStartDate=String(capability.ames_start_date||'');const input=root.querySelector('[data-ames-start-date]');if(input&&!input.value)input.value=amesStartDate;syncHistoryMode();renderBody();}catch(error){capability={implemented:false,factory_validated:false,error:error.message};renderBody();}}
   function render(){
+    const lang=document.documentElement.lang||'pt-BR';let preserved=null;
+    if(mounted&&lang!==lastLang){preserved=preserveForm();root.replaceChildren();mounted=false;}
     if(!mounted){
       const now=new Date(),from=new Date(now);from.setDate(from.getDate()-7);
       root.innerHTML=`<section class="mes-context-panel ames-fastlane-panel ames-3012-panel"><div class="section-head"><div><h3>3012 · Defect Repair Inquiry</h3><p>${t('Defeito + reparo + análise/Repair Comment. A coleta lê a grid ExtJS diretamente; exportação Excel não é requisito.','Defect + repair + analysis/Repair Comment. Collection reads the ExtJS grid directly; Excel export is not required.')}</p></div><span class="status warn">${t('GATE FÍSICO','PHYSICAL GATE')}</span></div>
         <div class="ames-3012-history-config"><label>${t('Início histórico A-MES','A-MES historical start')}<input type="date" data-ames-start-date></label><button type="button" class="button secondary" data-ames-start-save>${t('Salvar data-base','Save start date')}</button><small>${t('Usado por padrão em consultas de SN exata. É configuração do posto, não um ano fixo no código.','Used by default for exact-SN queries. This is a workstation setting, not a year hardcoded in code.')}</small></div>
         <form data-3012-form class="ames-3012-form"><label>SN / PCBA<input name="sn" placeholder="${t('opcional · por SN pode usar histórico total','optional · exact SN can use full history')}"></label><label>${t('Início','Start')}<input type="date" name="start_at" value="${isoDate(from)}"></label><label>${t('Fim','End')}<input type="date" name="end_at" value="${isoDate(now)}"></label><label>${t('Linha','Line')}<input name="line" placeholder="${t('opcional','optional')}"></label><label>${t('Modelo','Model')}<input name="model" placeholder="CPH..."></label><label>Defect Code<input name="defect_code" placeholder="${t('opcional','optional')}"></label><label>Repair Code<input name="repair_code" placeholder="${t('opcional','optional')}"></label><label>Defect Type<input name="defect_type" placeholder="${t('opcional','optional')}"></label><label class="ames-3012-history-option"><input type="checkbox" data-3012-full-history checked disabled> ${t('SN exata: histórico desde AMES_START_DATE','Exact SN: history from AMES_START_DATE')}</label><div class="ames-3012-actions"><button type="button" class="button primary" data-3012-run>${t('Coletar 3012','Collect 3012')}</button><button type="button" class="button secondary" data-3012-local>${t('Consultar SQLite','Query SQLite')}</button></div></form><p class="mes-context" data-3012-history-hint>${t('Sem SN, períodos grandes são divididos em blocos com checkpoint.','Without an SN, large periods use checkpointed chunks.')}</p><div data-3012-body></div></section>`;
-      root.querySelector('[data-3012-run]').addEventListener('click',collect);root.querySelector('[data-3012-local]').addEventListener('click',()=>loadLocal().catch(error=>{statusText=error.message;renderBody();}));root.querySelector('[data-ames-start-save]').addEventListener('click',saveStartDate);root.querySelector('[name="sn"]').addEventListener('input',syncHistoryMode);root.querySelector('[name="start_at"]').addEventListener('input',()=>{startDateDirty=true;});root.querySelector('[data-3012-full-history]').addEventListener('change',syncHistoryMode);mounted=true;readCapability();
+      if(preserved){
+        for(const name of ['sn','start_at','end_at','line','model','defect_code','repair_code','defect_type']){const el=root.querySelector(`[name="${name}"]`);if(el&&preserved[name]!==undefined)el.value=String(preserved[name]);}
+        const full=root.querySelector('[data-3012-full-history]');if(full)full.checked=Boolean(preserved.fullHistory);
+        const startInput=root.querySelector('[data-ames-start-date]');if(startInput)startInput.value=preserved.amesStartDateInput||amesStartDate;
+      }
+      root.querySelector('[data-3012-run]').addEventListener('click',collect);root.querySelector('[data-3012-local]').addEventListener('click',()=>loadLocal().catch(error=>{statusText=error.message;renderBody();}));root.querySelector('[data-ames-start-save]').addEventListener('click',saveStartDate);root.querySelector('[name="sn"]').addEventListener('input',syncHistoryMode);root.querySelector('[name="start_at"]').addEventListener('input',()=>{startDateDirty=true;});root.querySelector('[data-3012-full-history]').addEventListener('change',syncHistoryMode);mounted=true;lastLang=lang;
+      if(capability){const input=root.querySelector('[data-ames-start-date]');if(input&&!input.value)input.value=amesStartDate;syncHistoryMode();renderBody();}else readCapability();
     }
     syncHistoryMode();renderBody();
   }
-  return {render,clear(){clearTimeout(pollTimer);root.replaceChildren();mounted=false;rows=[];}};
+  return {render,clear(){clearTimeout(pollTimer);root.replaceChildren();mounted=false;rows=[];lastLang='';}};
 }
