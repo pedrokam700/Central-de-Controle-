@@ -40,6 +40,15 @@ function Test-Ames {
     }
 }
 
+function Get-PreviewStatus([string]$Url) {
+    try {
+        $response = Invoke-WebRequest $Url -UseBasicParsing -TimeoutSec 8 -MaximumRedirection 3
+        return [int]$response.StatusCode
+    } catch {
+        try { return [int]$_.Exception.Response.StatusCode } catch { return 0 }
+    }
+}
+
 function Show-RouteTail {
     try {
         $latest = Get-ChildItem -LiteralPath $Logs -Filter 'rota_ames_persistente_*.txt' -ErrorAction SilentlyContinue |
@@ -198,13 +207,31 @@ try {
     if (-not (Test-Path $tokenPath)) { F 'Token local do agente nao foi criado.' }
 
     $token = (Get-Content $tokenPath -Raw).Trim()
-    $url = '__PREVIEW__#ames_agent_token=' + [uri]::EscapeDataString($token)
+    $hostedBase = '__PREVIEW__'
+    $hostedUrl = $hostedBase + '#ames_agent_token=' + [uri]::EscapeDataString($token)
+    $localUrl = 'http://127.0.0.1:8765/?build=FASTLANE-__HEAD8__'
+    $previewStatus = Get-PreviewStatus $hostedBase
 
     L '[7/7] Abrindo Central fastlane...'
-    Start-Process $url
+    if ($previewStatus -eq 404) {
+        L '      Preview HTTP 404; abrindo Console local como fallback seguro.' Yellow
+        L ('      Preview com problema: ' + $hostedBase) Yellow
+        Start-Process $localUrl
+    } elseif ($previewStatus -eq 0 -or $previewStatus -ge 500) {
+        L ('      Preview indisponivel/status=' + $previewStatus + '; abrindo Console local.') Yellow
+        Start-Process $localUrl
+    } else {
+        if ($previewStatus -eq 401 -or $previewStatus -eq 403) {
+            L ('      Preview protegido HTTP ' + $previewStatus + '; abrindo no navegador para usar a sessao do usuario.') Yellow
+        } else {
+            L ('      Preview respondendo HTTP ' + $previewStatus + '.') Green
+        }
+        Start-Process $hostedUrl
+    }
+
     L ''
     L '[OK] FASTLANE PRONTA PARA TESTE' Green
-    L '3012, guardian de rede e Shift 2114 ainda exigem validacao fisica.' Yellow
+    L 'Agente e fallback local foram validados automaticamente; 3012, guardian de rede e Shift 2114 ainda exigem validacao fisica.' Yellow
     L ('Log: ' + $Log)
     exit 0
 } catch {
