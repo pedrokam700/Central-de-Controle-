@@ -6,6 +6,7 @@ operational calendar and loopback authorization on top.
 """
 from __future__ import annotations
 
+import os
 from urllib.parse import urlparse
 
 import agent_entry as entry
@@ -56,7 +57,10 @@ entry.a.ingest_3028_live = _hardened_live_ingest
 
 
 class HardenedHandler(entry.Handler):
-    _PUBLIC_API = {"/api/v1/health", "/api/v1/hardening/health"}
+    # /ready is a deliberately tiny loopback startup contract. It must remain
+    # public just like /health; otherwise the launcher cannot distinguish a live
+    # agent from an agent that merely requires the workstation token.
+    _PUBLIC_API = {"/api/v1/ready", "/api/v1/health", "/api/v1/hardening/health"}
 
     def _active_port(self):
         return int(getattr(self.server, "server_port", entry.a.CONFIG.get("port", 8765)))
@@ -101,6 +105,19 @@ class HardenedHandler(entry.Handler):
         path = urlparse(self.path).path
         if not self._authorized(path):
             self._reject_unauthorized()
+            return
+        if path == "/api/v1/ready":
+            # Minimal by design: no paths, MES data, tokens or workstation secrets.
+            self._send(
+                {
+                    "ok": True,
+                    "ready": True,
+                    "agent_build": "CANONICAL-R11-BATCH",
+                    "agent_version": entry.a.AGENT_VERSION,
+                    "candidate_version": entry.a.CANDIDATE_VERSION,
+                    "pid": os.getpid(),
+                }
+            )
             return
         if path == "/api/v1/hardening/health":
             try:
