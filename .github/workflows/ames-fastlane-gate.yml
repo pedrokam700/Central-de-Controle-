@@ -83,11 +83,13 @@ jobs:
           print('3012 normalization/persistence/offline lookup OK')
           PY
 
-      - name: Assert physical gates and lightweight readiness contract
+      - name: Assert physical gates and final readiness ownership
         run: |
           grep -q 'factory_validated":False' ames/agent/agent_3012_patch.py
           grep -q 'gate físico ainda pendente' ames/console-3012-fastlane.mjs
-          grep -q '/api/v1/ready' ames/agent/fastlane_runtime_guard.py
+          grep -q '"/api/v1/ready"' ames/agent/agent_hardened_entry.py
+          grep -q 'if path == "/api/v1/ready"' ames/agent/agent_hardened_entry.py
+          grep -q 'def install(entry_module)' ames/agent/fastlane_runtime_guard.py
           grep -q 'ConnectionAbortedError' ames/agent/fastlane_runtime_guard.py
 
       - name: Build exact CLEAN V3 fastlane overlay
@@ -116,6 +118,7 @@ jobs:
           if ($launcher -notmatch '/api/v1/ready') { throw 'launcher does not use /ready' }
           if ($launcher -match "api/v1/health'\s+-TimeoutSec\s+2([^0-9]|$)") { throw 'launcher still polls heavy /health with 2s' }
           if (($launcher | Select-String -Pattern '/api/v1/health' -AllMatches).Matches.Count -ne 1) { throw 'launcher must call /health exactly once' }
+          if ($launcher -notmatch 'HTTP 401') { throw 'launcher does not fail fast on readiness auth mismatch' }
           if (-not (Test-Path 'dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py')) { throw 'runtime guard missing from exact artifact' }
 
       - name: Inspect fastlane overlay
@@ -126,7 +129,9 @@ jobs:
           test -f dist/ames-fastlane-test/payload/ames-agent/agent_3012_patch.py
           test -f dist/ames-fastlane-test/payload/ames-agent/network_watch.py
           test -f dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py
-          grep -q 'fastlane_runtime_guard.install()' dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw
+          grep -q 'fastlane_runtime_guard.install(hardened.entry)' dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw
+          grep -q 'import agent_hardened_entry as hardened' dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw
+          grep -q 'if path == "/api/v1/ready"' dist/ames-fastlane-test/payload/ames-agent/agent_hardened_entry.py
           grep -q '/api/v1/ready' dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1
 
       - name: Upload fastlane test package
@@ -139,12 +144,18 @@ jobs:
 
   windows-artifact-contract:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Install agent Python dependencies
+        shell: powershell
+        run: |
+          python -m pip install --disable-pip-version-check -r ames/agent/requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build and harden exact artifact on Windows
         shell: powershell
@@ -154,7 +165,7 @@ jobs:
           python scripts/harden-ames-fastlane-package.py "${{ github.sha }}"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Windows PowerShell parser and startup handshake contract
+      - name: Windows PowerShell parser and startup contract
         shell: powershell
         run: |
           $launcherPath = 'dist/ames-fastlane-test/payload/INICIAR_FASTLANE_TESTE.ps1'
@@ -172,7 +183,57 @@ jobs:
           if ($launcher -notmatch '/api/v1/ready') { throw 'Missing lightweight readiness endpoint' }
           if ($launcher -match "api/v1/health'\s+-TimeoutSec\s+2([^0-9]|$)") { throw 'Heavy health is still used as startup poll' }
           if (($launcher | Select-String -Pattern '/api/v1/health' -AllMatches).Matches.Count -ne 1) { throw 'Full health must run exactly once after readiness' }
-          if (-not (Test-Path 'dist/ames-fastlane-test/payload/ames-agent/fastlane_runtime_guard.py')) { throw 'Runtime guard missing' }
+          if ($launcher -notmatch 'HTTP 401') { throw 'Launcher does not fail fast on readiness authorization mismatch' }
           $bootstrap = Get-Content 'dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw' -Raw
-          if ($bootstrap -notmatch 'fastlane_runtime_guard\.install\(\)') { throw 'Runtime guard not installed by bootstrap' }
-          Write-Host 'Windows artifact contract OK' -ForegroundColor Green
+          if ($bootstrap -notmatch 'fastlane_runtime_guard\.install\(hardened\.entry\)') { throw 'Runtime guard is not installed on final hardened handler' }
+          if ($bootstrap -match 'runpy\.run_path') { throw 'Bootstrap still runs old pre-hardening patch order' }
+          Write-Host 'Windows static artifact contract OK' -ForegroundColor Green
+
+      - name: Windows live artifact readiness smoke
+        shell: powershell
+        run: |
+          $payload = Resolve-Path 'dist/ames-fastlane-test/payload'
+          $bootstrap = Resolve-Path 'dist/ames-fastlane-test/payload/agent_fastlane_bootstrap.pyw'
+          $port = 18765
+          $proc = Start-Process -FilePath 'python' -ArgumentList @("`"$bootstrap`"", '--host', '127.0.0.1', '--port', "$port") -WorkingDirectory $payload -PassThru
+          try {
+            $ready = $null
+            for ($i = 0; $i -lt 45; $i++) {
+              Start-Sleep -Seconds 1
+              if ($proc.HasExited) { break }
+              try {
+                $response = Invoke-WebRequest "http://127.0.0.1:$port/api/v1/ready" -UseBasicParsing -TimeoutSec 3
+                if ($response.StatusCode -eq 200) {
+                  $ready = $response.Content | ConvertFrom-Json
+                  break
+                }
+              } catch {
+                $status = $null
+                try { $status = [int]$_.Exception.Response.StatusCode } catch {}
+                if ($status -eq 401) { throw 'LIVE CONTRACT FAILURE: /api/v1/ready returned HTTP 401' }
+              }
+            }
+            if (-not $ready) {
+              Get-ChildItem 'dist/ames-fastlane-test/payload/logs' -ErrorAction SilentlyContinue | ForEach-Object {
+                Write-Host "--- $($_.Name) ---"
+                Get-Content $_.FullName -Tail 120 -ErrorAction SilentlyContinue
+              }
+              if ($proc.HasExited) { throw "Agent exited before readiness: $($proc.ExitCode)" }
+              throw 'LIVE CONTRACT FAILURE: /api/v1/ready never returned HTTP 200'
+            }
+            if (-not $ready.ok -or -not $ready.ready) { throw 'LIVE CONTRACT FAILURE: invalid readiness body' }
+            if ([string]$ready.agent_build -ne 'CANONICAL-R11-BATCH') { throw "Unexpected build: $($ready.agent_build)" }
+
+            $protectedStatus = $null
+            try {
+              Invoke-WebRequest "http://127.0.0.1:$port/api/v1/network/status" -UseBasicParsing -TimeoutSec 3 | Out-Null
+              $protectedStatus = 200
+            } catch {
+              try { $protectedStatus = [int]$_.Exception.Response.StatusCode } catch {}
+            }
+            if ($protectedStatus -ne 401) { throw "Protected endpoint must remain 401 without token; got $protectedStatus" }
+
+            Write-Host "LIVE artifact readiness OK: PID=$($ready.pid) build=$($ready.agent_build)" -ForegroundColor Green
+          } finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+          }
