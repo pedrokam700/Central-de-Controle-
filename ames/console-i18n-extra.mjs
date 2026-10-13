@@ -1,4 +1,47 @@
 export const EXTRA_EN=Object.fromEntries(`
+Turno de produção|Production shift
+Data operacional|Operational date
+1º Turno|1st Shift
+2º Turno|2nd Shift
+1º Turno · contextos|1st Shift · contexts
+2º Turno · contextos|2nd Shift · contexts
+Turno sem evidência|Shift without evidence
+Todos|All
+Pronto|Ready
+Rede do posto|Workstation network
+Modo local-first: dados já salvos continuam consultáveis mesmo sem internet. Para novas consultas MES, conecte o agente local.|Saved local data remains available without internet. Connect the local agent for new MES queries.
+Consulta por SN enriquecida|Enriched SN lookup
+Investigação de PCBA ou Material SN com 3074, 2114, 3022 e 3012 quando a fonte estiver disponível.|PCBA or Material SN investigation with 3074, 2114, 3022 and 3012 when available.
+Timeline 3022 e histórico 3012 de defeito, reparo e análise.|3022 timeline and 3012 defect, repair and analysis history.
+Consultar A-MES|Query A-MES
+Consultar base local|Query local database
+No posto MES, use Consultar A-MES para buscar fontes ao vivo. Na Assistência/offline, use Consultar base local para cruzar tudo que já foi armazenado no SQLite.|At the MES workstation, query A-MES for live sources. For assistance or offline use, query the local database to cross-reference stored SQLite evidence.
+3012 · Defect Repair Inquiry|3012 · Defect Repair Inquiry
+Defeito + reparo + análise/Repair Comment. A coleta lê a grid ExtJS diretamente; exportação Excel não é requisito.|Defect, repair and analysis/Repair Comment. Collection reads the ExtJS grid directly without Excel.
+GATE FÍSICO|FACTORY GATE
+Início|Start
+Fim|End
+Modelo|Model
+Coletar 3012|Collect 3012
+Consultar SQLite|Query SQLite
+implementada · gate físico ainda pendente|implemented · physical validation pending
+Sem SN, períodos grandes são divididos automaticamente em blocos de 31 dias. Com SN, blocos maiores são usados. Cada bloco fica checkpointado para retomada após queda de rede/Chrome.|Without an SN, long periods are split into 31-day chunks. Larger chunks are used with an SN. Each chunk is checkpointed within the collection job.
+Ethernet mantém internet; Wi-Fi A-MES e a rota exclusiva para 172.29.185.215 são monitorados sem alterar DNS ou gateway padrão.|Ethernet keeps internet access; A-MES Wi-Fi and the host route to 172.29.185.215 are monitored without changing DNS or the default gateway.
+A-MES conectado|A-MES connected
+Wi-Fi A-MES desconectado|A-MES Wi-Fi disconnected
+Wi-Fi diferente do perfil A-MES|Wi-Fi differs from the A-MES profile
+Rota A-MES não confirmada|A-MES route unconfirmed
+A-MES sem resposta|A-MES not responding
+alcançável|reachable
+sem resposta|no response
+Auto-recuperação|Automatic recovery
+parada|stopped
+ativa|active
+observando|observing
+Verificar rede|Check network
+Reparar Wi-Fi / rota A-MES|Repair A-MES Wi-Fi / route
+Cloud não é requisito para operar o Console local.|Cloud is not required to operate the local Console.
+
 Relação histórica|Historical relation
 Defect Code antigo|Prior defect code
 Defect Description antigo|Prior defect description

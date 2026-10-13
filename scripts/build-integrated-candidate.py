@@ -43,8 +43,10 @@ def build(destination, development=False):
  for name in ['ATUALIZAR_INSTALACAO_EXISTENTE.bat','ATUALIZAR_R12_EXISTENTE.bat']:payload[name]=mod._update_bat()
  for name in ['RESTAURAR_INSTALACAO_ANTERIOR.bat','ROLLBACK_R12_EXISTENTE.bat']:payload[name]=mod._rollback_bat()
  payload['ames-agent/candidate-files.json']=json.dumps({name:hashlib.sha256(payload['ames-agent/'+name]).hexdigest() for name in mod.FILES},indent=2).encode()
- extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/')) or k in ['START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat']}
+ extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/')) or k in ['ames-agent/requirements.txt','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat']}
  payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty)},indent=2).encode()
+ for doc in (ROOT/'docs/ames').glob('integrated-v5*'):
+  if doc.is_file():payload['evidence/'+doc.name]=doc.read_bytes()
  payload['LEIA_PRIMEIRO.txt']=(f'''CENTRAL + A-MES — CANDIDATO INTEGRADO
 HEAD: {sha}
 Gate fisico pendente. Nao e uma promocao de producao.
@@ -71,7 +73,7 @@ VALIDACAO FISICA:
 
 ROLLBACK: RESTAURAR_INSTALACAO_ANTERIOR.bat seleciona backup; preserva SQLite operacional.
 ''').encode()
- manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','development':bool(dirty),'physical_gate':'PENDING','hashes_3028':HASHES,'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
+ manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'physical_gate':'PENDING','hashes_3028':HASHES,'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
  payload['CANDIDATE_MANIFEST.json']=json.dumps(manifest,indent=2).encode()
  destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
  with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as z:

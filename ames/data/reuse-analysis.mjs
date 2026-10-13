@@ -32,7 +32,10 @@ export function reuseLinks(snapshot){
   const history=(snapshot?.pcba_history?.records||[]).filter(h=>previous.includes(h.pcba_sn));
   const process=(snapshot?.process_timeline?.events||[]).filter(e=>e.pcba_sn===pcba);
   const operators=process.flatMap(e=>e.provenance?.adapter?.operator_events||[]);
-  const row={line:value(r,'line','Linha')||snapshot.line_id,product:value(r,'product','product_model','Modelo')||occurrence?.product_key||null,pcba,material,
+  const repairs=[...(r.repair_evidence_3012||[]),...history.flatMap(h=>h.repair_evidence_3012||[])];
+  const row={production_shift:occurrence?.production_shift||null,production_operational_date:occurrence?.production_operational_date||null,production_event_time:occurrence?.production_event_time||null,
+   repair_user:unique(repairs.map(r=>r.repair_user)).join(', ')||null,repair_comment:unique(repairs.map(r=>r.repair_comment)).join(' | ')||null,repair_source:repairs.length?'3012 · candidatos por PCBA':null,
+   line:value(r,'line','Linha')||snapshot.line_id,product:value(r,'product','product_model','Modelo')||occurrence?.product_key||null,pcba,material,
    part_number:value(r,'part_number','Part Number','material_id'),item_type:value(r,'item_type','material_type','Tipo material'),family,
    previous_pcbas:unique(previous.concat(corr.map(c=>value(c,'historical_pcba','PCBA desvinculada')))).join(', '),
    defect_code:value(r,'defect_code','Defect Code atual')||occurrence?.defect_code,defect_desc:value(r,'defect_desc','Defect Description atual','Defect Desc atual')||occurrence?.defect_desc,
@@ -44,7 +47,7 @@ export function reuseLinks(snapshot){
    operator:unique(operators.flatMap(o=>[o.operator_id,o.operator_name])).join(', ')||null,
    _sourceRows:[r],_history:history};
   const key=JSON.stringify([row.line,pcba,material,r.bind_id||r.bind_time_utc||null,r.unbind_id||r.unbind_time_utc||null]);
-  if(out.has(key)){const old=out.get(key);old._sourceRows.push(r);for(const k of ['defect_code','defect_desc','defect_time','relations'])old[k]=unique([old[k],row[k]]).join(', ')||null;}
+  if(out.has(key)){const old=out.get(key);old._sourceRows.push(r);for(const k of ['defect_code','defect_desc','defect_time','relations','production_shift','production_operational_date','production_event_time','repair_user','repair_comment','repair_source'])old[k]=unique([old[k],row[k]]).join(', ')||null;}
   else out.set(key,row);
  }
  return [...out.values()];
@@ -52,6 +55,6 @@ export function reuseLinks(snapshot){
 export function aggregatePcbas(links){
  const groups=new Map();for(const r of links){const key=JSON.stringify([r.line,r.pcba]);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);}
  return [...groups.values()].map(rows=>{const r=rows[0],out={pcba:r.pcba,line:r.line,materials:unique(rows.map(x=>x.material)).length,links:rows.length,historical_pcbas:unique(rows.flatMap(x=>list(x.previous_pcbas))).length,_links:rows};
- for(const k of ['product','family','item_type','defect_code','defect_desc','defect_time','relations','previous_pcbas','material','part_number','usage','history_code','history_desc','station','operation','operator'])out[k]=unique(rows.map(x=>x[k])).join(', ')||null;return out;});
+ for(const k of ['production_shift','production_operational_date','production_event_time','repair_user','repair_comment','repair_source','product','family','item_type','defect_code','defect_desc','defect_time','relations','previous_pcbas','material','part_number','usage','history_code','history_desc','station','operation','operator'])out[k]=unique(rows.map(x=>x[k])).join(', ')||null;return out;});
 }
 export function reuseKpis(rows){const pcbas=aggregatePcbas(rows);return {pcbas:pcbas.length,materials:unique(rows.map(r=>r.material)).length,links:rows.length,same:pcbas.filter(r=>r.relations?.includes('MESMA FALHA')).length,family:pcbas.filter(r=>r.relations?.includes('MESMA FAMÍLIA')).length,other:pcbas.filter(r=>r.relations?.includes('OUTRA FALHA')).length};}

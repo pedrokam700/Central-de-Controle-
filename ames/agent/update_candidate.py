@@ -8,7 +8,7 @@ import socket
 import sqlite3
 import uuid
 from pathlib import Path
-FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py')
+FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py','production_shift.py','agent_3012_patch.py','ames_3012_live.py','repair_3012.py','local_sn.py','network_watch.py','fastlane_runtime_guard.py')
 ROOT_FILES=('INICIAR_POSTO_CENTRAL_V2.bat','00_INICIAR_AQUI.bat','INICIAR_CENTRAL_AMES.cmd',
             'suporte/ames-workstation/ROTA_AMES_APLICAR.bat','suporte/ames-workstation/ROTA_AMES_REMOVER.bat',
             'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1',
@@ -91,7 +91,7 @@ def update(path,source=None):
         extras=json.loads(local_manifest.read_text(encoding='utf-8'))['files']
         for rel,expected in extras.items():
             candidate=(source_root/rel).resolve()
-            if source_root.resolve() not in candidate.parents or not (rel.startswith(('frontend/','factory-engine/','network/')) or rel in ('START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat')):raise ValueError('Invalid local bundle path')
+            if source_root.resolve() not in candidate.parents or not (rel.startswith(('frontend/','factory-engine/','network/')) or rel in ('ames-agent/requirements.txt','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat')):raise ValueError('Invalid local bundle path')
             if hashlib.sha256(candidate.read_bytes()).hexdigest()!=expected:raise ValueError('Local asset hash mismatch: '+rel)
     saved=backup(target,extras)
     try:

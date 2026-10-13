@@ -19,9 +19,9 @@ export function normalizeCanonical(payload){
   }
   const legacy={schema:'central-v2-ames-line-v1',line,summary:{...payload.summary,line,snapshot_id:sid},defects:datasets.defects};
   const base=normalizeAgentRead({legacy,datasets,insights:payload.insights});
-  const occurrences=base.occurrences.map((row,i)=>({...row,occurrence_id:datasets.defects[i].occurrence_id,identity_kind:'durable_local_observation',evidence_ref:JSON.stringify([payload.source_id,sid,revision,datasets.defects[i].record_id]),snapshot_revision:revision,raw_ref:datasets.defects[i].raw_ref,provenance:datasets.defects[i].provenance}));
+  const occurrences=base.occurrences.map((row,i)=>({...row,...Object.fromEntries(Object.entries(datasets.defects[i]).filter(([k])=>k.startsWith('production_')||k==='repair_evidence_3012')),occurrence_id:datasets.defects[i].occurrence_id,identity_kind:'durable_local_observation',evidence_ref:JSON.stringify([payload.source_id,sid,revision,datasets.defects[i].record_id]),snapshot_revision:revision,raw_ref:datasets.defects[i].raw_ref,provenance:datasets.defects[i].provenance}));
   const processEvents=payload.capabilities?.process_timeline?datasets.process_timeline.map(e=>({...e,operation_code:e.station,operation_name:e.process,hist_seq:e.provenance?.adapter?.hist_seq,event_group:e.provenance?.adapter?.event_group})):[];
-  const contextMap=new Map();
+  const contextMap=new Map((payload.process_contexts||[]).filter(c=>c.line===line).map(c=>[c.defect_key,c]));
   for(const event of processEvents){
     const contexts=event?.provenance?.adapter?.defect_contexts;
     if(!Array.isArray(contexts))continue;

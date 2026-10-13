@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterable, List
 from mes_scheduler import session_object
 from operator_evidence import operator_evidence
 import canonical
+import production_shift
 import process_timeline
 
 
@@ -102,6 +103,11 @@ def ensure_schema(store) -> None:
         CREATE INDEX IF NOT EXISTS idx_process_context_line ON process_defect_contexts(snapshot_id,line,pcba_sn,defect_time);
         """)
 
+        existing = {r[1] for r in con.execute("PRAGMA table_info(process_defect_contexts)")}
+        for name in production_shift.FIELDS:
+            if name not in existing:
+                con.execute(f"ALTER TABLE process_defect_contexts ADD COLUMN {name} TEXT")
+
 
 def patch_store(store) -> None:
     """Expose contexts through the existing /base catalog without changing Store ABI."""
@@ -166,6 +172,7 @@ def _context_from_correlation(rec: Dict[str, Any], correlated: Dict[str, Any]) -
         "analysis_kind": correlated.get("analysis_kind"), "reference_rule_id": correlated.get("reference_rule_id"),
         "reference_confidence": correlated.get("reference_confidence"), "reference_station_code": stations[0] if stations else None,
         "reference_reason": correlated.get("reference_reason"), "reference_status": refsel.get("status"),
+        **production_shift.classify(ref.get("event_time_utc") or ref.get("event_time"), prev.get("event_time_utc") or prev.get("event_time")),
         "reference_event_time": ref.get("event_time_utc") or ref.get("event_time"), "reference_hist_seq": ref.get("hist_seq"),
         "reference_pass_count_before_defect": int(refsel.get("prior_count") or 0),
         "previous_operation_code": prev.get("operation_code"), "previous_operation_name": prev.get("operation_name"),
@@ -188,6 +195,7 @@ def _persist_contexts(store, snapshot_id: int, contexts: Iterable[Dict[str, Any]
         "previous_operation_name","previous_station","previous_event_time","previous_hist_seq","previous_event_group","repair_action",
         "repair_class","repair_event_time","return_a5201_event_time","next_reference_event_time","status","source","details_json"
     ]
+    cols.extend(production_shift.FIELDS)
     sql = "INSERT OR REPLACE INTO process_defect_contexts("+",".join(cols)+") VALUES("+",".join("?" for _ in cols)+")"
     with store.connect() as con:
         for ctx in contexts:
@@ -282,6 +290,7 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                         event_id=hashlib.sha256(_json(raw_key).encode()).hexdigest()[:32]
                         adapter={
                             "contract":"R11_DERIVED_REQUIRES_R12_FACTORY_GATE","hist_seq":hist,
+                            **production_shift.classify(event_time),
                             "current_operation_code":p.get("current_operation_code"),"event_group":p.get("event_group"),
                             "defect_contexts":context_by_pass.get(event_time,[]),
                             "operator_evidence":operator_evidence(p.get("raw") or {}),

@@ -1,0 +1,29 @@
+{
+  "host": "127.0.0.1",
+  "port": 8765,
+  "engine_dir": "",
+  "configured_lines": ["TAN10101", "TAN10102", "TAN10103"],
+  "line_aliases": {"Linha 1": "TAN10101", "Linha 2": "TAN10102", "Linha 3": "TAN10103"},
+  "day_start": "07:00",
+  "monitor_interval_minutes": 30,
+  "performance": "balanced",
+  "chrome_cdp": "http://127.0.0.1:9222",
+  "ames_host": "172.29.185.215",
+  "ames_port": 80,
+  "ames_start_url": "http://172.29.185.215/asymes",
+  "ames_wifi_profile": "TAXXX_5G",
+  "chrome_profile_dir": "",
+  "auto_3028": {"ready": true, "note": "coleta direta ExtJS validada em fabrica"},
+  "auto_3022": {"ready": false, "note": "gate fisico do candidato integrado"},
+  "setup_complete": false,
+  "backup_retention": 10,
+  "auto_backup_on_start": true,
+  "3012_individual_lookback_days": 180,
+  "3012_individual_max_pcbas": 25,
+  "3012_sn_chunk_days": 120,
+  "allowed_origins": [
+    "https://central-cora-v2-pedrokam700-6477.vercel.app",
+    "https://central-cora-v2.vercel.app",
+    "https://central-cora-v2-git-ui-ames-fastlane-sn-2ae6e4-pedrokam700-6477.vercel.app"
+  ]
+}

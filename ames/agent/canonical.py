@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import uuid
+import production_shift
 from datetime import datetime, timezone
 
 SCHEMA = 'central-ames-v2'
@@ -91,8 +92,12 @@ def export_revision(store,sid,line,insight_builder=None):
         if not snap:raise ValueError('Snapshot not found')
         epochrow=con.execute('SELECT epoch FROM mes_source_clock WHERE snapshot_id=?',(sid,)).fetchone();epoch=epochrow[0] if epochrow else 0
         previous=con.execute('SELECT * FROM mes_revisions WHERE snapshot_id=? AND line=? ORDER BY revision DESC LIMIT 1',(sid,line)).fetchone()
-        if previous and previous['epoch']==epoch:return json.loads(previous['payload'])
+        if previous and previous['epoch']==epoch and json.loads(previous['payload']).get('projection_version')==5:return json.loads(previous['payload'])
         source=con.execute("SELECT value FROM schema_meta WHERE key='ames_source_id'").fetchone()[0]
+        tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        process_contexts=[dict(r) for r in con.execute('SELECT * FROM process_defect_contexts WHERE snapshot_id=? AND line=?',(sid,line))] if 'process_defect_contexts' in tables else []
+        context_by_key={r['defect_key']:r for r in process_contexts}
+        repair_rows=[dict(r) for r in con.execute('SELECT * FROM repair_history_3012')] if 'repair_history_3012' in tables else []
         sets={};coverage={}
         for dataset in DATASETS:
             rows=[];ambiguous=0;unassigned=0
@@ -110,7 +115,16 @@ def export_revision(store,sid,line,insight_builder=None):
                 products=sorted({r['product'] for r in selected if r.get('product')})
                 view={'defects':'3028','pcba_history':'2114','material_reuse':'3074','history_contexts':'2114','process_timeline':'3022'}[dataset]
                 row.update(record_id=ident,line=line,line_id=line,snapshot_id=str(sid),product=products[0] if len(products)==1 else None,product_candidates=products,source_view=view,source_timestamp=raw.get('defect_time') or raw.get('event_time'),collected_at=snap['collected_at'],raw_ref=f'sqlite:{source}:{dataset}:{sid}:{key}',provenance={'identity_scope':'agent_snapshot_observation','source_id':source,'line_candidates':candidates,'line_ambiguous':len(candidates)>1,'contexts':selected})
-                if dataset=='defects':row['occurrence_id']=ident
+                if dataset=='defects':
+                    row['occurrence_id']=ident
+                    context=context_by_key.get(raw.get('defect_key'),{})
+                    row.update({k:context.get(k) for k in production_shift.FIELDS})
+                if dataset in ('defects','pcba_history','material_reuse'):
+                    sn=raw.get('pcba_sn') or raw.get('current_pcba_sn')
+                    row['repair_evidence_3012']=[{k:r.get(k) for k in ('row_key','pcba_sn','defect_code','defect_desc','defect_time','defect_user','repair_user','repair_time','repair_code','repair_comment','defect_reason_type','defect_reason_desc','product_id','product_model','line','sample_batch_id','defect_oper')} for r in repair_rows if r.get('pcba_sn')==sn]
+                    # Separate candidates, never overwrite a 3028/2114 fact with 3012.
+                    for repair in row['repair_evidence_3012']:
+                        repair.update(source_view='3012',association='same_pcba_candidate',raw_ref='sqlite:3012:'+str(repair['row_key']))
                 if dataset=='material_reuse':
                     try:
                         material_raw=json.loads(raw.get('raw_json') or '{}')
@@ -122,6 +136,7 @@ def export_revision(store,sid,line,insight_builder=None):
                 if dataset=='process_timeline':
                     row.update({k:raw.get(k) for k in ('event_id','product','pcba_sn','process','station','event_time','raw_ref')});row['valid']=bool(raw['valid'])
                     row['provenance']['adapter']=json.loads(raw['provenance_json'])
+                    row.update(production_shift.classify(raw.get('event_time')))
                     row['coverage']={'status':'partial','source_complete':False}
                 ambiguous+=int(len(candidates)>1);rows.append(row)
             sets[dataset]=rows
@@ -132,7 +147,7 @@ def export_revision(store,sid,line,insight_builder=None):
         if insight_builder:
             try:insights=insight_builder(line=line,snapshot_id=sid)
             except Exception:pass
-        payload={'schema':SCHEMA,'schema_version':2,'source_id':source,'snapshot_id':str(sid),'line_id':line,'collected_at':snap['collected_at'],'source_view':'3028','source_timestamp':None,'summary':{'period':dict(con.execute('SELECT start_at,end_at FROM analysis_windows WHERE id=?',(snap['window_id'],)).fetchone() or {}),'line':line,'snapshot_id':str(sid),'collected_at':snap['collected_at'],'fpy':m.get('fpy'),'check_fpy':m.get('check_fpy'),'quantity':m.get('quantity'),'defect_rows':len(sets['defects'])},'datasets':sets,'coverage':coverage,'insights':insights,'capabilities':{'process_timeline':bool(sets['process_timeline'])}}
+        payload={'projection_version':5,'schema':SCHEMA,'schema_version':2,'source_id':source,'snapshot_id':str(sid),'line_id':line,'collected_at':snap['collected_at'],'source_view':'3028','source_timestamp':None,'summary':{'period':dict(con.execute('SELECT start_at,end_at FROM analysis_windows WHERE id=?',(snap['window_id'],)).fetchone() or {}),'line':line,'snapshot_id':str(sid),'collected_at':snap['collected_at'],'fpy':m.get('fpy'),'check_fpy':m.get('check_fpy'),'quantity':m.get('quantity'),'defect_rows':len(sets['defects'])},'datasets':sets,'coverage':coverage,'insights':insights,'process_contexts':process_contexts,'capabilities':{'process_timeline':bool(sets['process_timeline'])}}
         fingerprint=digest(payload)
         if previous and previous['content_hash']==fingerprint:
             con.execute('UPDATE mes_revisions SET epoch=? WHERE snapshot_id=? AND line=? AND revision=?',(epoch,sid,line,previous['revision']));return json.loads(previous['payload'])

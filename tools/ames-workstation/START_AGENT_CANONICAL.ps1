@@ -20,6 +20,8 @@ function Stop-AgentOn8765 {
   $listeners=Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue
   if($listeners){
     $listeners.OwningProcess | Sort-Object -Unique | ForEach-Object {
+      $process=Get-CimInstance Win32_Process -Filter "ProcessId = $_"
+      if(-not $process -or [string]$process.CommandLine -notmatch 'agent(_hardened|_clean)?_entry\.py|agent\.py') {throw 'Porta ocupada por processo nao confirmado como agente; feche manualmente.'}
       Write-Host "Parando agente local incompatível PID $_ na porta 8765..."
       Stop-Process -Id $_ -Force -ErrorAction Stop
     }
@@ -60,12 +62,14 @@ try{
 
 Set-Content -Path $outLog -Value ("=== START " + (Get-Date -Format s) + " ===") -Encoding UTF8
 Set-Content -Path $errLog -Value ("=== START " + (Get-Date -Format s) + " ===") -Encoding UTF8
-Start-Process -FilePath $pythonw -ArgumentList @($agent) -WorkingDirectory (Split-Path $agent -Parent) -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog | Out-Null
+Start-Process -FilePath $pythonw -ArgumentList @('"' + $agent + '"') -WorkingDirectory (Split-Path $agent -Parent) -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog | Out-Null
 
 for($i=0;$i -lt 30;$i++){
   Start-Sleep -Milliseconds 500
   try{
-    $h=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 1
+    $ready=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 2
+    if(-not $ready.ready){continue}
+    $h=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 25
     $actual='';if($h.package_root){$actual=[IO.Path]::GetFullPath([string]$h.package_root).TrimEnd([char]92)}
     $hard=Get-HardeningHealth
     if($h.ok -and [string]$h.agent_build -like 'CANONICAL-*' -and $actual -ieq $expected -and $hard){

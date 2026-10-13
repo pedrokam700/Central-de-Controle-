@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 AGENT=ROOT/'ames'/'agent'
 WORKSTATION=ROOT/'tools'/'ames-workstation'
-FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py')
+FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py','production_shift.py','agent_3012_patch.py','ames_3012_live.py','repair_3012.py','local_sn.py','network_watch.py','fastlane_runtime_guard.py')
 PREVIEW_URLS=(
     'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app',
     'https://deploy-preview-23--productcontrolcenter.netlify.app',
