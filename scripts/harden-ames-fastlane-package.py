@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -73,7 +74,8 @@ def main() -> None:
     boot_text = bootstrap.read_text(encoding="utf-8")
     if "/api/v1/ready" not in launch_text:
         raise SystemExit("generated launcher does not use lightweight /ready")
-    if "api/v1/health' -TimeoutSec 2" in launch_text:
+    # Numeric boundary matters: TimeoutSec 20 must NOT be mistaken for TimeoutSec 2.
+    if re.search(r"api/v1/health'\s+-TimeoutSec\s+2(?!\d)", launch_text):
         raise SystemExit("generated launcher still polls heavy /health with 2s timeout")
     if launch_text.count("/api/v1/health") != 1:
         raise SystemExit("generated launcher must call full /health exactly once")
