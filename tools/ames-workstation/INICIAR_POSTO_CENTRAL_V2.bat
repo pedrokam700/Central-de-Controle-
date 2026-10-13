@@ -71,7 +71,7 @@ if errorlevel 1 (
 
 if not exist "%ROOT%ames-agent\config.json" if exist "%ROOT%ames-agent\config.example.json" copy /Y "%ROOT%ames-agent\config.example.json" "%ROOT%ames-agent\config.json" >nul
 
-echo [3/7] Verificando acesso A-MES...
+echo [3/7] Verificando redes e garantindo rota persistente A-MES...
 call :probe
 if errorlevel 1 (
   netsh wlan show profiles 2>nul | findstr /I /C:"TAXXX_5G" >nul 2>nul
@@ -79,24 +79,30 @@ if errorlevel 1 (
     echo       Tentando reconectar o perfil TAXXX_5G ja salvo no Windows...
     netsh wlan connect name="TAXXX_5G" >nul 2>nul
     timeout /t 5 /nobreak >nul
-    call :probe
   )
 )
-if errorlevel 1 (
-  if exist "%ROOT%suporte\ames-workstation\ROTA_AMES_APLICAR.bat" (
-    call "%ROOT%suporte\ames-workstation\ROTA_AMES_APLICAR.bat"
-  ) else if exist "%ROOT%12_APLICAR_ROTA_AMES_TEMPORARIA.bat" (
-    call "%ROOT%12_APLICAR_ROTA_AMES_TEMPORARIA.bat"
-  ) else (
+rem Mesmo que o A-MES ja responda, garantimos a rota persistente. Isso migra
+rem automaticamente postos antigos que ainda tinham apenas ActiveStore.
+if exist "%ROOT%suporte\ames-workstation\ROTA_AMES_APLICAR.bat" (
+  call "%ROOT%suporte\ames-workstation\ROTA_AMES_APLICAR.bat"
+  if errorlevel 1 goto :fail
+) else if exist "%ROOT%12_APLICAR_ROTA_AMES_TEMPORARIA.bat" (
+  rem Fallback apenas para instalacoes antigas ainda nao migradas.
+  call "%ROOT%12_APLICAR_ROTA_AMES_TEMPORARIA.bat"
+  if errorlevel 1 goto :fail
+) else (
+  call :probe
+  if errorlevel 1 (
     echo [ERRO] A-MES indisponivel e ferramenta de rota ausente.
     goto :fail
   )
-  call :probe
-  if errorlevel 1 (
-    echo [ERRO] A rota foi preparada, mas 172.29.185.215:80 continua inacessivel.
-    goto :fail
-  )
 )
+call :probe
+if errorlevel 1 (
+  echo [ERRO] A rota foi verificada, mas 172.29.185.215:80 continua inacessivel.
+  goto :fail
+)
+echo       Ethernet + TAXXX_5G: rota A-MES ativa/persistente e acesso OK.
 
 echo [4/7] Iniciando/verificando agente canonico...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%suporte\ames-workstation\START_AGENT_CANONICAL.ps1" -Root "%ROOT%"
@@ -124,6 +130,7 @@ if defined EXPECTED_FRONTEND_SHA echo - Frontend esperado: %EXPECTED_FRONTEND_SH
 echo - Agente local: http://127.0.0.1:8765
 echo - Pareamento local: workstation-token-v1
 echo - Chrome A-MES: perfil dedicado / CDP 9222
+echo - Rota A-MES: persistente e revalidada automaticamente pelo launcher.
 echo - O login do A-MES continua manual.
 echo - Se a internet externa cair depois de um preview validado/cache valido,
 echo   o launcher reutiliza somente a mesma origem/SHA; a coleta local continua
