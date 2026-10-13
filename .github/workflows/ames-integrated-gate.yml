@@ -91,11 +91,12 @@ jobs:
           z=Path(os.environ['RUNNER_TEMP'])/'central-ames-integrated.zip'
           with zipfile.ZipFile(z) as f:
               names=set(f.namelist())
-              required={'00_INICIAR_AQUI.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','ames-agent/agent_hardened_entry.py','frontend/Central-de-Controle-/index.html','CANDIDATE_MANIFEST.json'}
+              required={'00_INICIAR_AQUI.bat','01_INSTALAR_UMA_VEZ.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','ames-agent/agent_hardened_entry.py','frontend/Central-de-Controle-/index.html','CANDIDATE_MANIFEST.json'}
               missing=required-names
               assert not missing, f'missing clean bundle files: {missing}'
               assert 'ames-agent/config.json' not in names
               assert not any(n.startswith('ames-agent/data/') for n in names)
+              assert not any(n.startswith('ATUALIZAR_') or n.startswith('RESTAURAR_') for n in names)
               manifest=json.loads(f.read('CANDIDATE_MANIFEST.json'))
               assert manifest['standalone_clean'] is True
               assert manifest['physical_gate']=='PENDING'
@@ -113,7 +114,7 @@ jobs:
   windows-clean-artifact:
     needs: integrated-contract
     runs-on: windows-latest
-    timeout-minutes: 18
+    timeout-minutes: 22
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -143,17 +144,21 @@ jobs:
           }
           Write-Host 'Windows launcher syntax OK' -ForegroundColor Green
 
-      - name: Install agent dependencies
-        shell: powershell
+      - name: Run real first-use installer from exact ZIP
+        shell: cmd
+        working-directory: package
         run: |
-          python -m pip install --disable-pip-version-check -r package\ames-agent\requirements.txt
-          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          call 01_INSTALAR_UMA_VEZ.bat /auto
+          if errorlevel 1 exit /b %errorlevel%
+          if not exist ".venv\Scripts\python.exe" exit /b 41
+          if not exist "ames-agent\config.json" exit /b 42
+          if not exist "ames-agent\data\ames_local.sqlite3" exit /b 43
 
-      - name: Live smoke from extracted clean ZIP
+      - name: Live smoke from installed clean ZIP
         shell: powershell
         run: |
-          Copy-Item package\ames-agent\config.example.json package\ames-agent\config.json
-          $proc=Start-Process -FilePath 'python' -ArgumentList @('agent_hardened_entry.py') -WorkingDirectory (Resolve-Path 'package\ames-agent') -PassThru
+          $python=(Resolve-Path 'package\.venv\Scripts\python.exe').Path
+          $proc=Start-Process -FilePath $python -ArgumentList @('agent_hardened_entry.py') -WorkingDirectory (Resolve-Path 'package\ames-agent') -PassThru
           try {
             $ready=$null
             for($i=0;$i -lt 50;$i++){
@@ -177,6 +182,8 @@ jobs:
             $body=@{ames_start_date='2026-02-01'}|ConvertTo-Json
             $saved=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/config' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 5
             if([string]$saved.config.ames_start_date -ne '2026-02-01'){throw 'ames_start_date did not persist through hardened config'}
+            $savedFile=Get-Content package\ames-agent\config.json -Raw | ConvertFrom-Json
+            if([string]$savedFile.ames_start_date -ne '2026-02-01'){throw 'ames_start_date was not persisted to config.json'}
             Write-Host "LIVE CLEAN ZIP OK: PID=$($ready.pid) build=$($ready.agent_build)" -ForegroundColor Green
           } finally {
             if($proc -and -not $proc.HasExited){Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue}
