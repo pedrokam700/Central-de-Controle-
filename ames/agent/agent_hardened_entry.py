@@ -9,6 +9,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 import agent_entry as entry
+import agent_3012_patch
 import hardening
 import local_security
 import operational_calendar
@@ -17,6 +18,10 @@ HARDENING_STATE = hardening.install(entry.a, entry.canonical)
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)
+
+# Layer 3012 after the canonical R11/R12 entry has loaded and before the security
+# handler subclasses it. This preserves all validated 3028/3074/2114/3022 code.
+entry.Handler = agent_3012_patch.install(entry.a, entry.Handler, entry.canonical)
 
 # Preserve the validated 3028 collector itself. Only the time-window provider is
 # upgraded: production-day boundary is explicit and distinct from work shifts.
