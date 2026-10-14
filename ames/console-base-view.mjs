@@ -73,23 +73,15 @@ export function createBaseConsoleView(root,store,client){
 
   async function connectedDataset(value,serial){
     const requestPage=basePageRequest(page,pageSize,BASE_MAX_ROWS);
-    let total=null;
-    try{
-      const catalog=await client.auxiliary('catalog',{line:value.line,snapshot_id:value.snapshot_id});
-      const rows=Array.isArray(catalog?.datasets)?catalog.datasets:[];
-      const match=rows.find(row=>String(row?.dataset||'')===String(value.dataset));
-      const count=Number(match?.rows??match?.count);
-      if(Number.isFinite(count)&&count>=0)total=Math.min(BASE_MAX_ROWS,count);
-    }catch(error){
-      if(error?.name==='AbortError')throw error;
-    }
-    if(serial!==requestSerial)return null;
     const data=await client.auxiliary('dataset',{...value,limit:requestPage.limit,offset:requestPage.offset});
     if(serial!==requestSerial)return null;
     const rows=normalizeRows(data);
+    const reported=Number(data?.total);
+    let total=Number.isFinite(reported)&&reported>=0?Math.min(BASE_MAX_ROWS,reported):null;
     if(total===null){
       const observed=requestPage.offset+rows.length;
-      total=rows.length<requestPage.limit?observed:Math.min(BASE_MAX_ROWS,observed+pageSize);
+      const hasMore=data?.has_more===true;
+      total=hasMore?Math.min(BASE_MAX_ROWS,observed+pageSize):observed;
     }
     return {title:'Dataset',...data,rows,total,server_paged:true,loaded_limited:requestPage.offset+rows.length<total};
   }
