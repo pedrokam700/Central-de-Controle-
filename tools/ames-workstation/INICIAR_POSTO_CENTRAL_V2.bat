@@ -118,7 +118,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$headers=@{'X-Centra
 if errorlevel 1 goto :fail
 
 echo [6/7] Preflight local...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$h=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 3;$hh=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -TimeoutSec 3;Write-Host ('Agente: '+$h.candidate_version+' / Build='+$h.agent_build+' / A-MES='+$h.ames_reachable+' / CDP='+$h.chrome_cdp_reachable+' / 3022='+$h.auto_3022_ready+' / Security='+$hh.local_security.mode);if(-not $h.ok -or -not $hh.ok -or [string]$hh.local_security.mode -ne 'workstation-token-v1'){exit 1}}catch{Write-Host $_.Exception.Message;exit 1}"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$headers=@{'X-Central-Agent-Token'=$env:AGENT_TOKEN};$h=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 3;$hh=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -Headers $headers -TimeoutSec 3;Write-Host ('Agente: '+$h.candidate_version+' / Build='+$h.agent_build+' / A-MES='+$h.ames_reachable+' / CDP='+$h.chrome_cdp_reachable+' / 3022='+$h.auto_3022_ready+' / Security='+$hh.local_security.mode);if(-not $h.ok -or -not $hh.ok -or [string]$hh.local_security.mode -ne 'workstation-token-v1'){exit 1}}catch{Write-Host $_.Exception.Message;exit 1}"
 if errorlevel 1 goto :fail
 
 echo [7/7] Abrindo a UNICA Central com pareamento local...
