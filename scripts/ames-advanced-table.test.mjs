@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {filterRows,orderRows,paginateRows,csv} from '../ames/advanced-table.mjs';
-import {baseIncrementalLimit,basePageWindow,normalizeBasePageSize} from '../ames/base-paging.mjs';
+import {baseIncrementalLimit,basePageRequest,basePageWindow,baseServerPageWindow,normalizeBasePageSize} from '../ames/base-paging.mjs';
 
 test('advanced table paginates large selections without truncating the dataset',()=>{
   const rows=Array.from({length:1234},(_,i)=>({id:i+1,line:i%2?'TAN10101':'TAN10102'}));
@@ -46,6 +46,16 @@ test('Base local paging exposes only the current window and requests data increm
   assert.equal(baseIncrementalLimit(2000,250),100000);
 });
 
+test('Base local server paging requests only one bounded page at the exact offset',()=>{
+  assert.deepEqual(basePageRequest(0,100),{page:0,pageSize:100,limit:100,offset:0});
+  assert.deepEqual(basePageRequest(4,100),{page:4,pageSize:100,limit:100,offset:400});
+  assert.deepEqual(basePageRequest(9999,250),{page:9999,pageSize:250,limit:250,offset:100000});
+  const fifth=baseServerPageWindow(1234,4,100,100);
+  assert.deepEqual(fifth,{page:4,pageSize:100,pages:13,total:1234,start:400,end:500,displayStart:401,hasPrev:true,hasNext:true,needsMore:false});
+  const last=baseServerPageWindow(1234,12,100,34);
+  assert.equal(last.displayStart,1201);assert.equal(last.end,1234);assert.equal(last.hasNext,false);
+});
+
 test('Base local paging clamps invalid pages and page sizes without fabricating rows',()=>{
   assert.equal(normalizeBasePageSize(999),100);
   assert.equal(normalizeBasePageSize('250'),250);
@@ -53,4 +63,5 @@ test('Base local paging clamps invalid pages and page sizes without fabricating 
   assert.equal(last.page,12);assert.equal(last.displayStart,1201);assert.equal(last.end,1234);assert.equal(last.hasNext,false);assert.equal(last.needsMore,false);
   const empty=basePageWindow(0,3,50,0);
   assert.deepEqual(empty,{page:0,pageSize:50,pages:1,total:0,start:0,end:0,displayStart:0,hasPrev:false,hasNext:false,needsMore:false});
+  assert.deepEqual(baseServerPageWindow(0,3,50,0),empty);
 });
