@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 AGENT=ROOT/'ames'/'agent'
 WORKSTATION=ROOT/'tools'/'ames-workstation'
-FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py','production_shift.py','agent_3012_patch.py','ames_3012_live.py','repair_3012.py','local_sn.py','network_watch.py','fastlane_runtime_guard.py')
+FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py','production_shift.py','agent_3012_patch.py','ames_3012_live.py','repair_3012.py','local_sn.py','network_watch.py','performance_indexes.py','fastlane_runtime_guard.py')
 PREVIEW_URLS=(
     'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app',
     'https://deploy-preview-23--productcontrolcenter.netlify.app',
@@ -72,7 +72,7 @@ if not exist "%TARGET_FULL%" (
 rem Se o usuario selecionar a pasta externa criada pelo ZIP e houver exatamente
 rem uma instalacao valida logo abaixo, entra nela automaticamente.
 if not exist "%TARGET_FULL%\ames-agent\agent.py" if /I not "%TARGET_NAME%"=="ames-agent" (
-  for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$r=[IO.Path]::GetFullPath($env:TARGET_FULL);$c=@(Get-ChildItem -LiteralPath $r -Directory -ErrorAction SilentlyContinue ^| Where-Object {Test-Path -LiteralPath (Join-Path $_.FullName 'ames-agent\agent.py')});if($c.Count -eq 1){Write-Output $c[0].FullName}"`) do set "TARGET_FULL=%%I"
+  for /f "usebackq delims=" %%I in (`powershell -NoProfile -STA -ExecutionPolicy Bypass -Command "$r=[IO.Path]::GetFullPath($env:TARGET_FULL);$c=@(Get-ChildItem -LiteralPath $r -Directory -ErrorAction SilentlyContinue ^| Where-Object {Test-Path -LiteralPath (Join-Path $_.FullName 'ames-agent\agent.py')});if($c.Count -eq 1){Write-Output $c[0].FullName}"`) do set "TARGET_FULL=%%I"
   for %%I in ("%TARGET_FULL%") do set "TARGET_NAME=%%~nxI"
 )
 
@@ -203,7 +203,7 @@ set "PACKAGE_ROOT=%TARGET_FULL%"
 if /I "%TARGET_NAME%"=="ames-agent" for %%I in ("%TARGET_FULL%\..") do set "PACKAGE_ROOT=%%~fI"
 
 set "BACKUP=%~2"
-if "%BACKUP%"=="" for /f "usebackq delims=" %%B in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Join-Path $env:PACKAGE_ROOT 'candidate-backups';if(Test-Path $p){$b=Get-ChildItem $p -Directory ^| Where-Object {Test-Path (Join-Path $_.FullName 'backup.json')} ^| Sort-Object LastWriteTime -Descending ^| Select-Object -First 1 -ExpandProperty FullName;if($b){Write-Output $b}}"`) do set "BACKUP=%%B"
+if "%BACKUP%"=="" for /f "usebackq delims=" %%B in (`powershell -NoProfile -STA -ExecutionPolicy Bypass -Command "$p=Join-Path $env:PACKAGE_ROOT 'candidate-backups';if(Test-Path $p){$b=Get-ChildItem $p -Directory ^| Where-Object {Test-Path (Join-Path $_.FullName 'backup.json')} ^| Sort-Object LastWriteTime -Descending ^| Select-Object -First 1 -ExpandProperty FullName;if($b){Write-Output $b}}"`) do set "BACKUP=%%B"
 if "%BACKUP%"=="" (
   echo [ERRO] Nenhum backup candidato foi encontrado em:
   echo        %PACKAGE_ROOT%\candidate-backups
