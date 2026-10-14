@@ -34,3 +34,39 @@ body.dark .ames-legacy-shell .ames-legacy-nav button.active { background:var(--a
 .ames-preparation [data-check-state=ok] { color:var(--ames-ok); }
 .ames-preparation [data-check-state=missing] { color:var(--ames-warn); }
 @media(max-width:760px) { .ames-preparation .mes-pagination { display:flex; flex-wrap:wrap; } .ames-preparation button { min-height:44px!important; white-space:normal!important; } }
+
+/* Unified Central <-> Console MES route.
+   Console MES is a full-screen internal view, like CORA: it overlays the Central
+   shell but remains in the same document/origin/session. The existing
+   [data-console-back] button returns through Central's own data-page=home action. */
+body:has(#mesConsoleView:not(.hidden)) { overflow:hidden!important; }
+body:has(#mesConsoleView:not(.hidden)) #mesConsoleView {
+  position:fixed!important;
+  inset:0!important;
+  z-index:99990!important;
+  display:block!important;
+  width:100vw!important;
+  height:100dvh!important;
+  min-width:0!important;
+  max-width:none!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  overflow:hidden!important;
+  background:#f7f7f5!important;
+}
+body.dark:has(#mesConsoleView:not(.hidden)) #mesConsoleView { background:#11161c!important; }
+body:has(#mesConsoleView:not(.hidden)) #mesConsole,
+body:has(#mesConsoleView:not(.hidden)) #mesConsole > .ames-legacy-shell {
+  width:100%!important;
+  height:100%!important;
+  min-height:100dvh!important;
+  max-height:100dvh!important;
+  margin:0!important;
+}
+body:has(#mesConsoleView:not(.hidden)) #mesConsole > .ames-legacy-shell {
+  overflow:hidden!important;
+}
