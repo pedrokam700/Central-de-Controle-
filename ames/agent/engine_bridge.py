@@ -264,7 +264,8 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
             defect_local_offset_hours=defect_offset, grid_naive_offset_hours=grid_offset,
         )
         if event_callback:
-            event_callback({"stage":"3074","kind":"result","result":result_3074})
+            done_3074 = int(result_3074.get("requested_pcba_count") or parser_result.get("unique_pcba_count") or 0)
+            event_callback({"stage":"3074","kind":"result","current":done_3074,"total":done_3074,"status":str(result_3074.get("status") or "done"),"result":result_3074})
 
         def hist_progress(i, total, pcba, status, state):
             if line_callback:
@@ -277,6 +278,9 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
             checkpoint_path=checkpoint_2114, progress=hist_progress, pause_s=pause_2114,
             include_current=True,
         )
+        if event_callback:
+            done_2114 = int(result_2114.get("requested_pcba_count") or len(result_2114.get("pcbas") or []))
+            event_callback({"stage":"2114","kind":"result","current":done_2114,"total":done_2114,"status":str(result_2114.get("status") or "done"),"result":result_2114})
         return {
             "version": "0.16-live",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
