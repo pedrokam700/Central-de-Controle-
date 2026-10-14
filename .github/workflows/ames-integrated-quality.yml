@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - work/ames-integrated-clean-v5-20261013
+      - work/ames-integrated-clean-v5-improvements-20261013
   workflow_dispatch:
 
 permissions:
