@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import re
 from pathlib import Path
 
@@ -50,6 +51,16 @@ def quoted_python_names(source: str, assignment: str) -> set[str]:
     return set(re.findall(r"['\"]([^'\"]+\.py)['\"]", match.group(1)))
 
 
+def integrated_builder_module():
+    path = ROOT / "scripts" / "build-integrated-candidate.py"
+    spec = importlib.util.spec_from_file_location("build_integrated_candidate_contract", path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("Could not load integrated candidate builder")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_updater_covers_active_hardened_agent_dependency_closure():
     required_modules = dependency_closure("agent_hardened_entry") - FROZEN_INHERITED
     required_files = {f"{name}.py" for name in required_modules}
@@ -81,6 +92,36 @@ def test_integrated_clean_builder_copies_all_agent_python_modules():
     assert "p.suffix=='.py'" in source
 
 
+def test_integrated_clean_builder_rejects_runtime_private_files():
+    builder = integrated_builder_module()
+    assert builder.assert_clean_payload({
+        "ames-agent/config.example.json": b"{}",
+        "frontend/Central-de-Controle-/index.html": b"ok",
+        "LEIA_PRIMEIRO.txt": b"ok",
+    }) is True
+    forbidden = [
+        "ames-agent/config.json",
+        "ames-agent/data/ames_local.sqlite3",
+        "ames-agent/data/local_agent_token",
+        "ames-agent/network_health.jsonl",
+        "logs/agent.log",
+        "ames-agent/__pycache__/agent.cpython-312.pyc",
+        "nested/old-package.zip",
+        "private/.env",
+        "private/client.pem",
+        "private/client.key",
+        "private/cookies.json",
+        "private/session.json",
+    ]
+    for name in forbidden:
+        try:
+            builder.assert_clean_payload({"safe.txt": b"ok", name: b"private"})
+        except ValueError as exc:
+            assert name in str(exc), (name, exc)
+        else:
+            raise AssertionError(f"forbidden CLEAN payload file accepted: {name}")
+
+
 def test_legacy_fastlane_is_not_an_active_package_authority():
     source = (ROOT / "scripts" / "build-ames-fastlane-test-overlay.py").read_text(encoding="utf-8")
     # Fastlane is retained only as historical compatibility material. The active
@@ -95,6 +136,7 @@ if __name__ == "__main__":
         test_updater_covers_active_hardened_agent_dependency_closure,
         test_active_package_builders_derive_from_single_updater_contract,
         test_integrated_clean_builder_copies_all_agent_python_modules,
+        test_integrated_clean_builder_rejects_runtime_private_files,
         test_legacy_fastlane_is_not_an_active_package_authority,
     ]
     for fn in tests:
