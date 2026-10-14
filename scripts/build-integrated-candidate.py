@@ -3,6 +3,18 @@ import argparse, hashlib, json, os, subprocess, tempfile, zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
+_FORBIDDEN_EXACT={'config.json','local_agent_token','network_health.jsonl','.env','cookies.json','session.json'}
+_FORBIDDEN_SUFFIXES={'.sqlite','.sqlite3','.db','.pyc','.log','.zip','.pem','.key'}
+
+def assert_clean_payload(payload):
+ bad=[]
+ for name in payload:
+  normalized=str(name).replace('\\','/')
+  p=Path(normalized);base=p.name.lower();parts={part.lower() for part in p.parts}
+  if normalized.startswith('ames-agent/data/') or '__pycache__' in parts or base in _FORBIDDEN_EXACT or p.suffix.lower() in _FORBIDDEN_SUFFIXES:
+   bad.append(normalized)
+ if bad:raise ValueError('Standalone CLEAN contains forbidden runtime/private files: '+', '.join(sorted(bad)))
+ return True
 
 def build(destination, development=False):
  sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
@@ -80,8 +92,10 @@ VALIDACAO FISICA AINDA NECESSARIA:
 
 Se este candidato falhar, feche a pasta nova e volte a usar a CLEAN V3 intacta.
 ''').encode()
- manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
+ assert_clean_payload(payload)
+ manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac5b244dffffad0e2' if False else 'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
  payload['CANDIDATE_MANIFEST.json']=json.dumps(manifest,indent=2).encode()
+ assert_clean_payload(payload)
  destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
  with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as z:
   for name,data in sorted(payload.items()):z.writestr(name,data)
