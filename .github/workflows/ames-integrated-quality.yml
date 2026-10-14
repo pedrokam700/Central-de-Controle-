@@ -84,12 +84,13 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/console-tests" playwright@1.62.1
           "$RUNNER_TEMP/console-tests/node_modules/.bin/playwright" install --with-deps chromium
-      - name: Verify nine views, themes, languages and mobile
+      - name: Verify nine views, shared context, themes, languages and mobile
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/console-tests/node_modules/playwright/index.mjs
           BROWSER_OUTPUT: ${{ runner.temp }}/console-evidence
         run: |
           node scripts/ames-experience.browser.mjs
+          node scripts/ames-operational-context.browser.mjs
           node scripts/ames-trace-interaction.browser.mjs
           node scripts/ames-local-navigation.browser.mjs
       - uses: actions/upload-artifact@v4
