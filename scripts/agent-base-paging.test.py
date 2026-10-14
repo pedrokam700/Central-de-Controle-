@@ -104,7 +104,8 @@ def test_contextual_fallback_preserves_store_semantics_then_slices_transport():
         seed(store)
         result = paging.snapshot_page(store, "pcba_history", 7, line="TAN10101", limit=50, offset=100)
         check([row["seq"] for row in result["rows"][:2]] == [100, 101], "fallback must slice after contextual projection")
-        check(store.dataset_calls == [("pcba_history", 7, "TAN10101", 150)], "fallback should request only required prefix")
+        check(store.dataset_calls == [("pcba_history", 7, "TAN10101", 151)], "fallback should request page prefix plus one look-ahead row")
+        check(result["has_more"] is True and result["total"] is None, "look-ahead row should prove more data without inventing an exact total")
 
 
 def test_team_line_resolves_latest_snapshot_but_multiline_keeps_legacy_aggregation():
@@ -115,7 +116,8 @@ def test_team_line_resolves_latest_snapshot_but_multiline_keeps_legacy_aggregati
         check(one["snapshot_id"] == 7 and one["rows"][0]["pcba_sn"] == "P0040", "line-scoped team page should use exact latest snapshot")
         many = paging.team_page(store, "audit_events", lines=["TAN10101", "TAN10102"], line=None, limit=20, offset=40)
         check(many["rows"][0]["seq"] == 40, "multi-line fallback offset")
-        check(store.team_calls[-1][-1] == 60, "multi-line fallback should request only needed prefix")
+        check(store.team_calls[-1][-1] == 61, "multi-line fallback should request prefix plus one look-ahead row")
+        check(many["has_more"] is True and many["total"] is None, "multi-line fallback should not invent a total while look-ahead proves more rows")
 
 
 if __name__ == "__main__":
