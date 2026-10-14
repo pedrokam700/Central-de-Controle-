@@ -66,18 +66,23 @@ def main() -> int:
         if ready.get("agent_build") != "CANONICAL-R11-BATCH":
             raise RuntimeError(f"Build inesperado: {ready.get('agent_build')!r}")
 
-        # /health intentionally runs the heavier local preflight. A brand-new
-        # Windows venv can be noticeably slower on the first import than later
-        # launches. Keep every assertion, but give the cold preflight the same
-        # 20 s budget used by the workstation startup diagnostics.
+        # /health is consumed by the UI and must be bounded. Full Wi-Fi/route
+        # diagnostics belong to /network/status/background guardian, never here.
+        health_started = time.monotonic()
         try:
-            health = _json(base + "/health", timeout=20.0)
+            health = _json(base + "/health", timeout=5.0)
         except TimeoutError as exc:
-            raise RuntimeError("/health excedeu 20 s no preflight local") from exc
+            raise RuntimeError("/health excedeu 5 s; diagnóstico de rede voltou ao caminho crítico") from exc
+        health_elapsed = time.monotonic() - health_started
         if health.get("ok") is not True:
             raise RuntimeError("/health não retornou ok=true")
         if health.get("agent_build") != "CANONICAL-R11-BATCH":
             raise RuntimeError("/health não confirmou o build canônico")
+        network = health.get("network") or {}
+        if network.get("detail_source") not in {"pending_guardian", "guardian_cache"}:
+            raise RuntimeError(f"/health usou fonte de rede inesperada: {network.get('detail_source')!r}")
+        if health_elapsed >= 5.0:
+            raise RuntimeError(f"/health excedeu orçamento local: {health_elapsed:.2f}s")
 
         # Detailed diagnostics are intentionally not public. The self-test acts
         # as the same-origin local UI instead of weakening the API for probes.
@@ -97,8 +102,8 @@ def main() -> int:
         print(
             "[OK] Selftest agente CLEAN: "
             f"build={ready.get('agent_build')} port={port} "
-            f"schema={hardening.get('schema_version')} sqlite={hardening.get('integrity')} "
-            f"indexes={indexes.get('present')}/{indexes.get('expected')}"
+            f"health={health_elapsed:.2f}s schema={hardening.get('schema_version')} "
+            f"sqlite={hardening.get('integrity')} indexes={indexes.get('present')}/{indexes.get('expected')}"
         )
         return 0
     except Exception as exc:
