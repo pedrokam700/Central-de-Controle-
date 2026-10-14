@@ -11,7 +11,8 @@ $owned=New-Object System.Collections.Generic.List[object]
 $report=[ordered]@{status='running';legacy_build='CLEAN-V4-3012';events=@();test_root=$testRoot}
 function Record([string]$name,$data){$report.events+=@{at=(Get-Date).ToUniversalTime().ToString('o');name=$name;data=$data};$report|ConvertTo-Json -Depth 12|Set-Content (Join-Path $evidence 'result.json') -Encoding UTF8}
 function Start-Fixture([string]$path,[string]$extra=''){
- $proc=Start-Process $python -ArgumentList @('-u',('"'+$path+'"'),$extra) -PassThru -WindowStyle Hidden
+ $arguments=@('-u',('"'+$path+'"'));if($extra){$arguments+=$extra}
+ $proc=Start-Process $python -ArgumentList $arguments -PassThru -WindowStyle Hidden
  $owned.Add($proc);return $proc
 }
 function Wait-Legacy {

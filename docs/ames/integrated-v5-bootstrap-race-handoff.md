@@ -21,3 +21,7 @@ Arquivos deste checkpoint: fixture de legado sintético, barreira de teste Pytho
 Teste Windows pendente no Actions deste commit; esperado vermelho antes da correção. A barreira `sitecustomize` existe somente em `scripts/fixtures` e não entra no ZIP. O Windows venv pode usar processo redirecionador: a correção deve medir/provar o PID real criado, sem aceitar um PID apenas por ter respondido HTTP.
 
 Próxima ação exata: inspecionar o resultado/log do job Windows, registrar reprodução e implementar arbitragem por identidade forte + mutex + PID/porta/root/token/H1 + retries limitados. Depois executar Full Quality e Candidate Gate no SHA corrigido, gerar ZIP final apenas quando ambos passarem. Gate físico continua PENDING.
+
+### Correção da fixture de reprodução
+
+Checkpoint remoto inicial `b2bcbf24579f9898f0c69da58092abfeb5400aee`; Candidate run `38562506084`. Instalação e smoke/restart Windows passaram. O teste de disputa parou antes de criar o legado porque PowerShell rejeita um argumento vazio em `Start-Process -ArgumentList`. Isso NÃO comprova reprodução. Corrigida somente a montagem dos argumentos da fixture; executar novamente o Candidate Gate. Implementação do bootstrap ainda não publicada neste checkpoint.
