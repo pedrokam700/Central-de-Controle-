@@ -15,6 +15,7 @@ $script:outLog=$null
 $script:errLog=$null
 $script:lastProbeError=''
 $script:lastHardeningError=''
+$script:lastCapabilityError=''
 
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 if(-not (Test-Path -LiteralPath $python)){throw "Python do ambiente local nao encontrado: $python"}
@@ -50,6 +51,23 @@ function Get-AgentHeaders {
   return @{'X-Central-Agent-Token'=$token}
 }
 
+function Get-PublicReady {
+  $script:lastProbeError=''
+  try{return Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 3}catch{$script:lastProbeError=$_.Exception.Message;return $null}
+}
+
+function Get-ProtectedCapabilities {
+  $script:lastCapabilityError=''
+  $headers=Get-AgentHeaders
+  if(-not $headers){$script:lastCapabilityError='Token local ainda nao disponivel.';return $null}
+  try{
+    $cap=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/v2/capabilities' -Headers $headers -TimeoutSec 5
+    if($cap.native_console -and $cap.package_root -and $cap.scheduler){return $cap}
+    $script:lastCapabilityError='Capabilities respondeu sem o contrato canonico esperado.'
+  }catch{$script:lastCapabilityError=$_.Exception.Message}
+  return $null
+}
+
 function Get-HardeningHealth {
   $script:lastHardeningError=''
   $headers=Get-AgentHeaders
@@ -62,11 +80,6 @@ function Get-HardeningHealth {
     $script:lastHardeningError='Resposta H1 recebida, mas o contrato de integridade/seguranca/indexes nao ficou GREEN.'
   } catch {$script:lastHardeningError=$_.Exception.Message}
   return $null
-}
-
-function Get-PublicHealth {
-  $script:lastProbeError=''
-  try{return Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 25}catch{$script:lastProbeError=$_.Exception.Message;return $null}
 }
 
 function Stop-ProcessAndWait {
@@ -91,7 +104,7 @@ function Stop-AgentOn8765 {
     if(-not $process -or $cmd -notmatch 'agent(_hardened|_clean)?_entry\.py|agent\.py'){
       throw "Porta 8765 ocupada pelo PID $processId, que nao foi confirmado como agente A-MES. Feche-o manualmente; nenhum processo desconhecido sera morto."
     }
-    Stop-ProcessAndWait -ProcessId $processId -Reason 'agente incompatível/residual na porta 8765'
+    Stop-ProcessAndWait -ProcessId $processId -Reason 'agente A-MES incompatível/residual na porta 8765'
   }
 }
 
@@ -108,17 +121,18 @@ function Stop-ResidualSamePackageAgents {
 }
 
 function Get-CanonicalIdentity {
-  param($Health)
-  if(-not $Health -or -not $Health.ok){return $null}
-  if(-not $Health.agent_version -or -not $Health.candidate_version -or -not $Health.agent_build -or -not $Health.db){
-    throw 'A porta 8765 respondeu, mas nao se identificou como agente A-MES completo.'
+  param($Ready,$Capabilities)
+  if(-not $Ready -or -not $Ready.ok -or -not $Ready.ready){return $null}
+  if(-not $Ready.agent_version -or -not $Ready.candidate_version -or -not $Ready.agent_build){
+    throw 'A porta 8765 respondeu /ready, mas nao se identificou como agente A-MES completo.'
   }
-  $actual=''
-  if($Health.package_root){$actual=[IO.Path]::GetFullPath([string]$Health.package_root).TrimEnd([char]92)}
+  if(-not $Capabilities -or -not $Capabilities.package_root){return $null}
+  $actual=[IO.Path]::GetFullPath([string]$Capabilities.package_root).TrimEnd([char]92)
   return [pscustomobject]@{
     actual=$actual
-    buildOk=([string]$Health.agent_build -like 'CANONICAL-*')
+    buildOk=([string]$Ready.agent_build -like 'CANONICAL-*')
     rootOk=($actual -and $actual -ieq $expected)
+    nativeOk=([bool]$Capabilities.native_console)
   }
 }
 
@@ -131,22 +145,25 @@ function Show-LogTail {
   $lines|ForEach-Object{Write-Host $_}
 }
 
-# Reuso idempotente: primeiro prove identidade publica; depois use o token local
-# para consultar o diagnostico H1 protegido. O endpoint H1 NAO e publico.
-$existing=Get-PublicHealth
-if($existing){
-  $identity=Get-CanonicalIdentity $existing
+# O startup canônico NÃO depende de /health. /health inclui estado operacional
+# (rede A-MES, Chrome, motor) e pode variar sem invalidar o processo local.
+# Identidade local = /ready publico + capabilities autenticado + H1 autenticado.
+$existing=Get-PublicReady
+if($existing -and $existing.ready){
+  $cap=Get-ProtectedCapabilities
+  $identity=Get-CanonicalIdentity $existing $cap
   $hard=$null
-  if($identity.buildOk -and $identity.rootOk){$hard=Get-HardeningHealth}
-  if($identity.buildOk -and $identity.rootOk -and $hard){
+  if($identity -and $identity.buildOk -and $identity.rootOk -and $identity.nativeOk){$hard=Get-HardeningHealth}
+  if($identity -and $identity.buildOk -and $identity.rootOk -and $identity.nativeOk -and $hard){
     Write-Host "[OK] Agente canonico H1 ja esta ativo: $($existing.candidate_version) / $($existing.agent_build) / schema=$($hard.schema_version) / $($identity.actual)"
     exit 0
   }
-  Write-Host "Agente incompatível/incompleto detectado: versao=$($existing.candidate_version) build=$($existing.agent_build) root=$($identity.actual) H1=$([bool]$hard)"
+  Write-Host "Agente A-MES ativo, mas incompatível com esta pasta/contrato. H1=$([bool]$hard)"
+  if($script:lastCapabilityError){Write-Host "Capabilities: $script:lastCapabilityError"}
   if($script:lastHardeningError){Write-Host "H1: $script:lastHardeningError"}
   Stop-AgentOn8765
 }else{
-  # Health indisponivel nao autoriza iniciar cegamente sobre uma porta ocupada.
+  # /ready indisponivel nao autoriza iniciar cegamente sobre uma porta ocupada.
   $listeners=@(Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue)
   if($listeners.Count -gt 0){Stop-AgentOn8765}
 }
@@ -165,7 +182,7 @@ try{
   # python.exe + -u: janela escondida, mas stdout/stderr reais e sem buffer.
   # pythonw deixava diagnostico vazio/ambíguo em falhas de startup.
   $script:startedProcess=Start-Process -FilePath $python -ArgumentList @('-u',('"'+$agent+'"')) -WorkingDirectory (Split-Path $agent -Parent) -WindowStyle Hidden -RedirectStandardOutput $script:outLog -RedirectStandardError $script:errLog -PassThru
-  Write-StartupState -Status 'starting' -Message 'Processo criado; aguardando /ready, /health e H1 autenticado.'
+  Write-StartupState -Status 'starting' -Message 'Processo criado; aguardando /ready, capabilities e H1 autenticados.'
 
   $deadline=(Get-Date).AddSeconds([Math]::Max(10,$StartupTimeoutSeconds))
   $ready=$null
@@ -173,25 +190,24 @@ try{
     if($script:startedProcess.HasExited){
       throw "Agente encerrou durante o startup com exit code $($script:startedProcess.ExitCode)."
     }
-    try{
-      $ready=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 3
-      if($ready.ready){break}
-    }catch{$script:lastProbeError=$_.Exception.Message}
+    $ready=Get-PublicReady
+    if($ready -and $ready.ready){break}
     Start-Sleep -Milliseconds 500
   }
   if(-not $ready -or -not $ready.ready){throw "API /ready nao respondeu em ate $StartupTimeoutSeconds s. Ultimo probe: $script:lastProbeError"}
 
-  $health=Get-PublicHealth
-  if(-not $health){throw "API /health falhou apos /ready. Ultimo probe: $script:lastProbeError"}
-  $identity=Get-CanonicalIdentity $health
-  if(-not $identity.buildOk){throw "Build inesperado apos startup: $($health.agent_build)"}
+  $cap=Get-ProtectedCapabilities
+  if(-not $cap){throw "Capabilities canonicas nao validaram apos /ready. $script:lastCapabilityError"}
+  $identity=Get-CanonicalIdentity $ready $cap
+  if(-not $identity -or -not $identity.buildOk){throw "Build inesperado apos startup: $($ready.agent_build)"}
   if(-not $identity.rootOk){throw "Agente iniciou de pasta divergente. Esperado=$expected Atual=$($identity.actual)"}
+  if(-not $identity.nativeOk){throw 'Agente iniciou sem native_console canônico.'}
 
   $hard=Get-HardeningHealth
   if(-not $hard){throw "H1 protegido nao validou com o token deste posto. $script:lastHardeningError"}
 
-  Write-StartupState -Status 'ready' -Message "H1 GREEN; schema=$($hard.schema_version); integrity=$($hard.integrity)."
-  Write-Host "[OK] Agente H1 ativo: $($health.candidate_version) / $($health.agent_build) / schema=$($hard.schema_version) / SQLite=$($hard.integrity) / $($identity.actual)"
+  Write-StartupState -Status 'ready' -Message "Identidade local + H1 GREEN; schema=$($hard.schema_version); integrity=$($hard.integrity)."
+  Write-Host "[OK] Agente H1 ativo: $($ready.candidate_version) / $($ready.agent_build) / schema=$($hard.schema_version) / SQLite=$($hard.integrity) / $($identity.actual)"
   exit 0
 }catch{
   $failure=$_.Exception.Message
