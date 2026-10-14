@@ -164,7 +164,8 @@ function fmtRate(count,quantity){return Number.isFinite(quantity)&&quantity>0?`$
 
 function occurrenceMiniTable(rows){
   if(!rows.length)return `<p>${t('Nenhuma ocorrência.','No occurrences.')}</p>`;
-  return `<div class="table-wrap"><table><thead><tr><th>PCBA</th><th>${t('Linha','Line')}</th><th>${t('Falha','Failure')}</th><th>${t('Horário','Time')}</th><th>${t('Turno','Shift')}</th><th>AT</th><th>${t('Reuso relevante','Relevant reuse')}</th></tr></thead><tbody>${rows.slice(0,250).map(r=>`<tr><td>${esc(r.pcba||'—')}</td><td>${esc(r.line)}</td><td>${esc(r.defect_desc||r.defect_code||'—')}</td><td>${esc(r.defect_time||'—')}</td><td>${esc(shiftLabel(r.production_shift))}</td><td>${esc(r.repair_comment||'—')}</td><td>${esc(r.reuse_with_failure?t('Sim','Yes'):t('Não','No'))}</td></tr>`).join('')}</tbody></table></div>`;
+  const limit=250,visible=rows.slice(0,limit),limited=rows.length>limit;
+  return `<div class="table-wrap"><table><thead><tr><th>PCBA</th><th>${t('Linha','Line')}</th><th>${t('Falha','Failure')}</th><th>${t('Horário','Time')}</th><th>${t('Turno','Shift')}</th><th>AT</th><th>${t('Reuso relevante','Relevant reuse')}</th></tr></thead><tbody>${visible.map(r=>`<tr><td>${esc(r.pcba||'—')}</td><td>${esc(r.line)}</td><td>${esc(r.defect_desc||r.defect_code||'—')}</td><td>${esc(r.defect_time||'—')}</td><td>${esc(shiftLabel(r.production_shift))}</td><td>${esc(r.repair_comment||'—')}</td><td>${esc(r.reuse_with_failure?t('Sim','Yes'):t('Não','No'))}</td></tr>`).join('')}</tbody></table></div>${limited?`<p class="ames-dfa-preview-note">${t(`Prévia: ${limit} de ${rows.length} ocorrências. Use “Ocorrências detalhadas” e os filtros para investigar o conjunto completo.`,`Preview: ${limit} of ${rows.length} occurrences. Use “Detailed occurrences” and filters to investigate the full set.`)}</p>`:''}`;
 }
 
 function renderRanking(rows,quantity){
