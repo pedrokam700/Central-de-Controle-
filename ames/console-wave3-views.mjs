@@ -61,57 +61,6 @@ export function createReuseConsoleView(root,store){
   return {render,clear(){root?.replaceChildren();last='';selected='';}};
 }
 
-const BASE_ACTIONS=[
-  ['dataset','▦','Dataset','Inspecionar a tabela selecionada no SQLite local'],
-  ['catalog','⌘','Catálogo','Estrutura, datasets e cobertura disponíveis'],
-  ['trends','↗','Tendências','Evolução salva da linha selecionada'],
-  ['jobs','◴','Jobs','Histórico operacional do agente'],
-  ['backup','↓','Backup','Gerar/preservar backup local'],
-  ['search','⌕','Busca','Pesquisar evidências locais']
-];
-
-function normalizeRows(result){
-  if(Array.isArray(result))return result;
-  return result?.rows||result?.datasets||result?.jobs||result?.results||result?.items||[];
-}
-
-export function createBaseConsoleView(root,store,client){
-  let mounted=false,line=LINE_IDS[0],result=null,active='dataset',busy=false;
-  function resultView(){
-    const host=root.querySelector('[data-base-result]');if(!host)return;
-    if(busy){host.innerHTML='<div class="ames-empty ames-empty-large"><span>…</span><h3>Consultando base local</h3><p>A operação é somente leitura, exceto quando você pede explicitamente backup/exportação.</p></div>';return;}
-    if(!result){host.innerHTML='<div class="ames-empty ames-empty-large"><span>▦</span><h3>Base local pronta para inspeção</h3><p>Escolha uma ação acima. Esta é a área técnica para 3028, 2114, 3074, process_events, process_defect_contexts, tendências e jobs.</p></div>';return;}
-    const rows=normalizeRows(result),cols=Object.keys(rows[0]||{}).slice(0,12).map(k=>[k,k]);
-    host.innerHTML=`<section class="mes-context-panel ames-base-result">${sectionHead(result.title||active,`${rows.length} registro(s) retornados na leitura atual.`)}${rowsTable(rows,cols,{empty:'A operação foi concluída, mas não retornou linhas para este escopo.'})}</section>`;
-  }
-  async function run(name){
-    if(busy)return;active=name;busy=true;resultView();
-    try{
-      if(name==='excel'){const blob=await client.excel(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='AMES_EQUIPE_LINHAS.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;}
-      const value={line,snapshot_id:store.read(line).snapshot?.snapshot_id,dataset:root.querySelector('[data-base-dataset]')?.value,q:root.querySelector('[data-base-q]')?.value?.trim()||''};
-      let r;
-      if(store.agent().status!=='connected'){
-        const snapshot=store.read(line).snapshot, datasets=snapshot?.canonical?.datasets||{defects:snapshot?.occurrences||[],pcba_history:snapshot?.pcba_history?.records||[],material_reuse:snapshot?.material_trace?.records||[],process_timeline:snapshot?.process_timeline?.events||[]};
-        if(!snapshot)throw Error('Sem dados compartilhados para esta linha.');
-        if(name==='dataset')r={rows:datasets[value.dataset==='process_events'?'process_timeline':value.dataset]||[]};
-        else if(name==='catalog')r={rows:Object.entries(datasets).map(([dataset,rows])=>({dataset,rows:rows.length}))};
-        else if(name==='search')r={rows:Object.values(datasets).flat().filter(row=>JSON.stringify(row).toLowerCase().includes(value.q.toLowerCase()))};
-        else throw Error('Dados disponíveis para consulta; coleta local indisponível.');
-      }else r=await client.auxiliary(name,value);
-      result={title:BASE_ACTIONS.find(x=>x[0]===name)?.[2]||name,...(Array.isArray(r)?{rows:r}:r)};
-    }catch(error){result={title:'Erro',rows:[{erro:error.message}]};}
-    finally{busy=false;resultView();}
-  }
-  function render(){
-    if(!mounted){
-      root.innerHTML=`<section class="mes-context-panel ames-base-toolbar">${sectionHead('Base local / SQLite','Área técnica para auditoria. Dados brutos e derivados ficam aqui para não poluir as outras oito views.')}<div class="mes-filters"><label>Linha<select data-base-line>${lineOptions(line)}</select></label><label>Dataset<select data-base-dataset><option value="defects">3028 · falhas</option><option value="pcba_history">2114 · histórico PCBA</option><option value="material_reuse">3074 · material/reuso</option><option value="process_events">3022 · process_events</option><option value="process_defect_contexts">3022 · process_defect_contexts</option><option value="history_contexts">Contextos históricos</option></select></label><label>Busca local<input data-base-q placeholder="SN, falha, CPH, posto, material..."></label></div></section>
-      <div class="ames-base-actions">${BASE_ACTIONS.map(([id,icon,label,note])=>`<button type="button" class="ames-base-action" data-base="${id}"><span>${icon}</span><b>${label}</b><small>${note}</small></button>`).join('')}<button type="button" class="ames-base-action" data-base="excel"><span>⇩</span><b>Excel</b><small>Exportar a base consolidada disponível</small></button></div><section data-base-result></section>`;
-      mounted=true;root.querySelector('[data-base-line]').addEventListener('change',e=>line=e.target.value);root.querySelector('[data-base-q]').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();run('search');}});for(const button of root.querySelectorAll('[data-base]'))button.addEventListener('click',()=>run(button.dataset.base));resultView();
-    }
-  }
-  return {render,clear(){root?.replaceChildren();mounted=false;result=null;busy=false;}};
-}
-
 const kindClass=kind=>{const value=String(kind||'').toLowerCase();if(value.includes('causa')||value.includes('confirmed'))return'cause';if(value.includes('hip')||value.includes('hyp'))return'hypothesis';if(value.includes('corr'))return'correlation';return'fact';};
 const kindLabel=kind=>{const cls=kindClass(kind);return cls==='cause'?'Causa confirmada':cls==='hypothesis'?'Hipótese':cls==='correlation'?'Correlação':'Fato / evidência';};
 
