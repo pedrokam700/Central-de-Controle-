@@ -1,0 +1,21 @@
+# Interface — gate físico RED / bootstrap aprovado
+
+## Checkpoint antes da implementação — 2026-10-14
+
+GitHub revalidado: branch `work/ames-integrated-clean-v5-improvements-20261013`, HEAD `ea7668587e4b575d1c759ab54c852dbe0fb901e7`. Checkout limpo e reconciliado.
+
+O usuário confirmou em 14/10/2026 que o bootstrap `cc1f61c7855abb1e1cff1eb4f4d2e240ce42fa71` **passou fisicamente na fábrica**. Essa confirmação encerra a pendência física do bootstrap registrada no handoff anterior; não valida a interface. **Bootstrap congelado: não alterar.** Full Quality e Candidate Gate desse SHA já estavam GREEN.
+
+O novo gate físico da interface está **RED**, conforme relato do usuário. Escopo exclusivo autorizado:
+
+1. Rastreabilidade: selecionar falhas pelos snapshots carregados, com código + descrição + contagem agregada nas linhas selecionadas. Valor interno continua código. Todas/selecionadas; códigos manuais só em opção avançada.
+2. Limites técnicos de ocorrências/PCBAs por linha em seção recolhida `Limites avançados`. Padrão sem limite (0 interno), sem exigir que o operador interprete zero.
+3. Rastrear 3074/2114/3022: provar botão → collect('deep') → /deep-trace → job → polling. Mostrar início imediato, erro novo mesmo com job anterior, substituição do job, etapas/linha e resumo real. Teste de interação e polling, não só markup.
+4. Voltar à Central: Central completa, preservando Console MES offline/local e retorno explícito ao Console. Validar viewport desktop 1920x1080.
+5. Falta de descrição: código + `Descrição não informada`, nunca `Undefined error` como label.
+
+Inspeção inicial confirma que `ames/console-trace-scope.mjs` lista somente códigos e que `core/local-workstation.mjs` esconde sidebar/topbar e substitui a volta por uma home mínima. O defeito de erro escondido em `automation-view.mjs` foi relatado pelo usuário; investigação do fluxo completo é o próximo passo.
+
+Este checkpoint altera somente este documento. Nenhuma implementação iniciada. Não alterar coletores 3028/3074/2114/3022/3012 nem contratos sem necessidade comprovada. Não retomar PR #23 nem tarefas antigas.
+
+Próxima ação exata: mapear rastreabilidade e entrada da Central completa, registrar as causas comprovadas e implementar somente este escopo com testes de clique/job/polling e navegação desktop. Salvar commits pequenos e revalidar remoto antes de cada bloco. Após correção: Full Quality + Candidate Gate; ZIP final somente após ambos GREEN. Depois parar para novo teste físico da interface.
