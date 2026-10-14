@@ -1,3 +1,5 @@
+import {withProcessProvenance} from './console-process-provenance.mjs';
+
 function processReady(store){
   return store.agent()?.status==='connected' && store.agent()?.capabilities?.process_timeline===true;
 }
@@ -65,8 +67,9 @@ export function applyMonitorProcessCapability(root,store){
 
 export function withProcessCapability(view,root,store,kind){
   const apply=kind==='trace'?applyTrace:kind==='sn'?applySn:applyProcess;
+  const target=kind==='process'?withProcessProvenance(view,root,store):view;
   return Object.freeze({
-    render(){view.render();apply(root,store);},
-    clear(){view.clear?.();}
+    render(){target.render();apply(root,store);},
+    clear(){target.clear?.();}
   });
 }
