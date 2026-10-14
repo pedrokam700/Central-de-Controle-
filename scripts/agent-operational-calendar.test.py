@@ -67,8 +67,11 @@ def test_invalid_calendar_fails_closed():
 class _AuditStore:
     def __init__(self):
         self.events = []
+        self.fail = False
 
     def record_audit(self, event_type, workstation=None, details=None):
+        if self.fail:
+            raise RuntimeError("audit unavailable")
         self.events.append((event_type, workstation, details or {}))
 
 
@@ -90,6 +93,7 @@ class _FakeAgent:
         self.WORKSTATION = "TEST"
         self.STORE = _AuditStore()
         self.writes = []
+        self.fail_write = False
 
     def normalize_line_id(self, value):
         raw = str(value or "").strip()
@@ -105,6 +109,8 @@ class _FakeAgent:
         return out
 
     def write_config(self, config):
+        if self.fail_write:
+            raise OSError("disk unavailable")
         self.writes.append(copy.deepcopy(config))
 
 
@@ -132,6 +138,7 @@ def test_candidate_config_normalizes_safe_values():
     check(agent.CONFIG["performance"] == "balanced", "normal legado deve virar balanced")
     check(agent.CONFIG["allowed_origins"] == ["https://central-cora-v2.vercel.app", "http://127.0.0.1:8765"], "origens devem ser canônicas")
     check(result["ignored_keys"] == ["unknown_legacy_field"], "campos desconhecidos devem ser auditáveis sem quebrar compatibilidade")
+    check(result["audit_warning"] is None, "audit normal não deve gerar warning")
     check(len(agent.writes) == 1, "config validada deve ser persistida uma vez")
     check(agent.STORE.events[-1][2]["ignored_keys"] == ["unknown_legacy_field"], "audit deve registrar campos ignorados")
 
@@ -162,6 +169,31 @@ def test_candidate_config_rejects_unsafe_network_values_atomically():
         check(not agent.STORE.events, f"falha de validação não pode auditar como update concluído: {body}")
 
 
+def test_candidate_config_disk_failure_keeps_previous_memory_and_no_audit():
+    agent = _FakeAgent()
+    before = copy.deepcopy(agent.CONFIG)
+    agent.fail_write = True
+    try:
+        candidate_config.apply(agent, {"performance": "fast", "backup_retention": 20})
+    except OSError as exc:
+        check("disk unavailable" in str(exc), "erro real de persistência deve chegar ao chamador")
+    else:
+        raise AssertionError("falha de persistência deveria ser propagada")
+    check(agent.CONFIG == before, "falha de escrita não pode deixar CONFIG em memória diferente do disco")
+    check(not agent.writes, "escrita que falhou não pode ser registrada como persistida")
+    check(not agent.STORE.events, "update não persistido não pode gerar audit de sucesso")
+
+
+def test_candidate_config_audit_failure_does_not_turn_committed_config_into_failure():
+    agent = _FakeAgent()
+    agent.STORE.fail = True
+    result = candidate_config.apply(agent, {"performance": "safe"})
+    check(result["ok"] is True, "config já persistida deve continuar sucesso mesmo se audit ficar indisponível")
+    check(result["audit_warning"] == "RuntimeError", "falha de audit deve ficar explícita sem expor payload")
+    check(agent.CONFIG["performance"] == "safe", "config persistida e memória devem permanecer alinhadas")
+    check(agent.writes[-1]["performance"] == "safe", "persistência deve ocorrer antes do audit")
+
+
 if __name__ == "__main__":
     tests = [
         test_legacy_day_start_is_migrated_without_shift_reinterpretation,
@@ -170,6 +202,8 @@ if __name__ == "__main__":
         test_invalid_calendar_fails_closed,
         test_candidate_config_normalizes_safe_values,
         test_candidate_config_rejects_unsafe_network_values_atomically,
+        test_candidate_config_disk_failure_keeps_previous_memory_and_no_audit,
+        test_candidate_config_audit_failure_does_not_turn_committed_config_into_failure,
     ]
     for test in tests:
         test()
