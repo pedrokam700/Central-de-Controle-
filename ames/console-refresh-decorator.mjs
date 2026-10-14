@@ -1,7 +1,7 @@
 import { LINE_IDS } from './data/contract.mjs';
 
 export function withAgentRefresh(view,root,store,client,{label='Atualizar leitura'}={}){
-  let listening=false;
+  let listening=false,languageObserver=null;
   function currentLine(){
     const select=root.querySelector('[data-top3-line],[data-trace-line],[data-reuse-line],[data-process-line]');
     const value=select?.value;
@@ -45,6 +45,7 @@ export function withAgentRefresh(view,root,store,client,{label='Atualizar leitur
     paintProvenance(bar);
     if(!listening){root.addEventListener('change',onScopeChange);listening=true;}
   }
+  function repaintForLocale(){view.render();decorate();}
   function onScopeChange(event){if(event.target?.matches?.('[data-top3-line],[data-trace-line],[data-reuse-line],[data-process-line]'))queueMicrotask(()=>{const bar=root.querySelector('[data-native-refresh-bar]');if(bar)paintProvenance(bar);});}
-  return Object.freeze({render(){view.render();decorate();},clear(){if(listening){root.removeEventListener('change',onScopeChange);listening=false;}view.clear?.();}});
+  return Object.freeze({render(){view.render();decorate();if(!languageObserver){languageObserver=new MutationObserver(repaintForLocale);languageObserver.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});}},clear(){languageObserver?.disconnect();languageObserver=null;if(listening){root.removeEventListener('change',onScopeChange);listening=false;}view.clear?.();}});
 }
