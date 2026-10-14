@@ -52,7 +52,7 @@ jobs:
 
       - name: Integrated JS contracts
         run: |
-          node --test scripts/ames-integrated-v5.test.mjs scripts/ames-daily-failure-analytics.test.mjs scripts/ames-agent-diagnostics.test.mjs
+          node --test scripts/ames-integrated-v5.test.mjs scripts/ames-daily-failure-analytics.test.mjs scripts/ames-agent-diagnostics.test.mjs scripts/ames-workstation-bootstrap.test.mjs
           node --test scripts/ames-base-view-performance.test.mjs scripts/ames-runtime-observability.test.mjs scripts/ames-advanced-table.test.mjs
 
       - name: Check console module syntax
@@ -152,7 +152,7 @@ jobs:
       - name: Parse Windows launchers from exact artifact
         shell: powershell
         run: |
-          foreach($file in @('package\START_LOCAL_CANDIDATE.ps1','package\suporte\ames-workstation\START_AGENT_CANONICAL.ps1','package\network\ensure_ames_route.ps1')){
+          foreach($file in @('package\START_LOCAL_CANDIDATE.ps1','package\suporte\ames-workstation\START_AGENT_CANONICAL.ps1','package\suporte\ames-workstation\DIAGNOSTICO_POSTO.ps1','package\network\ensure_ames_route.ps1')){
             $tokens=$null;$errors=$null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors)|Out-Null
             if($errors.Count){$errors|ForEach-Object{Write-Host $_.Message -ForegroundColor Red};throw "PowerShell parse failed: $file"}
@@ -169,36 +169,39 @@ jobs:
           if not exist "ames-agent\config.json" exit /b 42
           if not exist "ames-agent\data\ames_local.sqlite3" exit /b 43
 
-      - name: Live smoke from installed clean ZIP
+      - name: Live smoke through real canonical launcher from installed CLEAN
         shell: powershell
         run: |
-          $python=(Resolve-Path 'package\.venv\Scripts\python.exe').Path
-          $proc=Start-Process -FilePath $python -ArgumentList @('agent_hardened_entry.py') -WorkingDirectory (Resolve-Path 'package\ames-agent') -PassThru
+          $root=(Resolve-Path 'package').Path
+          $starter=(Resolve-Path 'package\suporte\ames-workstation\START_AGENT_CANONICAL.ps1').Path
+          $agentPid=$null
           try {
-            $ready=$null
-            for($i=0;$i -lt 50;$i++){
-              Start-Sleep -Milliseconds 500
-              if($proc.HasExited){break}
-              try{$ready=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 3;if($ready.ready){break}}catch{}
-            }
-            if(-not $ready -or -not $ready.ready){
-              if($proc.HasExited){throw "Agent exited before readiness: $($proc.ExitCode)"}
-              throw 'Exact clean ZIP agent never became ready'
-            }
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $starter -Root $root -StartupTimeoutSeconds 60
+            if($LASTEXITCODE -ne 0){throw "Canonical launcher first start failed with exit code $LASTEXITCODE"}
+
+            $statePath=Join-Path $root 'logs\agent_startup_state.json'
+            if(-not (Test-Path $statePath)){throw 'Launcher did not persist agent_startup_state.json'}
+            $state=Get-Content $statePath -Raw | ConvertFrom-Json
+            if([string]$state.status -ne 'ready'){throw "Launcher state is not ready: $($state.status) / $($state.message)"}
+            if(-not $state.stdout -or -not (Test-Path ([string]$state.stdout))){throw 'Launcher did not create stdout evidence file'}
+            if(-not $state.stderr -or -not (Test-Path ([string]$state.stderr))){throw 'Launcher did not create stderr evidence file'}
+
+            $ready=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 5
+            if(-not $ready.ready){throw 'Exact clean ZIP agent is not ready after launcher success'}
             if([string]$ready.agent_build -ne 'CANONICAL-R11-BATCH'){throw "Unexpected build: $($ready.agent_build)"}
+            $agentPid=[int]$ready.pid
+
             $health=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 25
             if(-not $health.ok){throw 'Health endpoint not OK'}
+            if([IO.Path]::GetFullPath([string]$health.package_root).TrimEnd([char]92) -ine [IO.Path]::GetFullPath($root).TrimEnd([char]92)){throw 'Launcher accepted an agent from the wrong package root'}
+
             $html=Invoke-WebRequest 'http://127.0.0.1:8765/Central-de-Controle-/' -UseBasicParsing -TimeoutSec 5
             if($html.StatusCode -ne 200 -or $html.Content -notmatch 'Central'){throw 'Local frontend not served from exact ZIP'}
+
             $token=(Get-Content package\ames-agent\data\local_agent_token -Raw).Trim()
+            if($token.Length -lt 32){throw 'Local agent token missing/invalid after launcher start'}
             $headers=@{'X-Central-Agent-Token'=$token}
-            $cap=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/3012/capability' -Headers $headers -TimeoutSec 5
-            if(-not $cap.implemented -or $cap.factory_validated){throw '3012 capability/gate contract invalid'}
-            $body=@{ames_start_date='2026-02-01'}|ConvertTo-Json
-            $saved=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/config' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 5
-            if([string]$saved.config.ames_start_date -ne '2026-02-01'){throw 'ames_start_date did not persist through hardened config'}
-            $savedFile=Get-Content package\ames-agent\config.json -Raw | ConvertFrom-Json
-            if([string]$savedFile.ames_start_date -ne '2026-02-01'){throw 'ames_start_date was not persisted to config.json'}
+
             $unauthorized=$false
             try{
               Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -TimeoutSec 5 | Out-Null
@@ -206,11 +209,32 @@ jobs:
               if($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401){$unauthorized=$true}else{throw}
             }
             if(-not $unauthorized){throw 'Detailed hardening diagnostics must reject unauthenticated callers'}
+
             $hardening=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -Headers $headers -TimeoutSec 8
             if(-not $hardening.ok -or [string]$hardening.hardening -ne 'H1'){throw 'Hardening health not OK'}
             if([string]$hardening.integrity -ne 'ok'){throw 'SQLite integrity is not OK'}
             if(-not $hardening.performance_indexes.ok){throw 'SQLite performance indexes are incomplete in installed CLEAN'}
-            Write-Host "LIVE CLEAN ZIP OK: PID=$($ready.pid) build=$($ready.agent_build)" -ForegroundColor Green
+
+            $cap=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/3012/capability' -Headers $headers -TimeoutSec 5
+            if(-not $cap.implemented -or $cap.factory_validated){throw '3012 capability/gate contract invalid'}
+            $body=@{ames_start_date='2026-02-01'}|ConvertTo-Json
+            $saved=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/config' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 5
+            if([string]$saved.config.ames_start_date -ne '2026-02-01'){throw 'ames_start_date did not persist through hardened config'}
+            $savedFile=Get-Content package\ames-agent\config.json -Raw | ConvertFrom-Json
+            if([string]$savedFile.ames_start_date -ne '2026-02-01'){throw 'ames_start_date was not persisted to config.json'}
+
+            # Idempotency is part of the physical contract: a second launch must
+            # recognize the same authenticated H1 agent, not kill it or collide logs.
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $starter -Root $root -StartupTimeoutSeconds 30
+            if($LASTEXITCODE -ne 0){throw "Canonical launcher second start failed with exit code $LASTEXITCODE"}
+            $ready2=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 5
+            if([int]$ready2.pid -ne $agentPid){throw "Second launcher invocation replaced a healthy agent: $agentPid -> $($ready2.pid)"}
+
+            Write-Host "LIVE CLEAN LAUNCHER OK: PID=$agentPid build=$($ready.agent_build) H1=$($hardening.hardening)" -ForegroundColor Green
           } finally {
-            if($proc -and -not $proc.HasExited){Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue}
+            if($agentPid){Stop-Process -Id $agentPid -Force -ErrorAction SilentlyContinue}
+            else {
+              $listener=Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+              if($listener){Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue}
+            }
           }
