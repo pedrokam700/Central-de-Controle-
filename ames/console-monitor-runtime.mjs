@@ -5,15 +5,10 @@ import { readHardeningDiagnostics } from './agent-diagnostics.mjs';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const STAGES=['3028','3074','2114','3022'];
 const RELEASE_BUILD_URL=new URL('../../release-build.json',import.meta.url).href;
-const PHYSICAL_PREVIEW_ORIGINS=new Set([
-  'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app',
-  'https://deploy-preview-23--productcontrolcenter.netlify.app'
-]);
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 
 export function physicalOriginStatus(origin){
   const raw=String(origin||'').trim().replace(/\/$/,'');
-  if(PHYSICAL_PREVIEW_ORIGINS.has(raw))return {ok:true,mode:'preview'};
   try{
     const url=new URL(raw);
     const host=String(url.hostname||'').toLowerCase();
@@ -25,8 +20,7 @@ export function physicalOriginStatus(origin){
 
 function originNote(state){
   if(state?.mode==='local')return t('pacote CLEAN local no próprio posto','local CLEAN package on this workstation');
-  if(state?.mode==='preview')return t('preview aprovado para validação controlada','approved preview for controlled validation');
-  return t('origem não aprovada para o gate físico','origin not approved for the physical gate');
+  return t('origem não aprovada para o gate físico; use o CLEAN local','origin not approved for the physical gate; use the local CLEAN package');
 }
 
 function stageInfo(job,stage,processReady){
