@@ -17,6 +17,7 @@ import candidate_config
 import hardening
 import local_security
 import operational_calendar
+import origin_policy
 import performance_indexes
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
@@ -88,13 +89,7 @@ class HardenedHandler(entry.Handler):
 
     def _cors(self):
         origin = self.headers.get("Origin")
-        port = self._active_port()
-        allowed = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
-        allowed.update(
-            str(x).rstrip("/")
-            for x in (entry.a.CONFIG.get("allowed_origins") or [])
-            if str(x).strip()
-        )
+        allowed = origin_policy.allowed_origins(entry.a.CONFIG, self._active_port())
         if origin and origin.rstrip("/") in allowed:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
@@ -178,6 +173,7 @@ class HardenedHandler(entry.Handler):
                         "ok": True,
                         "hardening": "H1",
                         "local_security": local_security.public_status(AGENT_TOKEN_PATH),
+                        "origin_policy": origin_policy.public_status(entry.a.CONFIG, self._active_port()),
                         "operational_calendar": operational_calendar.public_contract(entry.a.CONFIG),
                         "current_shift": operational_calendar.shift_for(entry.a.CONFIG),
                         "ames_start_date": entry.a.CONFIG.get("ames_start_date") or None,
