@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 BASE_DIR = Path(__file__).resolve().parent
 ENTRY = BASE_DIR / "agent_hardened_entry.py"
@@ -23,8 +23,9 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _json(url: str, timeout: float = 3.0) -> dict:
-    with urlopen(url, timeout=timeout) as response:
+def _json(url: str, timeout: float = 3.0, headers: dict[str, str] | None = None) -> dict:
+    request = Request(url, headers=headers or {})
+    with urlopen(request, timeout=timeout) as response:
         if int(response.status) != 200:
             raise RuntimeError(f"HTTP {response.status}: {url}")
         value = json.loads(response.read().decode("utf-8"))
@@ -78,16 +79,26 @@ def main() -> int:
         if health.get("agent_build") != "CANONICAL-R11-BATCH":
             raise RuntimeError("/health não confirmou o build canônico")
 
-        hardening = _json(base + "/hardening/health", timeout=5.0)
+        # Detailed diagnostics are intentionally not public. The self-test acts
+        # as the same-origin local UI instead of weakening the API for probes.
+        hardening = _json(
+            base + "/hardening/health",
+            timeout=5.0,
+            headers={"Origin": f"http://127.0.0.1:{port}"},
+        )
         if hardening.get("ok") is not True or hardening.get("hardening") != "H1":
             raise RuntimeError("Hardening H1 não ficou pronto")
         if str(hardening.get("integrity") or "").lower() != "ok":
             raise RuntimeError(f"SQLite quick_check falhou: {hardening.get('integrity')!r}")
+        indexes = hardening.get("performance_indexes") or {}
+        if indexes.get("ok") is not True:
+            raise RuntimeError(f"Índices SQLite incompletos: {indexes.get('missing')!r}")
 
         print(
             "[OK] Selftest agente CLEAN: "
             f"build={ready.get('agent_build')} port={port} "
-            f"schema={hardening.get('schema_version')} sqlite={hardening.get('integrity')}"
+            f"schema={hardening.get('schema_version')} sqlite={hardening.get('integrity')} "
+            f"indexes={indexes.get('present')}/{indexes.get('expected')}"
         )
         return 0
     except Exception as exc:
