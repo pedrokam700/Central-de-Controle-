@@ -52,7 +52,10 @@ class UpdateTests(unittest.TestCase):
             self.assertTrue((target/'agent_entry.py').is_file());self.assertTrue((target/'process_r11.py').is_file())
             for name in migration_only:self.assertTrue((target/name).is_file())
             origins=json.loads((target/'config.json').read_text())['allowed_origins']
-            self.assertIn(updater.ORIGIN,origins);self.assertIn(updater.PREVIEW_ORIGIN,origins);self.assertIn(updater.NETLIFY_PREVIEW_ORIGIN,origins);self.assertEqual(len(origins),len(set(origins)))
+            self.assertEqual(origins,['https://fallback.example',updater.ORIGIN])
+            self.assertNotIn(updater.PREVIEW_ORIGIN,origins)
+            self.assertNotIn(updater.NETLIFY_PREVIEW_ORIGIN,origins)
+            self.assertEqual(len(origins),len(set(origins)))
             newer=store.create_snapshot(window_id=None,source_kind='after update')
             with patch.object(updater.socket,'create_connection',side_effect=OSError):updater.rollback(target,saved)
             self.assertEqual(store.latest_snapshot_id(),newer);self.assertGreater(newer,first)
