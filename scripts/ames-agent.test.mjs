@@ -13,7 +13,7 @@ function fixture(){
 }
 export function harness(){
   const store=createAmesStore(),f=fixture(),calls=[],pending=[];let clock=10000;
-  const routes={'v2/capabilities':{schema:'central-ames-v2',native_console:true,revision:true,cursor:true},'v2/snapshots':()=>({ok:true,json:async()=>({snapshots:[canonicalAgentFixture(f)]})}),health:{agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY},engine_found:true},config:{configured_lines:[line],performance:'fast'},monitor:{enabled:0},'team-dashboard':{snapshot_ids:{[line]:f.legacy.summary.snapshot_id},lines:[{...f.legacy.summary,metrics:f.legacy.summary}]},insights:f.insights,'deep-trace':{id:'J',status:'queued'},runs:{id:'J',status:'queued'},'jobs/J':{id:'J',status:'running',stage_progress:{'3074':{line,current:1,total:3,line_percent:33}},partial_refresh:0},'jobs/J/cancel':{ok:true},'monitor/start':{enabled:true,interval_minutes:5},'monitor/stop':{enabled:false}};
+  const routes={ready:{ok:true,ready:true,agent_build:'CANONICAL-R11-BATCH',agent_version:'0.5.23'},'v2/capabilities':{schema:'central-ames-v2',native_console:true,revision:true,cursor:true},'v2/snapshots':()=>({ok:true,json:async()=>({snapshots:[canonicalAgentFixture(f)]})}),health:{agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY},engine_found:true},config:{configured_lines:[line],performance:'fast',production_day_start:'07:00',timezone:'America/Sao_Paulo',work_shifts:{'1':{label:'1º Turno',start:'07:30',end:'17:30'},'2':{label:'2º Turno',start:'17:30',end:'07:30'}}},monitor:{enabled:0},'team-dashboard':{snapshot_ids:{[line]:f.legacy.summary.snapshot_id},lines:[{...f.legacy.summary,metrics:f.legacy.summary}]},insights:f.insights,'deep-trace':{id:'J',status:'queued'},runs:{id:'J',status:'queued'},'jobs/J':{id:'J',status:'running',stage_progress:{'3074':{line,current:1,total:3,line_percent:33}},partial_refresh:0},'jobs/J/cancel':{ok:true},'monitor/start':{enabled:true,interval_minutes:5},'monitor/stop':{enabled:false}};
   const fetcher=async(url,options)=>{
     const u=new URL(url),key=u.pathname.replace('/api/v1/','');calls.push({key,body:options.body&&JSON.parse(options.body),options,url});
     if(key==='v2/records')return {ok:true,json:async()=>canonicalResponse(canonicalAgentFixture(f),u)};
@@ -41,11 +41,11 @@ test('scope validates exact lines, supported profiles and limits',()=>{
   assert.deepEqual(collectionScope({...scope,lines:[line,line]}),scope);
   for(const patch of [{lines:[]},{lines:['1']},{performance:'turbo'},{max_pcbas:-1},{max_failures:1.5},{defect_codes:['']}])assert.throws(()=>collectionScope({...scope,...patch}));
 });
-test('old agent blocked before commands; real scheduler health required',async()=>{
-  const h=harness();h.routes.health.mes_scheduler={};await assert.rejects(h.client.connect(),/patch/);assert.equal(h.store.agent().status,'disconnected');assert.equal(h.calls.length,1);
+test('old agent blocked after fast readiness; real scheduler health required',async()=>{
+  const h=harness();h.routes.health.mes_scheduler={};await assert.rejects(h.client.connect(),/patch/);assert.equal(h.store.agent().status,'disconnected');assert.deepEqual(h.calls.map(c=>c.key),['ready','health']);
 });
 test('real payloads, persistent config, 850ms progress and >2200ms changed partial refresh',async()=>{
-  const h=harness();await h.client.connect();assert.equal(h.store.read(line).source,'local');
+  const h=harness();await h.client.connect();assert.equal(h.store.read(line).source,'local');assert.deepEqual(h.calls.slice(0,2).map(c=>c.key),['ready','health']);assert.equal(h.store.agent().config.production_day_start,'07:00');
   await h.client.saveConfig({...scope,lines:[line,'TAN10102']});assert.deepEqual(h.calls.find(c=>c.key==='config'&&c.body).body,{configured_lines:[line,'TAN10102'],performance:'fast'});
   await h.client.collect('deep',{...scope,defect_codes:['D1','D2']});assert.deepEqual(h.calls.find(c=>c.key==='deep-trace').body,{...scope,defect_codes:['D1','D2'],request_id:h.calls.find(c=>c.key==='deep-trace').body.request_id});assert.equal(h.pending[0].ms,850);
   const count=()=>h.calls.filter(c=>c.key==='v2/snapshots').length,before=count();await h.tick();assert.equal(count(),before);assert.equal(h.store.agent().job.stage_progress['3074'].current,1);
@@ -60,11 +60,11 @@ test('monitor is explicit; original Excel bytes pass through without regeneratin
   assert(h.calls.every(c=>!c.key.includes('3022')&&c.options.credentials==='omit'));
 });
 test('snapshot replacement while reading is rejected, old read remains intact',async()=>{
-  const h=harness();await h.client.connect();const old=h.store.read(line).snapshot;let n=0;
+  const h=harness();await h.client.connect();const old=h.store.read(line).snapshot;
   h.routes['v2/snapshots']=()=>({ok:true,json:async()=>({snapshots:[{...canonicalAgentFixture(h.f),snapshot_revision:2}]})});
   await assert.rejects(h.client.refresh(),/Revisão misturada/);assert.equal(h.store.read(line).snapshot,old);
 });
-test('logout aborts pending request, no late data or errors enter next session',async()=>{
+test('logout aborts pending health request, no late data or errors enter next session',async()=>{
   const h=harness();let finish;h.routes.health=()=>new Promise(resolve=>finish=resolve);const pending=h.client.connect();h.client.clear();h.store.clear();finish({ok:true,json:async()=>({agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY}})});await assert.rejects(pending,{name:'AbortError'});assert.equal(h.store.agent().status,'disconnected');assert.equal(h.store.agent().error,'');assert.equal(h.store.read(line).snapshot,null);
 });
 
