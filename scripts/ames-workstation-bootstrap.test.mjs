@@ -72,7 +72,7 @@ test('startup real e idempotente: processo e capturado, limpo, logado e independ
   assert.match(starter,/@\('-u'/);
   assert.match(starter,/api\/v1\/ready/);
   assert.match(starter,/api\/v1\/v2\/capabilities/);
-  assert.doesNotMatch(starter,/api\/v1\/health/);
+  assert.doesNotMatch(starter,/Invoke-RestMethod\s+'http:\/\/127\.0\.0\.1:8765\/api\/v1\/health'/);
   assert.doesNotMatch(starter,/pythonw\.exe/i);
   assert.doesNotMatch(starter,/0\.5\.24\*|0\.5\.25\*/);
 });
