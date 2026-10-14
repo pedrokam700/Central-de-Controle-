@@ -1,4 +1,5 @@
 import {LINE_IDS} from './data/contract.mjs';
+import {readHardeningDiagnostics} from './agent-diagnostics.mjs';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
@@ -58,17 +59,45 @@ export function buildDataHealth(store){
   return ['3028','3074','2114','3022','3012'].map(source=>sourceModel(store,source));
 }
 
+export function buildSecurityHealth(diagnostics){
+  const policy=diagnostics?.status==='ok'?diagnostics.originPolicy:null;
+  if(!policy)return {tone:'unknown',label:t('Segurança não comprovada','Security unproven'),detail:t('Diagnóstico local indisponível ou posto ainda não pareado.','Local diagnostics are unavailable or the workstation is not paired yet.'),remote:null,rejected:null};
+  const rejected=Number.isFinite(Number(policy.rejectedEntries))?Number(policy.rejectedEntries):null;
+  const remote=Number.isFinite(Number(policy.remoteOrigins))?Number(policy.remoteOrigins):null;
+  const ok=policy.ok===true&&rejected===0;
+  return {
+    tone:ok?'ok':'partial',
+    label:ok?t('Política CORS validada','CORS policy validated'):t('Configuração legada filtrada','Legacy configuration filtered'),
+    detail:ok?t('Somente loopback e origens HTTPS explicitamente autorizadas são aceitas.','Only loopback and explicitly authorized HTTPS origins are accepted.'):t('Entradas inseguras antigas foram ignoradas em runtime; revise a configuração do posto quando conveniente.','Unsafe legacy entries were ignored at runtime; review workstation configuration when convenient.'),
+    remote,
+    rejected,
+    mode:policy.mode||null,
+  };
+}
+
 export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
-  let last='';
+  let last='',security=null,securityFor='',securityLoading=false,disposed=false;
+  async function loadSecurity(agent){
+    if(disposed||securityLoading||agent.status!=='connected')return;
+    const identity=String(agent.agent_build||agent.capabilities?.agent_build||'connected');
+    if(securityFor===identity&&security)return;
+    securityLoading=true;securityFor=identity;
+    try{security=await readHardeningDiagnostics();}
+    catch(error){security={status:'unavailable',reason:error?.name==='AbortError'?'aborted':'error'};}
+    finally{securityLoading=false;if(!disposed){last='';render();}}
+  }
   function render(){
+    if(disposed)return;
     const model=buildDataHealth(store),agent=store.agent();
-    const key=JSON.stringify([model,agent.status,agent.agent_build,document.documentElement.lang]);if(key===last)return;last=key;
+    if(agent.status==='connected')void loadSecurity(agent);else if(security||securityFor){security=null;securityFor='';securityLoading=false;}
+    const securityState=buildSecurityHealth(security);
+    const key=JSON.stringify([model,agent.status,agent.agent_build,security,securityLoading,document.documentElement.lang]);if(key===last)return;last=key;
     root.setAttribute('data-no-i18n','');
-    root.innerHTML=`<section class="mes-context-panel ames-data-health"><div class="section-head"><div><h3>${t('Saúde e cobertura dos dados','Data health and coverage')}</h3><p>${t('Mostra o que foi realmente carregado. Ausência de evidência nunca é apresentada como zero.','Shows what was actually loaded. Missing evidence is never presented as zero.')}</p></div><span class="ames-health-agent ${agent.status==='connected'?'ok':'unknown'}">${agent.status==='connected'?t('Agente conectado','Agent connected'):t('Dados compartilhados / cache','Shared data / cache')}</span></div><div class="ames-data-health-grid">${model.map(item=>`<article class="ames-health-card ${item.state.tone}"><div class="ames-health-card-head"><div><b>${esc(item.label)}</b><span>${esc(item.name)}</span></div><span class="ames-health-state">${esc(item.state.label)}</span></div><strong>${item.count}</strong><small>${esc(item.unit)}</small><p>${esc(item.state.detail)}</p><footer><span>${esc(item.latest||t('coleta não informada','collection not provided'))}</span><button type="button" class="button secondary" data-health-evidence="${esc(item.source)}">${t('Ver evidência','View evidence')}</button></footer></article>`).join('')}</div></section>`;
+    root.innerHTML=`<section class="mes-context-panel ames-data-health"><div class="section-head"><div><h3>${t('Saúde e cobertura dos dados','Data health and coverage')}</h3><p>${t('Mostra o que foi realmente carregado. Ausência de evidência nunca é apresentada como zero.','Shows what was actually loaded. Missing evidence is never presented as zero.')}</p></div><span class="ames-health-agent ${agent.status==='connected'?'ok':'unknown'}">${agent.status==='connected'?t('Agente conectado','Agent connected'):t('Dados compartilhados / cache','Shared data / cache')}</span></div><div class="ames-data-health-grid">${model.map(item=>`<article class="ames-health-card ${item.state.tone}"><div class="ames-health-card-head"><div><b>${esc(item.label)}</b><span>${esc(item.name)}</span></div><span class="ames-health-state">${esc(item.state.label)}</span></div><strong>${item.count}</strong><small>${esc(item.unit)}</small><p>${esc(item.state.detail)}</p><footer><span>${esc(item.latest||t('coleta não informada','collection not provided'))}</span><button type="button" class="button secondary" data-health-evidence="${esc(item.source)}">${t('Ver evidência','View evidence')}</button></footer></article>`).join('')}</div><div class="notice ${securityState.tone==='partial'?'warn':''}" data-security-health><b>${t('Segurança local','Local security')} · ${esc(securityState.label)}</b><br>${esc(securityState.detail)}<br><small>${t('Origens remotas autorizadas','Authorized remote origins')}: ${securityState.remote??'—'} · ${t('Entradas rejeitadas','Rejected entries')}: ${securityState.rejected??'—'}${securityState.mode?` · ${esc(securityState.mode)}`:''}</small></div></section>`;
     root.querySelectorAll('[data-health-evidence]').forEach(button=>button.addEventListener('click',()=>{
       const item=model.find(x=>x.source===button.dataset.healthEvidence);if(!item)return;
       onEvidence({title:`${item.label} · ${item.name}`,description:item.state.detail,fields:[[t('Estado','Status'),item.state.label],[t('Registros visíveis','Visible records'),item.count],[t('Última coleta','Last collection'),item.latest||'—'],[t('Build do agente','Agent build'),agent.agent_build||agent.capabilities?.agent_build||'—']],lines:item.reads.map(x=>({label:`${t('Linha','Line')} ${x.index} · ${x.line}`,snapshot:x.read.snapshot?.snapshot_id||t('sem snapshot','no snapshot'),freshness:x.read.freshness,detail:x.read.source})),notes:[t('Cobertura mede evidência disponível no snapshot atual. Zero registros pode ser válido; quando a coleta não pode ser comprovada, o estado fica desconhecido/parcial.','Coverage reflects evidence available in the current snapshot. Zero records can be valid; when collection cannot be proven, status remains unknown/partial.')]});
     }));
   }
-  return {render,clear(){root?.replaceChildren();last='';}};
+  return {render,clear(){disposed=true;root?.replaceChildren();root?.removeAttribute('data-no-i18n');last='';security=null;securityFor='';}};
 }
