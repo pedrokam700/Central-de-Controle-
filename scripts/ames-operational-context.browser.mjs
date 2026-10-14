@@ -60,7 +60,26 @@ try{
   await page.waitForFunction(()=>document.querySelector('[data-reuse-line-tab="TAN10102"]')?.getAttribute('aria-selected')==='true');
   assert.equal(await reuseLine2.getAttribute('aria-selected'),'true','Reuse must inherit Line 2');
 
+  await page.locator('[data-console-view=base]').click();
+  const baseLine=page.locator('[data-base-line]');
+  await baseLine.waitFor();
+  assert.equal(await baseLine.inputValue(),'TAN10102','Base must inherit Line 2');
+  await baseLine.selectOption('TAN10101');
+  await page.waitForFunction(()=>qa.store.context().line_id==='TAN10101');
+  await baseLine.selectOption('TAN10102');
+  await page.waitForFunction(()=>qa.store.context().line_id==='TAN10102');
+
+  await page.locator('[data-console-view=knowledge]').click();
+  const knowledgeLine=page.locator('[data-knowledge-line]');
+  await knowledgeLine.waitFor();
+  assert.equal(await knowledgeLine.inputValue(),'TAN10102','CORA must inherit Line 2');
+  await knowledgeLine.selectOption('TAN10101');
+  await page.waitForFunction(()=>qa.store.context().line_id==='TAN10101');
   await page.locator('[data-console-view=top3]').click();
+  assert.equal(await page.locator('[data-daily-summary-line]').inputValue(),'TAN10101','Top 3 must inherit a line explicitly changed in CORA');
+  await page.locator('[data-daily-summary-line]').selectOption('TAN10102');
+  await page.waitForFunction(()=>qa.store.context().line_id==='TAN10102');
+
   const shift=page.locator('[data-top3-analytics] [data-dfa="shift"]');
   await shift.waitFor();
   await shift.selectOption('1st Shift');
@@ -70,7 +89,7 @@ try{
   assert((await page.locator('[data-top3-analytics] .ames-dfa-rank-item').count())>0,'unclassified shift must not erase the daily ranking');
   assert.equal(await page.evaluate(()=>qa.store.context().shift),'1st Shift');
 
-  console.log('PASS: shared Line 2 survives Top 3 → Failures → Trace → Reuse; unclassified 3022 shift stays unknown instead of zero.');
+  console.log('PASS: shared Line 2 survives Top 3 → Failures → Trace → Reuse → Base → CORA; Base/CORA write back to the same context; unclassified 3022 shift stays unknown instead of zero.');
 }finally{
   await browser.close();await new Promise(resolve=>server.close(resolve));
 }
