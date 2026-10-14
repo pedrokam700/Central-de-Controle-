@@ -26,9 +26,9 @@ export function isMesRoundtrip(location=globalThis.location){
 }
 
 // Backward compatibility only: old CLEAN links may still arrive with
-// ?from_mes_local=1. They now select the Console MES view inside the SAME Central
-// document. No cross-origin link, second shell or second authentication context is
-// created.
+// ?from_mes_local=1 or ?view=mesConsole. The caller MUST invoke this only after
+// Central's navigation listeners are bound. That avoids the old bootstrap race
+// where a synthetic click happened before app.js could receive it.
 export function installLocalConsoleReturn(document=globalThis.document,location=globalThis.location){
   if(!document||!isMesRoundtrip(location))return false;
   const open=()=>{
@@ -51,8 +51,5 @@ export function installLocalConsoleReturn(document=globalThis.document,location=
   return true;
 }
 
-if(typeof window!=='undefined'&&typeof document!=='undefined'){
-  const boot=()=>installLocalConsoleReturn(document,window.location);
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
-  else boot();
-}
+// Deliberately no import-time auto-navigation here. Central/Console are one app,
+// and route compatibility must run only after the app has installed its handlers.
