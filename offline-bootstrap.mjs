@@ -42,6 +42,9 @@ try{
 
 try{
   await import(`./app.js?v=${BUILD}`);
+  // When Central was opened from the local MES Console, keep Central on its
+  // canonical auth origin and add only a simple explicit route back to localhost.
+  await import('./core/central-roundtrip.mjs');
 }catch(error){
   window.__centralAppImportError=String(error?.message||error);
   console.error('[Central] app.js não carregou:',error);
