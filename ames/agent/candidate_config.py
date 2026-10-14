@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import threading
 from datetime import datetime
 from typing import Any, Dict
 from urllib.parse import urlparse
@@ -19,6 +20,7 @@ PERFORMANCE_VALUES = {"fast", "balanced", "safe"}
 _START_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _HOST_RE = re.compile(r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*$")
 _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_CONFIG_LOCK = threading.Lock()
 
 
 def normalize_start_date(value: Any) -> str:
@@ -156,8 +158,6 @@ def _normalize_calendar(current: Dict[str, Any], changed: Dict[str, Any]) -> Dic
         return changed
 
     candidate = {**current, **changed}
-    # `day_start` is only the legacy name of the production-day boundary. It is
-    # never a work-shift boundary. Keep both names synchronized during migration.
     if "production_day_start" in changed:
         candidate["day_start"] = changed["production_day_start"]
     elif "day_start" in changed:
@@ -171,8 +171,7 @@ def _normalize_calendar(current: Dict[str, Any], changed: Dict[str, Any]) -> Dic
     return changed
 
 
-def apply(agent_module, body: Dict[str, Any]) -> Dict[str, Any]:
-    incoming = dict(body or {})
+def _apply_locked(agent_module, incoming: Dict[str, Any]) -> Dict[str, Any]:
     changed = {k: v for k, v in incoming.items() if k in CANDIDATE_ALLOWED}
 
     if "configured_lines" in changed:
@@ -211,18 +210,35 @@ def apply(agent_module, body: Dict[str, Any]) -> Dict[str, Any]:
         changed["auto_backup_on_start"] = _bool(changed["auto_backup_on_start"], "auto_backup_on_start")
 
     changed = _normalize_calendar(agent_module.CONFIG, changed)
-
     effective_host = str(changed.get("ames_host") or agent_module.CONFIG.get("ames_host") or "").strip()
     if "ames_start_url" in changed:
         changed["ames_start_url"] = _start_url(changed["ames_start_url"], effective_host)
 
-    # Validate everything first. CONFIG is mutated only after all checks passed.
-    agent_module.CONFIG.update(changed)
-    agent_module.write_config(agent_module.CONFIG)
     ignored = sorted(k for k in incoming if k not in CANDIDATE_ALLOWED)
-    agent_module.STORE.record_audit(
-        "CONFIG_UPDATE",
-        workstation=agent_module.WORKSTATION,
-        details={"keys": sorted(changed.keys()), "ignored_keys": ignored, "candidate_extension": True},
-    )
-    return {"ok": True, "config": agent_module.CONFIG, "ignored_keys": ignored}
+    next_config = {**agent_module.CONFIG, **changed}
+
+    # Persist first. If the atomic disk write fails, the process keeps the exact
+    # previous in-memory config and the caller receives the write failure.
+    agent_module.write_config(next_config)
+    agent_module.CONFIG.clear()
+    agent_module.CONFIG.update(next_config)
+
+    audit_warning = None
+    try:
+        agent_module.STORE.record_audit(
+            "CONFIG_UPDATE",
+            workstation=agent_module.WORKSTATION,
+            details={"keys": sorted(changed.keys()), "ignored_keys": ignored, "candidate_extension": True},
+        )
+    except Exception as exc:
+        # The configuration is already durably committed. Do not tell the user it
+        # failed and invite a duplicate write only because audit logging failed.
+        audit_warning = type(exc).__name__
+
+    return {"ok": True, "config": dict(agent_module.CONFIG), "ignored_keys": ignored, "audit_warning": audit_warning}
+
+
+def apply(agent_module, body: Dict[str, Any]) -> Dict[str, Any]:
+    incoming = dict(body or {})
+    with _CONFIG_LOCK:
+        return _apply_locked(agent_module, incoming)
