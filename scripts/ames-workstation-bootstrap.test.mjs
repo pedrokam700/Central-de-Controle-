@@ -69,6 +69,7 @@ test('startup real e idempotente: processo e capturado, limpo e logs nunca depen
   assert.match(starter,/agent_startup_state\.json/);
   assert.match(starter,/agent_stdout_\$stamp\.log|agent_stdout_/);
   assert.match(starter,/@\('-u'/);
+  assert.match(starter,/api\/v1\/health' -TimeoutSec 25/);
   assert.doesNotMatch(starter,/pythonw\.exe/i);
   assert.doesNotMatch(starter,/0\.5\.24\*|0\.5\.25\*/);
 });
