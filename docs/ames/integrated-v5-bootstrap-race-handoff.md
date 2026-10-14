@@ -25,3 +25,15 @@ Próxima ação exata: inspecionar o resultado/log do job Windows, registrar rep
 ### Correção da fixture de reprodução
 
 Checkpoint remoto inicial `b2bcbf24579f9898f0c69da58092abfeb5400aee`; Candidate run `38562506084`. Instalação e smoke/restart Windows passaram. O teste de disputa parou antes de criar o legado porque PowerShell rejeita um argumento vazio em `Start-Process -ArgumentList`. Isso NÃO comprova reprodução. Corrigida somente a montagem dos argumentos da fixture; executar novamente o Candidate Gate. Implementação do bootstrap ainda não publicada neste checkpoint.
+
+### Reprodução Windows confirmada
+
+SHA testado: `8fb07d777acb2e0522994eb6a26782ca47ee1ad5`. Candidate [38563132437](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/38563132437), Windows job `115849092616`, artifact `11893512668`. O artefato preservado contém:
+
+- `race-gate/result.json`: legado inicial PID 5144, reocupação por PID 9592 depois da criação canônica.
+- `agent_startup_state.json`: status `failed`, PID iniciado 1272, mensagem **Build inesperado apos startup: CLEAN-V4-3012**.
+- stdout confirma encerramento do legado 5144 e limpeza do processo novo 1272.
+
+Isso reproduz a causa reportada na fábrica. Full Quality do mesmo SHA passou (run `38563132129`). A leitura de ExitCode da fixture ficou nula no Windows PowerShell; este checkpoint retém explicitamente o handle para preservar esse diagnóstico. O resultado da reprodução independe desse código de saída: estado e stderr comprovam o build errado.
+
+Arquivos alterados neste checkpoint: teste Windows e este handoff. Próximo passo: publicar correção isolada do launcher, executar os dois gates e analisar evidências do retry e PID real. Gate físico PENDING; ZIP final ainda não liberado.

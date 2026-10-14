@@ -13,6 +13,7 @@ function Record([string]$name,$data){$report.events+=@{at=(Get-Date).ToUniversal
 function Start-Fixture([string]$path,[string]$extra=''){
  $arguments=@('-u',('"'+$path+'"'));if($extra){$arguments+=$extra}
  $proc=Start-Process $python -ArgumentList $arguments -PassThru -WindowStyle Hidden
+ $null=$proc.Handle # Retain handle so Windows PowerShell can read ExitCode after exit.
  $owned.Add($proc);return $proc
 }
 function Wait-Legacy {
@@ -23,6 +24,7 @@ function Wait-Exit($process,[int]$seconds=100){if(-not $process.WaitForExit($sec
 function Start-Launcher {
  $stamp=[guid]::NewGuid().ToString('N')
  $proc=Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$starter+'"'),'-Root',('"'+$Root+'"'),'-StartupTimeoutSeconds','20') -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $evidence ($stamp+'.stdout.txt')) -RedirectStandardError (Join-Path $evidence ($stamp+'.stderr.txt'))
+ $null=$proc.Handle # Retain handle so Windows PowerShell can read ExitCode after exit.
  $owned.Add($proc);return $proc
 }
 try{
