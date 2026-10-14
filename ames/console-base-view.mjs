@@ -8,7 +8,7 @@ const locale=()=>document.documentElement.lang||'pt-BR';
 const lineOptions=selected=>LINE_IDS.map((line,i)=>`<option value="${line}"${selected===line?' selected':''}>${t('Linha','Line')} ${i+1} · ${line}</option>`).join('');
 const fmt=value=>value===null||value===undefined||value===''?'—':String(value);
 const sectionHead=(title,subtitle='',right='')=>`<div class="section-head"><div><h3>${esc(title)}</h3>${subtitle?`<p>${esc(subtitle)}</p>`:''}</div>${right}</div>`;
-const table=(rows,columns,empty)=>!rows.length?`<div class="ames-empty"><span>—</span><p>${esc(empty||t('Nenhum registro disponível.','No records available.'))}</p></div>`:`<div class="table-wrap"><table><thead><tr>${columns.map(([,label])=>`<th>${esc(label||key)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${columns.map(([key])=>`<td>${esc(fmt(row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+const table=(rows,columns,empty)=>!rows.length?`<div class="ames-empty"><span>—</span><p>${esc(empty||t('Nenhum registro disponível.','No records available.'))}</p></div>`:`<div class="table-wrap"><table><thead><tr>${columns.map(([key,label])=>`<th>${esc(label||key)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${columns.map(([key])=>`<td>${esc(fmt(row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 const normalizeRows=result=>Array.isArray(result)?result:result?.rows||result?.datasets||result?.jobs||result?.results||result?.items||[];
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 
@@ -67,7 +67,11 @@ export function sharedDatasetProvenance(snapshot,dataset,readState=SOURCE_STATE.
   if(cached&&sourceStateHasEvidence(state))return SOURCE_STATE.CACHED;
   return state;
 }
-export function completedDatasetProvenance(rows=[]){return Array.isArray(rows)&&rows.length?SOURCE_STATE.OK:SOURCE_STATE.ZERO;}
+export function completedDatasetProvenance(rows=[],total=null){
+  const provenTotal=Number.isFinite(Number(total))?Number(total):null;
+  if(provenTotal!==null)return provenTotal===0?SOURCE_STATE.ZERO:SOURCE_STATE.OK;
+  return Array.isArray(rows)&&rows.length?SOURCE_STATE.OK:SOURCE_STATE.ZERO;
+}
 function sourceTone(state){return state===SOURCE_STATE.ERROR?'bad':state===SOURCE_STATE.PARTIAL?'warn':state===SOURCE_STATE.CACHED?'warn':sourceStateHasEvidence(state)?'ok':'unknown';}
 function sourceEmptyMessage(state){
   if(state===SOURCE_STATE.ZERO)return t('A consulta foi concluída e retornou zero linhas para este escopo.','The query completed and returned zero rows for this scope.');
@@ -137,7 +141,7 @@ export function createBaseConsoleView(root,store,client){
       const hasMore=data?.has_more===true;
       total=hasMore?Math.min(BASE_MAX_ROWS,observed+pageSize):observed;
     }
-    return {title:'Dataset',...data,rows,total,source_state:completedDatasetProvenance(rows),server_paged:true,loaded_limited:requestPage.offset+rows.length<total};
+    return {title:'Dataset',...data,rows,total,source_state:completedDatasetProvenance(rows,total),server_paged:true,loaded_limited:requestPage.offset+rows.length<total};
   }
 
   function sharedDataset(value){
