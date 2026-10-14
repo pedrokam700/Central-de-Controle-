@@ -16,6 +16,7 @@ import { withProcessOperatorLayout } from './console-process-operator.mjs';
 import { createMonitorRuntimeView } from './console-monitor-runtime.mjs';
 import { withKnowledgeArchitecture } from './console-knowledge-architecture.mjs';
 import { withAgentRefresh } from './console-refresh-decorator.mjs';
+import { withReuseProvenance } from './console-reuse-provenance.mjs';
 import { withTraceSelectionHelper } from './console-trace-scope.mjs';
 import { createFailureProcessAddon } from './console-failure-process.mjs';
 import { withBaseCatalog } from './console-base-catalog.mjs';
@@ -77,7 +78,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     else if(id==='failures'){pane.innerHTML='<section data-failures-main></section><section data-failures-process></section>';const failureRoot=pane.querySelector('[data-failures-main]'),primary=createFailuresParityView(failureRoot,store,client),process=createFailureProcessAddon(pane.querySelector('[data-failures-process]'),store,failureRoot);view={render(){primary.render();process.render();},clear(){primary.clear?.();process.clear?.();pane.replaceChildren();}};}
     else if(id==='sn')view=withOfflineSnLookup(withProcessCapability(withFastlaneSnEnhancements(createSnConsoleView(pane,store,client),pane,store),pane,store,'sn'),pane,store);
     else if(id==='trace'){const base=withTraceSelectionHelper(withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace'),pane,store);view=withAgentRefresh(base,pane,store,client,{label:'Atualizar tela'});}
-    else if(id==='reuse')view=withAgentRefresh(createReuseConsoleView(pane,store),pane,store,client,{label:'Atualizar'});
+    else if(id==='reuse')view=withAgentRefresh(withReuseProvenance(createReuseConsoleView(pane,store),pane,store),pane,store,client,{label:'Atualizar'});
     else if(id==='process'){pane.innerHTML='<section data-process-main></section><section data-process-3012></section>';const processRoot=pane.querySelector('[data-process-main]'),processBase=withProcessOperatorLayout(withProcessCapability(createProcessConsoleView(processRoot,store),processRoot,store,'process'),processRoot),base=withAgentRefresh(processBase,processRoot,store,client,{label:'Atualizar'}),repair3012=create3012FastlaneView(pane.querySelector('[data-process-3012]'),store);view={render(){base.render();repair3012.render();},clear(){base.clear?.();repair3012.clear?.();pane.replaceChildren();}};}
     else if(id==='base'){pane.innerHTML='<section data-base-history></section><section data-base-local></section>';const local=pane.querySelector('[data-base-local]'),base=withBaseCatalog(createBaseConsoleView(local,store,client),local,store,client),periods=createHistoryView(pane.querySelector('[data-base-history]'),store,client,history);view={render(){periods.render();base.render();},clear(){periods.clear();base.clear();}};}
     else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);views.set(id,view);return view;
