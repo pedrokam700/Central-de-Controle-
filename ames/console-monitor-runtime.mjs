@@ -8,6 +8,7 @@ const PHYSICAL_PREVIEW_ORIGINS=new Set([
   'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app',
   'https://deploy-preview-23--productcontrolcenter.netlify.app'
 ]);
+const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 
 function stageInfo(job,stage,processReady){
   if(stage==='3022'&&!processReady)return {pct:0,label:'indisponível neste agente',state:'disabled'};
@@ -39,6 +40,42 @@ function gateModel(agent,lines,processReady,frontend,origin){
   return {core,coreReady,snapshots,gateStatus,gateClass};
 }
 
+function guardianStatus(value){
+  if(!value||typeof value!=='object')return null;
+  if(typeof value.status==='string'&&value.status)return value.status;
+  if(typeof value.state==='string'&&value.state)return value.state;
+  if(value.ok===true)return 'ok';
+  if(value.enabled===true)return 'enabled';
+  return null;
+}
+
+export function runtimeDiagnostics(agent,lines=[]){
+  const readiness=agent?.readiness||{},runtime=agent?.runtime||{};
+  const checks=[readiness.python,readiness.dependencies,readiness.playwright,readiness.sqlite];
+  const known=checks.filter(value=>value!==null&&value!==undefined).length;
+  const ok=checks.filter(value=>value===true).length;
+  return Object.freeze({
+    scheduler:runtime.scheduler?.policy||runtime.scheduler?.name||null,
+    preflight:{ok,known,total:checks.length},
+    setupComplete:runtime.setup_complete===true,
+    candidateVersion:runtime.candidate_version||null,
+    latestSnapshotId:runtime.latest_snapshot_id??null,
+    guardian:guardianStatus(runtime.network_guardian),
+    freshLines:lines.filter(line=>line.freshness==='fresh').length,
+    staleLines:lines.filter(line=>line.freshness==='stale').length,
+    missingLines:lines.filter(line=>!line.snapshot).length,
+    error:String(agent?.error||''),
+  });
+}
+
+function ageLabel(ms){
+  if(!Number.isFinite(ms)||ms<0)return '—';
+  if(ms<60000)return '< 1 min';
+  const minutes=Math.floor(ms/60000);if(minutes<60)return `${minutes} min`;
+  const hours=Math.floor(minutes/60);if(hours<48)return `${hours} h`;
+  return `${Math.floor(hours/24)} d`;
+}
+
 export function createMonitorRuntimeView(root,store){
   let host,last='',releaseBuild=null,releaseLoaded=false,disposed=false;
   async function loadReleaseBuild(){
@@ -54,14 +91,15 @@ export function createMonitorRuntimeView(root,store){
   function render(){
     if(disposed)return;if(!releaseLoaded)void loadReleaseBuild();
     const a=store.agent(),job=a.job,processReady=a.status==='connected'&&a.capabilities?.process_timeline===true;
-    const lines=LINE_IDS.map((line,i)=>{const read=store.read(line);return {line,index:i+1,snapshot:read.snapshot?.snapshot_id||null,source:read.source,freshness:read.freshness};});
+    const lines=LINE_IDS.map((line,i)=>{const read=store.read(line);return {line,index:i+1,snapshot:read.snapshot?.snapshot_id||null,source:read.source,freshness:read.freshness,age_ms:read.age_ms};});
+    const diagnostics=runtimeDiagnostics(a,lines);
     const lastBackup=a.auxiliary?.name==='backup'?(a.auxiliary.result?.path||a.auxiliary.result?.created_at||'criado nesta sessão'):'—';
     const origin=globalThis.location?.origin||'origem não disponível',gate=gateModel(a,lines,processReady,releaseBuild,origin);
     const frontendSha=releaseBuild?.sha?String(releaseBuild.sha):releaseBuild===null?'carregando':'não informado';
     const frontendMeta=[releaseBuild?.provider,releaseBuild?.branch].filter(Boolean).join(' · ');
-    const key=JSON.stringify([a.status,a.readiness,a.agent_build,a.capabilities,a.auxiliary?.name,lastBackup,job?.id,job?.status,job?.stage,job?.progress,job?.stage_progress,processReady,lines,origin,releaseBuild]);if(key===last)return;last=key;
+    const key=JSON.stringify([a.status,a.readiness,a.runtime,a.error,a.agent_build,a.capabilities,a.auxiliary?.name,lastBackup,job?.id,job?.status,job?.stage,job?.progress,job?.stage_progress,processReady,lines.map(x=>({...x,age_ms:Number.isFinite(x.age_ms)?Math.floor(x.age_ms/60000):null})),origin,releaseBuild,document.documentElement.lang]);if(key===last)return;last=key;
     if(!host){host=document.createElement('section');host.className='ames-monitor-runtime';root.append(host);}
-    host.innerHTML=`<div class="ames-runtime-grid"><section class="mes-context-panel"><div class="section-head"><div><h3>Progresso da execução</h3><p>3028 → 3074 → 2114 → 3022, sem misturar as linhas.</p></div><span class="ames-runtime-job">${esc(job?`${job.status||''} · ${job.id||''}`:'AGUARDANDO')}</span></div><div class="ames-runtime-pipeline">${STAGES.map(stage=>{const info=stageInfo(job,stage,processReady);return`<article class="ames-runtime-stage ${info.state}"><div><b>${stage}</b><span>${Math.max(0,Math.min(100,info.pct))}%</span></div><div class="ames-runtime-bar"><i style="width:${Math.max(0,Math.min(100,info.pct))}%"></i></div><small>${esc(info.label)}</small></article>`}).join('')}</div></section><aside class="mes-context-panel"><div class="section-head"><div><h3>Estado do motor</h3><p>O navegador é apenas a interface.</p></div></div><div class="ames-runtime-kv"><span>Endpoint</span><b>${esc(AGENT_URL)}</b><span>Rede A-MES</span><b>${a.readiness?.ames?'Conectada':'Indisponível'}</b><span>Chrome A-MES</span><b>${a.readiness?.chrome?'Conectado':'Indisponível'}</b><span>Snapshots</span><b>${gate.snapshots}/3 linhas</b><span>Motor</span><b>${a.readiness?.engine?'Disponível':'Indisponível'}</b><span>3022 automático</span><b>${processReady?'Pronto':'A validar'}</b><span>Último backup</span><b>${esc(lastBackup)}</b></div></aside></div><details class="ames-runtime-diagnostics"><summary>Diagnóstico técnico e gate físico</summary><div class="ames-runtime-diagnostics-body"><div class="ames-runtime-lines">${lines.map(x=>`<span><b>Linha ${x.index}</b> · ${esc(x.snapshot||'sem snapshot')} · ${esc(x.source||'sem fonte')} · ${esc(x.freshness||'idade desconhecida')}</span>`).join('')}</div><section class="mes-context-panel ames-factory-gate"><div class="section-head"><div><h3>Gate físico · posto de fábrica</h3><p>Informações de validação ficam recolhidas para não poluir a operação diária.</p></div><span class="ames-gate-pill ${gate.gateClass}">${esc(gate.gateStatus)}</span></div><div class="ames-gate-grid"><div class="ames-gate-checks">${gate.core.map(([label,ok,note])=>`<div class="ames-gate-check ${ok?'ok':'pending'}"><span>${ok?'✓':'—'}</span><div><b>${esc(label)}</b><small>${esc(note)}</small></div></div>`).join('')}</div><div class="ames-gate-proof"><h4>Evidência que ainda exige o posto</h4><p><b>Shift 2114 automático</b><span>Pendente prova física sem seleção manual de OPC.</span></p><p><b>3022 múltiplas passagens / retrabalho</b><span>${processReady?'Capacidade declarada; ainda precisa caso real.':'Bloqueado até agente R12/canônico declarar process_timeline.'}</span></p><p><b>9/9 desktop + mobile</b><span>Pendente validação visual e funcional no ambiente real.</span></p><p><b>Reboot / bootstrap</b><span>Pendente reinício do notebook e recuperação da configuração.</span></p></div></div><p>GREEN físico somente após evidência no posto e aprovação do usuário.</p><div class="ames-gate-foot"><span><b>Origem desta Central</b> ${esc(origin)}</span><span><b>Frontend SHA:</b> ${esc(frontendSha)}${frontendMeta?` · ${esc(frontendMeta)}`:''}</span><span><b>Build agente:</b> ${esc(a.agent_build||a.capabilities?.agent_build||'—')}</span></div></section></div></details>`;
+    host.innerHTML=`<div class="ames-runtime-grid"><section class="mes-context-panel"><div class="section-head"><div><h3>Progresso da execução</h3><p>3028 → 3074 → 2114 → 3022, sem misturar as linhas.</p></div><span class="ames-runtime-job">${esc(job?`${job.status||''} · ${job.id||''}`:'AGUARDANDO')}</span></div><div class="ames-runtime-pipeline">${STAGES.map(stage=>{const info=stageInfo(job,stage,processReady);return`<article class="ames-runtime-stage ${info.state}"><div><b>${stage}</b><span>${Math.max(0,Math.min(100,info.pct))}%</span></div><div class="ames-runtime-bar"><i style="width:${Math.max(0,Math.min(100,info.pct))}%"></i></div><small>${esc(info.label)}</small></article>`}).join('')}</div></section><aside class="mes-context-panel"><div class="section-head"><div><h3>Estado do motor</h3><p>O navegador é apenas a interface.</p></div></div><div class="ames-runtime-kv"><span>Endpoint</span><b>${esc(AGENT_URL)}</b><span>Rede A-MES</span><b>${a.readiness?.ames?'Conectada':'Indisponível'}</b><span>Chrome A-MES</span><b>${a.readiness?.chrome?'Conectado':'Indisponível'}</b><span>Snapshots</span><b>${gate.snapshots}/3 linhas</b><span>Motor</span><b>${a.readiness?.engine?'Disponível':'Indisponível'}</b><span>3022 automático</span><b>${processReady?'Pronto':'A validar'}</b><span>Último backup</span><b>${esc(lastBackup)}</b></div></aside></div><details class="ames-runtime-diagnostics"><summary>Diagnóstico técnico e gate físico</summary><div class="ames-runtime-diagnostics-body"><section class="mes-context-panel ames-runtime-observability" data-no-i18n><div class="section-head"><div><h3>${t('Observabilidade local','Local observability')}</h3><p>${t('Estado técnico do posto sem expor token, payload MES ou dados pessoais.','Technical workstation state without exposing tokens, MES payloads or personal data.')}</p></div></div><div class="ames-runtime-kv"><span>Scheduler</span><b>${esc(diagnostics.scheduler||t('não informado','not reported'))}</b><span>Preflight</span><b>${diagnostics.preflight.known?`${diagnostics.preflight.ok}/${diagnostics.preflight.total} ${t('itens OK','checks OK')}`:t('não informado','not reported')}</b><span>${t('Configuração do posto','Workstation setup')}</span><b>${diagnostics.setupComplete?t('concluída','complete'):t('pendente / não comprovada','pending / unproven')}</b><span>${t('Snapshot mais recente','Latest snapshot')}</span><b>${esc(diagnostics.latestSnapshotId??'—')}</b><span>${t('Linhas frescas','Fresh lines')}</span><b>${diagnostics.freshLines}/${LINE_IDS.length}</b><span>${t('Guardian de rede','Network guardian')}</span><b>${esc(diagnostics.guardian||t('não informado','not reported'))}</b></div><div class="ames-runtime-lines">${lines.map(x=>`<span><b>${t('Linha','Line')} ${x.index}</b> · ${esc(x.snapshot||t('sem snapshot','no snapshot'))} · ${esc(x.source||t('sem fonte','no source'))} · ${esc(x.freshness||t('idade desconhecida','unknown age'))} · ${t('idade','age')} ${ageLabel(x.age_ms)}</span>`).join('')}</div>${diagnostics.error?`<div class="notice warn"><b>${t('Último erro do agente','Latest agent error')}</b><br>${esc(diagnostics.error)}</div>`:''}</section><section class="mes-context-panel ames-factory-gate"><div class="section-head"><div><h3>Gate físico · posto de fábrica</h3><p>Informações de validação ficam recolhidas para não poluir a operação diária.</p></div><span class="ames-gate-pill ${gate.gateClass}">${esc(gate.gateStatus)}</span></div><div class="ames-gate-grid"><div class="ames-gate-checks">${gate.core.map(([label,ok,note])=>`<div class="ames-gate-check ${ok?'ok':'pending'}"><span>${ok?'✓':'—'}</span><div><b>${esc(label)}</b><small>${esc(note)}</small></div></div>`).join('')}</div><div class="ames-gate-proof"><h4>Evidência que ainda exige o posto</h4><p><b>Shift 2114 automático</b><span>Pendente prova física sem seleção manual de OPC.</span></p><p><b>3022 múltiplas passagens / retrabalho</b><span>${processReady?'Capacidade declarada; ainda precisa caso real.':'Bloqueado até agente R12/canônico declarar process_timeline.'}</span></p><p><b>9/9 desktop + mobile</b><span>Pendente validação visual e funcional no ambiente real.</span></p><p><b>Reboot / bootstrap</b><span>Pendente reinício do notebook e recuperação da configuração.</span></p></div></div><p>GREEN físico somente após evidência no posto e aprovação do usuário.</p><div class="ames-gate-foot"><span><b>Origem desta Central</b> ${esc(origin)}</span><span><b>Frontend SHA:</b> ${esc(frontendSha)}${frontendMeta?` · ${esc(frontendMeta)}`:''}</span><span><b>Build agente:</b> ${esc(a.agent_build||a.capabilities?.agent_build||'—')}</span></div></section></div></details>`;
   }
   return {render,clear(){disposed=true;host?.remove();host=null;last='';}};
 }
