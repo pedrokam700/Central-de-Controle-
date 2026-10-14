@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const consoleView=fs.readFileSync('ames/console-view.mjs','utf8');
+const wave3=fs.readFileSync('ames/console-wave3-views.mjs','utf8');
 const architecture=fs.readFileSync('docs/ames/ACTIVE_ARCHITECTURE_MAP.md','utf8');
 const gated=fs.readFileSync('docs/ames/IDEIAS_GATED_USUARIO_2026-10-13.md','utf8');
 
 test('Console keeps one canonical Base Local implementation and exactly nine routes',()=>{
   assert.match(consoleView,/import \{ createBaseConsoleView \} from '\.\/console-base-view\.mjs';/);
   assert.doesNotMatch(consoleView,/createBaseConsoleView[^\n]*from '\.\/console-wave3-views\.mjs'/);
+  assert.doesNotMatch(wave3,/export function createBaseConsoleView\b/,'legacy wave3 module must not keep a second Base Local implementation');
+  assert.doesNotMatch(wave3,/const BASE_ACTIONS\b/,'legacy wave3 module must not keep dead Base Local action registry');
   const ids=[...consoleView.matchAll(/\['(monitor|top3|failures|sn|trace|reuse|process|base|knowledge)'\s*,/g)].map(match=>match[1]);
   assert.deepEqual(ids.slice(0,9),['monitor','top3','failures','sn','trace','reuse','process','base','knowledge']);
   assert.equal(new Set(ids.slice(0,9)).size,9);
