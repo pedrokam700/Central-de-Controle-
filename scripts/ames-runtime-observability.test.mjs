@@ -53,14 +53,10 @@ test('runtime observability fails closed when health fields are unknown',()=>{
 });
 
 test('physical origin gate accepts standalone CLEAN loopback and approved preview only',()=>{
-  assert.deepEqual(physicalOriginStatus('http://127.0.0.1:8765'),{
-    ok:true,mode:'local',note:'pacote CLEAN local no próprio posto'
-  });
-  assert.deepEqual(physicalOriginStatus('http://localhost:8765/'),{
-    ok:true,mode:'local',note:'pacote CLEAN local no próprio posto'
-  });
-  assert.equal(physicalOriginStatus('https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app').mode,'preview');
-  assert.equal(physicalOriginStatus('https://central-cora-v2.vercel.app').ok,false);
-  assert.equal(physicalOriginStatus('https://example.com').ok,false);
-  assert.equal(physicalOriginStatus('file:///C:/Central/index.html').ok,false);
+  assert.deepEqual(physicalOriginStatus('http://127.0.0.1:8765'),{ok:true,mode:'local'});
+  assert.deepEqual(physicalOriginStatus('http://localhost:8765/'),{ok:true,mode:'local'});
+  assert.deepEqual(physicalOriginStatus('https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'),{ok:true,mode:'preview'});
+  assert.deepEqual(physicalOriginStatus('https://central-cora-v2.vercel.app'),{ok:false,mode:'unapproved'});
+  assert.deepEqual(physicalOriginStatus('https://example.com'),{ok:false,mode:'unapproved'});
+  assert.deepEqual(physicalOriginStatus('file:///C:/Central/index.html'),{ok:false,mode:'unapproved'});
 });
