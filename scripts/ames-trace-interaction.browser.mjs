@@ -70,6 +70,9 @@ try{
  assert.match(await trace.locator('[data-trace-result]').innerText(),/eventos coletados: 5/);
  assert(polls.length>=4);assert(polls.every(p=>p.endsWith('/new-job')));
  await page.screenshot({path:path.join(out,'trace-job-result-1920.png'),fullPage:true});
+ // Keep the same scope when retrying an ambiguous failed submission: the
+ // production client deliberately preserves request_id until it is resolved.
+ await page.evaluate(()=>{const f=document.querySelector('[data-agent-form]');for(const c of f.querySelectorAll('[name=lines]'))c.checked=true;f.elements.defectMode.value='selected';f.elements.codes.value='GN01-TX01';});
  fail=true;await page.locator('#monitor [data-agent-action=deep]').click();
  await page.waitForFunction(()=>document.querySelector('[data-agent-strip]').textContent.includes('HTTP 500'));
  assert.match(await page.locator('[data-agent-strip]').innerText(),/Job new-job/);
@@ -77,4 +80,4 @@ try{
  await trace.locator('[data-trace-run]').click();await page.waitForFunction(()=>document.querySelector('[data-trace-status]').textContent.includes('HTTP 500'));
  assert.equal(requests.length,3);assert.deepEqual(errors,[]);
  console.log('PASS: selected failures/counts, unlimited defaults, real click/POST/job/polling, stages/result, new errors visible with prior job in both views.');
-}finally{await browser.close();await new Promise(r=>server.close(r));}
+}catch(error){fs.writeFileSync(path.join(out,'trace-interaction-failure.json'),JSON.stringify({error:error.message,requests,polls,state:await page.evaluate(()=>window.qa?.store.agent()),text:await page.locator('body').innerText()},null,2));throw error;}finally{await browser.close();await new Promise(r=>server.close(r));}

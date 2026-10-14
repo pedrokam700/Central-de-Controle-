@@ -42,3 +42,11 @@ Teste novo `scripts/ames-trace-interaction.browser.mjs` executa clique real → 
 Pendente: navegação Central completa/retorno Console + prova 1920x1080, resultados dos gates e ZIP final. Bootstrap/coletores não alterados. Próxima ação: verificar CI deste checkpoint, corrigir somente falhas observadas e completar navegação autorizada.
 
 Validação local adicional deste checkpoint: `node --test --test-isolation=none scripts/ames-*.test.mjs` — 225/225 PASS.
+
+## Navegação corrigida / primeira execução CI
+
+SHA parcial `23fc75372e14c5be267fd95496b782e31a6d6060`: Candidate Gate run `38570507980` GREEN, inclusive Windows. Full Quality run `38570507950`: estático e Firestore GREEN; experiência 9 views/PT/EN/temas/mobile GREEN. O novo browser provou seleção, clique/POST, job novo, polling 3074→2114→3022, resumo e erro HTTP no Monitoramento; falhou só no último caso, porque a fixture tentou repetir uma submissão falha com escopo diferente, corretamente bloqueado pelo request_id existente. Ajustado o teste para repetir o mesmo escopo nas duas views, sem remover essa proteção de idempotência.
+
+Retorno local agora navega à entrada completa `?online=1`, carregando offline-bootstrap/app.js existentes. Removida a home placeholder; grid local corrigido para uma coluna enquanto a sidebar está oculta. A Central completa mantém Auth/cache originais (primeiro acesso da conta ainda exige conexão), com links explícitos ao Console MES local na navegação e na tela de login. Nenhuma alteração em app.js/Auth ou bootstrap Windows.
+
+Adicionado teste browser da entrada real, app.js real e layout 1920x1080, com Firebase exclusivamente sintético no transporte de teste. Valida navegação Início→Tarefas→Início e retorno Console offline. 225/225 contratos locais continuam PASS. Próximo passo exato: executar ambos os gates neste commit, examinar logs/screenshots e corrigir apenas regressões comprovadas. Gate físico da interface continua RED aguardando candidato automatizadamente GREEN.

@@ -75,7 +75,7 @@ def build(destination, development=False):
  import re
  html=re.sub(r'<script id="central-runtime-boot-guard">[\s\S]*?</script>','',html)
  payload[index]=html.encode()
- payload['frontend/Central-de-Controle-/local-entry.mjs']=b"if(!['127.0.0.1','localhost'].includes(location.hostname))throw Error('Local workstation requires loopback');\nif(new URLSearchParams(location.search).has('online'))await import('./offline-bootstrap.mjs?v=15.1.13.49');else await import('./core/local-workstation.mjs');\n"
+ payload['frontend/Central-de-Controle-/local-entry.mjs']=b"import './core/local-entry.mjs';\n"
  extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat'] or k.startswith('suporte/ames-workstation/')}
  payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty),'standalone_clean':True,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES)},indent=2).encode()
  for doc in (ROOT/'docs/ames').glob('integrated-v5*'):
