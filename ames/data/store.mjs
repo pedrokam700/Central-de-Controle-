@@ -1,6 +1,7 @@
 import { immutable, instant, normalizeLegacySnapshot, productKey, requireLine, LINE_IDS } from './contract.mjs';
 import { normalizeAgentRead } from './agent-contract.mjs';
 import {normalizeCanonical,CANONICAL_SCHEMA} from './canonical.mjs';
+import {SOURCE_STATE} from './source-provenance.mjs';
 
 const EMPTY_CONTEXT=Object.freeze({line_id:null,lines:[],period:null,product:null,shift:null,defect:null});
 const clean=value=>value===null||value===undefined||value===''?null:String(value);
@@ -50,10 +51,11 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
     requireLine(line);
     const snapshot = (localConnected && local.get(line)) || synced.get(line) || remote.get(line) || local.get(line) || null;
     const source = !snapshot ? 'none' : snapshot === local.get(line) ? (localConnected ? 'local' : 'local_cache') : 'remote';
+    const source_state=!snapshot?SOURCE_STATE.NOT_COLLECTED:source==='local_cache'?SOURCE_STATE.CACHED:SOURCE_STATE.OK;
     const collected = instant(snapshot?.collected_at);
     const age = collected === null ? null : now() - collected;
     return immutable({
-      source, snapshot, local_connected: localConnected,
+      source, source_state, snapshot, local_connected: localConnected,
       age_ms: age,
       freshness: age === null || age < 0 ? 'unknown' : age > maxAgeMs || source === 'local_cache' ? 'stale' : 'fresh'
     });
