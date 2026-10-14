@@ -1,5 +1,6 @@
 import {LINE_IDS} from './data/contract.mjs';
 import {readHardeningDiagnostics} from './agent-diagnostics.mjs';
+import {read3012Status} from './agent-3012-health.mjs';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const t=(pt,en)=>typeof document!=='undefined'&&document.documentElement?.lang?.startsWith('en')?en:pt;
@@ -12,7 +13,7 @@ const rows=(snapshot,name)=>{
 };
 const status=(tone,label,detail)=>({tone,label,detail});
 
-function sourceModel(store,source){
+function sourceModel(store,source,repairStatus=null){
   const agent=store.agent();
   const reads=LINE_IDS.map((line,index)=>({line,index:index+1,read:store.read(line)}));
   const snapshots=reads.filter(x=>x.read.snapshot);
@@ -51,12 +52,29 @@ function sourceModel(store,source){
   const allOccurrences=snapshots.flatMap(x=>rows(x.read.snapshot,'3028'));
   const withEvidence=allOccurrences.filter(row=>Array.isArray(row?.repair_evidence_3012)&&row.repair_evidence_3012.length>0);
   const count=withEvidence.length;
-  const state=!allOccurrences.length?status('unknown',t('Sem base','No base data'),t('Não há ocorrências para medir cobertura 3012.','There are no occurrences to assess 3012 coverage.')):count?status(count===allOccurrences.length?'ok':'partial',count===allOccurrences.length?t('Coberto','Covered'):t('Parcial','Partial'),`${count}/${allOccurrences.length} ${t('ocorrências com evidência 3012','occurrences with 3012 evidence')}`):status('unknown',t('Não comprovado','Not proven'),t('Nenhuma evidência 3012 foi associada a estas ocorrências; isso não equivale a zero reparos.','No 3012 evidence is linked to these occurrences; this does not mean zero repairs.'));
-  return {source,label:'3012',name:t('Reparo / AT','Repair / AT'),count,state,latest,reads,unit:t('ocorrências com evidência','occurrences with evidence')};
+  const cache=repairStatus?.status==='ok'?repairStatus.local:null;
+  const cacheRows=Number.isFinite(Number(cache?.rows))?Number(cache.rows):0;
+  const cacheSns=Number.isFinite(Number(cache?.coverageSns))?Number(cache.coverageSns):0;
+  const cacheIntervals=Number.isFinite(Number(cache?.coverageIntervals))?Number(cache.coverageIntervals):0;
+  const hasCacheCoverage=cacheSns>0||cacheIntervals>0;
+  let state;
+  if(!allOccurrences.length){
+    state=hasCacheCoverage
+      ?status('unknown',t('Cache local disponível','Local cache available'),t(`SQLite 3012 possui cobertura registrada para ${cacheSns} SN(s), mas não há ocorrências 3028 neste snapshot para cruzar.`,`3012 SQLite has recorded coverage for ${cacheSns} SN(s), but this snapshot has no 3028 occurrences to correlate.`))
+      :status('unknown',t('Sem base','No base data'),t('Não há ocorrências para medir cobertura 3012.','There are no occurrences to assess 3012 coverage.'));
+  }else if(count){
+    const detail=`${count}/${allOccurrences.length} ${t('ocorrências com evidência 3012','occurrences with 3012 evidence')}${hasCacheCoverage?t(` · cache local: ${cacheSns} SN(s) / ${cacheIntervals} intervalo(s)`,` · local cache: ${cacheSns} SN(s) / ${cacheIntervals} interval(s)`):''}`;
+    state=status(count===allOccurrences.length?'ok':'partial',count===allOccurrences.length?t('Coberto','Covered'):t('Parcial','Partial'),detail);
+  }else if(hasCacheCoverage){
+    state=status('partial',t('Sem vínculo neste snapshot','No link in this snapshot'),t(`Nenhuma ocorrência atual tem evidência 3012 associada. O cache local contém ${cacheRows} registro(s) e cobertura para ${cacheSns} SN(s), mas isso não prova cobertura das PCBAs atuais.`,`No current occurrence has linked 3012 evidence. Local cache contains ${cacheRows} record(s) and coverage for ${cacheSns} SN(s), but this does not prove coverage of the current PCBAs.`));
+  }else{
+    state=status('unknown',t('Não comprovado','Not proven'),t('Nenhuma evidência 3012 foi associada e não há cobertura exata registrada no cache local. Isso não equivale a zero reparos.','No 3012 evidence is linked and no exact-query coverage is recorded in the local cache. This does not mean zero repairs.'));
+  }
+  return {source,label:'3012',name:t('Reparo / AT','Repair / AT'),count,state,latest,reads,unit:t('ocorrências com evidência','occurrences with evidence'),cache:repairStatus?.status==='ok'?{...repairStatus.local,factoryValidated:repairStatus.factoryValidated,amesStartDate:repairStatus.amesStartDate}:null};
 }
 
-export function buildDataHealth(store){
-  return ['3028','3074','2114','3022','3012'].map(source=>sourceModel(store,source));
+export function buildDataHealth(store,repairStatus=null){
+  return ['3028','3074','2114','3022','3012'].map(source=>sourceModel(store,source,repairStatus));
 }
 
 export function buildSecurityHealth(diagnostics){
@@ -76,7 +94,7 @@ export function buildSecurityHealth(diagnostics){
 }
 
 export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
-  let last='',security=null,securityFor='',securityLoading=false,disposed=false;
+  let last='',security=null,securityFor='',securityLoading=false,repairStatus=null,repairFor='',repairLoading=false,disposed=false;
   async function loadSecurity(agent){
     if(disposed||securityLoading||agent.status!=='connected')return;
     const identity=String(agent.agent_build||agent.capabilities?.agent_build||'connected');
@@ -86,18 +104,37 @@ export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
     catch(error){security={status:'unavailable',reason:error?.name==='AbortError'?'aborted':'error'};}
     finally{securityLoading=false;if(!disposed){last='';render();}}
   }
+  async function loadRepairStatus(agent){
+    if(disposed||repairLoading||agent.status!=='connected')return;
+    const identity=String(agent.agent_build||agent.capabilities?.agent_build||'connected');
+    if(repairFor===identity&&repairStatus)return;
+    repairLoading=true;repairFor=identity;
+    try{repairStatus=await read3012Status();}
+    catch(error){repairStatus={status:'unavailable',reason:error?.name==='AbortError'?'aborted':'error'};}
+    finally{repairLoading=false;if(!disposed){last='';render();}}
+  }
   function render(){
     if(disposed)return;
-    const model=buildDataHealth(store),agent=store.agent();
-    if(agent.status==='connected')void loadSecurity(agent);else if(security||securityFor){security=null;securityFor='';securityLoading=false;}
-    const securityState=buildSecurityHealth(security);
-    const key=JSON.stringify([model,agent.status,agent.agent_build,security,securityLoading,typeof document==='undefined'?'':document.documentElement.lang]);if(key===last)return;last=key;
+    const agent=store.agent();
+    if(agent.status==='connected'){void loadSecurity(agent);void loadRepairStatus(agent);}
+    else{
+      if(security||securityFor){security=null;securityFor='';securityLoading=false;}
+      if(repairStatus||repairFor){repairStatus=null;repairFor='';repairLoading=false;}
+    }
+    const model=buildDataHealth(store,repairStatus),securityState=buildSecurityHealth(security);
+    const key=JSON.stringify([model,agent.status,agent.agent_build,security,securityLoading,repairStatus,repairLoading,typeof document==='undefined'?'':document.documentElement.lang]);if(key===last)return;last=key;
     root.setAttribute('data-no-i18n','');
     root.innerHTML=`<section class="mes-context-panel ames-data-health"><div class="section-head"><div><h3>${t('Saúde e cobertura dos dados','Data health and coverage')}</h3><p>${t('Mostra o que foi realmente carregado. Ausência de evidência nunca é apresentada como zero.','Shows what was actually loaded. Missing evidence is never presented as zero.')}</p></div><span class="ames-health-agent ${agent.status==='connected'?'ok':'unknown'}">${agent.status==='connected'?t('Agente conectado','Agent connected'):t('Dados compartilhados / cache','Shared data / cache')}</span></div><div class="ames-data-health-grid">${model.map(item=>`<article class="ames-health-card ${item.state.tone}"><div class="ames-health-card-head"><div><b>${esc(item.label)}</b><span>${esc(item.name)}</span></div><span class="ames-health-state">${esc(item.state.label)}</span></div><strong>${item.count}</strong><small>${esc(item.unit)}</small><p>${esc(item.state.detail)}</p><footer><span>${esc(item.latest||t('coleta não informada','collection not provided'))}</span><button type="button" class="button secondary" data-health-evidence="${esc(item.source)}">${t('Ver evidência','View evidence')}</button></footer></article>`).join('')}</div><div class="notice ${securityState.tone==='partial'?'warn':''}" data-security-health><b>${t('Segurança local','Local security')} · ${esc(securityState.label)}</b><br>${esc(securityState.detail)}<br><small>${t('Origens remotas autorizadas','Authorized remote origins')}: ${securityState.remote??'—'} · ${t('Entradas rejeitadas','Rejected entries')}: ${securityState.rejected??'—'}${securityState.mode?` · ${esc(securityState.mode)}`:''}</small></div></section>`;
     root.querySelectorAll('[data-health-evidence]').forEach(button=>button.addEventListener('click',()=>{
       const item=model.find(x=>x.source===button.dataset.healthEvidence);if(!item)return;
-      onEvidence({title:`${item.label} · ${item.name}`,description:item.state.detail,fields:[[t('Estado','Status'),item.state.label],[t('Registros visíveis','Visible records'),item.count],[t('Última coleta','Last collection'),item.latest||'—'],[t('Build do agente','Agent build'),agent.agent_build||agent.capabilities?.agent_build||'—']],lines:item.reads.map(x=>({label:`${t('Linha','Line')} ${x.index} · ${x.line}`,snapshot:x.read.snapshot?.snapshot_id||t('sem snapshot','no snapshot'),freshness:x.read.freshness,detail:x.read.source})),notes:[t('Cobertura mede evidência disponível no snapshot atual. Zero registros pode ser válido; quando a coleta não pode ser comprovada, o estado fica desconhecido/parcial.','Coverage reflects evidence available in the current snapshot. Zero records can be valid; when collection cannot be proven, status remains unknown/partial.')]});
+      const fields=[[t('Estado','Status'),item.state.label],[t('Registros visíveis','Visible records'),item.count],[t('Última coleta','Last collection'),item.latest||'—'],[t('Build do agente','Agent build'),agent.agent_build||agent.capabilities?.agent_build||'—']];
+      const notes=[t('Cobertura mede evidência disponível no snapshot atual. Zero registros pode ser válido; quando a coleta não pode ser comprovada, o estado fica desconhecido/parcial.','Coverage reflects evidence available in the current snapshot. Zero records can be valid; when collection cannot be proven, status remains unknown/partial.')];
+      if(item.source==='3012'&&item.cache){
+        fields.push([t('Registros no SQLite 3012','3012 SQLite records'),item.cache.rows??'—'],[t('SNs com cobertura registrada','SNs with recorded coverage'),item.cache.coverageSns??'—'],[t('Intervalos de cobertura','Coverage intervals'),item.cache.coverageIntervals??'—'],['AMES_START_DATE',item.cache.amesStartDate||'—'],[t('Validação física 3012','3012 physical validation'),item.cache.factoryValidated?t('validada','validated'):t('pendente','pending')]);
+        notes.push(t('Cobertura registrada no cache prova apenas os intervalos exatos consultados para aquelas SNs; não prova automaticamente que todas as PCBAs do snapshot atual foram consultadas.','Recorded cache coverage proves only the exact queried intervals for those SNs; it does not automatically prove that every PCBA in the current snapshot was queried.'));
+      }
+      onEvidence({title:`${item.label} · ${item.name}`,description:item.state.detail,fields,lines:item.reads.map(x=>({label:`${t('Linha','Line')} ${x.index} · ${x.line}`,snapshot:x.read.snapshot?.snapshot_id||t('sem snapshot','no snapshot'),freshness:x.read.freshness,detail:x.read.source})),notes});
     }));
   }
-  return {render,clear(){disposed=true;root?.replaceChildren();root?.removeAttribute('data-no-i18n');last='';security=null;securityFor='';}};
+  return {render,clear(){disposed=true;root?.replaceChildren();root?.removeAttribute('data-no-i18n');last='';security=null;securityFor='';repairStatus=null;repairFor='';}};
 }
