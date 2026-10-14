@@ -1,8 +1,7 @@
 import {LINE_IDS} from './data/contract.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
+import {BASE_PAGE_SIZES,BASE_MAX_ROWS,normalizeBasePageSize,baseIncrementalLimit,basePageWindow} from './base-paging.mjs';
 
-const PAGE_SIZES=[50,100,250];
-const MAX_ROWS=100000;
 const lineOptions=selected=>LINE_IDS.map((line,i)=>`<option value="${line}"${selected===line?' selected':''}>Linha ${i+1} · ${line}</option>`).join('');
 const fmt=value=>value===null||value===undefined||value===''?'—':String(value);
 const sectionHead=(title,subtitle='',right='')=>`<div class="section-head"><div><h3>${esc(title)}</h3>${subtitle?`<p>${esc(subtitle)}</p>`:''}</div>${right}</div>`;
@@ -42,11 +41,10 @@ export function createBaseConsoleView(root,store,client){
   }
 
   function pagerModel(rows,total){
-    const safeTotal=Number.isFinite(Number(total))?Math.max(0,Number(total)):rows.length;
-    const maxPage=Math.max(0,Math.ceil(safeTotal/pageSize)-1);
-    page=clamp(page,0,maxPage);
-    const start=page*pageSize,end=Math.min(start+pageSize,rows.length,safeTotal);
-    return {total:safeTotal,maxPage,start,end,pageRows:rows.slice(start,end),hasPrev:page>0,hasNext:end<safeTotal};
+    const fallbackTotal=Number.isFinite(Number(total))?Number(total):rows.length;
+    const model=basePageWindow(fallbackTotal,page,pageSize,rows.length);
+    page=model.page;pageSize=model.pageSize;
+    return {...model,pageRows:rows.slice(model.start,model.end),maxPage:model.pages-1};
   }
 
   function resultView(){
@@ -55,26 +53,26 @@ export function createBaseConsoleView(root,store,client){
     if(!result){host.innerHTML='<div class="ames-empty ames-empty-large"><span>▦</span><h3>Base local pronta para inspeção</h3><p>Escolha uma ação acima. Tabelas grandes são paginadas para não montar milhares de linhas no navegador.</p></div>';return;}
     const rows=normalizeRows(result),cols=Object.keys(rows[0]||{}).slice(0,12).map(k=>[k,k]);
     const paged=active==='dataset'&&result.error!==true;
-    const model=paged?pagerModel(rows,result.total):{total:rows.length,start:0,end:rows.length,pageRows:rows,hasPrev:false,hasNext:false,maxPage:0};
+    const model=paged?pagerModel(rows,result.total):{total:rows.length,start:0,end:rows.length,displayStart:rows.length?1:0,pageRows:rows,hasPrev:false,hasNext:false,maxPage:0};
     const subtitle=paged
-      ?`${model.total} registro(s) no dataset · exibindo ${model.total?model.start+1:0}–${model.end}. O navegador mantém no máximo ${pageSize} linhas visíveis por página.`
+      ?`${model.total} registro(s) no dataset · exibindo ${model.displayStart}–${model.end}. O navegador mantém no máximo ${pageSize} linhas visíveis por página.`
       :`${rows.length} registro(s) retornados na leitura atual.`;
-    const pager=paged&&model.total?`<div class="ames-base-pager" data-base-pager><span>${model.start+1}–${model.end} de ${model.total}</span><label>Por página<select data-base-page-size>${PAGE_SIZES.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><button type="button" class="button secondary" data-base-prev${model.hasPrev?'':' disabled'}>Anterior</button><span>Página ${page+1} de ${model.maxPage+1}</span><button type="button" class="button secondary" data-base-next${model.hasNext?'':' disabled'}>Próxima</button></div>`:'';
+    const pager=paged&&model.total?`<div class="ames-base-pager" data-base-pager><span>${model.displayStart}–${model.end} de ${model.total}</span><label>Por página<select data-base-page-size>${BASE_PAGE_SIZES.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><button type="button" class="button secondary" data-base-prev${model.hasPrev?'':' disabled'}>Anterior</button><span>Página ${page+1} de ${model.maxPage+1}</span><button type="button" class="button secondary" data-base-next${model.hasNext?'':' disabled'}>Próxima</button></div>`:'';
     host.innerHTML=`<section class="mes-context-panel ames-base-result">${sectionHead(result.title||active,subtitle)}${table(model.pageRows,cols,'A operação foi concluída, mas não retornou linhas para este escopo.')}${pager}${paged&&result.loaded_limited?'<p class="ames-base-page-note">Leitura incremental do SQLite: novas páginas são buscadas somente quando necessário.</p>':''}</section>`;
     host.querySelector('[data-base-prev]')?.addEventListener('click',()=>gotoPage(page-1));
     host.querySelector('[data-base-next]')?.addEventListener('click',()=>gotoPage(page+1));
-    host.querySelector('[data-base-page-size]')?.addEventListener('change',event=>{pageSize=Number(event.target.value)||100;page=0;void loadDatasetPage();});
+    host.querySelector('[data-base-page-size]')?.addEventListener('change',event=>{pageSize=normalizeBasePageSize(event.target.value);page=0;void loadDatasetPage();});
   }
 
   async function connectedDataset(value,serial){
-    const requested=Math.min(MAX_ROWS,(page+1)*pageSize);
+    const requested=baseIncrementalLimit(page,pageSize,BASE_MAX_ROWS);
     let total=null;
     try{
       const catalog=await client.auxiliary('catalog',{line:value.line,snapshot_id:value.snapshot_id});
       const rows=Array.isArray(catalog?.datasets)?catalog.datasets:[];
       const match=rows.find(row=>String(row?.dataset||'')===String(value.dataset));
       const count=Number(match?.rows??match?.count);
-      if(Number.isFinite(count)&&count>=0)total=count;
+      if(Number.isFinite(count)&&count>=0)total=Math.min(BASE_MAX_ROWS,count);
     }catch(error){
       if(error?.name==='AbortError')throw error;
     }
@@ -82,7 +80,7 @@ export function createBaseConsoleView(root,store,client){
     const data=await client.auxiliary('dataset',{...value,limit:requested});
     if(serial!==requestSerial)return null;
     const rows=normalizeRows(data);
-    if(total===null)total=rows.length<requested?rows.length:Math.min(MAX_ROWS,requested+(rows.length===requested?pageSize:0));
+    if(total===null)total=rows.length<requested?rows.length:Math.min(BASE_MAX_ROWS,requested+(rows.length===requested?pageSize:0));
     return {title:'Dataset',...data,rows,total,loaded_limited:rows.length<total};
   }
 
@@ -108,8 +106,8 @@ export function createBaseConsoleView(root,store,client){
     if(active!=='dataset'||busy)return;
     const total=Number(result?.total??normalizeRows(result).length),maxPage=Math.max(0,Math.ceil(total/pageSize)-1);
     const target=clamp(Number(next)||0,0,maxPage);if(target===page)return;page=target;
-    const rows=normalizeRows(result),need=(page+1)*pageSize;
-    if(store.agent().status==='connected'&&rows.length<Math.min(need,total))await loadDatasetPage();else resultView();
+    const rows=normalizeRows(result),window=basePageWindow(total,page,pageSize,rows.length);
+    if(store.agent().status==='connected'&&window.needsMore)await loadDatasetPage();else resultView();
   }
 
   async function run(name){
