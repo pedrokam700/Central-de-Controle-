@@ -16,8 +16,10 @@ import candidate_config
 import hardening
 import local_security
 import operational_calendar
+import performance_indexes
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
+PERFORMANCE_INDEX_STATE = performance_indexes.install(entry.a.STORE)
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)
@@ -158,6 +160,7 @@ class HardenedHandler(entry.Handler):
                         "operational_calendar": operational_calendar.public_contract(entry.a.CONFIG),
                         "current_shift": operational_calendar.shift_for(entry.a.CONFIG),
                         "ames_start_date": entry.a.CONFIG.get("ames_start_date") or None,
+                        "performance_indexes": performance_indexes.health(entry.a.STORE),
                         **hardening.health(entry.a.STORE),
                     }
                 )
