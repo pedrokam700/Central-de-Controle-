@@ -151,6 +151,17 @@ class AmesNavigation:
             opc.goto(base + "#" + route, wait_until="domcontentloaded", timeout=int(timeout_s * 1000))
         return self._wait_view(opc, route, 'input[name="snImei"]:visible', timeout_s)
 
-    def ensure_current_shift_2114(self, page=None) -> str:
+    def ensure_current_shift_2114(self, page=None, strict: bool = False):
+        """Best-effort preparation of the 2114 shift selector.
+
+        A missing/unrecognized Shift is a 2114-source failure, not a reason to
+        suppress 3074/3022.  Callers that truly need a hard prerequisite can pass
+        strict=True; normal composite collection degrades per source.
+        """
         from ames.shift_2114 import ensure_shift
-        return ensure_shift(page or self.ensure_2114())
+        try:
+            return ensure_shift(page or self.ensure_2114())
+        except Exception:
+            if strict:
+                raise
+            return None
