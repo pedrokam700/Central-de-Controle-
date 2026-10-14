@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import {createAmesStore} from '../ames/data/store.mjs';
 import {buildLiveSnForensics} from '../ames/data/sn-forensics.mjs';
 import {scopedDailyRows} from '../ames/daily-failure-summary.mjs';
+import {source3012State} from '../ames/console-sn-offline-fastlane.mjs';
+
+globalThis.document??={documentElement:{lang:'pt-BR'}};
 
 const snapshot=(line,id)=>({
   kind:'ames_shared_snapshot',line,schema:'central-v2-ames-line-v1',
@@ -72,6 +75,17 @@ test('SN investigation preserves successful 3074 and 3022 evidence when 2114 is 
   assert.equal(model.materials.length,1);
   assert.equal(model.materials[0].item_sn,'MAT-1');
   assert.equal(model.process.length,1);
+});
+
+test('3012 source state distinguishes not collected, proven zero, error and cache evidence',()=>{
+  assert.equal(source3012State({}).kind,'unknown','missing 3012 is unknown, never zero');
+  const zero=source3012State({trace_3012:{rows:[]}});
+  assert.equal(zero.kind,'ok');
+  assert.equal(zero.proven_zero,true,'an explicit successful rows=[] may represent real zero');
+  assert.equal(source3012State({trace_3012:{status:'error',error:'boom'}}).kind,'bad');
+  const cached=source3012State({local_snapshot:{repair_3012:[{repair_user:'TECH'}]}});
+  assert.equal(cached.kind,'ok');
+  assert.match(cached.label,/Cache local/);
 });
 
 test('operational view adapters read and write one shared active line',()=>{
