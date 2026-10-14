@@ -41,6 +41,11 @@ export function withTraceSelectionHelper(view,root,store){
     const all=panel.querySelector('[data-trace-scope-mode="all"]'),chosen=panel.querySelector('[data-trace-scope-mode="selected"]');
     if(all)all.checked=codeMode==='all';if(chosen)chosen.checked=codeMode==='selected';
   }
+  function syncEvidenceLine(){
+    const select=root.querySelector('[data-trace-line]'),line=store.context?.().line_id||store.preferredLine?.();
+    if(!select||!line||select.value===line)return;
+    select.value=line;select.dispatchEvent(new Event('change',{bubbles:true}));
+  }
   function rebuild(){
     const form=root.querySelector('[data-trace-form]'),input=form?.querySelector('[name=codes]');if(!form||!input)return;
     formRef=form;inputRef=input;
@@ -53,8 +58,9 @@ export function withTraceSelectionHelper(view,root,store){
     panel.onchange=e=>{const mode=e.target.closest('[data-trace-scope-mode]');if(mode?.dataset.traceScopeMode==='all'){codeMode='all';input.value='';syncChecks(panel,input);return;}if(mode?.dataset.traceScopeMode==='selected'){codeMode='selected';syncChecks(panel,input);if(!selectedCodes(input).length)panel.querySelector('[data-trace-code]')?.focus();return;}if(e.target.matches('[data-trace-code]')){codeMode='selected';input.value=[...panel.querySelectorAll('[data-trace-code]:checked')].map(x=>x.value).join(', ');syncChecks(panel,input);}};
   }
   function polishStatus(){const status=root.querySelector('[data-trace-status]');if(!status)return;const existing=status.querySelector('[data-trace-human-error]');if(existing)existing.remove();const raw=status.textContent?.trim()||'',friendly=humanTraceError(raw);if(!friendly)return;status.innerHTML=`<div class="notice warn" data-trace-human-error><b>${t('Coleta parcial','Partial collection')}</b><br><span>${esc(friendly)}</span><details class="ames-technical-detail"><summary>${t('Detalhes técnicos','Technical details')}</summary><pre>${esc(raw)}</pre></details></div>`;}
-  const repaint=()=>{rebuild();polishStatus();};
+  const repaint=()=>{syncEvidenceLine();rebuild();polishStatus();};
   const runGuard=e=>{const run=e.target.closest('[data-trace-run]');if(!run||codeMode!=='selected'||selectedCodes(inputRef).length)return;e.preventDefault();e.stopImmediatePropagation();const status=root.querySelector('[data-trace-status]');if(status)status.innerHTML=`<div class="notice warn"><b>${t('Falhas selecionadas:','Selected failures:')}</b> ${t('marque ao menos uma falha antes de iniciar. Nenhuma coleta foi enviada.','select at least one failure before starting. No collection was sent.')}</div>`;formRef?.querySelector('[data-trace-code]')?.focus();};
-  function wire(){const form=root.querySelector('[data-trace-form]');if(!form||wired)return;wired=true;formRef=form;form.addEventListener('change',e=>{if(e.target.matches('[name=lines]'))rebuild();});const input=form.querySelector('[name=codes]');inputRef=input;input?.addEventListener('input',()=>{codeMode=selectedCodes(input).length?'selected':'all';const panel=form.querySelector('[data-trace-code-helper]');if(panel)syncChecks(panel,input);});root.addEventListener('click',runGuard,true);langObserver=new MutationObserver(repaint);langObserver.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});}
-  return Object.freeze({render(){view.render();wire();repaint();},clear(){langObserver?.disconnect();langObserver=null;root.removeEventListener('click',runGuard,true);view.clear?.();wired=false;formRef=null;inputRef=null;codeMode='all';}});
+  const contextLineChange=e=>{if(e.target.matches('[data-trace-line]'))store.updateContext?.({line_id:e.target.value});};
+  function wire(){const form=root.querySelector('[data-trace-form]');if(!form||wired)return;wired=true;formRef=form;form.addEventListener('change',e=>{if(e.target.matches('[name=lines]'))rebuild();});const input=form.querySelector('[name=codes]');inputRef=input;input?.addEventListener('input',()=>{codeMode=selectedCodes(input).length?'selected':'all';const panel=form.querySelector('[data-trace-code-helper]');if(panel)syncChecks(panel,input);});root.addEventListener('change',contextLineChange);root.addEventListener('click',runGuard,true);langObserver=new MutationObserver(repaint);langObserver.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});}
+  return Object.freeze({render(){view.render();wire();repaint();},clear(){langObserver?.disconnect();langObserver=null;root.removeEventListener('change',contextLineChange);root.removeEventListener('click',runGuard,true);view.clear?.();wired=false;formRef=null;inputRef=null;codeMode='all';}});
 }
