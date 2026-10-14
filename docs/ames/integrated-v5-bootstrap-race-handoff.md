@@ -37,3 +37,13 @@ SHA testado: `8fb07d777acb2e0522994eb6a26782ca47ee1ad5`. Candidate [38563132437]
 Isso reproduz a causa reportada na fábrica. Full Quality do mesmo SHA passou (run `38563132129`). A leitura de ExitCode da fixture ficou nula no Windows PowerShell; este checkpoint retém explicitamente o handle para preservar esse diagnóstico. O resultado da reprodução independe desse código de saída: estado e stderr comprovam o build errado.
 
 Arquivos alterados neste checkpoint: teste Windows e este handoff. Próximo passo: publicar correção isolada do launcher, executar os dois gates e analisar evidências do retry e PID real. Gate físico PENDING; ZIP final ainda não liberado.
+
+## Checkpoint 2 — correção estrutural
+
+Pai remoto reconciliado: `ade7373345348246bbcb4c1cbdaaae7014ffae3c` (reprodução e evidência). Este commit altera somente o launcher canônico, seu contrato de teste, asserções da fixture Windows e este handoff.
+
+Implementado: mutex global de startup; inventário de processos com argv exato, caminho e dois hashes congelados do pacote A-MES; limpeza também de conhecidos sem listener e wrappers antigos conhecidos; serviço desconhecido bloqueia sem ser morto. Antes de encerrar, revalida nascimento/PID/entrypoint e usa handle verificado. Nenhum arquivo de CLEAN antigo é alterado.
+
+PID iniciado é o intérprete real, evitando o redirecionador do venv Windows: usa o mecanismo `sys._base_executable` + `__PYVENV_LAUNCHER__` do CPython multiprocessing. Exige listener e `/ready.pid` iguais a esse PID, package_root exato e H1 autenticado com token da pasta atual, com estabilidade e nova checagem de posse. Reuso só de PID previamente registrado pelo launcher com mesmo nascimento/entrypoint. Até 3 tentativas (máximo configurável 5); reocupação registra PID/caminho e passa pela mesma limpeza controlada. Estado atual atômico, histórico por invocação, estado anterior e stdout/stderr por tentativa preservados. Tokens nunca são registrados.
+
+Validação local: `node --test scripts/ames-workstation-bootstrap.test.mjs`, 11/11 PASS. Reprodução Windows anterior está comprovada acima; os gates Windows/Full Quality desta implementação ainda PENDING até o Actions deste commit. Próxima ação exata: inspecionar ambos os runs e baixar os logs/state da disputa; corrigir somente falhas observadas, registrar cada resultado e repetir gates. Não gerar ZIP final até ambos PASS; físico continua PENDING.

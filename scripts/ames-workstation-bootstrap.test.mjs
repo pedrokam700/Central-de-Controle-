@@ -73,7 +73,14 @@ test('startup real e idempotente: processo e capturado, limpo, logado e independ
   assert.match(starter,/api\/v1\/ready/);
   assert.match(starter,/api\/v1\/v2\/capabilities/);
   assert.doesNotMatch(starter,/Invoke-RestMethod\s+'http:\/\/127\.0\.0\.1:8765\/api\/v1\/health'/);
-  assert.doesNotMatch(starter,/pythonw\.exe/i);
+  assert.match(starter,/Start-Process -FilePath \$runtime\.base/);
+  assert.match(starter,/__PYVENV_LAUNCHER__/);
+  assert.match(starter,/\[int\]\$Ready\.pid -ne \$ExpectedPid/);
+  assert.match(starter,/Assert-PortOwner/);
+  assert.match(starter,/Global\\CentralAMES\.CanonicalBootstrap/);
+  assert.match(starter,/\$script:attempt -le \$MaxAttempts/);
+  assert.match(starter,/UNKNOWN_OWNER/);
+  assert.match(starter,/agent_bootstrap\.pyw/);
   assert.doesNotMatch(starter,/0\.5\.24\*|0\.5\.25\*/);
 });
 

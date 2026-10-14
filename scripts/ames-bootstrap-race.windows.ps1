@@ -61,6 +61,12 @@ try{
  Record 'final_ready' $ready
  if($ready.agent_build -ne 'CANONICAL-R11-BATCH' -or [int]$ready.pid -ne [int]$state.pid){throw 'Ready PID differs from the launcher-owned canonical PID'}
  if($state.status -ne 'ready'){throw 'State not ready'}
+ $spawn=@($state.events|Where-Object {$_.event -eq 'canonical_spawned'})
+ if($spawn.Count -lt 2 -or [int]$spawn[-1].evidence.pid -ne [int]$ready.pid){throw 'Retry did not retain the exact launcher-created PID'}
+ if([int]$state.attempt -lt 2 -or [int]$state.attempt -gt [int]$state.max_attempts){throw 'Retry count outside bounded contract'}
+ if(-not @($state.events|Where-Object {$_.event -eq 'port_reoccupied' -and [int]$_.evidence.pid -eq $racer.Id}).Count){throw 'Reoccupying PID/path not recorded'}
+ Record 'canonical_won' @{pid=$ready.pid;attempt=$state.attempt;spawned_pids=@($spawn|ForEach-Object {$_.evidence.pid})}
+
  $token=(Get-Content (Join-Path $Root 'ames-agent\data\local_agent_token') -Raw).Trim();$headers=@{'X-Central-Agent-Token'=$token}
  $cap=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/v2/capabilities' -Headers $headers -TimeoutSec 5
  if([IO.Path]::GetFullPath($cap.package_root).TrimEnd([char]92) -ine $Root.TrimEnd([char]92)){throw 'Wrong package accepted'}
