@@ -85,11 +85,19 @@ try{
   await shift.selectOption('1st Shift');
   await page.locator('[data-daily-shift-unclassified]').waitFor();
   await page.waitForFunction(()=>document.querySelector('[data-top3-analytics] [data-dfa-kpi="shift1"] .stat-value')?.textContent?.trim()==='—');
-  assert.equal(await page.locator('[data-top3-analytics] [data-dfa-kpi="shift1"] .stat-value').innerText(),'—');
-  assert((await page.locator('[data-top3-analytics] .ames-dfa-rank-item').count())>0,'unclassified shift must not erase the daily ranking');
+  const shift1Kpi=page.locator('[data-top3-analytics] [data-dfa-kpi="shift1"]');
+  const shift2Kpi=page.locator('[data-top3-analytics] [data-dfa-kpi="shift2"]');
+  assert.equal(await shift1Kpi.locator('.stat-value').innerText(),'—');
+  assert.equal(await shift1Kpi.isDisabled(),true,'1st-shift drilldown must be disabled without 3022 classification');
+  assert.equal(await shift2Kpi.isDisabled(),true,'2nd-shift drilldown must be disabled without 3022 classification');
+  assert.equal(await shift1Kpi.getAttribute('aria-disabled'),'true');
+  const matrixShiftButtons=page.locator('[data-top3-analytics] [data-matrix-line][data-matrix-shift]');
+  if(await matrixShiftButtons.count())assert.equal(await matrixShiftButtons.first().isDisabled(),true,'Line × shift drilldown must be disabled without 3022 classification');
+  const rankCount=await page.locator('[data-top3-analytics] .ames-dfa-rank-item').count();
+  assert(rankCount>0,'unclassified shift must not erase the daily ranking');
   assert.equal(await page.evaluate(()=>qa.store.context().shift),'1st Shift');
 
-  console.log('PASS: shared Line 2 survives Top 3 → Failures → Trace → Reuse → Base → CORA; Base/CORA write back to the same context; unclassified 3022 shift stays unknown instead of zero.');
+  console.log('PASS: shared Line 2 survives Top 3 → Failures → Trace → Reuse → Base → CORA; Base/CORA write back to the same context; unclassified 3022 shift stays unknown, keeps ranking and disables false-zero drilldowns.');
 }finally{
   await browser.close();await new Promise(resolve=>server.close(resolve));
 }
