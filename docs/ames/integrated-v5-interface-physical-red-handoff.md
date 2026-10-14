@@ -19,3 +19,14 @@ Inspeção inicial confirma que `ames/console-trace-scope.mjs` lista somente có
 Este checkpoint altera somente este documento. Nenhuma implementação iniciada. Não alterar coletores 3028/3074/2114/3022/3012 nem contratos sem necessidade comprovada. Não retomar PR #23 nem tarefas antigas.
 
 Próxima ação exata: mapear rastreabilidade e entrada da Central completa, registrar as causas comprovadas e implementar somente este escopo com testes de clique/job/polling e navegação desktop. Salvar commits pequenos e revalidar remoto antes de cada bloco. Após correção: Full Quality + Candidate Gate; ZIP final somente após ambos GREEN. Depois parar para novo teste físico da interface.
+
+## Investigação concluída antes da correção
+
+Checkpoint inicial publicado: `932d6efac4b657962de270422e9ae31561c81fbd`. Confirmado no código:
+
+- `createTraceConsoleView` cria `section[data-trace-form]`, mas o handler chama `new FormData(form)` antes do try. O navegador lança TypeError porque o elemento não é HTMLFormElement; o fluxo para antes de `client.collect('deep')`.
+- Tanto Rastreabilidade quanto Monitoramento priorizam job antigo na renderização. O client já publica erros, mas o status não os mostra consistentemente.
+- O polling descarta `result` de jobs deep_trace (mantém apenas sn_lookup), embora o backend já forneça resultado por linha, escopo e etapas. Basta preservar esses campos no client; nenhum contrato/backend precisa mudar.
+- O retorno local chama o botão home escondido, cujo handler mostra uma home mínima e mantém a classe que oculta a navegação completa. A entrada completa já existe em `?online=1` e carrega a Central real com Auth/cache existentes. A correção usará essa entrada, com volta explícita ao Console local; não criará outra Central.
+
+Próximo passo seguro: corrigir formulário/estado de submissão/renderização e seleção humana; testes reais do clique e polling. Depois corrigir navegação com teste da entrada real no viewport 1920x1080. Bootstrap e coletores continuam congelados.
