@@ -61,11 +61,14 @@ test('3022 modes are capability-gated instead of being falsely advertised',()=>{
   assert.match(css,/\.ames-mode-card\.ames-capability-disabled/);
 });
 
-test('Wave 3 keeps reuso Base local and CORA native and evidence-first',()=>{
+test('Wave 3 keeps reuso and CORA native while canonical Base Local stays evidence-first',()=>{
   const views=fs.readFileSync('ames/console-wave3-views.mjs','utf8');
+  const base=fs.readFileSync('ames/console-base-view.mjs','utf8');
   const css=fs.readFileSync('ames/console-wave3.css','utf8');
   for(const text of ['Segundo uso da própria PCBA','segundo uso de Material SN','Abrir SNs exatos','ITEM EXATO EM EVIDÊNCIA','Drill-down não carregado']) assert.match(views,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  for(const text of ['3028 · falhas','2114 · histórico PCBA','3074 · material/reuso','3022 · process_events','process_defect_contexts','Histórico operacional do agente','Backup']) assert.match(views,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['3028 · falhas','2114 · histórico PCBA','3074 · material/reuso','3022 · process_events','process_defect_contexts','Histórico operacional do agente','Backup']) assert.match(base,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.doesNotMatch(views,/export function createBaseConsoleView\b/);
+  assert.doesNotMatch(views,/const BASE_ACTIONS\b/);
   for(const text of ['Fato / evidência','Correlação','Hipótese','Causa confirmada','não transforma correlação em causa']) assert.match(views,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(css,/\.ames-reuse-summary/);
   assert.match(css,/\.ames-base-actions/);
