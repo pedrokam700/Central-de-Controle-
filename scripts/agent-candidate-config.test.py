@@ -100,6 +100,22 @@ def test_host_and_start_url_must_match():
     assert_raises("ames_host", lambda: candidate_config._host("http://172.29.185.215"))
 
 
+def test_host_change_requires_matching_start_url_in_same_update():
+    with tempfile.TemporaryDirectory() as temp:
+        agent = FakeAgent(Path(temp) / "config.txt")
+        before = copy.deepcopy(agent.CONFIG)
+        assert_raises("mesmo host", lambda: candidate_config.apply(agent, {"ames_host": "172.29.185.216"}))
+        assert agent.CONFIG == before
+        assert agent.STORE.events == []
+
+        result = candidate_config.apply(agent, {
+            "ames_host": "172.29.185.216",
+            "ames_start_url": "http://172.29.185.216/asymes",
+        })
+        assert result["config"]["ames_host"] == "172.29.185.216"
+        assert result["config"]["ames_start_url"] == "http://172.29.185.216/asymes"
+
+
 def test_atomic_failure_keeps_in_memory_config_unchanged():
     with tempfile.TemporaryDirectory() as temp:
         agent = FakeAgent(Path(temp) / "config.txt")
@@ -157,6 +173,7 @@ if __name__ == "__main__":
     tests = [
         test_origin_validation_and_normalization,
         test_host_and_start_url_must_match,
+        test_host_change_requires_matching_start_url_in_same_update,
         test_atomic_failure_keeps_in_memory_config_unchanged,
         test_successful_update_is_normalized_audited_and_reports_ignored_keys,
         test_numeric_and_boolean_ranges_fail_closed,
