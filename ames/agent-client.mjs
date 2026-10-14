@@ -22,6 +22,7 @@ function bootstrapAgentToken(explicit=''){
 }
 
 const requestTimeout=path=>path==='/ready'?2500:path==='/health'?12000:30000;
+const boundedLimit=(value,fallback=100000,max=100000)=>{const n=Number(value);return Number.isInteger(n)&&n>0?Math.min(n,max):fallback;};
 
 // Transport belongs to the existing session; all operational data lives in store.
 export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
@@ -148,12 +149,22 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       }
       const cfg=await request('/config');
       const config=publicConfig(cfg);
-      publish({status:'connected',config,capabilities,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.preflight?.playwright??health.playwright_ready??null,python:health.preflight?.python??null,dependencies:health.preflight?.dependencies??null,sqlite:health.preflight?.sqlite??null,session:null},agent_build:health.agent_build||ready?.agent_build||'',error:''});
+      const runtime={
+        scheduler:health.mes_scheduler||null,
+        preflight:health.preflight||null,
+        workstation:health.workstation||null,
+        candidate_version:health.candidate_version||ready?.candidate_version||null,
+        setup_complete:!!health.setup_complete,
+        latest_snapshot_id:health.latest_snapshot_id??null,
+        network:health.network||null,
+        network_guardian:health.network_guardian||null
+      };
+      publish({status:'connected',config,capabilities,runtime,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.preflight?.playwright??health.playwright_ready??null,python:health.preflight?.python??null,dependencies:health.preflight?.dependencies??null,sqlite:health.preflight?.sqlite??null,session:null},agent_build:health.agent_build||ready?.agent_build||'',error:''});
       const monitor=await request('/monitor');publish({monitor:{enabled:!!monitor.enabled,interval_minutes:monitor.interval_minutes,next_run_at:monitor.next_run_at}});
       await refresh();
     },options),
     refresh:()=>action(refresh),
-    saveConfig:value=>action(async()=>{check();const scope=collectionScope(value);const cfg={configured_lines:scope.lines,performance:scope.performance};await request('/config',cfg);publish({config:{...store.agent().config,...cfg}});}),
+    saveConfig:value=>action(async()=>{check();const scope=collectionScope(value);const cfg={configured_lines:scope.lines,performance:scope.performance};const saved=await request('/config',cfg);publish({config:publicConfig(saved?.config||saved)});}),
     collect:(type,value)=>action(async()=>{
       check();if(store.agent().job&&!['done','error','cancelled','skipped'].includes(store.agent().job.status))throw new Error('Aguarde ou cancele o job atual.');
       const scope=type==='sn'?null:collectionScope(value);let path,body;
@@ -177,12 +188,16 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       lastPartial=-1;unschedule(timer);const token=generation;timer=schedule(()=>poll(job.id,token),850);
     }),
     cancel:()=>action(async()=>{check();const job=store.agent().job;if(job)await request('/jobs/'+encodeURIComponent(job.id)+'/cancel',{});}),
-    monitor:(enabled,value)=>action(async()=>{check();const scope=collectionScope(value),interval=Number(value.interval_minutes);if(enabled&&(!Number.isInteger(interval)||interval<5))throw new Error('Intervalo mínimo do monitor: 5 minutos.');const result=await request(enabled?'/monitor/start':'/monitor/stop',enabled?{mode:'today',lines:scope.lines,performance:scope.performance,interval_minutes:interval}:{});publish({monitor:{enabled:!!result.enabled,interval_minutes:result.interval_minutes}});}),
+    monitor:(enabled,value)=>action(async()=>{check();const scope=collectionScope(value),interval=Number(value.interval_minutes);if(enabled&&(!Number.isInteger(interval)||interval<5))throw new Error('Intervalo mínimo do monitor: 5 minutos.');const result=await request(enabled?'/monitor/start':'/monitor/stop',enabled?{mode:'today',lines:scope.lines,performance:scope.performance,interval_minutes:interval}:{});publish({monitor:{enabled:!!result.enabled,interval_minutes:result.interval_minutes,next_run_at:result.next_run_at||null}});}),
     auxiliary:(name,value={})=>action(async()=>{
       check();const line=value.line;if(line&&!LINE_IDS.includes(line))throw Error('Linha inválida');let result;
-      if(name==='catalog')result=await request('/base/catalog');
-      else if(name==='trends')result=await request('/trends?line='+encodeURIComponent(line)+'&limit=10000');
-      else if(name==='dataset')result=await request('/base?'+new URLSearchParams({dataset:value.dataset,line,limit:100000}));
+      if(name==='catalog')result=await request('/base/catalog?'+new URLSearchParams(value.snapshot_id?{snapshot_id:value.snapshot_id}:{}));
+      else if(name==='trends')result=await request('/trends?'+new URLSearchParams({line,limit:boundedLimit(value.limit,500,500)}));
+      else if(name==='dataset'){
+        const params={dataset:value.dataset,line,limit:boundedLimit(value.limit,100000,100000)};
+        if(value.snapshot_id)params.snapshot_id=value.snapshot_id;
+        result=await request('/base?'+new URLSearchParams(params));
+      }
       else if(name==='backup')result=await request('/backup',{reason:'native_console'});
       else if(name==='repairs')result=await request('/repairs/refresh',{snapshot_id:value.snapshot_id,line,unresolved_only:!!value.unresolved_only});
       else if(name==='chrome')result=await request('/chrome/start',{});
@@ -194,10 +209,10 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       else if(name==='jobs')result=await request('/jobs');
       else if(name==='monitor')result=await request('/monitor');
       else throw Error('Operação desconhecida');
-      const configPatch=name==='config'?publicConfig(result):name==='setup'?{...store.agent().config,...value.config}:undefined;
+      const configPatch=name==='config'?publicConfig(result):name==='setup'?publicConfig(result?.config||result):undefined;
       publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(configPatch?{config:configPatch}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
-    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',config:null,job:null,readiness:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
+    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
   });
 }
