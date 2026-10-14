@@ -5,7 +5,8 @@ import { createLineOverview, createTrendAddon, createFailuresParityView } from '
 import { createDailyFailureSummary } from './daily-failure-summary.mjs';
 import { createDailyFailureAnalytics } from './daily-failure-analytics.mjs';
 import { createSnConsoleView, createTraceConsoleView, createProcessConsoleView } from './console-specialized-views.mjs';
-import { createReuseConsoleView, createBaseConsoleView, createKnowledgeConsoleView } from './console-wave3-views.mjs';
+import { createReuseConsoleView, createKnowledgeConsoleView } from './console-wave3-views.mjs';
+import { createBaseConsoleView } from './console-base-view.mjs';
 import { withFastlaneSnEnhancements } from './console-fastlane-sn-reuse.mjs';
 import { withOfflineSnLookup } from './console-sn-offline-fastlane.mjs';
 import { createNetworkHealthView } from './console-network-fastlane.mjs';
