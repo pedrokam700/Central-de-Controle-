@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,7 +87,10 @@ def test_shift_waits_for_committed_confirmation():
     real_time, real_sleep = shift_2114.time.time, shift_2114.time.sleep
     shift_2114.time.time, shift_2114.time.sleep = clock.time, clock.sleep
     try:
-        result = shift_2114.ensure_shift(page, timeout_s=4.0)
+        # Freeze the operational clock inside the first-shift window. The contract
+        # must not change outcome merely because CI happens to run after 17:30 BRT.
+        first_shift = datetime(2026, 10, 14, 10, 0, tzinfo=timezone(timedelta(hours=-3)))
+        result = shift_2114.ensure_shift(page, now=first_shift, timeout_s=4.0)
     finally:
         shift_2114.time.time, shift_2114.time.sleep = real_time, real_sleep
     assert result == "1st Shift"
