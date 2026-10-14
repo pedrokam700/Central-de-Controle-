@@ -23,6 +23,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
   let agent = immutable({status:'disconnected',config:null,job:null,error:''});
   let context = immutable({...EMPTY_CONTEXT});
   let contextRevision=0;
+  let contextLineExplicit=false;
 
   function normalizeBatch(payloads, localRead = false) {
     const next = new Map();
@@ -69,6 +70,10 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
   function ensureContextLine(){
     const loaded=loadedLines();
     if(context.line_id&&LINE_IDS.includes(context.line_id)){
+      // A human/explicit selection is operational intent, not a cache hint. Keep it
+      // even while that line has no current snapshot; the UI must show Not collected
+      // instead of silently jumping to a different line when data refreshes.
+      if(contextLineExplicit)return context.line_id;
       if(!loaded.length||loaded.includes(context.line_id))return context.line_id;
     }
     const line=loaded[0]||context.line_id||LINE_IDS[0];
@@ -116,13 +121,14 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
         if(line!==null&&!LINE_IDS.includes(line))throw Error('invalid_operational_line');
         next.line_id=line;
         next.lines=line?[line]:[];
+        contextLineExplicit=line!==null;
       }
       if(Object.prototype.hasOwnProperty.call(patch,'lines')){
         const lines=[...new Set((patch.lines||[]).map(clean).filter(Boolean))];
         if(lines.some(line=>!LINE_IDS.includes(line)))throw Error('invalid_operational_lines');
         next.lines=lines;
-        if(lines.length===1)next.line_id=lines[0];
-        else if(!lines.length)next.line_id=null;
+        if(lines.length===1){next.line_id=lines[0];contextLineExplicit=true;}
+        else if(!lines.length){next.line_id=null;contextLineExplicit=false;}
       }
       if(Object.prototype.hasOwnProperty.call(patch,'period'))next.period=cleanPeriod(patch.period);
       for(const key of ['product','shift','defect'])if(Object.prototype.hasOwnProperty.call(patch,key))next[key]=clean(patch[key]);
@@ -146,7 +152,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
     clear() {
       local = new Map(); remote = new Map(); synced = new Map(); localConnected = false; issues = [];
       agent = immutable({status:'disconnected',config:null,job:null,error:''});
-      context = immutable({...EMPTY_CONTEXT});contextRevision+=1;
+      context = immutable({...EMPTY_CONTEXT});contextLineExplicit=false;contextRevision+=1;
     }
   });
 }
