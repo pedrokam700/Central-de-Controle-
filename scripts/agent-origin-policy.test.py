@@ -48,7 +48,7 @@ def test_duplicate_and_non_list_legacy_values_fail_closed():
         {"allowed_origins": ["https://central-cora-v2.vercel.app", "https://central-cora-v2.vercel.app/"]},
         8765,
     )
-    assert duplicated["summary"]["duplicates"] if "duplicates" in duplicated["summary"] else duplicated["summary"]["duplicate_entries"] == 1
+    assert duplicated["summary"]["duplicate_entries"] == 1
 
     scalar = origin_policy.evaluate({"allowed_origins": "http://remote.example"}, 8765)
     assert scalar["summary"]["rejected_entries"] == 1
