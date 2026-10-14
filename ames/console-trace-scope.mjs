@@ -1,5 +1,6 @@
 import {defectDescription,knownDescription} from './defect-label.mjs';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 
 export function loadedFailures(store,lines){
   const groups=new Map();
@@ -19,13 +20,13 @@ function humanTraceError(raw){
   const text=String(raw||'').trim(),low=text.toLowerCase();
   if(!text)return null;
   if(low.includes('2114')&&(low.includes('shift')||low.includes('turno')||low.includes('unconfirmed')||low.includes('não confirmado'))){
-    return '2114 aguardando confirmação de turno. A etapa não deve ser tratada como concluída enquanto o turno não estiver confirmado; as demais fontes continuam independentes quando houver evidência.';
+    return t('2114 aguardando confirmação de turno. A etapa não deve ser tratada como concluída enquanto o turno não estiver confirmado; as demais fontes continuam independentes quando houver evidência.','2114 is waiting for shift confirmation. The stage must not be treated as complete until the shift is confirmed; other sources remain independent when evidence is available.');
   }
   if(/playwright|locator|traceback|runtimeerror|typeerror|extjs|strict mode violation/i.test(text)){
-    if(low.includes('3022'))return 'Não foi possível consultar a 3022 nesta etapa. A evidência já coletada pelas outras fontes permanece válida.';
-    if(low.includes('2114'))return 'Não foi possível concluir a 2114 nesta etapa. A evidência já coletada pelas outras fontes permanece válida.';
-    if(low.includes('3074'))return 'Não foi possível concluir a 3074 nesta etapa. As demais fontes continuam válidas quando houver evidência.';
-    return 'Uma fonte do A-MES não pôde ser concluída nesta etapa. O detalhe técnico foi preservado abaixo para diagnóstico.';
+    if(low.includes('3022'))return t('Não foi possível consultar a 3022 nesta etapa. A evidência já coletada pelas outras fontes permanece válida.','3022 could not be queried at this stage. Evidence already collected from other sources remains valid.');
+    if(low.includes('2114'))return t('Não foi possível concluir a 2114 nesta etapa. A evidência já coletada pelas outras fontes permanece válida.','2114 could not be completed at this stage. Evidence already collected from other sources remains valid.');
+    if(low.includes('3074'))return t('Não foi possível concluir a 3074 nesta etapa. As demais fontes continuam válidas quando houver evidência.','3074 could not be completed at this stage. Other sources remain valid when evidence is available.');
+    return t('Uma fonte do A-MES não pôde ser concluída nesta etapa. O detalhe técnico foi preservado abaixo para diagnóstico.','An A-MES source could not be completed at this stage. Technical details are preserved below for diagnostics.');
   }
   return null;
 }
@@ -50,8 +51,10 @@ export function withTraceSelectionHelper(view,root,store){
     }
     const lines=[...form.querySelectorAll('[name=lines]:checked')].map(x=>x.value);
     const codes=loadedFailures(store,lines),current=input.value;
-    const total=codes.reduce((sum,item)=>sum+item.count,0);
-    panel.innerHTML=`<div class="ames-trace-code-head"><div><h4>Falhas carregadas</h4><p>Selecione pela descrição. A contagem soma as ocorrências nas linhas escolhidas. Selecionadas exige ao menos um código antes de iniciar.</p></div><span>${codes.length} falha(s) · ${total} ocorrência(s)</span></div><div class="ames-trace-scope-mode"><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="all"> Todas</label><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="selected"> Selecionadas</label></div><div class="ames-trace-code-grid">${codes.length?codes.map(item=>`<label class="ames-trace-failure-option"><input type="checkbox" value="${esc(item.code)}" data-trace-code><span data-no-i18n><strong>${esc(defectDescription(item.description))}</strong><small>${item.count} ocorrência${item.count===1?'':'s'}</small></span></label>`).join(''):'<span class="ames-trace-no-failures">Nenhuma falha carregada nas linhas selecionadas.</span>'}</div>`;
+    const total=codes.reduce((sum,item)=>sum+item.count,0),en=document.documentElement.lang.startsWith('en');
+    const failureWord=en?(codes.length===1?'failure':'failures'):(codes.length===1?'falha':'falhas');
+    const occurrenceWord=en?(total===1?'occurrence':'occurrences'):(total===1?'ocorrência':'ocorrências');
+    panel.innerHTML=`<div class="ames-trace-code-head"><div><h4>${t('Falhas carregadas','Loaded failures')}</h4><p>${t('Selecione pela descrição. A contagem soma as ocorrências nas linhas escolhidas. Selecionadas exige ao menos um código antes de iniciar.','Select by description. Counts add occurrences across the chosen lines. Selected requires at least one code before starting.')}</p></div><span>${codes.length} ${failureWord} · ${total} ${occurrenceWord}</span></div><div class="ames-trace-scope-mode"><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="all"> ${t('Todas','All')}</label><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="selected"> ${t('Selecionadas','Selected')}</label></div><div class="ames-trace-code-grid">${codes.length?codes.map(item=>`<label class="ames-trace-failure-option"><input type="checkbox" value="${esc(item.code)}" data-trace-code><span data-no-i18n><strong>${esc(defectDescription(item.description))}</strong><small>${item.count} ${en?(item.count===1?'occurrence':'occurrences'):(item.count===1?'ocorrência':'ocorrências')}</small></span></label>`).join(''):`<span class="ames-trace-no-failures">${t('Nenhuma falha carregada nas linhas selecionadas.','No failures loaded for the selected lines.')}</span>`}</div>`;
     input.value=current;if(selectedCodes(input).length)codeMode='selected';syncChecks(panel,input);
     panel.onchange=e=>{
       const mode=e.target.closest('[data-trace-scope-mode]');
@@ -71,13 +74,13 @@ export function withTraceSelectionHelper(view,root,store){
   function polishStatus(){
     const status=root.querySelector('[data-trace-status]');if(!status||status.querySelector('[data-trace-human-error]'))return;
     const raw=status.textContent?.trim()||'',friendly=humanTraceError(raw);if(!friendly)return;
-    status.innerHTML=`<div class="notice warn" data-trace-human-error><b>Coleta parcial</b><br><span>${esc(friendly)}</span><details class="ames-technical-detail"><summary>Detalhes técnicos</summary><pre>${esc(raw)}</pre></details></div>`;
+    status.innerHTML=`<div class="notice warn" data-trace-human-error><b>${t('Coleta parcial','Partial collection')}</b><br><span>${esc(friendly)}</span><details class="ames-technical-detail"><summary>${t('Detalhes técnicos','Technical details')}</summary><pre>${esc(raw)}</pre></details></div>`;
   }
   const runGuard=e=>{
     const run=e.target.closest('[data-trace-run]');if(!run||codeMode!=='selected'||selectedCodes(inputRef).length)return;
     e.preventDefault();e.stopImmediatePropagation();
     const status=root.querySelector('[data-trace-status]');
-    if(status)status.innerHTML='<div class="notice warn"><b>Falhas selecionadas:</b> marque ao menos uma falha antes de iniciar. Nenhuma coleta foi enviada.</div>';
+    if(status)status.innerHTML=`<div class="notice warn"><b>${t('Falhas selecionadas:','Selected failures:')}</b> ${t('marque ao menos uma falha antes de iniciar. Nenhuma coleta foi enviada.','select at least one failure before starting. No collection was sent.')}</div>`;
     formRef?.querySelector('[data-trace-code]')?.focus();
   };
   function wire(){
