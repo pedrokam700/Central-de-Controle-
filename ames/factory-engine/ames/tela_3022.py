@@ -248,7 +248,7 @@ def preparar_foco_montagem_teste(rows, test_end_code=DEFAULT_TEST_END_CODE, incl
         "post_test_rows": post_rows,
         "all_count": len(annotated),
         "focus_count": len(focus_rows),
-        "post_test_count": len(post_rows),
+        "post_test_count": post_count,
         # Compatibility with R2/R3 consumers. From R4 it means COMPLETED A5700.
         "boundary_found": bool(boundary),
     }
@@ -637,13 +637,25 @@ class Tela3022:
         return self.browser.choose_active_page("3022")
 
     def _query_control(self, page):
+        # AWIP3022 may keep stale/hidden Ext fields mounted after an internal view
+        # transition. Selecting the first matching field used to return that hidden
+        # control, producing the physical "element is not visible / required" stall.
         js = r"""
         () => {
           if (!window.Ext || !Ext.ComponentQuery) return null;
+          const visible = c => {
+            try {
+              if (c.isVisible && !c.isVisible(true)) return false;
+              const el = (c.inputEl && c.inputEl.dom) || (c.inputId ? document.getElementById(c.inputId) : null);
+              if (!el) return false;
+              const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+              return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+            } catch(e) { return false; }
+          };
           const fs = Ext.ComponentQuery.query('field');
           const f = fs.find(c => {
             const t = [c.fieldLabel,c.name,c.itemId,c.id].filter(Boolean).join(' ').toLowerCase();
-            return (t.includes('sn') && t.includes('imei')) || t.includes('a-s');
+            return visible(c) && ((t.includes('sn') && t.includes('imei')) || t.includes('a-s'));
           });
           if (!f) return null;
           return {inputId:String(f.inputId||''), id:String(f.id||''), name:String(f.name||'')};
@@ -656,12 +668,12 @@ class Tela3022:
                     continue
                 selectors = []
                 if meta.get("inputId"):
-                    selectors.append(f"#{meta['inputId']}")
+                    selectors.append(f"#{meta['inputId']}:visible")
                 if meta.get("name"):
-                    selectors.append(f'input[name="{meta["name"]}"]')
+                    selectors.append(f'input[name="{meta["name"]}"]:visible')
                 for sel in selectors:
                     loc = frame.locator(sel)
-                    if loc.count() and loc.first.is_visible(timeout=400):
+                    if loc.count() and loc.first.is_visible(timeout=500):
                         return loc.first
             except Exception:
                 pass
@@ -702,14 +714,29 @@ class Tela3022:
         if not pcba_sn:
             raise ValueError("SN vazio.")
         page = self._page()
-        campo = self._query_control(page)
         _, view, _ = find_button(
             page,
             texts=self.cfg["view_texts"],
             frame_hints=("3022", "View Lot History")
         )
-        campo.click(timeout=3000)
-        campo.fill(pcba_sn, timeout=3000)
+
+        # Re-resolve once if ExtJS swaps the form between discovery and input.
+        # fill() already focuses the control, so an extra click is unnecessary and
+        # was exactly where the hidden stale input timed out in the physical gate.
+        last_input_error = None
+        for attempt in range(2):
+            campo = self._query_control(page)
+            try:
+                campo.wait_for(state="visible", timeout=1600)
+                campo.fill(pcba_sn, timeout=3000)
+                last_input_error = None
+                break
+            except Exception as exc:
+                last_input_error = exc
+                if attempt == 0:
+                    time.sleep(0.25)
+        if last_input_error is not None:
+            raise RuntimeError(f"3022 não encontrou um campo SN/IMEI visível e estável: {last_input_error}")
         view.click(timeout=5000)
 
         inicio = time.time()
