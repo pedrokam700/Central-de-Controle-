@@ -65,7 +65,9 @@ test('snapshot replacement while reading is rejected, old read remains intact',a
   await assert.rejects(h.client.refresh(),/Revisão misturada/);assert.equal(h.store.read(line).snapshot,old);
 });
 test('logout aborts pending health request, no late data or errors enter next session',async()=>{
-  const h=harness();let finish;h.routes.health=()=>new Promise(resolve=>finish=resolve);const pending=h.client.connect();h.client.clear();h.store.clear();finish({ok:true,json:async()=>({agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY}})});await assert.rejects(pending,{name:'AbortError'});assert.equal(h.store.agent().status,'disconnected');assert.equal(h.store.agent().error,'');assert.equal(h.store.read(line).snapshot,null);
+  const h=harness();let finish;h.routes.health=()=>new Promise(resolve=>finish=resolve);const pending=h.client.connect();
+  for(let i=0;i<20&&!finish;i++)await Promise.resolve();
+  assert.equal(typeof finish,'function');h.client.clear();h.store.clear();finish({ok:true,json:async()=>({agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY}})});await assert.rejects(pending,{name:'AbortError'});assert.equal(h.store.agent().status,'disconnected');assert.equal(h.store.agent().error,'');assert.equal(h.store.read(line).snapshot,null);
 });
 
 test('timeout retry retains request identity and unchanged revisions avoid dataset requests',async()=>{
