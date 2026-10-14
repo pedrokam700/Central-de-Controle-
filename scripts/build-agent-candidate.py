@@ -6,7 +6,7 @@ from pathlib import Path,PurePosixPath
 import zipfile
 SOURCE_SHA='1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167'
 COLLECTORS={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
-FILES=['agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py']
+FILES=['agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','performance_indexes.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py']
 PRODUCTION_URL='https://central-cora-v2.vercel.app'
 VERCEL_PREVIEW_URL='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
 PR_PREVIEW_URL='https://deploy-preview-23--productcontrolcenter.netlify.app'
