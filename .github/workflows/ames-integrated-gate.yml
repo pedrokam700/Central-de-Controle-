@@ -204,7 +204,10 @@ jobs:
             $html=Invoke-WebRequest 'http://127.0.0.1:8765/Central-de-Controle-/' -UseBasicParsing -TimeoutSec 5
             if($html.StatusCode -ne 200 -or $html.Content -notmatch 'Central'){throw 'Local frontend not served from exact ZIP'}
 
-            $token=(Get-Content package\ames-agent\data\local_agent_token -Raw).Trim()
+            $tokenPath=Join-Path $root 'ames-agent\data\local_agent_token'
+            $configPath=Join-Path $root 'ames-agent\config.json'
+            $dbPath=Join-Path $root 'ames-agent\data\ames_local.sqlite3'
+            $token=(Get-Content $tokenPath -Raw).Trim()
             if($token.Length -lt 32){throw 'Local agent token missing/invalid after launcher start'}
             $headers=@{'X-Central-Agent-Token'=$token}
 
@@ -230,17 +233,54 @@ jobs:
             $body=@{ames_start_date='2026-02-01'}|ConvertTo-Json
             $saved=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/config' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 5
             if([string]$saved.config.ames_start_date -ne '2026-02-01'){throw 'ames_start_date did not persist through hardened config'}
-            $savedFile=Get-Content package\ames-agent\config.json -Raw | ConvertFrom-Json
+            $savedFile=Get-Content $configPath -Raw | ConvertFrom-Json
             if([string]$savedFile.ames_start_date -ne '2026-02-01'){throw 'ames_start_date was not persisted to config.json'}
+            if(-not (Test-Path $dbPath) -or (Get-Item $dbPath).Length -le 0){throw 'Operational SQLite missing/empty before restart validation'}
 
-            # Idempotency is part of the physical contract: a second launch must
-            # recognize the same authenticated H1 agent, not kill it or collide logs.
+            # Idempotency is part of the contract: a second launch must recognize
+            # the same authenticated H1 agent, not kill it or collide logs.
             & powershell -NoProfile -ExecutionPolicy Bypass -File $starter -Root $root -StartupTimeoutSeconds 30
             if($LASTEXITCODE -ne 0){throw "Canonical launcher second start failed with exit code $LASTEXITCODE"}
             $ready2=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 5
             if([int]$ready2.pid -ne $agentPid){throw "Second launcher invocation replaced a healthy agent: $agentPid -> $($ready2.pid)"}
 
-            Write-Host "LIVE CLEAN LAUNCHER OK: PID=$agentPid build=$($ready.agent_build) H1=$($hardening.hardening) health=$([math]::Round($healthTimer.Elapsed.TotalSeconds,2))s" -ForegroundColor Green
+            # Controlled process restart: this is not an OS reboot gate. It proves
+            # that local identity/config/SQLite survive a real agent stop/start.
+            $firstPid=$agentPid
+            $tokenBeforeRestart=$token
+            Stop-Process -Id $firstPid -Force -ErrorAction Stop
+            $stopped=$false
+            for($i=0;$i -lt 60;$i++){
+              $processAlive=Get-Process -Id $firstPid -ErrorAction SilentlyContinue
+              $listener=Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+              if(-not $processAlive -and -not $listener){$stopped=$true;break}
+              Start-Sleep -Milliseconds 100
+            }
+            if(-not $stopped){throw 'Agent did not fully stop before controlled restart'}
+            $agentPid=$null
+
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $starter -Root $root -StartupTimeoutSeconds 60
+            if($LASTEXITCODE -ne 0){throw "Canonical launcher restart failed with exit code $LASTEXITCODE"}
+            $ready3=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 5
+            if(-not $ready3.ready){throw 'Agent did not become ready after controlled restart'}
+            $agentPid=[int]$ready3.pid
+            if($agentPid -eq $firstPid){throw "Controlled restart reused old PID unexpectedly: $firstPid"}
+
+            $tokenAfterRestart=(Get-Content $tokenPath -Raw).Trim()
+            if($tokenAfterRestart -ne $tokenBeforeRestart){throw 'Local workstation token changed across controlled restart'}
+            $savedFileAfter=Get-Content $configPath -Raw | ConvertFrom-Json
+            if([string]$savedFileAfter.ames_start_date -ne '2026-02-01'){throw 'config.json lost ames_start_date across controlled restart'}
+            if(-not (Test-Path $dbPath) -or (Get-Item $dbPath).Length -le 0){throw 'Operational SQLite missing/empty after controlled restart'}
+
+            $headersAfter=@{'X-Central-Agent-Token'=$tokenAfterRestart}
+            $identityAfter=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/v2/capabilities' -Headers $headersAfter -TimeoutSec 5
+            if(-not $identityAfter.native_console){throw 'Canonical capabilities missing after controlled restart'}
+            if([IO.Path]::GetFullPath([string]$identityAfter.package_root).TrimEnd([char]92) -ine [IO.Path]::GetFullPath($root).TrimEnd([char]92)){throw 'Restarted agent reported wrong package root'}
+            $hardeningAfter=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -Headers $headersAfter -TimeoutSec 8
+            if(-not $hardeningAfter.ok -or [string]$hardeningAfter.integrity -ne 'ok'){throw 'SQLite/H1 failed after controlled restart'}
+            if(-not $hardeningAfter.performance_indexes.ok){throw 'SQLite performance indexes incomplete after controlled restart'}
+
+            Write-Host "LIVE CLEAN RESTART OK: firstPID=$firstPid restartPID=$agentPid token/config/SQLite preserved" -ForegroundColor Green
           } finally {
             if($agentPid){Stop-Process -Id $agentPid -Force -ErrorAction SilentlyContinue}
             else {
