@@ -10,6 +10,10 @@ const entry=fs.readFileSync('ames/agent/agent_entry.py','utf8');
 const hardenedEntry=fs.readFileSync('ames/agent/agent_hardened_entry.py','utf8');
 const localSecurity=fs.readFileSync('ames/agent/local_security.py','utf8');
 const builder=fs.readFileSync('scripts/build-agent-candidate.py','utf8');
+const updater=fs.readFileSync('ames/agent/update_candidate.py','utf8');
+const updaterMatch=updater.match(/FILES=\((.*?)\)\nROOT_FILES=/s);
+assert.ok(updaterMatch,'update_candidate.py sem contrato FILES');
+const updaterFiles=new Set([...updaterMatch[1].matchAll(/'([^']+\.py)'/g)].map(m=>m[1]));
 
 test('launcher usa uma Central e um agente local pareado',()=>{
   assert.match(launcher,/127\.0\.0\.1:8765\/api\/v1\/health/);
@@ -74,9 +78,14 @@ test('bootstrap nao armazena segredos A-MES e falha fechado em servico desconhec
   assert.match(diag,/nao le nem imprime senha A-MES/i);
 });
 
-test('candidate builder inclui ferramentas de posto, hardening e segurança local',()=>{
-  for(const name of ['INICIAR_POSTO_CENTRAL_V2.bat','ROTA_AMES_APLICAR.bat','ROTA_AMES_REMOVER.bat','START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','agent_hardened_entry.py','hardening.py','local_security.py']){
+test('candidate builder inclui ferramentas de posto e deriva hardening do contrato ativo do updater',()=>{
+  for(const name of ['INICIAR_POSTO_CENTRAL_V2.bat','ROTA_AMES_APLICAR.bat','ROTA_AMES_REMOVER.bat','START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1']){
     assert.ok(builder.includes(name),`builder nao inclui ${name}`);
+  }
+  assert.match(builder,/_updater_files\(root\)/);
+  assert.match(builder,/update_candidate\.py/);
+  for(const name of ['agent_entry.py','agent_hardened_entry.py','base_paging_backend.py','candidate_config.py','hardening.py','local_security.py','operational_calendar.py','performance_indexes.py']){
+    assert.ok(updaterFiles.has(name),`contrato ativo do updater nao inclui ${name}`);
   }
   assert.match(builder,/if any\('local_agent_token' in name for name in files\):raise ValueError/);
 });
