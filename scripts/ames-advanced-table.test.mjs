@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {filterRows,orderRows,paginateRows,csv} from '../ames/advanced-table.mjs';
+import {baseIncrementalLimit,basePageWindow,normalizeBasePageSize} from '../ames/base-paging.mjs';
 
 test('advanced table paginates large selections without truncating the dataset',()=>{
   const rows=Array.from({length:1234},(_,i)=>({id:i+1,line:i%2?'TAN10101':'TAN10102'}));
@@ -33,4 +34,23 @@ test('CSV export still includes every selected row and neutralizes formulas',()=
   const output=csv(rows,[{key:'id',label:'ID'},{key:'note',label:'Note'}]);
   assert.equal(output.split('\r\n').length,651);
   assert.match(output,/"'=cmd"/);
+});
+
+test('Base local paging exposes only the current window and requests data incrementally',()=>{
+  const first=basePageWindow(1234,0,100,100);
+  assert.deepEqual(first,{page:0,pageSize:100,pages:13,total:1234,start:0,end:100,displayStart:1,hasPrev:false,hasNext:true,needsMore:false});
+  const fifth=basePageWindow(1234,4,100,300);
+  assert.equal(fifth.start,400);assert.equal(fifth.end,300);assert.equal(fifth.needsMore,true);
+  assert.equal(baseIncrementalLimit(0,100),100);
+  assert.equal(baseIncrementalLimit(4,100),500);
+  assert.equal(baseIncrementalLimit(2000,250),100000);
+});
+
+test('Base local paging clamps invalid pages and page sizes without fabricating rows',()=>{
+  assert.equal(normalizeBasePageSize(999),100);
+  assert.equal(normalizeBasePageSize('250'),250);
+  const last=basePageWindow(1234,99,100,1234);
+  assert.equal(last.page,12);assert.equal(last.displayStart,1201);assert.equal(last.end,1234);assert.equal(last.hasNext,false);assert.equal(last.needsMore,false);
+  const empty=basePageWindow(0,3,50,0);
+  assert.deepEqual(empty,{page:0,pageSize:50,pages:1,total:0,start:0,end:0,displayStart:0,hasPrev:false,hasNext:false,needsMore:false});
 });
