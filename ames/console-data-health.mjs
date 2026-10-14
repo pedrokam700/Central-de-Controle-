@@ -2,7 +2,7 @@ import {LINE_IDS} from './data/contract.mjs';
 import {readHardeningDiagnostics} from './agent-diagnostics.mjs';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
+const t=(pt,en)=>typeof document!=='undefined'&&document.documentElement?.lang?.startsWith('en')?en:pt;
 const rows=(snapshot,name)=>{
   if(name==='3028')return snapshot?.occurrences||[];
   if(name==='3074')return snapshot?.material_trace?.records||snapshot?.canonical?.datasets?.material_reuse||[];
@@ -91,7 +91,7 @@ export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
     const model=buildDataHealth(store),agent=store.agent();
     if(agent.status==='connected')void loadSecurity(agent);else if(security||securityFor){security=null;securityFor='';securityLoading=false;}
     const securityState=buildSecurityHealth(security);
-    const key=JSON.stringify([model,agent.status,agent.agent_build,security,securityLoading,document.documentElement.lang]);if(key===last)return;last=key;
+    const key=JSON.stringify([model,agent.status,agent.agent_build,security,securityLoading,typeof document==='undefined'?'':document.documentElement.lang]);if(key===last)return;last=key;
     root.setAttribute('data-no-i18n','');
     root.innerHTML=`<section class="mes-context-panel ames-data-health"><div class="section-head"><div><h3>${t('Saúde e cobertura dos dados','Data health and coverage')}</h3><p>${t('Mostra o que foi realmente carregado. Ausência de evidência nunca é apresentada como zero.','Shows what was actually loaded. Missing evidence is never presented as zero.')}</p></div><span class="ames-health-agent ${agent.status==='connected'?'ok':'unknown'}">${agent.status==='connected'?t('Agente conectado','Agent connected'):t('Dados compartilhados / cache','Shared data / cache')}</span></div><div class="ames-data-health-grid">${model.map(item=>`<article class="ames-health-card ${item.state.tone}"><div class="ames-health-card-head"><div><b>${esc(item.label)}</b><span>${esc(item.name)}</span></div><span class="ames-health-state">${esc(item.state.label)}</span></div><strong>${item.count}</strong><small>${esc(item.unit)}</small><p>${esc(item.state.detail)}</p><footer><span>${esc(item.latest||t('coleta não informada','collection not provided'))}</span><button type="button" class="button secondary" data-health-evidence="${esc(item.source)}">${t('Ver evidência','View evidence')}</button></footer></article>`).join('')}</div><div class="notice ${securityState.tone==='partial'?'warn':''}" data-security-health><b>${t('Segurança local','Local security')} · ${esc(securityState.label)}</b><br>${esc(securityState.detail)}<br><small>${t('Origens remotas autorizadas','Authorized remote origins')}: ${securityState.remote??'—'} · ${t('Entradas rejeitadas','Rejected entries')}: ${securityState.rejected??'—'}${securityState.mode?` · ${esc(securityState.mode)}`:''}</small></div></section>`;
     root.querySelectorAll('[data-health-evidence]').forEach(button=>button.addEventListener('click',()=>{
