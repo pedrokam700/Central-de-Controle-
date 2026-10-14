@@ -19,7 +19,9 @@ test('Top 3 stays a quick summary but each failure opens the canonical occurrenc
   assert.match(summary,/\[data-top3-analytics\] \[data-dfa="defect"\]/);
   assert.match(summary,/\[data-top3-analytics\] \[data-dfa-mode="occurrences"\]/);
   assert.match(summary,/data-daily-open-ranking/);
-  assert.match(summary,/queueMicrotask\(syncLineToAnalytics\)/);
+  assert.match(summary,/store\.updateContext\?\.\(\{defect:code\|\|null\}\)/);
+  assert.match(summary,/syncContextToAnalytics\(\)/);
+  assert.match(summary,/queueMicrotask\(\(\)=>\{/);
 });
 
 test('quick summary exposes reuse at three granularities and missing evidence is not false zero',()=>{
