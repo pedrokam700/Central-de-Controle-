@@ -6,8 +6,6 @@ import {buildLiveSnForensics} from '../ames/data/sn-forensics.mjs';
 import {scopedDailyRows} from '../ames/daily-failure-summary.mjs';
 import {source3012State} from '../ames/console-sn-offline-fastlane.mjs';
 
-globalThis.document??={documentElement:{lang:'pt-BR'}};
-
 const snapshot=(line,id)=>({
   kind:'ames_shared_snapshot',line,schema:'central-v2-ames-line-v1',
   payload:{schema:'central-v2-ames-line-v1',line,generated_at:'2026-10-14T10:00:00-03:00',summary:{line,snapshot_id:id,collected_at:'2026-10-14T10:00:00-03:00',defect_rows:1,fpy:99,check_fpy:98,quantity:100},defects:[{line,pcba_sn:'002527TEST',product_model:'CPH2817',defect_code:'GN01',defect_desc:'test',defect_time:'2026-10-14T09:00:00-03:00'}]}
@@ -78,6 +76,7 @@ test('SN investigation preserves successful 3074 and 3022 evidence when 2114 is 
 });
 
 test('3012 source state distinguishes not collected, proven zero, error and cache evidence',()=>{
+  globalThis.document={documentElement:{lang:'pt-BR'}};
   assert.equal(source3012State({}).kind,'unknown','missing 3012 is unknown, never zero');
   const zero=source3012State({trace_3012:{rows:[]}});
   assert.equal(zero.kind,'ok');
