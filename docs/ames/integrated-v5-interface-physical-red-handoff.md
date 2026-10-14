@@ -1,5 +1,70 @@
 # Interface — gate físico RED / bootstrap aprovado
 
+## Checkpoint de encerramento da correção — 2026-10-14
+
+**Bootstrap cc1f61c: aprovado fisicamente pelo usuário e preservado byte a byte. Interface: correção automatizada GREEN; validação física nova PENDING (último teste físico da interface continua RED até reteste).**
+
+Código corrigido e revalidado no GitHub: `7877b18ec10edb6f94bc85285ab7fc2d5720130d`. Este checkpoint modifica somente documentação. Commits de implementação: `23fc75372e14c5be267fd95496b782e31a6d6060` (seleção/limites/labels e job observável) e `7877b18ec10edb6f94bc85285ab7fc2d5720130d` (navegação completa e teste).
+
+### Comprovado
+
+- Causa do clique silencioso: FormData recebia section, lançando exceção antes do try e antes de qualquer POST. Corrigido para form real e erro visível. Job antigo não encobre erro novo.
+- Falhas agrupadas pelo código, descrição humana e contagem somada nas linhas escolhidas; código permanece valor interno. Todas/Selecionadas preservadas, seleção vazia não dispara coleta abrangente.
+- Limites técnicos recolhidos em `Limites avançados`; padrão vazio apresentado como `Sem limite`, convertido em 0 internamente. Entrada manual de códigos recolhida.
+- Início imediato, criação de job novo identificável, polling, etapas/linha e resumo dos campos realmente devolvidos. Materiais/históricos são identificados como valores no snapshot, não como incremento inventado.
+- Descrição ausente ou sentinel `Undefined error` recebe `Descrição não informada` nos labels; código continua identificado. Dados brutos/contratos não alterados.
+- Voltar à Central carrega offline-bootstrap e app.js completos, com sidebar/topbar, navegação nativa e acesso explícito de volta ao Console local. Home placeholder removida. Auth/cache da Central permanecem os existentes; primeiro acesso de conta exige conexão. Console local continua independente desses serviços.
+- Nenhuma mudança em bootstrap Windows, agentes/coletores 3028/3074/2114/3022/3012, factory-engine ou dados operacionais. Verificado com `git diff cc1f61c -- tools/ames-workstation/START_AGENT_CANONICAL.ps1 ames/agent ames/factory-engine` vazio.
+
+### Evidência dos gates no SHA 7877b18
+
+| Gate | Resultado | Evidência |
+| --- | --- | --- |
+| Contratos locais Node | 225/225 PASS | `node --test --test-isolation=none scripts/ames-*.test.mjs` |
+| Full Quality | GREEN | [Run 38570976144](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/38570976144): estático, Firestore e experiência browser |
+| Candidate Gate | GREEN | [Run 38570975763](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/38570975763): contratos, CLEAN e Windows |
+| Windows | GREEN | Job `115875884990`, instalação real/restart/disputa de porta do bootstrap preservado |
+| Browser real de interação | PASS | Job `115875765919`: seleção/contagem; POST /deep-trace com token; job novo; polling 3074/2114/3022; resultado; erro novo nas duas views com job anterior |
+| Navegação real / 1920x1080 | PASS | Mesmo job: entrada local → Central completa/Auth/app.js → Início/Tarefas/Início → Console local |
+| Físico da interface | PENDING | Usuário deve retestar; não promover a GREEN por resultado automatizado |
+
+Capturas [artifact 11897167738](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/38570976144/artifacts/11897167738), retenção 7 dias: `central-complete-1920x1080.png`, `console-local-return-1920x1080.png`, `trace-job-result-1920.png`, mais evidências das 9 views/PT/EN/temas/mobile. Capturas da Central completa e do retorno foram inspecionadas: sidebar/topbar e largura corretas, sem overflow horizontal. O teste de trace isolado comprova comportamento; seu screenshot não é uma avaliação do layout do Console completo. Firebase e serviço MES dos testes browser são sintéticos; não são prova de coleta física.
+
+### Arquivos alterados nesta etapa
+
+```text
+.github/workflows/ames-integrated-quality.yml
+ames/advanced-table.mjs
+ames/agent-client.mjs
+ames/automation-view.mjs
+ames/collection-status.mjs
+ames/console-i18n-extra.mjs
+ames/console-legacy-parity.mjs
+ames/console-shift-summary.mjs
+ames/console-specialized-views.mjs
+ames/console-trace-scope.mjs
+ames/daily-failure-analytics.mjs
+ames/daily-failure-summary.mjs
+ames/defect-label.mjs
+ames/evidence-view.mjs
+core/local-entry.mjs
+core/local-workstation.mjs
+docs/ames/integrated-v5-interface-physical-red-handoff.md
+scripts/ames-local-navigation.browser.mjs
+scripts/ames-trace-interaction.browser.mjs
+scripts/ames-trace-scope.test.mjs
+scripts/build-integrated-candidate.py
+sw.js
+```
+
+### Próximo passo seguro
+
+Confirmar os dois gates também no commit documental deste checkpoint antes de gerar o ZIP CLEAN exato desse HEAD. O builder exige checkout limpo, grava SHA no manifest e verifica hashes/ausência de dados operacionais. Entregar o pacote somente após GREEN; então **parar e aguardar o teste físico do usuário** dos cinco pontos. Não retomar PR #23 ou funcionalidades laterais. Não alterar o bootstrap já aprovado. Se houver nova falha, revalidar remoto e analisar a evidência física antes de implementar.
+
+Os registros abaixo são históricos e não substituem este estado mais recente.
+
+---
+
 ## Checkpoint antes da implementação — 2026-10-14
 
 GitHub revalidado: branch `work/ames-integrated-clean-v5-improvements-20261013`, HEAD `ea7668587e4b575d1c759ab54c852dbe0fb901e7`. Checkout limpo e reconciliado.
