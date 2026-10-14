@@ -5,6 +5,9 @@ from datetime import datetime
 from pathlib import Path
 
 
+SHIFT_UNCONFIRMED = "SHIFT_UNCONFIRMED"
+
+
 def _atomic_json(path, obj):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -188,6 +191,54 @@ def _seed_from_checkpoint_path(checkpoint, seed_path, source_sha256, shift):
             checkpoint["pcbas"][pcba] = state
 
 
+def _unavailable_result(plan, source_sha256, checkpoint_path, reason):
+    """Return explicit 2114 source failure without discarding the 3074 result.
+
+    Composite collection treats 2114 as enrichment.  The source is still strict:
+    no SN is submitted while Shift is unconfirmed, but the caller receives a
+    structured partial result instead of an exception that aborts every source.
+    """
+    now = datetime.now().isoformat(timespec="seconds")
+    targets = list(plan["targets"])
+    pcbas = [{"pcba_sn": pcba, "status": "ERROR", "error": reason, "result": None} for pcba in targets]
+    if checkpoint_path:
+        checkpoint = _new_checkpoint(source_sha256, targets, None)
+        checkpoint["source_status"] = "ERROR"
+        checkpoint["source_error"] = reason
+        for pcba in targets:
+            checkpoint["pcbas"][pcba] = {
+                "pcba_sn": pcba,
+                "status": "ERROR",
+                "error": reason,
+                "updated_at": now,
+                "result": None,
+            }
+        checkpoint["updated_at"] = now
+        _atomic_json(checkpoint_path, checkpoint)
+    return {
+        "version": "0.11",
+        "status": "partial",
+        "source_status": "ERROR",
+        "source_error": reason,
+        "shift": None,
+        "source_sha256": source_sha256,
+        "requested_pcba_count": len(targets),
+        "processed_pcba_count": 0,
+        "pcba_error_count": len(targets),
+        "pcba_no_data_count": 0,
+        "historical_target_count": plan["historical_target_count"],
+        "current_target_count": plan["current_target_count"],
+        "context_count": plan["historical_context_count"],
+        "current_context_count": plan["current_context_count"],
+        "checkpoint_path": str(checkpoint_path) if checkpoint_path else None,
+        "contexts": plan["historical_contexts"],
+        "current_contexts": plan["current_contexts"],
+        "historical_targets": plan["historical_targets"],
+        "current_targets": plan["current_targets"],
+        "pcbas": pcbas,
+    }
+
+
 def executar_fluxo_2114(
     resultado_3074,
     tela2114,
@@ -199,12 +250,13 @@ def executar_fluxo_2114(
     seed_checkpoint_path=None,
     include_current=False,
 ):
-    """Consulta 2114. Por compatibilidade, o padrão continua histórico-only.
+    """Consulta 2114 sem transformar uma fonte indisponível em falha global.
 
     - deduplica todas as PCBAs;
-    - reaproveita resultado V0.10 como seed (não consulta de novo o que já está COMPLETE);
+    - reaproveita resultado V0.10 como seed;
     - salva checkpoint V0.11 por PCBA;
-    - erro isolado não aborta o lote.
+    - erro isolado não aborta o lote;
+    - Shift ausente retorna estado parcial estruturado, preservando 3074/3022.
     """
     if include_current:
         plan = extrair_plano_2114_completo(resultado_3074)
@@ -226,10 +278,17 @@ def executar_fluxo_2114(
     checkpoint_path = Path(checkpoint_path) if checkpoint_path else None
 
     shift = tela2114.turno_atual()
-    if not shift:
-        raise RuntimeError(
-            "Shift da 2114 não está selecionado. Abra a AWIP2114 e selecione o turno antes de executar."
+    if not shift or shift == SHIFT_UNCONFIRMED:
+        reason = (
+            "2114 indisponível nesta execução: Shift não confirmado no campo principal. "
+            "3074/3022 podem continuar; nenhuma consulta 2114 foi enviada."
         )
+        if progress:
+            for idx, pcba in enumerate(targets, 1):
+                progress(idx, len(targets), pcba, "ERROR", {
+                    "pcba_sn": pcba, "status": "ERROR", "error": reason, "result": None,
+                })
+        return _unavailable_result(plan, source_sha256, checkpoint_path, reason)
 
     checkpoint = None
     if checkpoint_path and checkpoint_path.exists():
@@ -321,6 +380,9 @@ def executar_fluxo_2114(
 
     return {
         "version": "0.11",
+        "status": "complete" if not errors else "partial",
+        "source_status": "COMPLETE" if not errors else "PARTIAL",
+        "source_error": None,
         "shift": shift,
         "source_sha256": source_sha256,
         "requested_pcba_count": len(targets),
