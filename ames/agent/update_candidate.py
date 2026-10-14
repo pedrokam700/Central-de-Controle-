@@ -18,7 +18,10 @@ HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb26374
 ORIGIN='https://central-cora-v2.vercel.app'
 PREVIEW_ORIGIN='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
 NETLIFY_PREVIEW_ORIGIN='https://deploy-preview-23--productcontrolcenter.netlify.app'
-ORIGINS=(ORIGIN,PREVIEW_ORIGIN,NETLIFY_PREVIEW_ORIGIN)
+# Preview URLs stay as historical/dev constants, but an operational workstation
+# must not gain new preview CORS permissions automatically. Existing explicit
+# user origins are preserved; only the stable Central origin is appended.
+ORIGINS=(ORIGIN,)
 
 def installation(path):
     target=Path(path).resolve()
