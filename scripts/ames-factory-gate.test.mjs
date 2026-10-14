@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-test('gate físico permanece auditável, exige preview e SHA do frontend e nunca vira GREEN apenas por CI',()=>{
+test('gate físico permanece auditável, aceita CLEAN local ou preview aprovado, exige SHA e nunca vira GREEN apenas por CI',()=>{
   const runtime=fs.readFileSync('ames/console-monitor-runtime.mjs','utf8');
   const css=fs.readFileSync('ames/console-monitor-runtime.css','utf8');
   const build=fs.readFileSync('scripts/build-static.mjs','utf8');
@@ -14,13 +14,17 @@ test('gate físico permanece auditável, exige preview e SHA do frontend e nunca
     '9/9 desktop + mobile',
     'Reboot / bootstrap',
     'Origem desta Central',
-    'Origem de preview',
+    'Origem da Central',
     'Frontend SHA',
-    'produção não vale como gate',
+    'pacote CLEAN local no próprio posto',
+    'preview aprovado para validação controlada',
     'GREEN físico somente após evidência no posto e aprovação do usuário.'
   ]) assert.ok(runtime.includes(text));
   assert.ok(runtime.includes('release-build.json'));
   assert.ok(runtime.includes('PHYSICAL_PREVIEW_ORIGINS'));
+  assert.ok(runtime.includes('physicalOriginStatus'));
+  assert.ok(runtime.includes("host==='127.0.0.1'"));
+  assert.ok(runtime.includes("host==='localhost'"));
   assert.ok(runtime.includes('central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'));
   assert.ok(runtime.includes('deploy-preview-23--productcontrolcenter.netlify.app'));
   assert.ok(runtime.includes('core.slice(0,7)'));
