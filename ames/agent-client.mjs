@@ -21,6 +21,8 @@ function bootstrapAgentToken(explicit=''){
   return token;
 }
 
+const requestTimeout=path=>path==='/ready'?2500:path==='/health'?12000:30000;
+
 // Transport belongs to the existing session; all operational data lives in store.
 export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
   let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false, lastPartial=-1,lastRefresh=0,pendingSubmission=null;
@@ -31,7 +33,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     const headers={};
     if(body!==undefined)headers['Content-Type']='application/json';
     if(workstationToken)headers['X-Central-Agent-Token']=workstationToken;
-    const response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(path==='/health'?4000:30000)]),cache:'no-store',credentials:'omit'});
+    const response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(requestTimeout(path))]),cache:'no-store',credentials:'omit'});
     if(response.status===401)throw new Error('Agente local não autorizado. Abra a Central pelo launcher deste posto.');
     if(!response.ok)throw new Error(`Agente: HTTP ${response.status}`);
     const data=blob?await response.blob():await response.json();
@@ -45,6 +47,9 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       configured_lines:(cfg.configured_lines||[]).filter(l=>LINE_IDS.includes(l)),
       performance:['fast','balanced','safe'].includes(cfg.performance)?cfg.performance:'balanced',
       day_start:cfg.day_start,
+      production_day_start:cfg.production_day_start||cfg.day_start||'07:00',
+      timezone:cfg.timezone||'America/Sao_Paulo',
+      work_shifts:cfg.work_shifts||null,
       monitor_interval_minutes:cfg.monitor_interval_minutes,
       backup_retention:cfg.backup_retention,
       auto_backup_on_start:cfg.auto_backup_on_start
@@ -120,7 +125,14 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
   }
   return Object.freeze({
     connect:(options={})=>action(async()=>{
-      const health=await request('/health');
+      let ready=null;
+      try{ready=await request('/ready');}
+      catch(error){
+        if(error.name==='AbortError')throw error;
+        if(!String(error.message||'').includes('HTTP 404'))throw error;
+      }
+      const healthRaw=await request('/health');
+      const health={...healthRaw,agent_build:healthRaw.agent_build||ready?.agent_build||''};
       if(health.agent_version!=='0.5.23'||health.mes_scheduler?.policy!==SCHEDULER_POLICY)throw new Error('Instale o patch de serialização com scheduler FIFO antes de conectar o Console.');
       let capabilities=null;
       try {
@@ -136,7 +148,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       }
       const cfg=await request('/config');
       const config=publicConfig(cfg);
-      publish({status:'connected',config,capabilities,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.preflight?.playwright??health.playwright_ready??null,python:health.preflight?.python??null,dependencies:health.preflight?.dependencies??null,sqlite:health.preflight?.sqlite??null,session:null},agent_build:health.agent_build||'',error:''});
+      publish({status:'connected',config,capabilities,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.preflight?.playwright??health.playwright_ready??null,python:health.preflight?.python??null,dependencies:health.preflight?.dependencies??null,sqlite:health.preflight?.sqlite??null,session:null},agent_build:health.agent_build||ready?.agent_build||'',error:''});
       const monitor=await request('/monitor');publish({monitor:{enabled:!!monitor.enabled,interval_minutes:monitor.interval_minutes,next_run_at:monitor.next_run_at}});
       await refresh();
     },options),
