@@ -47,7 +47,11 @@ function normalizeProcess(row){
   };
 }
 function processScore(row,pcba){
-  const p=normalizeProcess(row);if(!p)return -1;if(pcba&&p.pcba_sn&&text(p.pcba_sn)!==text(pcba))return -1;
+  const p=normalizeProcess(row);if(!p)return -1;
+  // Fail closed across PCBAs. A 3022 row without board identity may only be
+  // contextualized by the caller that owns the live SN lookup; it must never
+  // float into an unrelated historical PCBA just because A6900 matches.
+  if(pcba&&(!p.pcba_sn||text(p.pcba_sn)!==text(pcba)))return -1;
   let score=0;const station=text(p.station).toUpperCase(),operation=text(p.operation_name).toUpperCase();
   if(station==='A6900'||station.startsWith('A6900'))score+=10;
   if(operation.includes('EXPORT REPAIR'))score+=10;
@@ -71,8 +75,11 @@ function parseList(value){if(Array.isArray(value))return value.map(text).filter(
 export function buildLiveSnForensics(result={}){
   const trace2114=result.trace_2114||{},trace3074=result.trace_3074||{},trace3022=result.trace_3022||{},trace3012=result.trace_3012||{};
   const repairs=trace3012.rows||result.local_snapshot?.repair_3012||[];
-  const process=[...(trace3022.operator_evidence||[]),...(trace3022.process_passages||[]),...(trace3022.rows||[])];
   const queryPcba=result.detected_type==='PCBA'?result.sn:(pcbaOf(trace2114.current_failure)||result.sn);
+  // trace_3022 is the process trace of the queried/current board. Some legacy
+  // passage rows omit pcba_sn, so contextualize only those rows to queryPcba.
+  // Rows that already carry a PCBA keep that exact identity.
+  const process=[...(trace3022.operator_evidence||[]),...(trace3022.process_passages||[]),...(trace3022.rows||[])].map(row=>pcbaOf(row)?row:{...row,pcba_sn:queryPcba});
   const current=failureEntry(trace2114.current_failure,{pcba:queryPcba,repairs,process});
   const ownHistory=(trace2114.previous_failures||[]).map(row=>failureEntry(row,{pcba:queryPcba,repairs,process})).filter(Boolean);
   const materials=(trace3074.reused_components||[]).map(item=>{
