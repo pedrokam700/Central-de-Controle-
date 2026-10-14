@@ -27,6 +27,8 @@ function historicalEvidence(previous,corr,history,process){
    operation:unique(passages.map(e=>e.operation_name||e.process)).join(', ')||null};
  }).filter(row=>row.pcba);
 }
+function historyCodeText(evidence,fallback=[]){const rows=(evidence||[]).filter(e=>e.defect_code);return rows.length?rows.map(e=>`${e.pcba}: ${e.defect_code}`).join(' | '):unique(fallback).join(', ')||null;}
+function historyDescText(evidence,fallback=[]){const rows=(evidence||[]).filter(e=>e.defect_desc||e.defect_code);return rows.length?rows.map(e=>`${e.pcba}: ${e.defect_desc||e.defect_code}`).join(' | '):unique(fallback).join(' | ')||null;}
 export function reuseLinks(snapshot){
  const canonical=snapshot?.material_trace?.records||[];
  const source=canonical.length?canonical:(snapshot?.insights?.drilldowns?.material_analysis||[]);
@@ -67,8 +69,8 @@ export function reuseLinks(snapshot){
    defect_code:value(r,'defect_code','Defect Code atual')||occurrence?.defect_code,defect_desc:value(r,'defect_desc','Defect Description atual','Defect Desc atual')||occurrence?.defect_desc,
    defect_time:occurrence?.defect_time||value(r,'defect_time','Defect Time atual'),usage:uses==null?null:Number(uses)===2?'2º uso':Number(uses)>=3?'3º+ uso':null,
    relations:relations.join(', ')||null,
-   history_code:evidence.length?evidence.map(e=>`${e.pcba}: ${e.defect_code||'—'}`).join(' | '):historyCodes.join(', ')||null,
-   history_desc:evidence.length?evidence.map(e=>`${e.pcba}: ${e.defect_desc||e.defect_code||'—'}`).join(' | '):historyDescriptions.join(' | ')||null,
+   history_code:historyCodeText(evidence,historyCodes),
+   history_desc:historyDescText(evidence,historyDescriptions),
    historical_evidence:evidence,
    station:unique(operators.map(o=>o.station).concat(currentProcess.map(e=>e.station))).join(', ')||null,
    operation:unique(operators.map(o=>o.operation_name).concat(currentProcess.map(e=>e.process))).join(', ')||null,
@@ -81,8 +83,8 @@ export function reuseLinks(snapshot){
    for(const k of ['defect_code','defect_desc','defect_time','relations','production_shift','production_operational_date','production_event_time','repair_user','repair_comment','repair_source','component_group'])old[k]=unique([old[k],row[k]]).join(', ')||null;
    const merged=[...(old.historical_evidence||[]),...(row.historical_evidence||[])],seen=new Set();old.historical_evidence=merged.filter(e=>{const k=JSON.stringify([e.pcba,e.defect_code,e.defect_desc,e.defect_time,e.relation]);if(seen.has(k))return false;seen.add(k);return true;});
    old.previous_pcbas=unique(old.historical_evidence.map(e=>e.pcba)).join(', ')||old.previous_pcbas;
-   old.history_code=old.historical_evidence.length?old.historical_evidence.map(e=>`${e.pcba}: ${e.defect_code||'—'}`).join(' | '):old.history_code;
-   old.history_desc=old.historical_evidence.length?old.historical_evidence.map(e=>`${e.pcba}: ${e.defect_desc||e.defect_code||'—'}`).join(' | '):old.history_desc;
+   old.history_code=historyCodeText(old.historical_evidence,old.history_code?[old.history_code]:[]);
+   old.history_desc=historyDescText(old.historical_evidence,old.history_desc?[old.history_desc]:[]);
    old.root_cause_confirmed=old.root_cause_confirmed||row.root_cause_confirmed;
   }
   else out.set(key,row);
