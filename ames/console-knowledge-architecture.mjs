@@ -1,8 +1,9 @@
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 
 export function withKnowledgeArchitecture(view,root){
+  let langObserver;
   function decorate(){
-    if(root.querySelector('[data-knowledge-architecture]'))return;
+    root.querySelector('[data-knowledge-architecture]')?.remove();
     const aside=document.createElement('details');
     aside.dataset.knowledgeArchitecture='1';
     aside.className='mes-context-panel ames-knowledge-architecture';
@@ -10,5 +11,5 @@ export function withKnowledgeArchitecture(view,root){
     const search=root.querySelector('.ames-knowledge-search');
     if(search)search.after(aside);else root.append(aside);
   }
-  return Object.freeze({render(){view.render();decorate();},clear(){view.clear?.();}});
+  return Object.freeze({render(){view.render();decorate();if(!langObserver){langObserver=new MutationObserver(decorate);langObserver.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});}},clear(){langObserver?.disconnect();langObserver=null;view.clear?.();}});
 }
