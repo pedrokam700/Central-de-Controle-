@@ -18,6 +18,8 @@ EXPECTED_HEADERS = [
     "Defect Type",
 ]
 
+SHIFT_UNCONFIRMED = "SHIFT_UNCONFIRMED"
+
 
 def _safe_input_value(page, name):
     try:
@@ -89,7 +91,8 @@ class Tela2114:
     - não clica Confirm, Update ou Cancel;
     - não altera registros;
     - assume a 2114 já aberta no OPC;
-    - o Shift deve estar selecionado antes da consulta.
+    - a consulta individual continua estrita: só envia SN depois de o Shift estar
+      realmente confirmado no campo principal da 2114.
     """
 
     def __init__(self, browser, base_dir: Path):
@@ -143,9 +146,18 @@ class Tela2114:
             f"Abas: {urls}"
         )
 
-    def turno_atual(self):
+    def turno_confirmado(self):
+        """Return only a physically committed Shift value, never a fabricated one."""
         page = self._page()
         return _safe_input_value(page, "desc")
+
+    def turno_atual(self):
+        """Composite pipelines need a non-fatal source state before 3074 runs.
+
+        `SHIFT_UNCONFIRMED` is explicit evidence that 2114 is unavailable; it is
+        not treated as a real MES shift by `consultar`, which remains strict.
+        """
+        return self.turno_confirmado() or SHIFT_UNCONFIRMED
 
     def consultar(self, pcba_sn, timeout_s=15.0, empty_confirm_s=1.8):
         pcba_sn = normalizar_sn(pcba_sn)
@@ -162,12 +174,14 @@ class Tela2114:
         sn = sn.first
 
         from ames.shift_2114 import ensure_shift
-        ensure_shift(page)
+        # The composite preflight already gets the full bounded wait.  Individual
+        # queries retry briefly so a transient lookup can recover without spending
+        # 8 seconds per PCBA when the source is genuinely unavailable.
+        ensure_shift(page, timeout_s=min(3.0, max(1.5, float(timeout_s) / 4.0)))
         shift_desc = _safe_input_value(page, "desc")
         if not shift_desc:
             raise RuntimeError(
-                "Shift da 2114 não está selecionado/legível. "
-                "Selecione o turno manualmente antes do teste."
+                "Shift da 2114 não está selecionado/legível após tentativa automática."
             )
 
         # O comportamento da 2114 é de scan: preencher e Enter.
