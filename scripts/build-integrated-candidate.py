@@ -70,14 +70,15 @@ def build(destination, development=False):
    if p.is_file():payload['frontend/'+p.relative_to(temp).as_posix()]=p.read_bytes()
  index='frontend/Central-de-Controle-/index.html'
  html=payload[index].decode()
- # Local boot does not load Firebase/CDNs. Online path still uses canonical Auth.
- html=html.replace('src="/Central-de-Controle-/offline-bootstrap.mjs?v=15.1.13.49"','src="/Central-de-Controle-/local-entry.mjs"')
- import re
- html=re.sub(r'<script id="central-runtime-boot-guard">[\s\S]*?</script>','',html)
- payload[index]=html.encode()
- payload['frontend/Central-de-Controle-/local-entry.mjs']=b"import './core/local-entry.mjs';\n"
+ # IMPORTANT: the CLEAN must preserve the same integrated Central shell produced
+ # by build-static. Older packaging replaced offline-bootstrap with local-entry,
+ # creating a second Console-only mini-app and a second auth/navigation context.
+ if 'src="/Central-de-Controle-/offline-bootstrap.mjs?v=15.1.13.49"' not in html:
+  raise ValueError('Integrated Central bootstrap missing from CLEAN index')
+ if 'src="/Central-de-Controle-/local-entry.mjs"' in html:
+  raise ValueError('CLEAN regressed to standalone local Console entry')
  extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat'] or k.startswith('suporte/ames-workstation/')}
- payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty),'standalone_clean':True,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES)},indent=2).encode()
+ payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES)},indent=2).encode()
  for doc in (ROOT/'docs/ames').glob('integrated-v5*'):
   if doc.is_file():payload['evidence/'+doc.name]=doc.read_bytes()
  analytics_doc=ROOT/'docs/ames/falhas-do-dia-analytics.md'
@@ -91,12 +92,14 @@ INSTALACAO / TESTE:
 2. Extraia ESTE ZIP em uma pasta NOVA e independente.
 3. Execute apenas 00_INICIAR_AQUI.bat.
 4. O primeiro uso cria .venv, config.json e SQLite somente dentro desta nova pasta.
-5. Entre manualmente no A-MES. Console local: http://127.0.0.1:8765/Central-de-Controle-/
+5. Central e Console MES usam o MESMO frontend local: http://127.0.0.1:8765/Central-de-Controle-/
+6. Console MES e uma view interna da Central: entrar/sair nao abre outra aplicacao nem exige um segundo login.
+7. O primeiro login da Central pode exigir internet. Depois, Auth/Firestore usam persistencia/cache do navegador quando disponiveis.
 
 ESTE PACOTE NAO E UM UPDATER:
 - nao sobrepoe CLEAN V3;
 - nao traz banco operacional, senha, cookie, sessao CDP ou token;
-- nao depende de Vercel/Netlify/Internet para o uso operacional depois de preparado;
+- o A-MES, agente, SQLite, coletores e scheduler continuam locais/offline por padrao;
 - usa um unico frontend local, agente, SQLite e scheduler.
 
 3012 / HISTORICO:
@@ -106,6 +109,7 @@ ESTE PACOTE NAO E UM UPDATER:
 - 3012 continua gate fisico ate prova no A-MES real.
 
 VALIDACAO FISICA AINDA NECESSARIA:
+- Navegacao Central -> Console MES -> Central sem reload, troca de origem ou novo login.
 - Shift 2114 1st 07:30-17:30 / 2nd 17:30-07:30 sem confirmar manualmente.
 - 3012 real: Defect/Repair User/Time/Code/Comment e consulta historica por SN.
 - Consulta SN: falha atual/antigas/material/PCBA anterior e 3022.
@@ -117,7 +121,7 @@ VALIDACAO FISICA AINDA NECESSARIA:
 Se este candidato falhar, feche a pasta nova e volte a usar a CLEAN V3 intacta.
 ''').encode()
  assert_clean_payload(payload)
- manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
+ manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
  payload['CANDIDATE_MANIFEST.json']=json.dumps(manifest,indent=2).encode()
  assert_clean_payload(payload)
  destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
@@ -125,6 +129,6 @@ Se este candidato falhar, feche a pasta nova e volte a usar a CLEAN V3 intacta.
   for name,data in sorted(payload.items()):z.writestr(name,data)
  verification=verify_zip(destination)
  if verification['sha']!=sha:raise ValueError('Final ZIP manifest SHA does not match build HEAD')
- print(json.dumps({'file':str(destination.resolve()),'sha':sha,'development':bool(dirty),'standalone_clean':True,'sha256':hashlib.sha256(destination.read_bytes()).hexdigest(),'files':len(payload),'verified_manifest_files':verification['manifest_files'],'verified_zip_files':verification['zip_files']}))
+ print(json.dumps({'file':str(destination.resolve()),'sha':sha,'development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'sha256':hashlib.sha256(destination.read_bytes()).hexdigest(),'files':len(payload),'verified_manifest_files':verification['manifest_files'],'verified_zip_files':verification['zip_files']}))
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('destination');p.add_argument('--development',action='store_true');a=p.parse_args();build(a.destination,a.development)
