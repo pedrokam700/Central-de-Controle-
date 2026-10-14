@@ -3,7 +3,7 @@ import {LINE_IDS} from './data/contract.mjs';
 import {selectDashboard} from './data/dashboard.mjs';
 import {buildDailyFailureRows,filterDailyFailureRows,rankDailyFailures} from './daily-failure-analytics.mjs';
 
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const number=v=>v===null||v===undefined?'—':String(v);
 const pct=v=>v===null||v===undefined?'—':`${Number(v).toFixed(2)}%`;
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
