@@ -5,6 +5,12 @@
   "configured_lines": ["TAN10101", "TAN10102", "TAN10103"],
   "line_aliases": {"Linha 1": "TAN10101", "Linha 2": "TAN10102", "Linha 3": "TAN10103"},
   "day_start": "07:00",
+  "production_day_start": "07:00",
+  "timezone": "America/Sao_Paulo",
+  "work_shifts": {
+    "1": {"label": "1º Turno", "start": "07:30", "end": "17:30"},
+    "2": {"label": "2º Turno", "start": "17:30", "end": "07:30"}
+  },
   "monitor_interval_minutes": 30,
   "performance": "balanced",
   "chrome_cdp": "http://127.0.0.1:9222",
@@ -23,7 +29,6 @@
   "3012_sn_chunk_days": 90,
   "allowed_origins": [
     "https://central-cora-v2-pedrokam700-6477.vercel.app",
-    "https://central-cora-v2.vercel.app",
-    "https://central-cora-v2-git-ui-ames-fastlane-sn-2ae6e4-pedrokam700-6477.vercel.app"
+    "https://central-cora-v2.vercel.app"
   ]
 }
