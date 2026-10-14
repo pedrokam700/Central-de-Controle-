@@ -51,6 +51,7 @@ test('agente ativo precisa ser da mesma pasta, build canonico, H1 autenticado e 
   assert.match(starter,/agent_hardened_entry\.py/);
   assert.match(starter,/Get-AgentToken/);
   assert.match(starter,/X-Central-Agent-Token/);
+  assert.match(starter,/api\/v1\/v2\/capabilities' -Headers \$headers/);
   assert.match(starter,/api\/v1\/hardening\/health' -Headers \$headers/);
   assert.match(starter,/schema_version/);
   assert.match(starter,/SQLite=\$\(\$hard\.integrity\)/);
@@ -61,7 +62,7 @@ test('agente ativo precisa ser da mesma pasta, build canonico, H1 autenticado e 
   assert.match(localSecurity,/secrets\.token_urlsafe\(32\)/);
 });
 
-test('startup real e idempotente: processo e capturado, limpo e logs nunca dependem de pythonw',()=>{
+test('startup real e idempotente: processo e capturado, limpo, logado e independe de health operacional',()=>{
   assert.match(starter,/Start-Process[\s\S]*-PassThru/);
   assert.match(starter,/Stop-ProcessAndWait/);
   assert.match(starter,/Stop-ResidualSamePackageAgents/);
@@ -69,9 +70,20 @@ test('startup real e idempotente: processo e capturado, limpo e logs nunca depen
   assert.match(starter,/agent_startup_state\.json/);
   assert.match(starter,/agent_stdout_\$stamp\.log|agent_stdout_/);
   assert.match(starter,/@\('-u'/);
-  assert.match(starter,/api\/v1\/health' -TimeoutSec 25/);
+  assert.match(starter,/api\/v1\/ready/);
+  assert.match(starter,/api\/v1\/v2\/capabilities/);
+  assert.doesNotMatch(starter,/api\/v1\/health/);
   assert.doesNotMatch(starter,/pythonw\.exe/i);
   assert.doesNotMatch(starter,/0\.5\.24\*|0\.5\.25\*/);
+});
+
+test('health local e limitado; diagnostico completo de rede fica fora do caminho critico',()=>{
+  assert.match(entry,/def _health_network_snapshot\(\):/);
+  assert.match(entry,/network_watch\.tcp_probe\(host,port,timeout=\.8\)/);
+  assert.match(entry,/detail_source.*guardian_cache/);
+  assert.match(entry,/detail_source.*pending_guardian/);
+  assert.match(entry,/if u\.path=="\/api\/v1\/health"[\s\S]*_health_network_snapshot\(\)/);
+  assert.match(entry,/if u\.path=="\/api\/v1\/network\/status"[\s\S]*_network_snapshot\(\)/);
 });
 
 test('todos os consumidores do H1 protegido usam token local sem enfraquecer o endpoint',()=>{
