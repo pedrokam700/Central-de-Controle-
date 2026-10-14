@@ -37,15 +37,21 @@ function explanation(state){
   return t('A 3022 possui evidência carregada para este escopo.','3022 evidence is loaded for this scope.');
 }
 function syncContext(root,store,state){
-  const context=store.context?.()||{},line=root.querySelector('[data-process-line]'),shift=root.querySelector('[data-process-shift]'),defect=root.querySelector('[data-process-defect]');
+  const context=store.context?.()||{},line=root.querySelector('[data-process-line]');
   if(!state.syncing&&line&&context.line_id&&line.value!==context.line_id){state.syncing=true;line.value=context.line_id;line.dispatchEvent(new Event('change',{bubbles:true}));state.syncing=false;}
   const nextShift=root.querySelector('[data-process-shift]');
   if(!state.syncing&&nextShift&&context.shift&&nextShift.value!==context.shift){state.syncing=true;nextShift.value=context.shift;nextShift.dispatchEvent(new Event('change',{bubbles:true}));state.syncing=false;}
   const nextDefect=root.querySelector('[data-process-defect]');
   if(!state.syncing&&nextDefect&&context.defect&&[...nextDefect.options].some(option=>option.value===context.defect)&&nextDefect.value!==context.defect){state.syncing=true;nextDefect.value=context.defect;nextDefect.dispatchEvent(new Event('change',{bubbles:true}));state.syncing=false;}
   for(const [selector,key] of [['[data-process-line]','line_id'],['[data-process-shift]','shift'],['[data-process-defect]','defect']]){
-    const el=root.querySelector(selector);if(!el||el.dataset.processContextBound)return;el.dataset.processContextBound='1';el.addEventListener('change',()=>{if(state.syncing)return;store.updateContext?.({[key]:el.value||null});});
+    const el=root.querySelector(selector);if(!el||el.dataset.processContextBound)continue;el.dataset.processContextBound='1';el.addEventListener('change',()=>{if(state.syncing)return;store.updateContext?.({[key]:el.value||null});});
   }
+}
+function paintUnknownSection(section,state){
+  if(!section)return;
+  section.dataset.processSourceState=state;
+  const empty=section.querySelector('.ames-empty p');
+  if(empty)empty.textContent=explanation(state);
 }
 function decorate(root,store){
   const line=root.querySelector('[data-process-line]')?.value||store.context?.().line_id||store.preferredLine?.();
@@ -57,7 +63,12 @@ function decorate(root,store){
   root.querySelector('[data-process-source-note]')?.remove();
   const note=document.createElement('div');note.dataset.processSourceNote='1';note.className=`notice ${sourceState===SOURCE_STATE.ERROR||sourceState===SOURCE_STATE.PARTIAL||sourceState===SOURCE_STATE.CACHED?'warn':''}`;note.innerHTML=`<b>${sourceStateLabel(sourceState,locale())}</b><br>${explanation(sourceState)}`;toolbar.after(note);
   const kpis=root.querySelector('.ames-process-kpis');if(kpis){kpis.dataset.processSourceState=sourceState;if(!usable)for(const value of kpis.querySelectorAll('.ames-kv > b')){value.textContent='—';value.dataset.sourceUnknown='1';}}
-  const timeline=root.querySelector('.ames-timeline-panel > summary');if(timeline&&!usable)timeline.textContent=timeline.textContent.replace(/\b0\s+evento\(s\)/i,'— evento(s)').replace(/\b0\s+event\(s\)/i,'— event(s)');
+  const contexts=root.querySelector('.ames-process-contexts'),timelinePanel=root.querySelector('.ames-timeline-panel');
+  if(contexts)contexts.dataset.processSourceState=sourceState;
+  if(timelinePanel)timelinePanel.dataset.processSourceState=sourceState;
+  const timeline=timelinePanel?.querySelector(':scope > summary');
+  if(timeline&&!usable)timeline.textContent=timeline.textContent.replace(/\b0\s+evento\(s\)/i,'— evento(s)').replace(/\b0\s+event\(s\)/i,'— event(s)');
+  if(!usable){paintUnknownSection(contexts,sourceState);paintUnknownSection(timelinePanel,sourceState);}
 }
 
 export function withProcessProvenance(view,root,store){
