@@ -60,6 +60,15 @@ try{
   await page.waitForFunction(()=>document.querySelector('[data-reuse-line-tab="TAN10102"]')?.getAttribute('aria-selected')==='true');
   assert.equal(await reuseLine2.getAttribute('aria-selected'),'true','Reuse must inherit Line 2');
 
+  await page.locator('[data-console-view=process]').click();
+  const processLine=page.locator('[data-process-line]');
+  await processLine.waitFor();
+  assert.equal(await processLine.inputValue(),'TAN10102','Process / 3022 must inherit Line 2');
+  await processLine.selectOption('TAN10101');
+  await page.waitForFunction(()=>qa.store.context().line_id==='TAN10101');
+  await processLine.selectOption('TAN10102');
+  await page.waitForFunction(()=>qa.store.context().line_id==='TAN10102');
+
   await page.locator('[data-console-view=base]').click();
   const baseLine=page.locator('[data-base-line]');
   await baseLine.waitFor();
@@ -97,7 +106,7 @@ try{
   assert(rankCount>0,'unclassified shift must not erase the daily ranking');
   assert.equal(await page.evaluate(()=>qa.store.context().shift),'1st Shift');
 
-  console.log('PASS: shared Line 2 survives Top 3 → Failures → Trace → Reuse → Base → CORA; Base/CORA write back to the same context; unclassified 3022 shift stays unknown, keeps ranking and disables false-zero drilldowns.');
+  console.log('PASS: shared Line 2 survives Top 3 → Failures → Trace → Reuse → Process → Base → CORA; Process/Base/CORA write back to the same context; unclassified 3022 shift stays unknown, keeps ranking and disables false-zero drilldowns.');
 }finally{
   await browser.close();await new Promise(resolve=>server.close(resolve));
 }
