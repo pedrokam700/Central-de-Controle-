@@ -20,6 +20,21 @@ const BASE_ACTIONS=[
 ];
 const actionLabel=name=>{const item=BASE_ACTIONS.find(x=>x[0]===name);return item?t(item[2],item[3]):name;};
 
+const OPERATIONAL_COLUMNS={
+  defects:[[['line','LINE'],'Linha','Line'],[['pcba_sn','PCBA SN','pcba'],'PCBA','PCBA'],[['defect_time','Defect Time'],'Defect Time','Defect Time'],[['defect_desc','Defect Description','description'],'Falha','Failure'],[['product_model','Product Model','model'],'Modelo','Model'],[['repair_comment','Repair Comment'],'Repair Comment','Repair Comment'],[['repair_status_current','Repair Status Current','repair_status'],'Status reparo','Repair status'],[['repair_user','Repair User'],'Repair User','Repair User']],
+  pcba_history:[[['pcba_sn','PCBA SN'],'PCBA','PCBA'],[['defect_time','Defect Time'],'Defect Time','Defect Time'],[['defect_desc','Defect Description'],'Falha','Failure'],[['manual_or_auto','Manual/Automatic','registration_mode'],'Manual/Automatic','Manual/Automatic'],[['repair_status','Repair Status'],'Status reparo','Repair status'],[['defect_type','Defect Type'],'Defect Type','Defect Type'],[['relation','Relação histórica'],'Relação','Relation']],
+  material_reuse:[[['line','LINE'],'Linha','Line'],[['current_pcba_sn','PCBA atual','pcba_sn'],'PCBA atual','Current PCBA'],[['item_sn','Material SN','material_sn'],'Material SN','Material SN'],[['item_type','Tipo material','material_type'],'Tipo','Type'],[['known_use_count','Usos conhecidos material'],'Usos','Uses'],[['reuse_count','Reusos conhecidos material'],'Reusos','Reuses'],[['relation_to_current_failure','Classificação desta PCBA','relation'],'Relação','Relation'],[['previous_pcbas_json','PCBAs desvinculadas'],'PCBAs anteriores','Previous PCBAs']],
+  process_events:[[['pcba_sn','PCBA'],'PCBA','PCBA'],[['operation_code','Posto'],'Posto','Station'],[['operation_name','Processo'],'Processo','Process'],[['event_time','Horário'],'Horário real','Actual time'],[['production_shift','Turno de produção'],'Turno','Shift'],[['production_operational_date','Data operacional'],'Data operacional','Operational date'],[['station','Station'],'Station','Station']],
+  process_defect_contexts:[[['pcba_sn','PCBA'],'PCBA','PCBA'],[['defect_time','Defect Time'],'Defect Time','Defect Time'],[['defect_desc','Defect Description'],'Falha','Failure'],[['reference_station_code','Posto relevante'],'Posto relevante','Relevant station'],[['reference_event_time','Horário relevante'],'Horário real','Actual time'],[['production_shift','Turno de produção'],'Turno','Shift'],[['repair_action','AT / ação'],'AT / ação','AT / action'],[['status','Status'],'Status','Status']]
+};
+function operationalColumns(rows,dataset,technical){
+  const keys=Object.keys(rows[0]||{});if(technical)return keys.map(key=>[key,key]);
+  const spec=OPERATIONAL_COLUMNS[dataset]||[];const used=new Set(),cols=[];
+  for(const [aliases,pt,en] of spec){const key=aliases.find(alias=>keys.includes(alias));if(key&&!used.has(key)){used.add(key);cols.push([key,t(pt,en)]);}}
+  if(cols.length>=3)return cols;
+  return keys.slice(0,8).map(key=>[key,key]);
+}
+
 function sharedDatasets(snapshot){
   return snapshot?.canonical?.datasets||{
     defects:snapshot?.occurrences||[],
@@ -31,7 +46,7 @@ function sharedDatasets(snapshot){
 }
 
 export function createBaseConsoleView(root,store,client){
-  let mounted=false,line=LINE_IDS[0],result=null,active='dataset',busy=false,page=0,pageSize=100,requestSerial=0;
+  let mounted=false,line=LINE_IDS[0],result=null,active='dataset',busy=false,page=0,pageSize=100,requestSerial=0,technicalColumns=false;
 
   function selection(){
     return {
@@ -55,7 +70,7 @@ export function createBaseConsoleView(root,store,client){
     const host=root.querySelector('[data-base-result]');if(!host)return;
     if(busy){host.innerHTML=`<div class="ames-empty ames-empty-large"><span>…</span><h3>${t('Consultando base local','Querying local database')}</h3><p>${t('A operação é somente leitura, exceto quando você pede explicitamente backup/exportação.','This operation is read-only unless you explicitly request backup/export.')}</p></div>`;return;}
     if(!result){host.innerHTML=`<div class="ames-empty ames-empty-large"><span>▦</span><h3>${t('Base local pronta para inspeção','Local database ready for inspection')}</h3><p>${t('Escolha uma ação acima. Tabelas grandes são paginadas para não montar milhares de linhas no navegador.','Choose an action above. Large tables are paginated so the browser does not render thousands of rows at once.')}</p></div>`;return;}
-    const rows=normalizeRows(result),cols=Object.keys(rows[0]||{}).slice(0,12).map(k=>[k,k]);
+    const rows=normalizeRows(result),dataset=selection().dataset,cols=operationalColumns(rows,dataset,technicalColumns);
     const paged=active==='dataset'&&result.error!==true;
     const model=paged?pagerModel(rows,result.total,!!result.server_paged):{total:rows.length,start:0,end:rows.length,displayStart:rows.length?1:0,pageRows:rows,hasPrev:false,hasNext:false,maxPage:0};
     const subtitle=paged
@@ -65,7 +80,9 @@ export function createBaseConsoleView(root,store,client){
     const pageNote=paged&&result.server_paged
       ?t('Leitura paginada do SQLite: o agente envia somente a página atual; trocar de página não transfere novamente todo o dataset.','Paged SQLite read: the agent sends only the current page; changing pages does not transfer the whole dataset again.')
       :paged&&result.loaded_limited?t('Leitura incremental do SQLite: novas páginas são buscadas somente quando necessário.','Incremental SQLite read: additional pages are fetched only when needed.'):'';
-    host.innerHTML=`<section class="mes-context-panel ames-base-result">${sectionHead(result.title||active,subtitle)}${table(model.pageRows,cols,t('A operação foi concluída, mas não retornou linhas para este escopo.','The operation completed but returned no rows for this scope.'))}${pager}${pageNote?`<p class="ames-base-page-note">${pageNote}</p>`:''}</section>`;
+    const columnAction=rows.length?`<button type="button" class="button secondary" data-base-columns>${technicalColumns?t('Visão operacional','Operational view'):t('Colunas técnicas','Technical columns')}</button>`:'';
+    host.innerHTML=`<section class="mes-context-panel ames-base-result">${sectionHead(result.title||active,subtitle,columnAction)}${paged&&!technicalColumns?`<p class="ames-base-operational-note">${t('Visão operacional: mostra primeiro os campos usados na leitura diária. Nenhum dado foi removido; use “Colunas técnicas” para abrir todos os campos retornados.','Operational view: daily-use fields are shown first. No data was removed; use “Technical columns” to open every returned field.')}</p>`:''}${table(model.pageRows,cols,t('A operação foi concluída, mas não retornou linhas para este escopo.','The operation completed but returned no rows for this scope.'))}${pager}${pageNote?`<p class="ames-base-page-note">${pageNote}</p>`:''}</section>`;
+    host.querySelector('[data-base-columns]')?.addEventListener('click',()=>{technicalColumns=!technicalColumns;resultView();});
     host.querySelector('[data-base-prev]')?.addEventListener('click',()=>gotoPage(page-1));
     host.querySelector('[data-base-next]')?.addEventListener('click',()=>gotoPage(page+1));
     host.querySelector('[data-base-page-size]')?.addEventListener('change',event=>{pageSize=normalizeBasePageSize(event.target.value);page=0;void loadDatasetPage();});
@@ -132,7 +149,7 @@ export function createBaseConsoleView(root,store,client){
     finally{if(serial===requestSerial){busy=false;resultView();}}
   }
 
-  function resetForScope(){requestSerial++;page=0;result=null;active='dataset';busy=false;resultView();}
+  function resetForScope(){requestSerial++;page=0;result=null;active='dataset';busy=false;technicalColumns=false;resultView();}
 
   function render(){
     if(mounted)return;
@@ -147,5 +164,5 @@ export function createBaseConsoleView(root,store,client){
     resultView();
   }
 
-  return {render,clear(){requestSerial++;root?.replaceChildren();root?.removeAttribute('data-no-i18n');mounted=false;result=null;busy=false;page=0;}};
+  return {render,clear(){requestSerial++;root?.replaceChildren();root?.removeAttribute('data-no-i18n');mounted=false;result=null;busy=false;page=0;technicalColumns=false;}};
 }
