@@ -10,7 +10,9 @@ async function request(path,body){const headers={};const auth=token();if(auth)he
 function isoDate(date){return date.toISOString().slice(0,10);}
 
 export function create3012FastlaneView(root,store){
-  let mounted=false,pollTimer=null,rows=[],statusText=t('Pronto','Ready'),capability=null,amesStartDate='',startDateDirty=false,lastLang='';
+  let mounted=false,pollTimer=null,rows=[],statusText=t('Pronto','Ready'),capability=null,amesStartDate='',startDateDirty=false,lastLang='',disposed=false;
+  const langObserver=typeof MutationObserver!=='undefined'?new MutationObserver(mutations=>{if(disposed||!mutations.some(m=>m.attributeName==='lang'))return;queueMicrotask(()=>{if(disposed)return;render();});}):null;
+  langObserver?.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
   function formValues(){const f=root.querySelector('[data-3012-form]'),data=new FormData(f),sn=String(data.get('sn')||'').trim(),fullHistory=Boolean(sn&&root.querySelector('[data-3012-full-history]')?.checked);const start=fullHistory?(amesStartDate||String(data.get('start_at')||'')):String(data.get('start_at')||'');return {sn,start_at:start?start+'T00:00:00':'',end_at:String(data.get('end_at')||'')+'T23:59:59',line:String(data.get('line')||''),model:String(data.get('model')||''),defect_code:String(data.get('defect_code')||''),repair_code:String(data.get('repair_code')||''),defect_type:String(data.get('defect_type')||''),chunk_days:sn?90:31};}
   function preserveForm(){if(!mounted)return null;const f=root.querySelector('[data-3012-form]');if(!f)return null;const data=Object.fromEntries(new FormData(f));return {...data,fullHistory:Boolean(root.querySelector('[data-3012-full-history]')?.checked),amesStartDateInput:String(root.querySelector('[data-ames-start-date]')?.value||'')};}
   function syncHistoryMode(){const sn=String(root.querySelector('[name="sn"]')?.value||'').trim(),box=root.querySelector('[data-3012-full-history]'),start=root.querySelector('[name="start_at"]'),hint=root.querySelector('[data-3012-history-hint]');if(box)box.disabled=!sn;if(sn&&box?.checked&&amesStartDate&&!startDateDirty&&start)start.value=amesStartDate;if(hint)hint.textContent=sn&&box?.checked?t(`SN exata: histórico completo desde o início configurado do A-MES (${amesStartDate||'data inicial ainda não configurada'}). O SQLite funciona como cache e somente lacunas temporais voltam ao MES.`,`Exact SN: full history from the configured A-MES start (${amesStartDate||'start date not configured yet'}). SQLite is used as cache and only temporal gaps return to MES.`):t('Período manual: a consulta respeita as datas informadas.','Manual period: the query follows the selected dates.');}
@@ -21,7 +23,13 @@ export function create3012FastlaneView(root,store){
   function renderBody(){const body=root.querySelector('[data-3012-body]');if(!body)return;body.innerHTML=`<div class="ames-job-strip"><b>${esc(statusText)}</b><span>${capability?.factory_validated?t('3012 validada fisicamente','3012 physically validated'):t('implementada · gate físico ainda pendente','implemented · physical gate still pending')}</span></div><div data-repair-configurable></div>`;createAdvancedTable(body.querySelector('[data-repair-configurable]'),{rows,columns:REPAIR_COLUMNS,key:'process-repair-3012',presets:[{id:'repair',label:'Reparo 3012',en:'3012 repair'}]});}
   async function readCapability(){try{capability=await request('/3012/capability');amesStartDate=String(capability.ames_start_date||'');const input=root.querySelector('[data-ames-start-date]');if(input&&!input.value)input.value=amesStartDate;syncHistoryMode();renderBody();}catch(error){capability={implemented:false,factory_validated:false,error:error.message};renderBody();}}
   function render(){
-    const lang=document.documentElement.lang||'pt-BR';let preserved=null;if(mounted&&lang!==lastLang){preserved=preserveForm();root.replaceChildren();mounted=false;}
+    if(disposed)return;
+    const lang=document.documentElement.lang||'pt-BR';let preserved=null;
+    if(mounted&&lang!==lastLang){
+      preserved=preserveForm();
+      if(statusText==='Pronto'||statusText==='Ready')statusText=t('Pronto','Ready');
+      root.replaceChildren();mounted=false;
+    }
     if(!mounted){
       const now=new Date(),from=new Date(now);from.setDate(from.getDate()-7);
       root.innerHTML=`<section class="mes-context-panel ames-fastlane-panel ames-3012-panel"><div class="section-head"><div><h3>3012 · Defect Repair Inquiry</h3><p>${t('Consulte primeiro pela SN exata. A resposta reúne defeito, reparo, usuário e Repair Comment sem depender de exportação Excel.','Start with the exact SN. The result combines defect, repair, user and Repair Comment without requiring an Excel export.')}</p></div><span class="status warn">${t('GATE FÍSICO','PHYSICAL GATE')}</span></div>
@@ -32,5 +40,5 @@ export function create3012FastlaneView(root,store){
     }
     syncHistoryMode();renderBody();
   }
-  return {render,clear(){clearTimeout(pollTimer);root.replaceChildren();mounted=false;rows=[];lastLang='';}};
+  return {render,clear(){disposed=true;langObserver?.disconnect();clearTimeout(pollTimer);root.replaceChildren();mounted=false;rows=[];lastLang='';}};
 }
