@@ -55,11 +55,11 @@ def seed(store: FakeStore):
         )
         con.executemany(
             "INSERT INTO defect_observations(id,snapshot_id,line,defect_time,pcba_sn) VALUES(?,?,?,?,?)",
-            [(i + 1, 7, "TAN10101", f"2026-10-13T08:{i % 60:02d}:{i // 60:02d}", f"P{i:04d}") for i in range(300)],
+            [(i + 1, 7, "TAN10101", f"2026-10-13T08:{i // 60:02d}:{i % 60:02d}", f"P{i:04d}") for i in range(300)],
         )
         con.executemany(
             "INSERT INTO process_defect_contexts(id,snapshot_id,line,defect_time,pcba_sn) VALUES(?,?,?,?,?)",
-            [(i + 1, 7, "TAN10101", f"2026-10-13T09:{i % 60:02d}:{i // 60:02d}", f"C{i:04d}") for i in range(130)],
+            [(i + 1, 7, "TAN10101", f"2026-10-13T09:{i // 60:02d}:{i % 60:02d}", f"C{i:04d}") for i in range(130)],
         )
 
 
