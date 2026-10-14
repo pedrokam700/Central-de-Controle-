@@ -10,7 +10,16 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 AGENT=ROOT/'ames'/'agent'
 WORKSTATION=ROOT/'tools'/'ames-workstation'
-FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py','production_shift.py','agent_3012_patch.py','ames_3012_live.py','repair_3012.py','local_sn.py','network_watch.py','performance_indexes.py','fastlane_runtime_guard.py')
+
+def _updater_files():
+    source=(AGENT/'update_candidate.py').read_text(encoding='utf-8')
+    match=re.search(r"FILES=\((.*?)\)\nROOT_FILES=",source,re.S)
+    if not match:raise ValueError('Could not read update_candidate FILES contract')
+    files=tuple(re.findall(r"'([^']+\.py)'",match.group(1)))
+    if not files:raise ValueError('Empty update_candidate FILES contract')
+    return files
+
+FILES=_updater_files()
 PREVIEW_URLS=(
     'https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app',
     'https://deploy-preview-23--productcontrolcenter.netlify.app',
@@ -203,7 +212,7 @@ set "PACKAGE_ROOT=%TARGET_FULL%"
 if /I "%TARGET_NAME%"=="ames-agent" for %%I in ("%TARGET_FULL%\..") do set "PACKAGE_ROOT=%%~fI"
 
 set "BACKUP=%~2"
-if "%BACKUP%"=="" for /f "usebackq delims=" %%B in (`powershell -NoProfile -STA -ExecutionPolicy Bypass -Command "$p=Join-Path $env:PACKAGE_ROOT 'candidate-backups';if(Test-Path $p){$b=Get-ChildItem $p -Directory ^| Where-Object {Test-Path (Join-Path $_.FullName 'backup.json')} ^| Sort-Object LastWriteTime -Descending ^| Select-Object -First 1 -ExpandProperty FullName;if($b){Write-Output $b}}"`) do set "BACKUP=%%B"
+if "%BACKUP%"=="" for /f "usebackq delims=" %%B in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Join-Path $env:PACKAGE_ROOT 'candidate-backups';if(Test-Path $p){$b=Get-ChildItem $p -Directory ^| Where-Object {Test-Path (Join-Path $_.FullName 'backup.json')} ^| Sort-Object LastWriteTime -Descending ^| Select-Object -First 1 -ExpandProperty FullName;if($b){Write-Output $b}}"`) do set "BACKUP=%%B"
 if "%BACKUP%"=="" (
   echo [ERRO] Nenhum backup candidato foi encontrado em:
   echo        %PACKAGE_ROOT%\candidate-backups
