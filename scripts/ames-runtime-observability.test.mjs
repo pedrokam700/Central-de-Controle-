@@ -19,7 +19,13 @@ test('runtime observability summarizes only sanitized operational state',()=>{
     {snapshot:'41',freshness:'fresh'},
     {snapshot:'42',freshness:'stale'},
     {snapshot:null,freshness:'unknown'},
-  ]);
+  ],{
+    status:'ok',
+    level:'H1',
+    integrity:'ok',
+    performanceIndexes:{ok:true,expected:8,present:8,missing:[]},
+    hidden:'must-not-appear'
+  });
   assert.deepEqual(result,{
     scheduler:'fifo-monitor-skip-v1',
     preflight:{ok:3,known:4,total:4},
@@ -27,6 +33,10 @@ test('runtime observability summarizes only sanitized operational state',()=>{
     candidateVersion:'0.5.25-rc1',
     latestSnapshotId:42,
     guardian:'healthy',
+    hardening:'H1',
+    sqliteIntegrity:'ok',
+    performanceIndexes:{ok:true,expected:8,present:8,missing:[]},
+    diagnosticsStatus:'ok',
     freshLines:1,
     staleLines:1,
     missingLines:1,
@@ -40,12 +50,16 @@ test('runtime observability fails closed when health fields are unknown',()=>{
     {snapshot:null,freshness:'unknown'},
     {snapshot:null,freshness:'unknown'},
     {snapshot:null,freshness:'unknown'},
-  ]);
+  ],{status:'unavailable',reason:'not_paired'});
   assert.equal(result.scheduler,null);
   assert.deepEqual(result.preflight,{ok:0,known:0,total:4});
   assert.equal(result.setupComplete,false);
   assert.equal(result.latestSnapshotId,null);
   assert.equal(result.guardian,null);
+  assert.equal(result.hardening,null);
+  assert.equal(result.sqliteIntegrity,null);
+  assert.equal(result.performanceIndexes,null);
+  assert.equal(result.diagnosticsStatus,'unavailable');
   assert.equal(result.freshLines,0);
   assert.equal(result.staleLines,0);
   assert.equal(result.missingLines,3);
