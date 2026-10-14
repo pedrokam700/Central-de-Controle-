@@ -93,7 +93,7 @@ VALIDACAO FISICA AINDA NECESSARIA:
 Se este candidato falhar, feche a pasta nova e volte a usar a CLEAN V3 intacta.
 ''').encode()
  assert_clean_payload(payload)
- manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac5b244dffffad0e2' if False else 'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
+ manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
  payload['CANDIDATE_MANIFEST.json']=json.dumps(manifest,indent=2).encode()
  assert_clean_payload(payload)
  destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
