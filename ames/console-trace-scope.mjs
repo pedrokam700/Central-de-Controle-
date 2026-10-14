@@ -15,6 +15,21 @@ export function loadedFailures(store,lines){
   return [...groups.values()].sort((a,b)=>b.count-a.count||a.code.localeCompare(b.code));
 }
 
+function humanTraceError(raw){
+  const text=String(raw||'').trim(),low=text.toLowerCase();
+  if(!text)return null;
+  if(low.includes('2114')&&(low.includes('shift')||low.includes('turno')||low.includes('unconfirmed')||low.includes('não confirmado'))){
+    return '2114 aguardando confirmação de turno. A etapa não deve ser tratada como concluída enquanto o turno não estiver confirmado; as demais fontes continuam independentes quando houver evidência.';
+  }
+  if(/playwright|locator|traceback|runtimeerror|typeerror|extjs|strict mode violation/i.test(text)){
+    if(low.includes('3022'))return 'Não foi possível consultar a 3022 nesta etapa. A evidência já coletada pelas outras fontes permanece válida.';
+    if(low.includes('2114'))return 'Não foi possível concluir a 2114 nesta etapa. A evidência já coletada pelas outras fontes permanece válida.';
+    if(low.includes('3074'))return 'Não foi possível concluir a 3074 nesta etapa. As demais fontes continuam válidas quando houver evidência.';
+    return 'Uma fonte do A-MES não pôde ser concluída nesta etapa. O detalhe técnico foi preservado abaixo para diagnóstico.';
+  }
+  return null;
+}
+
 export function withTraceSelectionHelper(view,root,store){
   let wired=false,codeMode='all',formRef=null,inputRef=null;
   function selectedCodes(input){return String(input?.value||'').split(',').map(x=>x.trim()).filter(Boolean);}
@@ -35,7 +50,8 @@ export function withTraceSelectionHelper(view,root,store){
     }
     const lines=[...form.querySelectorAll('[name=lines]:checked')].map(x=>x.value);
     const codes=loadedFailures(store,lines),current=input.value;
-    panel.innerHTML=`<h4>Falhas carregadas</h4><p>Selecione pela descrição. A contagem soma as ocorrências nas linhas escolhidas. Selecionadas exige ao menos um código antes de iniciar.</p><div class="ames-trace-scope-mode"><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="all"> Todas</label><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="selected"> Selecionadas</label></div><div class="ames-trace-code-grid">${codes.length?codes.map(item=>`<label><input type="checkbox" value="${esc(item.code)}" data-trace-code><span data-no-i18n>${esc(item.code)} — ${esc(defectDescription(item.description))} — ${item.count}</span></label>`).join(''):'<span>Nenhuma falha carregada nas linhas selecionadas.</span>'}</div>`;
+    const total=codes.reduce((sum,item)=>sum+item.count,0);
+    panel.innerHTML=`<div class="ames-trace-code-head"><div><h4>Falhas carregadas</h4><p>Selecione pela descrição. A contagem soma as ocorrências nas linhas escolhidas. Selecionadas exige ao menos um código antes de iniciar.</p></div><span>${codes.length} falha(s) · ${total} ocorrência(s)</span></div><div class="ames-trace-scope-mode"><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="all"> Todas</label><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="selected"> Selecionadas</label></div><div class="ames-trace-code-grid">${codes.length?codes.map(item=>`<label class="ames-trace-failure-option"><input type="checkbox" value="${esc(item.code)}" data-trace-code><span data-no-i18n><strong>${esc(defectDescription(item.description))}</strong><small>${item.count} ocorrência${item.count===1?'':'s'}</small></span></label>`).join(''):'<span class="ames-trace-no-failures">Nenhuma falha carregada nas linhas selecionadas.</span>'}</div>`;
     input.value=current;if(selectedCodes(input).length)codeMode='selected';syncChecks(panel,input);
     panel.onchange=e=>{
       const mode=e.target.closest('[data-trace-scope-mode]');
@@ -52,6 +68,11 @@ export function withTraceSelectionHelper(view,root,store){
       }
     };
   }
+  function polishStatus(){
+    const status=root.querySelector('[data-trace-status]');if(!status||status.querySelector('[data-trace-human-error]'))return;
+    const raw=status.textContent?.trim()||'',friendly=humanTraceError(raw);if(!friendly)return;
+    status.innerHTML=`<div class="notice warn" data-trace-human-error><b>Coleta parcial</b><br><span>${esc(friendly)}</span><details class="ames-technical-detail"><summary>Detalhes técnicos</summary><pre>${esc(raw)}</pre></details></div>`;
+  }
   const runGuard=e=>{
     const run=e.target.closest('[data-trace-run]');if(!run||codeMode!=='selected'||selectedCodes(inputRef).length)return;
     e.preventDefault();e.stopImmediatePropagation();
@@ -66,5 +87,5 @@ export function withTraceSelectionHelper(view,root,store){
     input?.addEventListener('input',()=>{codeMode=selectedCodes(input).length?'selected':'all';const panel=form.querySelector('[data-trace-code-helper]');if(panel)syncChecks(panel,input);});
     root.addEventListener('click',runGuard,true);
   }
-  return Object.freeze({render(){view.render();wire();rebuild();},clear(){root.removeEventListener('click',runGuard,true);view.clear?.();wired=false;formRef=null;inputRef=null;codeMode='all';}});
+  return Object.freeze({render(){view.render();wire();rebuild();polishStatus();},clear(){root.removeEventListener('click',runGuard,true);view.clear?.();wired=false;formRef=null;inputRef=null;codeMode='all';}});
 }
