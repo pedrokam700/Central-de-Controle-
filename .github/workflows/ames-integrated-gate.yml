@@ -191,9 +191,15 @@ jobs:
             if([string]$ready.agent_build -ne 'CANONICAL-R11-BATCH'){throw "Unexpected build: $($ready.agent_build)"}
             $agentPid=[int]$ready.pid
 
-            $health=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 25
+            # /health is consumed by the real UI, so it must remain bounded even on
+            # a cold Windows runner with no factory Wi-Fi, route or A-MES server.
+            $healthTimer=[Diagnostics.Stopwatch]::StartNew()
+            $health=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 5
+            $healthTimer.Stop()
             if(-not $health.ok){throw 'Health endpoint not OK'}
-            if([IO.Path]::GetFullPath([string]$health.package_root).TrimEnd([char]92) -ine [IO.Path]::GetFullPath($root).TrimEnd([char]92)){throw 'Launcher accepted an agent from the wrong package root'}
+            if($healthTimer.Elapsed.TotalSeconds -ge 5){throw "Health exceeded local UI budget: $($healthTimer.Elapsed.TotalSeconds)s"}
+            if([IO.Path]::GetFullPath([string]$health.package_root).TrimEnd([char]92) -ine [IO.Path]::GetFullPath($root).TrimEnd([char]92)){throw 'Health reported wrong package root'}
+            if(@('pending_guardian','guardian_cache') -notcontains [string]$health.network.detail_source){throw "Health used unexpected network source: $($health.network.detail_source)"}
 
             $html=Invoke-WebRequest 'http://127.0.0.1:8765/Central-de-Controle-/' -UseBasicParsing -TimeoutSec 5
             if($html.StatusCode -ne 200 -or $html.Content -notmatch 'Central'){throw 'Local frontend not served from exact ZIP'}
@@ -201,6 +207,10 @@ jobs:
             $token=(Get-Content package\ames-agent\data\local_agent_token -Raw).Trim()
             if($token.Length -lt 32){throw 'Local agent token missing/invalid after launcher start'}
             $headers=@{'X-Central-Agent-Token'=$token}
+
+            $identity=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/v2/capabilities' -Headers $headers -TimeoutSec 5
+            if(-not $identity.native_console){throw 'Canonical capabilities missing native_console'}
+            if([IO.Path]::GetFullPath([string]$identity.package_root).TrimEnd([char]92) -ine [IO.Path]::GetFullPath($root).TrimEnd([char]92)){throw 'Capabilities reported wrong package root'}
 
             $unauthorized=$false
             try{
@@ -230,7 +240,7 @@ jobs:
             $ready2=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 5
             if([int]$ready2.pid -ne $agentPid){throw "Second launcher invocation replaced a healthy agent: $agentPid -> $($ready2.pid)"}
 
-            Write-Host "LIVE CLEAN LAUNCHER OK: PID=$agentPid build=$($ready.agent_build) H1=$($hardening.hardening)" -ForegroundColor Green
+            Write-Host "LIVE CLEAN LAUNCHER OK: PID=$agentPid build=$($ready.agent_build) H1=$($hardening.hardening) health=$([math]::Round($healthTimer.Elapsed.TotalSeconds,2))s" -ForegroundColor Green
           } finally {
             if($agentPid){Stop-Process -Id $agentPid -Force -ErrorAction SilentlyContinue}
             else {
