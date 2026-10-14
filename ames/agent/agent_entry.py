@@ -117,11 +117,38 @@ def start_deep_trace_job(cfg):
 
 
 def _network_snapshot():
+    """Expensive/fresh workstation network diagnostics for explicit requests only."""
     return network_watch.snapshot(
         a.CONFIG.get("ames_host", "172.29.185.215"),
         int(a.CONFIG.get("ames_port", 80)),
         a.CONFIG.get("ames_wifi_profile", "TAXXX_5G"),
     )
+
+
+def _health_network_snapshot():
+    """Bounded network state for /health; never runs netsh/PowerShell synchronously.
+
+    The network guardian owns full Wi-Fi/route diagnostics in the background. Health
+    refreshes only the cheap TCP reachability bit and reuses the guardian's last
+    detailed snapshot when one exists. Startup/local UI therefore stay usable even
+    while A-MES Wi-Fi or Windows network commands are unavailable/slow.
+    """
+    host=a.CONFIG.get("ames_host", "172.29.185.215")
+    port=int(a.CONFIG.get("ames_port", 80))
+    expected=a.CONFIG.get("ames_wifi_profile", "TAXXX_5G")
+    guardian=NETWORK_GUARDIAN.state()
+    cached=guardian.get("last") if isinstance(guardian,dict) else None
+    reachable=network_watch.tcp_probe(host,port,timeout=.8)
+    if isinstance(cached,dict):
+        network=dict(cached)
+        network["host"]=str(host);network["port"]=port;network["reachable"]=reachable
+        network["detail_source"]="guardian_cache";network["details_cached"]=True
+    else:
+        network={"at":None,"host":str(host),"port":port,"reachable":reachable,
+                 "expected_ssid":expected,"wifi":None,"wifi_expected":None,
+                 "interface":None,"route":None,"elevated":None,
+                 "detail_source":"pending_guardian","details_cached":False}
+    return network,guardian
 
 
 class Handler(a.Handler):
@@ -139,20 +166,20 @@ class Handler(a.Handler):
         if u.path=="/api/v1/health":
             try:
                 engine=a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR);support=process_r11.engine_support(engine)
-                network=_network_snapshot()
+                network,guardian=_health_network_snapshot();chrome_ready=a._tcp_probe("127.0.0.1",9222,timeout=.5)
                 self._send({"ok":True,"preflight":preflight.check(a.DB_PATH),"agent_version":a.AGENT_VERSION,"candidate_version":a.CANDIDATE_VERSION,"agent_build":"CANONICAL-R11-BATCH",
                             "package_root":str(a.BASE_DIR.parent.resolve()),"mes_scheduler":a.MES.snapshot(),"db":str(a.DB_PATH),
                             "engine_found":bool(engine),"engine_dir":str(engine) if engine else None,
-                            "chrome_cdp":a.CONFIG.get("chrome_cdp"),"chrome_cdp_reachable":a._tcp_probe("127.0.0.1",9222,timeout=.5),
+                            "chrome_cdp":a.CONFIG.get("chrome_cdp"),"chrome_cdp_reachable":chrome_ready,
                             "ames_host":a.CONFIG.get("ames_host","172.29.185.215"),"ames_port":int(a.CONFIG.get("ames_port",80)),
-                            "ames_reachable":bool(network.get("reachable")),"network":network,"network_guardian":NETWORK_GUARDIAN.state(),
+                            "ames_reachable":bool(network.get("reachable")),"network":network,"network_guardian":guardian,
                             "auto_3028_ready":bool((a.CONFIG.get("auto_3028") or {}).get("ready")),"auto_3022_ready":bool(support.get("ready")),
                             "process_contract":"R11_DERIVED_R12_FACTORY_GATE","latest_snapshot_id":a.STORE.latest_snapshot_id(),
                             "configured_lines":a.CONFIG.get("configured_lines") or [],"day_start":a.CONFIG.get("day_start","07:00"),
                             "monitor_interval_minutes":int(a.CONFIG.get("monitor_interval_minutes",30)),"setup_complete":bool(a.CONFIG.get("setup_complete")),
                             "latest_backup":a.STORE.latest_backup_info(a.BACKUP_DIR),"workstation":a.WORKSTATION,
-                            "readiness":{"agent":True,"engine":bool(engine),"chrome":a._tcp_probe("127.0.0.1",9222,timeout=.5),
-                                         "ames_network":bool(network.get("reachable")),"ames_wifi_expected":bool(network.get("wifi_expected")),
+                            "readiness":{"agent":True,"engine":bool(engine),"chrome":chrome_ready,
+                                         "ames_network":bool(network.get("reachable")),"ames_wifi_expected":network.get("wifi_expected"),
                                          "auto_3028":bool((a.CONFIG.get("auto_3028") or {}).get("ready")),"auto_3022":bool(support.get("ready"))}})
             except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
             return
