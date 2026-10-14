@@ -10,6 +10,7 @@ function numberOrNull(value){
 export function sanitizeHardeningDiagnostics(raw){
   if(!raw||typeof raw!=='object')return null;
   const indexes=raw.performance_indexes&&typeof raw.performance_indexes==='object'?raw.performance_indexes:null;
+  const origins=raw.origin_policy&&typeof raw.origin_policy==='object'?raw.origin_policy:null;
   return Object.freeze({
     status:raw.ok===true?'ok':'error',
     level:typeof raw.hardening==='string'?raw.hardening:null,
@@ -20,6 +21,14 @@ export function sanitizeHardeningDiagnostics(raw){
       expected:numberOrNull(indexes.expected),
       present:numberOrNull(indexes.present),
       missing:Array.isArray(indexes.missing)?indexes.missing.map(String).slice(0,32):[],
+    }):null,
+    originPolicy:origins?Object.freeze({
+      ok:origins.ok===true,
+      mode:typeof origins.mode==='string'?origins.mode:null,
+      localOrigins:numberOrNull(origins.local_origins),
+      configuredEntries:numberOrNull(origins.configured_entries),
+      remoteOrigins:numberOrNull(origins.remote_origins),
+      rejectedEntries:numberOrNull(origins.rejected_entries),
     }):null,
   });
 }
