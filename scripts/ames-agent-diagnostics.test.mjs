@@ -9,6 +9,7 @@ test('hardening diagnostics keep only sanitized integrity fields',()=>{
     integrity:'OK',
     schema_version:7,
     performance_indexes:{ok:true,expected:8,present:8,missing:[]},
+    origin_policy:{ok:true,mode:'loopback-plus-explicit-https',local_origins:2,configured_entries:2,remote_origins:2,rejected_entries:0,secret_origin:'https://do-not-copy.example'},
     local_security:{token_file:'C:/secret/local_agent_token',token:'must-not-leak'},
     raw_payload:{mes_cookie:'secret'},
   });
@@ -18,9 +19,11 @@ test('hardening diagnostics keep only sanitized integrity fields',()=>{
     integrity:'ok',
     schemaVersion:7,
     performanceIndexes:{ok:true,expected:8,present:8,missing:[]},
+    originPolicy:{ok:true,mode:'loopback-plus-explicit-https',localOrigins:2,configuredEntries:2,remoteOrigins:2,rejectedEntries:0},
   });
   const text=JSON.stringify(value);
   assert.equal(text.includes('secret'),false);
+  assert.equal(text.includes('do-not-copy'),false);
   assert.equal(text.includes('token_file'),false);
   assert.equal(text.includes('raw_payload'),false);
 });
@@ -34,6 +37,7 @@ test('diagnostics request uses workstation token and keeps response sanitized',a
       return {ok:true,status:200,json:async()=>({
         ok:true,hardening:'H1',integrity:'ok',schema_version:3,
         performance_indexes:{ok:false,expected:8,present:7,missing:['idx_missing']},
+        origin_policy:{ok:false,mode:'loopback-plus-explicit-https',local_origins:2,configured_entries:3,remote_origins:1,rejected_entries:2},
         local_security:{token:'hidden'}
       })};
     }
@@ -44,6 +48,7 @@ test('diagnostics request uses workstation token and keeps response sanitized',a
   assert.equal(result.level,'H1');
   assert.equal(result.integrity,'ok');
   assert.deepEqual(result.performanceIndexes,{ok:false,expected:8,present:7,missing:['idx_missing']});
+  assert.deepEqual(result.originPolicy,{ok:false,mode:'loopback-plus-explicit-https',localOrigins:2,configuredEntries:3,remoteOrigins:1,rejectedEntries:2});
   assert.equal(JSON.stringify(result).includes('hidden'),false);
 });
 
