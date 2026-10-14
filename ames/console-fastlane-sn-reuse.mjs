@@ -1,5 +1,6 @@
 import {createAdvancedTable} from './advanced-table.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
+import {componentLabel} from './data/reuse-analysis.mjs';
 
 // PR26 3012 enrichment uses the shared configurable table. The canonical SN
 // view already renders 2114/3074/3022; this decorator reorganizes that evidence
@@ -24,7 +25,7 @@ function operatorSummary(result,rows){
   const currentDesc=current?value(current,'Defect Description','defect_desc')||t('Descrição não informada','Description not provided'):'';
   const currentTime=current?value(current,'Defect Time','defect_time'):'';
   const currentMode=current?value(current,'Manual/Automatic','manual_or_auto'):'';
-  const materialPreview=reused.slice(0,4).map(item=>`<li><b>${esc(value(item,'item_type')||t('Material','Material'))}</b><span>${esc(value(item,'item_sn')||'—')}</span><small>${esc(relationLabel(item.relation_to_current_failure))}</small></li>`).join('');
+  const materialPreview=reused.slice(0,4).map(item=>{const raw=String(value(item,'item_type')||t('Material','Material')),label=componentLabel(raw,document.documentElement.lang)||raw,detail=raw!==label?`${raw} · ${relationLabel(item.relation_to_current_failure)}`:relationLabel(item.relation_to_current_failure);return `<li><b>${esc(label)}</b><span>${esc(value(item,'item_sn')||'—')}</span><small>${esc(detail)}</small></li>`;}).join('');
   const context=contexts[0]||passages[0]||{};
   const station=value(context,'reference_station_code','operation_code','station')||'—';
   const eventTime=value(context,'reference_event_time','event_time','production_event_time')||'—';
