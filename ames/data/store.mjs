@@ -4,6 +4,14 @@ import {normalizeCanonical,CANONICAL_SCHEMA} from './canonical.mjs';
 
 const EMPTY_CONTEXT=Object.freeze({line_id:null,lines:[],period:null,product:null,shift:null,defect:null});
 const clean=value=>value===null||value===undefined||value===''?null:String(value);
+const cleanPeriod=value=>{
+  if(value===null||value===undefined||value==='')return null;
+  if(typeof value==='object'&&!Array.isArray(value)){
+    const from=clean(value.from),to=clean(value.to);
+    return from||to?{from,to}:null;
+  }
+  return clean(value);
+};
 
 // One store belongs to one Central session. Transport/auth stay in the shell.
 export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
@@ -14,6 +22,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
   let issues = [];
   let agent = immutable({status:'disconnected',config:null,job:null,error:''});
   let context = immutable({...EMPTY_CONTEXT});
+  let contextRevision=0;
 
   function normalizeBatch(payloads, localRead = false) {
     const next = new Map();
@@ -49,11 +58,21 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
     });
   }
 
-  function firstLoadedLine(){return LINE_IDS.find(line=>readLine(line).snapshot)||LINE_IDS[0];}
+  function loadedLines(){return LINE_IDS.filter(line=>readLine(line).snapshot);}
+  function firstLoadedLine(){return loadedLines()[0]||LINE_IDS[0];}
+  function setContext(next){
+    const before=JSON.stringify(context),after=JSON.stringify(next);
+    context=immutable(next);
+    if(before!==after)contextRevision+=1;
+    return context;
+  }
   function ensureContextLine(){
-    if(context.line_id&&LINE_IDS.includes(context.line_id))return context.line_id;
-    const line=firstLoadedLine();
-    context=immutable({...context,line_id:line,lines:[line]});
+    const loaded=loadedLines();
+    if(context.line_id&&LINE_IDS.includes(context.line_id)){
+      if(!loaded.length||loaded.includes(context.line_id))return context.line_id;
+    }
+    const line=loaded[0]||context.line_id||LINE_IDS[0];
+    if(loaded.length&&(context.line_id!==line||context.lines.length!==1||context.lines[0]!==line))setContext({...context,line_id:line,lines:[line]});
     return line;
   }
 
@@ -72,22 +91,23 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
       const result = normalizeBatch(payloads);
       remote = result.next; // Full replacement also removes revoked/deleted docs.
       issues = immutable([...errors, ...result.errors]);
-      if(!context.line_id&&remote.size)ensureContextLine();
+      if(remote.size)ensureContextLine();
       return issues;
     },
     replaceLocalSnapshots(payloads) {
       const result = normalizeBatch(payloads, true);
       for(const [line,next] of result.next){const old=local.get(line);if(next.canonical&&old?.source_id===next.source_id&&old?.snapshot_id===next.snapshot_id&&old?.revision===next.revision&&old?.content_hash===next.content_hash)result.next.set(line,old);}
       local = result.next;
-      if(!context.line_id&&local.size)ensureContextLine();
+      if(local.size)ensureContextLine();
       return immutable(result.errors);
     },
     setLocalConnected(value) { localConnected = value === true; },
-    replaceSyncedSnapshots(payloads){const result=normalizeBatch(payloads,true);synced=result.next;if(!context.line_id&&synced.size)ensureContextLine();return immutable(result.errors);},
+    replaceSyncedSnapshots(payloads){const result=normalizeBatch(payloads,true);synced=result.next;if(synced.size)ensureContextLine();return immutable(result.errors);},
     localCanonical(){return [...local.values()].map(s=>s.canonical).filter(Boolean);},
     agent() { return agent; },
     updateAgent(patch) { agent = immutable({...agent,...patch}); },
     context(){return context;},
+    contextRevision(){return contextRevision;},
     preferredLine(){return ensureContextLine();},
     updateContext(patch={}){
       const next={...context};
@@ -102,10 +122,11 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
         if(lines.some(line=>!LINE_IDS.includes(line)))throw Error('invalid_operational_lines');
         next.lines=lines;
         if(lines.length===1)next.line_id=lines[0];
+        else if(!lines.length)next.line_id=null;
       }
-      for(const key of ['period','product','shift','defect'])if(Object.prototype.hasOwnProperty.call(patch,key))next[key]=clean(patch[key]);
-      context=immutable(next);
-      return context;
+      if(Object.prototype.hasOwnProperty.call(patch,'period'))next.period=cleanPeriod(patch.period);
+      for(const key of ['product','shift','defect'])if(Object.prototype.hasOwnProperty.call(patch,key))next[key]=clean(patch[key]);
+      return setContext(next);
     },
     read(line) { return readLine(line); },
     occurrences({ line_id, product, defect_code, pcba_sn } = {}) {
@@ -125,7 +146,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
     clear() {
       local = new Map(); remote = new Map(); synced = new Map(); localConnected = false; issues = [];
       agent = immutable({status:'disconnected',config:null,job:null,error:''});
-      context = immutable({...EMPTY_CONTEXT});
+      context = immutable({...EMPTY_CONTEXT});contextRevision+=1;
     }
   });
 }
