@@ -14,9 +14,14 @@ function markOperationalColumns(section,technical){
 }
 
 function decorateRule(root){
-  const rule=root.querySelector('.ames-rule-strip-strong');if(!rule||rule.dataset.operatorRule)return;rule.dataset.operatorRule='1';
-  const note=rule.querySelector('small');if(!note)return;
-  const details=document.createElement('details');details.className='ames-process-rule-detail';details.innerHTML=`<summary>${t('Por que esta regra existe','Why this rule exists')}</summary><p>${note.textContent}</p>`;note.replaceWith(details);
+  const rule=root.querySelector('.ames-rule-strip-strong');if(!rule)return;
+  let details=rule.querySelector('.ames-process-rule-detail');
+  if(!details){
+    const note=rule.querySelector('small');if(!note)return;
+    details=document.createElement('details');details.className='ames-process-rule-detail';details.dataset.sourceText=note.textContent;details.innerHTML='<summary></summary><p></p>';note.replaceWith(details);
+  }
+  details.querySelector('summary').textContent=t('Por que esta regra existe','Why this rule exists');
+  details.querySelector('p').textContent=details.dataset.sourceText||'';
 }
 
 function decorateContexts(root,state){
@@ -30,14 +35,16 @@ function decorateContexts(root,state){
   button.textContent=state.technical?t('Visão operacional','Operational view'):t('Colunas técnicas','Technical columns');
   markOperationalColumns(section,state.technical);
   let note=section.querySelector('[data-process-operator-note]');
-  if(!note&&!state.technical){note=document.createElement('p');note.dataset.processOperatorNote='1';note.className='ames-process-operator-note';note.textContent=t('A visão diária mostra PCBA, falha, Defect Time, modo de registro, posto, horário real, turno, AT e status. As demais colunas continuam disponíveis em “Colunas técnicas”.','The daily view shows PCBA, failure, Defect Time, registration mode, station, actual time, shift, AT and status. Remaining fields stay available under “Technical columns”.');section.querySelector('.section-head')?.after(note);}
-  if(note)note.hidden=state.technical;
+  if(!note){note=document.createElement('p');note.dataset.processOperatorNote='1';note.className='ames-process-operator-note';section.querySelector('.section-head')?.after(note);}
+  note.textContent=t('A visão diária mostra PCBA, falha, Defect Time, modo de registro, posto, horário real, turno, AT e status. As demais colunas continuam disponíveis em “Colunas técnicas”.','The daily view shows PCBA, failure, Defect Time, registration mode, station, actual time, shift, AT and status. Remaining fields stay available under “Technical columns”.');
+  note.hidden=state.technical;
 }
 
 export function withProcessOperatorLayout(view,root){
-  const state={technical:false};
+  const state={technical:false};let langObserver;
+  const repaint=()=>{decorateRule(root);decorateContexts(root,state);};
   return Object.freeze({
-    render(){view.render();decorateRule(root);decorateContexts(root,state);},
-    clear(){view.clear?.();state.technical=false;}
+    render(){view.render();repaint();if(!langObserver){langObserver=new MutationObserver(repaint);langObserver.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});}},
+    clear(){langObserver?.disconnect();langObserver=null;view.clear?.();state.technical=false;}
   });
 }
