@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - work/ames-integrated-clean-v5-20261013
+      - work/ames-integrated-clean-v5-improvements-20261013
   workflow_dispatch:
 
 permissions:
@@ -32,6 +33,10 @@ jobs:
       - name: Integrated Python contracts
         run: |
           python scripts/agent-integrated-v5.test.py
+          python scripts/agent-operational-calendar.test.py
+          python scripts/agent-base-paging.test.py
+          python scripts/agent-performance-indexes.test.py
+          python scripts/agent-package-contract.test.py
           PYTHONPATH=ames/agent python - <<'PY'
           import candidate_config
           assert candidate_config.normalize_start_date('2026-01-01') == '2026-01-01'
@@ -45,7 +50,9 @@ jobs:
           PY
 
       - name: Integrated JS contracts
-        run: node --test scripts/ames-integrated-v5.test.mjs scripts/ames-daily-failure-analytics.test.mjs
+        run: |
+          node --test scripts/ames-integrated-v5.test.mjs scripts/ames-daily-failure-analytics.test.mjs
+          node --test scripts/ames-base-view-performance.test.mjs scripts/ames-runtime-observability.test.mjs scripts/ames-advanced-table.test.mjs
 
       - name: Check console module syntax
         run: |
@@ -53,6 +60,12 @@ jobs:
           node --check ames/console-legacy-parity.mjs
           node --check ames/console-specialized-views.mjs
           node --check ames/console-wave3-views.mjs
+          node --check ames/console-base-view.mjs
+          node --check ames/console-data-health.mjs
+          node --check ames/console-shift-summary.mjs
+          node --check ames/console-evidence-drawer.mjs
+          node --check ames/console-monitor-runtime.mjs
+          node --check ames/base-paging.mjs
           node --check ames/daily-failure-summary.mjs
           node --check ames/daily-failure-analytics.mjs
           node --check ames/console-3012-fastlane.mjs
@@ -91,7 +104,7 @@ jobs:
           z=Path(os.environ['RUNNER_TEMP'])/'central-ames-integrated.zip'
           with zipfile.ZipFile(z) as f:
               names=set(f.namelist())
-              required={'00_INICIAR_AQUI.bat','01_INSTALAR_UMA_VEZ.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','ames-agent/agent_hardened_entry.py','frontend/Central-de-Controle-/index.html','CANDIDATE_MANIFEST.json'}
+              required={'00_INICIAR_AQUI.bat','01_INSTALAR_UMA_VEZ.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','ames-agent/agent_hardened_entry.py','ames-agent/base_paging_backend.py','ames-agent/performance_indexes.py','frontend/Central-de-Controle-/index.html','frontend/Central-de-Controle-/ames/console-base-view.mjs','frontend/Central-de-Controle-/ames/console-data-health.mjs','frontend/Central-de-Controle-/ames/console-shift-summary.mjs','frontend/Central-de-Controle-/ames/console-evidence-drawer.mjs','CANDIDATE_MANIFEST.json'}
               missing=required-names
               assert not missing, f'missing clean bundle files: {missing}'
               assert 'ames-agent/config.json' not in names
@@ -184,6 +197,9 @@ jobs:
             if([string]$saved.config.ames_start_date -ne '2026-02-01'){throw 'ames_start_date did not persist through hardened config'}
             $savedFile=Get-Content package\ames-agent\config.json -Raw | ConvertFrom-Json
             if([string]$savedFile.ames_start_date -ne '2026-02-01'){throw 'ames_start_date was not persisted to config.json'}
+            $hardening=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -TimeoutSec 8
+            if(-not $hardening.ok){throw 'Hardening health not OK'}
+            if(-not $hardening.performance_indexes.ok){throw 'SQLite performance indexes are incomplete in installed CLEAN'}
             Write-Host "LIVE CLEAN ZIP OK: PID=$($ready.pid) build=$($ready.agent_build)" -ForegroundColor Green
           } finally {
             if($proc -and -not $proc.HasExited){Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue}
