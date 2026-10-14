@@ -78,12 +78,15 @@ test('SN investigation preserves successful 3074 and 3022 evidence when 2114 is 
 test('3012 source state distinguishes not collected, proven zero, error and cache evidence',()=>{
   globalThis.document={documentElement:{lang:'pt-BR'}};
   assert.equal(source3012State({}).kind,'unknown','missing 3012 is unknown, never zero');
-  const zero=source3012State({trace_3012:{rows:[]}});
+  const unproven=source3012State({trace_3012:{rows:[]}});
+  assert.equal(unproven.kind,'unknown');
+  assert.equal(unproven.proven_zero,false,'an empty default container without completion proof is not zero');
+  const zero=source3012State({trace_3012:{status:'ok',rows:[]}});
   assert.equal(zero.kind,'ok');
-  assert.equal(zero.proven_zero,true,'an explicit successful rows=[] may represent real zero');
+  assert.equal(zero.proven_zero,true,'completed rows=[] is real zero');
   assert.equal(source3012State({trace_3012:{status:'error',error:'boom'}}).kind,'bad');
   const cached=source3012State({local_snapshot:{repair_3012:[{repair_user:'TECH'}]}});
-  assert.equal(cached.kind,'ok');
+  assert.equal(cached.kind,'cached');
   assert.match(cached.label,/Cache local/);
 });
 
