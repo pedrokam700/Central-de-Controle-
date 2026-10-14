@@ -110,7 +110,7 @@ jobs:
             $html=Invoke-WebRequest 'http://127.0.0.1:8765/Central-de-Controle-/' -UseBasicParsing -TimeoutSec 5
             if($html.StatusCode -ne 200 -or $html.Content -notmatch 'Central'){throw 'local frontend not served'}
             $manifest=Get-Content 'package\CANDIDATE_MANIFEST.json' -Raw | ConvertFrom-Json
-            if([string]$manifest.source_sha -ne '${{ github.sha }}'){throw "manifest SHA mismatch: $($manifest.source_sha)"}
+            if([string]$manifest.sha -ne '${{ github.sha }}'){throw "manifest SHA mismatch: $($manifest.sha)"}
             Write-Host 'Windows CLEAN smoke OK' -ForegroundColor Green
           }
           finally {
