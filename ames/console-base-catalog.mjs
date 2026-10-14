@@ -3,11 +3,27 @@ import { LINE_IDS } from './data/contract.mjs';
 // Complementa a Base local sem duplicar estado: o agente continua sendo a fonte
 // do catálogo e a view continua usando o mesmo client/store da sessão Central.
 export function withBaseCatalog(view,root,store,client){
-  let loading=false,loadedFor='';
+  let loading=false,loadedFor='',syncingLine=false;
+
+  function sharedLine(){
+    const value=store.context?.().line_id;
+    return LINE_IDS.includes(value)?value:null;
+  }
 
   function currentLine(){
     const value=root.querySelector('[data-base-line]')?.value;
-    return LINE_IDS.includes(value)?value:LINE_IDS[0];
+    if(LINE_IDS.includes(value))return value;
+    return sharedLine()||store.preferredLine?.()||LINE_IDS[0];
+  }
+
+  function syncSharedLine(){
+    const line=sharedLine(),select=root.querySelector('[data-base-line]');
+    if(!line||!select||select.value===line)return;
+    syncingLine=true;
+    try{
+      select.value=line;
+      if(select.value===line)select.dispatchEvent(new Event('change',{bubbles:true}));
+    }finally{syncingLine=false;}
   }
 
   function paint(message=''){
@@ -61,17 +77,18 @@ export function withBaseCatalog(view,root,store,client){
   }
 
   function render(){
-    view.render();paint();
+    view.render();syncSharedLine();paint();
     const select=root.querySelector('[data-base-line]');
     if(select&&!select.dataset.baseCatalogBound){
       select.dataset.baseCatalogBound='1';
       select.addEventListener('change',()=>{
         const line=currentLine();
+        if(!syncingLine&&LINE_IDS.includes(line))store.updateContext?.({line_id:line});
         const status=root.querySelector('[data-base-catalog-status]');
         if(status&&loadedFor&&loadedFor!==line)status.textContent='Linha alterada. Recarregue o catálogo se quiser confirmar cobertura/datasets deste contexto.';
       });
     }
   }
 
-  return Object.freeze({render,clear(){view.clear?.();loading=false;loadedFor='';}});
+  return Object.freeze({render,clear(){view.clear?.();loading=false;loadedFor='';syncingLine=false;}});
 }
