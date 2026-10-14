@@ -16,6 +16,24 @@ def assert_clean_payload(payload):
  if bad:raise ValueError('Standalone CLEAN contains forbidden runtime/private files: '+', '.join(sorted(bad)))
  return True
 
+def verify_zip(destination):
+ destination=Path(destination)
+ with zipfile.ZipFile(destination) as z:
+  names=set(z.namelist())
+  if 'CANDIDATE_MANIFEST.json' not in names:raise ValueError('CANDIDATE_MANIFEST.json missing from final ZIP')
+  manifest=json.loads(z.read('CANDIDATE_MANIFEST.json').decode('utf-8'))
+  files=manifest.get('files') if isinstance(manifest,dict) else None
+  if not isinstance(files,dict):raise ValueError('Candidate manifest files map missing')
+  missing=sorted(set(files)-names)
+  if missing:raise ValueError('Manifest references missing ZIP files: '+', '.join(missing))
+  mismatched=[]
+  for name,want in files.items():
+   got=hashlib.sha256(z.read(name)).hexdigest()
+   if got!=want:mismatched.append(name)
+  if mismatched:raise ValueError('Final ZIP hash mismatch: '+', '.join(sorted(mismatched)))
+  assert_clean_payload({name:b'' for name in names})
+  return {'zip_files':len(names),'manifest_files':len(files),'sha':manifest.get('sha')}
+
 def build(destination, development=False):
  sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
  dirty=subprocess.check_output(['git','status','--porcelain','--untracked-files=all'],cwd=ROOT,text=True).strip()
@@ -99,6 +117,7 @@ Se este candidato falhar, feche a pasta nova e volte a usar a CLEAN V3 intacta.
  destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
  with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as z:
   for name,data in sorted(payload.items()):z.writestr(name,data)
- print(json.dumps({'file':str(destination.resolve()),'sha':sha,'development':bool(dirty),'standalone_clean':True,'sha256':hashlib.sha256(destination.read_bytes()).hexdigest(),'files':len(payload)}))
+ verification=verify_zip(destination)
+ print(json.dumps({'file':str(destination.resolve()),'sha':sha,'development':bool(dirty),'standalone_clean':True,'sha256':hashlib.sha256(destination.read_bytes()).hexdigest(),'files':len(payload),'verified_manifest_files':verification['manifest_files'],'verified_zip_files':verification['zip_files']}))
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('destination');p.add_argument('--development',action='store_true');a=p.parse_args();build(a.destination,a.development)
