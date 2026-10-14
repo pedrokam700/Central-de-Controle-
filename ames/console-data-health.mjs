@@ -77,7 +77,7 @@ function sourceModel(store,source,repairStatus=null){
     const detail=`${count}/${allOccurrences.length} ${t('ocorrências com evidência 3012','occurrences with 3012 evidence')}${hasCacheCoverage?t(` · cache local: ${cacheSns} SN(s) / ${cacheIntervals} intervalo(s)`,` · local cache: ${cacheSns} SN(s) / ${cacheIntervals} interval(s)`):''}`;
     state=status(count===allOccurrences.length?'ok':'partial',count===allOccurrences.length?t('Coberto','Covered'):t('Parcial','Partial'),detail);
   }else if(hasCacheCoverage){
-    state=status('partial',t('Cache local','Local cache'),t(`Nenhuma ocorrência atual tem evidência 3012 associada. O cache local contém ${cacheRows} registro(s) e cobertura para ${cacheSns} SN(s), mas isso não prova cobertura das PCBAs atuais.`,`No current occurrence has linked 3012 evidence. Local cache contains ${cacheRows} record(s) and coverage for ${cacheSns} SN(s), but this does not prove coverage of the current PCBAs.`));
+    state=status('partial',t('Sem vínculo neste snapshot','No link in this snapshot'),t(`Nenhuma ocorrência atual tem evidência 3012 associada. O cache local contém ${cacheRows} registro(s) e cobertura para ${cacheSns} SN(s), mas isso não prova cobertura das PCBAs atuais.`,`No current occurrence has linked 3012 evidence. Local cache contains ${cacheRows} record(s) and coverage for ${cacheSns} SN(s), but this does not prove coverage of the current PCBAs.`));
   }else{
     state=status('unknown',t('Não comprovado','Not proven'),t('Nenhuma evidência 3012 foi associada e não há cobertura exata registrada no cache local. Isso não equivale a zero reparos.','No 3012 evidence is linked and no exact-query coverage is recorded in the local cache. This does not mean zero repairs.'));
   }
