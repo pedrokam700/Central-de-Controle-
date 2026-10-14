@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
+import json
 import re
+import tempfile
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,6 +126,51 @@ def test_integrated_clean_builder_rejects_runtime_private_files():
             raise AssertionError(f"forbidden CLEAN payload file accepted: {name}")
 
 
+def _write_synthetic_candidate(path: Path, *, content: bytes = b"safe", manifest_hash: str | None = None, extra: bool = False):
+    wanted = manifest_hash or hashlib.sha256(content).hexdigest()
+    manifest = {
+        "sha": "a" * 40,
+        "standalone_clean": True,
+        "physical_gate": "PENDING",
+        "files": {"safe.txt": wanted},
+    }
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("safe.txt", content)
+        if extra:
+            z.writestr("unmanifested.txt", b"extra")
+        z.writestr("CANDIDATE_MANIFEST.json", json.dumps(manifest).encode("utf-8"))
+
+
+def test_integrated_clean_final_zip_verification_fails_closed():
+    builder = integrated_builder_module()
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        valid = root / "valid.zip"
+        _write_synthetic_candidate(valid)
+        state = builder.verify_zip(valid)
+        assert state["zip_files"] == 2
+        assert state["manifest_files"] == 1
+        assert state["sha"] == "a" * 40
+
+        tampered = root / "tampered.zip"
+        _write_synthetic_candidate(tampered, content=b"changed", manifest_hash=hashlib.sha256(b"original").hexdigest())
+        try:
+            builder.verify_zip(tampered)
+        except ValueError as exc:
+            assert "hash mismatch" in str(exc).lower()
+        else:
+            raise AssertionError("tampered ZIP content was accepted")
+
+        extra = root / "extra.zip"
+        _write_synthetic_candidate(extra, extra=True)
+        try:
+            builder.verify_zip(extra)
+        except ValueError as exc:
+            assert "unmanifested" in str(exc).lower()
+        else:
+            raise AssertionError("unmanifested ZIP file was accepted")
+
+
 def test_legacy_fastlane_is_not_an_active_package_authority():
     source = (ROOT / "scripts" / "build-ames-fastlane-test-overlay.py").read_text(encoding="utf-8")
     # Fastlane is retained only as historical compatibility material. The active
@@ -137,6 +186,7 @@ if __name__ == "__main__":
         test_active_package_builders_derive_from_single_updater_contract,
         test_integrated_clean_builder_copies_all_agent_python_modules,
         test_integrated_clean_builder_rejects_runtime_private_files,
+        test_integrated_clean_final_zip_verification_fails_closed,
         test_legacy_fastlane_is_not_an_active_package_authority,
     ]
     for fn in tests:
