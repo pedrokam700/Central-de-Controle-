@@ -36,3 +36,21 @@ test('polimento mantém dashboard rápido antes da granularidade e CORA com arqu
   assert.match(knowledge,/createElement\('details'\)/);
   assert.match(knowledge,/Como a CORA usa os dados/);
 });
+
+test('processo e base local mostram leitura operacional sem descartar campos técnicos',()=>{
+  const process=fs.readFileSync('ames/console-process-operator.mjs','utf8');
+  const base=fs.readFileSync('ames/console-base-view.mjs','utf8');
+  const shell=fs.readFileSync('ames/console-view.mjs','utf8');
+  const css=fs.readFileSync('ames/console-operator-parity.css','utf8');
+  assert.match(process,/PRIMARY_HEADERS/);
+  assert.match(process,/Colunas técnicas/);
+  assert.match(process,/Why this rule exists/);
+  assert.match(base,/OPERATIONAL_COLUMNS/);
+  assert.match(base,/technicalColumns/);
+  assert.match(base,/Nenhum dado foi removido/);
+  assert.match(shell,/withProcessOperatorLayout/);
+  assert.match(shell,/console-operator-parity\.css/);
+  assert.match(css,/ames-reuse-line-tabs/);
+  assert.match(css,/ames-process-operator-note/);
+  assert.match(css,/ames-base-operational-note/);
+});
