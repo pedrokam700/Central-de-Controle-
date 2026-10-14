@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const launcher=fs.readFileSync('tools/ames-workstation/INICIAR_POSTO_CENTRAL_V2.bat','utf8');
+const localStarter=fs.readFileSync('tools/ames-workstation/START_LOCAL_CANDIDATE.ps1','utf8');
 const route=fs.readFileSync('tools/ames-workstation/ROTA_AMES_APLICAR.bat','utf8');
 const diag=fs.readFileSync('tools/ames-workstation/DIAGNOSTICO_POSTO.ps1','utf8');
 const starter=fs.readFileSync('tools/ames-workstation/START_AGENT_CANONICAL.ps1','utf8');
@@ -41,14 +42,16 @@ test('launcher recupera auto-repair R11 quando .venv existe mas esta incompleto'
   assert.match(launcher,/01_INSTALAR_UMA_VEZ\.bat" \/auto/);
 });
 
-test('agente ativo precisa ser da mesma pasta, build canonico, H1 e segurança local',()=>{
+test('agente ativo precisa ser da mesma pasta, build canonico, H1 autenticado e seguranca local',()=>{
   assert.match(entry,/"package_root":str\(a\.BASE_DIR\.parent\.resolve\(\)\)/);
   assert.match(starter,/package_root/);
   assert.match(starter,/\$actual -ieq \$expected/);
   assert.match(starter,/Stop-AgentOn8765/);
   assert.match(starter,/agent_build -like 'CANONICAL-\*'/);
   assert.match(starter,/agent_hardened_entry\.py/);
-  assert.match(starter,/api\/v1\/hardening\/health/);
+  assert.match(starter,/Get-AgentToken/);
+  assert.match(starter,/X-Central-Agent-Token/);
+  assert.match(starter,/api\/v1\/hardening\/health' -Headers \$headers/);
   assert.match(starter,/schema_version/);
   assert.match(starter,/SQLite=\$\(\$hard\.integrity\)/);
   assert.match(hardenedEntry,/hardening\.install/);
@@ -56,6 +59,37 @@ test('agente ativo precisa ser da mesma pasta, build canonico, H1 e segurança l
   assert.match(hardenedEntry,/HardenedHandler/);
   assert.match(localSecurity,/TOKEN_HEADER = "X-Central-Agent-Token"/);
   assert.match(localSecurity,/secrets\.token_urlsafe\(32\)/);
+});
+
+test('startup real e idempotente: processo e capturado, limpo e logs nunca dependem de pythonw',()=>{
+  assert.match(starter,/Start-Process[\s\S]*-PassThru/);
+  assert.match(starter,/Stop-ProcessAndWait/);
+  assert.match(starter,/Stop-ResidualSamePackageAgents/);
+  assert.match(starter,/startup nao validado/);
+  assert.match(starter,/agent_startup_state\.json/);
+  assert.match(starter,/agent_stdout_\$stamp\.log|agent_stdout_/);
+  assert.match(starter,/@\('-u'/);
+  assert.doesNotMatch(starter,/pythonw\.exe/i);
+  assert.doesNotMatch(starter,/0\.5\.24\*|0\.5\.25\*/);
+});
+
+test('todos os consumidores do H1 protegido usam token local sem enfraquecer o endpoint',()=>{
+  assert.match(launcher,/hardening\/health' -Headers \$headers/);
+  assert.match(diag,/hardening\/health' -Headers \$headers/);
+  assert.match(diag,/X-Central-Agent-Token/);
+  assert.match(hardenedEntry,/_PUBLIC_API = \{"\/api\/v1\/ready", "\/api\/v1\/health"\}/);
+  assert.doesNotMatch(hardenedEntry,/_PUBLIC_API[^\n]*hardening\/health/);
+});
+
+test('falha do 00_INICIAR produz diagnostico automatico e evidencias persistentes',()=>{
+  assert.match(localStarter,/DIAGNOSTICO_POSTO\.ps1/);
+  assert.match(localStarter,/Invoke-StartupDiagnostic/);
+  assert.match(localStarter,/local_agent_token/);
+  assert.match(localStarter,/token\.Length -lt 32/);
+  assert.match(diag,/agent_startup_state\.json/);
+  assert.match(diag,/Listener\/processo do agente 8765/);
+  assert.match(diag,/stdout do ultimo startup/);
+  assert.match(diag,/stderr do ultimo startup/);
 });
 
 test('rota A-MES persiste, e auto-reparada e nao troca gateway padrao',()=>{
@@ -72,10 +106,10 @@ test('rota A-MES persiste, e auto-reparada e nao troca gateway padrao',()=>{
 
 test('bootstrap nao armazena segredos A-MES e falha fechado em servico desconhecido',()=>{
   assert.match(starter,/candidate_version/);
-  assert.match(starter,/0\.5\.24|0\.5\.25/);
   assert.match(starter,/nao se identificou como agente A-MES/i);
   assert.doesNotMatch(starter,/password|senha\s*=|cookie|wifi.*key/i);
-  assert.match(diag,/nao le nem imprime senha A-MES/i);
+  assert.match(diag,/nao imprime senha A-MES/i);
+  assert.match(diag,/valor nunca exibido/i);
 });
 
 test('candidate builder inclui ferramentas de posto e deriva hardening do contrato ativo do updater',()=>{
