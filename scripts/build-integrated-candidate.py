@@ -3,6 +3,7 @@ import argparse, hashlib, json, os, subprocess, tempfile, zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
+SUPPORT_FILES=('START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1')
 _FORBIDDEN_EXACT={'config.json','local_agent_token','network_health.jsonl','.env','cookies.json','session.json'}
 _FORBIDDEN_SUFFIXES={'.sqlite','.sqlite3','.db','.pyc','.log','.zip','.pem','.key'}
 
@@ -53,8 +54,10 @@ def build(destination, development=False):
   if p.is_file() and '__pycache__' not in p.parts and (p.suffix=='.py' or (p.parent.name=='config' and p.suffix=='.json') or p.name=='requirements.txt'):
    payload['factory-engine/'+p.relative_to(ROOT/'ames/factory-engine').as_posix()]=p.read_bytes()
  ws=ROOT/'tools/ames-workstation'
- for p in ws.iterdir():
-  if p.is_file():payload['suporte/ames-workstation/'+p.name]=p.read_bytes()
+ for name in SUPPORT_FILES:
+  source=ws/name
+  if not source.is_file():raise ValueError('Required workstation support file missing: '+name)
+  payload['suporte/ames-workstation/'+name]=source.read_bytes()
  for name in ['01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','START_LOCAL_CANDIDATE.ps1']:
   payload[name]=(ws/name).read_bytes()
  payload['09_REPARAR_DEPENDENCIAS.bat']=(ws/'09_REPARAR_DEPENDENCIAS_CLEAN.bat').read_bytes()
@@ -73,8 +76,8 @@ def build(destination, development=False):
  html=re.sub(r'<script id="central-runtime-boot-guard">[\s\S]*?</script>','',html)
  payload[index]=html.encode()
  payload['frontend/Central-de-Controle-/local-entry.mjs']=b"if(!['127.0.0.1','localhost'].includes(location.hostname))throw Error('Local workstation requires loopback');\nif(new URLSearchParams(location.search).has('online'))await import('./offline-bootstrap.mjs?v=15.1.13.49');else await import('./core/local-workstation.mjs');\n"
- extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat']}
- payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty),'standalone_clean':True,'ames_start_date_default':config_example.get('ames_start_date')},indent=2).encode()
+ extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat'] or k.startswith('suporte/ames-workstation/')}
+ payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty),'standalone_clean':True,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES)},indent=2).encode()
  for doc in (ROOT/'docs/ames').glob('integrated-v5*'):
   if doc.is_file():payload['evidence/'+doc.name]=doc.read_bytes()
  analytics_doc=ROOT/'docs/ames/falhas-do-dia-analytics.md'
@@ -114,7 +117,7 @@ VALIDACAO FISICA AINDA NECESSARIA:
 Se este candidato falhar, feche a pasta nova e volte a usar a CLEAN V3 intacta.
 ''').encode()
  assert_clean_payload(payload)
- manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
+ manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
  payload['CANDIDATE_MANIFEST.json']=json.dumps(manifest,indent=2).encode()
  assert_clean_payload(payload)
  destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
