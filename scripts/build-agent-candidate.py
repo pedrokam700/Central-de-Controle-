@@ -2,23 +2,29 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path,PurePosixPath
 import zipfile
 SOURCE_SHA='1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167'
 COLLECTORS={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
-FILES=['agent.py','agent_entry.py','agent_hardened_entry.py','hardening.py','local_security.py','operational_calendar.py','performance_indexes.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py']
 PRODUCTION_URL='https://central-cora-v2.vercel.app'
 VERCEL_PREVIEW_URL='https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'
 PR_PREVIEW_URL='https://deploy-preview-23--productcontrolcenter.netlify.app'
 ORIGINS=[PRODUCTION_URL,VERCEL_PREVIEW_URL,PR_PREVIEW_URL]
+
+def _updater_files(root):
+    source=(root/'ames'/'agent'/'update_candidate.py').read_text(encoding='utf-8')
+    match=re.search(r"FILES=\((.*?)\)\nROOT_FILES=",source,re.S)
+    if not match:raise ValueError('Could not read update_candidate FILES contract')
+    files=list(dict.fromkeys(re.findall(r"'([^']+\.py)'",match.group(1))))
+    if not files:raise ValueError('Empty update_candidate FILES contract')
+    return files
+
 def build(source,destination):
     source,destination=Path(source).resolve(),Path(destination).resolve()
     if destination.exists() or source==destination:raise ValueError('New destination required')
     if hashlib.sha256(source.read_bytes()).hexdigest()!=SOURCE_SHA:raise ValueError('Original ZIP mismatch')
-    root=Path(__file__).resolve().parents[1];files={}
-    updater=(root/'ames'/'agent'/'update_candidate.py').read_text(encoding='utf-8')
-    for required in FILES:
-        if f"'{required}'" not in updater:raise ValueError('Candidate/updater contract mismatch: '+required)
+    root=Path(__file__).resolve().parents[1];files={};candidate_files=_updater_files(root)
     with zipfile.ZipFile(source) as old:
         prefix=next(n[:-len('agent.py')] for n in old.namelist() if n.endswith('/ames-agent/agent.py'));base=prefix[:-len('ames-agent/')]
         for name,digest in COLLECTORS.items():
@@ -40,8 +46,11 @@ def build(source,destination):
             files[config_example]=(json.dumps(cfg,ensure_ascii=False,indent=2)+'\n').encode('utf-8')
         for name in ['agent.py','engine_bridge.py','store.py']:files[prefix+'rollback-v0523/'+name]=old.read(prefix+name)
         if base+'00_INICIAR_AQUI.bat' in files:files[base+'rollback-v0523/00_INICIAR_AQUI.bat']=files[base+'00_INICIAR_AQUI.bat']
-        for name in [*FILES,'update_candidate.py']:files[prefix+name]=(root/'ames'/'agent'/name).read_bytes().replace(b'\r\n',b'\n')
-        files[prefix+'candidate-files.json']=json.dumps({n:hashlib.sha256(files[prefix+n]).hexdigest() for n in FILES},sort_keys=True,indent=2).encode()
+        for name in [*candidate_files,'update_candidate.py']:
+            path=root/'ames'/'agent'/name
+            if not path.is_file():raise ValueError('Candidate file missing: '+name)
+            files[prefix+name]=path.read_bytes().replace(b'\r\n',b'\n')
+        files[prefix+'candidate-files.json']=json.dumps({n:hashlib.sha256(files[prefix+n]).hexdigest() for n in candidate_files},sort_keys=True,indent=2).encode()
         files[base+'CANDIDATO_0_5_24_RC1.md']=(root/'ames'/'agent'/'README.md').read_bytes().replace(b'\r\n',b'\n')
         files[base+'suporte/PREPARAR_PREVIEW_CENTRAL_V2.ps1']=(root/'scripts'/'ames-authorize-preview-origin.ps1').read_bytes().replace(b'\r\n',b'\n')
         workstation=root/'tools'/'ames-workstation'
