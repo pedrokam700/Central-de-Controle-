@@ -21,7 +21,7 @@ test('newly rendered view adopts the shared operational line',async()=>{
   await Promise.resolve();
   assert.equal(select.value,'TAN10102');
   assert.equal(dispatched,1);
-  assert.deepEqual(updates.at(-1),{line_id:'TAN10102'});
+  assert.equal(updates.length,0,'adopting the line already held by state.ames must not create a redundant store write');
   dispose();
 });
 
