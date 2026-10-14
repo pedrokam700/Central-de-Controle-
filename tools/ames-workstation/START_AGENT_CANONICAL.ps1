@@ -124,9 +124,9 @@ function Get-CanonicalIdentity {
 
 function Show-LogTail {
   param([string]$Path,[string]$Label)
-  if(-not $Path -or -not (Test-Path -LiteralPath $Path)){Write-Host "$Label: arquivo ainda nao criado.";return}
+  if(-not $Path -or -not (Test-Path -LiteralPath $Path)){Write-Host "${Label}: arquivo ainda nao criado.";return}
   $lines=@(Get-Content -LiteralPath $Path -Tail 40 -ErrorAction SilentlyContinue)
-  if(-not $lines -or $lines.Count -eq 0){Write-Host "$Label: vazio.";return}
+  if(-not $lines -or $lines.Count -eq 0){Write-Host "${Label}: vazio.";return}
   Write-Host "--- $Label ($Path) ---"
   $lines|ForEach-Object{Write-Host $_}
 }
