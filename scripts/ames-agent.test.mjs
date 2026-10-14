@@ -18,6 +18,7 @@ export function harness(){
     const u=new URL(url),key=u.pathname.replace('/api/v1/','');calls.push({key,body:options.body&&JSON.parse(options.body),options,url});
     if(key==='v2/records')return {ok:true,json:async()=>canonicalResponse(canonicalAgentFixture(f),u)};
     if(key==='base')return {ok:true,json:async()=>({rows:u.searchParams.get('dataset')==='defects'?f.legacy.defects:(f.datasets[u.searchParams.get('dataset')]||[])})};
+    if(key==='base/catalog')return {ok:true,json:async()=>({datasets:[{dataset:'defects',rows:f.legacy.defects.length}]})};
     if(key==='export/excel/download')return {ok:true,blob:async()=>new Blob(['PKoriginal'])};
     const value=routes[key];if(value instanceof Function)return value(options);
     if(!value)throw Error('Unexpected route '+key);
@@ -58,6 +59,14 @@ test('monitor is explicit; original Excel bytes pass through without regeneratin
   const h=harness();await h.client.connect();await h.client.monitor(true,{...scope,interval_minutes:5});assert.deepEqual(h.calls.find(c=>c.key==='monitor/start').body,{mode:'today',lines:[line],performance:'fast',interval_minutes:5});
   await h.client.monitor(false,scope);assert.equal(h.store.agent().monitor.enabled,false);assert.equal(await (await h.client.excel()).text(),'PKoriginal');
   assert(h.calls.every(c=>!c.key.includes('3022')&&c.options.credentials==='omit'));
+});
+test('technical Base reads carry exact bounded offset without changing canonical refresh transport',async()=>{
+  const h=harness();await h.client.connect();
+  await h.client.auxiliary('dataset',{dataset:'defects',line,snapshot_id:'17',limit:100,offset:200});
+  const call=h.calls.filter(c=>c.key==='base').at(-1),url=new URL(call.url);
+  assert.equal(url.searchParams.get('dataset'),'defects');assert.equal(url.searchParams.get('line'),line);assert.equal(url.searchParams.get('snapshot_id'),'17');
+  assert.equal(url.searchParams.get('limit'),'100');assert.equal(url.searchParams.get('offset'),'200');
+  const canonicalCalls=h.calls.filter(c=>c.key==='v2/records');assert(canonicalCalls.every(c=>!new URL(c.url).searchParams.has('offset')));
 });
 test('snapshot replacement while reading is rejected, old read remains intact',async()=>{
   const h=harness();await h.client.connect();const old=h.store.read(line).snapshot;
