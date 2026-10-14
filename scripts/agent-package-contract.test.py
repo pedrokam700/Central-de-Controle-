@@ -96,6 +96,22 @@ def test_integrated_clean_builder_copies_all_agent_python_modules():
     assert "p.suffix=='.py'" in source
 
 
+def test_integrated_clean_support_files_are_explicit():
+    builder = integrated_builder_module()
+    assert tuple(builder.SUPPORT_FILES) == (
+        "START_AGENT_CANONICAL.ps1",
+        "DIAGNOSTICO_POSTO.ps1",
+    )
+    source = (ROOT / "scripts" / "build-integrated-candidate.py").read_text(encoding="utf-8")
+    assert "for p in ws.iterdir()" not in source
+    for legacy in (
+        "CAPTURAR_MOTOR_R12_SEGURO.bat",
+        "ROTA_AMES_APLICAR.bat",
+        "ROTA_AMES_REMOVER.bat",
+    ):
+        assert legacy not in builder.SUPPORT_FILES
+
+
 def test_integrated_clean_builder_rejects_runtime_private_files():
     builder = integrated_builder_module()
     assert builder.assert_clean_payload({
@@ -185,6 +201,7 @@ if __name__ == "__main__":
         test_updater_covers_active_hardened_agent_dependency_closure,
         test_active_package_builders_derive_from_single_updater_contract,
         test_integrated_clean_builder_copies_all_agent_python_modules,
+        test_integrated_clean_support_files_are_explicit,
         test_integrated_clean_builder_rejects_runtime_private_files,
         test_integrated_clean_final_zip_verification_fails_closed,
         test_legacy_fastlane_is_not_an_active_package_authority,
