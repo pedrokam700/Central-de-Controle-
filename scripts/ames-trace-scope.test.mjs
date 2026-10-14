@@ -29,3 +29,16 @@ test('modo Selecionadas nunca cai silenciosamente em todas as falhas',()=>{
   assert.match(helper,/root\.addEventListener\('click',runGuard,true\)/);
   assert.match(helper,/root\.removeEventListener\('click',runGuard,true\)/);
 });
+
+
+test('seleção agrupa códigos e soma ocorrências só das linhas selecionadas sem alterar dados',async()=>{
+  const {loadedFailures}=await import('../ames/console-trace-scope.mjs');
+  const {defectDescription}=await import('../ames/defect-label.mjs');
+  const rows={A:[{defect_code:'GN01',defect_desc:'Undefined error'},{defect_code:'GN01',defect_desc:'Receiver noise'}],B:[{defect_code:'GN01',defect_desc:'Receiver noise'},{defect_code:'GN02',defect_desc:''}]};
+  const before=JSON.stringify(rows),store={read:line=>({snapshot:{occurrences:rows[line]}})};
+  assert.deepEqual(loadedFailures(store,['A']),[{code:'GN01',description:'Receiver noise',count:2}]);
+  assert.deepEqual(loadedFailures(store,['A','B']),[{code:'GN01',description:'Receiver noise',count:3},{code:'GN02',description:'',count:1}]);
+  assert.equal(JSON.stringify(rows),before);
+  assert.equal(defectDescription('Undefined error'),'Descrição não informada');
+  assert.equal(defectDescription(null,'en-US'),'Description not provided');
+});

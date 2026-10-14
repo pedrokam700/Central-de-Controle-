@@ -30,3 +30,15 @@ Checkpoint inicial publicado: `932d6efac4b657962de270422e9ae31561c81fbd`. Confir
 - O retorno local chama o botão home escondido, cujo handler mostra uma home mínima e mantém a classe que oculta a navegação completa. A entrada completa já existe em `?online=1` e carrega a Central real com Auth/cache existentes. A correção usará essa entrada, com volta explícita ao Console local; não criará outra Central.
 
 Próximo passo seguro: corrigir formulário/estado de submissão/renderização e seleção humana; testes reais do clique e polling. Depois corrigir navegação com teste da entrada real no viewport 1920x1080. Bootstrap e coletores continuam congelados.
+
+## Correção parcial persistida — rastreabilidade e labels
+
+Base reconciliada `ff8ba54fb7754049b080d3af695ae9de3c637524`. Formulário real, captura de erro abrangendo a coleta, submissão imediata e feedback compartilhado entre Rastreabilidade/Monitoramento. Client mantém resultado e escopo já retornados pelo job deep_trace. UI mostra etapas/linha e resumo dos campos efetivamente retornados (materiais/históricos no snapshot, eventos/contextos 3022), sem declarar contagens cumulativas como novas coletas.
+
+Seleção usa código+descrição+contagem agregada; limites/manuais recolhidos, vazio convertido em 0 no pedido. Labels de falhas tratam descrição ausente/Undefined error somente na apresentação, preservando dados brutos. Novos módulos incluídos no cache offline.
+
+Teste novo `scripts/ames-trace-interaction.browser.mjs` executa clique real → POST /deep-trace autenticado → job novo → polling → etapas → resultado, além de erro com job anterior nas duas views. Adicionado ao Full Quality. Contratos de seleção locais passaram; browser local não iniciou (Chromium disponível encerrou SIGSEGV antes de abrir página), portanto a prova browser depende do Actions deste checkpoint e não foi contada como PASS.
+
+Pendente: navegação Central completa/retorno Console + prova 1920x1080, resultados dos gates e ZIP final. Bootstrap/coletores não alterados. Próxima ação: verificar CI deste checkpoint, corrigir somente falhas observadas e completar navegação autorizada.
+
+Validação local adicional deste checkpoint: `node --test --test-isolation=none scripts/ames-*.test.mjs` — 225/225 PASS.

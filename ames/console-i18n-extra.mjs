@@ -1,4 +1,21 @@
 export const EXTRA_EN=Object.fromEntries(`
+Falhas carregadas|Loaded failures
+Selecione pela descrição. A contagem soma as ocorrências nas linhas escolhidas. Selecionadas exige ao menos um código antes de iniciar.|Select by description. Counts add occurrences across the chosen lines. Selected requires at least one code before starting.
+Nenhuma falha carregada nas linhas selecionadas.|No failures loaded for the selected lines.
+Limites avançados|Advanced limits
+Sem limite por padrão. Preencha somente para limitar esta execução.|Unlimited by default. Fill in only to limit this run.
+Sem limite|Unlimited
+Códigos manuais (avançado)|Manual codes (advanced)
+Separados por vírgula|Comma-separated
+Nenhuma coleta iniciada nesta sessão.|No collection started in this session.
+Iniciando rastreabilidade...|Starting traceability...
+Descrição não informada|Description not provided
+Resultado da coleta|Collection result
+Valores informados pelo job; cobertura disponível no snapshot.|Values reported by the job; coverage available in the snapshot.
+Linha aguardando informação|Waiting for line information
+Em execução|Running
+Aguardando|Waiting
+
 Turno de produção|Production shift
 Data operacional|Operational date
 1º Turno|1st Shift

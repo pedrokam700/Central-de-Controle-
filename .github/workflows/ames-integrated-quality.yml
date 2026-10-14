@@ -86,7 +86,9 @@ jobs:
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/console-tests/node_modules/playwright/index.mjs
           BROWSER_OUTPUT: ${{ runner.temp }}/console-evidence
-        run: node scripts/ames-experience.browser.mjs
+        run: |
+          node scripts/ames-experience.browser.mjs
+          node scripts/ames-trace-interaction.browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -1,3 +1,4 @@
+import {collectionStatus} from './collection-status.mjs';
 import {componentFamily} from "./data/reuse-analysis.mjs";
 import { LINE_IDS } from './data/contract.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
@@ -59,20 +60,31 @@ export function createTraceConsoleView(root,store,client){
   let mounted=false,line=LINE_IDS[0],evidence;
   function render(){
     if(!mounted){
-      root.innerHTML=`<div class="ames-trace-layout"><section class="ames-console-form ames-trace-config" data-trace-form>
+      root.innerHTML=`<div class="ames-trace-layout"><form class="ames-console-form ames-trace-config" data-trace-form>
         ${sectionHead('Escopo desta coleta','A coleta selecionada nunca mistura linhas e um modo não apaga evidência já existente dos outros modos.')}
         <fieldset><legend>Linhas desta execução</legend>${LINE_IDS.map((id,i)=>`<label class="mes-opt-in"><input type="checkbox" name="lines" value="${id}" checked>Linha ${i+1} · ${id}</label>`).join('')}</fieldset>
         <div class="ames-mode-grid"><label class="ames-mode-card"><input type="radio" name="trace_mode" value="full" checked><span><b>Completo</b><small>3074 + 2114 + 3022</small></span></label><label class="ames-mode-card"><input type="radio" name="trace_mode" value="process_only"><span><b>Processo</b><small>Somente horários 3022</small></span></label><label class="ames-mode-card"><input type="radio" name="trace_mode" value="reuse_only"><span><b>Reuso</b><small>3074 + 2114</small></span></label></div>
-        <div class="mes-filters"><label>Perfil<select name="performance"><option value="fast">Rápido</option><option value="balanced" selected>Equilibrado</option><option value="safe">Seguro</option></select></label><label>Ocorrências máximas / linha<input type="number" name="max_failures" min="0" value="0"></label><label>PCBAs máximas / linha<input type="number" name="max_pcbas" min="0" value="0"></label></div><label>Códigos exatos de falha<input name="codes" placeholder="vazio = todas"></label><div class="mes-pagination"><button type="button" class="button primary" data-trace-run>Iniciar coleta</button><button type="button" class="button secondary" data-trace-cancel>Cancelar</button></div>
-      </section><aside class="mes-context-panel ames-trace-progress"><h3>Progresso da rastreabilidade</h3><div data-trace-status></div></aside></div>
+        <div class="mes-filters"><label>Perfil<select name="performance"><option value="fast">Rápido</option><option value="balanced" selected>Equilibrado</option><option value="safe">Seguro</option></select></label></div><details data-trace-limits><summary>Limites avançados</summary><p>Sem limite por padrão. Preencha somente para limitar esta execução.</p><div class="mes-filters"><label>Ocorrências máximas / linha<input type="number" name="max_failures" min="1" placeholder="Sem limite"></label><label>PCBAs máximas / linha<input type="number" name="max_pcbas" min="1" placeholder="Sem limite"></label></div></details><details><summary>Códigos manuais (avançado)</summary><label>Códigos exatos de falha<input name="codes" placeholder="Separados por vírgula"></label></details><div class="mes-pagination"><button type="button" class="button primary" data-trace-run>Iniciar coleta</button><button type="button" class="button secondary" data-trace-cancel>Cancelar</button></div>
+      </form><aside class="mes-context-panel ames-trace-progress"><h3>Progresso da rastreabilidade</h3><div data-trace-status></div></aside></div>
       <section class="mes-context-panel ames-trace-evidence-wrap">${sectionHead('Evidência carregada','Selecione uma linha para inspecionar exatamente o que sustenta a leitura.',`<label>Visualizar linha<select data-trace-line>${lineOptions(line)}</select></label>`)}<section data-trace-evidence></section></section>`;
       mounted=true;evidence=createAgentEvidenceView(root.querySelector('[data-trace-evidence]'),store);
       root.querySelector('[data-trace-line]').addEventListener('change',e=>{line=e.target.value;evidence.render(line);});
-      root.querySelector('[data-trace-run]').addEventListener('click',async()=>{const form=root.querySelector('[data-trace-form]'),data=new FormData(form),mode=data.get('trace_mode')||'full',codes=String(data.get('codes')||'').split(',').map(x=>x.trim()).filter(Boolean),lines=[...form.querySelectorAll('[name=lines]:checked')].map(x=>x.value);if(!lines.length){root.querySelector('[data-trace-status]').innerHTML='<div class="ames-empty"><span>!</span><p>Selecione pelo menos uma linha.</p></div>';return;}try{await client.collect('deep',{lines,performance:data.get('performance'),max_failures:Number(data.get('max_failures')||0),max_pcbas:Number(data.get('max_pcbas')||0),defect_codes:codes,trace_mode:mode});}catch(error){root.querySelector('[data-trace-status]').innerHTML=`<div class="notice warn">${esc(error.message)}</div>`;}});
+      root.querySelector('[data-trace-form]').addEventListener('submit',e=>{e.preventDefault();root.querySelector('[data-trace-run]').click();});
+      root.querySelector('[data-trace-run]').addEventListener('click',async()=>{
+        const button=root.querySelector('[data-trace-run]');if(button.disabled)return;
+        button.disabled=true;store.updateAgent({submitting:true,error:''});render();
+        try{
+          const form=root.querySelector('[data-trace-form]'),data=new FormData(form),lines=[...form.querySelectorAll('[name=lines]:checked')].map(x=>x.value);
+          if(!lines.length)throw Error('Selecione pelo menos uma linha.');
+          await client.collect('deep',{lines,performance:data.get('performance'),max_failures:Number(data.get('max_failures')||0),max_pcbas:Number(data.get('max_pcbas')||0),defect_codes:String(data.get('codes')||'').split(',').map(x=>x.trim()).filter(Boolean),trace_mode:data.get('trace_mode')||'full'});
+        }catch(error){store.updateAgent({error:error.message});}
+        finally{store.updateAgent({submitting:false});render();}
+      });
       root.querySelector('[data-trace-cancel]').addEventListener('click',()=>client.cancel().catch(error=>root.querySelector('[data-trace-status]').innerHTML=`<div class="notice warn">${esc(error.message)}</div>`));
     }
-    const a=store.agent(),job=a.job,status=root.querySelector('[data-trace-status]');
-    if(job){const progress=Object.entries(job.stage_progress||{});status.innerHTML=`<div class="ames-job-head"><b>${esc(job.status||'')}</b><span>${esc(modeLabel(job.scope?.trace_mode||job.trace_mode||''))}</span></div><p>${esc(job.stage||'')} · ${esc(job.message||'')}</p>${progress.length?`<div class="ames-progress-list">${progress.map(([stage,p])=>`<article><div><b>${esc(stage)}</b><span>${esc(p.line||'')}</span></div><progress max="100" value="${Number(p.line_percent||0)}"></progress><small>${esc(fmt(p.current))}/${esc(fmt(p.total))} · ${esc(fmt(p.line_percent))}% · ${esc(p.detail||'')}</small></article>`).join('')}</div>`:'<div class="ames-empty"><span>…</span><p>Aguardando progresso detalhado.</p></div>'}`;}else status.innerHTML='<div class="ames-empty"><span>○</span><p>Nenhuma coleta de rastreabilidade iniciada nesta sessão.</p></div>';
+    const a=store.agent(),status=root.querySelector('[data-trace-status]');
+    root.querySelector('[data-trace-run]').disabled=!!a.submitting;
+    status.setAttribute('aria-live','polite');status.innerHTML=collectionStatus(a);
     evidence?.render(line);
   }
   return {render,clear(){root?.replaceChildren();mounted=false;evidence=undefined;}};

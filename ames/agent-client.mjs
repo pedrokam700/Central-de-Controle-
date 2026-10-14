@@ -110,7 +110,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     if(token!==generation)return;
     try {
       const raw=await request('/jobs/'+encodeURIComponent(id));
-      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},partial_refresh:raw.partial_refresh||0,result:raw.kind==='sn_lookup'?raw.result:undefined}});
+      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
       if(done||(partial!==lastPartial&&now()-lastRefresh>2200)){
         try{await refresh();lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
@@ -185,7 +185,9 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const signature=JSON.stringify([path,body]);
       if(pendingSubmission&&pendingSubmission.signature!==signature)throw Error('Confirme a solicitação anterior repetindo o mesmo escopo antes de iniciar outra.');
       pendingSubmission ||= {signature,id:crypto.randomUUID()};body.request_id=pendingSubmission.id;
-      const job=await request(path,body);pendingSubmission=null;publish({job:{id:job.id,kind:job.kind,status:job.status,stage:job.stage,message:job.message},error:''});
+      if(type==='deep')publish({submitting:true,error:''});
+      let job;try{job=await request(path,body);if(!job?.id)throw Error('O agente não retornou um job.');}finally{if(type==='deep')publish({submitting:false});}
+      pendingSubmission=null;publish({job:{id:job.id,kind:job.kind,status:job.status,stage:job.stage,message:job.message,scope:{trace_mode:value.trace_mode}},error:''});
       lastPartial=-1;unschedule(timer);const token=generation;timer=schedule(()=>poll(job.id,token),850);
     }),
     cancel:()=>action(async()=>{check();const job=store.agent().job;if(job)await request('/jobs/'+encodeURIComponent(job.id)+'/cancel',{});}),
