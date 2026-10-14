@@ -30,9 +30,13 @@ SELECT_SHIFT_JS = r'''args => {
     ...extra,
   });
 
-  // A manual selection made by the operator is already a valid committed state.
-  if(domValue()===expected)return out({ok:true,strategy:'existing_dom',reason:'confirmed'});
-  if(!globalThis.Ext?.ComponentQuery)return out({reason:'ext_unavailable'});
+  if(!globalThis.Ext?.ComponentQuery){
+    // No Ext runtime means we cannot prove a programmatic selection. A field that
+    // was already filled manually remains usable, but automation never fabricates it.
+    return domValue()===expected
+      ? out({ok:true,strategy:'existing_dom',reason:'confirmed_manual_or_lookup'})
+      : out({reason:'ext_unavailable'});
+  }
 
   const fields=[...new Set([
     ...Ext.ComponentQuery.query('combobox'),
@@ -41,7 +45,7 @@ SELECT_SHIFT_JS = r'''args => {
   ])];
   const owner=fields.find(f=>desc&&f.inputEl?.dom===desc) || null;
 
-  // Legacy/alternate variant: the Shift field itself is a combobox.  This stays
+  // Legacy/alternate variant: the Shift field itself is a combobox. This stays
   // deliberately strict: matching raw text is not enough; value + submit value +
   // selected record must all agree so we never repeat the physical stale-value bug.
   const combos=fields.filter(f=>f?.getStore && (f===owner || /shift/i.test(String(f.fieldLabel||'')) || /desc/i.test(String(f.name||''))));
@@ -74,6 +78,13 @@ SELECT_SHIFT_JS = r'''args => {
       const confirmed=norm(actual)===norm(value) && norm(submitted)===norm(value) && found===rec && selectionOk && norm(raw)===expected && (!combo.isValid || combo.isValid());
       if(confirmed)return out({ok:true,strategy:'combobox',reason:'confirmed',record:rec.data||{},value:actual,submitted,raw,owner_xtype:combo.xtype||''});
     }catch(_){ }
+  }
+
+  // The physical 2114 uses a lookup-trigger field whose selected value is copied
+  // back to input[name=desc]. Only use this shortcut when the owner is NOT a
+  // combobox/store field; combobox variants must pass the strict block above.
+  if(domValue()===expected && !owner?.getStore){
+    return out({ok:true,strategy:'existing_lookup_dom',reason:'confirmed'});
   }
 
   const gridInfo=[];
