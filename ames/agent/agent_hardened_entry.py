@@ -62,10 +62,9 @@ entry.a.ingest_3028_live = _hardened_live_ingest
 
 
 class HardenedHandler(entry.Handler):
-    # /ready is a deliberately tiny loopback startup contract. It must remain
-    # public just like /health; otherwise the launcher cannot distinguish a live
-    # agent from an agent that merely requires the workstation token.
-    _PUBLIC_API = {"/api/v1/ready", "/api/v1/health", "/api/v1/hardening/health"}
+    # Only the minimal startup probes are public. Detailed hardening diagnostics
+    # include local integrity state and therefore require same-origin/token auth.
+    _PUBLIC_API = {"/api/v1/ready", "/api/v1/health"}
 
     def _active_port(self):
         return int(getattr(self.server, "server_port", entry.a.CONFIG.get("port", 8765)))
