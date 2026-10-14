@@ -34,6 +34,7 @@ jobs:
           python scripts/agent-update.test.py
           python scripts/agent-clean-v3.test.py
           python scripts/agent-integrated-v5.test.py
+          python scripts/agent-performance-indexes.test.py
       - name: Existing Node contracts
         run: |
           node --test scripts/ames-auth-hardening.test.mjs
