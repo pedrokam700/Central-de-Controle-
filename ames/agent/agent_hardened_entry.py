@@ -12,6 +12,7 @@ from pathlib import Path
 
 import agent_entry as entry
 import agent_3012_patch
+import base_paging_backend
 import candidate_config
 import hardening
 import local_security
@@ -119,6 +120,27 @@ class HardenedHandler(entry.Handler):
             return
         if not self._authorized(path):
             self._reject_unauthorized()
+            return
+        if path == "/api/v1/base":
+            q = parse_qs(urlparse(self.path).query)
+            dataset = (q.get("dataset") or ["defects"])[0]
+            sid = (q.get("snapshot_id") or [None])[0]
+            line = entry.a.normalize_line_id((q.get("line") or [None])[0])
+            if line and line not in entry.canonical.LINES:
+                self._send({"error": "invalid_line"}, 400)
+                return
+            try:
+                self._send(base_paging_backend.page(
+                    entry.a.STORE,
+                    dataset,
+                    snapshot_id=sid,
+                    line=line or None,
+                    configured_lines=entry.a.CONFIG.get("configured_lines") or [],
+                    limit=(q.get("limit") or [100])[0],
+                    offset=(q.get("offset") or [0])[0],
+                ))
+            except (TypeError, ValueError) as exc:
+                self._send({"error": "invalid_base_query", "message": str(exc)}, 400)
             return
         if path == "/api/v1/local-history":
             q=parse_qs(urlparse(self.path).query);line=(q.get('line') or [''])[0]
