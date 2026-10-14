@@ -14,7 +14,7 @@ AGENT_FILES = [
     "agent.py", "agent_entry.py", "agent_hardened_entry.py", "agent_3012_patch.py",
     "ames_3028.py", "ames_3028_live.py", "ames_3012_live.py", "canonical.py", "engine_bridge.py",
     "hardening.py", "local_security.py", "local_sn.py", "mes_scheduler.py", "network_watch.py",
-    "operational_calendar.py", "preflight.py", "process_r11.py", "process_timeline.py", "repair_3012.py", "store.py",
+    "operational_calendar.py", "performance_indexes.py", "preflight.py", "process_r11.py", "process_timeline.py", "repair_3012.py", "store.py",
     "requirements.txt", "config.example.json",
 ]
 FROZEN = {
