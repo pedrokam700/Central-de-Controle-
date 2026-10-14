@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {filterDailyFailureRows,rankDailyFailures} from '../ames/daily-failure-analytics.mjs';
+import {buildDailyFailureRows,filterDailyFailureRows,productionMetrics,rankDailyFailures} from '../ames/daily-failure-analytics.mjs';
 import {aggregatePcbas,componentGroup,reuseKpis,reuseLinks} from '../ames/data/reuse-analysis.mjs';
 import {pcbaReuseCategoryMap} from '../ames/reuse-table-view.mjs';
 
@@ -26,6 +26,30 @@ test('daily filters preserve shift and association semantics without inferring c
   assert.deepEqual(filterDailyFailureRows(rows,{shift:'1st Shift'}).map(r=>r.pcba),['P1']);
   assert.deepEqual(filterDailyFailureRows(rows,{reuse:'with_failure'}).map(r=>r.pcba),['P1']);
   assert.deepEqual(filterDailyFailureRows(rows,{relation:'MESMA FALHA'}).map(r=>r.pcba),['P1']);
+});
+
+test('production rate fails closed when temporal denominator does not match the filter scope',()=>{
+  const snapshot={snapshot_id:1,revision:1,summary:{quantity:100,check_fpy:96.5},occurrences:[]};
+  const store={read:()=>({snapshot}),occurrences:()=>({rows:[],coverage:{status:'partial'}})};
+  const rows=[{line:'TAN10101',production_operational_date:'2026-10-13',defect_time:'2026-10-13T09:00:00'}];
+  const proven=productionMetrics(store,{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows);
+  assert.equal(proven.quantity,100);assert.equal(proven.checkFpy,96.5);assert.equal(proven.denominatorProven,true);
+  assert.equal(productionMetrics(store,{line:'TAN10101',shift:'1st Shift',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
+  assert.equal(productionMetrics(store,{line:'TAN10101',hour:'09:00',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
+  assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-10-12',to:'2026-10-12'},rows).quantity,null);
+  assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-10-12',to:'2026-10-13'},rows).quantity,null);
+});
+
+test('daily occurrence preserves loaded AT repair fields without falsely claiming 3012',()=>{
+  const snapshot={snapshot_id:7,occurrences:[{pcba_sn:'P1',defect_key:'K1',defect_code:'D1',defect_desc:'Camera scratched',defect_time:'2026-10-13T09:15:00',product_key:'CPH2817',repair_user:'AT01',repair_comment:'camera replaced',repair_time:'2026-10-13T09:40:00',repair_code:'RC1',repair_source:'3028-repair-refresh',repair_evidence_3012:[]}],process_timeline:{contexts:[]},pcba_history:{records:[]},insights:{drilldowns:{}},material_trace:{records:[]}};
+  const store={read:line=>({snapshot:line==='TAN10101'?snapshot:null})};
+  const rows=buildDailyFailureRows(store);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].repair_user,'AT01');
+  assert.equal(rows[0].repair_comment,'camera replaced');
+  assert.equal(rows[0].repair_code,'RC1');
+  assert.equal(rows[0].repair_source,'3028-repair-refresh');
+  assert.equal(rows[0].repair_rows.length,0);
 });
 
 test('three reuse granularities never turn three material links into three PCBAs',()=>{
