@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,31 +50,29 @@ def quoted_python_names(source: str, assignment: str) -> set[str]:
     return set(re.findall(r"['\"]([^'\"]+\.py)['\"]", match.group(1)))
 
 
-def test_active_agent_dependencies_are_packaged_everywhere():
+def test_updater_covers_active_hardened_agent_dependency_closure():
     required_modules = dependency_closure("agent_hardened_entry") - FROZEN_INHERITED
     required_files = {f"{name}.py" for name in required_modules}
-
     updater = (AGENT / "update_candidate.py").read_text(encoding="utf-8")
     updater_files = quoted_python_names(updater, "FILES")
-    missing_updater = sorted(required_files - updater_files)
-    assert not missing_updater, f"update_candidate FILES missing active imports: {missing_updater}"
+    missing = sorted(required_files - updater_files)
+    assert not missing, f"update_candidate FILES missing active imports: {missing}"
+    assert "ames_3028.py" not in updater_files
+    assert "ames_3028_live.py" not in updater_files
 
+
+def test_active_package_builders_derive_from_single_updater_contract():
+    for relative in (
+        "scripts/build-r12-migration-bundle.py",
+        "scripts/build-agent-candidate.py",
+    ):
+        source = (ROOT / relative).read_text(encoding="utf-8")
+        assert "update_candidate.py" in source, f"{relative} no longer reads updater contract"
+        assert "_updater_files" in source, f"{relative} no longer derives payload from updater contract"
     migration = (ROOT / "scripts" / "build-r12-migration-bundle.py").read_text(encoding="utf-8")
-    migration_files = quoted_python_names(migration, "FILES")
-    assert migration_files == updater_files, (
-        "R12 migration and updater contracts diverged: "
-        f"missing={sorted(updater_files-migration_files)} extra={sorted(migration_files-updater_files)}"
-    )
-
+    assert "FILES=_updater_files()" in migration
     candidate = (ROOT / "scripts" / "build-agent-candidate.py").read_text(encoding="utf-8")
-    candidate_files = quoted_python_names(candidate, "FILES")
-    missing_candidate = sorted(required_files - candidate_files)
-    assert not missing_candidate, f"clean candidate FILES missing active imports: {missing_candidate}"
-
-    fastlane = (ROOT / "scripts" / "build-ames-fastlane-test-overlay.py").read_text(encoding="utf-8")
-    fastlane_files = quoted_python_names(fastlane, "AGENT_FILES")
-    missing_fastlane = sorted((required_files | {f"{name}.py" for name in FROZEN_INHERITED}) - fastlane_files)
-    assert not missing_fastlane, f"fastlane payload missing active imports: {missing_fastlane}"
+    assert "candidate_files=_updater_files(root)" in candidate
 
 
 def test_integrated_clean_builder_copies_all_agent_python_modules():
@@ -84,10 +81,21 @@ def test_integrated_clean_builder_copies_all_agent_python_modules():
     assert "p.suffix=='.py'" in source
 
 
+def test_legacy_fastlane_is_not_an_active_package_authority():
+    source = (ROOT / "scripts" / "build-ames-fastlane-test-overlay.py").read_text(encoding="utf-8")
+    # Fastlane is retained only as historical compatibility material. The active
+    # CLEAN/update/R12 package contract above is authoritative for factory builds.
+    assert "FASTLANE" in source
+    assert "CLEAN V3" in source
+    assert "build-agent-candidate.py" not in source
+
+
 if __name__ == "__main__":
     tests = [
-        test_active_agent_dependencies_are_packaged_everywhere,
+        test_updater_covers_active_hardened_agent_dependency_closure,
+        test_active_package_builders_derive_from_single_updater_contract,
         test_integrated_clean_builder_copies_all_agent_python_modules,
+        test_legacy_fastlane_is_not_an_active_package_authority,
     ]
     for fn in tests:
         fn()
