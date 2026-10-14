@@ -1,6 +1,6 @@
 import {LINE_IDS} from './data/contract.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
-import {BASE_PAGE_SIZES,BASE_MAX_ROWS,normalizeBasePageSize,baseIncrementalLimit,basePageWindow} from './base-paging.mjs';
+import {BASE_PAGE_SIZES,BASE_MAX_ROWS,normalizeBasePageSize,basePageRequest,basePageWindow,baseServerPageWindow} from './base-paging.mjs';
 
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 const lineOptions=selected=>LINE_IDS.map((line,i)=>`<option value="${line}"${selected===line?' selected':''}>${t('Linha','Line')} ${i+1} · ${line}</option>`).join('');
@@ -42,11 +42,13 @@ export function createBaseConsoleView(root,store,client){
     };
   }
 
-  function pagerModel(rows,total){
+  function pagerModel(rows,total,serverPaged=false){
     const fallbackTotal=Number.isFinite(Number(total))?Number(total):rows.length;
-    const model=basePageWindow(fallbackTotal,page,pageSize,rows.length);
+    const model=serverPaged
+      ?baseServerPageWindow(fallbackTotal,page,pageSize,rows.length)
+      :basePageWindow(fallbackTotal,page,pageSize,rows.length);
     page=model.page;pageSize=model.pageSize;
-    return {...model,pageRows:rows.slice(model.start,model.end),maxPage:model.pages-1};
+    return {...model,pageRows:serverPaged?rows:rows.slice(model.start,model.end),maxPage:model.pages-1};
   }
 
   function resultView(){
@@ -55,19 +57,22 @@ export function createBaseConsoleView(root,store,client){
     if(!result){host.innerHTML=`<div class="ames-empty ames-empty-large"><span>▦</span><h3>${t('Base local pronta para inspeção','Local database ready for inspection')}</h3><p>${t('Escolha uma ação acima. Tabelas grandes são paginadas para não montar milhares de linhas no navegador.','Choose an action above. Large tables are paginated so the browser does not render thousands of rows at once.')}</p></div>`;return;}
     const rows=normalizeRows(result),cols=Object.keys(rows[0]||{}).slice(0,12).map(k=>[k,k]);
     const paged=active==='dataset'&&result.error!==true;
-    const model=paged?pagerModel(rows,result.total):{total:rows.length,start:0,end:rows.length,displayStart:rows.length?1:0,pageRows:rows,hasPrev:false,hasNext:false,maxPage:0};
+    const model=paged?pagerModel(rows,result.total,!!result.server_paged):{total:rows.length,start:0,end:rows.length,displayStart:rows.length?1:0,pageRows:rows,hasPrev:false,hasNext:false,maxPage:0};
     const subtitle=paged
       ?t(`${model.total} registro(s) no dataset · exibindo ${model.displayStart}–${model.end}. O navegador mantém no máximo ${pageSize} linhas visíveis por página.`,`${model.total} dataset record(s) · showing ${model.displayStart}–${model.end}. The browser keeps at most ${pageSize} visible rows per page.`)
       :t(`${rows.length} registro(s) retornados na leitura atual.`,`${rows.length} record(s) returned by the current read.`);
     const pager=paged&&model.total?`<div class="ames-base-pager" data-base-pager><span>${model.displayStart}–${model.end} ${t('de','of')} ${model.total}</span><label>${t('Por página','Per page')}<select data-base-page-size>${BASE_PAGE_SIZES.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><button type="button" class="button secondary" data-base-prev${model.hasPrev?'':' disabled'}>${t('Anterior','Previous')}</button><span>${t('Página','Page')} ${page+1} ${t('de','of')} ${model.maxPage+1}</span><button type="button" class="button secondary" data-base-next${model.hasNext?'':' disabled'}>${t('Próxima','Next')}</button></div>`:'';
-    host.innerHTML=`<section class="mes-context-panel ames-base-result">${sectionHead(result.title||active,subtitle)}${table(model.pageRows,cols,t('A operação foi concluída, mas não retornou linhas para este escopo.','The operation completed but returned no rows for this scope.'))}${pager}${paged&&result.loaded_limited?`<p class="ames-base-page-note">${t('Leitura incremental do SQLite: novas páginas são buscadas somente quando necessário.','Incremental SQLite read: additional pages are fetched only when needed.')}</p>`:''}</section>`;
+    const pageNote=paged&&result.server_paged
+      ?t('Leitura paginada do SQLite: o agente envia somente a página atual; trocar de página não transfere novamente todo o dataset.','Paged SQLite read: the agent sends only the current page; changing pages does not transfer the whole dataset again.')
+      :paged&&result.loaded_limited?t('Leitura incremental do SQLite: novas páginas são buscadas somente quando necessário.','Incremental SQLite read: additional pages are fetched only when needed.'):'';
+    host.innerHTML=`<section class="mes-context-panel ames-base-result">${sectionHead(result.title||active,subtitle)}${table(model.pageRows,cols,t('A operação foi concluída, mas não retornou linhas para este escopo.','The operation completed but returned no rows for this scope.'))}${pager}${pageNote?`<p class="ames-base-page-note">${pageNote}</p>`:''}</section>`;
     host.querySelector('[data-base-prev]')?.addEventListener('click',()=>gotoPage(page-1));
     host.querySelector('[data-base-next]')?.addEventListener('click',()=>gotoPage(page+1));
     host.querySelector('[data-base-page-size]')?.addEventListener('change',event=>{pageSize=normalizeBasePageSize(event.target.value);page=0;void loadDatasetPage();});
   }
 
   async function connectedDataset(value,serial){
-    const requested=baseIncrementalLimit(page,pageSize,BASE_MAX_ROWS);
+    const requestPage=basePageRequest(page,pageSize,BASE_MAX_ROWS);
     let total=null;
     try{
       const catalog=await client.auxiliary('catalog',{line:value.line,snapshot_id:value.snapshot_id});
@@ -79,18 +84,21 @@ export function createBaseConsoleView(root,store,client){
       if(error?.name==='AbortError')throw error;
     }
     if(serial!==requestSerial)return null;
-    const data=await client.auxiliary('dataset',{...value,limit:requested});
+    const data=await client.auxiliary('dataset',{...value,limit:requestPage.limit,offset:requestPage.offset});
     if(serial!==requestSerial)return null;
     const rows=normalizeRows(data);
-    if(total===null)total=rows.length<requested?rows.length:Math.min(BASE_MAX_ROWS,requested+(rows.length===requested?pageSize:0));
-    return {title:'Dataset',...data,rows,total,loaded_limited:rows.length<total};
+    if(total===null){
+      const observed=requestPage.offset+rows.length;
+      total=rows.length<requestPage.limit?observed:Math.min(BASE_MAX_ROWS,observed+pageSize);
+    }
+    return {title:'Dataset',...data,rows,total,server_paged:true,loaded_limited:requestPage.offset+rows.length<total};
   }
 
   function sharedDataset(value){
     const snapshot=store.read(value.line).snapshot;if(!snapshot)throw Error(t('Sem dados compartilhados para esta linha.','No shared data for this line.'));
     const datasets=sharedDatasets(snapshot),key=value.dataset==='process_events'?'process_timeline':value.dataset;
     const rows=datasets[key]||[];
-    return {title:'Dataset',rows,total:rows.length,loaded_limited:false};
+    return {title:'Dataset',rows,total:rows.length,server_paged:false,loaded_limited:false};
   }
 
   async function loadDatasetPage(){
@@ -108,8 +116,7 @@ export function createBaseConsoleView(root,store,client){
     if(active!=='dataset'||busy)return;
     const total=Number(result?.total??normalizeRows(result).length),maxPage=Math.max(0,Math.ceil(total/pageSize)-1);
     const target=clamp(Number(next)||0,0,maxPage);if(target===page)return;page=target;
-    const rows=normalizeRows(result),window=basePageWindow(total,page,pageSize,rows.length);
-    if(store.agent().status==='connected'&&window.needsMore)await loadDatasetPage();else resultView();
+    if(store.agent().status==='connected')await loadDatasetPage();else resultView();
   }
 
   async function run(name){
@@ -138,7 +145,7 @@ export function createBaseConsoleView(root,store,client){
   function render(){
     if(mounted)return;
     root.setAttribute('data-no-i18n','');
-    root.innerHTML=`<section class="mes-context-panel ames-base-toolbar">${sectionHead('Base local / SQLite',t('Área técnica para auditoria. Leituras grandes usam paginação incremental para preservar velocidade e memória do navegador.','Technical audit area. Large reads use incremental pagination to preserve browser speed and memory.'))}<div class="mes-filters"><label>${t('Linha','Line')}<select data-base-line>${lineOptions(line)}</select></label><label>Dataset<select data-base-dataset><option value="defects">3028 · ${t('falhas','failures')}</option><option value="pcba_history">2114 · ${t('histórico PCBA','PCBA history')}</option><option value="material_reuse">3074 · ${t('material/reuso','material/reuse')}</option><option value="process_events">3022 · process_events</option><option value="process_defect_contexts">3022 · process_defect_contexts</option><option value="history_contexts">${t('Contextos históricos','Historical contexts')}</option></select></label><label>${t('Busca local','Local search')}<input data-base-q placeholder="${t('SN, falha, CPH, posto, material...','SN, failure, CPH, station, material...')}"></label></div></section>
+    root.innerHTML=`<section class="mes-context-panel ames-base-toolbar">${sectionHead('Base local / SQLite',t('Área técnica para auditoria. Leituras grandes usam paginação do agente para preservar velocidade e memória do navegador.','Technical audit area. Large reads use agent-side paging to preserve browser speed and memory.'))}<div class="mes-filters"><label>${t('Linha','Line')}<select data-base-line>${lineOptions(line)}</select></label><label>Dataset<select data-base-dataset><option value="defects">3028 · ${t('falhas','failures')}</option><option value="pcba_history">2114 · ${t('histórico PCBA','PCBA history')}</option><option value="material_reuse">3074 · ${t('material/reuso','material/reuse')}</option><option value="process_events">3022 · process_events</option><option value="process_defect_contexts">3022 · process_defect_contexts</option><option value="history_contexts">${t('Contextos históricos','Historical contexts')}</option></select></label><label>${t('Busca local','Local search')}<input data-base-q placeholder="${t('SN, falha, CPH, posto, material...','SN, failure, CPH, station, material...')}"></label></div></section>
     <div class="ames-base-actions">${BASE_ACTIONS.map(([id,icon,ptLabel,enLabel,ptNote,enNote])=>`<button type="button" class="ames-base-action" data-base="${id}"><span>${icon}</span><b>${t(ptLabel,enLabel)}</b><small>${t(ptNote,enNote)}</small></button>`).join('')}<button type="button" class="ames-base-action" data-base="excel"><span>⇩</span><b>Excel</b><small>${t('Exportar a base consolidada disponível','Export the available consolidated database')}</small></button></div><section data-base-result></section>`;
     mounted=true;
     root.querySelector('[data-base-line]').addEventListener('change',event=>{line=event.target.value;resetForScope();});
