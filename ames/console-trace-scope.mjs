@@ -32,7 +32,7 @@ function humanTraceError(raw){
 }
 
 export function withTraceSelectionHelper(view,root,store){
-  let wired=false,codeMode='all',formRef=null,inputRef=null;
+  let wired=false,codeMode='all',formRef=null,inputRef=null,langObserver=null;
   function selectedCodes(input){return String(input?.value||'').split(',').map(x=>x.trim()).filter(Boolean);}
   function syncChecks(panel,input){
     const selected=new Set(selectedCodes(input));
@@ -45,50 +45,16 @@ export function withTraceSelectionHelper(view,root,store){
     const form=root.querySelector('[data-trace-form]'),input=form?.querySelector('[name=codes]');if(!form||!input)return;
     formRef=form;inputRef=input;
     let panel=form.querySelector('[data-trace-code-helper]');
-    if(!panel){
-      panel=document.createElement('section');panel.dataset.traceCodeHelper='1';panel.className='ames-trace-code-helper';
-      (input.closest('details')||input.closest('label'))?.insertAdjacentElement('beforebegin',panel);
-    }
-    const lines=[...form.querySelectorAll('[name=lines]:checked')].map(x=>x.value);
-    const codes=loadedFailures(store,lines),current=input.value;
-    const total=codes.reduce((sum,item)=>sum+item.count,0),en=document.documentElement.lang.startsWith('en');
-    const failureWord=en?(codes.length===1?'failure':'failures'):(codes.length===1?'falha':'falhas');
-    const occurrenceWord=en?(total===1?'occurrence':'occurrences'):(total===1?'ocorrência':'ocorrências');
+    if(!panel){panel=document.createElement('section');panel.dataset.traceCodeHelper='1';panel.className='ames-trace-code-helper';(input.closest('details')||input.closest('label'))?.insertAdjacentElement('beforebegin',panel);}
+    const lines=[...form.querySelectorAll('[name=lines]:checked')].map(x=>x.value),codes=loadedFailures(store,lines),current=input.value,total=codes.reduce((sum,item)=>sum+item.count,0),en=document.documentElement.lang.startsWith('en');
+    const failureWord=en?(codes.length===1?'failure':'failures'):(codes.length===1?'falha':'falhas'),occurrenceWord=en?(total===1?'occurrence':'occurrences'):(total===1?'ocorrência':'ocorrências');
     panel.innerHTML=`<div class="ames-trace-code-head"><div><h4>${t('Falhas carregadas','Loaded failures')}</h4><p>${t('Selecione pela descrição. A contagem soma as ocorrências nas linhas escolhidas. Selecionadas exige ao menos um código antes de iniciar.','Select by description. Counts add occurrences across the chosen lines. Selected requires at least one code before starting.')}</p></div><span>${codes.length} ${failureWord} · ${total} ${occurrenceWord}</span></div><div class="ames-trace-scope-mode"><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="all"> ${t('Todas','All')}</label><label><input type="radio" name="trace_code_mode_helper" data-trace-scope-mode="selected"> ${t('Selecionadas','Selected')}</label></div><div class="ames-trace-code-grid">${codes.length?codes.map(item=>`<label class="ames-trace-failure-option"><input type="checkbox" value="${esc(item.code)}" data-trace-code><span data-no-i18n><strong>${esc(defectDescription(item.description))}</strong><small>${item.count} ${en?(item.count===1?'occurrence':'occurrences'):(item.count===1?'ocorrência':'ocorrências')}</small></span></label>`).join(''):`<span class="ames-trace-no-failures">${t('Nenhuma falha carregada nas linhas selecionadas.','No failures loaded for the selected lines.')}</span>`}</div>`;
     input.value=current;if(selectedCodes(input).length)codeMode='selected';syncChecks(panel,input);
-    panel.onchange=e=>{
-      const mode=e.target.closest('[data-trace-scope-mode]');
-      if(mode?.dataset.traceScopeMode==='all'){codeMode='all';input.value='';syncChecks(panel,input);return;}
-      if(mode?.dataset.traceScopeMode==='selected'){
-        codeMode='selected';syncChecks(panel,input);
-        if(!selectedCodes(input).length)panel.querySelector('[data-trace-code]')?.focus();
-        return;
-      }
-      if(e.target.matches('[data-trace-code]')){
-        codeMode='selected';
-        input.value=[...panel.querySelectorAll('[data-trace-code]:checked')].map(x=>x.value).join(', ');
-        syncChecks(panel,input);
-      }
-    };
+    panel.onchange=e=>{const mode=e.target.closest('[data-trace-scope-mode]');if(mode?.dataset.traceScopeMode==='all'){codeMode='all';input.value='';syncChecks(panel,input);return;}if(mode?.dataset.traceScopeMode==='selected'){codeMode='selected';syncChecks(panel,input);if(!selectedCodes(input).length)panel.querySelector('[data-trace-code]')?.focus();return;}if(e.target.matches('[data-trace-code]')){codeMode='selected';input.value=[...panel.querySelectorAll('[data-trace-code]:checked')].map(x=>x.value).join(', ');syncChecks(panel,input);}};
   }
-  function polishStatus(){
-    const status=root.querySelector('[data-trace-status]');if(!status||status.querySelector('[data-trace-human-error]'))return;
-    const raw=status.textContent?.trim()||'',friendly=humanTraceError(raw);if(!friendly)return;
-    status.innerHTML=`<div class="notice warn" data-trace-human-error><b>${t('Coleta parcial','Partial collection')}</b><br><span>${esc(friendly)}</span><details class="ames-technical-detail"><summary>${t('Detalhes técnicos','Technical details')}</summary><pre>${esc(raw)}</pre></details></div>`;
-  }
-  const runGuard=e=>{
-    const run=e.target.closest('[data-trace-run]');if(!run||codeMode!=='selected'||selectedCodes(inputRef).length)return;
-    e.preventDefault();e.stopImmediatePropagation();
-    const status=root.querySelector('[data-trace-status]');
-    if(status)status.innerHTML=`<div class="notice warn"><b>${t('Falhas selecionadas:','Selected failures:')}</b> ${t('marque ao menos uma falha antes de iniciar. Nenhuma coleta foi enviada.','select at least one failure before starting. No collection was sent.')}</div>`;
-    formRef?.querySelector('[data-trace-code]')?.focus();
-  };
-  function wire(){
-    const form=root.querySelector('[data-trace-form]');if(!form||wired)return;wired=true;formRef=form;
-    form.addEventListener('change',e=>{if(e.target.matches('[name=lines]'))rebuild();});
-    const input=form.querySelector('[name=codes]');inputRef=input;
-    input?.addEventListener('input',()=>{codeMode=selectedCodes(input).length?'selected':'all';const panel=form.querySelector('[data-trace-code-helper]');if(panel)syncChecks(panel,input);});
-    root.addEventListener('click',runGuard,true);
-  }
-  return Object.freeze({render(){view.render();wire();rebuild();polishStatus();},clear(){root.removeEventListener('click',runGuard,true);view.clear?.();wired=false;formRef=null;inputRef=null;codeMode='all';}});
+  function polishStatus(){const status=root.querySelector('[data-trace-status]');if(!status)return;const existing=status.querySelector('[data-trace-human-error]');if(existing)existing.remove();const raw=status.textContent?.trim()||'',friendly=humanTraceError(raw);if(!friendly)return;status.innerHTML=`<div class="notice warn" data-trace-human-error><b>${t('Coleta parcial','Partial collection')}</b><br><span>${esc(friendly)}</span><details class="ames-technical-detail"><summary>${t('Detalhes técnicos','Technical details')}</summary><pre>${esc(raw)}</pre></details></div>`;}
+  const repaint=()=>{rebuild();polishStatus();};
+  const runGuard=e=>{const run=e.target.closest('[data-trace-run]');if(!run||codeMode!=='selected'||selectedCodes(inputRef).length)return;e.preventDefault();e.stopImmediatePropagation();const status=root.querySelector('[data-trace-status]');if(status)status.innerHTML=`<div class="notice warn"><b>${t('Falhas selecionadas:','Selected failures:')}</b> ${t('marque ao menos uma falha antes de iniciar. Nenhuma coleta foi enviada.','select at least one failure before starting. No collection was sent.')}</div>`;formRef?.querySelector('[data-trace-code]')?.focus();};
+  function wire(){const form=root.querySelector('[data-trace-form]');if(!form||wired)return;wired=true;formRef=form;form.addEventListener('change',e=>{if(e.target.matches('[name=lines]'))rebuild();});const input=form.querySelector('[name=codes]');inputRef=input;input?.addEventListener('input',()=>{codeMode=selectedCodes(input).length?'selected':'all';const panel=form.querySelector('[data-trace-code-helper]');if(panel)syncChecks(panel,input);});root.addEventListener('click',runGuard,true);langObserver=new MutationObserver(repaint);langObserver.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});}
+  return Object.freeze({render(){view.render();wire();repaint();},clear(){langObserver?.disconnect();langObserver=null;root.removeEventListener('click',runGuard,true);view.clear?.();wired=false;formRef=null;inputRef=null;codeMode='all';}});
 }
