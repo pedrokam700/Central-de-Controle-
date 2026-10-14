@@ -52,17 +52,24 @@ export function createDailyFailureSummary(root,store){
   }
   function bindContextBridge(){
     if(contextBridgeBound)return;const host=pane();if(!host)return;contextBridgeBound=true;
-    host.addEventListener('change',event=>{
+    const onContextInput=event=>{
       if(internalAnalyticsSync)return;
       const el=event.target?.closest?.('[data-top3-analytics] [data-dfa]');if(!el)return;
       const field=el.dataset.dfa,value=el.value;
+      let handled=true;
       if(field==='line')store.updateContext?.({line_id:value||null});
       else if(field==='shift')store.updateContext?.({shift:value||null});
       else if(field==='product')store.updateContext?.({product:value||null});
       else if(field==='defect')store.updateContext?.({defect:value||null});
       else if(field==='from'||field==='to')updatePeriod(field,value);
+      else handled=false;
+      if(!handled)return;
       const shared=store.context?.().line_id;if(shared)line=shared;last='';queueMicrotask(render);
-    });
+    };
+    // Analytics rerenders its own subtree synchronously on input/change. Capture the
+    // operator intent before that target is detached, otherwise state.ames can miss it.
+    host.addEventListener('change',onContextInput,true);
+    host.addEventListener('input',onContextInput,true);
   }
   function dispatchAnalytics(el,value){
     if(!el)return;el.value=String(value??'');if(String(el.value)!==String(value??'')&&value)return;
