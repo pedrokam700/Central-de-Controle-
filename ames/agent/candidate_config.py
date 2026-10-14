@@ -211,8 +211,13 @@ def _apply_locked(agent_module, incoming: Dict[str, Any]) -> Dict[str, Any]:
 
     changed = _normalize_calendar(agent_module.CONFIG, changed)
     effective_host = str(changed.get("ames_host") or agent_module.CONFIG.get("ames_host") or "").strip()
-    if "ames_start_url" in changed:
-        changed["ames_start_url"] = _start_url(changed["ames_start_url"], effective_host)
+    # Host and navigation URL are one configuration unit. Changing only the host
+    # while leaving a URL aimed at the previous MES can make probes and browser
+    # navigation disagree. Validate the effective pair whenever either side is
+    # edited and fail closed unless both describe the same host.
+    if "ames_start_url" in changed or "ames_host" in changed:
+        effective_url = changed.get("ames_start_url", agent_module.CONFIG.get("ames_start_url"))
+        changed["ames_start_url"] = _start_url(effective_url, effective_host)
 
     ignored = sorted(k for k in incoming if k not in CANDIDATE_ALLOWED)
     next_config = {**agent_module.CONFIG, **changed}
