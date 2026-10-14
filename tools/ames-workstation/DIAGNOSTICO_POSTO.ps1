@@ -16,7 +16,7 @@ if(Test-Path -LiteralPath $tokenPath){
 function Show-Tail {
   param([string]$Path,[string]$Label)
   if(-not $Path){return}
-  if(-not (Test-Path -LiteralPath $Path)){Write-Host ("$Label: arquivo nao existe: $Path");return}
+  if(-not (Test-Path -LiteralPath $Path)){Write-Host ("${Label}: arquivo nao existe: $Path");return}
   $lines=@(Get-Content -LiteralPath $Path -Tail 40 -ErrorAction SilentlyContinue)
   Write-Host ("--- $Label ---")
   if($lines.Count){$lines|ForEach-Object{Write-Host $_}}else{Write-Host '(vazio)'}
