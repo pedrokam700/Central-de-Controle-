@@ -3,7 +3,7 @@ import { LINE_IDS } from './data/contract.mjs';
 import { coverageState } from './data/history.mjs';
 import { selectDashboard } from './data/dashboard.mjs';
 
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const number=v=>v===null||v===undefined?'—':String(v);
 const pct=v=>v===null||v===undefined?'—':`${v}%`;
 const lineOptions=(selected)=>LINE_IDS.map((id,i)=>`<option value="${id}"${id===selected?' selected':''}>Linha ${i+1} · ${id}</option>`).join('');
