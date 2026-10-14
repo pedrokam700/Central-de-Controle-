@@ -29,6 +29,19 @@ test('filter sort and pagination keep exact operational selection semantics',()=
   assert.deepEqual(paginateRows(ordered,{page:1,pageSize:50}).rows.map(r=>r.id),[2,1,3]);
 });
 
+test('global search cache reuses normalized row text without changing results',()=>{
+  let reads=0;
+  const row={id:1,line:'TAN10101'};
+  Object.defineProperty(row,'description',{enumerable:true,get(){reads++;return 'Camera Scratched';}});
+  const cache=new WeakMap();
+  assert.deepEqual(filterRows([row],{query:'camera'},cache).map(r=>r.id),[1]);
+  assert.deepEqual(filterRows([row],{query:'scratched'},cache).map(r=>r.id),[1]);
+  assert.equal(reads,1,'same row must be normalized only once while the dataset is unchanged');
+  const freshCache=new WeakMap();
+  assert.deepEqual(filterRows([row],{query:'camera'},freshCache).map(r=>r.id),[1]);
+  assert.equal(reads,2,'replacing the dataset cache must re-read the row');
+});
+
 test('CSV export still includes every selected row and neutralizes formulas',()=>{
   const rows=Array.from({length:650},(_,i)=>({id:i+1,note:i===0?'=cmd':'ok'}));
   const output=csv(rows,[{key:'id',label:'ID'},{key:'note',label:'Note'}]);
