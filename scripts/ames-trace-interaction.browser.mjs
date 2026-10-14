@@ -44,11 +44,15 @@ const page=await browser.newPage({viewport:{width:1920,height:1080}}),errors=[];
 const out=process.env.BROWSER_OUTPUT||'../browser-evidence';fs.mkdirSync(out,{recursive:true});
 try{
  await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>!!window.qa);
- const trace=page.locator('#trace');
- assert.match(await trace.locator('[data-trace-code-helper]').innerText(),/GN01-TX01 — Earpiece: receiver noise\/intermittent — 3/);
- assert.match(await trace.locator('[data-trace-code-helper]').innerText(),/GN02 — Descrição não informada — 1/);
+ const trace=page.locator('#trace'),helper=trace.locator('[data-trace-code-helper]');
+ const helperText=await helper.innerText();
+ assert.match(helperText,/Earpiece: receiver noise\/intermittent[\s\S]*3 ocorrências/);
+ assert.match(helperText,/Descrição não informada[\s\S]*1 ocorrência/);
+ assert.doesNotMatch(helperText,/GN01-TX01|GN02/);
+ assert.equal(await trace.locator('[data-trace-code][value="GN01-TX01"]').count(),1);
+ assert.equal(await trace.locator('[data-trace-code][value="GN02"]').count(),1);
  await trace.locator('[name=lines][value=TAN10102]').uncheck();
- assert.match(await trace.locator('[data-trace-code-helper]').innerText(),/intermittent — 2/);
+ assert.match(await trace.locator('[data-trace-code-helper]').innerText(),/intermittent[\s\S]*2 ocorrências/);
  await trace.locator('[name=lines][value=TAN10102]').check();
  assert.equal(await trace.locator('[name=max_failures]').isVisible(),false);
  assert.equal(await trace.locator('[name=max_failures]').inputValue(),'');
@@ -79,5 +83,5 @@ try{
  assert.equal(requests.length,2);
  await trace.locator('[data-trace-run]').click();await page.waitForFunction(()=>document.querySelector('[data-trace-status]').textContent.includes('HTTP 500'));
  assert.equal(requests.length,3);assert.deepEqual(errors,[]);
- console.log('PASS: selected failures/counts, unlimited defaults, real click/POST/job/polling, stages/result, new errors visible with prior job in both views.');
+ console.log('PASS: human failure labels/counts with internal codes, unlimited defaults, real click/POST/job/polling, stages/result, new errors visible with prior job in both views.');
 }catch(error){fs.writeFileSync(path.join(out,'trace-interaction-failure.json'),JSON.stringify({error:error.message,requests,polls,state:await page.evaluate(()=>window.qa?.store.agent()),text:await page.locator('body').innerText()},null,2));throw error;}finally{await browser.close();await new Promise(r=>server.close(r));}
