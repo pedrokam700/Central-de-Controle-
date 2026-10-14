@@ -61,11 +61,13 @@ test('3022 modes are capability-gated instead of being falsely advertised',()=>{
   assert.match(css,/\.ames-mode-card\.ames-capability-disabled/);
 });
 
-test('Wave 3 keeps reuso and CORA native while canonical Base Local stays evidence-first',()=>{
+test('Wave 3 keeps operator-first reuse and CORA native while canonical Base Local stays evidence-first',()=>{
   const views=fs.readFileSync('ames/console-wave3-views.mjs','utf8');
   const base=fs.readFileSync('ames/console-base-view.mjs','utf8');
   const css=fs.readFileSync('ames/console-wave3.css','utf8');
-  for(const text of ['Segundo uso da própria PCBA','segundo uso de Material SN','Abrir SNs exatos','ITEM EXATO EM EVIDÊNCIA','Drill-down não carregado']) assert.match(views,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['Dashboards de reuso e recorrência','Itens exatos em evidência','Análise detalhada / gráficos e vínculos','reuseExactId','reuseColumns','mountReuseTable']) assert.match(views,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(views,/orderedGroups=\['material_kpis','correlation_kpis','pcba_kpis'/);
+  assert.match(views,/createElement\('details'\)[\s\S]*ames-reuse-granularity/);
   for(const dataset of ['defects','pcba_history','material_reuse','process_events','process_defect_contexts']) assert.match(base,new RegExp(`value=["']${dataset}["']`));
   for(const text of ['falhas','histórico PCBA','material/reuso','Histórico operacional do agente','Backup']) assert.match(base,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.doesNotMatch(views,/export function createBaseConsoleView\b/);
