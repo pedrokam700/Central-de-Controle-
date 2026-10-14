@@ -67,7 +67,7 @@ function renderLocal(root,result,error=''){
 }
 
 export function withOfflineSnLookup(base,root,store){
-  let localResult=null,localError='',lastSn='';
+  let localResult=null,localError='',lastSn='',disposed=false;
   function resetForNewSn(){localResult=null;localError='';store.updateAgent?.({error:''});root.querySelector('[data-sn-local-result]')?.remove();root.querySelector('[data-sn-result]')?.removeAttribute('hidden');}
   function paintDecorations(){
     const form=root.querySelector('[data-sn-form]');if(!form)return;
@@ -76,6 +76,9 @@ export function withOfflineSnLookup(base,root,store){
     const context=form.querySelector('.mes-context');if(context)context.textContent=t('No posto MES, use Consultar A-MES para enriquecer por fonte. Se uma fonte falhar, as demais e o SQLite continuam válidos. Na Assistência/offline, use Consultar base local.','On the MES workstation, use Query A-MES to enrich the investigation by source. If one source fails, the others and SQLite remain valid. In Assistance/offline mode, use Query local database.');
     const pipeline=form.querySelector('.ames-pipeline');if(pipeline)pipeline.innerHTML=`<span>SN</span><i>→</i><span>3074</span><i>+</i><span>2114</span><i>+</i><span>3022</span><i>+</i><span>3012/cache</span><i>→</i><span>${t('Resultado por evidência','Evidence-based result')}</span>`;
   }
+  function repaintLanguage(){if(disposed)return;paintDecorations();renderLiveSources(root,store);if(localResult||localError)renderLocal(root,localResult,localError);}
+  const langObserver=typeof MutationObserver!=='undefined'?new MutationObserver(mutations=>{if(disposed||!mutations.some(m=>m.attributeName==='lang'))return;queueMicrotask(repaintLanguage);}):null;
+  langObserver?.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
   function install(){
     const form=root.querySelector('[data-sn-form]');if(!form)return;
     const primary=form.querySelector('[data-sn-run]');
@@ -85,5 +88,5 @@ export function withOfflineSnLookup(base,root,store){
     if(!button){button=document.createElement('button');button.type='button';button.className='button secondary';button.dataset.snLocal='1';primary?.after(button);button.addEventListener('click',async()=>{const sn=root.querySelector('[name=sn]')?.value.trim();if(!sn)return;lastSn=sn;resetForNewSn();root.querySelector('[data-sn-result]')?.setAttribute('hidden','');button.disabled=true;button.textContent=t('Consultando local…','Querying local…');try{localResult=await localLookup(sn);}catch(error){localResult=null;localError=error.message||String(error);}finally{button.disabled=false;paintDecorations();renderLocal(root,localResult,localError);renderLiveSources(root,store);}});}
     paintDecorations();
   }
-  return {render(){base.render();install();paintDecorations();renderLiveSources(root,store);if(localResult||localError)renderLocal(root,localResult,localError);},clear(){base.clear?.();root.querySelector('[data-sn-local-result]')?.remove();root.querySelector('[data-sn-source-health]')?.remove();localResult=null;localError='';lastSn='';store.updateAgent?.({error:''});}};
+  return {render(){if(disposed)return;base.render();install();paintDecorations();renderLiveSources(root,store);if(localResult||localError)renderLocal(root,localResult,localError);},clear(){disposed=true;langObserver?.disconnect();base.clear?.();root.querySelector('[data-sn-local-result]')?.remove();root.querySelector('[data-sn-source-health]')?.remove();localResult=null;localError='';lastSn='';store.updateAgent?.({error:''});}};
 }
