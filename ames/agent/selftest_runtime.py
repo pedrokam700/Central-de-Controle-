@@ -65,7 +65,14 @@ def main() -> int:
         if ready.get("agent_build") != "CANONICAL-R11-BATCH":
             raise RuntimeError(f"Build inesperado: {ready.get('agent_build')!r}")
 
-        health = _json(base + "/health", timeout=8.0)
+        # /health intentionally runs the heavier local preflight. A brand-new
+        # Windows venv can be noticeably slower on the first import than later
+        # launches. Keep every assertion, but give the cold preflight the same
+        # 20 s budget used by the workstation startup diagnostics.
+        try:
+            health = _json(base + "/health", timeout=20.0)
+        except TimeoutError as exc:
+            raise RuntimeError("/health excedeu 20 s no preflight local") from exc
         if health.get("ok") is not True:
             raise RuntimeError("/health não retornou ok=true")
         if health.get("agent_build") != "CANONICAL-R11-BATCH":
