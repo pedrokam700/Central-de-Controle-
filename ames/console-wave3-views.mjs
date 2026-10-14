@@ -49,8 +49,9 @@ function reuseLineTabs(store,active){
 }
 
 export function createReuseConsoleView(root,store){
-  let line=LINE_IDS[0],selected='',last='';
+  let line=store.context?.().line_id||store.preferredLine?.()||LINE_IDS[0],selected='',last='';
   function render(){
+    const shared=store.context?.().line_id;if(LINE_IDS.includes(shared)&&shared!==line){line=shared;selected='';last='';}
     const read=store.read(line),snapshot=read.snapshot,insights=snapshot?.insights,groups=insights?.groups||{},rows=selected?(insights?.drilldowns?.[selected]||[]):[];
     const key=JSON.stringify([line,snapshot?.snapshot_id,selected,insights,snapshot?.material_trace,document.documentElement.lang]);if(key===last)return;last=key;
     const groupCount=Object.keys(groups).length,kpiCount=Object.values(groups).reduce((n,pairs)=>n+(pairs?.length||0),0),drillCount=Object.keys(insights?.drilldowns||{}).length;
@@ -62,7 +63,7 @@ export function createReuseConsoleView(root,store){
       ${selected?`<section class="mes-context-panel ames-selected-evidence">${sectionHead(t('Itens exatos em evidência','Exact evidence items'),t(`${rows.length} registro(s) sustentam o indicador selecionado. A lista abaixo é exatamente a evidência que forma o número.`,`${rows.length} record(s) support the selected indicator. The list below is the exact evidence forming the value.`),`<button type="button" class="button secondary" data-reuse-clear>${t('Fechar evidência','Close evidence')}</button>`)}${rows.length?`<div class="ames-evidence-hero"><small>${t('Primeiro item do conjunto','First item in the set')}</small><b>${esc(reuseExactId(rows[0],selected)||t('Identificador não informado','Identifier not provided'))}</b><span>${esc(reuseMeta(rows[0],selected))}</span></div>`:''}${rowsTable(rows,reuseColumns(rows[0]||{},selected),{empty:t('O indicador existe, mas nenhum registro detalhado foi retornado nesta leitura.','The indicator exists, but no detailed records were returned in this read.'),highlight:(_,i)=>i===0})}</section>`:''}`;
     const advanced=document.createElement('details');advanced.className='mes-context-panel ames-reuse-granularity';advanced.innerHTML=`<summary><b>${t('Análise detalhada / gráficos e vínculos','Detailed analysis / charts and links')}</b><span>${t('Abra quando precisar cruzar PCBAs, Material SN, grupos e processo 3022.','Open when you need to cross-reference PCBAs, Material SNs, groups and the 3022 process.')}</span></summary><div data-reuse-granular-host></div>`;root.append(advanced);
     let advancedMounted=false;const mountAdvanced=()=>{if(advancedMounted)return;advancedMounted=true;mountReuseTable(advanced.querySelector('[data-reuse-granular-host]'),snapshot);};advanced.addEventListener('toggle',()=>{if(advanced.open)mountAdvanced();});
-    for(const btn of root.querySelectorAll('[data-reuse-line-tab]'))btn.addEventListener('click',()=>{line=btn.dataset.reuseLineTab;selected='';last='';render();});
+    for(const btn of root.querySelectorAll('[data-reuse-line-tab]'))btn.addEventListener('click',()=>{line=btn.dataset.reuseLineTab;store.updateContext?.({line_id:line});selected='';last='';render();});
     root.querySelector('[data-reuse-clear]')?.addEventListener('click',()=>{selected='';last='';render();});
     for(const btn of root.querySelectorAll('[data-reuse-drill]'))btn.addEventListener('click',()=>{selected=btn.dataset.reuseDrill;last='';render();requestAnimationFrame(()=>root.querySelector('.ames-selected-evidence')?.scrollIntoView({behavior:'smooth',block:'start'}));});
   }
@@ -73,7 +74,15 @@ const kindClass=kind=>{const value=String(kind||'').toLowerCase();if(value.inclu
 const kindLabel=kind=>{const cls=kindClass(kind);return cls==='cause'?t('Causa confirmada','Confirmed cause'):cls==='hypothesis'?t('Hipótese','Hypothesis'):cls==='correlation'?t('Correlação','Correlation'):t('Fato / evidência','Fact / evidence');};
 
 export function createKnowledgeConsoleView(root,client,store){
-  let mounted=false,line=LINE_IDS[0],result=[],query='',busy=false,error='';
+  let mounted=false,line=store.context?.().line_id||store.preferredLine?.()||LINE_IDS[0],result=[],query='',busy=false,error='';
+  function adoptSharedLine(){
+    const shared=store.context?.().line_id;if(!LINE_IDS.includes(shared)||shared===line)return false;
+    line=shared;result=[];query='';error='';
+    const select=root.querySelector('[data-knowledge-line]');if(select)select.value=line;
+    const input=root.querySelector('[data-knowledge-q]');if(input)input.value='';
+    if(mounted)paint();
+    return true;
+  }
   function paint(){
     const host=root.querySelector('[data-knowledge-result]');if(!host)return;
     if(busy){host.innerHTML=`<div class="ames-empty ames-empty-large"><span>…</span><h3>${t('Buscando conhecimento operacional','Searching operational knowledge')}</h3><p>${t('A CORA consulta a mesma base A-MES; ela não transforma correlação em causa.','CORA queries the same A-MES database; it does not turn correlation into causation.')}</p></div>`;return;}
@@ -90,7 +99,8 @@ export function createKnowledgeConsoleView(root,client,store){
     }else{const r=await client.auxiliary('search',{line,q:query});result=r.results||r.rows||[];}
   }catch(err){result=[];error=err.message;}finally{busy=false;paint();}}
   function render(){
-    if(!mounted){root.innerHTML=`<section class="mes-context-panel ames-knowledge-search">${sectionHead(t('CORA · conhecimento A-MES','CORA · A-MES knowledge'),t('Busca estruturada na mesma base operacional. Causa só é exibida como confirmada quando a fonte a classifica assim.','Structured search in the same operational database. A cause is only confirmed when classified as such by the source.'))}<div class="ames-knowledge-query"><label>${t('Linha','Line')}<select data-knowledge-line>${lineOptions(line)}</select></label><label>${t('Buscar','Search')}<input data-knowledge-q placeholder="${t('PCBA, Material SN, falha, CPH, processo...','PCBA, Material SN, failure, CPH, process...')}"></label><button class="button primary" data-knowledge-run>${t('Buscar','Search')}</button></div><div class="ames-knowledge-legend"><span class="fact">${t('Fato / evidência','Fact / evidence')}</span><span class="correlation">${t('Correlação','Correlation')}</span><span class="hypothesis">${t('Hipótese','Hypothesis')}</span><span class="cause">${t('Causa confirmada','Confirmed cause')}</span></div></section><section data-knowledge-result></section>`;mounted=true;root.querySelector('[data-knowledge-line]').addEventListener('change',e=>{line=e.target.value;result=[];error='';query='';root.querySelector('[data-knowledge-q]').value='';paint();});root.querySelector('[data-knowledge-run]').addEventListener('click',search);root.querySelector('[data-knowledge-q]').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();search();}});paint();}
+    adoptSharedLine();
+    if(!mounted){root.innerHTML=`<section class="mes-context-panel ames-knowledge-search">${sectionHead(t('CORA · conhecimento A-MES','CORA · A-MES knowledge'),t('Busca estruturada na mesma base operacional. Causa só é exibida como confirmada quando a fonte a classifica assim.','Structured search in the same operational database. A cause is only confirmed when classified as such by the source.'))}<div class="ames-knowledge-query"><label>${t('Linha','Line')}<select data-knowledge-line>${lineOptions(line)}</select></label><label>${t('Buscar','Search')}<input data-knowledge-q placeholder="${t('PCBA, Material SN, falha, CPH, processo...','PCBA, Material SN, failure, CPH, process...')}"></label><button class="button primary" data-knowledge-run>${t('Buscar','Search')}</button></div><div class="ames-knowledge-legend"><span class="fact">${t('Fato / evidência','Fact / evidence')}</span><span class="correlation">${t('Correlação','Correlation')}</span><span class="hypothesis">${t('Hipótese','Hypothesis')}</span><span class="cause">${t('Causa confirmada','Confirmed cause')}</span></div></section><section data-knowledge-result></section>`;mounted=true;root.querySelector('[data-knowledge-line]').addEventListener('change',e=>{line=e.target.value;store.updateContext?.({line_id:line});result=[];error='';query='';root.querySelector('[data-knowledge-q]').value='';paint();});root.querySelector('[data-knowledge-run]').addEventListener('click',search);root.querySelector('[data-knowledge-q]').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();search();}});paint();}
   }
   return {render,clear(){root?.replaceChildren();mounted=false;result=[];query='';busy=false;error='';}};
 }
