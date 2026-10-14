@@ -23,6 +23,7 @@ function bootstrapAgentToken(explicit=''){
 
 const requestTimeout=path=>path==='/ready'?2500:path==='/health'?12000:30000;
 const boundedLimit=(value,fallback=100000,max=100000)=>{const n=Number(value);return Number.isInteger(n)&&n>0?Math.min(n,max):fallback;};
+const boundedOffset=(value,max=100000)=>{const n=Number(value);return Number.isInteger(n)&&n>=0?Math.min(n,max):0;};
 
 // Transport belongs to the existing session; all operational data lives in store.
 export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
@@ -194,7 +195,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(name==='catalog')result=await request('/base/catalog?'+new URLSearchParams(value.snapshot_id?{snapshot_id:value.snapshot_id}:{}));
       else if(name==='trends')result=await request('/trends?'+new URLSearchParams({line,limit:boundedLimit(value.limit,500,500)}));
       else if(name==='dataset'){
-        const params={dataset:value.dataset,line,limit:boundedLimit(value.limit,100000,100000)};
+        const params={dataset:value.dataset,line,limit:boundedLimit(value.limit,100000,100000),offset:boundedOffset(value.offset)};
         if(value.snapshot_id)params.snapshot_id=value.snapshot_id;
         result=await request('/base?'+new URLSearchParams(params));
       }
