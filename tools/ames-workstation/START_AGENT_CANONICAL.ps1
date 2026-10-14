@@ -66,7 +66,7 @@ function Get-HardeningHealth {
 
 function Get-PublicHealth {
   $script:lastProbeError=''
-  try{return Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 5}catch{$script:lastProbeError=$_.Exception.Message;return $null}
+  try{return Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/health' -TimeoutSec 25}catch{$script:lastProbeError=$_.Exception.Message;return $null}
 }
 
 function Stop-ProcessAndWait {
