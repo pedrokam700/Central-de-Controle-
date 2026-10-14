@@ -37,6 +37,7 @@ jobs:
           python scripts/agent-base-paging.test.py
           python scripts/agent-performance-indexes.test.py
           python scripts/agent-package-contract.test.py
+          python scripts/agent-candidate-config.test.py
           PYTHONPATH=ames/agent python - <<'PY'
           import candidate_config
           assert candidate_config.normalize_start_date('2026-01-01') == '2026-01-01'
@@ -197,8 +198,16 @@ jobs:
             if([string]$saved.config.ames_start_date -ne '2026-02-01'){throw 'ames_start_date did not persist through hardened config'}
             $savedFile=Get-Content package\ames-agent\config.json -Raw | ConvertFrom-Json
             if([string]$savedFile.ames_start_date -ne '2026-02-01'){throw 'ames_start_date was not persisted to config.json'}
-            $hardening=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -TimeoutSec 8
-            if(-not $hardening.ok){throw 'Hardening health not OK'}
+            $unauthorized=$false
+            try{
+              Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -TimeoutSec 5 | Out-Null
+            }catch{
+              if($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401){$unauthorized=$true}else{throw}
+            }
+            if(-not $unauthorized){throw 'Detailed hardening diagnostics must reject unauthenticated callers'}
+            $hardening=Invoke-RestMethod 'http://127.0.0.1:8765/api/v1/hardening/health' -Headers $headers -TimeoutSec 8
+            if(-not $hardening.ok -or [string]$hardening.hardening -ne 'H1'){throw 'Hardening health not OK'}
+            if([string]$hardening.integrity -ne 'ok'){throw 'SQLite integrity is not OK'}
             if(-not $hardening.performance_indexes.ok){throw 'SQLite performance indexes are incomplete in installed CLEAN'}
             Write-Host "LIVE CLEAN ZIP OK: PID=$($ready.pid) build=$($ready.agent_build)" -ForegroundColor Green
           } finally {
