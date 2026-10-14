@@ -4,10 +4,11 @@ The factory MES has at least two UI variants:
 - a normal ExtJS combobox/field;
 - a lookup trigger that opens a small ExtJS grid with Name / Time / Desc rows.
 
-Never treat visible text alone as proof.  Success requires the parent Shift field
-(`input[name="desc"]`) to contain the expected label after the ExtJS record is
-selected.  Rich diagnostics are returned on failure so a physical regression is
-observable instead of looking like a generic timeout.
+Never treat visible text alone as proof. Success requires either the real combo
+submitted value to match its selected record or the parent Shift field
+(`input[name="desc"]`) to contain the expected label after a lookup-grid action.
+Rich diagnostics are returned on failure so a physical regression is observable
+instead of looking like a generic timeout.
 """
 import time
 from datetime import datetime, timezone, timedelta
@@ -40,12 +41,9 @@ SELECT_SHIFT_JS = r'''args => {
   ])];
   const owner=fields.find(f=>desc&&f.inputEl?.dom===desc) || null;
 
-  const fieldRaw=f=>norm(f?.getRawValue?.() ?? f?.getValue?.() ?? '');
-  if(owner && fieldRaw(owner)===expected && domValue()===expected){
-    return out({ok:true,strategy:'owner_field',reason:'confirmed',owner_xtype:owner.xtype||''});
-  }
-
-  // Legacy/alternate variant: the Shift field itself is a combobox.
+  // Legacy/alternate variant: the Shift field itself is a combobox.  This stays
+  // deliberately strict: matching raw text is not enough; value + submit value +
+  // selected record must all agree so we never repeat the physical stale-value bug.
   const combos=fields.filter(f=>f?.getStore && (f===owner || /shift/i.test(String(f.fieldLabel||'')) || /desc/i.test(String(f.name||''))));
   for(const combo of combos){
     try{
@@ -56,9 +54,10 @@ SELECT_SHIFT_JS = r'''args => {
       if(matches.length!==1)continue;
       const rec=matches[0], vf=combo.valueField, df=combo.displayField;
       const value=vf?rec.get(vf):undefined, label=df?rec.get(df):args.label;
+      if(value==null || value==='')continue;
       if(args.apply){
         const old=combo.getValue?.();
-        if(combo.select)combo.select(rec);else if(value!==undefined)combo.setValue?.(value);
+        if(combo.select)combo.select(rec);else combo.setValue?.(value);
         const major=Number(Ext.getVersion?.()?.major||4);
         combo.fireEvent?.('select',combo,major>=5?rec:[rec]);
         combo.fireEvent?.('change',combo,combo.getValue?.(),old);
@@ -66,8 +65,14 @@ SELECT_SHIFT_JS = r'''args => {
         combo.fireEvent?.('blur',combo);
         combo.collapse?.();
       }
-      const confirmed=domValue()===expected || (combo===owner && fieldRaw(combo)===expected && norm(label)===expected);
-      if(confirmed)return out({ok:true,strategy:'combobox',reason:'confirmed',record:rec.data||{},owner_xtype:combo.xtype||''});
+      const actual=combo.getValue?.();
+      const submitted=combo.getSubmitValue?combo.getSubmitValue():actual;
+      const found=combo.findRecordByValue?combo.findRecordByValue(actual):records.find(r=>norm(r.get?.(vf))===norm(actual));
+      const selection=combo.getSelection?.();
+      const selectionOk=!selection || (Array.isArray(selection)?selection.includes(rec):selection===rec);
+      const raw=combo.getRawValue?.() ?? label;
+      const confirmed=norm(actual)===norm(value) && norm(submitted)===norm(value) && found===rec && selectionOk && norm(raw)===expected && (!combo.isValid || combo.isValid());
+      if(confirmed)return out({ok:true,strategy:'combobox',reason:'confirmed',record:rec.data||{},value:actual,submitted,raw,owner_xtype:combo.xtype||''});
     }catch(_){ }
   }
 
@@ -134,7 +139,7 @@ SELECT_SHIFT_JS = r'''args => {
     });
   }
 
-  // If no shift grid is visible yet, explicitly open the lookup trigger.  This is
+  // If no shift grid is visible yet, explicitly open the lookup trigger. This is
   // the read-only Shift selector, not the page Confirm/Update buttons.
   if(args.apply){
     let requested=false;
@@ -149,7 +154,7 @@ SELECT_SHIFT_JS = r'''args => {
       }
     }catch(_){ }
     if(!requested && desc){
-      const wrap=desc.closest('.x-form-item,.x-field,.x-form-field-wrap,.x-form-trigger-wrap')||desc.parentElement;
+      const wrap=desc.closest?.('.x-form-item,.x-field,.x-form-field-wrap,.x-form-trigger-wrap')||desc.parentElement;
       const trigger=wrap?.querySelector?.('.x-form-trigger:not(.x-item-disabled),.x-form-arrow-trigger:not(.x-item-disabled)');
       if(trigger){try{trigger.click();requested=true;}catch(_){ }}
     }
@@ -167,7 +172,7 @@ def current_shift(now=None):
 
 
 def ensure_shift(page, now=None, timeout_s=8.0):
-    """Select the current shift and prove the parent 2114 field committed it.
+    """Select the current shift and prove the 2114 control committed it.
 
     The OPC page can take a few seconds to create/populate the lookup window, so
     this uses bounded state polling instead of a blind long sleep.
@@ -190,7 +195,7 @@ def ensure_shift(page, now=None, timeout_s=8.0):
                 })
                 if last and last.get('ok'):
                     # Re-read without applying anything: this is the proof that the
-                    # parent 2114 field actually retained the chosen shift.
+                    # selected record actually remained committed.
                     time.sleep(.08)
                     confirmed = frame.evaluate(SELECT_SHIFT_JS, {
                         'code': code,
