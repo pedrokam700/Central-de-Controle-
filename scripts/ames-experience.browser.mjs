@@ -71,10 +71,12 @@ try{
       await page.getByText('Manual period: the query follows the selected dates.',{exact:true}).waitFor();
       await page.getByText('Advanced filters',{exact:true}).waitFor();
       const historyConfig=page.locator('[data-console-pane=process] .ames-3012-workstation-config');
-      assert.equal(await historyConfig.getAttribute('open'),null,'workstation historical configuration must stay collapsed by default');
+      assert.equal(await historyConfig.evaluate(el=>el.open),false,'workstation historical configuration must stay collapsed by default');
       await historyConfig.locator('summary').click();
       await page.getByText('Known A-MES start date',{exact:true}).waitFor();
       await page.getByText(/Used by .Full history. mode\. This is a workstation setting and normally only needs to be configured once\./).waitFor();
+      await historyConfig.locator('summary').click();
+      assert.equal(await historyConfig.evaluate(el=>el.open),false,'test must restore collapsed state between theme passes');
     }
     await page.locator('[data-console-view=monitor]').click();
     await page.screenshot({path:path.join(out,'console-'+lang+'-'+(dark?'dark':'light')+'.png'),fullPage:true});
