@@ -131,6 +131,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 22
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: central-ames-integrated-${{ github.sha }}
@@ -288,3 +289,16 @@ jobs:
               if($listener){Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue}
             }
           }
+
+      - name: Legacy agent reoccupation and unknown-owner Windows gate
+        shell: powershell
+        run: ./scripts/ames-bootstrap-race.windows.ps1 -Root (Resolve-Path 'package').Path
+
+      - name: Preserve Windows startup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-bootstrap-evidence-${{ github.sha }}
+          path: package/logs/
+          if-no-files-found: warn
+          retention-days: 14
