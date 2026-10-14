@@ -66,10 +66,19 @@ export function createDailyFailureSummary(root,store){
       if(!handled)return;
       const shared=store.context?.().line_id;if(shared)line=shared;last='';queueMicrotask(render);
     };
+    const blockUnknownShiftDrilldown=event=>{
+      if(!shiftUnclassifiedCurrent)return;
+      const control=event.target?.closest?.('[data-top3-analytics] [data-dfa-kpi="shift1"],[data-top3-analytics] [data-dfa-kpi="shift2"],[data-top3-analytics] [data-matrix-line][data-matrix-shift]');
+      if(!control)return;
+      event.preventDefault();event.stopImmediatePropagation();
+    };
     // Analytics rerenders its own subtree synchronously on input/change. Capture the
     // operator intent before that target is detached, otherwise state.ames can miss it.
     host.addEventListener('change',onContextInput,true);
     host.addEventListener('input',onContextInput,true);
+    // Shift-specific drilldowns are invalid when 3022 has not classified any row in
+    // the active scope. Block them at capture time so a click cannot manufacture zero.
+    host.addEventListener('click',blockUnknownShiftDrilldown,true);
   }
   function dispatchAnalytics(el,value){
     if(!el)return;el.value=String(value??'');if(String(el.value)!==String(value??'')&&value)return;
@@ -78,10 +87,12 @@ export function createDailyFailureSummary(root,store){
   function polishAnalyticsShift(){
     const analytics=pane()?.querySelector?.('[data-top3-analytics]');if(!analytics)return;
     analytics.querySelector('[data-dfa-shift-unclassified]')?.remove();
+    for(const control of analytics.querySelectorAll('[data-dfa-kpi="shift1"],[data-dfa-kpi="shift2"],[data-matrix-line][data-matrix-shift]')){control.disabled=false;control.removeAttribute('aria-disabled');control.removeAttribute('data-unknown-shift-control');control.removeAttribute('title');}
     for(const el of analytics.querySelectorAll('[data-dfa-kpi="shift1"] .stat-value,[data-dfa-kpi="shift2"] .stat-value'))el.removeAttribute('data-unknown-shift');
     if(!shiftUnclassifiedCurrent)return;
     const notice=document.createElement('div');notice.className='notice warn';notice.dataset.dfaShiftUnclassified='1';notice.innerHTML=`<b>${t('Turno não classificado pela 3022.','Shift not classified by 3022.')}</b><br>${t('O ranking mantém as falhas existentes e mostra — nos totais por turno.','The ranking keeps existing failures and shows — for shift totals.')}`;
     analytics.querySelector('.ames-dfa-main')?.prepend(notice);
+    for(const control of analytics.querySelectorAll('[data-dfa-kpi="shift1"],[data-dfa-kpi="shift2"],[data-matrix-line][data-matrix-shift]')){control.disabled=true;control.setAttribute('aria-disabled','true');control.dataset.unknownShiftControl='1';control.title=t('3022 não classificou o turno neste escopo.','3022 did not classify the shift in this scope.');}
     for(const el of analytics.querySelectorAll('[data-dfa-kpi="shift1"] .stat-value,[data-dfa-kpi="shift2"] .stat-value')){el.textContent='—';el.dataset.unknownShift='1';}
     for(const meta of analytics.querySelectorAll('.ames-dfa-rank-meta')){
       for(const span of meta.querySelectorAll('span'))if(/1º turno|2º turno|1st shift|2nd shift/i.test(span.textContent||''))span.hidden=true;
