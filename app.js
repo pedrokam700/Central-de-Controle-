@@ -1157,6 +1157,33 @@ import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
       }
     }
 
+    function navigateSearchRoutine(routine){
+      if(!routine)return;
+      show('daily');
+      setTimeout(()=>{
+        if(currentAccount?.role==='admin'){
+          document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');
+          dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',routine.docId);return;
+        }
+        const execution=dailyMergedExecutions().find(item=>item.routineId===routine.docId);
+        const key=execution?.executionKey||execution?.docId||'';
+        const card=key?document.querySelector(`[data-daily-exec="${CSS.escape(key)}"]`):null;
+        if(card){card.scrollIntoView({behavior:'smooth',block:'center'});card.classList.add('daily-tour-highlight');setTimeout(()=>card.classList.remove('daily-tour-highlight'),1800);}
+      },120);
+    }
+    function navigateSearchPerson(user){
+      if(!user)return;
+      show('daily');
+      if(currentAccount?.role!=='admin')return;
+      setTimeout(()=>{
+        document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');
+        dailyAdminTab='dashboard';renderDailyAdmin();
+        const select=document.querySelector('#dailyDashUser');
+        if(select&&[...select.options].some(option=>option.value===user.docId)){select.value=user.docId;renderDailyAdminDashboard();}
+        document.querySelector('#dailyAdminDashboard')?.scrollIntoView({behavior:'smooth',block:'start'});
+      },100);
+    }
+
     function commandPaletteEntries(query=''){
       const q=String(query||'').trim().toLowerCase(),items=[];
       const add=(title,sub,kind,fn,searchText='')=>{if(!q||[title,sub,kind,searchText].join(' ').toLowerCase().includes(q))items.push({title,sub,kind,fn});};
@@ -1172,7 +1199,8 @@ import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
       state.operationalFailures.filter(r=>match(r.id,r.issue,r.owner,r.maquina,r.linha,r.estacao)).slice(0,8).forEach(r=>add(`${r.id} · ${r.issue||'Falha'}`,failureScopeSummary(r),t('Falha'),()=>{show('operations');openOperationalDetail(r.id);},[r.id,r.issue,r.maquina,r.linha].join(' ')));
       state.activities.filter(a=>match(a.id,a.title,a.area,a.description,a.nextAction)).slice(0,8).forEach(a=>add(`${a.id} · ${a.title}`,a.nextAction?`Próxima: ${a.nextAction}`:a.area,t('Atividade'),()=>{show('work');openActivityDetail(a.id);},[a.id,a.title,a.area,a.nextAction].join(' ')));
       state.flows.filter(f=>match(f.id,f.scope,f.description,f.product)).slice(0,6).forEach(f=>add(`${f.id} · ${f.scope}`,f.description||'',t('Fluxo'),()=>{show('flow');openFlowDetail(f.id);},[f.id,f.scope,f.product].join(' ')));
-      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(currentAccount?.role==='admin')setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},120);},[r.name,r.description,r.checklistTemplate].join(' ')));
+      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>navigateSearchRoutine(r),[r.name,r.description,r.checklistTemplate].join(' ')));
+      users.filter(u=>u.disabled!==true&&match(u.name,u.email,u.role)).slice(0,6).forEach(u=>add(u.name||u.email||t('Pessoa'),u.role==='admin'?'Admin':t('Pessoa'),t('Pessoa'),()=>navigateSearchPerson(u),[u.name,u.email,u.role].join(' ')));
       return items.slice(0,32);
     }
     function renderCommandPalette(query=''){
@@ -1215,7 +1243,11 @@ import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
       const acts=state.activities.filter(a=>match(a.id,a.product,a.title,a.type,a.area,a.description,a.owner,a.updates?.map(u=>u.text)));
       if(acts.length) groups.push(['Atividades',acts.map(a=>({title:`${a.id} · ${a.title}`,sub:a.product?`${productDisplayCode(a.product)} · ${a.area}`:a.area,fn:()=>{openActivityDetail(a.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
       const flows=state.flows.filter(f=>match(f.id,f.product,f.scope,f.description,f.creator,f.followUpOwner,f.updates?.map(u=>u.text)));
-      if(flows.length) groups.push(['Fluxos',flows.map(f=>({title:`${f.id} · ${f.scope}`,sub:f.product?productDisplayCode(f.product):'Sem produto',fn:()=>{openFlowDetail(f.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      if(flows.length) groups.push(['Fluxos',flows.map(f=>({title:`${f.id} · ${f.scope}`,sub:f.product?productDisplayCode(f.product):'Sem produto',fn:()=>{show('flow');openFlowDetail(f.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      const routines=state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate));
+      if(routines.length) groups.push([currentLanguage==='en-US'?'Routines':'Rotinas',routines.map(r=>({title:r.name||t('Rotina'),sub:r.description||t('Rotina'),fn:()=>{document.querySelector('#searchResultsModal').classList.add('hidden');navigateSearchRoutine(r);}}))]);
+      const people=users.filter(u=>u.disabled!==true&&match(u.name,u.email,u.role));
+      if(people.length) groups.push([currentLanguage==='en-US'?'People':'Pessoas',people.map(u=>({title:u.name||u.email||t('Pessoa'),sub:u.role==='admin'?'Admin':t('Pessoa'),fn:()=>{document.querySelector('#searchResultsModal').classList.add('hidden');navigateSearchPerson(u);}}))]);
       document.querySelector('#searchResultsSubtitle').textContent=`Resultados para “${q}”`;
       window.__globalSearchActions=[]; let actionIndex=0;
       document.querySelector('#globalResults').innerHTML=groups.length ? groups.map(([name,arr])=>`<div class="search-result-group"><h4>${name} · ${arr.length}</h4>${arr.slice(0,12).map(x=>{const idx=actionIndex++;window.__globalSearchActions[idx]=x.fn;return `<div class="search-result" data-search-index="${idx}"><strong>${esc(x.title)}</strong><div class="secondary-text">${esc(x.sub)}</div></div>`;}).join('')}</div>`).join('') : '<div class="muted-box">Nenhum resultado encontrado.</div>';
