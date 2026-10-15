@@ -1,4 +1,5 @@
 import {withProcessProvenance} from './console-process-provenance.mjs';
+import {withSnEvidenceConsistency} from './console-sn-consistency.mjs';
 
 function processReady(store){
   return store.agent()?.status==='connected' && store.agent()?.capabilities?.process_timeline===true;
@@ -67,7 +68,7 @@ export function applyMonitorProcessCapability(root,store){
 
 export function withProcessCapability(view,root,store,kind){
   const apply=kind==='trace'?applyTrace:kind==='sn'?applySn:applyProcess;
-  const target=kind==='process'?withProcessProvenance(view,root,store):view;
+  const target=kind==='process'?withProcessProvenance(view,root,store):kind==='sn'?withSnEvidenceConsistency(view,root,store):view;
   return Object.freeze({
     render(){target.render();apply(root,store);},
     clear(){target.clear?.();}
