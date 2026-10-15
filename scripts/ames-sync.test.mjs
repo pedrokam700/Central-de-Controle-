@@ -40,5 +40,7 @@ test('offline/reconnect publishes once; active teammates read sanitized latest l
   online=true;await sync.retry();assert.equal(pending.size,1);await sync.retry();assert.equal(pending.size,0);assert.equal(heads.size,1);await sync.capture();assert.equal(writes.length,1);
   const sameAccount=createAmesStore(),readerA=createMesSync(sameAccount,remote,{queue,online:()=>false});readerA.start('A');await new Promise(r=>setTimeout(r,30));assert.equal(sameAccount.read('TAN10101').snapshot.revision,1);readerA.stop();
   const teammate=createAmesStore(),readerB=createMesSync(teammate,remote,{queue,online:()=>false});readerB.start('B');await new Promise(r=>setTimeout(r,30));assert.equal(teammate.read('TAN10101').snapshot.revision,1);assert.equal(teammate.read('TAN10101').source,'remote');
-  readerB.stop();teammate.clear();assert.equal(teammate.read('TAN10101').snapshot,null);sync.stop();
+  const syncStatus=teammate.agent().sync;assert.equal(syncStatus.read_status,'ready');assert.equal(syncStatus.remote_scope,'team_latest');assert.equal(syncStatus.remote_line_count,1);assert.equal(syncStatus.remote_latest_collected_at,'2026-10-09T10:00:00Z');
+  assert.deepEqual(syncStatus.remote_heads,[{line_id:'TAN10101',source_id:'source',snapshot_id:'1',snapshot_revision:1,collected_at:'2026-10-09T10:00:00Z',authority:'team_latest'}]);assert.equal('owner_uid' in syncStatus.remote_heads[0],false);
+  readerB.stop();assert.equal(teammate.agent().sync.read_status,'idle');assert.equal(teammate.agent().sync.remote_line_count,0);assert.deepEqual(teammate.agent().sync.remote_heads,[]);teammate.clear();assert.equal(teammate.read('TAN10101').snapshot,null);sync.stop();
 });
