@@ -179,7 +179,7 @@ sem snapshot|no snapshot
 idade desconhecida|unknown age
 MES local|Local MES
 Pacote deste frontend ainda não disponível no Actions.|The package for this frontend is not yet available in Actions.
-Esse é o caminho de migração suportado para o gate atual. Preserve a pasta R12 como rollback, aplique o candidato canônico e inicie pelo|This is the supported migration path for the current gate. Preserve the R12 folder for rollback, apply the canonical candidate and start with
+Esse é o caminho de migração suportado para o gate atual. Preserve a pasta R12 como rollback, aplique o candidato canônico e inicie pelo|This is the supported migration path for the current gate. Preserve the R12 folder as rollback, apply the canonical candidate and start with
 . A interface operacional continua sendo esta Central; o agente local permanece em|. Work Center remains the operational interface; the local agent remains at
 O ZIP público anterior não contém a fusão atual e deixou de ser oferecido por segurança. Estado:|The previous public ZIP does not contain the current integration and is no longer offered. Status:
 code_ready_factory_package_pending|code ready; factory package pending
@@ -188,4 +188,18 @@ ausência não equivale a zero|missing data does not mean zero
 Instalar o candidato 0.5.24-rc1 com patch FIFO e autorizar a origem exata da Central no config.json local|Install candidate 0.5.24-rc1 with the FIFO patch and authorize Work Center's exact origin in local config.json
 Contrato v2 com revisão/cursor; cobertura da fonte continua parcial|v2 contract with revision/cursor; source coverage remains partial
 Validação física de CDP, rede, duração, Excel e paridade fabril ainda pendente|Physical validation of CDP, network, duration, Excel and factory parity is still pending
+Falhas agrupadas|Grouped failures
+Primeiro veja o nome da falha e a quantidade. O código é apenas referência técnica. Clique em uma falha para abrir só suas ocorrências.|Start with the failure name and count. The code is only a technical reference. Click a failure to open only its occurrences.
+Código técnico|Technical code
+Código técnico não informado|Technical code not provided
+Última ocorrência|Latest occurrence
+Mostrar todas|Show all
+Ordenar ocorrências|Sort occurrences
+Falha A → Z|Failure A → Z
+Mais recentes|Newest first
+Mais antigas|Oldest first
+Todas as falhas|All failures
+Top 3 falhas|Top 3 failures
+Descrição humana em destaque; o código fica apenas como referência técnica.|Human-readable description is emphasized; the code remains only a technical reference.
+Buscar nome da falha|Search failure name
 `.trim().split('\n').map(line=>{const i=line.indexOf('|');return [line.slice(0,i),line.slice(i+1)];}));
