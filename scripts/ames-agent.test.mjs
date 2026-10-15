@@ -13,7 +13,7 @@ function fixture(){
 }
 export function harness(){
   const store=createAmesStore(),f=fixture(),calls=[],pending=[];let clock=10000;
-  const routes={ready:{ok:true,ready:true,agent_build:'CANONICAL-R11-BATCH',agent_version:'0.5.23'},'v2/capabilities':{schema:'central-ames-v2',native_console:true,revision:true,cursor:true},'v2/snapshots':()=>({ok:true,json:async()=>({snapshots:[canonicalAgentFixture(f)]})}),health:{agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY},engine_found:true},config:{configured_lines:[line],performance:'fast',production_day_start:'07:00',timezone:'America/Sao_Paulo',work_shifts:{'1':{label:'1º Turno',start:'07:30',end:'17:30'},'2':{label:'2º Turno',start:'17:30',end:'07:30'}}},monitor:{enabled:0},'team-dashboard':{snapshot_ids:{[line]:f.legacy.summary.snapshot_id},lines:[{...f.legacy.summary,metrics:f.legacy.summary}]},insights:f.insights,'deep-trace':{id:'J',status:'queued'},runs:{id:'J',status:'queued'},'jobs/J':{id:'J',status:'running',stage_progress:{'3074':{line,current:1,total:3,line_percent:33}},partial_refresh:0},'jobs/J/cancel':{ok:true},'monitor/start':{enabled:true,interval_minutes:5},'monitor/stop':{enabled:false}};
+  const routes={ready:{ok:true,ready:true,agent_build:'CANONICAL-R11-BATCH',agent_version:'0.5.23'},'v2/capabilities':{schema:'central-ames-v2',native_console:true,revision:true,cursor:true},'v2/snapshots':()=>({ok:true,json:async()=>({snapshots:[canonicalAgentFixture(f)]})}),health:{agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY},engine_found:true},config:{configured_lines:[line],performance:'fast',production_day_start:'07:00',timezone:'America/Sao_Paulo',work_shifts:{'1':{label:'1º Turno',start:'07:30',end:'17:30'},'2':{label:'2º Turno',start:'17:30',end:'07:30'}}},monitor:{enabled:0},backup:{ok:true,backup:{path:'C:/Users/private/data/backups/ames.sqlite3',bytes:2048,created_at:'2026-10-15T09:38:00',reason:'native_console',token:'secret'}},'team-dashboard':{snapshot_ids:{[line]:f.legacy.summary.snapshot_id},lines:[{...f.legacy.summary,metrics:f.legacy.summary}]},insights:f.insights,'deep-trace':{id:'J',status:'queued'},runs:{id:'J',status:'queued'},'jobs/J':{id:'J',status:'running',stage_progress:{'3074':{line,current:1,total:3,line_percent:33}},partial_refresh:0},'jobs/J/cancel':{ok:true},'monitor/start':{enabled:true,interval_minutes:5},'monitor/stop':{enabled:false}};
   const fetcher=async(url,options)=>{
     const u=new URL(url),key=u.pathname.replace('/api/v1/','');calls.push({key,body:options.body&&JSON.parse(options.body),options,url});
     if(key==='v2/records')return {ok:true,json:async()=>canonicalResponse(canonicalAgentFixture(f),u)};
@@ -44,6 +44,16 @@ test('scope validates exact lines, supported profiles and limits',()=>{
 });
 test('old agent blocked after fast readiness; real scheduler health required',async()=>{
   const h=harness();h.routes.health.mes_scheduler={};await assert.rejects(h.client.connect(),/patch/);assert.equal(h.store.agent().status,'disconnected');assert.deepEqual(h.calls.map(c=>c.key),['ready','health']);
+});
+test('health and manual backup keep recovery metadata without paths or secrets in Central state',async()=>{
+  const h=harness();h.routes.health.latest_backup={path:'C:/Users/private/data/backups/old.sqlite3',bytes:4096,modified_at:'2026-10-15T08:00:00',token:'health-secret'};
+  await h.client.connect();
+  assert.deepEqual(h.store.agent().runtime.latest_backup,{created_at:'2026-10-15T08:00:00',bytes:4096,reason:null});
+  let state=JSON.stringify(h.store.agent());assert.equal(state.includes('C:/Users/private'),false);assert.equal(state.includes('health-secret'),false);
+  const result=await h.client.auxiliary('backup');
+  assert.deepEqual(result.backup,{created_at:'2026-10-15T09:38:00',bytes:2048,reason:'native_console'});
+  assert.deepEqual(h.store.agent().auxiliary.result.backup,result.backup);
+  state=JSON.stringify(h.store.agent());assert.equal(state.includes('C:/Users/private'),false);assert.equal(state.includes('secret'),false);
 });
 test('real payloads, persistent config, 850ms progress and >2200ms changed partial refresh',async()=>{
   const h=harness();await h.client.connect();assert.equal(h.store.read(line).source,'local');assert.deepEqual(h.calls.slice(0,2).map(c=>c.key),['ready','health']);assert.equal(h.store.agent().config.production_day_start,'07:00');
