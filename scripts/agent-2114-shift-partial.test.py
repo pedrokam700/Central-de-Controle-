@@ -4,7 +4,9 @@ These tests intentionally do not claim factory validation.  They prove that:
 - shift preparation requires a committed confirmation, not the first visual hit;
 - the composite navigator can degrade 2114 without killing other sources;
 - fluxo_2114 returns structured partial evidence when Shift is unavailable;
-- one 2114 PCBA error does not abort the remaining 2114 batch.
+- one 2114 PCBA error does not abort the remaining 2114 batch;
+- a completed checkpoint is refreshed on a new explicit trace instead of posing as a new MES read;
+- a partial checkpoint still resumes only the unfinished PCBA work.
 """
 from __future__ import annotations
 
@@ -87,8 +89,6 @@ def test_shift_waits_for_committed_confirmation():
     real_time, real_sleep = shift_2114.time.time, shift_2114.time.sleep
     shift_2114.time.time, shift_2114.time.sleep = clock.time, clock.sleep
     try:
-        # Freeze the operational clock inside the first-shift window. The contract
-        # must not change outcome merely because CI happens to run after 17:30 BRT.
         first_shift = datetime(2026, 10, 14, 10, 0, tzinfo=timezone(timedelta(hours=-3)))
         result = shift_2114.ensure_shift(page, now=first_shift, timeout_s=4.0)
     finally:
@@ -120,6 +120,7 @@ def test_navigation_shift_is_nonfatal_unless_strict():
 def test_unconfirmed_shift_returns_partial_without_querying_2114():
     class Tela:
         calls = 0
+        last_shift_error = "lookup did not commit"
 
         def turno_atual(self):
             return fluxo_2114.SHIFT_UNCONFIRMED
@@ -147,6 +148,7 @@ def test_unconfirmed_shift_returns_partial_without_querying_2114():
     assert out["pcba_error_count"] == 1
     assert out["pcbas"][0]["status"] == "ERROR"
     assert "3074/3022 podem continuar" in out["source_error"]
+    assert "lookup did not commit" in out["source_error"]
 
 
 def test_one_2114_error_does_not_abort_remaining_targets():
@@ -179,12 +181,78 @@ def test_one_2114_error_does_not_abort_remaining_targets():
     assert [row["status"] for row in out["pcbas"]] == ["ERROR", "COMPLETE"]
 
 
+def test_completed_checkpoint_is_requeried_on_new_explicit_trace():
+    class Tela:
+        def __init__(self):
+            self.calls = []
+
+        def turno_atual(self):
+            return "1st Shift"
+
+        def consultar(self, pcba):
+            self.calls.append(pcba)
+            return {"query_sn": pcba, "rows": [{"Lot Id": pcba}], "no_data": False, "shift": "1st Shift"}
+
+    tela = Tela()
+    with tempfile.TemporaryDirectory() as td:
+        checkpoint = Path(td) / "2114.json"
+        first = fluxo_2114.executar_fluxo_2114(
+            sample_3074("002500000382"), tela, source_sha256="same-source",
+            checkpoint_path=checkpoint, include_current=True, pause_s=0,
+        )
+        second = fluxo_2114.executar_fluxo_2114(
+            sample_3074("002500000382"), tela, source_sha256="same-source",
+            checkpoint_path=checkpoint, include_current=True, pause_s=0,
+        )
+    assert first["source_status"] == "COMPLETE"
+    assert second["source_status"] == "COMPLETE"
+    assert tela.calls == ["002500000382", "002500000382"], "a new trace must submit the SN again"
+    assert second["checkpoint_refreshed"] is True
+    assert second["checkpoint_resumed"] is False
+
+
+def test_partial_checkpoint_resumes_only_unfinished_pcba():
+    class Tela:
+        def __init__(self):
+            self.calls = []
+            self.fail_second = True
+
+        def turno_atual(self):
+            return "1st Shift"
+
+        def consultar(self, pcba):
+            self.calls.append(pcba)
+            if pcba.endswith("2") and self.fail_second:
+                raise RuntimeError("temporary 2114 failure")
+            return {"query_sn": pcba, "rows": [], "no_data": True, "shift": "1st Shift"}
+
+    tela = Tela()
+    with tempfile.TemporaryDirectory() as td:
+        checkpoint = Path(td) / "2114.json"
+        first = fluxo_2114.executar_fluxo_2114(
+            sample_3074("002500000001", "002500000002"), tela, source_sha256="partial-source",
+            checkpoint_path=checkpoint, include_current=True, pause_s=0,
+        )
+        tela.fail_second = False
+        second = fluxo_2114.executar_fluxo_2114(
+            sample_3074("002500000001", "002500000002"), tela, source_sha256="partial-source",
+            checkpoint_path=checkpoint, include_current=True, pause_s=0,
+        )
+    assert first["source_status"] == "PARTIAL"
+    assert second["source_status"] == "COMPLETE"
+    assert tela.calls == ["002500000001", "002500000002", "002500000002"]
+    assert second["checkpoint_resumed"] is True
+    assert second["checkpoint_refreshed"] is False
+
+
 def main():
     tests = [
         test_shift_waits_for_committed_confirmation,
         test_navigation_shift_is_nonfatal_unless_strict,
         test_unconfirmed_shift_returns_partial_without_querying_2114,
         test_one_2114_error_does_not_abort_remaining_targets,
+        test_completed_checkpoint_is_requeried_on_new_explicit_trace,
+        test_partial_checkpoint_resumes_only_unfinished_pcba,
     ]
     for test in tests:
         test()
