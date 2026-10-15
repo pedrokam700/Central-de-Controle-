@@ -35,11 +35,26 @@ genérica por identidade/evidência para qualquer material serializado.
 - Teste direcionado `ames-block4-a2.test.mjs`: 4/4 PASS; `node --check` nos três módulos PASS.
 - Não houve mudança em bootstrap/8765, coletores, waits/selectors/acceptance 3022,
   SQLite, sync, 3028 ou motor de correlação.
+- LAST_SAFE_SHA A2.1: 8c3b7ec4903473cc89b0cf24f95baa26c16aa801.
+
+## B1 — Consulta por SN ao vivo: KPIs → evidência (concluída)
+
+- Os KPIs do resumo ao vivo agora levam diretamente à aba correspondente: falha atual,
+  histórico 2114, materiais 3074, processo 3022 e reparos 3012.
+- A navegação aceita clique e teclado (Enter/Espaço); não cria nova view nem estado paralelo.
+- O card Processo 3022 do resumo só mostra posto/horário de geração/turno quando
+  `trustedProductionEvidence()` comprova a referência. Uma passagem 3022 genérica não é
+  reutilizada como se fosse geração da falha.
+- `Defect Time` no resumo humano passa a ser rotulado `Registro da falha (MES)`.
+- Motor `sn-forensics` e os alertas genéricos do Bloco 3 permanecem inalterados.
+- Contrato estático novo `scripts/ames-sn-navigation.test.mjs` trava tabs, acessibilidade,
+  uso do helper de confiança e proíbe o fallback antigo `contexts[0]||passages[0]`.
 
 A2.2 ainda PENDING: aplicar a mesma regra de confiança nos adapters maiores
 (`console-specialized-views`, analytics/resumos) sem usar Defect Time como fallback de
 turno/dia/horário de geração.
-B (drill-down), C (enriquecimento/histórico) e D (multi-PC) também PENDING.
+B2 PENDING: paridade de navegação/drill-down da Consulta por SN offline.
+C (enriquecimento/histórico) e D (multi-PC) também PENDING.
 Não iniciar Bloco 5. Não rodar Full Quality/UX Physical Candidate nesta etapa.
 Commits intermediários usam [skip ci] para não disparar gates pesados.
 Gate físico PENDING exceto bootstrap e a persistência de rede já observados fisicamente;
