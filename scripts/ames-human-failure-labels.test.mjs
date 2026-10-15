@@ -21,5 +21,11 @@ test('main failure operator views do not require memorizing Defect Code', async 
   assert.match(legacy,/Descrição humana em destaque; o código fica apenas como referência técnica/);
 
   const process = await read('ames/console-failure-process.mjs');
-  assert.match(process,/<th>PCBA<\/th><th>Falha<\/th><th>Código técnico<\/th>/);
+  const pcbaHeader=process.indexOf('<th>PCBA</th>');
+  const failureHeader=process.indexOf("${t('Falha','Failure')}");
+  const codeHeader=process.indexOf("${t('Código técnico','Technical code')}");
+  assert(pcbaHeader>=0,'PCBA must remain the first technical identity column');
+  assert(failureHeader>pcbaHeader,'human failure description must appear before the technical code');
+  assert(codeHeader>failureHeader,'technical code must remain secondary to the human description');
+  assert.match(process,/knownDescription\(row\.defect_desc\)\|\|row\.defect_code/);
 });

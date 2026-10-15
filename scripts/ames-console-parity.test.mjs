@@ -47,7 +47,10 @@ test('Wave 2 keeps SN trace and 3022 as one native investigation flow',()=>{
   const css=fs.readFileSync('ames/console-wave2.css','utf8');
   for(const text of ['Consulta individual por SN','3074','2114','3022','Falha atual da PCBA','Falhas antigas da PCBA','Materiais em 2º uso ou mais','PCBAs anteriores/desvinculadas']) assert.match(specialized,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   for(const text of ['full','process_only','reuse_only','Escopo desta coleta','Progresso da rastreabilidade','Evidência carregada']) assert.match(specialized,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  for(const text of ['Defect Time','última passagem concluída válida ≤ Defect Time','A5700','A5162','A5201','Manual/Automatic','Múltiplas passagens']) assert.match(specialized,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const text of ['Registro da falha (MES)','última passagem concluída válida ≤ registro da falha','Posto de referência (3022)','Horário de geração (3022)','Turno comprovado (3022)','Dia de produção (3022)','Posto de retorno','Horário do retorno','Manual/Automatic','Múltiplas passagens']) assert.match(specialized,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(specialized,/trustedProductionEvidence/);
+  assert.match(specialized,/genericReturnEvidence/);
+  assert.doesNotMatch(specialized,/Retorno A5201/);
   assert.match(css,/\.ames-sn-grid/);
   assert.match(css,/\.ames-trace-layout/);
   assert.match(css,/\.ames-process-kpis/);

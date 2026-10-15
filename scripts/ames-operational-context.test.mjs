@@ -52,8 +52,13 @@ test('shift filter never converts failures without 3022 classification into fals
     {pcba_sn:'P2',product_model:'CPH2859V',defect_code:'D2',defect_time:'2026-10-08T11:00:00-03:00'},
   ];
   assert.equal(scopedDailyRows(rows,{shift:'1st Shift'}).length,2,'unknown shift must remain visible');
-  const classified=[{...rows[0],production_shift:'1st Shift'},{...rows[1],production_shift:'2nd Shift'}];
-  assert.equal(scopedDailyRows(classified,{shift:'1st Shift'}).length,1,'proven shift may be filtered normally');
+  const unproven=[{...rows[0],production_shift:'1st Shift'},{...rows[1],production_shift:'2nd Shift'}];
+  assert.equal(scopedDailyRows(unproven,{shift:'1st Shift'}).length,2,'raw shift without 3022 proof must not filter failures');
+  const classified=[
+    {...rows[0],production_evidence_proven:true,production_shift:'1st Shift'},
+    {...rows[1],production_evidence_proven:true,production_shift:'2nd Shift'}
+  ];
+  assert.equal(scopedDailyRows(classified,{shift:'1st Shift'}).length,1,'proven 3022 shift may be filtered normally');
   const daily=source('ames/daily-failure-summary.mjs');
   assert.match(daily,/Turno não classificado pela 3022/);
   assert.match(daily,/não foram convertidas em zero/);
@@ -99,5 +104,8 @@ test('operational view adapters read and write one shared active line',()=>{
   assert.match(parity,/store\.preferredLine\?\.\(\)/);
   assert.match(trace,/store\.context\?\.\(\)\.line_id\|\|store\.preferredLine/);
   assert.match(refresh,/data-reuse-line-tab/);
-  assert.match(daily,/mesmo contexto operacional de linha, período, CPH, turno e falha/);
+  for(const field of ['line','shift','product','defect'])assert.match(daily,new RegExp(`field==='${field}'`));
+  assert.match(daily,/field==='from'\|\|field==='to'/);
+  assert.match(daily,/syncContextToAnalytics/);
+  assert.match(daily,/targets=\{line:context\.line_id\|\|line,shift:context\.shift\|\|''/);
 });
