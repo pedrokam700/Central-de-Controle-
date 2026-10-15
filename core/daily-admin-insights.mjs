@@ -8,8 +8,10 @@ function recordKeys(record){
     .filter(Boolean);
 }
 
-function recordId(record){
-  return text(record?.id||record?.docId||record?.failureId||record?.activityId||record?.reportId);
+function recordIdentifiers(record){
+  return [record?.id,record?.docId,record?.failureId,record?.activityId,record?.reportId]
+    .map(text)
+    .filter(Boolean);
 }
 
 function linkedIds(executions,field){
@@ -79,12 +81,16 @@ function scopeLabel(execution){
 
 function historyItem(item){
   return {
-    timestamp:text(item?.timestamp||item?.createdAt||item?.updatedAt||item?.date),
+    timestamp:text(item?.at||item?.timestamp||item?.createdAt||item?.updatedAt||item?.date),
     kind:text(item?.kind||item?.type||item?.category),
-    title:text(item?.title||item?.label||item?.name||item?.action||'Alteração administrativa'),
-    detail:text(item?.detail||item?.description||item?.summary),
-    actor:text(item?.actorName||item?.userName||item?.changedByName||item?.ownerName)
+    title:text(item?.summary||item?.title||item?.label||item?.name||item?.action||'Alteração administrativa'),
+    detail:text(item?.detail||item?.description||item?.label||item?.action),
+    actor:text(item?.by||item?.actorName||item?.userName||item?.changedByName||item?.ownerName)
   };
+}
+
+function isSystemAccount(user){
+  return user?.systemAccount===true||normalized(user?.id||user?.docId)==='master';
 }
 
 export function buildDailyAdminInsights({
@@ -102,10 +108,10 @@ export function buildDailyAdminInsights({
 
   const linkedFailures=asArray(operationalFailures).filter(item=>{
     const origin=text(item?.originRoutineExecutionId);
-    const id=recordId(item);
-    return (origin&&executionKeySet.has(origin))||(id&&explicitlyLinkedFailureIds.has(id));
+    const ids=recordIdentifiers(item);
+    return (origin&&executionKeySet.has(origin))||ids.some(id=>explicitlyLinkedFailureIds.has(id));
   });
-  const linkedFailureIds=new Set(linkedFailures.map(recordId).filter(Boolean));
+  const linkedFailureIds=new Set(linkedFailures.flatMap(recordIdentifiers));
 
   const linkedReports=asArray(reports).filter(item=>{
     const origin=text(item?.originRoutineExecutionId);
@@ -115,8 +121,8 @@ export function buildDailyAdminInsights({
 
   const linkedActivities=asArray(activities).filter(item=>{
     const origin=text(item?.originRoutineExecutionId);
-    const id=recordId(item);
-    return (origin&&executionKeySet.has(origin))||(id&&explicitlyLinkedActivityIds.has(id));
+    const ids=recordIdentifiers(item);
+    return (origin&&executionKeySet.has(origin))||ids.some(id=>explicitlyLinkedActivityIds.has(id));
   });
 
   const checklist=rows.flatMap(checklistEntries);
@@ -147,7 +153,7 @@ export function buildDailyAdminInsights({
     }];
   });
 
-  const teamUsers=asArray(users).filter(user=>normalized(user?.id)!=='master'&&user?.systemAccount!==true);
+  const teamUsers=asArray(users).filter(user=>!isSystemAccount(user));
   const activeUsers=teamUsers.filter(user=>user?.disabled!==true);
   const disabledUsers=teamUsers.filter(user=>user?.disabled===true);
   const activeAdmins=activeUsers.filter(user=>normalized(user?.role)==='admin');
