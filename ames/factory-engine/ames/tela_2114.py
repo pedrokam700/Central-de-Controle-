@@ -152,12 +152,29 @@ class Tela2114:
         return _safe_input_value(page, "desc")
 
     def turno_atual(self):
-        """Composite pipelines need a non-fatal source state before 3074 runs.
+        """Return a committed Shift, making one bounded real selection attempt.
 
-        `SHIFT_UNCONFIRMED` is explicit evidence that 2114 is unavailable; it is
-        not treated as a real MES shift by `consultar`, which remains strict.
+        The composite flow used to inspect the field after an earlier best-effort
+        navigation attempt. If that first attempt was transient, 2114 was marked
+        unavailable without ever retrying at the moment the source actually ran.
+        This method now retries the real lookup once and still degrades explicitly
+        to SHIFT_UNCONFIRMED instead of fabricating a value.
         """
-        return self.turno_confirmado() or SHIFT_UNCONFIRMED
+        confirmed = self.turno_confirmado()
+        if confirmed:
+            self.last_shift_error = None
+            return confirmed
+        try:
+            from ames.shift_2114 import ensure_shift
+            selected = ensure_shift(self._page(), timeout_s=8.0)
+            confirmed = self.turno_confirmado()
+            if confirmed:
+                self.last_shift_error = None
+                return confirmed
+            self.last_shift_error = f"Shift {selected or ''} não permaneceu confirmado no campo principal."
+        except Exception as exc:
+            self.last_shift_error = f"{type(exc).__name__}: {exc}"
+        return SHIFT_UNCONFIRMED
 
     def consultar(self, pcba_sn, timeout_s=15.0, empty_confirm_s=1.8):
         pcba_sn = normalizar_sn(pcba_sn)
