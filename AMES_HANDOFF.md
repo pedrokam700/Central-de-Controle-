@@ -2,6 +2,16 @@
 
 > Este arquivo é um **checkpoint**, não uma fonte eternamente atual. Antes de qualquer alteração, revalide o GitHub. A fonte de verdade é: Roadmap #28 + PR ativo #27 + HEAD remoto + workflows/gates do HEAD exato.
 
+## Checkpoint prioritário — Bloco 3, 2026-10-15
+
+Blocos 1 e 2 concluídos e preservados no parent `403b5878f3000b9c363c9e4eca63fe1b51175cbf`.
+Bloco 3 de correlações técnicas concluído em código + 30 testes direcionados PASS.
+O SHA deste checkpoint está nos comentários da Issue #28 e PR #27.
+Leia primeiro `docs/ames/operator-recovery-20261015.md` (seção Bloco 3).
+Próximo: Bloco 4 de UI/histórico; não refazer Blocos 1–3. Full Quality/Candidate
+finais e validação física continuam PENDING. Nenhum CLEAN gerado neste bloco.
+As referências anteriores abaixo são históricas e exigem revalidação.
+
 ## Ordem obrigatória ao retomar
 
 1. Ler o Roadmap Mestre: Issue **#28 — ROADMAP MESTRE — Central de Trabalho + A-MES**.

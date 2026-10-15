@@ -1,5 +1,5 @@
 import {createAdvancedTable} from './advanced-table.mjs';
-import {escapeHtml as esc} from './evidence-view.mjs';
+import {escapeHtml as esc,renderSnCorrelationAlerts} from './evidence-view.mjs';
 import {componentLabel} from './data/reuse-analysis.mjs';
 import {buildLiveSnForensics,relationLabel} from './data/sn-forensics.mjs';
 
@@ -14,6 +14,8 @@ function person(event){if(!event)return '—';const name=event.operator_name,id=
 function repairPerson(row){return row?.repair_user||'—';}
 function failureTitle(failure){if(!failure)return t('Sem falha histórica confirmada','No confirmed historical failure');return [failure.defect_code,failure.defect_desc].filter(Boolean).join(' — ')||t('Falha sem descrição','Failure without description');}
 function repairBlock(repairs=[]){
+  const candidates=repairs.filter(r=>r.association!=='exact_occurrence');repairs=repairs.filter(r=>r.association==='exact_occurrence');
+  if(!repairs.length&&candidates.length)return `<p>${t('3012: registros da mesma PCBA sem vínculo comprovado com esta ocorrência; consulte Reparo 3012.','3012: same-PCBA records without a proven link to this occurrence; see 3012 repair.')}</p>`;
   if(!repairs.length)return `<div class="ames-sn-forensic-empty">${t('3012 sem reparo/análise armazenado para esta PCBA/falha.','No stored 3012 repair/analysis for this PCBA/failure.')}</div>`;
   const r=repairs[0];return `<div class="ames-sn-repair-story"><div><small>Repair User</small><b>${esc(fmt(repairPerson(r)))}</b></div><div><small>Repair Time</small><b>${esc(fmt(r.repair_time))}</b></div><div><small>Repair Code</small><b>${esc(fmt(r.repair_code))}</b></div><div class="wide"><small>Repair Comment</small><b>${esc(fmt(r.repair_comment))}</b></div></div>${repairs.length>1?`<small class="ames-sn-more">+ ${repairs.length-1} ${t('registro(s) 3012 relacionado(s)','related 3012 record(s)')}</small>`:''}`;
 }
@@ -41,7 +43,7 @@ function ownHistoryStory(model){
 }
 function forensicView(result){
   const model=buildLiveSnForensics(result);
-  return `<div class="ames-sn-forensic-intro"><div><h3>${t('História completa da SN','Complete SN story')}</h3><p>${t('A leitura é organizada por PCBA/componente. 3074 liga o material à placa; 2114 prova a falha histórica; 3012 acrescenta reparo/comentário; 3022 acrescenta processo e operador quando o MES realmente os retorna.','The read is organized by PCBA/component. 3074 links material to board; 2114 proves failure history; 3012 adds repair/comment; 3022 adds process and operator only when MES actually returns them.')}</p></div><span class="status">${t('SEM INFERIR CAUSA','NO CAUSE INFERENCE')}</span></div>${currentStory(model)}${ownHistoryStory(model)}<section class="ames-sn-materials-story"><div class="section-head"><div><h3>${t('Componentes reutilizados e passado real','Reused components and actual history')}</h3><p>${t('Cada vínculo preserva Material SN, PCBA anterior, falha antiga e evidências de reparo/processo.','Each link preserves Material SN, previous PCBA, previous failure, and repair/process evidence.')}</p></div><span class="status">${model.materials.length}</span></div>${model.materials.length?model.materials.map(materialStory).join(''):emptyCard(t('Sem material reutilizado confirmado','No confirmed reused material'),t('Ausência nesta resposta não é convertida em causa nem em zero global.','Absence in this response is not converted into cause or a global zero.'))}</section>`;
+  return `<div class="ames-sn-forensic-intro"><div><h3>${t('História completa da SN','Complete SN story')}</h3><p>${t('A leitura é organizada por PCBA/componente. 3074 liga o material à placa; 2114 prova a falha histórica; 3012 acrescenta reparo/comentário; 3022 acrescenta processo e operador quando o MES realmente os retorna.','The read is organized by PCBA/component. 3074 links material to board; 2114 proves failure history; 3012 adds repair/comment; 3022 adds process and operator only when MES actually returns them.')}</p></div><span class="status">${t('SEM INFERIR CAUSA','NO CAUSE INFERENCE')}</span></div>${renderSnCorrelationAlerts(model,document.documentElement.lang||'pt-BR')}${currentStory(model)}${ownHistoryStory(model)}<section class="ames-sn-materials-story"><div class="section-head"><div><h3>${t('Componentes reutilizados e passado real','Reused components and actual history')}</h3><p>${t('Cada vínculo preserva Material SN, PCBA anterior, falha antiga e evidências de reparo/processo.','Each link preserves Material SN, previous PCBA, previous failure, and repair/process evidence.')}</p></div><span class="status">${model.materials.length}</span></div>${model.materials.length?model.materials.map(materialStory).join(''):emptyCard(t('Sem material reutilizado confirmado','No confirmed reused material'),t('Ausência nesta resposta não é convertida em causa nem em zero global.','Absence in this response is not converted into cause or a global zero.'))}</section>`;
 }
 
 function operatorSummary(result,rows){

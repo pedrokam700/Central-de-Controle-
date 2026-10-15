@@ -1,4 +1,97 @@
-# Recuperação da tranche técnica — checkpoint do Bloco 1
+# Recuperação da tranche técnica — checkpoints dos Blocos 1–3
+
+## Atualização prioritária — Bloco 3 concluído, 2026-10-15
+
+Parent remoto revalidado: `403b5878f3000b9c363c9e4eca63fe1b51175cbf`.
+O commit que contém esta seção é o checkpoint do Bloco 3; seu SHA completo será
+registrado nos comentários da Issue #28 e PR #27. Blocos 1 e 2 preservados.
+
+### Recuperação e escopo
+
+Antes de qualquer checkout/reset foram executados git status e git diff.
+operator-audit estava detached exatamente no parent acima, com alteração local
+somente em ames/data/sn-forensics.mjs (76 inserções / 9 remoções). Esse trabalho
+inacabado do Bloco 3 foi inspecionado, preservado e continuado. Outras cópias locais
+não foram alteradas. Não houve reset, descarte ou reaplicação dos Blocos 1/2.
+Comentários canônicos 6194796421 e 6194874895 lidos integralmente.
+
+### Causas e correções comprovadas
+
+- O rascunho aceitava data ausente como passado; agora histórico precisa de hora
+  completa estritamente anterior à ocorrência atual. Timestamps equivalentes
+  UTC/local são normalizados para comparação, sem regravar os dados de origem.
+- Reparos da mesma PCBA permanecem candidatos; associação exata exige PCBA,
+  Defect Code e Defect Time. Alertas só usam Repair Time >= falha de origem e
+  < próxima ocorrência conhecida daquela PCBA e < falha atual. Reparo futuro,
+  sem hora ou cruzando o ciclo não vira evidência nem comentário do alerta.
+- row_key da 3012 inclui comentário/metadados, portanto não identifica uma
+  intervenção. Contagem usa PCBA + instante de reparo + código de reparo + usuário;
+  várias falhas/observações da mesma intervenção não multiplicam repair_count.
+  Dois registros indistinguíveis nesses campos são conservadoramente um só;
+  sem identificador de intervenção na fonte não se inventa uma segunda passagem.
+- Alertas cobrem mesma falha e mesma família da própria PCBA, histórico MainBoard,
+  múltiplas intervenções e nova falha após reparo explícito. Nome no comentário,
+  negação, suspeita, plano e substituição não comprovam reparo MainBoard realizado.
+- A sequência reparo 3012 → nova falha 2114 permite o indício pós-reparo. NÃO
+  afirma retorno a um posto: retorno permanece null até haver contexto 3022 da
+  mesma PCBA/ocorrência/reparo, com passagem após reparo e antes da próxima falha.
+- Cada componente mantém alerta próprio e evidência de PCBA/falha anterior,
+  vínculos 3074, Repair Comment/User/Time quando exatos e temporalmente válidos.
+  Caso FPC/LCM coberto por fixture; nenhum componente vencedor é escolhido.
+- Lista previous_pcbas/label agregado não comprova vínculo no instante da falha.
+  Usam-se query.rows/component_usage já coletados na 3074 e raw_json local já
+  persistido. Exigem-se vínculos da placa atual e anterior nos instantes pertinentes.
+  Intervalo agregado com event_count > 1 pode esconder lacunas e é recusado.
+  Sem comprovação, histórico permanece visível e correlation_limits explica a
+  ausência do alerta. Nenhuma coleta/contrato de backend foi alterado.
+- Família só vem de campo explícito/contexto da ocorrência exata ou relação
+  individual calculada na consulta; OUTRO/UNKNOWN não forma família correlata.
+  Nenhuma família é deduzida do tipo do componente ou de label agregado.
+- Todo alerta inclui evidence, classification=correlation e
+  root_cause_confirmed=false. Nenhum dado operacional é promovido a causa raiz.
+- Renderer compartilhado em evidence-view exibe todas as evidências ao vivo e
+  offline em PT/EN, com texto escapado. Exportação da investigação local inclui
+  alertas/limites sanitizados. Cards distinguem candidatos de associação exata.
+
+### Arquivos deste bloco
+
+Produto (apenas): ames/data/sn-forensics.mjs; ames/evidence-view.mjs;
+ames/console-fastlane-sn-reuse.mjs; ames/console-sn-offline-fastlane.mjs.
+Teste novo: scripts/ames-sn-correlations.test.mjs (18 casos).
+Continuidade: este arquivo, AMES_HANDOFF.md e docs/ames/ESTADO_ATUAL.json.
+Bootstrap/8765, todos os coletores/factory-engine, backend/SQLite/sync intactos
+em relação ao parent. Sem nova view, agente, DB ou cache.
+
+### Validação direcionada
+
+Node v24.19.0, 30 PASS / 0 FAIL:
+`node --test scripts/ames-sn-correlations.test.mjs scripts/ames-sn-forensics.test.mjs scripts/ames-source-provenance.test.mjs scripts/ames-offline-central.test.mjs scripts/ames-evidence-shortcuts.test.mjs`
+
+Inclui reparo futuro, data ausente, associação candidata, duplicação entre falhas
+simultâneas/revisões, dois reparos reais, limite do próximo ciclo, família explícita,
+negação/plano/substituição, retorno 3022 opcional comprovado, dois componentes
+FPC/LCM, vínculos futuros/encerrados/ausentes, label agregado, timezone, equivalência
+live/projeção SQLite/cache, ausência != zero, evidência PT/EN e escape de comentário.
+O teste live/local inicialmente expôs uma fixture live incompleta (uma ocorrência
+por componente, ambos na mesma PCBA). A fixture foi completada com as duas
+ocorrências que a consulta real retorna para cada componente; lógica não relaxada.
+Sintaxe Node dos quatro arquivos de produto + git diff --check: PASS.
+Nenhum Full Quality/Candidate pesado disparado manualmente; nenhum ZIP gerado.
+
+### Pendências e próxima ação exata
+
+- Bloco 3: concluído em código/contratos direcionados, sem certificação física.
+- Blocos 4 e 5: PENDING, NÃO iniciados neste checkpoint.
+- Full Quality + UX Physical Candidate da integração final: PENDING; qualquer CI
+  automático deve ser conferido no SHA exato, nunca inferido dos testes locais.
+- Bootstrap físico continua GREEN/congelado; demais gates físicos PENDING.
+- Próxima ação: revalidar PR #27/HEAD, ler este checkpoint e os comentários
+  canônicos. Começar exclusivamente Bloco 4 (semântica UI/histórico conforme seção
+  própria abaixo), preservando Blocos 1–3. Não refazer investigação nem promover
+  snapshot dcb15570 integralmente. Não gerar CLEAN antes dos gates finais GREEN.
+
+As seções abaixo preservam a evidência histórica dos Blocos 1 e 2 e não redefinem
+o estado atual. Esta atualização tem precedência sobre suas próximas ações antigas.
 
 ## Atualização — Bloco 2 concluído em código e contratos direcionados
 

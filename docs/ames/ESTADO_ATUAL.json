@@ -72,5 +72,26 @@
     "persistent investigations",
     "visual genealogy"
   ],
-  "restart_instruction": "Read AMES_HANDOFF.md, then revalidate Issue #28, PR #27, remote branch HEAD and exact-SHA workflows before any implementation decision."
+  "restart_instruction": "Read AMES_HANDOFF.md, then revalidate Issue #28, PR #27, remote branch HEAD and exact-SHA workflows before any implementation decision.",
+  "operator_recovery_checkpoint": {
+    "date": "2026-10-15",
+    "parent_last_safe_sha": "403b5878f3000b9c363c9e4eca63fe1b51175cbf",
+    "checkpoint_sha_location": "Issue #28 and PR #27 comments for the commit containing this entry",
+    "handoff": "docs/ames/operator-recovery-20261015.md",
+    "blocks": {
+      "1": "completed",
+      "2": "completed_preserved",
+      "3": "completed_directed_contracts",
+      "4": "pending_not_started",
+      "5": "pending_not_started"
+    },
+    "directed_tests": {
+      "pass": 30,
+      "fail": 0
+    },
+    "final_full_quality": "pending",
+    "final_candidate_gate": "pending",
+    "physical": "pending_except_frozen_bootstrap",
+    "next_action": "Revalidate remote HEAD; start only Block 4 UI/history from the checkpoint; do not repeat Blocks 1-3"
+  }
 }

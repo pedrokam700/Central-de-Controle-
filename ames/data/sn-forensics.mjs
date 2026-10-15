@@ -9,7 +9,7 @@ const defectCode=row=>value(row,'defect_code','Defect Code','Defect Code antigo'
 const defectDesc=row=>value(row,'defect_desc','Defect Description','Defect Description antigo');
 const defectTime=row=>value(row,'defect_time','Defect Time','Defect Time antigo');
 const histSeq=row=>{const n=Number(value(row,'hist_seq','Defect Hist Seq'));return Number.isFinite(n)?n:-1;};
-const latestHistory=rows=>[...(rows||[])].sort((a,b)=>histSeq(b)-histSeq(a)||text(defectTime(b)).localeCompare(text(defectTime(a))))[0]||null;
+const latestHistory=rows=>[...(rows||[])].sort((a,b)=>histSeq(b)-histSeq(a)||(instant(defectTime(b))??-Infinity)-(instant(defectTime(a))??-Infinity))[0]||null;
 const sameHistory=(a,b)=>Boolean(a&&b&&histSeq(a)===histSeq(b)&&same(defectCode(a),defectCode(b))&&same(defectTime(a),defectTime(b)));
 function raw2114ByPcba(trace2114,queryPcba=''){
   const map=new Map(),add=(pcba,row)=>{const key=text(pcba||pcbaOf(row)||queryPcba);if(!key||!row)return;const rows=map.get(key)||[];rows.push(row);map.set(key,rows);};
@@ -25,23 +25,24 @@ export function relationLabel(value){
 function normalizeRepair(row){
   if(!row)return null;
   return {
-    source:'3012',pcba_sn:pcbaOf(row),defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),
+    source:row.source_view||row.source||'3012',row_key:row.row_key||null,association:row.association||null,pcba_sn:pcbaOf(row),defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),
     repair_user:value(row,'repair_user','Repair User'),repair_time:value(row,'repair_time','Repair Time'),
     repair_code:value(row,'repair_code','Repair Code'),repair_desc:value(row,'repair_desc','Repair Description'),
-    repair_comment:value(row,'repair_comment','Repair Comment'),raw:row,
+    repair_comment:value(row,'repair_comment','Repair Comment'),repaired_location:value(row,'repaired_location','Repaired Location'),
+    reason_desc:value(row,'reason_desc','Repair Reason Description','Reason Description'),raw:row,
   };
 }
 function repairScore(row,{pcba,code,time}={}){
   let score=0;if(pcba&&same(pcba,pcbaOf(row)))score+=8;else if(pcba)return -1;
   if(code&&same(code,defectCode(row)))score+=4;
-  if(time&&same(time,defectTime(row)))score+=3;
+  if(time&&sameInstant(time,defectTime(row)))score+=3;
   if(value(row,'repair_comment','Repair Comment'))score+=2;
   if(value(row,'repair_user','Repair User'))score+=1;
   return score;
 }
 function repairsFor(all,criteria,embedded=[]){
   const rows=[...(embedded||[]),...(all||[])];
-  return uniq(rows.map(row=>({row,score:repairScore(row,criteria)})).filter(x=>x.score>=0).sort((a,b)=>b.score-a.score).map(x=>normalizeRepair(x.row)).filter(Boolean));
+  return uniq(rows.map(row=>({row,score:repairScore(row,criteria)})).filter(x=>x.score>=0).sort((a,b)=>b.score-a.score).map(x=>({...normalizeRepair(x.row),association:same(criteria.pcba,pcbaOf(x.row))&&same(criteria.code,defectCode(x.row))&&sameInstant(criteria.time,defectTime(x.row))?'exact_occurrence':'same_pcba_candidate'})).filter(Boolean));
 }
 
 function normalizeProcess(row){
@@ -79,7 +80,7 @@ export function preferredAnalysisEvent(rows,pcba){
 
 function failureEntry(row,{pcba,repairs=[],process=[],source='2114'}={}){
   if(!row)return null;const actualPcba=pcba||pcbaOf(row);
-  return {pcba_sn:actualPcba,defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),manual_or_auto:value(row,'manual_or_auto','Manual/Automatic'),repair_status:value(row,'repair_status','Repair Status'),relation:value(row,'relation'),repairs:repairsFor(repairs,{pcba:actualPcba,code:defectCode(row),time:defectTime(row)},row.repair_evidence_3012||[]),analysis_event:preferredAnalysisEvent(process,actualPcba),source,raw:row};
+  return {pcba_sn:actualPcba,defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),manual_or_auto:value(row,'manual_or_auto','Manual/Automatic'),repair_status:value(row,'repair_status','Repair Status'),relation:value(row,'relation'),failure_family:value(row,'failure_family','Failure Family'),repairs:repairsFor(repairs,{pcba:actualPcba,code:defectCode(row),time:defectTime(row)},row.repair_evidence_3012||[]),analysis_event:preferredAnalysisEvent(process,actualPcba),source,raw:row};
 }
 function parseList(value){if(Array.isArray(value))return value.map(text).filter(Boolean);try{const out=JSON.parse(value||'[]');return Array.isArray(out)?out.map(text).filter(Boolean):[];}catch{return text(value).split(/[,;|\n]/).map(x=>x.trim()).filter(Boolean);}}
 
@@ -91,6 +92,128 @@ function live3012State(result,trace3012){
   if(embedded)return SOURCE_STATE.OK;
   if((result?.local_snapshot?.repair_3012||[]).length)return SOURCE_STATE.CACHED;
   return SOURCE_STATE.NOT_COLLECTED;
+}
+
+// 2114/3012 wall-clock strings are factory-local. Raw 3074 grids are UTC.
+// Missing or date-only timestamps cannot establish event order.
+function instant(value,offset='-03:00'){
+  const raw=text(value);if(!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw))return null;
+  const n=Date.parse(/[Zz]$|[+-]\d{2}:?\d{2}$/.test(raw)?raw:raw.replace(' ','T')+offset);
+  return Number.isFinite(n)?n:null;
+}
+const sameInstant=(a,b)=>instant(a)!==null&&instant(a)===instant(b);
+const knownFamily=f=>text(f)&&!['OUTRO','OTHER','UNKNOWN','UNCLASSIFIED'].includes(text(f).toUpperCase());
+function related(current,old,explicitRelation=''){
+  if(text(current?.defect_code)&&same(current.defect_code,old?.defect_code))return 'MESMA_FALHA';
+  if(knownFamily(current?.failure_family)&&same(current.failure_family,old?.failure_family))return 'FALHA_SIMILAR';
+  // Only the relation of this occurrence, never an aggregate material label.
+  return text(explicitRelation).toUpperCase()==='FALHA_SIMILAR'?'FALHA_SIMILAR':null;
+}
+function repairIdentity(r){
+  // row_key includes comments/observation metadata in 3012: not an intervention ID.
+  // A single board intervention may also appear against several defect rows.
+  return JSON.stringify([text(r.pcba_sn),instant(r.repair_time),text(r.repair_code),text(r.repair_user)]);
+}
+function linkedRepairs(failure,before){
+  const found=new Map();
+  for(const r of failure?.repairs||[]){
+    if(r.association!=='exact_occurrence'||!same(r.pcba_sn,failure.pcba_sn)
+      ||!same(r.defect_code,failure.defect_code)||!sameInstant(r.defect_time,failure.defect_time))continue;
+    const at=instant(r.repair_time),defect=instant(failure.defect_time);
+    if(at===null||defect===null||before===null||at<defect||at>=before)continue;
+    const key=repairIdentity(r),old=found.get(key);
+    if(!old||(!old.repair_comment&&r.repair_comment))found.set(key,r);
+  }
+  return [...found.values()].sort((a,b)=>instant(b.repair_time)-instant(a.repair_time));
+}
+function explicitMainboardRepair(r){
+  // Free-text mentions, diagnoses, replacement plans and negations are not proof
+  // of a completed MainBoard repair. Do not classify a replacement as a repair.
+  const structured=[r.repair_desc,r.repair_code,r.repaired_location].map(text).join(' ');
+  const all=structured+' '+text(r.repair_comment);
+  return /main\s*board|mother\s*board|placa principal|board repair/i.test(structured)
+    && /repair|reparo|reparad|consert|rework|retrabalh|sold/i.test(structured)
+    && !/\b(?:no|not|without|não|nao|sem|pending|planned|replace|replacement|swap)\b|não realizado|nao realizado|aguard|substitu|troca|recommend|recomend|suspect|suspeit/i.test(all);
+}
+function rawObject(row){
+  if(row?.raw&&typeof row.raw==='object')return row.raw;
+  try{return JSON.parse(row?.raw_json||'{}');}catch{return {};}
+}
+function binding(row,pcba,grid=false){
+  return {pcba_sn:pcba,bind_time:value(row,'bind_time_utc','Bind Time'),unbind_time:value(row,'unbind_time_utc','Unbind Time'),source:'3074',offset:grid?'+00:00':'-03:00',event_count:row.event_count||1};
+}
+function liveBindings(trace,item,currentPcba){
+  const usage=(trace?.component_usage||[]).find(x=>same(x.item_sn,item.item_sn));
+  const rows=(usage?.query?.rows||[]).filter(r=>/pcba/i.test(text(r['Sn Type'])));
+  const out=rows.map(r=>binding(r,r.Barcode,true));
+  for(const r of trace?.query?.rows||[])if(same(r.Barcode,item.item_sn))out.push(binding(r,currentPcba,true));
+  return uniq(out);
+}
+function localBindings(item){
+  const raw=rawObject(item);
+  return [binding(item,item.current_pcba_sn),...(raw.all_pcba_history||[]).map(r=>binding(r,r.pcba_sn))];
+}
+function bindingAt(material,pcba,time){
+  return (material.bindings||[]).find(b=>{
+    const start=instant(b.bind_time,b.offset),end=instant(b.unbind_time,b.offset);
+    // An aggregated first-bind/last-unbind interval may hide gaps. Fail closed.
+    return same(b.pcba_sn,pcba)&&Number(b.event_count)<=1&&start!==null&&start<=time
+      &&(!text(b.unbind_time)||(end!==null&&end>=time));
+  });
+}
+function enrichFamilies(model){
+  for(const failure of [model.current,...model.own_history,...model.materials.flatMap(m=>m.history.map(h=>h.failure))].filter(Boolean)){
+    const ctx=(model.process_contexts||[]).find(c=>same(c.pcba_sn,failure.pcba_sn)&&same(c.defect_code,failure.defect_code)&&sameInstant(c.defect_time,failure.defect_time));
+    if(!failure.failure_family&&knownFamily(ctx?.failure_family))failure.failure_family=ctx.failure_family;
+  }
+}
+export function buildCorrelationAlerts(model={}){
+  const alerts=[],seen=new Set(),current=model.current,currentTime=instant(current?.defect_time);
+  model.correlation_limits=[];
+  const limit=(code,detail={})=>model.correlation_limits.push({code,...detail});
+  if(currentTime===null)limit('CURRENT_TIME_UNPROVEN');
+  const emit=a=>{const key=JSON.stringify([a.kind,a.pcba_sn,a.item_sn,a.prior_defect_code,instant(a.prior_defect_time)]);if(!seen.has(key)){seen.add(key);alerts.push({...a,classification:'correlation',root_cause_confirmed:false});}};
+  const prior=f=>{const time=instant(f?.defect_time);return currentTime!==null&&time!==null&&time<currentTime;};
+  const failureEvidence=f=>({pcba_sn:f.pcba_sn,defect_code:f.defect_code,defect_desc:f.defect_desc,defect_time:f.defect_time,failure_family:f.failure_family,source:f.source});
+  const evidence=(f,repairs)=>({current_failure:failureEvidence(current),failure:failureEvidence(f),repairs:repairs.map(({raw,...r})=>r)});
+  const allFailures=[current,...model.own_history||[],...(model.materials||[]).flatMap(m=>(m.history||[]).map(h=>h.failure))].filter(Boolean);
+  const cycleEnd=f=>Math.min(currentTime,...allFailures.filter(x=>same(x.pcba_sn,f.pcba_sn)&&instant(x.defect_time)>instant(f.defect_time)).map(x=>instant(x.defect_time)));
+  const boardRepairs=new Map();
+  for(const old of model.own_history||[]){
+    if(!prior(old)||!same(old.pcba_sn,model.current_pcba)){if(instant(old.defect_time)===null)limit('HISTORY_TIME_UNPROVEN',{pcba_sn:old.pcba_sn});continue;}
+    const relation=related(current,old,old.relation),repairs=linkedRepairs(old,cycleEnd(old));
+    if(relation)emit({kind:relation==='MESMA_FALHA'?'PCBA_SAME_FAILURE':'PCBA_SAME_FAMILY',severity:relation==='MESMA_FALHA'?'high':'medium',pcba_sn:model.current_pcba,relation,prior_defect_code:old.defect_code,prior_defect_desc:old.defect_desc,prior_defect_time:old.defect_time,technician_comment:repairs[0]?.repair_comment||null,sources:[old.source,...new Set(repairs.map(r=>r.source))].filter(Boolean),evidence:evidence(old,repairs)});
+    for(const r of repairs.filter(explicitMainboardRepair)){
+      const key=repairIdentity(r),existing=boardRepairs.get(key);
+      if(existing)existing.occurrences.push({failure:old,relation});
+      else boardRepairs.set(key,{repair:r,occurrences:[{failure:old,relation}]});
+    }
+  }
+  for(const material of model.materials||[]){
+    for(const hist of material.history||[]){
+      const old=hist.failure;if(!old||!prior(old)||same(hist.pcba_sn,model.current_pcba)||!text(material.item_sn))continue;
+      const relation=related(current,old,hist.relation_source==='occurrence'?hist.relation:null);
+      if(!relation)continue;
+      const currentBinding=bindingAt(material,model.current_pcba,currentTime),previousBinding=bindingAt(material,hist.pcba_sn,instant(old.defect_time));
+      if(!currentBinding||!previousBinding){limit('COMPONENT_BINDING_UNPROVEN',{item_sn:material.item_sn,pcba_sn:hist.pcba_sn});continue;}
+      // The historical failure must precede this installation on the current PCBA.
+      if(instant(old.defect_time)>=instant(currentBinding.bind_time,currentBinding.offset))continue;
+      const repairs=linkedRepairs(old,cycleEnd(old));
+      emit({kind:relation==='MESMA_FALHA'?'COMPONENT_SAME_FAILURE':'COMPONENT_SAME_FAMILY',severity:relation==='MESMA_FALHA'?'high':'medium',item_sn:material.item_sn,item_type:material.item_type,pcba_sn:hist.pcba_sn,current_pcba:model.current_pcba,relation,prior_defect_code:old.defect_code,prior_defect_desc:old.defect_desc,prior_defect_time:old.defect_time,technician_comment:repairs[0]?.repair_comment||null,sources:['3074',old.source,...new Set(repairs.map(r=>r.source))].filter(Boolean),evidence:{...evidence(old,repairs),binding:{item_sn:material.item_sn,previous_pcba:hist.pcba_sn,current_pcba:model.current_pcba,previous:previousBinding,current:currentBinding,source:'3074'}}});
+    }
+  }
+  const boards=[...boardRepairs.values()].sort((a,b)=>instant(b.repair.repair_time)-instant(a.repair.repair_time));
+  if(boards.length)emit({kind:boards.length>1?'PCBA_REPEATED_MAINBOARD_REPAIR':'PCBA_MAINBOARD_REPAIR_HISTORY',severity:boards.length>1?'high':'medium',pcba_sn:model.current_pcba,repair_count:boards.length,technician_comment:boards[0].repair.repair_comment||null,sources:[...new Set(boards.map(x=>x.repair.source))],evidence:boards.map(x=>({...evidence(x.occurrences[0].failure,[x.repair]),associated_failures:x.occurrences.map(o=>failureEvidence(o.failure))}))});
+  for(const {repair,occurrences} of boards){
+    for(const {failure,relation} of occurrences){
+      if(!relation)continue;
+      const end=cycleEnd(failure);
+      const ret=(model.process_contexts||[]).find(c=>same(c.pcba_sn,model.current_pcba)&&c.source==='3022'&&same(c.defect_code,failure.defect_code)&&sameInstant(c.defect_time,failure.defect_time)&&sameInstant(c.repair_event_time,repair.repair_time)&&text(c.return_station_code)&&instant(c.return_event_time)>instant(repair.repair_time)&&instant(c.return_event_time)<end);
+      // 3012 + the subsequent 2114 occurrence prove sequence, not a return station.
+      emit({kind:'PCBA_MAINBOARD_REPAIR_RECURRENCE',severity:'high',pcba_sn:model.current_pcba,relation,prior_defect_code:failure.defect_code,prior_defect_desc:failure.defect_desc,prior_defect_time:failure.defect_time,repair_count:boards.length,technician_comment:repair.repair_comment||null,sources:[failure.source,repair.source,ret?'3022':null].filter(Boolean),evidence:{...evidence(failure,[repair]),return:ret?{station:ret.return_station_code,operation:ret.return_operation_name,time:ret.return_event_time,source:'3022'}:null}});
+    }
+  }
+  return alerts;
 }
 
 export function buildLiveSnForensics(result={}){
@@ -114,12 +237,12 @@ export function buildLiveSnForensics(result={}){
     const history=[];
     for(const [pcba,evidence] of grouped){
       const withHistory=evidence.filter(ev=>ev.history);
-      if(withHistory.length){for(const ev of withHistory){const failure=failureEntry(ev.history,{pcba,repairs:[...(ev.repair_evidence_3012||[]),...repairs],process});history.push({pcba_sn:pcba,relation:ev.relation||item.relation_to_current_failure,reason:ev.reason||null,failure});}continue;}
+      if(withHistory.length){for(const ev of withHistory){const failure=failureEntry(ev.history,{pcba,repairs:[...(ev.repair_evidence_3012||[]),...repairs],process});history.push({pcba_sn:pcba,relation_source:ev.relation?'occurrence':'aggregate',relation:ev.relation||item.relation_to_current_failure,reason:ev.reason||null,failure});}continue;}
       const rawRows=rawByPcba.get(text(pcba))||[];
-      if(rawRows.length){const seed=evidence[0]||{};for(const row of rawRows){history.push({pcba_sn:pcba,relation:seed.relation||item.relation_to_current_failure||'HISTORICO_PCBA',reason:seed.reason||'Histórico 2114 retornado diretamente para esta PCBA anterior',failure:failureEntry(row,{pcba,repairs,process,source:'2114-raw'})});}}
+      if(rawRows.length){const seed=evidence[0]||{};for(const row of rawRows){history.push({pcba_sn:pcba,relation_source:'aggregate',relation:seed.relation||item.relation_to_current_failure||'HISTORICO_PCBA',reason:seed.reason||'Histórico 2114 retornado diretamente para esta PCBA anterior',failure:failureEntry(row,{pcba,repairs,process,source:'2114-raw'})});}}
       else history.push({pcba_sn:pcba,relation:item.relation_to_current_failure||'SEM_HISTORICO',reason:null,failure:null,repairs:repairsFor(repairs,{pcba}),analysis_event:preferredAnalysisEvent(process,pcba)});
     }
-    return {item_sn:item.item_sn||null,item_type:item.item_type||null,known_use_count:item.known_use_count??null,reuse_count:item.reuse_count??null,relation:item.relation_to_current_failure||null,previous_pcbas:previous,history,error:item.error||null,source:'3074',raw:item};
+    return {bindings:liveBindings(trace3074,item,queryPcba),item_sn:item.item_sn||null,item_type:item.item_type||null,known_use_count:item.known_use_count??null,reuse_count:item.reuse_count??null,relation:item.relation_to_current_failure||null,previous_pcbas:previous,history,error:item.error||null,source:'3074',raw:item};
   });
   const rawHistoryCount=[...rawByPcba.values()].reduce((sum,rows)=>sum+rows.length,0);
   const sourceStates={
@@ -129,7 +252,8 @@ export function buildLiveSnForensics(result={}){
     '3012':live3012State(result,trace3012),
     '3028':result.local_snapshot?SOURCE_STATE.CACHED:SOURCE_STATE.NOT_COLLECTED,
   };
-  return {query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
+  const model={process_contexts:result.local_snapshot?.process_contexts||[],query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
+  enrichFamilies(model);model.alerts=buildCorrelationAlerts(model);return model;
 }
 
 export function buildLocalSnForensics(result={}){
@@ -137,8 +261,9 @@ export function buildLocalSnForensics(result={}){
   const repairs=result.repair_3012||[],process=result.process_events||[],histories=result.pcba_history||[],query=result.query_sn||null;
   const byPcba=new Map();for(const row of histories){const p=text(pcbaOf(row));if(!p)continue;if(!byPcba.has(p))byPcba.set(p,[]);byPcba.get(p).push(row);}
   const ownRows=byPcba.get(text(query))||[];const currentRaw=latestHistory(ownRows),current=currentRaw?failureEntry(currentRaw,{pcba:query,repairs,process,source:'2114-cache'}):null;const ownHistory=ownRows.filter(row=>row!==currentRaw).map(row=>failureEntry(row,{pcba:query,repairs,process,source:'2114-cache'}));
-  const materials=(result.material_reuse||[]).map(item=>{const previous=parseList(value(item,'previous_pcbas_json','previous_pcbas'));return {item_sn:value(item,'item_sn','material_sn'),item_type:value(item,'item_type','material_type'),known_use_count:value(item,'total_pcba_count_known_now','known_use_count'),reuse_count:value(item,'previous_pcba_count','reuse_count'),relation:value(item,'relation_to_current_failure'),previous_pcbas:previous,history:previous.flatMap(pcba=>{const rows=byPcba.get(text(pcba))||[];if(rows.length)return rows.map(row=>({pcba_sn:pcba,relation:value(row,'relation')||value(item,'relation_to_current_failure')||'SEM_HISTORICO',reason:null,failure:failureEntry(row,{pcba,repairs,process,source:'2114-cache'})}));return [{pcba_sn:pcba,relation:'SEM_HISTORICO',reason:null,failure:null,repairs:repairsFor(repairs,{pcba}),analysis_event:preferredAnalysisEvent(process,pcba)}];}),source:'3074',raw:item};});
+  const materials=(result.material_reuse||[]).map(item=>{const previous=parseList(value(item,'previous_pcbas_json','previous_pcbas'));return {bindings:localBindings(item),item_sn:value(item,'item_sn','material_sn'),item_type:value(item,'item_type','material_type'),known_use_count:value(item,'total_pcba_count_known_now','known_use_count'),reuse_count:value(item,'previous_pcba_count','reuse_count'),relation:value(item,'relation_to_current_failure'),previous_pcbas:previous,history:previous.flatMap(pcba=>{const rows=byPcba.get(text(pcba))||[];if(rows.length)return rows.map(row=>({pcba_sn:pcba,relation_source:value(row,'relation')?'occurrence':'aggregate',relation:value(row,'relation')||value(item,'relation_to_current_failure')||'SEM_HISTORICO',reason:null,failure:failureEntry(row,{pcba,repairs,process,source:'2114-cache'})}));return [{pcba_sn:pcba,relation:'SEM_HISTORICO',reason:null,failure:null,repairs:repairsFor(repairs,{pcba}),analysis_event:preferredAnalysisEvent(process,pcba)}];}),source:'3074',raw:item};});
   const coverage=result.coverage||{};
   const sourceStates=Object.fromEntries(['3028','3074','2114','3022','3012'].map(source=>[source,coverage[source]?SOURCE_STATE.CACHED:SOURCE_STATE.NOT_COLLECTED]));
-  return {query_sn:query,detected_type:result.detected_type||null,current_pcba:query,current,own_history:ownHistory,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,query),process:processFor(process,query),source_states:sourceStates,coverage};
+  const model={process_contexts:result.process_contexts||[],query_sn:query,detected_type:result.detected_type||null,current_pcba:query,current,own_history:ownHistory,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,query),process:processFor(process,query),source_states:sourceStates,coverage};
+  enrichFamilies(model);model.alerts=buildCorrelationAlerts(model);return model;
 }
