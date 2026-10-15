@@ -1,0 +1,168 @@
+{
+  "base": "1e65eb71d40a0d11a6f3bdcc81a36358ac5c4ed4",
+  "snapshot": "dcb15570c2fdc2c12f404c4952ae6c93d9c06e79",
+  "files": [
+    {
+      "path": "ames/advanced-table.mjs",
+      "base_sha256": "9a33fe89c70e2dea038c5f5108989302be724206469e75f73c24b168c7002494",
+      "snapshot_sha256": "34103cc98811a5de123d48b177d881d8944faf0a391af0da8cea9b12beca726b",
+      "changed": true
+    },
+    {
+      "path": "ames/agent/production_shift.py",
+      "base_sha256": "c79a8470452fcec35d86af3383cf851df330605c4435cd6956dd23a68c1402e9",
+      "snapshot_sha256": "a73614234d959f9a863539985674632d487f2ebe9fe98b95d087ed3c4ceae378",
+      "changed": true
+    },
+    {
+      "path": "ames/console-base-view.mjs",
+      "base_sha256": "dcd77e1049a0cb049c67d31dc2fb26a1f303f8e2757837b6f337de648f91d099",
+      "snapshot_sha256": "856d58b9ad2d8544338e459bdbb9386bef8eb7d34480cc08e142941adb3fc122",
+      "changed": true
+    },
+    {
+      "path": "ames/console-failure-process.mjs",
+      "base_sha256": "cc0b2de262f939446af2bbd434fb2298ef4fa309c533c27af7337b3912afdad6",
+      "snapshot_sha256": "e35e8dc51d30b8c1d04423cfe4fedeb0149f1059d1e7cdc954b3a5074263572c",
+      "changed": true
+    },
+    {
+      "path": "ames/console-fastlane-sn-reuse.mjs",
+      "base_sha256": "c14ee66d138e35d0320eec6accb1ac72a910c7b5d28439d410b147773e3fb15c",
+      "snapshot_sha256": "334f59ec39c35448417aa2a3963170ec387ef3d52b01e166f2122a6ffe15ffc2",
+      "changed": true
+    },
+    {
+      "path": "ames/console-history.mjs",
+      "base_sha256": "718624ace7c279cf1081c04950fa7caea65864e3007154895925e5810f5f9781",
+      "snapshot_sha256": "5e80d06a70870c7dc76571982d7fcce025989cccb4075aad6ec73163c851d673",
+      "changed": true
+    },
+    {
+      "path": "ames/console-i18n-extra.mjs",
+      "base_sha256": "24df1a1b6255fd57b468d5c84205c3ac0d41a49035b7255b5d49967259c27dfd",
+      "snapshot_sha256": "dcbd6d74fa782de36254c8acc631651282950da30dd053c76008fb5d6d1aa6fa",
+      "changed": true
+    },
+    {
+      "path": "ames/console-legacy-parity.mjs",
+      "base_sha256": "e6ddfec76a3f7defd8d28bbc8920eb7338288126d5c9e54bb78f324c71703f21",
+      "snapshot_sha256": "2483c3b19000a4e91f054bc1ea00d4e58a793c95d62a3d8039dcc4d53c4feab5",
+      "changed": true
+    },
+    {
+      "path": "ames/console-process-operator.mjs",
+      "base_sha256": "8e097f20b63b36bd50b3f5a5509c485f614a17de86ab50ec964fbcc4dbfbc822",
+      "snapshot_sha256": "7b2efa57b60aad1045a55bc483b314756998414d0263a3d5e1f1c963e594db06",
+      "changed": true
+    },
+    {
+      "path": "ames/console-shift-summary.mjs",
+      "base_sha256": "55c59f332b4cd589569cbb3df7473e42a3a2130ab3dc0354d083ff5931b9a884",
+      "snapshot_sha256": "3824bfd9b720f2357207c34f0885a4475eb009b7991d2d944dc955668afc2f84",
+      "changed": true
+    },
+    {
+      "path": "ames/console-view.mjs",
+      "base_sha256": "a5f7cf9c35a1bd3a7d71359d367579856ca1286ace4daa21bbb0ef032fbfebde",
+      "snapshot_sha256": "f14fce3ad2bf143d08b702a997476b2acb4590c87be119f685508268a5632ce0",
+      "changed": true
+    },
+    {
+      "path": "ames/data/agent-contract.mjs",
+      "base_sha256": "f1f86aa9ec3a294b42a80755abe1a9a4298d2bbc9c87bec7979e8e016aecabe2",
+      "snapshot_sha256": "2eb4c172c24d38716834106fd01df3cb70353c515ad426a652e187e483bb51b4",
+      "changed": true
+    },
+    {
+      "path": "ames/data/reuse-analysis.mjs",
+      "base_sha256": "3ca600aeda510aa093e82eaa68227ad691e9f91c16b86a3b37443699f003dd70",
+      "snapshot_sha256": "9d40a40181308df5818086299ceaefe81b3b8762d01d388a45a2575f1a1e4e1a",
+      "changed": true
+    },
+    {
+      "path": "ames/data/sn-forensics.mjs",
+      "base_sha256": "60c5e52473d778abec714d328b2c9dfdc738430afcd85be929804f32a0affce7",
+      "snapshot_sha256": "0569e11792af4be53cbe87f0e9525eb3123f2e1fe325acbae9ebd31e658a5198",
+      "changed": true
+    },
+    {
+      "path": "ames/data/time-display.mjs",
+      "base_sha256": null,
+      "snapshot_sha256": "7df2f73163603b4bb95182acea55af1df682b09ae0bbfdfd50ecd56fc4f6c9f0",
+      "changed": true
+    },
+    {
+      "path": "ames/reuse-table-view.mjs",
+      "base_sha256": "3a5d9a1fbae91f2dde1b51646eb50a17b20cc334f58c2c7f181b04aaed2e6d1f",
+      "snapshot_sha256": "05d00cf36683fd3edfa97f81a6b6c1a419fa01945a81b3d858c26e5fb66baf6e",
+      "changed": true
+    },
+    {
+      "path": "ames/sync.mjs",
+      "base_sha256": "9c0eb1d4982228045f4c1021cad0323a18222695a1fc8654914413f5fd18cd54",
+      "snapshot_sha256": "fba33ff9198d3fc4825f637095e19b4b632a1596b382cc7d2b0af0c26f7ceb66",
+      "changed": true
+    },
+    {
+      "path": "scripts/agent-production-trust.test.py",
+      "base_sha256": null,
+      "snapshot_sha256": "f536e64c465b7a387f25b3e626bc6da300559155c21579c9c758d1583314ee09",
+      "changed": true
+    },
+    {
+      "path": "scripts/ames-operational-context.test.mjs",
+      "base_sha256": "86f33c4cdf6779c2c5f188959d161abb2af66581b7c56f89b0b27eb87e53987c",
+      "snapshot_sha256": "0eb5034409963639e42f432a573af1b8af8687986829a88c41a711a244d67a6f",
+      "changed": true
+    },
+    {
+      "path": "scripts/ames-technician-context.test.mjs",
+      "base_sha256": null,
+      "snapshot_sha256": "ea58cf761c3ea5c3fa17b751a0b22c4fd88722a8aa4d1140ba941bcfd743cc2a",
+      "changed": true
+    },
+    {
+      "path": "sw.js",
+      "base_sha256": "09eeb21e8384757d78ac0f7972736e2ae654522ee99916ef340bb719d312f073",
+      "snapshot_sha256": "32b21813c9728ebaaf0d8b9a9381b379378f43e50686709e3c9673babdbededd",
+      "changed": true
+    },
+    {
+      "path": "ames/daily-failure-analytics.mjs",
+      "base_sha256": "0f65d0fdc43816453ab62035a4081741b510b3647d476f9b8db86a224f321a5d",
+      "snapshot_sha256": "0f65d0fdc43816453ab62035a4081741b510b3647d476f9b8db86a224f321a5d",
+      "changed": false
+    },
+    {
+      "path": "ames/console-sn-offline-fastlane.mjs",
+      "base_sha256": "d36eaf04c91d8fdee16f72b6144438ee93c1a49834fc329ae10e1d88b7406024",
+      "snapshot_sha256": "d36eaf04c91d8fdee16f72b6144438ee93c1a49834fc329ae10e1d88b7406024",
+      "changed": false
+    },
+    {
+      "path": "ames/occurrence-view.mjs",
+      "base_sha256": "fefe5740b14e330bba3d78229066dd3a97c61acdc8b9149ffb94076ae82926cb",
+      "snapshot_sha256": "fefe5740b14e330bba3d78229066dd3a97c61acdc8b9149ffb94076ae82926cb",
+      "changed": false
+    },
+    {
+      "path": "ames/console-specialized-views.mjs",
+      "base_sha256": "533960f8fecac77b513aa3422f28c03c79cad2584d31722ba0053523b20b190e",
+      "snapshot_sha256": "533960f8fecac77b513aa3422f28c03c79cad2584d31722ba0053523b20b190e",
+      "changed": false
+    },
+    {
+      "path": "ames/daily-failure-summary.mjs",
+      "base_sha256": "fa44eca894afc6bd0620199e7b70b0fc41780deeb773b32cae91a94472ea08f4",
+      "snapshot_sha256": "fa44eca894afc6bd0620199e7b70b0fc41780deeb773b32cae91a94472ea08f4",
+      "changed": false
+    },
+    {
+      "path": "ames/defect-label.mjs",
+      "base_sha256": "95ec619b3e86b954c3b70de77e260297bf10d71bbf74f17a5f94312e110cfa51",
+      "snapshot_sha256": "95ec619b3e86b954c3b70de77e260297bf10d71bbf74f17a5f94312e110cfa51",
+      "changed": false
+    }
+  ]
+}
