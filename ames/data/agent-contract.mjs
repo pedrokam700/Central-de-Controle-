@@ -15,7 +15,8 @@ const fields = [
   'detection_operation_code','detection_operation_name','manual_or_auto_3028','manual_or_auto_2114','registration_mode',
   'registration_mode_source','registration_mode_conflict','failure_family','analysis_kind','reference_rule_id','reference_confidence',
   'reference_station_code','reference_reason','reference_status','reference_event_time','reference_hist_seq','reference_pass_count_before_defect',
-  'repair_action','repair_class','repair_event_time','return_a5201_event_time','next_reference_event_time','status',
+  'repair_action','repair_class','repair_event_time','return_station_code','return_operation_name','return_event_time','return_a5201_event_time','next_reference_event_time','status',
+  'production_shift','production_operational_date','production_event_time','production_shift_source','production_shift_basis',
   'previous_operation_code','previous_operation_name','previous_station','previous_event_time','previous_hist_seq','previous_event_group'
 ];
 

@@ -198,6 +198,7 @@ def normalize_3012_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "defect_material_desc": _clean(_pick(row, "defectMaterialDesc", "defect material desc")),
         "defect_reason_type": _clean(_pick(row, "defectReasonType", "defect reason type")),
         "defect_reason_desc": _clean(_pick(row, "defectReasonTypeDesc", "defectReasonDesc", "defect reason type desc", "defect reason desc")),
+        "reason_desc": _clean(_pick(row, "reasonDesc", "reason desc")),
         "defect_location": _clean(_pick(row, "defectLocation", "defect location")),
         "repaired_location": _clean(_pick(row, "repairedLocation", "repairLocation", "repaired location")),
         "repaired_count": _pick(row, "repairedCount", "repairCount", "repaired count"),
@@ -209,7 +210,7 @@ def normalize_3012_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "defect_source": _clean(_pick(row, "defectSource", "defect source")),
         "raw": row,
     }
-    identity = "|".join(_clean(out.get(k)) for k in sorted(out) if k != "raw")
+    identity = "|".join(_clean(out.get(k)) for k in sorted(out) if k not in ("raw", "reason_desc"))
     out["row_key"] = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
     return out
 

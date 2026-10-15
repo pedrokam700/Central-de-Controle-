@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS repair_history_3012(
   defect_material_desc TEXT,
   defect_reason_type TEXT,
   defect_reason_desc TEXT,
+  reason_desc TEXT,
   defect_location TEXT,
   repaired_location TEXT,
   repaired_count TEXT,
@@ -65,7 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_3012_coverage_sn ON repair_coverage_3012(sn,start
 FIELDS = [
     "product_id","pcba_sn","imei","department","line","product_model","order_id","sample_batch_id","material_id","material_desc",
     "defect_user","defect_time","defect_oper","defect_code","defect_desc","defect_category","defect_return_category",
-    "defect_material_id","defect_material_desc","defect_reason_type","defect_reason_desc","defect_location","repaired_location",
+    "defect_material_id","defect_material_desc","defect_reason_type","defect_reason_desc","reason_desc","defect_location","repaired_location",
     "repaired_count","repair_code","repair_desc","repair_comment","repair_user","repair_time","defect_source",
 ]
 
@@ -97,8 +98,11 @@ def ensure_schema(store) -> None:
     with store.connect() as con:
         con.executescript(TABLE_SQL)
         columns = {r[1] for r in con.execute('PRAGMA table_info(repair_history_3012)')}
-        if 'product_id' not in columns:
-            con.execute('ALTER TABLE repair_history_3012 ADD COLUMN product_id TEXT')
+        for name in ('product_id','reason_desc'):
+            if name not in columns:
+                con.execute(f'ALTER TABLE repair_history_3012 ADD COLUMN {name} TEXT')
+        from canonical import install_evidence_triggers
+        install_evidence_triggers(con)
 
 
 def record_coverage(store, payload: Dict[str, Any]) -> int:

@@ -17,8 +17,8 @@ const syncHeadsMetadata=heads=>{
 };
 export function sanitizeSnapshot(payload){
   normalizeCanonical(payload);
-  const allowed=['schema','schema_version','source_id','snapshot_id','snapshot_revision','content_hash','line_id','collected_at','source_view','source_timestamp','summary','datasets','coverage','insights','capabilities'];
-  const clean=value=>Array.isArray(value)?value.map(clean):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([k])=>!/^_|password|senha|cookie|credential|authorization|token|raw_json|session|cdp|wi.?fi|secret/i.test(k)).map(([k,v])=>[k,clean(v)])):value;
+  const allowed=['schema','schema_version','source_id','snapshot_id','snapshot_revision','content_hash','line_id','collected_at','source_view','source_timestamp','summary','datasets','coverage','insights','capabilities','process_contexts'];
+  const clean=value=>Array.isArray(value)?value.map(clean):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([k])=>!/^_|password|senha|cookie|credential|authorization|token|^raw$|raw_json|^raw_payload$|details_json|query_meta_json|session|cdp|wi.?fi|secret/i.test(k)).map(([k,v])=>[k,clean(v)])):value;
   return clean(Object.fromEntries(allowed.filter(k=>k in payload).map(k=>[k,payload[k]])));
 }
 export async function publication(uid,payload){

@@ -524,14 +524,14 @@ def analisar_ciclo_reparo_apos_falha(eventos, defect_time, *, reference_stations
     start_dt = repair[0] if repair else defect_utc
 
     passages = extrair_passagens_processo(eventos)
-    def first_pass(codes):
+    def first_pass(codes=None):
         found=[]
         for p in passages:
             dt=grid_time_to_utc(p.get("event_time"), event_naive_offset_hours)
             if not dt or dt <= start_dt: continue
             if cycle_end_dt is not None and dt >= cycle_end_dt: continue
             code=str(p.get("operation_code") or "").strip().upper(); st=str(p.get("station") or "").strip().upper()
-            if any(_code_matches(code,c) or _code_matches(st,c) for c in codes):
+            if (codes is None and (code or st)) or any(_code_matches(code,c) or _code_matches(st,c) for c in (codes or [])):
                 found.append((dt,p.get("hist_seq") if p.get("hist_seq") is not None else -1,p))
         found.sort(key=lambda x:(x[0],x[1]))
         if not found: return None
@@ -554,6 +554,7 @@ def analisar_ciclo_reparo_apos_falha(eventos, defect_time, *, reference_stations
         "repair_action_class":action_class,
         "repair_event":rep_ev,
         "return_a5201":return_a5201,
+        "return_process":first_pass() if repair else None,
         "next_reference_passage":next_ref,
         "next_defect_registration_time": (next_defect_registration[2].get("event_time") if next_defect_registration else None),
     }

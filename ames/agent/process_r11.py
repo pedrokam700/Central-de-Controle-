@@ -127,10 +127,11 @@ def ensure_schema(store) -> None:
         """)
 
         existing = {r[1] for r in con.execute("PRAGMA table_info(process_defect_contexts)")}
-        for name in production_shift.FIELDS:
+        for name in (*production_shift.FIELDS, "return_station_code", "return_operation_name", "return_event_time"):
             if name not in existing:
                 con.execute(f"ALTER TABLE process_defect_contexts ADD COLUMN {name} TEXT")
 
+        canonical.install_evidence_triggers(con)
 
 def patch_store(store) -> None:
     """Expose contexts through the existing /base catalog without changing Store ABI."""
@@ -163,7 +164,7 @@ def patch_store(store) -> None:
             sql += " AND line=?"; params.append(line)
         sql += " ORDER BY line,defect_time,pcba_sn LIMIT ?"; params.append(limit)
         with self.connect() as con:
-            return [dict(r) for r in con.execute(sql, params).fetchall()]
+            return [{**dict(r), **production_shift.from_context(dict(r))} for r in con.execute(sql, params).fetchall()]
 
     store.dataset_catalog = types.MethodType(dataset_catalog, store)
     store.dataset_rows = types.MethodType(dataset_rows, store)
@@ -182,10 +183,11 @@ def _context_from_correlation(rec: Dict[str, Any], correlated: Dict[str, Any]) -
     cycle = correlated.get("repair_cycle") or {}
     refsel = correlated.get("reference_selection") or {}
     repair = cycle.get("repair_event") or {}
-    ret = cycle.get("return_a5201") or {}
+    ret = cycle.get("return_process") or {}
+    legacy_ret = cycle.get("return_a5201") or {}
     nxt = cycle.get("next_reference_passage") or {}
     stations = correlated.get("reference_stations") or []
-    return {
+    context = {
         "line": rec.get("line"), "product_model": rec.get("product_model"), "pcba_sn": rec.get("pcba_sn"),
         "defect_key": rec.get("defect_key"), "defect_code": rec.get("defect_code"), "defect_desc": rec.get("defect_desc"),
         "defect_time": rec.get("defect_time"), "defect_time_utc": correlated.get("defect_time_utc"),
@@ -193,9 +195,9 @@ def _context_from_correlation(rec: Dict[str, Any], correlated: Dict[str, Any]) -
         "registration_mode": correlated.get("registration_mode"), "registration_mode_source": correlated.get("registration_mode_source"),
         "registration_mode_conflict": False, "failure_family": correlated.get("failure_family"),
         "analysis_kind": correlated.get("analysis_kind"), "reference_rule_id": correlated.get("reference_rule_id"),
-        "reference_confidence": correlated.get("reference_confidence"), "reference_station_code": stations[0] if stations else None,
+        "reference_confidence": correlated.get("reference_confidence"), "reference_station_code": ref.get("operation_code") or ref.get("station"),
         "reference_reason": correlated.get("reference_reason"), "reference_status": refsel.get("status"),
-        **production_shift.classify(ref.get("event_time_utc") or ref.get("event_time"), prev.get("event_time_utc") or prev.get("event_time")),
+        **production_shift.classify(None),
         "reference_event_time": ref.get("event_time_utc") or ref.get("event_time"), "reference_hist_seq": ref.get("hist_seq"),
         "reference_pass_count_before_defect": int(refsel.get("prior_count") or 0),
         "previous_operation_code": prev.get("operation_code"), "previous_operation_name": prev.get("operation_name"),
@@ -203,11 +205,16 @@ def _context_from_correlation(rec: Dict[str, Any], correlated: Dict[str, Any]) -
         "previous_hist_seq": prev.get("hist_seq"), "previous_event_group": prev.get("event_group"),
         "repair_action": cycle.get("repair_action"), "repair_class": cycle.get("repair_action_class"),
         "repair_event_time": repair.get("event_time_utc") or repair.get("event_time"),
-        "return_a5201_event_time": ret.get("event_time_utc") or ret.get("event_time"),
+        "return_a5201_event_time": legacy_ret.get("event_time_utc") or legacy_ret.get("event_time"),
+        "return_station_code": ret.get("operation_code") or ret.get("station"),
+        "return_operation_name": ret.get("operation_name"),
+        "return_event_time": ret.get("event_time_utc") or ret.get("event_time"),
         "next_reference_event_time": nxt.get("event_time_utc") or nxt.get("event_time"),
         "status": correlated.get("status"), "source": "3022",
     }
 
+    context.update(production_shift.from_context(context))
+    return context
 
 def _persist_contexts(store, snapshot_id: int, contexts: Iterable[Dict[str, Any]]) -> None:
     cols = [
@@ -218,13 +225,13 @@ def _persist_contexts(store, snapshot_id: int, contexts: Iterable[Dict[str, Any]
         "previous_operation_name","previous_station","previous_event_time","previous_hist_seq","previous_event_group","repair_action",
         "repair_class","repair_event_time","return_a5201_event_time","next_reference_event_time","status","source","details_json"
     ]
-    cols.extend(production_shift.FIELDS)
+    cols.extend((*production_shift.FIELDS,"return_station_code","return_operation_name","return_event_time"))
     sql = "INSERT OR REPLACE INTO process_defect_contexts("+",".join(cols)+") VALUES("+",".join("?" for _ in cols)+")"
     with store.connect() as con:
         for ctx in contexts:
             if not ctx.get("defect_key") or not ctx.get("line") or not ctx.get("pcba_sn"):
                 continue
-            row = {**ctx,"snapshot_id":int(snapshot_id),"registration_mode_conflict":int(bool(ctx.get("registration_mode_conflict"))),"details_json":_json({"temporal_only":True,"root_cause":False})}
+            row = {**ctx,**production_shift.from_context(ctx),"snapshot_id":int(snapshot_id),"registration_mode_conflict":int(bool(ctx.get("registration_mode_conflict"))),"details_json":_json({"temporal_only":True,"root_cause":False})}
             con.execute(sql, [row.get(k) for k in cols])
 
 
@@ -393,7 +400,7 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                     op_ev=operator_evidence(p.get("raw") or {})
                     adapter={
                         "contract":"R11_DERIVED_REQUIRES_R12_FACTORY_GATE","hist_seq":hist,
-                        **production_shift.classify(event_time),
+                        **production_shift.classify_passage(event_time),
                         "current_operation_code":p.get("current_operation_code"),"event_group":p.get("event_group"),
                         "defect_contexts":context_by_pass.get(event_time,[]),
                         "operator_evidence":op_ev,

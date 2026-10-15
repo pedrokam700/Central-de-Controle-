@@ -1,5 +1,66 @@
 # Recuperação da tranche técnica — checkpoint do Bloco 1
 
+## Atualização — Bloco 2 concluído em código e contratos direcionados
+
+Parent seguro: `b10c533ce68bf9c966186d235da02053c5194f8e` (auditoria do Bloco 1).
+Este commit implementa somente backend/projeção/transporte; os blocos 3–5 ainda
+estão PENDING. Não usar o snapshot dcb15570 inteiro.
+
+- production_shift ignora processo anterior e revalida referência/posto/tempo
+  compatível com a falha antes de classificar contexto persistido. Passagem
+  genérica tem basis=process_passage, distinta de reference_process.
+- process_r11 usa o posto da passagem real, migra/persiste retorno genérico e
+  reclassifica contextos antigos também no catálogo local. Consulta SN usa a
+  mesma projeção de contexto da coleta em lote.
+- tela_3022 altera somente a função pura analisar_ciclo_reparo_apos_falha:
+  primeira passagem após reparo comprovado, limitada pela próxima falha; mantém
+  campo legado A5201 separado. Comparação AST comprovou que nenhuma outra função
+  ou classe mudou, inclusive espera, seletores e acceptance de coleta.
+- canonical instala triggers para contexto e reparo independentemente da ordem
+  de criação das tabelas. Contexto invalida seu snapshot; 3012 invalida clocks
+  existentes, pois seu histórico global pode enriquecer diferentes períodos.
+  Projeção 6 força revalidação de classificações antigas sem apagar revisões.
+- API/manifest já transportavam contextos; projeção R12 e sync agora preservam
+  turno/basis/retorno/contextos. Normalizador rejeita mistura de linha/snapshot/
+  revisão. Sanitização remove raw/debug/segredos e preserva raw_ref/proveniência.
+- 3012: reasonDesc mapeado para reason_desc com migração aditiva; repair_desc,
+  repaired_location e reason_desc chegam à evidência canônica junto do comentário.
+  reason_desc não altera row_key existente; não duplica observações antigas.
+  Coletores/navegação 3012 não foram refeitos. Evidências continuam candidatos da
+  mesma PCBA; associação forte e alertas pertencem ao próximo bloco.
+
+Arquivos de produto: ames/agent/{ames_3012_live.py,canonical.py,process_r11.py,
+production_shift.py,repair_3012.py}, ames/data/{agent-contract.mjs,canonical.mjs},
+ames/factory-engine/ames/tela_3022.py, ames/sync.mjs.
+Testes: scripts/agent-production-trust.test.py (novo),
+scripts/ames-production-transport.test.mjs (novo),
+scripts/agent-integrated-v5.test.py (contrato anterior exigia fallback agora
+proibido; fixture positivo recebeu posto real, sem enfraquecer a validação).
+
+Validação local:
+- production-trust Python: PASS (referência ausente/futura, posto real,
+  retorno não-A5201, ausência de reparo, limite pela próxima falha, SQLite,
+  invalidação isolada, reparo/comentário, revisão antiga e restart).
+- production-transport Node: PASS (SQLite real → publicação → outro store,
+  projeção R12, segredos removidos, raw_ref preservado, identidades rejeitadas).
+- canonical Python 5/5; integrated-v5 5/5; process-r11 PASS;
+  calendário 8/8; offline-catalog 4/4; package-contract 7/7.
+- 14/14 Node: sync, process-provenance, process-r11, failure-process,
+  3012-mapper e 3012-navigation.
+- Sintaxe Python/Node e git diff --check PASS.
+- Bootstrap/workstation e 3028 byte a byte iguais ao checkpoint anterior.
+
+Full Quality / UX Physical Candidate da tranche final ainda PENDING; não foram
+disparados manualmente neste bloco. CI de pushes, se iniciado automaticamente,
+não substitui a integração final nem o físico. Nenhum ZIP gerado.
+
+Próxima ação exata: revalidar HEAD e iniciar Bloco 3 com contraexemplos de
+reparo futuro, duplicado, candidato sem vínculo, negação MainBoard e vários
+componentes; recuperar e corrigir somente sn-forensics/alertas com evidência.
+Depois Bloco 4 (UI/histórico) e Bloco 5 (integração/gates). Código de produto
+pendente da recuperação continua exclusivamente no snapshot remoto dcb15570;
+nenhum produto correto desta sessão deve ficar só local após este checkpoint.
+
 Data: 2026-10-15. PR #27 OPEN / DRAFT / UNMERGED. Issue #28 e comentários
 6194796421 / 6194874895 lidos. Autorização direta do usuário confirmada nesta sessão.
 
