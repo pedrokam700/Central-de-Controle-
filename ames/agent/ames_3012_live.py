@@ -7,6 +7,11 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
+from urllib.parse import urlsplit, urlunsplit
+
+ROUTE_3012 = "UAWIP.form.VwDefectRepairView"
+HOME_SURFACE = "/asymes/home"
+OPC_SURFACE = "/asymes/opc"
 
 QUERY_3012_JS = r"""
 async (cfg) => {
@@ -233,33 +238,80 @@ def _chunks(start: datetime, end: datetime, days: int) -> List[tuple[datetime, d
     return out
 
 
+def _url_matches_host(url: str, ames_host: str) -> bool:
+    text=str(url or "").lower()
+    return str(ames_host or "").lower() in text
+
+
+def _is_home_surface_url(url: str, ames_host: str) -> bool:
+    text=str(url or "").lower()
+    return _url_matches_host(text,ames_host) and HOME_SURFACE in text and OPC_SURFACE not in text and "/login" not in text
+
+
+def _is_home_3012_url(url: str, ames_host: str) -> bool:
+    return _is_home_surface_url(url,ames_host) and ROUTE_3012.lower() in str(url or "").lower()
+
+
+def _home_base_from_url(url: str) -> str:
+    base=str(url or "").split("#",1)[0]
+    parts=urlsplit(base)
+    path=parts.path or ""
+    low=path.lower()
+    if HOME_SURFACE in low:
+        return urlunsplit((parts.scheme,parts.netloc,path,parts.query,""))
+    if OPC_SURFACE in low:
+        idx=low.rfind(OPC_SURFACE)
+        path=path[:idx]+HOME_SURFACE+path[idx+len(OPC_SURFACE):]
+        return urlunsplit((parts.scheme,parts.netloc,path,parts.query,""))
+    if "/asymes" in low:
+        idx=low.find("/asymes")+len("/asymes")
+        path=path[:idx]+"/home"
+        return urlunsplit((parts.scheme,parts.netloc,path,parts.query,""))
+    raise RuntimeError("Sessao A-MES nao identificada para abrir a 3012 Home")
+
+
 def _select_page(browser, ames_host: str):
     pages=[p for ctx in browser.contexts for p in ctx.pages]
     if not pages:
         raise RuntimeError("Chrome dedicado sem paginas abertas")
-    def score(page):
-        url=(page.url or "").lower();s=0
-        if "vwdefectrepairview" in url:s+=120
-        if "3012" in url:s+=60
-        if str(ames_host).lower() in url:s+=20
-        return s
-    page=max(pages,key=score)
-    if score(page)>=120:return page
-    candidates=[p for p in pages if str(ames_host) in (p.url or "")]
-    if not candidates:
+
+    host_pages=[p for p in pages if _url_matches_host(getattr(p,"url", ""),ames_host)]
+    if not host_pages:
         raise RuntimeError("Nenhuma sessao A-MES aberta no Chrome dedicado")
-    page=candidates[0];base=(page.url or "").split("#",1)[0]
-    if "/asymes" not in base.lower():
-        raise RuntimeError("Sessao A-MES nao identificada")
-    page.goto(base+"#UAWIP.form.VwDefectRepairView",wait_until="domcontentloaded",timeout=25000)
+
+    # A-MES exposes a look-alike VwDefectRepairView under OPC too. That surface
+    # is not the canonical 3012 used by Central. Never accept it merely because
+    # the hash/route matches.
+    for page in reversed(host_pages):
+        if _is_home_3012_url(getattr(page,"url", ""),ames_host):
+            return page
+
+    home_pages=[p for p in host_pages if _is_home_surface_url(getattr(p,"url", ""),ames_host)]
+    if home_pages:
+        page=home_pages[-1]
+    else:
+        source=host_pages[-1]
+        context=getattr(source,"context",None) or (browser.contexts[0] if browser.contexts else None)
+        if context is None:
+            raise RuntimeError("Contexto do Chrome dedicado nao encontrado para abrir a 3012 Home")
+        page=context.new_page()
+        page.goto(_home_base_from_url(getattr(source,"url", "")),wait_until="domcontentloaded",timeout=25000)
+
+    base=_home_base_from_url(getattr(page,"url", ""))
+    target=base+"#"+ROUTE_3012
+    page.goto(target,wait_until="domcontentloaded",timeout=25000)
     deadline=time.time()+25
     while time.time()<deadline:
+        if not _is_home_surface_url(getattr(page,"url", ""),ames_host):
+            raise RuntimeError("3012 abriu fora da superficie Home; variante OPC foi recusada")
         try:
             ready=page.evaluate("""() => !!(window.Ext && Ext.ComponentQuery && Ext.ComponentQuery.query('*').some(c=>String(c?.text||'').trim()==='View'))""")
-            if ready:return page
-        except Exception:pass
+            if ready and _is_home_3012_url(getattr(page,"url", ""),ames_host):
+                return page
+        except Exception:
+            pass
         time.sleep(.4)
-    raise RuntimeError("Tela 3012 nao carregou automaticamente")
+    raise RuntimeError("Tela 3012 Home nao carregou automaticamente")
 
 
 def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None = None,
@@ -284,6 +336,8 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
 
     with sync_playwright() as pw:
         browser=pw.chromium.connect_over_cdp(cdp_url);page=_select_page(browser,ames_host)
+        if not _is_home_3012_url(getattr(page,"url", ""),ames_host):
+            raise RuntimeError("3012 canônica não confirmada na superfície Home")
         for sn in targets:
             for chunk_start,chunk_end in chunks:
                 chunk_key=f"{sn}|{chunk_start.isoformat()}|{chunk_end.isoformat()}|{line}|{model}|{defect_code}|{repair_code}|{defect_type}"
@@ -297,7 +351,7 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
                     raise RuntimeError('3012 retornou outra SN; filtros/grade nao confirmados')
                 records.extend(normalized);done.add(chunk_key)
                 diagnostics.append({"sn":sn,"from":cfg["dateFrom"]+" "+cfg["timeFrom"],"to":cfg["dateTo"]+" "+cfg["timeTo"],"rows":len(normalized),
-                                    "total":raw.get("total"),"pages":raw.get("pages"),"store_score":raw.get("storeScore"),"fields":raw.get("storeFields"),"applied":raw.get("applied")})
+                                    "total":raw.get("total"),"pages":raw.get("pages"),"store_score":raw.get("storeScore"),"fields":raw.get("storeFields"),"applied":raw.get("applied"),"surface":"home"})
                 if checkpoint_path:
                     checkpoint_path.parent.mkdir(parents=True,exist_ok=True)
                     checkpoint_path.write_text(json.dumps({"done":sorted(done),"rows":records,"updated_at":datetime.now().isoformat(timespec="seconds")},ensure_ascii=False,indent=2,default=str),encoding="utf-8")
@@ -305,7 +359,7 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
     unique={}
     for row in records:unique[row["row_key"]]=row
     rows=list(unique.values());rows.sort(key=lambda r:str(r.get("defect_time") or ""),reverse=True)
-    return {"source":"AWIP3012_DIRECT_EXTJS","view":"UAWIP.form.VwDefectRepairView","generated_at":datetime.now().isoformat(timespec="seconds"),
+    return {"source":"AWIP3012_HOME_DIRECT_EXTJS","surface":"home","view":ROUTE_3012,"generated_at":datetime.now().isoformat(timespec="seconds"),
             "query":{"sns":targets,"start_at":start.isoformat(timespec="minutes"),"end_at":end.isoformat(timespec="minutes"),"line":line,"model":model,
                      "defect_code":defect_code,"repair_code":repair_code,"defect_type":defect_type,"chunk_days":chunk_days},
             "rows":rows,"records_count":len(rows),"chunks":diagnostics}
