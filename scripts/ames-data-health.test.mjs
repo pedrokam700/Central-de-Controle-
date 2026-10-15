@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildDataHealth,buildSecurityHealth,buildSyncHealth,createDataHealthView} from '../ames/console-data-health.mjs';
+import {buildDataHealth,buildSecurityHealth,buildWorkstationHealth,buildSyncHealth,createDataHealthView} from '../ames/console-data-health.mjs';
 
 function fakeStore(occurrences=[]){
   return {
@@ -55,6 +55,37 @@ test('unavailable hardening diagnostics remain unknown instead of being reported
   }
 });
 
+test('workstation health exposes only whitelisted version setup and readiness fields',()=>{
+  const model=buildWorkstationHealth({
+    status:'connected',agent_build:'0.5.25-rc1',
+    runtime:{candidate_version:'0.5.26-rc1',setup_complete:true,network:{secret:'network-secret'},workstation:{hostname:'hidden-host'}},
+    readiness:{engine:true,chrome:true,ames:true,sqlite:true,python:true,dependencies:true,playwright:true,process:false,session:'session-secret'}
+  });
+  assert.equal(model.tone,'partial');
+  assert.equal(model.build,'0.5.25-rc1');
+  assert.equal(model.candidate,'0.5.26-rc1');
+  assert.equal(model.setup,true);
+  assert.equal(model.failed,1);
+  assert.equal(model.checks.find(x=>x.key==='process')?.value,false);
+  assert.equal(model.checks.some(x=>x.key==='session'),false);
+  const serialized=JSON.stringify(model);
+  assert.equal(serialized.includes('network-secret'),false);
+  assert.equal(serialized.includes('hidden-host'),false);
+  assert.equal(serialized.includes('session-secret'),false);
+});
+
+test('workstation health is green only with complete setup and fully reported ready checks',()=>{
+  const model=buildWorkstationHealth({
+    status:'connected',agent_build:'0.5.25-rc1',runtime:{candidate_version:'0.5.25-rc1',setup_complete:true},
+    readiness:{engine:true,chrome:true,ames:true,sqlite:true,python:true,dependencies:true,playwright:true,process:true}
+  });
+  assert.equal(model.tone,'ok');
+  assert.equal(model.known,8);
+  assert.equal(model.ready,8);
+  assert.equal(model.failed,0);
+  assert.equal(model.unknown,0);
+});
+
 test('shared sync health exposes team-latest provenance without account identity',()=>{
   const model=buildSyncHealth({sync:{
     read_status:'ready',remote_scope:'team_latest',remote_latest_collected_at:'2026-10-14T12:00:00Z',
@@ -81,13 +112,18 @@ test('shared sync read error preserves last valid provenance instead of erasing 
 });
 
 test('data health renders shared workstation authority and escaped source metadata',()=>{
-  const agent={status:'offline',capabilities:{process_timeline:false},sync:{
+  const agent={status:'offline',agent_build:'build-<1>',runtime:{candidate_version:'candidate-&-2',setup_complete:true,network:{secret:'must-not-render'}},readiness:{engine:true},capabilities:{process_timeline:false},sync:{
     read_status:'ready',remote_scope:'team_latest',remote_latest_collected_at:'2026-10-14T12:00:00Z',
     remote_heads:[{line_id:'TAN10101',source_id:'posto-&-1',snapshot_id:'31',snapshot_revision:4,collected_at:'2026-10-14T11:00:00Z',authority:'team_latest'}]
   }};
   const store={agent:()=>agent,read:()=>({snapshot:null,freshness:'unknown',source:null})};
   const root={innerHTML:'',setAttribute(){},removeAttribute(){},replaceChildren(){this.innerHTML='';},querySelectorAll(){return [];}};
   const view=createDataHealthView(root,store);view.render();
+  assert.match(root.innerHTML,/data-workstation-health/);
+  assert.match(root.innerHTML,/Posto local/);
+  assert.match(root.innerHTML,/build-&lt;1&gt;/);
+  assert.match(root.innerHTML,/candidate-&amp;-2/);
+  assert.equal(root.innerHTML.includes('must-not-render'),false);
   assert.match(root.innerHTML,/data-sync-health/);
   assert.match(root.innerHTML,/Sincronização entre postos/);
   assert.match(root.innerHTML,/Mais recente da equipe/);
