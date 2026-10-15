@@ -4746,6 +4746,12 @@ ${m.text}`).join('\n\n');
       </article>`;
     }
 
+    Object.assign(translations, {
+      "Continue no A-MES":"Continue in A-MES",
+      "O Console MES é a próxima camada factual: ele usa o mesmo contexto de linha, turno, CPH e falha para investigar dados de produção sem abrir um aplicativo paralelo.":"The MES Console is the next factual layer: it uses the same line, shift, CPH and failure context to investigate production data without opening a parallel app.",
+      "Abra o Console MES pela própria Central; o contexto operacional continua compartilhado.":"Open the MES Console from the Work Center; the operational context remains shared."
+    });
+
     function dailyTourStorageKey(){
       return 'central.daily.tour.v4.'+(currentAuthUser?.uid||currentAccount?.email||'user');
     }
@@ -4780,6 +4786,7 @@ ${m.text}`).join('\n\n');
           {selector:'#dailyAdminDashboard',adminPanel:true,adminTab:'dashboard',title:t('Leia o dashboard operacional'),text:t('Use os filtros para conferir cobertura, prazo, NG e execuções sem misturar políticas colaborativas com cobrança individual.'),tip:'Os filtros atualizam toda a leitura do dashboard.'}
         );
       }
+      steps.push({selector:'button[data-page=\"mesConsole\"]',mobileSelector:'#mobileMenuToggle',title:t('Continue no A-MES'),text:t('O Console MES é a próxima camada factual: ele usa o mesmo contexto de linha, turno, CPH e falha para investigar dados de produção sem abrir um aplicativo paralelo.'),tip:t('Abra o Console MES pela própria Central; o contexto operacional continua compartilhado.')});
       steps.push({selector:'#dailyTourButton',restoreAdmin:true,title:t('Ajuda sempre disponível'),text:t('O guia não precisa ocupar a tela no uso diário. Use este ícone quando quiser rever o passo a passo.'),tip:t('Você também pode pular etapas clicando nos indicadores do tour.')});
       return steps;
     }
@@ -4808,7 +4815,10 @@ ${m.text}`).join('\n\n');
 
     function dailyTourTarget(){
       const step=dailyTourSteps()[dailyTourStep];
-      return step?document.querySelector(step.selector):null;
+      if(!step)return null;
+      const mobile=window.matchMedia('(max-width:860px)').matches;
+      const selector=mobile&&step.mobileSelector?step.mobileSelector:step.selector;
+      return selector?document.querySelector(selector):null;
     }
 
     function setTourRect(el,left,top,width,height){
