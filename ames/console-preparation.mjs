@@ -2,6 +2,8 @@ import { createOnboardingView, savedIntegrationMode } from './onboarding-view.mj
 import { INTEGRATION_MODE_KEY } from './data/onboarding.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 
+const t = (pt, en) => typeof document !== 'undefined' && document.documentElement?.lang?.startsWith('en') ? en : pt;
+
 // Unknown checks stay unknown. A listening port never proves an authenticated MES session.
 export function workstationChecks(agent = {}) {
   const r = agent.readiness || {};
@@ -30,9 +32,9 @@ const safeBackup = raw => {
 export function workstationMaintenance(agent = {}) {
   const r = agent.readiness || {}, connected = agent.status === 'connected';
   const localChecks = [
-    ['Agente', connected], ['Motor', r.engine], ['Python', r.python],
-    ['Dependências', r.dependencies], ['Playwright', r.playwright], ['SQLite', r.sqlite]
-  ].map(([label, value]) => ({ label, state: value === true ? 'ok' : value === false ? 'missing' : 'unknown' }));
+    ['agent', 'Agente', connected], ['engine', 'Motor', r.engine], ['python', 'Python', r.python],
+    ['dependencies', 'Dependências', r.dependencies], ['playwright', 'Playwright', r.playwright], ['sqlite', 'SQLite', r.sqlite]
+  ].map(([key, label, value]) => ({ key, label, state: value === true ? 'ok' : value === false ? 'missing' : 'unknown' }));
   const allLocalReady = connected && localChecks.every(item => item.state === 'ok');
   const latest = safeBackup(agent.runtime?.latest_backup || (agent.auxiliary?.name === 'backup' ? agent.auxiliary?.result?.backup : null));
   return {
@@ -53,6 +55,17 @@ const formatBytes = value => {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 };
+
+const maintenanceStateLabel = tone => tone === 'ok'
+  ? t('Núcleo local pronto', 'Local core ready')
+  : tone === 'partial'
+    ? t('Verificação local parcial', 'Partial local verification')
+    : t('Núcleo local não verificado', 'Local core not verified');
+
+const maintenanceCheckLabel = key => ({
+  agent: t('Agente', 'Agent'), engine: t('Motor', 'Engine'), python: 'Python',
+  dependencies: t('Dependências', 'Dependencies'), playwright: 'Playwright', sqlite: 'SQLite'
+}[key] || key);
 
 export function createPreparationView(root, store, client) {
   let checking = false, checked = false, expanded = false, disposed = false, onboarding;
@@ -75,9 +88,11 @@ export function createPreparationView(root, store, client) {
     backupBusy = true; maintenanceMessage = ''; last = ''; render();
     try {
       const result = await client.auxiliary('backup');
-      maintenanceMessage = result?.ok && result?.backup ? 'Ponto de recuperação criado e validado pelo agente local.' : 'Backup solicitado; revalide o posto antes de atualizar.';
+      maintenanceMessage = result?.ok && result?.backup
+        ? t('Ponto de recuperação criado e validado pelo agente local.', 'Recovery point created and validated by the local agent.')
+        : t('Backup solicitado; revalide o posto antes de atualizar.', 'Backup requested; revalidate the workstation before updating.');
     } catch {
-      maintenanceMessage = 'Não foi possível criar o ponto de recuperação. Nenhuma atualização foi iniciada.';
+      maintenanceMessage = t('Não foi possível criar o ponto de recuperação. Nenhuma atualização foi iniciada.', 'The recovery point could not be created. No update was started.');
     } finally {
       backupBusy = false;
       if (!disposed) { last = ''; render(); }
@@ -91,17 +106,17 @@ export function createPreparationView(root, store, client) {
     const visible = expanded || (!connected && mode !== 'viewer');
     const backup = maintenance.latest_backup;
     const backupSummary = backup
-      ? `${esc(backup.created_at || 'data não informada')} · ${esc(formatBytes(backup.bytes))}${backup.reason ? ` · ${esc(backup.reason)}` : ''}`
-      : 'Nenhum ponto criado nesta sessão foi reportado à Central.';
+      ? `${esc(backup.created_at || t('data não informada', 'date not reported'))} · ${esc(formatBytes(backup.bytes))}${backup.reason ? ` · ${esc(backup.reason)}` : ''}`
+      : t('Nenhum ponto criado nesta sessão foi reportado à Central.', 'No recovery point created in this session has been reported to Work Center.');
     root.hidden=!visible;
-    const key=JSON.stringify([checking,checked,expanded,mode,connected,checks,maintenance,backupBusy,maintenanceMessage]);
+    const key=JSON.stringify([checking,checked,expanded,mode,connected,checks,maintenance,backupBusy,maintenanceMessage,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
     if(key===last)return;last=key;
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
       ${visible ? `<p>Consulte os dados compartilhados ou prepare este computador para coleta. O login A-MES permanece manual.</p>
       <div class="mes-pagination"><button type="button" class="button secondary" data-use-shared>Usar somente dados compartilhados</button><button type="button" class="button secondary" data-prepare-pc>Preparar este computador</button></div>` : ''}
       ${expanded ? `<details open><summary>Pré-teste do posto</summary><ul>${checks.map(c => `<li data-check-state="${c.state}">${esc(c.label)} — <span>${c.state === 'ok' ? 'Verificado' : c.state === 'missing' ? 'Pendente' : 'Não verificado'}</span></li>`).join('')}</ul><p>${ready ? 'Pronto para teste' : 'Conclua os itens pendentes e confirme o login manual A-MES antes da coleta.'}</p><button type="button" class="button secondary" data-preflight ${checking ? 'disabled' : ''}>Verificar novamente</button>
-      <section class="notice ${maintenance.tone === 'partial' ? 'warn' : ''}" data-workstation-maintenance><b>Manutenção do posto · ${esc(maintenance.label)}</b><br><small>Build instalada: ${esc(maintenance.build || '—')} · Candidato reportado: ${esc(maintenance.candidate || '—')} · Setup: ${maintenance.setup_complete ? 'concluído' : 'não confirmado'}</small><p>Verificação local: ${maintenance.localChecks.map(item => `${esc(item.label)} ${item.state === 'ok' ? '✓' : item.state === 'missing' ? '!' : '?'}`).join(' · ')}</p><p><b>Ponto de recuperação:</b> ${backupSummary}</p><div class="mes-pagination"><button type="button" class="button secondary" data-workstation-backup ${!connected || backupBusy ? 'disabled' : ''}>${backupBusy ? 'Criando ponto de recuperação…' : 'Criar ponto de recuperação agora'}</button></div>${maintenanceMessage ? `<p role="status">${esc(maintenanceMessage)}</p>` : ''}<small>A atualização e o rollback dos arquivos continuam fora do navegador. Crie um ponto de recuperação, encerre o agente antes de substituir arquivos e use somente o pacote/candidato validado para este build.</small></section>
+      <section class="notice ${maintenance.tone === 'partial' ? 'warn' : ''}" data-workstation-maintenance><b>${t('Manutenção do posto', 'Workstation maintenance')} · ${esc(maintenanceStateLabel(maintenance.tone))}</b><br><small>${t('Build instalada', 'Installed build')}: ${esc(maintenance.build || '—')} · ${t('Candidato reportado', 'Reported candidate')}: ${esc(maintenance.candidate || '—')} · Setup: ${maintenance.setup_complete ? t('concluído', 'complete') : t('não confirmado', 'not confirmed')}</small><p>${t('Verificação local', 'Local verification')}: ${maintenance.localChecks.map(item => `${esc(maintenanceCheckLabel(item.key))} ${item.state === 'ok' ? '✓' : item.state === 'missing' ? '!' : '?'}`).join(' · ')}</p><p><b>${t('Ponto de recuperação', 'Recovery point')}:</b> ${backupSummary}</p><div class="mes-pagination"><button type="button" class="button secondary" data-workstation-backup ${!connected || backupBusy ? 'disabled' : ''}>${backupBusy ? t('Criando ponto de recuperação…', 'Creating recovery point…') : t('Criar ponto de recuperação agora', 'Create recovery point now')}</button></div>${maintenanceMessage ? `<p role="status">${esc(maintenanceMessage)}</p>` : ''}<small>${t('A atualização e o rollback dos arquivos continuam fora do navegador. Crie um ponto de recuperação, encerre o agente antes de substituir arquivos e use somente o pacote/candidato validado para este build.', 'File update and rollback remain outside the browser. Create a recovery point, stop the agent before replacing files, and use only the package/candidate validated for this build.')}</small></section>
       <section data-installation></section></details>` : ''}
     </div>`;
     root.querySelector('[data-use-shared]')?.addEventListener('click', () => choose('viewer'));
