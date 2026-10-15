@@ -29,6 +29,29 @@ def _process_support():
     return process_r11.engine_support(a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR))
 
 
+def _source_stage(value):
+    raw=str(value or "").strip().lower()
+    if raw in {"complete","completed","done","ok","collected"}:return "done"
+    if raw in {"partial","partially_complete"}:return "partial"
+    if raw in {"error","failed","unavailable"}:return "error"
+    if raw in {"not_run","pending",""}:return "not_run"
+    return raw
+
+def _aggregate_stage(results, source):
+    states=[]
+    for item in (results or {}).values():
+        if item.get("skipped"):continue
+        payload=item.get(source) or {}
+        if source=="2114":raw=payload.get("source_status") or payload.get("status")
+        else:raw=payload.get("status")
+        state=_source_stage(raw)
+        if state!="not_run":states.append(state)
+    if not states:return "not_run"
+    if all(x=="error" for x in states):return "error"
+    if any(x in {"error","partial"} for x in states):return "partial"
+    return "done"
+
+
 def _run_deep_trace_job(job_id, cfg):
     mode=str(cfg.get("trace_mode") or "full").strip().lower()
     if mode not in {"full","process_only","reuse_only"}:
@@ -74,13 +97,24 @@ def _run_deep_trace_job(job_id, cfg):
                         try:a._attach_2114_to_current(_sid,{"pcbas":[{"pcba_sn":(ev or {}).get("pcba"),"status":"COMPLETE","result":state.get("result"),"error":None}]});did_ingest=True
                         except Exception:pass
                 job=a._job_live_event(job_id,ev,_line,_idx,total,_sid)
+                if stage=="3022":
+                    cur=int((ev or {}).get("current") or 0);count=max(0,int((ev or {}).get("total") or 0))
+                    pct=round(cur*100/count,1) if count else 0.0
+                    sp=dict(job.get("stage_progress") or {})
+                    phase=str((ev or {}).get("phase") or "mes")
+                    qms=(ev or {}).get("query_ms")
+                    detail=str((ev or {}).get("pcba") or "")
+                    if qms is not None:detail += f" · {qms} ms"
+                    sp["3022"]={"current":cur,"total":count,"percent":pct,"line_percent":pct,"line":_line,"line_index":_idx,"line_total":total,"detail":detail,"status":(ev or {}).get("status"),"phase":phase,"query_ms":qms}
+                    job=a._job_update(job_id,stage="3022",stage_progress=sp,message=f"{_line}: 3022 · {phase} · {cur}/{count}")
                 if did_ingest:job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1)
                 now=time.monotonic()
                 if did_ingest or now-last_persist[0]>=1.0:a._persist_job(job);last_persist[0]=now
             def text(message,_line=line):
                 nonlocal job
-                stage="2114" if str(message).startswith("2114") else "3074"
-                job=a._job_update(job_id,stage=stage,message=f"{_line}: {message}");a._persist_job(job)
+                msg=str(message)
+                stage="2114" if msg.startswith("2114") else ("3022" if msg.startswith("3022") else "3074")
+                job=a._job_update(job_id,stage=stage,message=f"{_line}: {msg}");a._persist_job(job)
 
             if mode in {"full","reuse_only"}:
                 base_progress=6+int((idx-1)*72/total)
@@ -102,10 +136,15 @@ def _run_deep_trace_job(job_id, cfg):
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
             results[line]=line_result
 
-        stages={"3028":"preserved","3074":"done" if mode in {"full","reuse_only"} else "not_run",
-                "2114":"done" if mode in {"full","reuse_only"} else "not_run","3022":"done" if mode in {"full","process_only"} else "not_run"}
+        stages={"3028":"preserved",
+                "3074":_aggregate_stage(results,"3074") if mode in {"full","reuse_only"} else "not_run",
+                "2114":_aggregate_stage(results,"2114") if mode in {"full","reuse_only"} else "not_run",
+                "3022":_aggregate_stage(results,"3022") if mode in {"full","process_only"} else "not_run"}
+        base_message={"full":"Rastreabilidade 3074/2114/3022 concluída","process_only":"Processo 3022 concluído","reuse_only":"Reuso 3074/2114 concluído"}[mode]
+        degraded=[name for name in ("3074","2114","3022") if stages.get(name) in {"partial","error"}]
+        message=base_message+(" · fontes com cobertura parcial/erro: "+", ".join(degraded) if degraded else "")
         job=a._job_update(job_id,status="done",stage="done",progress=100,finished_at=a.utc_now(),
-                          message={"full":"Rastreabilidade 3074/2114/3022 concluida","process_only":"Processo 3022 concluido","reuse_only":"Reuso 3074/2114 concluido"}[mode],
+                          message=message,
                           result={"snapshot_ids":ids,"lines":active,"deep_trace":results,"scope":{"trace_mode":mode,"defect_codes":codes,"max_failures":max_failures,"max_pcbas":max_pcbas,"performance":performance},"stages":stages})
         a._persist_job(job)
     except Exception as exc:
