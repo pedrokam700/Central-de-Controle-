@@ -3,7 +3,7 @@ import {SOURCE_STATE,sourceStateLabel} from './data/source-provenance.mjs';
 import {readHardeningDiagnostics} from './agent-diagnostics.mjs';
 import {read3012Status} from './agent-3012-health.mjs';
 
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 const t=(pt,en)=>typeof document!=='undefined'&&document.documentElement?.lang?.startsWith('en')?en:pt;
 const locale=()=>typeof document!=='undefined'?document.documentElement?.lang||'pt-BR':'pt-BR';
 const rows=(snapshot,name)=>{
@@ -135,6 +135,47 @@ export function buildSecurityHealth(diagnostics){
   return {tone:ok?'ok':'partial',label:ok?t('Política CORS validada','CORS policy validated'):t('Configuração legada filtrada','Legacy configuration filtered'),detail:ok?t('Somente loopback e origens HTTPS explicitamente autorizadas são aceitas.','Only loopback and explicitly authorized HTTPS origins are accepted.'):t('Entradas inseguras antigas foram ignoradas em runtime; revise a configuração do posto quando conveniente.','Unsafe legacy entries were ignored at runtime; review workstation configuration when convenient.'),remote,rejected,mode:policy.mode||null};
 }
 
+export function buildSyncHealth(agent={}){
+  const sync=agent?.sync||{};
+  const heads=(Array.isArray(sync.remote_heads)?sync.remote_heads:[])
+    .filter(head=>LINE_IDS.includes(head?.line_id))
+    .map(head=>({
+      line_id:head.line_id,
+      source_id:String(head.source_id||''),
+      snapshot_id:String(head.snapshot_id??''),
+      snapshot_revision:Number(head.snapshot_revision)||0,
+      collected_at:head.collected_at||null,
+      authority:head.authority==='team_latest'?'team_latest':null
+    }))
+    .sort((a,b)=>LINE_IDS.indexOf(a.line_id)-LINE_IDS.indexOf(b.line_id));
+  const readStatus=normalizedStatus(sync.read_status);
+  const latest=sync.remote_latest_collected_at||heads.map(head=>head.collected_at).filter(Boolean).sort().at(-1)||null;
+  const authority=sync.remote_scope==='team_latest'||heads.some(head=>head.authority==='team_latest')?'team_latest':null;
+  if(readStatus==='error'){
+    return {
+      tone:heads.length?'partial':'error',
+      label:heads.length?t('Atualização falhou; última leitura preservada','Refresh failed; last read preserved'):t('Erro de sincronização','Synchronization error'),
+      detail:heads.length?t('A atualização compartilhada falhou, mas a última evidência válida continua identificada abaixo.','Shared refresh failed, but the last valid evidence remains identified below.'):t('Não foi possível obter uma leitura compartilhada válida. Dados locais continuam independentes.','A valid shared read could not be obtained. Local data remains independent.'),
+      heads,count:heads.length,latest,authority,read_status:readStatus,has_error:true
+    };
+  }
+  if(!heads.length){
+    return {
+      tone:'unknown',
+      label:t('Sem leitura compartilhada','No shared read'),
+      detail:t('Nenhum snapshot remoto está ativo neste momento. Isso não altera nem invalida a base local.','No remote snapshot is active right now. This does not change or invalidate the local database.'),
+      heads,count:0,latest:null,authority,read_status:readStatus||'idle',has_error:false
+    };
+  }
+  const complete=heads.length===LINE_IDS.length;
+  return {
+    tone:complete?'ok':'partial',
+    label:complete?t('Cobertura compartilhada completa','Complete shared coverage'):t('Cobertura compartilhada parcial','Partial shared coverage'),
+    detail:`${heads.length}/${LINE_IDS.length} ${t('linhas com snapshot compartilhado identificado','lines with identified shared snapshot')}`,
+    heads,count:heads.length,latest,authority,read_status:readStatus||'ready',has_error:false
+  };
+}
+
 export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
   let last='',security=null,securityFor='',securityLoading=false,repairStatus=null,repairFor='',repairLoading=false,disposed=false;
   async function loadSecurity(agent){if(disposed||securityLoading||agent.status!=='connected')return;const identity=String(agent.agent_build||agent.capabilities?.agent_build||'connected');if(securityFor===identity&&security)return;securityLoading=true;securityFor=identity;try{security=await readHardeningDiagnostics();}catch(error){security={status:'unavailable',reason:error?.name==='AbortError'?'aborted':'error'};}finally{securityLoading=false;if(!disposed){last='';render();}}}
@@ -142,10 +183,12 @@ export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
   function render(){
     if(disposed)return;const agent=store.agent();
     if(agent.status==='connected'){void loadSecurity(agent);void loadRepairStatus(agent);}else{if(security||securityFor){security=null;securityFor='';securityLoading=false;}if(repairStatus||repairFor){repairStatus=null;repairFor='';repairLoading=false;}}
-    const model=buildDataHealth(store,repairStatus),securityState=buildSecurityHealth(security);
-    const key=JSON.stringify([model,agent.status,agent.agent_build,security,securityLoading,repairStatus,repairLoading,typeof document==='undefined'?'':document.documentElement.lang]);if(key===last)return;last=key;
+    const model=buildDataHealth(store,repairStatus),securityState=buildSecurityHealth(security),syncState=buildSyncHealth(agent);
+    const key=JSON.stringify([model,agent.status,agent.agent_build,syncState,security,securityLoading,repairStatus,repairLoading,typeof document==='undefined'?'':document.documentElement.lang]);if(key===last)return;last=key;
+    const syncAuthority=syncState.authority==='team_latest'?t('Mais recente da equipe','Latest team snapshot'):t('Não informada','Not provided');
+    const syncLines=syncState.heads.map((head,index)=>`${t('Linha','Line')} ${LINE_IDS.indexOf(head.line_id)+1||index+1} · ${esc(head.line_id)} · ${t('Origem','Source')} ${esc(head.source_id||'—')} · Snapshot ${esc(head.snapshot_id||'—')} r${esc(head.snapshot_revision)} · ${esc(head.collected_at||'—')}`).join('<br>');
     root.setAttribute('data-no-i18n','');
-    root.innerHTML=`<section class="mes-context-panel ames-data-health"><div class="section-head"><div><h3>${t('Saúde e cobertura dos dados','Data health and coverage')}</h3><p>${t('Mostra o que foi realmente carregado. Ausência de evidência nunca é apresentada como zero.','Shows what was actually loaded. Missing evidence is never presented as zero.')}</p></div><span class="ames-health-agent ${agent.status==='connected'?'ok':'unknown'}">${agent.status==='connected'?t('Agente conectado','Agent connected'):t('Dados compartilhados / cache','Shared data / cache')}</span></div><div class="ames-data-health-grid">${model.map(item=>`<article class="ames-health-card ${item.state.tone}" data-source-state="${esc(item.state.source_state)}"><div class="ames-health-card-head"><div><b>${esc(item.label)}</b><span>${esc(item.name)}</span></div><span class="ames-health-state">${esc(item.state.label)}</span></div><strong>${item.displayCount??'—'}</strong><small>${esc(item.unit)}</small><p>${esc(item.state.detail)}</p><footer><span>${esc(item.latest||t('coleta não informada','collection not provided'))}</span><button type="button" class="button secondary" data-health-evidence="${esc(item.source)}">${t('Ver evidência','View evidence')}</button></footer></article>`).join('')}</div><div class="notice ${securityState.tone==='partial'?'warn':''}" data-security-health><b>${t('Segurança local','Local security')} · ${esc(securityState.label)}</b><br>${esc(securityState.detail)}<br><small>${t('Origens remotas autorizadas','Authorized remote origins')}: ${securityState.remote??'—'} · ${t('Entradas rejeitadas','Rejected entries')}: ${securityState.rejected??'—'}${securityState.mode?` · ${esc(securityState.mode)}`:''}</small></div></section>`;
+    root.innerHTML=`<section class="mes-context-panel ames-data-health"><div class="section-head"><div><h3>${t('Saúde e cobertura dos dados','Data health and coverage')}</h3><p>${t('Mostra o que foi realmente carregado. Ausência de evidência nunca é apresentada como zero.','Shows what was actually loaded. Missing evidence is never presented as zero.')}</p></div><span class="ames-health-agent ${agent.status==='connected'?'ok':'unknown'}">${agent.status==='connected'?t('Agente conectado','Agent connected'):t('Dados compartilhados / cache','Shared data / cache')}</span></div><div class="ames-data-health-grid">${model.map(item=>`<article class="ames-health-card ${item.state.tone}" data-source-state="${esc(item.state.source_state)}"><div class="ames-health-card-head"><div><b>${esc(item.label)}</b><span>${esc(item.name)}</span></div><span class="ames-health-state">${esc(item.state.label)}</span></div><strong>${item.displayCount??'—'}</strong><small>${esc(item.unit)}</small><p>${esc(item.state.detail)}</p><footer><span>${esc(item.latest||t('coleta não informada','collection not provided'))}</span><button type="button" class="button secondary" data-health-evidence="${esc(item.source)}">${t('Ver evidência','View evidence')}</button></footer></article>`).join('')}</div><div class="notice ${syncState.tone==='partial'||syncState.tone==='error'?'warn':''}" data-sync-health><b>${t('Sincronização entre postos','Cross-workstation sync')} · ${esc(syncState.label)}</b><br>${esc(syncState.detail)}<br><small>${t('Autoridade','Authority')}: ${esc(syncAuthority)} · ${t('Última coleta remota','Latest remote collection')}: ${esc(syncState.latest||'—')}${syncLines?`<br>${syncLines}`:''}</small></div><div class="notice ${securityState.tone==='partial'?'warn':''}" data-security-health><b>${t('Segurança local','Local security')} · ${esc(securityState.label)}</b><br>${esc(securityState.detail)}<br><small>${t('Origens remotas autorizadas','Authorized remote origins')}: ${securityState.remote??'—'} · ${t('Entradas rejeitadas','Rejected entries')}: ${securityState.rejected??'—'}${securityState.mode?` · ${esc(securityState.mode)}`:''}</small></div></section>`;
     root.querySelectorAll('[data-health-evidence]').forEach(button=>button.addEventListener('click',()=>{const item=model.find(x=>x.source===button.dataset.healthEvidence);if(!item)return;const fields=[[t('Estado','Status'),item.state.label],[t('Proveniência','Provenance'),sourceStateLabel(item.state.source_state,locale())],[t('Registros visíveis','Visible records'),item.displayCount??'—'],[t('Última coleta','Last collection'),item.latest||'—'],[t('Build do agente','Agent build'),agent.agent_build||agent.capabilities?.agent_build||'—']];const notes=[t('0 só é mostrado quando a fonte foi comprovadamente consultada e retornou zero. Fonte não coletada, parcial sem cobertura ou com erro fica como —/estado explícito.','0 is shown only when the source was proven queried and returned zero. Uncollected, unproven partial, or failed sources remain — with an explicit status.')];if(item.source==='3012'&&item.cache){fields.push([t('Registros no SQLite 3012','3012 SQLite records'),item.cache.rows??'—'],[t('SNs com cobertura registrada','SNs with recorded coverage'),item.cache.coverageSns??'—'],[t('Intervalos de cobertura','Coverage intervals'),item.cache.coverageIntervals??'—'],['AMES_START_DATE',item.cache.amesStartDate||'—'],[t('Validação física 3012','3012 physical validation'),item.cache.factoryValidated?t('validada','validated'):t('pendente','pending')]);}onEvidence({title:`${item.label} · ${item.name}`,description:item.state.detail,fields,lines:item.reads.map(x=>({label:`${t('Linha','Line')} ${x.index} · ${x.line}`,snapshot:x.read.snapshot?.snapshot_id||t('sem snapshot','no snapshot'),freshness:x.read.freshness,detail:sourceStateLabel(readSourceState(x.read),locale())})),notes});}));
   }
   return {render,clear(){disposed=true;root?.replaceChildren();root?.removeAttribute('data-no-i18n');last='';security=null;securityFor='';repairStatus=null;repairFor='';}};
