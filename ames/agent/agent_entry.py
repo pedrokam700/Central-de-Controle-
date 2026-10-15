@@ -120,9 +120,13 @@ def _run_deep_trace_job(job_id, cfg):
                 base_progress=6+int((idx-1)*72/total)
                 job=a._job_update(job_id,stage="3074",progress=base_progress,message=f"{line}: 3074/2114 · {unique} PCBAs / {len(records)} ocorrencias")
                 a._persist_job(job)
-                payload=a.run_deep_v016_records(engine,records,source_key=f"snapshot_{sid}_{line}",work_dir=a.DATA_DIR/"checkpoints",
-                                                line_callback=text,event_callback=event,max_pcbas=max_pcbas,
-                                                shared_query_memo=shared_query_memo,performance=performance)
+                # One trace execution owns the shared A-MES session across the
+                # complete 3074→2114 interaction. Other MES jobs queue instead of
+                # navigating another view while 2114 is still active.
+                with a.MES.critical():
+                    payload=a.run_deep_v016_records(engine,records,source_key=f"snapshot_{sid}_{line}",work_dir=a.DATA_DIR/"checkpoints",
+                                                    line_callback=text,event_callback=event,max_pcbas=max_pcbas,
+                                                    shared_query_memo=shared_query_memo,performance=performance)
                 enrich=a.enrich_snapshot_from_integrated(sid,payload)
                 line_result.update({"enrichment":enrich,"3074":payload.get("trace_3074",{}),"2114":payload.get("trace_2114",{})})
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
