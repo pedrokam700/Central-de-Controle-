@@ -41,6 +41,7 @@ jobs:
           python scripts/agent-candidate-config.test.py
           python scripts/agent-origin-policy.test.py
           python scripts/agent-2114-shift-partial.test.py
+          python scripts/agent-3022-observability.test.py
       - name: Existing Node contracts
         run: |
           node --test scripts/ames-auth-hardening.test.mjs
