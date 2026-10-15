@@ -15,6 +15,7 @@ class AmesNavigation:
         "3028": "UAWIP.form.VwFpyInquireView",
         "3074": "UAWIP.form.VwAutoScanSnView",
         "3022": "UAWIP.form.VwViewLotHistoryView",
+        "3012": "UAWIP.form.VwDefectRepairView",
         "2114": "UAWIP.form.TrDefectLotByHandView",
     }
 
@@ -41,6 +42,14 @@ class AmesNavigation:
             except Exception:
                 pass
         return False
+
+    @staticmethod
+    def _is_home_surface(page) -> bool:
+        try:
+            u = (page.url or "").lower()
+            return "/asymes/home" in u and "/asymes/opc" not in u and "/login" not in u
+        except Exception:
+            return False
 
     def _main_page(self):
         candidates = []
@@ -106,6 +115,30 @@ class AmesNavigation:
     def ensure_3022(self, timeout_s: float = 15.0):
         # 3022 field names vary by MES release; route is the stable anchor.
         return self.ensure_main_view("3022", None, timeout_s)
+
+    def ensure_3012(self, timeout_s: float = 18.0):
+        """Open the canonical 3012 on Home, never the look-alike OPC surface."""
+        route = self.ROUTES["3012"]
+        for p in reversed(self.browser.pages):
+            try:
+                if self._is_home_surface(p) and route.lower() in (p.url or "").lower():
+                    if self._is_login(p):
+                        raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES e tente novamente.")
+                    return p
+            except Exception:
+                pass
+        page = self._main_page()
+        if not self._is_home_surface(page):
+            raise RuntimeError("3012 canônica exige a superfície /asymes/home; variante OPC recusada.")
+        try:
+            page.evaluate("r => { if (location.hash !== '#' + r) location.hash = '#' + r; }", route)
+        except Exception:
+            base = (page.url or "").split("#", 1)[0]
+            page.goto(base + "#" + route, wait_until="domcontentloaded", timeout=int(timeout_s * 1000))
+        page = self._wait_view(page, route, None, timeout_s)
+        if not self._is_home_surface(page):
+            raise RuntimeError("3012 abriu fora da superfície Home; variante OPC recusada.")
+        return page
 
     def _opc_url_from_main(self) -> str:
         page = self._main_page()
