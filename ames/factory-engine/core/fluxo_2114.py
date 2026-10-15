@@ -249,7 +249,7 @@ def executar_fluxo_2114(
     seed_result=None,
     seed_checkpoint_path=None,
     include_current=False,
-    refresh_completed_batch=False,
+    refresh_completed_batch=True,
 ):
     """Consulta 2114 sem transformar uma fonte indisponível em falha global.
 
