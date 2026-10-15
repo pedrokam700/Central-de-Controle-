@@ -1,171 +1,76 @@
 {
-  "updated_at": "2026-10-09T00:48:42Z",
-  "project": "Central de Trabalho V2 + A-MES",
-  "central_major_version": "2.0-preview",
-  "ames_working_version": "0.5.23",
-  "validated_baseline": "0.5.20",
-  "validated_baseline_sha256": "8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6",
-  "current_package": "AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip",
-  "current_package_sha256": "1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167",
-  "current_package_size_bytes": 707613,
-  "github_release_index": "ames/releases/latest/README.md",
-  "github_release_version": "ames/releases/v0.5.23/README.md",
-  "library_path": "/Central de trabalho/AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip",
-  "drive_package_id": "1C_yuDdIUs3rDHAcmJD23_9Ey-UnVDrry",
-  "central_v2": {
-    "url": "https://central-cora-v2.vercel.app/",
-    "project_id": "prj_SQUu2HXxyrtxAC8jv8wgnxZsbDJI",
-    "deployment_id": "dpl_5vGxUBs99S51aUUf8p8eSwTzL1bg",
-    "deployment_state": "READY",
-    "strategy": "Native fusion into the canonical Central. Existing Vercel URL/deployment are historical preview only; see Issue #21 and V2_AUDITORIA_ARQUITETURA.md.",
-    "data_bus": "Legacy aiKnowledge snapshots are partial compatibility input; structured versioned evidence and publication authorization still pending.",
+  "updated_at": "2026-10-14T21:00:00-03:00",
+  "project": "Central de Trabalho + A-MES",
+  "status_contract": "checkpoint_only_revalidate_github_before_action",
+  "canonical_sources": {
+    "roadmap_issue": 28,
+    "active_pr": 27,
+    "active_branch": "work/ames-operator-ux-parity-20261014",
+    "rule": "GitHub remote HEAD + Issue #28 + PR #27 + workflows for exact SHA are source of truth"
+  },
+  "checkpoint_reference": {
+    "code_head_before_state_refresh": "39e14e5c275582f7cb87015ee028e448c955c5ad",
+    "handoff_refresh_commit": "06791c00fa6469a8e2c307d7bfb5d2d0b5a963f5",
+    "integrated_full_quality_run": 38659187195,
+    "physical_candidate_run": 38659187125,
+    "automated_status": "green_on_39e14e5c275582f7cb87015ee028e448c955c5ad",
+    "factory_status": "pending",
+    "head_must_be_revalidated": true
+  },
+  "architecture": {
+    "central_count": 1,
+    "ames_store": "one state.ames/session",
     "local_agent": "http://127.0.0.1:8765",
-    "remote_behavior": "read sanitized last synchronized snapshots only; no remote MES command"
+    "sqlite": "one local factual database",
+    "mes_views": 9,
+    "console_is_internal_central_view": true,
+    "cloud_required_for_mes_collection": false,
+    "parallel_app_store_agent_db_allowed": false
   },
-  "overall_green": false,
-  "factory_gate": "CI at candidate SHA plus real factory-to-Firebase-to-remote validation of the native Central; V0.5.20 remains documented validated baseline.",
-  "lines": {
-    "Linha 1": "TAN10101",
-    "Linha 2": "TAN10102",
-    "Linha 3": "TAN10103"
-  },
-  "green_modules": [
-    "local agent/SQLite",
-    "dual network + dedicated Chrome",
-    "3028 direct collection engine",
-    "multi-line independent snapshots",
-    "V0.5.20 3074 navigation/query and persisted material/reuse data",
-    "V0.5.20 2114 navigation/query and persisted PCBA history with manual Shift fallback when needed",
-    "V0.16 correlation/report rules"
-  ],
-  "v0522_inherited_features": [
-    "reuse dashboards and exact drilldowns",
-    "PCBA/material 2nd/3plus use visibility",
-    "same failure and same family correlation",
-    "line-scoped rates and component-type matrix",
-    "persist before grouped visual refresh",
-    "11-sheet Excel with RAW_3028 audit",
-    "scope/progress/performance controls",
-    "new workstation bootstrap"
-  ],
-  "v0523_changes": [
-    "allow Central V2 production aliases in local-agent CORS",
-    "prefer opening Central V2 after local agent startup",
-    "automatic local UI fallback if online Central is unavailable",
-    "preserve validated MES collectors and serial access",
-    "make Central V2 read local data in factory and Firebase-synced data remotely"
-  ],
-  "central_v2_first_cut": [
-    "A-MES integrated navigation inside the same Central experience",
-    "A-MES global operation/reuse view",
-    "Dashboard enrichment by line",
-    "product/CPH enrichment with MES occurrences",
-    "Central do Dia enrichment with line health",
-    "CORA enrichment through existing aiKnowledge contextual search",
-    "sanitized asynchronous factory-to-remote sharing"
-  ],
   "hard_rules": [
-    "never merge operational KPIs across lines",
-    "MES access remains serialized",
-    "local collection never depends on cloud",
-    "never synchronize A-MES password/cookies/session/CDP/Wi-Fi credentials",
-    "persist completed MES result before visual refresh",
-    "do not auto-confirm root cause from correlation",
-    "do not mark V0.5.23 or Central V2 GREEN without factory evidence",
-    "3028 validated collector remains frozen"
+    "CI GREEN is not factory GREEN",
+    "bootstrap/8765 is physically approved and frozen unless new evidence appears",
+    "unknown != zero",
+    "one source failure must not erase other sources",
+    "do not infer root cause from correlation/reuse/process evidence",
+    "do not sync MES credentials, cookies, session, CDP or Wi-Fi secrets",
+    "before implementing BASELINE/AUDITAR items, inspect existing code/tests and do not recreate them in parallel"
   ],
-  "pending_modules": [
-    "factory validation of Central V2 detecting agent 8765",
-    "factory-to-Firebase-to-remote synchronization validation",
-    "V0.5.22/V0.5.23 dashboard drilldown validation",
-    "2114 automatic Shift hardening",
-    "individual SN factory validation",
-    "3022 real adapter and process timeline",
-    "phased native fusion and evidence drilldowns per V2_AUDITORIA_ARQUITETURA.md"
+  "physical_gates": {
+    "bootstrap_8765": "green_frozen",
+    "shift_2114_automatic": "pending",
+    "latency_and_stale_grid_3022": "pending",
+    "sn_query_current_and_previous_pcba_failures": "pending_retest",
+    "reuse_positive_drilldowns": "pending_retest",
+    "shared_operational_context_9_views": "pending_retest"
+  },
+  "baseline_state": {
+    "offline_sn_support": "implemented_audit_and_evolve",
+    "local_sap_style_base": "implemented_audit_and_polish",
+    "central_ames_architecture_fusion": "implemented",
+    "central_day_tasks_routines_checklists": "implemented_audit_edge_cases",
+    "admin_dashboard": "partial_baseline_audit",
+    "notifications": "partial_baseline_audit",
+    "multi_pc_sync": "partial_baseline_audit",
+    "workstation_update_backup_rollback": "implemented_baseline_evolve_ux",
+    "observability": "partial_expand_now"
+  },
+  "current_tranche": {
+    "name": "3022_non_invasive_observability",
+    "goal": "measure before optimizing waits",
+    "requirements": [
+      "measure 3022 navigation",
+      "measure per-PCBA collector duration",
+      "separate collector time from parsing/correlation/persistence/timeline time",
+      "record result/no_data/row counts/errors and configured timeout/empty-confirm",
+      "persist sanitized diagnostics in local audit data for inspection/export",
+      "do not change collector waits or claim physical improvement before factory evidence"
+    ]
+  },
+  "gated_not_now": [
+    "process hotspot",
+    "persistent investigations",
+    "visual genealogy"
   ],
-  "next_action": "Review consolidated native sprint; validate authenticated real snapshots/manual workflows and existing CORA backend. Obtain real agent contract before transport. Stop before publication, Rules, real 3022, main/merge or deploy; not GREEN.",
-  "architecture_audit": {
-    "date": "2026-10-08",
-    "baseline_sha": "8cbd5fee9558e5e60e312faea583a85435915dda",
-    "document": "docs/ames/V2_AUDITORIA_ARQUITETURA.md",
-    "issue": 21,
-    "pr": 22,
-    "branch": "v2/native-fusion",
-    "status": "code_audit_complete_factory_validation_pending",
-    "findings": 23
-  },
-  "native_fusion_checkpoint": {
-    "stage": "phase_1_partial_read_only_foundation",
-    "shell_build": "15.1.13.41",
-    "local_contract_tests": 18,
-    "local_quality_checks": 62,
-    "ci_status": "passed_on_code_checkpoint",
-    "factory_validated": false,
-    "local_transport_enabled": false,
-    "new_cloud_publication_enabled": false,
-    "tested_code_sha": "dbeb3a679af9e14e62afb3664d0e6f90916f0535",
-    "ci_run": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37857100470"
-  },
-  "native_dashboard_checkpoint": {
-    "stage": "dashboard_approved_for_development_continuation",
-    "base_sha": "b76b8b40eceb15d51d7b9383d8c62944adb734d7",
-    "shell_build": "15.1.13.42",
-    "local_contract_tests": 24,
-    "local_quality_checks": 75,
-    "browser_smoke": "passed_synthetic_edge_headless_360_390_768_1280_css_zoom_200",
-    "authenticated_test": false,
-    "factory_validated": false,
-    "local_transport_enabled": false,
-    "new_cloud_publication_enabled": false,
-    "ci_evidence": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37858870952",
-    "tested_code_sha": "2820bc17858d45b777cf5554c94f1df6d31e4d36"
-  },
-  "native_product_checkpoint": {
-    "stage": "product_cph_approved_for_development_continuation",
-    "base_sha": "2820bc17858d45b777cf5554c94f1df6d31e4d36",
-    "shell_build": "15.1.13.43",
-    "local_contract_tests": 30,
-    "local_quality_checks": 90,
-    "browser_smoke": "passed_synthetic_edge_headless_product_and_dashboard_360_390_768_1280_css_zoom_200",
-    "authenticated_test": false,
-    "factory_validated": false,
-    "local_transport_enabled": false,
-    "new_cloud_publication_enabled": false,
-    "ci_evidence": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37862679559",
-    "tested_code_sha": "d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df"
-  },
-  "native_failures_checkpoint": {
-    "stage": "failures_accepted_for_development_continuation",
-    "base_sha": "d3a733a94dbf8cd052a2ae1a4c9e61bdad73a0df",
-    "shell_build": "15.1.13.44",
-    "local_contract_tests": 37,
-    "local_quality_checks": 99,
-    "browser_smoke": "passed_synthetic_edge_headless_failures_dashboard_product_360_390_768_1280_css_zoom_200",
-    "persistent_manual_mes_links": false,
-    "historical_occurrence_deduplication": false,
-    "authenticated_test": false,
-    "factory_validated": false,
-    "local_transport_enabled": false,
-    "new_cloud_publication_enabled": false,
-    "ci_evidence": "https://github.com/pedrokam700/Central-de-Controle-/actions/runs/37863934049"
-  },
-  "native_sprint_checkpoint": {
-    "stage": "trace_daily_cora_onboarding_review_required",
-    "base_sha": "43672774db194031bf6050a5c3a3a73191bc1392",
-    "trace_sha": "05728949f1fe9dd17fe2efc24d919651f8545e09",
-    "daily_sha": "97d7bb3da044701bfe39528b31f6ff762e021e83",
-    "cora_sha": "5fe83c2d41a7f3a603906b127eea7cdf231bac46",
-    "onboarding_sha": "7d5b4b417ea23af73f9870b398db4ddb51bf32e9",
-    "shell_build": "15.1.13.45",
-    "local_contract_tests": 46,
-    "local_quality_checks": 130,
-    "browser_smoke": "synthetic_edge_headless_all_native_consumers_360_390_768_1280_css_zoom_200_passed",
-    "authenticated_test": false,
-    "factory_validated": false,
-    "local_transport_enabled": false,
-    "new_cloud_publication_enabled": false,
-    "cora_backend_verified": false,
-    "agent_package_modified": false,
-    "ci_evidence": "See PR #22 / Issue #21 for final SHA and CI"
-  }
+  "restart_instruction": "Read AMES_HANDOFF.md, then revalidate Issue #28, PR #27, remote branch HEAD and exact-SHA workflows before any implementation decision."
 }
