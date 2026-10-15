@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def install(entry_module):
-    """Install fastlane-only transport guards on the FINAL hardened handler.
+    """Install fastlane-only transport/read-model guards on the FINAL handler.
 
     This function intentionally receives ``agent_entry`` after
     ``agent_hardened_entry`` has finished replacing ``entry.Handler`` with the
@@ -11,12 +11,18 @@ def install(entry_module):
 
     /api/v1/ready itself is owned by HardenedHandler. This guard is only for
     benign client disconnects so a cancelled browser/launcher request does not
-    become a second HTTP 500.
+    become a second HTTP 500. The offline catalog extension installed here is
+    read-only and reuses the same canonical SQLite/store.
     """
     handler = entry_module.Handler
 
     if getattr(handler, "_fastlane_runtime_guard_installed", False):
         return
+
+    # Install only after 3012/process migrations and the final hardened handler
+    # exist. This makes optional datasets discoverable without inventing tables.
+    import offline_catalog
+    offline_catalog.install(entry_module)
 
     original_send = handler._send
 
