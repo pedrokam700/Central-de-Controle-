@@ -3,7 +3,7 @@ import {SOURCE_STATE,sourceStateLabel} from './data/source-provenance.mjs';
 import {readHardeningDiagnostics} from './agent-diagnostics.mjs';
 import {read3012Status} from './agent-3012-health.mjs';
 
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const t=(pt,en)=>typeof document!=='undefined'&&document.documentElement?.lang?.startsWith('en')?en:pt;
 const locale=()=>typeof document!=='undefined'?document.documentElement?.lang||'pt-BR':'pt-BR';
 const rows=(snapshot,name)=>{
