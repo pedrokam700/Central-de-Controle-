@@ -2,6 +2,19 @@ import {normalizeCanonical,CANONICAL_SCHEMA} from './data/canonical.mjs';
 import {LINE_IDS} from './data/contract.mjs';
 import {historyMetadata} from './data/history.mjs';
 const sha=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+const syncHeadMetadata=head=>Object.freeze({
+  line_id:head.line_id,
+  source_id:String(head.source_id||''),
+  snapshot_id:String(head.snapshot_id??''),
+  snapshot_revision:Number(head.snapshot_revision)||0,
+  collected_at:head.collected_at||null,
+  authority:'team_latest'
+});
+const syncHeadsMetadata=heads=>{
+  const remote_heads=heads.map(syncHeadMetadata).sort((a,b)=>a.line_id.localeCompare(b.line_id));
+  const latest=remote_heads.map(h=>h.collected_at).filter(Boolean).sort().at(-1)||null;
+  return {remote_scope:'team_latest',remote_heads,remote_line_count:remote_heads.length,remote_latest_collected_at:latest};
+};
 export function sanitizeSnapshot(payload){
   normalizeCanonical(payload);
   const allowed=['schema','schema_version','source_id','snapshot_id','snapshot_revision','content_hash','line_id','collected_at','source_view','source_timestamp','summary','datasets','coverage','insights','capabilities'];
@@ -25,6 +38,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[];
   const alive=(u,g)=>u===uid&&g===generation;
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
+  const clearRemoteStatus=()=>status({status:'idle',pending:0,error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null});
   async function flush(){
     if(!uid||running||!online())return;running=true;const u=uid,g=generation;
     try{
@@ -64,7 +78,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         const p=JSON.parse(text);if(p.line_id!==h.line_id||p.source_id!==h.source_id||p.snapshot_revision!==h.snapshot_revision||p.snapshot_id!==h.snapshot_id)throw Error('Manifesto remoto divergente');
         normalizeCanonical(p);payloads.push(p);
       }
-      if(alive(u,g)&&read===readGeneration){unschedule(readTimer);readRetry=1000;store.replaceSyncedSnapshots(payloads);status({read_status:'ready',read_error:''});}
+      if(alive(u,g)&&read===readGeneration){unschedule(readTimer);readRetry=1000;store.replaceSyncedSnapshots(payloads);status({read_status:'ready',read_error:'',...syncHeadsMetadata(heads)});}
     }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
   }
   return {
@@ -94,6 +108,6 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       if(!alive(u,g))return;seen=signature;status({status:'pending',pending:(await queue.list(u)).length});flush();
     },
     retry(){if(uid&&lastHeads.length)receive(lastHeads);return flush();},
-    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);}
+    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
   };
 }
