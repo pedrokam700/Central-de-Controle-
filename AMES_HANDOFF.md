@@ -1,29 +1,94 @@
-# Central V2 + A-MES — ponto de retomada
+# Central de Trabalho + A-MES — ponto canônico de retomada
 
-Leia primeiro:
-- `docs/ames/ESTADO_ATUAL.json`
-- `docs/ames/HANDOFF_MESTRE.md`
-- `docs/ames/DECISOES_ARQUITETURAIS.md`
-- `docs/ames/V2_INTEGRACAO_PLANO.md`
-- `ames/releases/latest/README.md`
+> Este arquivo é um **checkpoint**, não uma fonte eternamente atual. Antes de qualquer alteração, revalide o GitHub. A fonte de verdade é: Roadmap #28 + PR ativo #27 + HEAD remoto + workflows/gates do HEAD exato.
 
-Baseline funcional validada em fábrica: **V0.5.20** (`8aebf57443c140cd2e44a171628f8ac1974bb0315605ce90338af759957acbb6`). Ela confirmou o núcleo 3028 + 3074 + 2114.
+## Ordem obrigatória ao retomar
 
-Candidata local atual: **V0.5.23**
-- ZIP: `AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`
-- SHA-256: `1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167`
-- Drive: `1C_yuDdIUs3rDHAcmJD23_9Ey-UnVDrry`
-- Library: `/Central de trabalho/AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`
+1. Ler o Roadmap Mestre: Issue **#28 — ROADMAP MESTRE — Central de Trabalho + A-MES**.
+2. Revalidar o PR **#27 — AMES: operator UX parity for traceability and SN investigation**.
+3. Confirmar a branch ativa `work/ames-operator-ux-parity-20261014` e o HEAD remoto atual.
+4. Verificar os workflows/gates associados ao **SHA exato** antes de declarar qualquer estado automatizado.
+5. Separar sempre `CI GREEN` de `FÁBRICA GREEN`.
+6. Só depois comparar este checkpoint com o remoto e continuar.
 
-Central V2 candidata:
-- URL: `https://central-cora-v2.vercel.app/`
-- Vercel project: `central-cora-v2`
-- deployment: `dpl_5vGxUBs99S51aUUf8p8eSwTzL1bg` — READY
+## Checkpoint registrado em 2026-10-14/15
 
-A V2 mantém a experiência da Central original e injeta a camada A-MES. Na fábrica usa o agente local 8765; fora da rede OPPO usa somente snapshots sanitizados sincronizados no Firebase. Esses snapshots entram em `aiKnowledge` com `kind=ames_shared_snapshot` e `status=validado_sistema`, portanto ficam disponíveis à busca contextual já existente da CORA.
+- Roadmap canônico: **#28**.
+- PR de execução/estabilização: **#27**, aberto/draft, não mergear sem nova validação física.
+- Branch: `work/ames-operator-ux-parity-20261014`.
+- HEAD no momento deste checkpoint: `39e14e5c275582f7cb87015ee028e448c955c5ad`.
+- A-MES Integrated Full Quality no SHA acima: **GREEN automatizado** (`38659187195`).
+- A-MES UX Physical Candidate no SHA acima: **GREEN automatizado** (`38659187125`).
+- Resultado físico do candidato acima: **PENDING**. CI/Windows smoke não substituem fábrica.
 
-Primeiro corte da integração alimenta: Dashboard, páginas de produto/CPH, Central do Dia, CORA e uma área global A-MES com operação/reuso/recorrência. Linhas permanecem isoladas.
+## Arquitetura que não pode regredir
 
-Nunca sincronizar senha, cookies, sessão A-MES, CDP ou credenciais Wi-Fi. Cloud nunca é pré-requisito da coleta local. Não existe comando remoto do MES nesta etapa.
+- **Uma Central**.
+- **Um `state.ames` / uma sessão operacional**.
+- **Um agente local** em `127.0.0.1:8765`.
+- **Um SQLite local** como base factual offline do posto.
+- **Exatamente 9 views MES**; não criar 10ª view paralela, mini-app, store, agente ou banco duplicado.
+- Console MES é uma view interna da própria Central; Central ↔ Console não deve relogar nem fazer roundtrip canônico para outra aplicação.
+- A coleta MES local não depende da nuvem.
+- Não sincronizar senha, cookies, sessão A-MES, CDP ou credenciais Wi-Fi.
+- `unknown != zero`: não coletado, indisponível, erro, parcial, cache e zero comprovado são estados distintos.
+- Correlação/reuso/processo nunca promovem automaticamente hipótese a causa raiz.
 
-**V0.5.23 e Central V2 NÃO estão GREEN até teste real.** Próximo grande módulo depois da integração: 3022/timeline de processo.
+## Gates físicos conhecidos
+
+### GREEN físico / congelado salvo nova evidência
+
+- Bootstrap/porta 8765: correção de arbitragem validada fisicamente. **Não mexer sem nova evidência**.
+- Bootstrap histórico aprovado no commit `cc1f61c7855abb1e1cff1eb4f4d2e240ce42fa71`.
+
+### PENDING físico
+
+- 2114: seleção automática real do Shift sem intervenção manual.
+- 3022: latência real por PCBA e risco de grade ExtJS antiga durante troca de SN.
+- Consulta por SN: repetir caso real em que a PCBA atual tem falha e a PCBA anterior também tem falha; ausência de uma fonte não pode virar “não existe”.
+- Dashboard de reuso: validar cards/drill-downs positivos com evidência real.
+- Persistência de Linha/Turno/CPH/Falha entre as 9 views em uso real.
+
+## Estado funcional consolidado
+
+Já existe em grande parte e deve ser **auditado/polido, não refeito do zero**:
+
+- Consulta por SN operador-first com 3074 + 2114 + 3022 + 3012 + SQLite local e degradação por fonte.
+- Recuperação de falhas da PCBA atual e PCBAs anteriores a partir da 2114/local cache quando a associação resumida falha.
+- Repair User / Repair Comment e evidência 3012 quando disponíveis.
+- Processo 3022 com preservação do bruto e separação montagem/teste/packing baseada em evidência.
+- Base local estilo SAP: catálogo/datasets, busca, filtros, ordenação, escolha de colunas, presets, paginação e exportação.
+- Assistência Técnica offline usando SQLite local; ainda evoluir transportabilidade/sincronização e cobertura/data da base.
+- Central do Dia: checklist tipado, valores/evidências, rotinas editáveis, histórico, política de atraso/não cumprimento e exclusão segura de registros de teste.
+- Dashboard administrativo com filtros/alocação/execução como baseline a auditar.
+- Notificações internas + navegador + antecedência como baseline parcial.
+- Sincronização multi-PC/snapshots como baseline parcial, sem tornar a nuvem caminho crítico.
+- Atualização do posto já possui backup de SQLite, validação de hashes e rollback explícito; falta consolidar UX/migração/health check automáticos.
+- Saúde/proveniência e auditoria local já existem; observabilidade de desempenho ainda precisa ser ampliada.
+
+## Próxima tranche autorizada
+
+**Observabilidade não invasiva da 3022, antes de otimizar waits.**
+
+Objetivo imediato:
+
+- medir navegação 3022;
+- medir tempo total da consulta por PCBA;
+- separar tempo gasto dentro do coletor do tempo de parsing/correlação/persistência/timeline;
+- registrar resultado, linhas retornadas, `no_data`, erros, timeout/empty-confirm configurados e métricas reutilizáveis;
+- preservar comportamento atual até existir evidência para reduzir espera;
+- usar a Base local/Auditoria para permitir inspeção/exportação do diagnóstico sem poluir a UX diária.
+
+Depois do primeiro teste físico com essas métricas, decidir se vale instrumentar internamente o polling ExtJS/primeira mudança de grid ou otimizar a espera adaptativa.
+
+## Recursos GATED — não implementar agora
+
+- Hotspot de processo.
+- Investigações persistentes.
+- Genealogia visual.
+
+Só liberar conforme a ordem do Roadmap #28 e depois de a base factual anterior estar confiável.
+
+## Regra para futuras conversas/agentes
+
+Nunca responda “o que falta” apenas pela memória ou por este arquivo. **Revalide #28, #27, HEAD e gates primeiro.** Se um requisito do roadmap estiver marcado BASELINE/AUDITAR, procure a implementação e os testes existentes antes de propor nova arquitetura. GitHub é a fonte de verdade; este arquivo existe justamente para impedir que uma conversa volte para um estado antigo como V0.5.23 quando a branch já avançou muito além dele.
