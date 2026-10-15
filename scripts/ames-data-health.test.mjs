@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildDataHealth,buildSecurityHealth} from '../ames/console-data-health.mjs';
+import {buildDataHealth,buildSecurityHealth,buildSyncHealth,createDataHealthView} from '../ames/console-data-health.mjs';
 
 function fakeStore(occurrences=[]){
   return {
@@ -53,6 +53,47 @@ test('unavailable hardening diagnostics remain unknown instead of being reported
     assert.equal(model.remote,null);
     assert.equal(model.rejected,null);
   }
+});
+
+test('shared sync health exposes team-latest provenance without account identity',()=>{
+  const model=buildSyncHealth({sync:{
+    read_status:'ready',remote_scope:'team_latest',remote_latest_collected_at:'2026-10-14T12:00:00Z',
+    remote_heads:[
+      {line_id:'TAN10103',source_id:'posto-3',snapshot_id:'33',snapshot_revision:2,collected_at:'2026-10-14T12:00:00Z',authority:'team_latest',owner_uid:'must-not-leak'},
+      {line_id:'TAN10101',source_id:'posto-1',snapshot_id:'31',snapshot_revision:4,collected_at:'2026-10-14T11:00:00Z',authority:'team_latest'},
+    ]
+  }});
+  assert.equal(model.tone,'partial');
+  assert.equal(model.count,2);
+  assert.equal(model.authority,'team_latest');
+  assert.equal(model.latest,'2026-10-14T12:00:00Z');
+  assert.deepEqual(model.heads.map(x=>x.line_id),['TAN10101','TAN10103']);
+  assert.equal(JSON.stringify(model).includes('must-not-leak'),false);
+});
+
+test('shared sync read error preserves last valid provenance instead of erasing it',()=>{
+  const model=buildSyncHealth({sync:{read_status:'error',read_error:'technical details',remote_scope:'team_latest',remote_heads:[{line_id:'TAN10102',source_id:'posto-2',snapshot_id:'9',snapshot_revision:1,collected_at:'2026-10-14T10:00:00Z',authority:'team_latest'}]}});
+  assert.equal(model.tone,'partial');
+  assert.equal(model.has_error,true);
+  assert.equal(model.count,1);
+  assert.equal(model.heads[0].source_id,'posto-2');
+  assert.equal(JSON.stringify(model).includes('technical details'),false);
+});
+
+test('data health renders shared workstation authority and escaped source metadata',()=>{
+  const agent={status:'offline',capabilities:{process_timeline:false},sync:{
+    read_status:'ready',remote_scope:'team_latest',remote_latest_collected_at:'2026-10-14T12:00:00Z',
+    remote_heads:[{line_id:'TAN10101',source_id:'posto-&-1',snapshot_id:'31',snapshot_revision:4,collected_at:'2026-10-14T11:00:00Z',authority:'team_latest'}]
+  }};
+  const store={agent:()=>agent,read:()=>({snapshot:null,freshness:'unknown',source:null})};
+  const root={innerHTML:'',setAttribute(){},removeAttribute(){},replaceChildren(){this.innerHTML='';},querySelectorAll(){return [];}};
+  const view=createDataHealthView(root,store);view.render();
+  assert.match(root.innerHTML,/data-sync-health/);
+  assert.match(root.innerHTML,/Sincronização entre postos/);
+  assert.match(root.innerHTML,/Mais recente da equipe/);
+  assert.match(root.innerHTML,/posto-&amp;-1/);
+  assert.equal(root.innerHTML.includes('owner_uid'),false);
+  view.clear();
 });
 
 test('3012 cache coverage never becomes coverage of current PCBAs without linked evidence',()=>{
