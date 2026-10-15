@@ -33,10 +33,29 @@ assert.equal(preferredAnalysisEvent([{pcba_sn:'P',station:'A5200',operation_name
 assert.equal(preferredAnalysisEvent([{station:'A6900',operation_name:'Export Repair',operator_id:'CURRENT'}],'PCBA-OLD'),null,'3022 evidence without explicit historical PCBA identity must not leak to another board');
 assert.equal(preferredAnalysisEvent([{pcba_sn:'PCBA-CURRENT',station:'A6900',operation_name:'Export Repair',operator_id:'CURRENT'}],'PCBA-OLD'),null,'3022 evidence from the current PCBA must not be attached to an old PCBA');
 
+const rawOnly=buildLiveSnForensics({
+ sn:'PCBA-CURRENT',detected_type:'PCBA',
+ trace_2114:{pcbas:[
+  {pcba_sn:'PCBA-CURRENT',status:'COMPLETE',result:{rows:[
+   {'Lot Id':'PCBA-CURRENT','Defect Hist Seq':'1','Defect Code':'GN-OLD','Defect Description':'Old receiver issue','Defect Time':'2026-10-10 10:00:00'},
+   {'Lot Id':'PCBA-CURRENT','Defect Hist Seq':'2','Defect Code':'GN-NOW','Defect Description':'Current camera issue','Defect Time':'2026-10-14 10:00:00'},
+  ]}},
+  {pcba_sn:'PCBA-OLD',status:'COMPLETE',result:{rows:[
+   {'Lot Id':'PCBA-OLD','Defect Hist Seq':'4','Defect Code':'GN-HIST','Defect Description':'Historical camera failure','Defect Time':'2026-09-01 08:00:00'},
+  ]}},
+ ]},
+ trace_3074:{reused_components:[{item_sn:'MAT-1',item_type:'前置摄像头',previous_pcbas:['PCBA-OLD'],known_use_count:2,reuse_count:1,relation_to_current_failure:'FALHA_DIFERENTE',previous_pcba_evidence:[]}]},
+});
+assert.equal(rawOnly.current.defect_code,'GN-NOW','raw 2114 rows must recover the newest current PCBA failure when the preselected field is missing');
+assert.equal(rawOnly.current.source,'2114-raw');
+assert.equal(rawOnly.own_history[0].defect_code,'GN-OLD','older raw history must remain separated from the current occurrence');
+assert.equal(rawOnly.materials[0].history[0].failure.defect_code,'GN-HIST','previous PCBA raw 2114 rows must fill a missing previous_pcba_evidence history');
+assert.equal(rawOnly.materials[0].history[0].failure.source,'2114-raw');
+
 const local={query_sn:'PCBA-CURRENT',detected_type:'PCBA',pcba_history:[{pcba_sn:'PCBA-CURRENT',defect_code:'GN-CAM',defect_desc:'Camera scratched',defect_time:'2026-10-14 09:10:00'},{pcba_sn:'PCBA-OLD',defect_code:'GN-OLD-CAM',defect_desc:'Camera no function',defect_time:'2026-08-11 08:03:00'}],material_reuse:[{current_pcba_sn:'PCBA-CURRENT',item_sn:'MAT-CAM-1',item_type:'前置摄像头',previous_pcbas_json:'["PCBA-OLD"]',previous_pcba_count:1,total_pcba_count_known_now:2}],repair_3012:[live.trace_3012.rows[1]],process_events:[live.trace_3022.operator_evidence[1]],coverage:{2114:true,3074:true,3012:true,3022:true}};
 const offline=buildLocalSnForensics(local);
 assert.equal(offline.materials[0].history[0].failure.defect_desc,'Camera no function');
 assert.equal(offline.materials[0].history[0].failure.repairs[0].repair_comment,'old camera analysed');
 assert.equal(offline.materials[0].history[0].failure.analysis_event.operator_id,'BRM00111');
 
-console.log('PASS: SN story joins 3074 + 2114 + 3012 + 3022, prefers A6900/Export Repair, never invents employee names, and rejects cross-PCBA process leakage.');
+console.log('PASS: SN story joins 3074 + 2114 + 3012 + 3022, recovers current/previous failures from raw 2114 rows, prefers A6900/Export Repair, never invents employee names, and rejects cross-PCBA process leakage.');
