@@ -25,7 +25,7 @@ test('2114 source failure is never rendered as a successful zero',()=>{
   assert.match(html,/2114 indisponível/);
   assert.match(html,/Shift não confirmado/);
   assert.match(html,/0\/2 consultadas/);
-  assert.doesNotMatch(html,/2114 · históricos persistidos: 0/);
+  assert.doesNotMatch(html,/2114 · históricos no snapshot: 0/);
 });
 
 test('2114 partial state and 3022 MES/local phase remain visible',()=>{
@@ -42,7 +42,7 @@ test('confirmed complete 2114 may report a real zero only with completed source 
   const html=collectionStatus(doneState({
     status:'complete',source_status:'COMPLETE',requested_pcba_count:2,processed_pcba_count:2,pcba_error_count:0,pcba_no_data_count:2
   }));
-  assert.match(html,/2114 · históricos persistidos: 0/);
+  assert.match(html,/2114 · históricos no snapshot: 0/);
   assert.match(html,/PCBAs consultadas: 2\/2/);
   assert.match(html,/sem dados confirmados: 2/);
 });
