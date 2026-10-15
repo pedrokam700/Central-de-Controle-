@@ -6,4 +6,12 @@ export function knownDescription(value){
 export function defectDescription(value,locale=globalThis.document?.documentElement?.lang||'pt-BR'){
   return knownDescription(value)||(locale.startsWith('en')?'Description not provided':'Descrição não informada');
 }
-export function defectLabel(code,description){return `${code||'—'} — ${defectDescription(description)}`;}
+// Operator-facing labels are description-first. The raw code remains available as
+// a secondary technical reference and is the fallback only when no description exists.
+export function defectLabel(code,description,locale=globalThis.document?.documentElement?.lang||'pt-BR'){
+  const desc=knownDescription(description),raw=String(code??'').trim();
+  if(desc&&raw)return `${desc} — ${raw}`;
+  if(desc)return desc;
+  if(raw)return raw;
+  return locale.startsWith('en')?'Failure not identified':'Falha não identificada';
+}

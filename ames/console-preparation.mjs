@@ -70,6 +70,7 @@ const maintenanceCheckLabel = key => ({
 export function createPreparationView(root, store, client) {
   let checking = false, checked = false, expanded = false, disposed = false, onboarding;
   let backupBusy = false, maintenanceMessage = '';
+  let map3012Busy = false, map3012Message = '';
   let mode = savedIntegrationMode(), last = '';
   function choose(value) {
     mode = value;
@@ -98,6 +99,28 @@ export function createPreparationView(root, store, client) {
       if (!disposed) { last = ''; render(); }
     }
   }
+  async function map3012Now() {
+    if (map3012Busy || disposed || store.agent().status !== 'connected') return;
+    map3012Busy = true; map3012Message = ''; last = ''; render();
+    try {
+      const report = await client.auxiliary('map3012');
+      if (!report?.ok || report?.surface !== 'home' || report?.read_only !== true || report?.query_executed !== false) {
+        throw new Error(t('O agente não confirmou um mapeamento seguro da 3012 Home.', 'The agent did not confirm a safe 3012 Home mapping.'));
+      }
+      const stamp = String(report.generated_at || new Date().toISOString()).replace(/[:.]/g, '-');
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob), a = document.createElement('a');
+      a.href = url; a.download = `MAPEAMENTO_3012_HOME_${stamp}.json`;
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 0);
+      const fields = report.structure?.fields?.length ?? 0, grids = report.structure?.grids?.length ?? 0;
+      map3012Message = t(`Mapeamento concluído: ${fields} campo(s), ${grids} grid(s). Envie o JSON baixado no chat para a próxima etapa.`, `Mapping complete: ${fields} field(s), ${grids} grid(s). Send the downloaded JSON in chat for the next step.`);
+    } catch (error) {
+      map3012Message = error?.message || t('Não foi possível mapear a 3012 Home.', 'Could not map the 3012 Home view.');
+    } finally {
+      map3012Busy = false;
+      if (!disposed) { last = ''; render(); }
+    }
+  }
   function render() {
     if (disposed) return;
     const agent = store.agent(), connected = agent.status === 'connected';
@@ -109,20 +132,21 @@ export function createPreparationView(root, store, client) {
       ? `${esc(backup.created_at || t('data não informada', 'date not reported'))} · ${esc(formatBytes(backup.bytes))}${backup.reason ? ` · ${esc(backup.reason)}` : ''}`
       : t('Nenhum ponto criado nesta sessão foi reportado à Central.', 'No recovery point created in this session has been reported to Work Center.');
     root.hidden=!visible;
-    const key=JSON.stringify([checking,checked,expanded,mode,connected,checks,maintenance,backupBusy,maintenanceMessage,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
+    const key=JSON.stringify([checking,checked,expanded,mode,connected,checks,maintenance,backupBusy,maintenanceMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
     if(key===last)return;last=key;
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
       ${visible ? `<p>Consulte os dados compartilhados ou prepare este computador para coleta. O login A-MES permanece manual.</p>
       <div class="mes-pagination"><button type="button" class="button secondary" data-use-shared>Usar somente dados compartilhados</button><button type="button" class="button secondary" data-prepare-pc>Preparar este computador</button></div>` : ''}
       ${expanded ? `<details open><summary>Pré-teste do posto</summary><ul>${checks.map(c => `<li data-check-state="${c.state}">${esc(c.label)} — <span>${c.state === 'ok' ? 'Verificado' : c.state === 'missing' ? 'Pendente' : 'Não verificado'}</span></li>`).join('')}</ul><p>${ready ? 'Pronto para teste' : 'Conclua os itens pendentes e confirme o login manual A-MES antes da coleta.'}</p><button type="button" class="button secondary" data-preflight ${checking ? 'disabled' : ''}>Verificar novamente</button>
-      <section class="notice ${maintenance.tone === 'partial' ? 'warn' : ''}" data-workstation-maintenance><b>${t('Manutenção do posto', 'Workstation maintenance')} · ${esc(maintenanceStateLabel(maintenance.tone))}</b><br><small>${t('Build instalada', 'Installed build')}: ${esc(maintenance.build || '—')} · ${t('Candidato reportado', 'Reported candidate')}: ${esc(maintenance.candidate || '—')} · Setup: ${maintenance.setup_complete ? t('concluído', 'complete') : t('não confirmado', 'not confirmed')}</small><p>${t('Verificação local', 'Local verification')}: ${maintenance.localChecks.map(item => `${esc(maintenanceCheckLabel(item.key))} ${item.state === 'ok' ? '✓' : item.state === 'missing' ? '!' : '?'}`).join(' · ')}</p><p><b>${t('Ponto de recuperação', 'Recovery point')}:</b> ${backupSummary}</p><div class="mes-pagination"><button type="button" class="button secondary" data-workstation-backup ${!connected || backupBusy ? 'disabled' : ''}>${backupBusy ? t('Criando ponto de recuperação…', 'Creating recovery point…') : t('Criar ponto de recuperação agora', 'Create recovery point now')}</button></div>${maintenanceMessage ? `<p role="status">${esc(maintenanceMessage)}</p>` : ''}<small>${t('A atualização e o rollback dos arquivos continuam fora do navegador. Crie um ponto de recuperação, encerre o agente antes de substituir arquivos e use somente o pacote/candidato validado para este build.', 'File update and rollback remain outside the browser. Create a recovery point, stop the agent before replacing files, and use only the package/candidate validated for this build.')}</small></section>
+      <section class="notice ${maintenance.tone === 'partial' ? 'warn' : ''}" data-workstation-maintenance><b>${t('Manutenção do posto', 'Workstation maintenance')} · ${esc(maintenanceStateLabel(maintenance.tone))}</b><br><small>${t('Build instalada', 'Installed build')}: ${esc(maintenance.build || '—')} · ${t('Candidato reportado', 'Reported candidate')}: ${esc(maintenance.candidate || '—')} · Setup: ${maintenance.setup_complete ? t('concluído', 'complete') : t('não confirmado', 'not confirmed')}</small><p>${t('Verificação local', 'Local verification')}: ${maintenance.localChecks.map(item => `${esc(maintenanceCheckLabel(item.key))} ${item.state === 'ok' ? '✓' : item.state === 'missing' ? '!' : '?'}`).join(' · ')}</p><p><b>${t('Ponto de recuperação', 'Recovery point')}:</b> ${backupSummary}</p><div class="mes-pagination"><button type="button" class="button secondary" data-workstation-backup ${!connected || backupBusy ? 'disabled' : ''}>${backupBusy ? t('Criando ponto de recuperação…', 'Creating recovery point…') : t('Criar ponto de recuperação agora', 'Create recovery point now')}</button></div>${maintenanceMessage ? `<p role="status">${esc(maintenanceMessage)}</p>` : ''}<details data-3012-map-tools><summary>${t('Diagnóstico 3012 Home', '3012 Home diagnostics')}</summary><p>${t('Mapeia somente a estrutura técnica da 3012 correta na Home. Não executa consulta, não lê valores dos campos e não coleta cookie, sessão ou cabeçalhos.', 'Maps only the technical structure of the canonical 3012 Home view. It does not run a query, read field values, or collect cookies, session data or headers.')}</p><div class="mes-pagination"><button type="button" class="button secondary" data-map-3012 ${!connected || map3012Busy ? 'disabled' : ''}>${map3012Busy ? t('Mapeando 3012 Home…', 'Mapping 3012 Home…') : t('Mapear 3012 Home (somente leitura)', 'Map 3012 Home (read-only)')}</button></div>${map3012Message ? `<p role="status">${esc(map3012Message)}</p>` : ''}<small>${t('O agente reserva a sessão MES, abre a view Home correta e baixa um JSON sanitizado. Envie esse JSON no chat; a consulta controlada por SN será a etapa seguinte.', 'The agent reserves the MES session, opens the correct Home view and downloads a sanitized JSON. Send that JSON in chat; the controlled SN query is the next step.')}</small></details><small>${t('A atualização e o rollback dos arquivos continuam fora do navegador. Crie um ponto de recuperação, encerre o agente antes de substituir arquivos e use somente o pacote/candidato validado para este build.', 'File update and rollback remain outside the browser. Create a recovery point, stop the agent before replacing files, and use only the package/candidate validated for this build.')}</small></section>
       <section data-installation></section></details>` : ''}
     </div>`;
     root.querySelector('[data-use-shared]')?.addEventListener('click', () => choose('viewer'));
     root.querySelector('[data-prepare-pc]')?.addEventListener('click', () => choose('collector'));
     root.querySelector('[data-preflight]')?.addEventListener('click', check);
     root.querySelector('[data-workstation-backup]')?.addEventListener('click', backupNow);
+    root.querySelector('[data-map-3012]')?.addEventListener('click', map3012Now);
     onboarding?.clear(); onboarding = null;
     if (expanded) {
       onboarding = createOnboardingView(root.querySelector('[data-installation]'), { onChoice: choose });

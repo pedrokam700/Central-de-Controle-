@@ -21,7 +21,7 @@ function bootstrapAgentToken(explicit=''){
   return token;
 }
 
-const requestTimeout=path=>path==='/ready'?2500:path==='/health'?12000:30000;
+const requestTimeout=path=>path==='/ready'?2500:path==='/health'?12000:path==='/diagnostics/3012/map'?45000:30000;
 const boundedLimit=(value,fallback=100000,max=100000)=>{const n=Number(value);return Number.isInteger(n)&&n>0?Math.min(n,max):fallback;};
 const boundedOffset=(value,max=100000)=>{const n=Number(value);return Number.isInteger(n)&&n>=0?Math.min(n,max):0;};
 
@@ -211,6 +211,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         if(value.snapshot_id)params.snapshot_id=value.snapshot_id;
         result=await request('/base?'+new URLSearchParams(params));
       }
+      else if(name==='map3012')result=await request('/diagnostics/3012/map',{});
       else if(name==='backup')result=await request('/backup',{reason:'native_console'});
       else if(name==='repairs')result=await request('/repairs/refresh',{snapshot_id:value.snapshot_id,line,unresolved_only:!!value.unresolved_only});
       else if(name==='chrome')result=await request('/chrome/start',{});

@@ -8,6 +8,7 @@ import ames_3012_strategy
 import repair_3012
 import local_sn
 import production_shift
+import map_3012
 
 
 def install(a, BaseHandler, canonical):
@@ -246,6 +247,24 @@ def install(a, BaseHandler, canonical):
             if u.path == "/api/v1/3012/query":
                 try:
                     self._send(start_query(self._body()), 202)
+                except Exception as exc:
+                    self._send({"error": type(exc).__name__, "message": str(exc)}, 500)
+                return
+            if u.path == "/api/v1/diagnostics/3012/map":
+                try:
+                    # Same serialized MES lease as collectors: mapping cannot race
+                    # another job that changes the dedicated A-MES view.
+                    with a.MES.job():
+                        report = map_3012.map_3012_structure(
+                            cdp_url=str(a.CONFIG.get("chrome_cdp") or "http://127.0.0.1:9222"),
+                            ames_host=str(a.CONFIG.get("ames_host") or "172.29.185.215"),
+                        )
+                    a.STORE.record_audit("MAP_3012_HOME", workstation=a.WORKSTATION, details={
+                        "surface": report.get("surface"),
+                        "field_count": len((report.get("structure") or {}).get("fields") or []),
+                        "grid_count": len((report.get("structure") or {}).get("grids") or []),
+                    })
+                    self._send(report)
                 except Exception as exc:
                     self._send({"error": type(exc).__name__, "message": str(exc)}, 500)
                 return
