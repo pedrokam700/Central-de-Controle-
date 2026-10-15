@@ -106,7 +106,7 @@ function baseFilter(rows,state,q,name){
     if(state.repairUser&&!norm(r.repair_user).includes(norm(state.repairUser)))return false;
     if(state.pcba&&!norm(r.pcba).includes(norm(state.pcba)))return false;
     if(state.family&&!r.component_families.some(v=>norm(v)===norm(state.family)))return false;
-    if(state.relation&&!r.relations.some(v=>norm(v).includes(norm(state.relation)))return false;
+    if(state.relation&&!r.relations.some(v=>norm(v).includes(norm(state.relation))))return false;
     if(state.reuse==='present'&&!r.reuse_present)return false;
     if(state.reuse==='with_failure'&&!r.reuse_with_failure)return false;
     if(state.reuse==='pcba_failure'&&!r.pcba_prior_failure)return false;
