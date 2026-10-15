@@ -57,6 +57,15 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       auto_backup_on_start:cfg.auto_backup_on_start
     };
   }
+  function publicBackup(raw){
+    if(!raw||typeof raw!=='object')return null;
+    const bytes=Number(raw.bytes),when=raw.created_at||raw.modified_at||null;
+    return {
+      created_at:typeof when==='string'?when.slice(0,64):null,
+      bytes:Number.isFinite(bytes)&&bytes>=0?bytes:null,
+      reason:['manual','native_console','startup','update','rollback'].includes(String(raw.reason||''))?String(raw.reason):null
+    };
+  }
   async function refresh() {
     check();if(refreshing)return;refreshing=true;const token=generation;
     try {
@@ -157,6 +166,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         candidate_version:health.candidate_version||ready?.candidate_version||null,
         setup_complete:!!health.setup_complete,
         latest_snapshot_id:health.latest_snapshot_id??null,
+        latest_backup:publicBackup(health.latest_backup),
         network:health.network||null,
         network_guardian:health.network_guardian||null
       };
@@ -212,6 +222,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       else if(name==='jobs')result=await request('/jobs');
       else if(name==='monitor')result=await request('/monitor');
       else throw Error('Operação desconhecida');
+      if(name==='backup')result={...result,backup:publicBackup(result?.backup)};
       const configPatch=name==='config'?publicConfig(result):name==='setup'?publicConfig(result?.config||result):undefined;
       publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(configPatch?{config:configPatch}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
