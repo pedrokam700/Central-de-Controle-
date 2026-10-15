@@ -6,56 +6,35 @@ Clarificação #28/6197839964 lida: FPC/LCM são apenas fixtures; correlação c
 genérica por identidade/evidência para qualquer material serializado.
 
 ## A1 — apresentação de horários centralizada (concluída)
-
-- time-display.mjs formata somente apresentação PT/EN, fuso São Paulo para ISO
-  com offset e preserva wall-clock MES sem offset. Bindings UTC explicitam offset.
-- Tabelas configuráveis, Base, SN live/local, tabelas especializadas e alertas
-  usam o formatador. Exportação CSV e timestamps lógicos permanecem originais.
-- O novo módulo está no precache; não se alterou bootstrap/porta/agente.
-- 29 testes direcionados PASS: time-display (2), sn-correlations (18),
-  advanced-table (8), base-view-performance (1). git diff --check PASS.
-- Motor sn-forensics inalterado. Nenhum coletor/backend/SQLite/sync alterado.
-- LAST_SAFE_SHA A1: d0214b4a934367b174b5c28c20ebd571e321e4c3.
+- `time-display.mjs` centraliza apresentação PT/EN sem alterar timestamps lógicos.
+- LAST_SAFE_SHA A1: `d0214b4a934367b174b5c28c20ebd571e321e4c3`.
 
 ## A2.1 — nomenclaturas + confiança de produção (concluída)
-
-- `ames/data/production-evidence.mjs` centraliza a regra de apresentação: horário de
-  geração, turno e dia de produção só são expostos como comprovados quando
-  `production_shift_source=3022`, `production_shift_basis=reference_process`, posto de
-  referência e horário real estão presentes.
-- `console-failure-process.mjs` separa Registro da falha (MES), Horário de geração
-  (3022), Turno comprovado (3022), Dia de produção (3022), passagem anterior e retorno.
-- Retorno operacional usa somente `return_station_code`/`return_operation_name` +
-  `return_event_time`. O legado `return_a5201_event_time` não prova retorno genérico.
-- Manual/Automatic é descrito como modo de registro após reteste/caracterização, não
-  como tipo de reparo.
-- `console-process-operator.mjs` humaniza rótulos da visão operacional; o campo antigo
-  A5201 fica explicitamente marcado como legado/técnico, não como regra de retorno.
-- Novo helper incluído no precache offline.
-- Teste direcionado `ames-block4-a2.test.mjs`: 4/4 PASS; `node --check` nos três módulos PASS.
-- Não houve mudança em bootstrap/8765, coletores, waits/selectors/acceptance 3022,
-  SQLite, sync, 3028 ou motor de correlação.
-- LAST_SAFE_SHA A2.1: 8c3b7ec4903473cc89b0cf24f95baa26c16aa801.
+- `production-evidence.mjs` exige source=3022 + basis=reference_process + posto/horário.
+- Falhas separa Registro da falha (MES), geração/turno/dia 3022, passagem anterior e retorno genérico.
+- Manual/Automatic = modo de registro, não reparo. A5201 antigo fica legado/técnico.
+- LAST_SAFE_SHA A2.1: `8c3b7ec4903473cc89b0cf24f95baa26c16aa801`.
 
 ## B1 — Consulta por SN ao vivo: KPIs → evidência (concluída)
+- KPIs abrem tabs de falha, histórico 2114, materiais 3074, processo 3022 e reparos 3012.
+- Clique + Enter/Espaço; nenhuma view/store paralela.
+- Card de processo só apresenta geração/turno quando `trustedProductionEvidence()` comprova referência.
+- `sn-forensics` permaneceu intacto.
+- LAST_SAFE_SHA B1: `9fd7ae6471cd1892585af237702253a7bb52c9f7`.
 
-- Os KPIs do resumo ao vivo agora levam diretamente à aba correspondente: falha atual,
-  histórico 2114, materiais 3074, processo 3022 e reparos 3012.
-- A navegação aceita clique e teclado (Enter/Espaço); não cria nova view nem estado paralelo.
-- O card Processo 3022 do resumo só mostra posto/horário de geração/turno quando
-  `trustedProductionEvidence()` comprova a referência. Uma passagem 3022 genérica não é
-  reutilizada como se fosse geração da falha.
-- `Defect Time` no resumo humano passa a ser rotulado `Registro da falha (MES)`.
-- Motor `sn-forensics` e os alertas genéricos do Bloco 3 permanecem inalterados.
-- Contrato estático novo `scripts/ames-sn-navigation.test.mjs` trava tabs, acessibilidade,
-  uso do helper de confiança e proíbe o fallback antigo `contexts[0]||passages[0]`.
+## A2.2a — analytics: registro MES ≠ produção 3022 (concluída)
+- `productionEvidenceForOccurrence()` associa contexto apenas à ocorrência exata por `defect_key`
+  ou PCBA + código + instante equivalente; contexto vizinho não pode emprestar turno/horário/dia.
+- `daily-failure-analytics.mjs` não usa mais Defect Time como fallback de `production_event_time`,
+  `production_shift` ou `production_operational_date`.
+- O período De/Até passa a ser explicitamente período de Registro MES (`failure_record_date`).
+- Hora, turno, matriz e KPIs de turno usam apenas evidência 3022 comprovada; sem cobertura, ficam
+  desconhecidos/— em vez de zero falso. Filtro de turno/hora não esvazia o conjunto quando não há
+  classificação comprovada.
+- Métricas com denominador de produção ficam indisponíveis quando o escopo temporal não é provado
+  pela 3022, em vez de usar o dia do Defect Time como se fosse produção.
+- Contrato `ames-production-evidence-analytics.test.mjs` trava ocorrência exata e proíbe fallbacks.
+- Sem mudanças em coletor/SQLite/sync/3028/bootstrap/8765/waits/selectors/acceptance 3022.
 
-A2.2 ainda PENDING: aplicar a mesma regra de confiança nos adapters maiores
-(`console-specialized-views`, analytics/resumos) sem usar Defect Time como fallback de
-turno/dia/horário de geração.
-B2 PENDING: paridade de navegação/drill-down da Consulta por SN offline.
-C (enriquecimento/histórico) e D (multi-PC) também PENDING.
-Não iniciar Bloco 5. Não rodar Full Quality/UX Physical Candidate nesta etapa.
-Commits intermediários usam [skip ci] para não disparar gates pesados.
-Gate físico PENDING exceto bootstrap e a persistência de rede já observados fisicamente;
-o candidato final ainda precisa ser associado ao SHA exato. Nenhum ZIP gerado.
+PENDENTE: A2.2b (`daily-failure-summary` + `console-specialized-views`), B2 offline, C histórico/revisões e D multi-PC.
+Não iniciar Bloco 5 nem rodar gates pesados até o Bloco 4 fechar. PR draft/unmerged; físico geral PENDING; sem ZIP.
