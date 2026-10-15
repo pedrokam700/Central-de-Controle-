@@ -2,7 +2,13 @@
 
 > Este arquivo é um **checkpoint**, não uma fonte eternamente atual. Antes de qualquer alteração, revalide o GitHub. A fonte de verdade é: Roadmap #28 + PR ativo #27 + HEAD remoto + workflows/gates do HEAD exato.
 
-## Checkpoint prioritário — Bloco 3, 2026-10-15
+## Bloco 4 em andamento — 2026-10-15
+
+Leia primeiro `docs/ames/operator-block4-20261015.md`. A1 (formatação de horários)
+salvo; próximas subpartes e testes estão nesse checkpoint. Blocos 1–3 preservados.
+Não rodar gates pesados/Bloco 5 antes de concluir Bloco 4.
+
+## Checkpoint anterior — Bloco 3, 2026-10-15
 
 Blocos 1 e 2 concluídos e preservados no parent `403b5878f3000b9c363c9e4eca63fe1b51175cbf`.
 Bloco 3 de correlações técnicas concluído em código + 30 testes direcionados PASS.

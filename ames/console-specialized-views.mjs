@@ -1,3 +1,4 @@
+import {displayValue} from './data/time-display.mjs';
 import {collectionStatus} from './collection-status.mjs';
 import {componentFamily} from "./data/reuse-analysis.mjs";
 import { LINE_IDS } from './data/contract.mjs';
@@ -12,7 +13,7 @@ const modeLabel=value=>({full:'Completo · 3074 + 2114 + 3022',process_only:'Som
 
 function rowsTable(rows,columns,{empty='Nenhum registro disponível.',highlight}={}){
   if(!rows?.length)return `<div class="ames-empty"><span>—</span><p>${esc(empty)}</p></div>`;
-  return `<div class="table-wrap"><table><thead><tr>${columns.map(([key,label])=>`<th>${esc(label||key)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,index)=>`<tr${highlight?.(row,index)?' class="ames-evidence-hit"':''}>${columns.map(([key])=>`<td>${esc(fmt(row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr>${columns.map(([key,label])=>`<th>${esc(label||key)}</th>`).join('')}</tr></thead><tbody>${rows.map((row,index)=>`<tr${highlight?.(row,index)?' class="ames-evidence-hit"':''}>${columns.map(([key])=>`<td>${esc(displayValue(key,row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
 function sectionHead(title,subtitle='',right=''){
