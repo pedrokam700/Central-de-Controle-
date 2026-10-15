@@ -1,9 +1,32 @@
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 
-const PRIMARY_HEADERS=new Set(['PCBA','Falha','Failure','Defect Time','Manual/Automatic','Posto relevante','Relevant station','Horário relevante','Relevant time','Turno de produção','Production shift','AT / ação','AT / action','Status']);
+const HEADER_RENAMES=new Map([
+  ['Defect Time',['Registro da falha (MES)','Failure record (MES)']],
+  ['Posto relevante',['Posto de referência (3022)','Reference station (3022)']],
+  ['Relevant station',['Posto de referência (3022)','Reference station (3022)']],
+  ['Horário relevante',['Horário de geração (3022)','Generation time (3022)']],
+  ['Relevant time',['Horário de geração (3022)','Generation time (3022)']],
+  ['Turno de produção',['Turno comprovado (3022)','Proven shift (3022)']],
+  ['Production shift',['Turno comprovado (3022)','Proven shift (3022)']],
+  ['Data operacional',['Dia de produção (3022)','Production day (3022)']],
+  ['Operational date',['Dia de produção (3022)','Production day (3022)']],
+  ['Processo anterior',['Última passagem antes do registro','Last passage before record']],
+  ['Previous process',['Última passagem antes do registro','Last passage before record']],
+  ['Horário anterior',['Horário da passagem anterior','Previous passage time']],
+  ['Previous time',['Horário da passagem anterior','Previous passage time']],
+  ['Retorno A5201',['Retorno legado A5201','Legacy A5201 return']],
+]);
+const PRIMARY_HEADERS=new Set(['PCBA','Falha','Failure','Registro da falha (MES)','Failure record (MES)','Manual/Automatic','Posto de referência (3022)','Reference station (3022)','Horário de geração (3022)','Generation time (3022)','Turno comprovado (3022)','Proven shift (3022)','Dia de produção (3022)','Production day (3022)','AT / ação','AT / action','Status']);
 
+function renameOperationalHeaders(section){
+  for(const th of section?.querySelectorAll('thead th')||[]){
+    const rename=HEADER_RENAMES.get(th.textContent.trim());
+    if(rename)th.textContent=t(rename[0],rename[1]);
+  }
+}
 function markOperationalColumns(section,technical){
   const table=section?.querySelector('table');if(!table)return;
+  renameOperationalHeaders(section);
   const headers=[...table.querySelectorAll('thead th')];
   headers.forEach((th,index)=>{
     const primary=PRIMARY_HEADERS.has(th.textContent.trim());
@@ -36,7 +59,7 @@ function decorateContexts(root,state){
   markOperationalColumns(section,state.technical);
   let note=section.querySelector('[data-process-operator-note]');
   if(!note){note=document.createElement('p');note.dataset.processOperatorNote='1';note.className='ames-process-operator-note';section.querySelector('.section-head')?.after(note);}
-  note.textContent=t('A visão diária mostra PCBA, falha, Defect Time, modo de registro, posto, horário real, turno, AT e status. As demais colunas continuam disponíveis em “Colunas técnicas”.','The daily view shows PCBA, failure, Defect Time, registration mode, station, actual time, shift, AT and status. Remaining fields stay available under “Technical columns”.');
+  note.textContent=t('A visão diária separa registro da falha no MES de evidência 3022. Horário de geração, turno e dia só são considerados comprovados quando ligados à passagem real no posto de referência; a passagem anterior é apenas contexto.','The daily view separates the MES failure record from 3022 evidence. Generation time, shift and production day are only treated as proven when linked to a real passage at the reference station; the previous passage is context only.');
   note.hidden=state.technical;
 }
 
