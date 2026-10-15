@@ -16,7 +16,7 @@ import types
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from mes_scheduler import session_object
+from mes_scheduler import MES, session_object
 from operator_evidence import operator_evidence
 import canonical
 import production_shift
@@ -218,6 +218,15 @@ def _persist_legacy_events(store, snapshot_id: int, pcba: str, passages: Iterabl
 
 def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], *, snapshot_id: int, line: str,
                         max_pcbas: int = 0, performance: str = "balanced", line_callback=None, event_callback=None) -> Dict[str, Any]:
+    """Collect 3022 in two phases: MES I/O first, local enrichment second.
+
+    The previous implementation queried one PCBA and then performed correlation,
+    several SQLite writes and timeline ingestion before submitting the next PCBA.
+    On the factory screen that local work looked like a slow "piece switch" even
+    though no fixed 5-second sleep existed.  The MES phase below now owns the
+    shared browser once and reads all requested PCBAs back-to-back.  Only after
+    releasing the MES lease do we persist/correlate locally.
+    """
     support = engine_support(engine_dir)
     if not support.get("ready"):
         raise RuntimeError("Motor 3022 não possui o contrato R11/R12 exigido: " + _json(support))
@@ -228,90 +237,152 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
     navigation_mod = importlib.import_module("ames.navigation")
     tela3022_mod = importlib.import_module("ames.tela_3022")
     settings = {}
-    try: settings = json.loads((engine_dir/"config"/"settings.json").read_text(encoding="utf-8"))
-    except Exception: pass
+    try:
+        settings = json.loads((engine_dir/"config"/"settings.json").read_text(encoding="utf-8"))
+    except Exception:
+        pass
     time_cfg = settings.get("mes_time", {}) or {}
     defect_offset = float(time_cfg.get("defect_local_utc_offset_hours", -3))
     grid_offset = float(time_cfg.get("grid_naive_utc_offset_hours", 0))
     perf = str(performance or "balanced").lower()
-    pause = 0.0 if perf == "fast" else (0.12 if perf == "safe" else 0.03)
+    inter_query_pause = 0.0 if perf == "fast" else (0.12 if perf == "safe" else 0.03)
+
     by_pcba: Dict[str,List[Dict[str,Any]]] = {}
     for rec in records or []:
         pcba = str((rec or {}).get("pcba_sn") or "").strip()
-        if pcba: by_pcba.setdefault(pcba, []).append(dict(rec))
+        if pcba:
+            by_pcba.setdefault(pcba, []).append(dict(rec))
     targets = list(by_pcba)
-    if max_pcbas: targets = targets[:max(0,int(max_pcbas))]
+    if max_pcbas:
+        targets = targets[:max(0,int(max_pcbas))]
+
     entries=[];all_contexts=[];event_count=0;warnings=[]
+    captured=[];query_times=[]
+
+    # Phase A — one exclusive MES lease. No SQLite/correlation occurs between
+    # PCBA submissions, so the next SN can be sent as soon as A-MES answers.
     browser = session_object(browser_mod.AmesBrowser(engine_dir)).connect()
     try:
         nav = session_object(navigation_mod.AmesNavigation(browser._target))
-        if targets:
-            if line_callback: line_callback("3022 preparando AWIP3022 / View Lot History")
-            nav.ensure_3022()
         tela = session_object(tela3022_mod.Tela3022(browser._target, engine_dir)) if targets else None
-        if tela: tela._page()
-        for i,pcba in enumerate(targets,1):
-            try:
-                if line_callback: line_callback(f"3022 [{i}/{len(targets)}] {pcba}")
-                rr = tela.consultar(pcba)
-                rows = rr.get("rows") or []
-                with store.connect() as con:
-                    con.execute("DELETE FROM process_raw_events WHERE snapshot_id=? AND pcba_sn=?", (snapshot_id,pcba))
-                    con.executemany("INSERT INTO process_raw_events(snapshot_id,pcba_sn,row_index,raw_json) VALUES(?,?,?,?)", [(snapshot_id,pcba,i,_json(r)) for i,r in enumerate(rows)])
-                passages = list(rr.get("process_passages") or tela3022_mod.extrair_passagens_processo(rows))
-                contexts=[]
-                context_by_pass={}
-                for rec in by_pcba.get(pcba,[]):
-                    corr = tela3022_mod.correlacionar_falha_3022(
-                        engine_dir, rows, rec, registration_value=rec.get("manual_or_auto"), registration_source="3028",
-                        defect_local_offset_hours=defect_offset, event_naive_offset_hours=grid_offset)
-                    ctx = _context_from_correlation(rec,corr); contexts.append(ctx); all_contexts.append(ctx)
-                    chosen = corr.get("reference_process") or corr.get("previous_process") or {}
-                    chosen_time = chosen.get("event_time_utc") or chosen.get("event_time")
-                    if chosen_time:
-                        context_by_pass.setdefault(str(chosen_time),[]).append({k:v for k,v in ctx.items() if k not in {"details_json"}})
-                _persist_legacy_events(store,snapshot_id,pcba,passages)
-                _persist_contexts(store,snapshot_id,contexts)
-                products=sorted({canonical.cph(r.get("product_model")) for r in by_pcba.get(pcba,[]) if canonical.cph(r.get("product_model"))})
-                evidence_passages=list(passages)
-                for raw in rows:
-                    op=operator_evidence(raw)
-                    if op['operator_fields'] and op['station'] and op['event_time'] and not any(p.get('raw')==raw for p in passages):
-                        evidence_passages.append({**op,'operation_code':op['station'],'raw':raw,'completion_confirmed':False})
-                for product in products:
-                    events=[]
-                    for p in evidence_passages:
-                        event_time=_event_time_utc(engine_dir,p.get("event_time"),grid_offset)
-                        if not event_time: continue
-                        hist=p.get("hist_seq")
-                        op=str(p.get("operation_code") or p.get("station") or "").strip()
-                        if not op: continue
-                        raw_key=[snapshot_id,line,product,pcba,op,event_time,hist]
-                        event_id=hashlib.sha256(_json(raw_key).encode()).hexdigest()[:32]
-                        adapter={
-                            "contract":"R11_DERIVED_REQUIRES_R12_FACTORY_GATE","hist_seq":hist,
-                            **production_shift.classify(event_time),
-                            "current_operation_code":p.get("current_operation_code"),"event_group":p.get("event_group"),
-                            "defect_contexts":context_by_pass.get(event_time,[]),
-                            "operator_evidence":operator_evidence(p.get("raw") or {}),
-                            "operator_events":[operator_evidence(p.get("raw") or {})] if operator_evidence(p.get("raw") or {})["operator_fields"] else [],
-                        }
-                        events.append({
-                            "event_id":event_id,"line_id":line,"product":product,"pcba_sn":pcba,
-                            "process":p.get("operation_name") or op,"station":op,"event_time":event_time,"source_view":"3022",
-                            "snapshot_id":int(snapshot_id),"snapshot_revision":1,
-                            "provenance":adapter,"raw_ref":f"sqlite:3022:{snapshot_id}:{pcba}:{hist}:{event_id}",
-                            "coverage":{"status":"partial","source_complete":False},"valid":p.get("completion_confirmed",True),
-                        })
-                    if events:
-                        process_timeline.ingest(store,events);event_count += len(events)
-                entries.append({"pcba_sn":pcba,"status":"COMPLETE","events":len(passages),"contexts":len(contexts)})
-                if event_callback:event_callback({"stage":"3022","kind":"pcba","current":i,"total":len(targets),"pcba":pcba,"status":"COMPLETE","events":len(passages)})
-            except Exception as exc:
-                err=f"{type(exc).__name__}: {exc}";warnings.append(f"3022 {pcba}: {err}");entries.append({"pcba_sn":pcba,"status":"ERROR","error":err})
-                if event_callback:event_callback({"stage":"3022","kind":"pcba","current":i,"total":len(targets),"pcba":pcba,"status":"ERROR","error":err})
-            if pause: time.sleep(pause)
+        if targets:
+            with MES.critical():
+                if line_callback:
+                    line_callback("3022 preparando AWIP3022 / View Lot History")
+                nav.ensure_3022()
+                tela._page()
+                for i,pcba in enumerate(targets,1):
+                    started=time.perf_counter()
+                    if line_callback:
+                        line_callback(f"3022 MES [{i}/{len(targets)}] {pcba}")
+                    try:
+                        rr=tela.consultar(pcba)
+                        query_ms=round((time.perf_counter()-started)*1000.0,2)
+                        query_times.append(query_ms)
+                        captured.append({"pcba_sn":pcba,"status":"COLLECTED","result":rr,"query_ms":query_ms})
+                        if event_callback:
+                            event_callback({"stage":"3022","kind":"pcba","phase":"mes","current":i,"total":len(targets),"pcba":pcba,"status":"COLLECTED","query_ms":query_ms,"rows":len((rr or {}).get("rows") or [])})
+                    except Exception as exc:
+                        query_ms=round((time.perf_counter()-started)*1000.0,2)
+                        query_times.append(query_ms)
+                        err=f"{type(exc).__name__}: {exc}"
+                        captured.append({"pcba_sn":pcba,"status":"ERROR","error":err,"query_ms":query_ms})
+                        warnings.append(f"3022 {pcba}: {err}")
+                        if event_callback:
+                            event_callback({"stage":"3022","kind":"pcba","phase":"mes","current":i,"total":len(targets),"pcba":pcba,"status":"ERROR","error":err,"query_ms":query_ms})
+                    if inter_query_pause and i < len(targets):
+                        time.sleep(inter_query_pause)
     finally:
         browser.disconnect()
+
+    # Phase B — local-only enrichment. It intentionally runs after releasing MES,
+    # so database/correlation cost cannot delay the next physical PCBA query.
+    for i,item in enumerate(captured,1):
+        pcba=item["pcba_sn"]
+        if item.get("status") != "COLLECTED":
+            entries.append({"pcba_sn":pcba,"status":"ERROR","error":item.get("error"),"query_ms":item.get("query_ms")})
+            continue
+        try:
+            if line_callback:
+                line_callback(f"3022 processamento local [{i}/{len(captured)}] {pcba}")
+            rr=item.get("result") or {}
+            rows=rr.get("rows") or []
+            with store.connect() as con:
+                con.execute("DELETE FROM process_raw_events WHERE snapshot_id=? AND pcba_sn=?", (snapshot_id,pcba))
+                con.executemany(
+                    "INSERT INTO process_raw_events(snapshot_id,pcba_sn,row_index,raw_json) VALUES(?,?,?,?)",
+                    [(snapshot_id,pcba,row_index,_json(row)) for row_index,row in enumerate(rows)],
+                )
+            passages=list(rr.get("process_passages") or tela3022_mod.extrair_passagens_processo(rows))
+            contexts=[]
+            context_by_pass={}
+            for rec in by_pcba.get(pcba,[]):
+                corr=tela3022_mod.correlacionar_falha_3022(
+                    engine_dir, rows, rec, registration_value=rec.get("manual_or_auto"), registration_source="3028",
+                    defect_local_offset_hours=defect_offset, event_naive_offset_hours=grid_offset)
+                ctx=_context_from_correlation(rec,corr);contexts.append(ctx);all_contexts.append(ctx)
+                chosen=corr.get("reference_process") or corr.get("previous_process") or {}
+                chosen_time=chosen.get("event_time_utc") or chosen.get("event_time")
+                if chosen_time:
+                    context_by_pass.setdefault(str(chosen_time),[]).append({k:v for k,v in ctx.items() if k not in {"details_json"}})
+            _persist_legacy_events(store,snapshot_id,pcba,passages)
+            _persist_contexts(store,snapshot_id,contexts)
+            products=sorted({canonical.cph(r.get("product_model")) for r in by_pcba.get(pcba,[]) if canonical.cph(r.get("product_model"))})
+            evidence_passages=list(passages)
+            for raw in rows:
+                op=operator_evidence(raw)
+                if op['operator_fields'] and op['station'] and op['event_time'] and not any(p.get('raw')==raw for p in passages):
+                    evidence_passages.append({**op,'operation_code':op['station'],'raw':raw,'completion_confirmed':False})
+            for product in products:
+                events=[]
+                for p in evidence_passages:
+                    event_time=_event_time_utc(engine_dir,p.get("event_time"),grid_offset)
+                    if not event_time:
+                        continue
+                    hist=p.get("hist_seq")
+                    op=str(p.get("operation_code") or p.get("station") or "").strip()
+                    if not op:
+                        continue
+                    raw_key=[snapshot_id,line,product,pcba,op,event_time,hist]
+                    event_id=hashlib.sha256(_json(raw_key).encode()).hexdigest()[:32]
+                    op_ev=operator_evidence(p.get("raw") or {})
+                    adapter={
+                        "contract":"R11_DERIVED_REQUIRES_R12_FACTORY_GATE","hist_seq":hist,
+                        **production_shift.classify(event_time),
+                        "current_operation_code":p.get("current_operation_code"),"event_group":p.get("event_group"),
+                        "defect_contexts":context_by_pass.get(event_time,[]),
+                        "operator_evidence":op_ev,
+                        "operator_events":[op_ev] if op_ev["operator_fields"] else [],
+                    }
+                    events.append({
+                        "event_id":event_id,"line_id":line,"product":product,"pcba_sn":pcba,
+                        "process":p.get("operation_name") or op,"station":op,"event_time":event_time,"source_view":"3022",
+                        "snapshot_id":int(snapshot_id),"snapshot_revision":1,
+                        "provenance":adapter,"raw_ref":f"sqlite:3022:{snapshot_id}:{pcba}:{hist}:{event_id}",
+                        "coverage":{"status":"partial","source_complete":False},"valid":p.get("completion_confirmed",True),
+                    })
+                if events:
+                    process_timeline.ingest(store,events);event_count+=len(events)
+            entries.append({"pcba_sn":pcba,"status":"COMPLETE","events":len(passages),"contexts":len(contexts),"query_ms":item.get("query_ms"),"response_identity":rr.get("response_identity")})
+            if event_callback:
+                event_callback({"stage":"3022","kind":"pcba","phase":"local","current":i,"total":len(captured),"pcba":pcba,"status":"PROCESSED","events":len(passages),"query_ms":item.get("query_ms")})
+        except Exception as exc:
+            err=f"{type(exc).__name__}: {exc}"
+            warnings.append(f"3022 local {pcba}: {err}")
+            entries.append({"pcba_sn":pcba,"status":"ERROR","error":err,"query_ms":item.get("query_ms")})
+            if event_callback:
+                event_callback({"stage":"3022","kind":"pcba","phase":"local","current":i,"total":len(captured),"pcba":pcba,"status":"ERROR","error":err,"query_ms":item.get("query_ms")})
+
     store.rebuild_cora_index(int(snapshot_id))
-    return {"source":"3022","contract":"R11_DERIVED_REQUIRES_R12_FACTORY_GATE","pcbas":entries,"events":event_count,"contexts":len(all_contexts),"warnings":warnings,"support":support}
+    errors=sum(1 for row in entries if row.get("status")=="ERROR")
+    completed=sum(1 for row in entries if row.get("status")=="COMPLETE")
+    status="complete" if not errors else ("partial" if completed else "error")
+    timing={
+        "query_avg_ms":round(sum(query_times)/len(query_times),2) if query_times else None,
+        "query_max_ms":round(max(query_times),2) if query_times else None,
+    }
+    return {
+        "source":"3022","contract":"R11_DERIVED_REQUIRES_R12_FACTORY_GATE","status":status,
+        "requested":len(targets),"collected":sum(1 for row in captured if row.get("status")=="COLLECTED"),"processed":completed,"errors":errors,
+        "pcbas":entries,"events":event_count,"contexts":len(all_contexts),"warnings":warnings,"timing":timing,"support":support,
+    }
