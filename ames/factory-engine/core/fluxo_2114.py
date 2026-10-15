@@ -249,6 +249,7 @@ def executar_fluxo_2114(
     seed_result=None,
     seed_checkpoint_path=None,
     include_current=False,
+    refresh_completed_batch=False,
 ):
     """Consulta 2114 sem transformar uma fonte indisponível em falha global.
 
@@ -279,10 +280,13 @@ def executar_fluxo_2114(
 
     shift = tela2114.turno_atual()
     if not shift or shift == SHIFT_UNCONFIRMED:
+        detail = str(getattr(tela2114, "last_shift_error", "") or "").strip()
         reason = (
             "2114 indisponível nesta execução: Shift não confirmado no campo principal. "
             "3074/3022 podem continuar; nenhuma consulta 2114 foi enviada."
         )
+        if detail:
+            reason += " Diagnóstico: " + detail
         if progress:
             for idx, pcba in enumerate(targets, 1):
                 progress(idx, len(targets), pcba, "ERROR", {
@@ -291,6 +295,8 @@ def executar_fluxo_2114(
         return _unavailable_result(plan, source_sha256, checkpoint_path, reason)
 
     checkpoint = None
+    checkpoint_resumed = False
+    checkpoint_refreshed = False
     if checkpoint_path and checkpoint_path.exists():
         try:
             loaded = json.loads(checkpoint_path.read_text(encoding="utf-8"))
@@ -300,6 +306,16 @@ def executar_fluxo_2114(
                 and loaded.get("shift") == shift
             ):
                 checkpoint = loaded
+                current_states = [((loaded.get("pcbas") or {}).get(pcba) or {}).get("status") for pcba in targets]
+                # Checkpoints are for crash/partial resume, not a permanent cache.
+                # A new explicit trace run must query 2114 again when the prior
+                # batch already finished completely; otherwise the UI can claim
+                # 2/2 while no SN is sent to the real MES.
+                if refresh_completed_batch and current_states and all(state == "COMPLETE" for state in current_states):
+                    checkpoint = None
+                    checkpoint_refreshed = True
+                else:
+                    checkpoint_resumed = True
         except Exception:
             checkpoint = None
 
@@ -394,6 +410,8 @@ def executar_fluxo_2114(
         "context_count": plan["historical_context_count"],
         "current_context_count": plan["current_context_count"],
         "checkpoint_path": str(checkpoint_path) if checkpoint_path else None,
+        "checkpoint_resumed": checkpoint_resumed,
+        "checkpoint_refreshed": checkpoint_refreshed,
         # compatibilidade: contexts continua sendo o histórico dos materiais.
         "contexts": plan["historical_contexts"],
         "current_contexts": plan["current_contexts"],
