@@ -3,9 +3,23 @@ import { displayValue } from './data/time-display.mjs';
 import { trustedProductionEvidence, genericReturnEvidence } from './data/production-evidence.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 import { defectDescription, knownDescription } from './defect-label.mjs';
+import { EXTRA_EN } from './console-i18n-extra.mjs';
 
 const fmt=(key,value)=>displayValue(key,value);
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
+
+Object.assign(EXTRA_EN,{
+  'Registro da falha no MES não define quando ela foi gerada. Horário, turno e dia de produção só aparecem como comprovados quando existe passagem real da mesma PCBA no posto de referência 3022.':'The MES failure record does not define when the failure was generated. Time, shift and production day are only shown as proven when the same PCBA has real passage evidence at the 3022 reference station.',
+  'ocorrência → posto de referência 3022 → última passagem válida ≤ registro da falha. Passagem anterior é contexto; não prova geração.':'occurrence → 3022 reference station → latest valid passage ≤ failure record. Previous passage is context; it does not prove generation.',
+  'Registro da falha no MES é separado da passagem real 3022. Turno/dia/geração só aparecem quando a referência está comprovada.':'The MES failure record is separate from the real 3022 passage. Shift, production day and generation time appear only when the reference evidence is proven.',
+  'Com geração 3022 comprovada':'With proven 3022 generation evidence',
+  'ocorrência → posto de referência 3022 → última passagem concluída válida ≤ registro da falha':'occurrence → 3022 reference station → latest valid completed passage ≤ failure record',
+  'Passagem anterior é contexto. Retorno pós-reparo usa o primeiro posto/operação comprovado; A5201 é apenas um possível posto, nunca uma regra fixa.':'Previous passage is context. Post-repair return uses the first proven station/operation; A5201 is only one possible station, never a fixed rule.',
+  'Manual/Automatic é modo de registro da falha; reparo e retorno permanecem evidências separadas.':'Manual/Automatic is the failure registration mode; repair and return remain separate evidence.',
+  'Com filtro de falha, a timeline mostra as PCBAs pertencentes aos contextos dessa falha. Os eventos abaixo são passagens 3022 reais; não são automaticamente o ponto de geração da falha.':'With a failure filter, the timeline shows PCBAs belonging to that failure context. The events below are real 3022 passages; they are not automatically the failure generation point.',
+  'Hoje/Ontem usam o início operacional configurado neste posto.':'Today/Yesterday use this workstation’s configured operational start.',
+  'Consultar outro período':'Query another period'
+});
 
 export function createFailureProcessAddon(root,store,filterRoot){
   let last='';

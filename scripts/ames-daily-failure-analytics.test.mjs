@@ -20,8 +20,8 @@ test('ranking counts occurrences but deduplicates affected PCBAs',()=>{
 
 test('daily filters preserve shift and association semantics without inferring cause',()=>{
   const rows=[
-    {pcba:'P1',line:'TAN10101',production_shift:'1st Shift',product:'CPH2817',defect_code:'D1',defect_desc:'Camera scratched',repair_user:'U1',component_families:['Camera'],relations:['MESMA FALHA'],reuse_present:true,reuse_with_failure:true,pcba_prior_failure:false,component_history_count:1,production_operational_date:'2026-10-13'},
-    {pcba:'P2',line:'TAN10101',production_shift:'2nd Shift',product:'CPH2817',defect_code:'D2',defect_desc:'LCD stain',repair_user:'U2',component_families:['Screen / LCD'],relations:['OUTRA FALHA'],reuse_present:false,reuse_with_failure:false,pcba_prior_failure:false,component_history_count:0,production_operational_date:'2026-10-13'},
+    {pcba:'P1',line:'TAN10101',production_evidence_proven:true,production_shift:'1st Shift',product:'CPH2817',defect_code:'D1',defect_desc:'Camera scratched',repair_user:'U1',component_families:['Camera'],relations:['MESMA FALHA'],reuse_present:true,reuse_with_failure:true,pcba_prior_failure:false,component_history_count:1,production_operational_date:'2026-10-13'},
+    {pcba:'P2',line:'TAN10101',production_evidence_proven:true,production_shift:'2nd Shift',product:'CPH2817',defect_code:'D2',defect_desc:'LCD stain',repair_user:'U2',component_families:['Screen / LCD'],relations:['OUTRA FALHA'],reuse_present:false,reuse_with_failure:false,pcba_prior_failure:false,component_history_count:0,production_operational_date:'2026-10-13'},
   ];
   assert.deepEqual(filterDailyFailureRows(rows,{shift:'1st Shift'}).map(r=>r.pcba),['P1']);
   assert.deepEqual(filterDailyFailureRows(rows,{reuse:'with_failure'}).map(r=>r.pcba),['P1']);
@@ -31,7 +31,7 @@ test('daily filters preserve shift and association semantics without inferring c
 test('production rate fails closed when temporal denominator does not match the filter scope',()=>{
   const snapshot={snapshot_id:1,revision:1,summary:{quantity:100,check_fpy:96.5},occurrences:[]};
   const store={read:()=>({snapshot}),occurrences:()=>({rows:[],coverage:{status:'partial'}})};
-  const rows=[{line:'TAN10101',production_operational_date:'2026-10-13',defect_time:'2026-10-13T09:00:00'}];
+  const rows=[{line:'TAN10101',production_evidence_proven:true,production_operational_date:'2026-10-13',failure_record_date:'2026-10-13',defect_time:'2026-10-13T09:00:00'}];
   const proven=productionMetrics(store,{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows);
   assert.equal(proven.quantity,100);assert.equal(proven.checkFpy,96.5);assert.equal(proven.denominatorProven,true);
   assert.equal(productionMetrics(store,{line:'TAN10101',shift:'1st Shift',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
