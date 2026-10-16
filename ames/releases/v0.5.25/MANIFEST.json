@@ -1,0 +1,23 @@
+{
+  "version": "0.5.25",
+  "status": "factory_green_official",
+  "validated_baseline": "0.5.25",
+  "promoted_from": "0.5.25-rc1",
+  "validated_candidate_sha": "581ba30a69003c0fb8ece91b969f628fb96b92a1",
+  "official_merge_sha": "cae458664f56fd2bb05f00d7fbc1e3d786395c55",
+  "package": "AMES_Central_Offline_V0_5_25_OFICIAL.zip",
+  "sha256": "18a06ea508274ddfa50492d51c6a01a71262f7fbf721fd43eb380b77562219d6",
+  "size_bytes": 899917,
+  "drive_file_id": "13V1TrND4mKHuBaSWdc5MAagVeaURu8Py",
+  "central_v2_url": "https://central-cora-v2.vercel.app/",
+  "central_v2_deployment": "dpl_AMc1KhxjmxtXFBGsxThb6LUA4WvD",
+  "factory_green_date": "2026-10-16",
+  "hard_rules": [
+    "never_mix_lines_for_operational_kpi",
+    "mes_access_serial",
+    "never_sync_ames_credentials_or_session",
+    "cloud_failure_never_blocks_local_collection",
+    "3028_validated_collector_frozen",
+    "no_green_without_factory_test"
+  ]
+}
