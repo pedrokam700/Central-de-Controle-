@@ -35,5 +35,11 @@ test('3012 ExtJS load event uses records argument and refuses stale timeout grid
  const store={currentPage:4,pageSize:100,getModel:()=>({getFields:()=>['repairComment','repairUser','defectCode'].map(name=>({name:name.replace(/([A-Z])/g,' $1')}))}),on:(name,fn)=>{handler=fn},un:()=>{},loadPage(){},getTotalCount:()=>1,getProxy:()=>({extraParams:{sn:'P'}})};
  const grid={getStore:()=>store};const button={text:'View',isButton:true,handler:()=>handler(store,[record],true)};
  globalThis.window={Ext:{}};globalThis.Ext={ComponentManager:{all:{items:[...fields,grid,button]}}};
- try{const result=await query({sn:'P',dateFrom:'2026-10-13',dateTo:'2026-10-13',timeFrom:'07:30',timeTo:'17:30'});assert.equal(result.records[0].sn,'P');assert.equal(store.currentPage,1);assert.ok(js.includes('grade antiga recusada'));}finally{delete globalThis.window;delete globalThis.Ext;}
+ try{
+  const result=await query({sn:'P',dateFrom:'2026-10-13',dateTo:'2026-10-13',timeFrom:'07:30',timeTo:'17:30'});
+  assert.equal(result.records[0].sn,'P');
+  assert.equal(store.currentPage,1);
+  assert.ok(js.includes("store.on('load',finish,null,{single:true})"));
+  assert.ok(js.includes('View foi acionado mas a store nao respondeu'));
+ }finally{delete globalThis.window;delete globalThis.Ext;}
 });
