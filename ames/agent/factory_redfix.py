@@ -1,9 +1,9 @@
 """Focused hardening from the 2026-10-16 physical factory RED.
 
 This module deliberately does not touch bootstrap/8765 or production 3022
-waits/selectors/acceptance. It fixes three failures evidenced on the exact
-1dbfaf63 candidate: cooperative cancellation granularity, 2114 visible-PCBA
-confirmation, and 3012 ExtJS field discovery for grouped date/time controls.
+waits/selectors/acceptance. It keeps the cooperative-cancel and 2114 guards.
+The original 3012 fuzzy-field hotfix remains only for legacy runtimes; the
+canonical mapped V2 collector already supersedes it and must never be rewritten.
 """
 from __future__ import annotations
 
@@ -119,8 +119,18 @@ def _install_2114_visible_confirmation(a):
 
 
 def _install_3012_field_resolution():
+    """Patch only the obsolete fuzzy collector; mapped V2 is already canonical.
+
+    The physical mapping proved exact ExtJS itemIds and the mapped V2 collector
+    resolves those controls directly. Reapplying the old fuzzy-field redfix on
+    V2 would be a regression, so this function is intentionally idempotent.
+    """
     module = importlib.import_module("ames_3012_live")
     js = module.QUERY_3012_JS
+    if getattr(module, "QUERY_CONTRACT", None) == "3012-home-mapped-v2":
+        return
+    if "3012-home-mapped-v2" in js:
+        return
     if "factory-redfix-3012" in js:
         return
     if _LABEL_OLD not in js or _FIND_OLD not in js:
