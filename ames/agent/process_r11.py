@@ -313,6 +313,7 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
         if item.get("status") != "COLLECTED":
             entries.append({"pcba_sn":pcba,"status":"ERROR","error":item.get("error"),"query_ms":item.get("query_ms"),"query_diagnostics":item.get("query_diagnostics") or {}})
             continue
+        local_started=time.perf_counter()
         try:
             if line_callback:
                 line_callback(f"3022 processamento local [{i}/{len(captured)}] {pcba}")
@@ -374,9 +375,10 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                     })
                 if events:
                     process_timeline.ingest(store,events);event_count+=len(events)
-            entries.append({"pcba_sn":pcba,"status":"COMPLETE","events":len(passages),"contexts":len(contexts),"query_ms":item.get("query_ms"),"response_identity":rr.get("response_identity"),"query_diagnostics":rr.get("query_diagnostics") or {}})
+            local_ms=round((time.perf_counter()-local_started)*1000.0,2)
+            entries.append({"local_ms":local_ms,"pcba_sn":pcba,"status":"COMPLETE","events":len(passages),"contexts":len(contexts),"query_ms":item.get("query_ms"),"response_identity":rr.get("response_identity"),"query_diagnostics":rr.get("query_diagnostics") or {}})
             if event_callback:
-                event_callback({"stage":"3022","kind":"pcba","phase":"local","current":i,"total":len(captured),"pcba":pcba,"status":"PROCESSED","events":len(passages),"query_ms":item.get("query_ms")})
+                event_callback({"stage":"3022","kind":"pcba","phase":"local","current":i,"total":len(captured),"pcba":pcba,"status":"PROCESSED","local_ms":local_ms,"events":len(passages),"query_ms":item.get("query_ms")})
         except Exception as exc:
             err=f"{type(exc).__name__}: {exc}"
             warnings.append(f"3022 local {pcba}: {err}")

@@ -6,7 +6,7 @@ import fnmatch
 import unicodedata
 from pathlib import Path
 
-from ames.ui_helpers import find_text_input, find_button, extract_best_grid
+from ames.ui_helpers import find_text_input, find_button, extract_extjs_store_grid, extract_best_grid  # diagnostic API
 from core.normalizacao import normalizar_sn, normalizar_texto, parse_datetime
 from core.temporal_3074 import defect_time_to_utc, grid_time_to_utc
 
@@ -723,7 +723,7 @@ class Tela3022:
         )
         return campo
 
-    def _header_fields(self, page):
+    def _header_fields(self, page, frame=None):
         """Best-effort read of visible ExtJS fields for evidence payload only."""
         js = r"""
         () => {
@@ -743,7 +743,7 @@ class Tela3022:
         }
         """
         out = []
-        for frame in page.frames:
+        for frame in ([frame] if frame is not None else page.frames):
             try:
                 for item in frame.evaluate(js) or []:
                     if item not in out:
@@ -752,85 +752,39 @@ class Tela3022:
                 pass
         return out
 
-    def _grid_visible(self, page, grid):
-        # Scope confirmation to the exact grid selected by the existing extractor.
-        for frame in page.frames:
-            if frame.url != grid.get("frame_url") or not grid.get("grid_id"):
-                continue
-            try:
-                return frame.evaluate(r"""id => {
-                  const g = window.Ext && Ext.getCmp(id), el = g && g.el && g.el.dom;
-                  if (!g || !el || (g.isVisible && !g.isVisible(true))) return false;
-                  const r = el.getBoundingClientRect(), s = getComputedStyle(el);
-                  return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
-                }""", grid["grid_id"]) is True
-            except Exception:
-                return False
-        return False
+    def _history_response(self, frame, grid_id, action):
+        """One response lifecycle on the selected visible history store.
 
-    def _arm_grid_refresh_watch(self, page, grid, token):
-        """Arm a one-query watcher on the exact ExtJS history store before View.
-
-        This is the physical contract missing from the regressed collector: the
-        editable SN field proves what was requested; a store load/refresh proves
-        that the rows belong to a new 3022 response.  The real grid does not have
-        to duplicate the PCBA in every row.
+        Ext Store.load emits load; Ajax + loadData emits datachanged. Both are
+        real dataset events, including identical rows, unlike a typed SN or a
+        content hash. Listeners are removed on every exit, including timeout.
         """
-        if not grid or not grid.get("grid_id") or not grid.get("frame_url"):
-            return False
-        js = r"""
-        args => {
-          if (!window.Ext) return false;
-          const g = Ext.getCmp(args.grid_id);
-          const s = g && g.getStore && g.getStore();
-          if (!g || !s) return false;
-          const root = globalThis.__ames3022Refresh || (globalThis.__ames3022Refresh = {});
-          const st = root[args.token] = {
-            token: args.token, grid_id: args.grid_id,
-            beforeload: 0, load: 0, datachanged: 0, refresh: 0,
-            started: false, completed: false, success: null
-          };
-          const alive = () => root[args.token] === st;
-          const before = () => { if (!alive()) return; st.beforeload += 1; st.started = true; };
-          const loaded = (_store, _records, successful) => {
-            if (!alive()) return;
-            st.load += 1; st.started = true; st.completed = true; st.success = successful !== false;
-          };
-          const changed = () => { if (!alive()) return; st.datachanged += 1; st.started = true; };
-          const refreshed = () => { if (!alive()) return; st.refresh += 1; st.started = true; st.completed = true; };
-          try { s.on('beforeload', before, null, {single:true}); } catch(e) {}
-          try { s.on('load', loaded, null, {single:true}); } catch(e) {}
-          try { s.on('datachanged', changed, null, {single:true}); } catch(e) {}
-          try { s.on('refresh', refreshed, null, {single:true}); } catch(e) {}
-          return true;
-        }
-        """
-        for frame in getattr(page, "frames", []) or []:
-            if frame.url != grid.get("frame_url"):
-                continue
-            try:
-                return frame.evaluate(js, {"grid_id": grid["grid_id"], "token": token}) is True
-            except Exception:
-                return False
-        return False
-
-    def _read_grid_refresh_watch(self, page, frame_url, token):
-        if not frame_url or not token:
-            return {}
-        for frame in getattr(page, "frames", []) or []:
-            if frame.url != frame_url:
-                continue
-            try:
-                return frame.evaluate(
-                    "token => (globalThis.__ames3022Refresh && globalThis.__ames3022Refresh[token]) || null",
-                    token,
-                ) or {}
-            except Exception:
-                return {}
-        return {}
+        return frame.evaluate(r"""args => {
+          const g = window.Ext && Ext.getCmp(args.id), s = g && g.getStore();
+          if (!s) throw new Error('3022 history store unavailable');
+          if (args.action === 'arm' || args.action === 'dispose') {
+            const old = s.__ames3022Response;
+            if (old) {
+              s.un('datachanged', old.changed); s.un('load', old.loaded);
+              delete s.__ames3022Response;
+            }
+          }
+          if (args.action === 'arm') {
+            const state = {changes:0, loads:0, success:null};
+            state.changed = () => { state.changes += 1; };
+            state.loaded = (_store, _records, success) => {
+              state.loads += 1; state.success = success !== false;
+            };
+            s.on('datachanged', state.changed); s.on('load', state.loaded);
+            s.__ames3022Response = state;
+          }
+          const st = s.__ames3022Response;
+          return st ? {changes:st.changes, loads:st.loads, success:st.success} : null;
+        }""", {"id": grid_id, "action": action})
 
     def consultar(self, pcba_sn, timeout_s=18.0, empty_confirm_s=3.0):
         started = time.perf_counter()
+        self._active_response = None
         telemetry = {"query_started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                      "milestones_ms": {"query_start": 0.0}, "polls": 0, "input_retries": 0,
                      "poll_errors": 0, "mismatch_polls": 0, "status": "UNCONFIRMED",
@@ -848,6 +802,13 @@ class Tela3022:
             exc.query_diagnostics = telemetry
             raise
         finally:
+            if self._active_response is not None:
+                frame, grid_id = self._active_response
+                try:
+                    self._history_response(frame, grid_id, "dispose")
+                except Exception:
+                    telemetry["response_cleanup_failed"] = True
+                self._active_response = None
             telemetry["total_ms"] = round((time.perf_counter() - started) * 1000, 2)
             self.last_query_diagnostics = telemetry
 
@@ -856,7 +817,7 @@ class Tela3022:
         if not pcba_sn:
             raise ValueError("SN vazio.")
         page = self._page()
-        _, view, _ = find_button(
+        query_frame, view, _ = find_button(
             page,
             texts=self.cfg["view_texts"],
             frame_hints=("3022", "View Lot History")
@@ -867,9 +828,11 @@ class Tela3022:
         campo = None
         for attempt in range(2):
             campo = self._query_control(page)
+            mark("input_located")
             try:
                 campo.wait_for(state="visible", timeout=1600)
                 campo.fill(pcba_sn, timeout=3000)
+                mark("input_filled")
                 if normalizar_sn(campo.input_value(timeout=1000)) != pcba_sn:
                     raise RuntimeError("3022 input não confirmou a PCBA alvo")
                 mark("input_applied")
@@ -883,24 +846,15 @@ class Tela3022:
         if last_input_error is not None:
             raise RuntimeError(f"3022 não encontrou um campo SN/IMEI visível e estável: {last_input_error}")
 
-        before = None
-        try:
-            before = extract_best_grid(
-                page,
-                expected_headers=self.cfg["expected_headers"],
-                frame_hints=("3022", "Current Oper", "Tran Time", "View Lot History"),
-            )
-        except Exception:
-            pass
+        # Select the visible history before ranking by row count, and keep the
+        # same frame/grid through this query. Hidden previous views must not win.
+        before = extract_extjs_store_grid(page, self.cfg["expected_headers"],
+                                          frame=query_frame, visible_only=True)
+        grid_id = before["grid_id"]
         before_sig = _grid_signature_3022(before)
         telemetry["before_grid"] = before_sig
-
-        # Arm before clicking View so even a very fast ExtJS load cannot be missed
-        # by the Python polling interval.  This replaces the invalid assumption
-        # introduced in ac908287 that the physical grid must contain the PCBA id.
-        watch_token = f"q{time.perf_counter_ns()}"
-        watch_armed = self._arm_grid_refresh_watch(page, before, watch_token)
-        telemetry["refresh_watch_armed"] = bool(watch_armed)
+        self._active_response = (query_frame, grid_id)
+        self._history_response(query_frame, grid_id, "arm")
         mark("submit")
         view.click(timeout=5000)
         mark("view_clicked")
@@ -909,101 +863,46 @@ class Tela3022:
         ultima_exc = None
         empty_since = None
         last_grid = None
-        loading_grid = None
         while time.time() - inicio < timeout_s:
             telemetry["polls"] += 1
             try:
-                grid = extract_best_grid(
-                    page,
-                    expected_headers=self.cfg["expected_headers"],
-                    frame_hints=("3022", "Current Oper", "Tran Time", "View Lot History")
-                )
+                grid = extract_extjs_store_grid(page, self.cfg["expected_headers"],
+                                                frame=query_frame, visible_only=True, grid_id=grid_id)
                 last_grid = grid
                 mark("first_grid")
-                after_sig = _grid_signature_3022(grid)
-                telemetry["after_grid"] = after_sig
                 rows = grid.get("rows") or []
                 loading = grid.get("store_loading")
-                visible = self._grid_visible(page, grid)
-
-                # Directly re-read the same physical query control. Do not infer
-                # query identity from Ext fields attached to the result grid frame.
-                try:
-                    query_context_ok = normalizar_sn(campo.input_value(timeout=600)) == pcba_sn
-                except Exception:
-                    # If ExtJS replaced the input node, resolve the current visible
-                    # control once more instead of accepting an unknown context.
-                    try:
-                        campo = self._query_control(page)
-                        query_context_ok = normalizar_sn(campo.input_value(timeout=600)) == pcba_sn
-                    except Exception:
-                        query_context_ok = False
-                telemetry["query_context_ok"] = bool(query_context_ok)
-
-                fields = self._header_fields(page) if visible else []
-                identity = _result_identity_3022(rows, fields, pcba_sn)
-                telemetry["last_identity"] = identity
-                telemetry["grid_visible"] = visible
-                if identity == "MISMATCH":
-                    telemetry["mismatch_polls"] += 1
-
-                grid_key = (grid.get("frame_url"), grid.get("grid_id"))
-                if visible and loading is True:
-                    loading_grid = grid_key
-                loading_cycle = loading_grid == grid_key and loading is False
-                changed = before_sig is not None and before_sig != after_sig
-                watch = self._read_grid_refresh_watch(page, (before or {}).get("frame_url"), watch_token) if watch_armed else {}
-                watch_completed = bool(watch.get("completed"))
-                watch_started_finished = bool(watch.get("started")) and loading is False
-                # A changed signature is only a production proof when we armed the
-                # exact store before View, or when the MES itself exposes a matching
-                # read-only result identity. This prevents "typed input + unrelated
-                # grid change" from becoming a false positive.
-                changed_refresh = bool(changed and (watch_armed or identity == "RESULT_HEADER_MATCH"))
-                refreshed = bool(changed_refresh or loading_cycle or watch_completed or watch_started_finished)
-
-                telemetry["grid_changed"] = bool(changed)
+                if rows:
+                    mark("first_rows_observed")
+                telemetry["after_grid"] = _grid_signature_3022(grid)
+                telemetry["grid_changed"] = before_sig != telemetry["after_grid"]  # telemetry only
                 telemetry["store_loading"] = loading
-                telemetry["loading_observed"] = bool(loading_cycle)
-                telemetry["refresh_watch"] = {
-                    "started": bool(watch.get("started")),
-                    "completed": bool(watch.get("completed")),
-                    "beforeload": int(watch.get("beforeload") or 0),
-                    "load": int(watch.get("load") or 0),
-                    "datachanged": int(watch.get("datachanged") or 0),
-                    "refresh": int(watch.get("refresh") or 0),
-                } if watch_armed else {}
+                response = grid.get("store_response") or {}  # same JS turn as rows/loading
+                telemetry["store_response"] = response
+                if response.get("success") is False:
+                    raise RuntimeError("3022 consulta falhou na store")
+                refreshed = bool(response.get("changes") or response.get("loads"))
                 telemetry["refresh_proven"] = refreshed
-
-                # Canonical physical contract for 3022:
-                #   request context is still the target SN + the exact history grid
-                #   has produced a new response after View. A row-level PCBA id, if
-                #   a MES release exposes one, is self-identifying and can be accepted
-                #   without a second refresh proof. A read-only header alone cannot.
-                if identity == "MISMATCH" and refreshed:
-                    raise RuntimeError("3022 retornou identidade explícita diferente da PCBA consultada")
-                row_identity = identity == "GRID_IDENTITY_CONFIRMED"
-                confirmed = visible and loading is not True and (
-                    row_identity or (query_context_ok and refreshed)
-                )
-                if not confirmed:
+                if loading is True or refreshed:
+                    mark("response_started_observed")
+                query_context_ok = normalizar_sn(campo.input_value(timeout=600)) == pcba_sn
+                telemetry["query_context_ok"] = query_context_ok
+                if not refreshed or loading is True or not query_context_ok:
                     empty_since = None
                     time.sleep(0.12)
                     continue
 
-                mark("response_confirmed")
-                mark("identity_confirmed")  # telemetry compatibility for existing consumers/tests
-                if row_identity:
-                    confirmation = "GRID_IDENTITY_CONFIRMED"
-                elif identity == "RESULT_HEADER_MATCH":
-                    confirmation = "RESULT_HEADER_MATCH"
-                else:
-                    confirmation = (
-                        "STORE_REFRESH_CONFIRMED" if (watch_completed or watch_started_finished or loading_cycle)
-                        else "GRID_REFRESH_CONFIRMED"
-                    )
+                mark("grid_ready")
+                fields = self._header_fields(page, query_frame)
+                identity = _result_identity_3022(rows, fields, pcba_sn)
+                telemetry["last_identity"] = identity
+                if identity == "MISMATCH":
+                    telemetry["mismatch_polls"] += 1
+                    raise RuntimeError("3022 retornou identidade explícita diferente da PCBA consultada")
+                confirmation = "STORE_RESPONSE_CONFIRMED"
                 telemetry["confirmation"] = confirmation
-
+                mark("response_confirmed")
+                mark("identity_confirmed")  # query identity; row SN is optional
                 if rows:
                     focus = preparar_foco_montagem_teste(rows)
                     mark("parse_completed")
@@ -1036,15 +935,9 @@ class Tela3022:
                     }
 
                 if loading is False:
-                    if watch_completed:
-                        # ExtJS load completed with an empty store: no additional
-                        # multi-second stabilization is needed.
-                        empty_since = empty_since or time.time()
-                        required_empty_s = min(float(empty_confirm_s), 0.35)
-                    else:
-                        empty_since = empty_since or time.time()
-                        required_empty_s = float(empty_confirm_s)
-                    if time.time() - empty_since >= required_empty_s:
+                    if empty_since is None:
+                        empty_since = time.time()
+                    if time.time() - empty_since >= empty_confirm_s:
                         mark("empty_confirmed")
                         mark("parse_completed")
                         return {
@@ -1079,7 +972,7 @@ class Tela3022:
             except RuntimeError as exc:
                 # Explicit identity contradiction is terminal; other runtime
                 # extraction errors remain bounded/transient and are retried.
-                if "identidade explícita diferente" in str(exc):
+                if "identidade explícita diferente" in str(exc) or "consulta falhou na store" in str(exc):
                     raise
                 telemetry["poll_errors"] += 1
                 empty_since = None
@@ -1095,7 +988,6 @@ class Tela3022:
             f"A 3022 não confirmou atualização para {pcba_sn}. "
             f"Contexto SN: {telemetry.get('query_context_ok', False)}; "
             f"refresh: {telemetry.get('refresh_proven', False)}; "
-            f"grade visível: {telemetry.get('grid_visible', False)}; "
             f"última grade: {count}; último erro: {ultima_exc}"
         )
 

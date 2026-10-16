@@ -92,13 +92,20 @@ def _score_headers(headers, expected):
     en = [normalizar_texto(e) for e in expected]
     return sum(1 for e in en if any(e == h or e in h or h in e for h in hn if h))
 
-def extract_extjs_store_grid(page, expected_headers=()):
+def extract_extjs_store_grid(page, expected_headers=(), *, frame=None, visible_only=False, grid_id=None):
     candidates = []
     js = r"""
-    () => {
+    options => {
       if (!window.Ext || !Ext.ComponentQuery) return [];
       const grids = Ext.ComponentQuery.query('gridpanel');
-      return grids.map(g => {
+      return grids.filter(g => {
+        if (options.grid_id && g.id !== options.grid_id) return false;
+        if (!options.visible_only) return true;
+        const el = g.el && g.el.dom;
+        if (!el || (g.isVisible && !g.isVisible(true))) return false;
+        const r = el.getBoundingClientRect(), style = getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+      }).map(g => {
         let cols = [];
         try {
           const gc = g.headerCt && g.headerCt.getGridColumns ? g.headerCt.getGridColumns() : (g.columns || []);
@@ -111,6 +118,7 @@ def extract_extjs_store_grid(page, expected_headers=()):
         let storeLoading = null;
         let storeCount = null;
         let storeTotalCount = null;
+        let response = null;
         try {
           const s = g.getStore && g.getStore();
           if (s) {
@@ -118,6 +126,10 @@ def extract_extjs_store_grid(page, expected_headers=()):
             if (s.getCount) storeCount = s.getCount();
             if (s.getTotalCount) storeTotalCount = s.getTotalCount();
             s.each(r => records.push(Object.assign({}, r.data)));
+            const st = s.__ames3022Response;
+            if (options.visible_only && st) {
+              response = {changes:st.changes, loads:st.loads, success:st.success};
+            }
           }
         } catch(e) {}
         return {
@@ -126,14 +138,15 @@ def extract_extjs_store_grid(page, expected_headers=()):
           records: records,
           storeLoading: storeLoading,
           storeCount: storeCount,
-          storeTotalCount: storeTotalCount
+          storeTotalCount: storeTotalCount,
+          response: response
         };
       });
     }
     """
-    for frame in page.frames:
+    for frame in ([frame] if frame is not None else page.frames):
         try:
-            grids = frame.evaluate(js)
+            grids = frame.evaluate(js, {"visible_only": visible_only, "grid_id": grid_id})
         except Exception:
             continue
         for g in grids or []:
@@ -158,6 +171,7 @@ def extract_extjs_store_grid(page, expected_headers=()):
                 "store_loading": g.get("storeLoading"),
                 "store_count": g.get("storeCount"),
                 "store_total_count": g.get("storeTotalCount"),
+                **({"store_response": g.get("response")} if visible_only else {}),
             }))
     if not candidates:
         raise RuntimeError("Nenhuma grid ExtJS compativel encontrada.")

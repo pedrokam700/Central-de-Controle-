@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import sys
 import unittest
-from contextlib import ExitStack
-from unittest.mock import Mock, patch
+import json
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,8 @@ import diagnose_3022 as diag  # noqa: E402
 import process_r11  # noqa: E402
 sys.path.insert(0, str(ROOT / "ames" / "factory-engine"))
 from ames import tela_3022 as collector  # noqa: E402
+sys.path.insert(0, str(ROOT / "scripts" / "fixtures"))
+from ames_3022_harness import Ext3022Fixture, history_rows
 
 
 class Observability3022Tests(unittest.TestCase):
@@ -110,195 +113,141 @@ class Observability3022Tests(unittest.TestCase):
 
 
 class Canonical3022QueryTests(unittest.TestCase):
-    def grid(self, pcba=None, *, rows=True, loading=False, seq=1):
-        row = {"Current Oper": "A5700", "Hist Seq": seq}
-        if pcba is not None:
-            row["Lot Id"] = pcba
-        return {"headers": list(row), "rows": [row] if rows else [],
-                "store_loading": loading, "grid_id": "history", "frame_url": "mes/3022"}
+    # Unlike the old mocks, these tests execute the exact JS passed to evaluate:
+    # real column mapping, visibility filtering, store events and cleanup.
+    def fixture(self, plans, **kwargs):
+        return Ext3022Fixture(collector, plans, **kwargs)
 
-    def run_query(self, grids, *, fields=(), visible=True, input_values=None, timeout=1.7, empty=0.7,
-                  watch_armed=False, watch_states=()):
-        clock = [0.0]
-        def sleep(seconds):
-            clock[0] += seconds
-        sequence = iter(grids)
-        current = [None]
-        def extract(*args, **kwargs):
-            current[0] = next(sequence, current[0])
-            if isinstance(current[0], Exception):
-                raise current[0]
-            return current[0]
-        tela = collector.Tela3022.__new__(collector.Tela3022)
-        tela.cfg = {"view_texts": ["View"], "expected_headers": ["Current Oper"]}
-        tela._page = Mock(return_value=object())
-        tela._grid_visible = Mock(return_value=visible)
-        tela._header_fields = Mock(return_value=list(fields))
-        tela._arm_grid_refresh_watch = Mock(return_value=watch_armed)
-        watch_sequence = iter(watch_states)
-        watch_current = [{}]
-        def read_watch(*args, **kwargs):
-            watch_current[0] = next(watch_sequence, watch_current[0])
-            return watch_current[0]
-        tela._read_grid_refresh_watch = Mock(side_effect=read_watch)
-        field = Mock()
-        if input_values:
-            values = iter(input_values)
-            last_value = [input_values[-1]]
-            def input_value(*args, **kwargs):
-                last_value[0] = next(values, last_value[0])
-                return last_value[0]
-            field.input_value = Mock(side_effect=input_value)
-        else:
-            field.input_value = Mock(return_value="P2")
-        tela._query_control = Mock(return_value=field)
-        view = Mock()
-        with ExitStack() as stack:
-            stack.enter_context(patch.object(collector, "extract_best_grid", side_effect=extract))
-            stack.enter_context(patch.object(collector, "find_button", return_value=(None, view, None)))
-            stack.enter_context(patch.object(collector.time, "time", side_effect=lambda: clock[0]))
-            stack.enter_context(patch.object(collector.time, "perf_counter", side_effect=lambda: clock[0]))
-            stack.enter_context(patch.object(collector.time, "perf_counter_ns", side_effect=lambda: int(clock[0] * 1_000_000_000) + 1))
-            stack.enter_context(patch.object(collector.time, "sleep", side_effect=sleep))
-            try:
-                result = tela.consultar("P2", timeout_s=timeout, empty_confirm_s=empty)
-                return result, tela.last_query_diagnostics, view
-            except RuntimeError as exc:
-                self.assertIs(exc.query_diagnostics, tela.last_query_diagnostics)
-                return None, exc.query_diagnostics, view
+    def test_sequential_no_sn_rows_accept_after_actual_response_with_hidden_old_grid(self):
+        a, b = history_rows('operator-A', 3), history_rows('operator-B', 3)
+        with self.fixture([{'rows':a,'delay':240,'mode':'loadData'}, {'rows':b,'delay':840}],
+                          hidden=history_rows('hidden-old', 12)) as f:
+            for sn, expected, delay in [('A',a,240),('B',b,840)]:
+                result=f.tela.consultar(sn)
+                self.assertEqual([r['Tran User Id'] for r in result['rows']], [r['Tran User Id'] for r in expected])
+                self.assertEqual(result['query_diagnostics']['status'], 'CONFIRMED')
+                self.assertTrue(all(not r['Lot Id'] for r in result['rows']))
+                self.assertEqual(result['rows'][0]['TRAN CMF3'], 'raw preserved')
+                d=result['query_diagnostics'];m=d['milestones_ms']
+                self.assertGreaterEqual(d['total_ms'],delay)
+                self.assertLess(d['total_ms'],delay+121)
+                for step in ('input_located','input_filled','input_applied','view_clicked','first_grid',
+                             'response_started_observed','first_rows_observed','grid_ready','response_confirmed','parse_completed'):
+                    self.assertIn(step,m)
+                self.assertLessEqual(m['grid_ready'],m['parse_completed'])
+                self.assertEqual(f.call(op='state')['listeners'],0)
+            self.assertEqual(f.call(op='state')['submitted'],['A','B'])
 
-    def test_previous_pcba_is_not_parsed_then_target_is_confirmed(self):
-        old, target = self.grid("P1"), self.grid("P2")
-        result, d, _ = self.run_query([old, old, target])
-        self.assertEqual(result["rows"], target["rows"])
-        self.assertEqual(d["mismatch_polls"], 1)
-        self.assertEqual(d["polls"], 2)
-        self.assertEqual(d["status"], "CONFIRMED")
-        self.assertEqual(d["confirmation"], "GRID_IDENTITY_CONFIRMED")
-        milestones = d["milestones_ms"]
-        for name in ("query_start", "input_applied", "submit", "view_clicked", "first_grid", "identity_confirmed", "parse_completed"):
-            self.assertIn(name, milestones)
-        self.assertLess(milestones["first_grid"], milestones["identity_confirmed"])
-        self.assertGreaterEqual(d["total_ms"], milestones["parse_completed"])
-        self.assertNotIn("P1", str(d))
-        self.assertNotIn("P2", str(d))
+    def test_unchanged_previous_grid_is_not_accepted_for_next_sn(self):
+        with self.fixture([{'rows':history_rows('A')},{'mode':'stale'}]) as f:
+            f.tela.consultar('A')
+            with self.assertRaisesRegex(RuntimeError,'não confirmou atualização'):
+                f.tela.consultar('B',timeout_s=.5)
+            d=f.tela.last_query_diagnostics
+            self.assertEqual(d['status'],'UNCONFIRMED')
+            self.assertNotIn('parse_completed',d['milestones_ms'])
+            self.assertEqual(f.call(op='state')['listeners'],0)
 
-    def test_mismatch_fails_even_without_a_baseline_grid(self):
-        result, d, _ = self.run_query([RuntimeError("no grid before submit"), self.grid("P1")])
-        self.assertIsNone(result)
-        self.assertEqual(d["status"], "MISMATCH")
-        self.assertNotIn("parse_completed", d["milestones_ms"])
+    def test_identical_content_is_valid_on_new_store_response(self):
+        for mode in ('load','loadData'):
+            with self.subTest(mode=mode),self.fixture([{'rows':history_rows('same'),'mode':mode}],rows=history_rows('same')) as f:
+                rr=f.tela.consultar('B')
+                self.assertEqual(rr['query_diagnostics']['before_grid'],rr['query_diagnostics']['after_grid'])
+                self.assertEqual(rr['query_diagnostics']['status'],'CONFIRMED')
 
-    def test_mixed_identity_rows_fail_closed(self):
-        mixed = self.grid("P2")
-        mixed["rows"] += self.grid("P1")["rows"]
-        result, d, _ = self.run_query([self.grid("P1"), mixed])
-        self.assertIsNone(result)
-        self.assertEqual(d["status"], "MISMATCH")
+    def test_explicit_contradiction_fails_closed_and_cleans_listeners(self):
+        for identity in ('A','B'):
+            rows=history_rows('operator',identity=identity)
+            if identity=='B': rows+=history_rows('operator',identity='A')
+            with self.subTest(identity=identity),self.fixture([{'rows':rows}]) as f:
+                with self.assertRaisesRegex(RuntimeError,'identidade explícita diferente'):
+                    f.tela.consultar('B')
+                self.assertEqual(f.tela.last_query_diagnostics['status'],'MISMATCH')
+                self.assertNotIn('parse_completed',f.tela.last_query_diagnostics['milestones_ms'])
+                self.assertEqual(f.call(op='state')['listeners'],0)
 
-    def test_real_3022_contract_accepts_target_input_plus_refreshed_history_grid(self):
-        result, d, _ = self.run_query([self.grid(seq=1), self.grid(seq=2)], watch_armed=True)
-        self.assertIsNotNone(result)
-        self.assertEqual(d["status"], "CONFIRMED")
-        self.assertTrue(d["query_context_ok"])
-        self.assertTrue(d["grid_changed"])
-        self.assertEqual(d["confirmation"], "GRID_REFRESH_CONFIRMED")
-        self.assertLess(d["total_ms"], 500)
+    def test_matching_row_identity_does_not_bypass_new_query(self):
+        with self.fixture([{'mode':'stale'}], rows=history_rows('old',identity='B')) as f:
+            with self.assertRaises(RuntimeError): f.tela.consultar('B',timeout_s=.5)
 
-    def test_unchanged_nonidentifying_grid_is_still_rejected_without_refresh_proof(self):
-        grid = self.grid(seq=1)
-        result, d, _ = self.run_query([grid, grid], timeout=0.5)
-        self.assertIsNone(result)
-        self.assertEqual(d["status"], "UNCONFIRMED")
-        self.assertFalse(d["refresh_proven"])
+    def test_failed_load_cannot_accept_old_rows(self):
+        with self.fixture([{'mode':'failed','delay':240}],rows=history_rows('old')) as f:
+            with self.assertRaisesRegex(RuntimeError,'consulta falhou na store'):
+                f.tela.consultar('B')
+            self.assertEqual(f.call(op='state')['listeners'],0)
 
-    def test_store_load_event_proves_same_content_was_requeried(self):
-        grid = self.grid(seq=1)
-        result, d, _ = self.run_query(
-            [grid, grid],
-            watch_armed=True,
-            watch_states=[{"started": True, "completed": True, "beforeload": 1, "load": 1}],
-        )
-        self.assertIsNotNone(result)
-        self.assertEqual(d["confirmation"], "STORE_REFRESH_CONFIRMED")
-        self.assertTrue(d["refresh_proven"])
+    def test_loading_keeps_old_rows_unaccepted_until_new_response(self):
+        with self.fixture([{'rows':history_rows('new'),'delay':2400}],rows=history_rows('old')) as f:
+            rr=f.tela.consultar('B')
+            self.assertEqual(rr['rows'][0]['Tran User Id'],'new')
+            self.assertGreaterEqual(rr['query_diagnostics']['total_ms'],2400)
+            self.assertLess(rr['query_diagnostics']['total_ms'],2521)
 
-    def test_same_pcba_matching_grid_can_be_read_again(self):
-        grid = self.grid("P2")
-        result, d, _ = self.run_query([grid, grid])
-        self.assertIsNotNone(result)
-        self.assertEqual(d["before_grid"], d["after_grid"])
+    def test_empty_response_preserves_confirmation_window(self):
+        for mode in ('load','loadData'):
+            with self.subTest(mode=mode),self.fixture([{'rows':[],'mode':mode,'delay':240}]) as f:
+                rr=f.tela.consultar('B',empty_confirm_s=.7)
+                self.assertTrue(rr['no_data'])
+                self.assertEqual(rr['query_diagnostics']['status'],'CONFIRMED_EMPTY')
+                self.assertGreaterEqual(rr['query_diagnostics']['total_ms'],940)
+        with self.fixture([{'mode':'stale'}]) as f:
+            with self.assertRaises(RuntimeError): f.tela.consultar('B',timeout_s=.5,empty_confirm_s=.1)
 
-    def test_imei_and_component_serials_are_not_primary_pcba_mismatches(self):
-        grid = self.grid("P2")
-        grid["rows"][0].update({"IMEI": "other-id", "Component SN": "component"})
-        result, _, _ = self.run_query([self.grid("P1"), grid])
-        self.assertIsNotNone(result)
+    def test_other_collectors_keep_default_grid_selection(self):
+        from ames.ui_helpers import extract_extjs_store_grid
+        with self.fixture([],hidden=history_rows('old',9)) as f:
+            # Opt-in visibility is limited to 3022. Existing caller semantics stay intact.
+            self.assertEqual(extract_extjs_store_grid(f,['Current Oper'])['grid_id'],'hidden-history')
+            self.assertEqual(extract_extjs_store_grid(f,['Current Oper'],visible_only=True)['grid_id'],'history')
 
-    def test_explicit_result_sn_is_supported_but_component_sn_is_not(self):
-        self.assertEqual(collector._result_identity_3022([{"SN": "P2"}], [], "P2"), "GRID_IDENTITY_CONFIRMED")
-        self.assertEqual(collector._result_identity_3022([{"Component SN": "P2"}], [], "P2"), "UNCONFIRMED")
+    def test_visible_readonly_identity_conflict_is_not_ignored(self):
+        with self.fixture([{'rows':history_rows('new')}]) as f:
+            f.evaluate("""() => {
+              const query = Ext.ComponentQuery.query;
+              const input = query('field')[0];
+              const result = {...input, fieldLabel:'Lot Id', name:'lotid', readOnly:true,
+                              getValue:()=> 'A', getRawValue:()=> 'A'};
+              Ext.ComponentQuery.query = type => type === 'field' ? [input,result] : query(type);
+            }""")
+            with self.assertRaisesRegex(RuntimeError,'identidade explícita diferente'):
+                f.tela.consultar('B')
 
-    def test_loading_or_hidden_target_is_not_accepted(self):
-        for grid, visible in ((self.grid("P2", loading=True), True), (self.grid("P2"), False)):
-            result, d, _ = self.run_query([grid, grid], visible=visible)
-            self.assertIsNone(result)
-            self.assertEqual(d["status"], "UNCONFIRMED")
+    def test_response_event_does_not_require_optional_loading_api(self):
+        with self.fixture([{'rows':history_rows('new'),'mode':'loadData'}]) as f:
+            f.evaluate("() => { delete Ext.getCmp('history').getStore().isLoading; }")
+            self.assertEqual(f.tela.consultar('B')['query_diagnostics']['status'],'CONFIRMED')
 
-    def test_readonly_result_header_requires_refresh_and_exact_match(self):
-        field = {"label": "Lot Id", "raw": "P2", "visible": True, "read_only": True}
-        result, d, _ = self.run_query([self.grid(seq=1), self.grid(seq=2)], fields=[field])
-        self.assertIsNotNone(result)
-        self.assertEqual(d["confirmation"], "RESULT_HEADER_MATCH")
-        for mutation in ({}, {"read_only": False}, {"visible": False}, {"raw": "P1"}):
-            result, _, _ = self.run_query([self.grid(), self.grid()], fields=[{**field, **mutation}], timeout=0.5)
-            self.assertIsNone(result)
-        result, d, _ = self.run_query([self.grid("P2"), self.grid("P2")], fields=[{**field, "raw": "P1"}], timeout=0.5)
-        self.assertIsNone(result)
-        self.assertEqual(d["status"], "MISMATCH")
-
-    def test_changed_empty_grid_can_be_confirmed_without_row_identity(self):
-        result, d, _ = self.run_query([self.grid("P1"), self.grid(rows=False)], empty=0.3, timeout=0.8, watch_armed=True)
-        self.assertIsNotNone(result)
-        self.assertTrue(result["no_data"])
-        self.assertEqual(d["status"], "CONFIRMED_EMPTY")
-        self.assertEqual(d["confirmation"], "GRID_REFRESH_CONFIRMED")
-
-    def test_confirmed_empty_waits_existing_confirmation_window_without_load_event(self):
-        field = {"label": "PCBA", "raw": "P2", "visible": True, "read_only": True}
-        result, d, _ = self.run_query([self.grid("P1"), self.grid(rows=False)], fields=[field])
-        self.assertTrue(result["no_data"])
-        self.assertEqual(d["status"], "CONFIRMED_EMPTY")
-        self.assertGreaterEqual(d["milestones_ms"]["empty_confirmed"], 700)
-        self.assertGreaterEqual(d["polls"], 3)
-
-    def test_empty_loading_cycle_can_prove_refresh_without_signature_change(self):
-        field = {"label": "Lot Id", "raw": "P2", "visible": True, "read_only": True}
-        empty = self.grid(rows=False)
-        result, d, _ = self.run_query([empty, self.grid(rows=False, loading=True), empty], fields=[field])
-        self.assertTrue(result["no_data"])
-        self.assertEqual(d["before_grid"], d["after_grid"])
-        result, d, _ = self.run_query([empty, empty], fields=[field], timeout=0.5)
-        self.assertIsNone(result, "an unchanged old empty store is not a completed new query")
-
-    def test_input_retry_is_measured_and_never_submits_unconfirmed_input(self):
-        result, d, view = self.run_query([self.grid("P2")], input_values=["P1", "P2"])
-        self.assertIsNotNone(result)
-        self.assertEqual(d["input_retries"], 1)
-        view.click.assert_called_once_with(timeout=5000)
-        result, d, view = self.run_query([], input_values=["P1", "P1"])
-        self.assertIsNone(result)
-        view.click.assert_not_called()
-        self.assertNotIn("submit", d["milestones_ms"])
-
-    def test_extraction_error_resets_empty_confirmation(self):
-        field = {"label": "Lot Id", "raw": "P2", "visible": True, "read_only": True}
-        empty = self.grid(rows=False)
-        result, d, _ = self.run_query([self.grid("P1"), empty, RuntimeError("temporary"), empty], fields=[field])
-        self.assertTrue(result["no_data"])
-        self.assertEqual(d["poll_errors"], 1)
-        self.assertGreaterEqual(d["milestones_ms"]["empty_confirmed"], 0.9 * 1000)
+    def test_actual_collector_adapter_and_sqlite_preserve_both_responses(self):
+        from ames import browser, navigation
+        from store import Store
+        with tempfile.TemporaryDirectory() as td:
+            store=Store(Path(td)/'ames.sqlite3');store.initialize();process_r11.patch_store(store)
+            wid=store.ensure_window('today','2026-10-16T07:30:00','2026-10-16T18:00:00',None,['TAN10101'])
+            sid=store.create_snapshot(window_id=wid,source_kind='test')
+            records=[{'line':'TAN10101','pcba_sn':sn,'defect_key':'defect-'+sn,'product_model':'CPH2859',
+                      'defect_code':'E1','defect_desc':'Camera impurity','defect_time':'2026-10-16 10:32:00',
+                      'manual_or_auto':'MANUAL'} for sn in ('A','B')]
+            store.ingest_defects(sid,records,reconcile_window=False)
+            plans=[{'rows':history_rows(sn,3),'delay':240,'mode':'loadData'} for sn in ('A','B')]
+            with self.fixture(plans,hidden=history_rows('old',15)) as f, \
+                 patch.object(browser,'AmesBrowser',return_value=f), \
+                 patch.object(navigation.AmesNavigation,'ensure_3022'):
+                out=process_r11.collect_and_persist(store,ROOT/'ames/factory-engine',records,
+                                                  snapshot_id=sid,line='TAN10101',performance='fast')
+            self.assertEqual(out['status'],'complete',out)
+            self.assertEqual(out['collected'],2)
+            self.assertEqual(out['processed'],2)
+            self.assertTrue(all(p['local_ms'] >= 0 for p in out['pcbas']))
+            self.assertGreater(out['events'],0)
+            self.assertEqual(out['contexts'],2)
+            with store.connect() as con:
+                for sn in ('A','B'):
+                    raw=con.execute('SELECT raw_json FROM process_raw_events WHERE pcba_sn=?',(sn,)).fetchall()
+                    self.assertEqual(len(raw),3)
+                    self.assertTrue(all(json.loads(r[0])['Tran User Id']==sn for r in raw))
+                    for table in ('process_events','process_defect_contexts','mes_process_timeline'):
+                        self.assertGreater(con.execute(f'SELECT COUNT(*) FROM {table} WHERE pcba_sn=?',(sn,)).fetchone()[0],0,table)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
