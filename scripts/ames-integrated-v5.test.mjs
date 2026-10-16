@@ -21,8 +21,16 @@ test('automatic shift uses factory timezone, never browser timezone',()=>{
 test('3012 ExtJS load event uses records argument and refuses stale timeout grid',async()=>{
  const py=fs.readFileSync('ames/agent/ames_3012_live.py','utf8'),js=py.split('QUERY_3012_JS = r"""')[1].split('"""')[0],query=eval('('+js+')');
  let handler;
- const fields=['sn','line','model','defect code','repair code','defect type','start time','end time'].map(fieldLabel=>({fieldLabel,setValue(v){this.value=v},getValue(){return this.value},isValid(){return true}}));
- for(const fieldLabel of ['defect time start','defect time end'])fields.push({fieldLabel,xtype:'datefield',setValue(v){this.value=v},getValue(){return this.value},isValid(){return true}});
+ const textFields=['sn','line','model','defect code','repair code','defect type'].map(fieldLabel=>({fieldLabel,setValue(v){this.value=v},getValue(){return this.value},isValid(){return true}}));
+ const startGroup={itemId:'defectTimeStartGroup'};
+ const endGroup={itemId:'defectTimeEndGroup'};
+ const fields=[
+  ...textFields,
+  {fieldLabel:'defect time start',xtype:'datefield',ownerCt:startGroup,setValue(v){this.value=v},getValue(){return this.value},isValid(){return true}},
+  {fieldLabel:'start time',xtype:'timefield',ownerCt:startGroup,setValue(v){this.value=v},getValue(){return this.value},getRawValue(){return String(this.value??'')},isValid(){return true}},
+  {fieldLabel:'defect time end',xtype:'datefield',ownerCt:endGroup,setValue(v){this.value=v},getValue(){return this.value},isValid(){return true}},
+  {fieldLabel:'end time',xtype:'timefield',ownerCt:endGroup,setValue(v){this.value=v},getValue(){return this.value},getRawValue(){return String(this.value??'')},isValid(){return true}},
+ ];
  const record={getData:()=>({sn:'P',repairComment:'Synthetic'})};
  const store={currentPage:4,pageSize:100,getModel:()=>({getFields:()=>['repairComment','repairUser','defectCode'].map(name=>({name:name.replace(/([A-Z])/g,' $1')}))}),on:(name,fn)=>{handler=fn},un:()=>{},loadPage(){},getTotalCount:()=>1,getProxy:()=>({extraParams:{sn:'P'}})};
  const grid={getStore:()=>store};const button={text:'View',isButton:true,handler:()=>handler(store,[record],true)};
