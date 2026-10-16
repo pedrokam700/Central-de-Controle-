@@ -150,26 +150,41 @@ SELECT_SHIFT_JS = r'''args => {
     });
   }
 
-  // If no shift grid is visible yet, explicitly open the lookup trigger. This is
-  // the read-only Shift selector, not the page Confirm/Update buttons.
+  // Physical factory evidence shows that this 2114 variant only opens the Shift
+  // lookup when the small trigger block beside input[name=desc] is actually
+  // clicked. Prefer that real DOM control before ExtJS helper methods. The old
+  // ordering could call owner.onTriggerClick(), mark the request as sent and then
+  // skip the DOM trigger even though no lookup appeared on screen.
   if(args.apply){
     let requested=false;
-    try{
-      if(owner?.onTriggerClick){owner.onTriggerClick();requested=true;}
-      else if(owner?.getTrigger){
-        const triggers=owner.getTrigger();
-        const list=Array.isArray(triggers)?triggers:Object.values(triggers||{});
-        const trigger=list.find(t=>!t?.isVisible || t.isVisible());
-        if(trigger?.handler){trigger.handler.call(trigger.scope||owner,owner,trigger);requested=true;}
-        else if(trigger?.el?.dom){trigger.el.dom.click();requested=true;}
-      }
-    }catch(_){ }
-    if(!requested && desc){
-      const wrap=desc.closest?.('.x-form-item,.x-field,.x-form-field-wrap,.x-form-trigger-wrap')||desc.parentElement;
-      const trigger=wrap?.querySelector?.('.x-form-trigger:not(.x-item-disabled),.x-form-arrow-trigger:not(.x-item-disabled)');
-      if(trigger){try{trigger.click();requested=true;}catch(_){ }}
+    let trigger_strategy='';
+    if(desc){
+      try{
+        const wrap=desc.closest?.('.x-form-item,.x-field,.x-form-field-wrap,.x-form-trigger-wrap')||desc.parentElement;
+        const triggers=[...(wrap?.querySelectorAll?.('.x-form-trigger:not(.x-item-disabled),.x-form-arrow-trigger:not(.x-item-disabled)')||[])].filter(visible);
+        const trigger=triggers[0]||null;
+        if(trigger){
+          for(const type of ['mousedown','mouseup','click']){
+            trigger.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,view:window,button:0}));
+          }
+          requested=true;
+          trigger_strategy='physical_dom_trigger';
+        }
+      }catch(_){ }
     }
-    if(requested)return out({reason:'lookup_open_requested',owner_xtype:owner?.xtype||'',grids:gridInfo});
+    if(!requested){
+      try{
+        if(owner?.onTriggerClick){owner.onTriggerClick();requested=true;trigger_strategy='owner_onTriggerClick';}
+        else if(owner?.getTrigger){
+          const triggers=owner.getTrigger();
+          const list=Array.isArray(triggers)?triggers:Object.values(triggers||{});
+          const trigger=list.find(t=>!t?.isVisible || t.isVisible());
+          if(trigger?.handler){trigger.handler.call(trigger.scope||owner,owner,trigger);requested=true;trigger_strategy='ext_trigger_handler';}
+          else if(trigger?.el?.dom){trigger.el.dom.click();requested=true;trigger_strategy='ext_trigger_dom';}
+        }
+      }catch(_){ }
+    }
+    if(requested)return out({reason:'lookup_open_requested',owner_xtype:owner?.xtype||'',trigger_strategy,grids:gridInfo});
   }
 
   return out({reason:'shift_control_not_found',owner_xtype:owner?.xtype||'',grids:gridInfo});
