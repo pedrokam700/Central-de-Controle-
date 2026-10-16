@@ -71,6 +71,8 @@ jobs:
       - name: Compile local agent
         run: python -m compileall -q ames/agent ames/factory-engine
       - name: Build standalone CLEAN
+        env:
+          CENTRAL_PREVIEW_URLS: https://central-cora-v2-git-fix-ames-official-a-b3407a-pedrokam700-6477.vercel.app
         run: |
           python scripts/build-integrated-candidate.py "$RUNNER_TEMP/central-ames-integrated.zip"
           python - <<'PY'
@@ -79,7 +81,7 @@ jobs:
           z=Path(os.environ['RUNNER_TEMP'])/'central-ames-integrated.zip'
           with zipfile.ZipFile(z) as f:
               names=set(f.namelist())
-              required={'00_INICIAR_AQUI.bat','01_INSTALAR_UMA_VEZ.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','frontend/Central-de-Controle-/index.html','CANDIDATE_MANIFEST.json'}
+              required={'00_INICIAR_AQUI.bat','INICIAR_POSTO_CENTRAL_V2.bat','FRONTEND_GATE.json','01_INSTALAR_UMA_VEZ.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','frontend/Central-de-Controle-/index.html','CANDIDATE_MANIFEST.json'}
               missing=required-names
               assert not missing, f'missing CLEAN files: {missing}'
               assert 'ames-agent/config.json' not in names
@@ -88,6 +90,15 @@ jobs:
               assert manifest['standalone_clean'] is True
               assert manifest['physical_gate']=='PENDING'
               assert manifest['sha']=='${{ github.sha }}'
+              entry=f.read('00_INICIAR_AQUI.bat').decode('utf-8','replace')
+              assert 'INICIAR_POSTO_CENTRAL_V2.bat' in entry and 'FRONTEND_GATE.json' in entry
+              canonical=f.read('INICIAR_POSTO_CENTRAL_V2.bat').decode('utf-8','replace')
+              assert 'FRONTEND_GATE.json' in canonical and 'ames_agent_token' in canonical
+              gate=json.loads(f.read('FRONTEND_GATE.json'))
+              assert gate['expected_sha']=='${{ github.sha }}'
+              assert any('central-cora-v2-git-fix-ames-official' in u for u in gate['preview_urls'])
+              cfg=json.loads(f.read('ames-agent/config.example.json'))
+              assert any('central-cora-v2-git-fix-ames-official' in u for u in cfg['allowed_origins'])
           PY
       - name: Upload exact CLEAN
         uses: actions/upload-artifact@v4
@@ -117,6 +128,8 @@ jobs:
           if(-not $zip){throw 'CLEAN ZIP not found'}
           Expand-Archive -LiteralPath $zip -DestinationPath package -Force
           if(-not (Test-Path 'package\00_INICIAR_AQUI.bat')){throw '00_INICIAR_AQUI.bat missing'}
+          if(-not (Test-Path 'package\INICIAR_POSTO_CENTRAL_V2.bat')){throw 'canonical web launcher missing'}
+          if(-not (Test-Path 'package\FRONTEND_GATE.json')){throw 'preview gate missing'}
           if(Test-Path 'package\ames-agent\config.json'){throw 'CLEAN must not contain workstation config.json'}
           if(Test-Path 'package\ames-agent\data\ames_local.sqlite3'){throw 'CLEAN must not contain operational SQLite'}
       - name: Run real first-use installer
@@ -141,9 +154,11 @@ jobs:
             if(-not $ready.ready){throw 'agent not ready'}
             $pidToStop=[int]$ready.pid
             $html=Invoke-WebRequest 'http://127.0.0.1:8765/Central-de-Controle-/' -UseBasicParsing -TimeoutSec 5
-            if($html.StatusCode -ne 200 -or $html.Content -notmatch 'Central'){throw 'local frontend not served'}
+            if($html.StatusCode -ne 200 -or $html.Content -notmatch 'Central'){throw 'local frontend fallback not served'}
             $manifest=Get-Content 'package\CANDIDATE_MANIFEST.json' -Raw | ConvertFrom-Json
             if([string]$manifest.sha -ne '${{ github.sha }}'){throw "manifest SHA mismatch: $($manifest.sha)"}
+            $gate=Get-Content 'package\FRONTEND_GATE.json' -Raw | ConvertFrom-Json
+            if([string]$gate.expected_sha -ne '${{ github.sha }}'){throw "gate SHA mismatch: $($gate.expected_sha)"}
           }
           finally {
             if($pidToStop){Stop-Process -Id $pidToStop -Force -ErrorAction SilentlyContinue}
