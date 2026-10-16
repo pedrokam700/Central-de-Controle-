@@ -31,6 +31,7 @@ async (cfg) => {
   // factory-redfix-3012 integrated into the canonical collector. Keep this marker
   // while older updater closures still call the compatibility installer: the
   // installer sees the marker and does not monkey-patch this source at runtime.
+  const visible = c => c && !c.hidden && (typeof c.isVisible !== 'function' || c.isVisible(true));
   const ownLabel = c => fold([c?.fieldLabel,c?.boxLabel,c?.text,c?.title,c?.itemId,c?.name,c?.id].filter(Boolean).join(' '));
   const label = c => {
     const parts=[c?.fieldLabel,c?.boxLabel,c?.text,c?.title,c?.itemId,c?.name,c?.id];
@@ -42,11 +43,10 @@ async (cfg) => {
     }
     return fold(parts.filter(Boolean).join(' '));
   };
-  const visible = c => c && !c.hidden && (typeof c.isVisible !== "function" || c.isVisible(true));
   const fields = components.filter(c => visible(c) && (typeof c.setValue === 'function' || typeof c.setRawValue === 'function'));
   const xtype = c => fold(c?.xtype || c?.getXType?.() || '');
   const isDate = c => !!(c && (c.isXType?.('datefield') || c.xtype === 'datefield' || xtype(c).includes('datefield') || xtype(c).includes('date field')));
-  const isTime = c => !!(c && (c.isXType?.('timefield') || c.xtype === 'timefield' || xtype(c).includes('timefield') || xtype(c).includes('time field')));
+  const isTime = c => !!(c && !isDate(c) && (c.isXType?.('timefield') || c.xtype === 'timefield' || xtype(c).includes('timefield') || xtype(c).includes('time field') || /\btime\b/.test(label(c))));
   const scoreText = (text,pats,compactPats) => {
     const s=fold(text), sc=compact(s); let cur=0;
     for(let i=0;i<pats.length;i++){
@@ -59,12 +59,6 @@ async (cfg) => {
     }
     return cur;
   };
-  const kindOk = (c,kind) => {
-    const date=isDate(c), clock=isTime(c), text=label(c);
-    if(kind==='date') return date;
-    if(kind==='time') return !date && (clock || /time/.test(text));
-    return !date && !clock;
-  };
   const componentForInput = input => {
     if(!input) return null;
     for(const c of fields){
@@ -75,6 +69,7 @@ async (cfg) => {
     try { const direct=Ext.getCmp?.(cmpId); if(direct && fields.includes(direct)) return direct; } catch(e) {}
     return null;
   };
+  const kindOk = (c,kind) => kind==='date' ? isDate(c) : kind==='time' ? isTime(c) : (!isDate(c) && !isTime(c));
   function findDomField(patterns,kind){
     const pats=patterns.map(fold), compactPats=patterns.map(compact);
     const selectors='label,.x-form-item-label,.x-form-item-label-inner,.x-form-item-label-default';
@@ -87,8 +82,10 @@ async (cfg) => {
       const add=input=>{if(input && !seen.has(input)){seen.add(input);inputs.push(input);}};
       try { if(node.htmlFor) add(document.getElementById(node.htmlFor)); } catch(e) {}
       let root=node,depth=0;
-      while(root && depth<5 && !inputs.some(x=>kindOk(componentForInput(x),kind))){
+      while(root && depth<6){
         try { for(const input of root.querySelectorAll?.('input')||[]) add(input); } catch(e) {}
+        const matches=inputs.map(componentForInput).filter(c=>c && kindOk(c,kind));
+        if(matches.length) break;
         root=root.parentElement; depth+=1;
       }
       for(const input of inputs){
@@ -102,7 +99,7 @@ async (cfg) => {
     }
     return bestScore>0?best:null;
   }
-  function findField(patterns, kind="text") {
+  function findField(patterns, kind='text') {
     const direct=findDomField(patterns,kind);
     if(direct) return direct;
     const pats = patterns.map(fold), compactPats = patterns.map(compact);
@@ -113,6 +110,25 @@ async (cfg) => {
       if (cur>score) { score=cur; best=c; }
     }
     return score>0?best:null;
+  }
+  const descendsFrom=(c,owner)=>{
+    let x=c,depth=0;
+    while(x && depth<8){ if(x===owner) return true; x=x.ownerCt; depth+=1; }
+    return false;
+  };
+  function resolveDateTimePair(patterns){
+    const date=findField(patterns,'date');
+    if(!date) throw new Error('Data 3012 ausente: '+patterns[0]);
+    let owner=date.ownerCt,depth=0;
+    while(owner && depth<7){
+      const scoped=fields.filter(c=>visible(c) && descendsFrom(c,owner));
+      const dates=scoped.filter(isDate), times=scoped.filter(isTime);
+      if(dates.length===1 && dates[0]===date && times.length===1) return {date,time:times[0],scope:owner.id||owner.itemId||null};
+      owner=owner.ownerCt; depth+=1;
+    }
+    const time=findField(patterns,'time');
+    if(!time) throw new Error('Hora 3012 ausente: '+patterns[0]);
+    return {date,time,scope:null};
   }
   const meta = (c,value) => ({label:label(c),ownLabel:ownLabel(c),itemId:c.itemId||null,name:c.name||null,id:c.id||null,value,raw:String(c.getRawValue?.()??'')});
   function setText(patterns,value) {
@@ -132,10 +148,17 @@ async (cfg) => {
     if(String(c.getValue?.()??'')!==String(actual)||c.isValid?.()===false)throw new Error('3012: filtro nao aplicado: '+patterns[0]);
     return meta(c,actual);
   }
-  function setDate(patterns,value) {
-    const c=findField(patterns,'date'); if(!c)throw new Error('Data 3012 ausente: '+patterns[0]);
-    const parts=String(value).slice(0,10).split('-').map(Number), d=new Date(parts[0],parts[1]-1,parts[2]);
-    const old=c.getValue?.();
+  const expectedDate=value=>{
+    const parts=String(value).slice(0,10).split('-').map(Number);
+    return new Date(parts[0],parts[1]-1,parts[2]);
+  };
+  function dateMatches(c,value){
+    const d=expectedDate(value); let got=c.getValue?.();
+    if(!(got instanceof Date)){ try { got=c.parseDate?.(c.getRawValue?.()); } catch(e) {} }
+    return got instanceof Date && got.getFullYear()===d.getFullYear() && got.getMonth()===d.getMonth() && got.getDate()===d.getDate();
+  }
+  function setDateComponent(c,value,labelName){
+    const d=expectedDate(value), old=c.getValue?.();
     c.setValue(d);
     if(!String(c.getRawValue?.()??'').trim() && typeof c.setRawValue==='function'){
       let formatted=value;
@@ -143,28 +166,37 @@ async (cfg) => {
       c.setRawValue(formatted);
     }
     c.fireEvent?.('select',c,d);c.fireEvent?.('change',c,d,old);c.checkChange?.();c.fireEvent?.('blur',c);
-    let got=c.getValue?.();
-    if(!(got instanceof Date)){
-      try { got=c.parseDate?.(c.getRawValue?.()); } catch(e) {}
-    }
-    if(!(got instanceof Date)||got.getFullYear()!==d.getFullYear()||got.getMonth()!==d.getMonth()||got.getDate()!==d.getDate()||c.isValid?.()===false)throw new Error('Data 3012 nao aplicada: '+patterns[0]);
+    if(!dateMatches(c,value)||c.isValid?.()===false) throw new Error('Data 3012 nao aplicada: '+labelName);
     return meta(c,value);
   }
-  function setTime(patterns,value) {
-    const c=findField(patterns,'time'); if(!c)throw new Error('Hora 3012 ausente: '+patterns[0]);
+  function timeMatches(c,value){
     const parts=String(value||'00:00').split(':').map(Number), hh=parts[0]||0, mm=parts[1]||0;
-    const matches=got=>{
-      if(got instanceof Date) return got.getHours()===hh && got.getMinutes()===mm;
-      const raw=String(c.getRawValue?.()??got??'');
-      const m=raw.match(/(\d{1,2}):(\d{2})/);
-      return !!m && Number(m[1])===hh && Number(m[2])===mm;
-    };
-    const old=c.getValue?.(); c.setValue(value);
-    if(!matches(c.getValue?.()) && typeof c.setValue==='function') c.setValue(new Date(2008,0,1,hh,mm,0,0));
-    c.fireEvent?.('select',c,c.getValue?.());c.fireEvent?.('change',c,c.getValue?.(),old);c.checkChange?.();c.fireEvent?.('blur',c);
-    if(!matches(c.getValue?.())||c.isValid?.()===false)throw new Error('Hora 3012 nao aplicada: '+patterns[0]);
+    const raw=String(c.getRawValue?.()??'');
+    const m=raw.match(/(\d{1,2}):(\d{2})/);
+    if(m) return Number(m[1])===hh && Number(m[2])===mm;
+    const got=c.getValue?.();
+    return got instanceof Date && got.getHours()===hh && got.getMinutes()===mm;
+  }
+  function setTimeComponent(c,value,labelName){
+    const old=c.getValue?.();
+    // Never inject an arbitrary calendar date into a time field. ExtJS timefields
+    // may internally use 2008 as an epoch; feeding that Date back into this form
+    // can corrupt the paired Defect Time date on the real 3012 page.
+    c.setValue(value);
+    if(!timeMatches(c,value) && typeof c.setRawValue==='function') c.setRawValue(value);
+    try {
+      const input=c?.inputEl?.dom;
+      if(input){ input.value=String(value); input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); }
+    } catch(e) {}
+    c.fireEvent?.('change',c,c.getValue?.(),old);c.checkChange?.();c.fireEvent?.('blur',c);
+    if(!timeMatches(c,value)||c.isValid?.()===false) throw new Error('Hora 3012 nao aplicada: '+labelName);
     return meta(c,value);
   }
+
+  const startPair=resolveDateTimePair(['defect time start','defect start']);
+  const endPair=resolveDateTimePair(['defect time end','defect end']);
+  const pairIds=[startPair.date?.id,startPair.time?.id,endPair.date?.id,endPair.time?.id].filter(Boolean);
+  if(new Set(pairIds).size!==pairIds.length) throw new Error('3012: Start/End nao resolveram quatro campos distintos');
 
   const applied={};
   applied.sn=setText(['sn','sn imei','lot id'],cfg.sn);
@@ -173,12 +205,13 @@ async (cfg) => {
   applied.defectCode=setText(['defect code'],cfg.defectCode);
   applied.repairCode=setText(['repair code'],cfg.repairCode);
   applied.defectType=setText(['defect type'],cfg.defectType);
-  applied.dateFrom=setDate(['defect time start','defect start'],cfg.dateFrom);
-  applied.timeFrom=setTime(['defect time start','start time'],cfg.timeFrom);
-  applied.dateTo=setDate(['defect time end','defect end'],cfg.dateTo);
-  applied.timeTo=setTime(['defect time end','end time'],cfg.timeTo);
-  if(applied.dateFrom?.id && applied.dateFrom.id===applied.dateTo?.id)throw new Error('3012: datas inicial/final resolveram o mesmo campo');
-  if(applied.timeFrom?.id && applied.timeFrom.id===applied.timeTo?.id)throw new Error('3012: horas inicial/final resolveram o mesmo campo');
+  applied.dateFrom=setDateComponent(startPair.date,cfg.dateFrom,'defect time start');
+  applied.timeFrom=setTimeComponent(startPair.time,cfg.timeFrom,'defect time start');
+  applied.dateTo=setDateComponent(endPair.date,cfg.dateTo,'defect time end');
+  applied.timeTo=setTimeComponent(endPair.time,cfg.timeTo,'defect time end');
+  if(!dateMatches(startPair.date,cfg.dateFrom)) throw new Error('3012: Defect Time Start foi alterado ao preencher a hora');
+  if(!dateMatches(endPair.date,cfg.dateTo)) throw new Error('3012: Defect Time End foi alterado ao preencher a hora');
+  applied.dateTimeScopes={start:startPair.scope,end:endPair.scope};
 
   function storeFields(store) {
     const out=[];
@@ -210,23 +243,43 @@ async (cfg) => {
 
   const buttons=components.filter(c=>visible(c) && (c.isButton || c.xtype==='button' || typeof c.handler==='function'));
   let viewButton=null,best=-1;
-  for(const b of buttons){const s=ownLabel(b);let sc=0;if(s==='view')sc=100;else if(s.includes(' view ' )||s.endsWith(' view')||s.startsWith('view '))sc=80;else if(s.includes('query')||s.includes('search'))sc=40;if(sc>best){best=sc;viewButton=b;}}
+  for(const b of buttons){const s=ownLabel(b);let sc=0;if(s==='view')sc=100;else if(s.includes(' view ')||s.endsWith(' view')||s.startsWith('view '))sc=80;else if(s.includes('query')||s.includes('search'))sc=40;if(sc>best){best=sc;viewButton=b;}}
   if(!viewButton || best<40) throw new Error('Botao View da 3012 nao identificado.');
+  const physicalViewElement=()=>{
+    const candidates=[viewButton?.btnEl?.dom,viewButton?.el?.dom];
+    for(const root of candidates){
+      if(!root) continue;
+      if(typeof root.click==='function' && /^(A|BUTTON|INPUT)$/i.test(String(root.tagName||''))) return root;
+      try { const nested=root.querySelector?.('a,button,input[type="button"],input[type="submit"]'); if(nested) return nested; } catch(e) {}
+    }
+    return null;
+  };
+  const clickView=()=>{
+    const el=physicalViewElement();
+    if(el){
+      try { el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true})); } catch(e) {}
+      try { el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true})); } catch(e) {}
+      el.click();
+      return 'physical_dom_click';
+    }
+    if(typeof viewButton.fireEvent==='function'){ viewButton.fireEvent('click',viewButton); return 'ext_click_event'; }
+    if(typeof viewButton.handler==='function'){ viewButton.handler.call(viewButton.scope||viewButton,viewButton); return 'handler_fallback'; }
+    throw new Error('Botao View 3012 sem acao fisica disponivel.');
+  };
 
   const proxy=store.getProxy?.() || store.proxy;
   const beforeParams=JSON.parse(JSON.stringify(proxy?.extraParams||{}));
+  let viewAction=null;
   const waitLoad = () => new Promise((resolve,reject)=>{
     let done=false;
     const cleanup=()=>{clearTimeout(timer);store.un?.('load',finish);};
     const finish=(loadedStore,records,success)=>{if(done)return;done=true;cleanup();success===false?reject(new Error('3012 retornou falha ao carregar a grid.')):resolve((records||[]).map(dataOf));};
-    const timer=setTimeout(()=>{if(done)return;done=true;cleanup();reject(new Error('Timeout aguardando nova carga 3012; grade antiga recusada.'));},30000);
+    const timer=setTimeout(()=>{if(done)return;done=true;cleanup();reject(new Error('Timeout aguardando nova carga 3012; View foi acionado mas a store nao respondeu.'));},30000);
     if(typeof store.on!=='function'){cleanup();reject(new Error('Store 3012 sem evento load'));return;}
     store.on('load',finish,null,{single:true});
     store.currentPage=1;
-    try {
-      if(typeof viewButton.handler==='function') viewButton.handler.call(viewButton.scope||viewButton,viewButton);
-      else viewButton.fireEvent?.('click',viewButton);
-    } catch(e) { done=true;cleanup();reject(e); }
+    try { viewAction=clickView(); }
+    catch(e) { done=true;cleanup();reject(e); }
   });
   const firstPage=await waitLoad();
   await new Promise(r=>setTimeout(r,120));
@@ -234,7 +287,7 @@ async (cfg) => {
   const total=Number(store.getTotalCount?.() ?? firstPage.length ?? 0);
   const pageSize=Number(store.pageSize||firstPage.length||100)||100;
   const pages=Math.max(1,Math.ceil(total/pageSize));
-  if(pages>10000)throw new Error("3012 excedeu limite de paginacao");
+  if(pages>10000)throw new Error('3012 excedeu limite de paginacao');
   const records=[...firstPage]; const pageResults=[{page:1,count:firstPage.length}];
 
   async function loadPage(pageNo){
@@ -245,8 +298,8 @@ async (cfg) => {
     });
   }
   for(let p=2;p<=pages;p++){const rs=await loadPage(p);records.push(...rs);pageResults.push({page:p,count:rs.length});}
-  if(records.length!==total)throw new Error("3012 incompleta: "+records.length+" / "+total);
-  return {records,total,pageSize,pages,pageResults,applied,proxyParams:params,beforeParams,storeFields:chosen.names,storeScore:chosen.score,gridItemId:chosen.c?.itemId||null};
+  if(records.length!==total)throw new Error('3012 incompleta: '+records.length+' / '+total);
+  return {records,total,pageSize,pages,pageResults,applied,proxyParams:params,beforeParams,storeFields:chosen.names,storeScore:chosen.score,gridItemId:chosen.c?.itemId||null,viewAction};
 }
 """
 
@@ -445,7 +498,7 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
                     raise RuntimeError('3012 retornou outra SN; filtros/grade nao confirmados')
                 records.extend(normalized);done.add(chunk_key)
                 diagnostics.append({"sn":sn,"from":cfg["dateFrom"]+" "+cfg["timeFrom"],"to":cfg["dateTo"]+" "+cfg["timeTo"],"rows":len(normalized),
-                                    "total":raw.get("total"),"pages":raw.get("pages"),"store_score":raw.get("storeScore"),"fields":raw.get("storeFields"),"applied":raw.get("applied"),"surface":"home"})
+                                    "total":raw.get("total"),"pages":raw.get("pages"),"store_score":raw.get("storeScore"),"fields":raw.get("storeFields"),"applied":raw.get("applied"),"surface":"home","view_action":raw.get("viewAction")})
                 if checkpoint_path:
                     checkpoint_path.parent.mkdir(parents=True,exist_ok=True)
                     checkpoint_path.write_text(json.dumps({"done":sorted(done),"rows":records,"updated_at":datetime.now().isoformat(timespec="seconds")},ensure_ascii=False,indent=2,default=str),encoding="utf-8")
