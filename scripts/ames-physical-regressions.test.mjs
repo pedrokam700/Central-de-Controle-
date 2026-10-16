@@ -13,6 +13,9 @@ assert.match(view3022,/c\.isVisible\s*&&\s*!c\.isVisible\(true\)/,'3022 ExtJS di
 assert.match(view3022,/getBoundingClientRect\(\)/,'3022 discovery must verify a rendered input box');
 assert.match(view3022,/#\{meta\['inputId'\]\}:visible/,'3022 locator must be constrained to a visible input');
 assert.doesNotMatch(view3022,/campo\.click\(timeout=3000\)/,'3022 must not click the stale input before fill');
-assert.match(view3022,/for attempt in range\(2\):/,'3022 must re-resolve once if Ext swaps the internal form');
+assert.match(view3022,/input_ready_timeout_s/,'3022 must use a bounded readiness window for the live ExtJS query field');
+assert.match(view3022,/while time\.time\(\) < input_deadline:/,'3022 must re-resolve the live query field throughout the transient ExtJS lifecycle');
+assert.match(view3022,/if saw_ext:\s*\n\s*return None/,'3022 must not fall back to a stale generic input while ExtJS is rebuilding the field');
+assert.match(view3022,/mark\("view_located"\)/,'3022 must resolve View only after the query field is stable');
 
-console.log('PASS: physical regressions locked — terminal MES progress is preserved and 3022 ignores hidden stale inputs.');
+console.log('PASS: physical regressions locked — terminal MES progress is preserved and 3022 tolerates transient ExtJS SN-field recreation without accepting stale inputs.');
