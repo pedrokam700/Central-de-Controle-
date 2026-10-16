@@ -1,0 +1,44 @@
+name: Apply official agent/shared sync fix
+
+on:
+  push:
+    branches:
+      - fix/ames-official-agent-shared-sync-20261016
+    paths:
+      - scripts/apply-official-agent-shared-sync-fix.py
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply source correction
+        run: python scripts/apply-official-agent-shared-sync-fix.py
+      - name: Focused pairing and shared-sync contracts
+        run: |
+          node --test scripts/ames-agent-cross-tab-pairing.test.mjs
+          node --test scripts/ames-agent-pairing.test.mjs
+          node --test scripts/ames-sync-autocapture.test.mjs
+          node --test scripts/ames-sync.test.mjs
+          node --test scripts/ames-multipc-shared-contract.test.mjs
+          git diff --check
+      - name: Commit canonical fix and remove one-shot applier
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/apply-official-agent-shared-sync-fix.py .github/workflows/apply-official-agent-shared-sync-fix.yml
+          git add ames/agent-client.mjs ames/data/store.mjs ames/sync.mjs ames/agent/local_security.py
+          git commit -m "fix(ames): persist pairing and auto-publish shared snapshots"
+          git push origin HEAD:${GITHUB_REF_NAME}
