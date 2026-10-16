@@ -1,0 +1,41 @@
+name: Apply 3012 mapped V2
+
+on:
+  push:
+    branches:
+      - work/ames-operator-ux-parity-20261014
+    paths:
+      - scripts/trigger-3012-mapped-v2.txt
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Apply mapped 3012 correction
+        run: |
+          python scripts/patch-3012-mapped-v2.py
+          python -m py_compile ames/agent/ames_3012_live.py ames/agent/repair_3012.py ames/agent/agent_3012_patch.py
+          python scripts/agent-3012-runtime-contract.test.py
+          node --test scripts/ames-3012-runtime-contract.test.mjs scripts/ames-3012-physical-contract.test.mjs scripts/ames-3012-navigation.test.mjs
+          git diff --check
+      - name: Commit canonical correction and permanent regression tests
+        run: |
+          git rm scripts/patch-3012-mapped-v2.py scripts/fixtures/ames-3012-query-v2.js scripts/trigger-3012-mapped-v2.txt .github/workflows/apply-3012-mapped-v2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ames/agent/ames_3012_live.py ames/agent/repair_3012.py ames/agent/agent_3012_patch.py scripts/agent-3012-runtime-contract.test.py scripts/ames-3012-runtime-contract.test.mjs scripts/ames-3012-physical-contract.test.mjs
+          git commit -m "fix(ames): execute mapped 3012 runtime contract"
+          git push origin HEAD:${GITHUB_REF_NAME}
