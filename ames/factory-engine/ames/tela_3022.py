@@ -674,12 +674,16 @@ class Tela3022:
         return self.browser.choose_active_page("3022")
 
     def _query_control(self, page):
-        # AWIP3022 may keep stale/hidden Ext fields mounted after an internal view
-        # transition. Selecting the first matching field used to return that hidden
-        # control, producing the physical "element is not visible / required" stall.
+        """Return the current visible 3022 query input, never a stale Ext fallback.
+
+        During a real SN-to-SN transition ExtJS can destroy/recreate the text field.
+        If ExtJS is present but the live field is temporarily absent/unstable, return
+        None so the caller can re-resolve it. Falling through to the generic locator
+        in that state can bind to the just-destroyed `textfield-...-inputEl`.
+        """
         js = r"""
         () => {
-          if (!window.Ext || !Ext.ComponentQuery) return null;
+          if (!window.Ext || !Ext.ComponentQuery) return {ext:false, field:null};
           const visible = c => {
             try {
               if (c.isVisible && !c.isVisible(true)) return false;
@@ -694,13 +698,17 @@ class Tela3022:
             const t = [c.fieldLabel,c.name,c.itemId,c.id].filter(Boolean).join(' ').toLowerCase();
             return visible(c) && ((t.includes('sn') && t.includes('imei')) || t.includes('a-s'));
           });
-          if (!f) return null;
-          return {inputId:String(f.inputId||''), id:String(f.id||''), name:String(f.name||'')};
+          if (!f) return {ext:true, field:null};
+          return {ext:true, field:{inputId:String(f.inputId||''), id:String(f.id||''), name:String(f.name||'')}};
         }
         """
+        saw_ext = False
         for frame in page.frames:
             try:
-                meta = frame.evaluate(js)
+                probe = frame.evaluate(js) or {}
+                if probe.get("ext"):
+                    saw_ext = True
+                meta = probe.get("field") or {}
                 if not meta:
                     continue
                 selectors = []
@@ -710,10 +718,15 @@ class Tela3022:
                     selectors.append(f'input[name="{meta["name"]}"]:visible')
                 for sel in selectors:
                     loc = frame.locator(sel)
-                    if loc.count() and loc.first.is_visible(timeout=500):
+                    if loc.count() and loc.first.is_visible(timeout=350):
                         return loc.first
             except Exception:
                 pass
+
+        # ExtJS exists, therefore absence here is a transient lifecycle state.
+        # Do not let a generic selector latch onto a component that is being removed.
+        if saw_ext:
+            return None
 
         _, campo, _ = find_text_input(
             page,
@@ -831,38 +844,48 @@ class Tela3022:
         if not pcba_sn:
             raise ValueError("SN vazio.")
         page = self._page()
-        query_frame, view, _ = find_button(
-            page,
-            texts=self.cfg["view_texts"],
-            frame_hints=("3022", "View Lot History")
-        )
 
-        # Re-resolve once if ExtJS swaps the form between discovery and input.
+        # The real ExtJS form can recreate its SN field for longer than one short
+        # retry when moving from one PCBA to the next. Re-resolve the *live* field
+        # until it is stable enough to fill and read back; there is no fixed delay.
+        input_ready_timeout_s = min(5.0, max(2.0, float(timeout_s)))
+        telemetry["input_ready_timeout_s"] = input_ready_timeout_s
+        input_deadline = time.time() + input_ready_timeout_s
         last_input_error = None
         campo = None
-        for attempt in range(2):
-            campo = self._query_control(page)
-            mark("input_located")
+        while time.time() < input_deadline:
             try:
-                campo.wait_for(state="visible", timeout=1600)
-                campo.fill(pcba_sn, timeout=3000)
+                campo = self._query_control(page)
+                if campo is None:
+                    raise RuntimeError("campo SN/IMEI ExtJS em transição")
+                mark("input_located")
+                campo.wait_for(state="visible", timeout=700)
+                campo.fill(pcba_sn, timeout=1200)
                 mark("input_filled")
-                if normalizar_sn(campo.input_value(timeout=1000)) != pcba_sn:
+                if normalizar_sn(campo.input_value(timeout=700)) != pcba_sn:
                     raise RuntimeError("3022 input não confirmou a PCBA alvo")
-                # This is the only valid lifetime for the editable query control.
-                # The physical A-MES page may clear/recreate it as soon as View runs.
                 telemetry["target_confirmed_before_submit"] = True
-                telemetry["query_context_ok"] = True  # compatibility: means confirmed at submit time
+                telemetry["query_context_ok"] = True  # compatibility: confirmed at submit time
                 mark("input_applied")
                 last_input_error = None
                 break
             except Exception as exc:
                 last_input_error = exc
-                if attempt == 0:
-                    telemetry["input_retries"] += 1
-                    time.sleep(0.20)
+                telemetry["input_retries"] += 1
+                if time.time() >= input_deadline:
+                    break
+                time.sleep(0.10)
         if last_input_error is not None:
             raise RuntimeError(f"3022 não encontrou um campo SN/IMEI visível e estável: {last_input_error}")
+
+        # Resolve View only after the field is stable. The same Ext transition that
+        # recreates the input can also invalidate a button locator discovered early.
+        query_frame, view, _ = find_button(
+            page,
+            texts=self.cfg["view_texts"],
+            frame_hints=("3022", "View Lot History")
+        )
+        mark("view_located")
 
         # Select the visible history before ranking by row count, and keep the
         # same frame/grid through this query. Hidden previous views must not win.
