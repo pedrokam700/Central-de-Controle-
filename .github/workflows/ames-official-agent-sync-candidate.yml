@@ -75,7 +75,7 @@ jobs:
         run: python -m compileall -q ames/agent ames/factory-engine
       - name: Build standalone CLEAN
         env:
-          CENTRAL_PREVIEW_URLS: https://central-cora-v2-git-fix-ames-official-a-b3407a-pedrokam700-6477.vercel.app
+          CENTRAL_PREVIEW_URLS: https://central-cora-v2-git-fix-ames-official-a-b3407a-pedrokam700-6477.vercel.app;https://deploy-preview-30--productcontrolcenter.netlify.app
         run: |
           python scripts/build-integrated-candidate.py "$RUNNER_TEMP/central-ames-integrated.zip"
           python - <<'PY'
@@ -100,8 +100,10 @@ jobs:
               gate=json.loads(f.read('FRONTEND_GATE.json'))
               assert gate['expected_sha']=='${{ github.sha }}'
               assert any('central-cora-v2-git-fix-ames-official' in u for u in gate['preview_urls'])
+              assert any('deploy-preview-30--productcontrolcenter.netlify.app' in u for u in gate['preview_urls'])
               cfg=json.loads(f.read('ames-agent/config.example.json'))
               assert any('central-cora-v2-git-fix-ames-official' in u for u in cfg['allowed_origins'])
+              assert any('deploy-preview-30--productcontrolcenter.netlify.app' in u for u in cfg['allowed_origins'])
           PY
       - name: Upload validation-only package (not a releasable CLEAN)
         uses: actions/upload-artifact@v4
@@ -222,12 +224,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Require the same exact Vercel preview used by the package
+      - name: Require an exact-SHA public preview usable by the package
         env:
           EXPECTED_SHA: ${{ github.sha }}
         run: >-
           node scripts/post-deploy-smoke.mjs
-          --origin "https://central-cora-v2-git-fix-ames-official-a-b3407a-pedrokam700-6477.vercel.app"
+          --origin "https://deploy-preview-30--productcontrolcenter.netlify.app"
           --sha "$EXPECTED_SHA"
           --wait-ms 300000
           --max-redirects 4
