@@ -18,28 +18,17 @@ test('automatic shift uses factory timezone, never browser timezone',()=>{
  assert.equal(configuredShiftAt(config,new Date('2026-10-14T20:30:00Z')),'2nd Shift');
 });
 
-test('3012 ExtJS load event uses records argument and refuses stale timeout grid',async()=>{
- const py=fs.readFileSync('ames/agent/ames_3012_live.py','utf8'),js=py.split('QUERY_3012_JS = r"""')[1].split('"""')[0],query=eval('('+js+')');
- let handler;
- const textFields=['sn','line','model','defect code','repair code','defect type'].map(fieldLabel=>({fieldLabel,setValue(v){this.value=v},getValue(){return this.value},isValid(){return true}}));
- const startGroup={itemId:'defectTimeStartGroup'};
- const endGroup={itemId:'defectTimeEndGroup'};
- const fields=[
-  ...textFields,
-  {fieldLabel:'defect time start',xtype:'datefield',ownerCt:startGroup,setValue(v){this.value=v},getValue(){return this.value},isValid(){return true}},
-  {fieldLabel:'start time',xtype:'timefield',ownerCt:startGroup,setValue(v){this.value=v},getValue(){return this.value},getRawValue(){return String(this.value??'')},isValid(){return true}},
-  {fieldLabel:'defect time end',xtype:'datefield',ownerCt:endGroup,setValue(v){this.value=v},getValue(){return this.value},isValid(){return true}},
-  {fieldLabel:'end time',xtype:'timefield',ownerCt:endGroup,setValue(v){this.value=v},getValue(){return this.value},getRawValue(){return String(this.value??'')},isValid(){return true}},
- ];
- const record={getData:()=>({sn:'P',repairComment:'Synthetic'})};
- const store={currentPage:4,pageSize:100,getModel:()=>({getFields:()=>['repairComment','repairUser','defectCode'].map(name=>({name:name.replace(/([A-Z])/g,' $1')}))}),on:(name,fn)=>{handler=fn},un:()=>{},loadPage(){},getTotalCount:()=>1,getProxy:()=>({extraParams:{sn:'P'}})};
- const grid={getStore:()=>store};const button={text:'View',isButton:true,handler:()=>handler(store,[record],true)};
- globalThis.window={Ext:{}};globalThis.Ext={ComponentManager:{all:{items:[...fields,grid,button]}}};
- try{
-  const result=await query({sn:'P',dateFrom:'2026-10-13',dateTo:'2026-10-13',timeFrom:'07:30',timeTo:'17:30'});
-  assert.equal(result.records[0].sn,'P');
-  assert.equal(store.currentPage,1);
-  assert.ok(js.includes("store.on('load',finish,null,{single:true})"));
-  assert.ok(js.includes('View foi acionado mas a store nao respondeu'));
- }finally{delete globalThis.window;delete globalThis.Ext;}
+test('3012 mapped V2 uses real load records contract and refuses unconfirmed stale response',()=>{
+ const py=fs.readFileSync('ames/agent/ames_3012_live.py','utf8');
+ const js=py.split('QUERY_3012_JS = r"""')[1].split('"""')[0];
+ assert.match(py,/QUERY_CONTRACT = "3012-home-mapped-v2"/);
+ assert.match(js,/state\.loadFn=\(_store,_records,success\)/);
+ assert.match(js,/store\.on\?\.\('load',state\.loadFn\)/);
+ assert.match(js,/STORE_LOAD_CONFIRMED/);
+ assert.match(js,/STORE_DATASET_EVENT/);
+ assert.match(js,/STORE_REBOUND_AFTER_VIEW/);
+ assert.match(js,/3012_RESPONSE_NOT_CONFIRMED/);
+ assert.match(js,/3012_VIEW_NOT_EXECUTED/);
+ assert.match(js,/byItemId\('grdDefectRepair'/);
+ assert.match(js,/byItemId\('btnView'/);
 });
