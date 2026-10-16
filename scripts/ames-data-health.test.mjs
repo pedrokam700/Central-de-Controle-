@@ -1,0 +1,165 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {buildDataHealth,buildSecurityHealth,buildWorkstationHealth,buildSyncHealth,createDataHealthView} from '../ames/console-data-health.mjs';
+
+function fakeStore(occurrences=[]){
+  return {
+    agent(){return {status:'connected',capabilities:{process_timeline:true}};},
+    read(line){
+      if(line!=='TAN10101')return {snapshot:null,freshness:'unknown',source:null};
+      return {snapshot:{
+        snapshot_id:'1',collected_at:'2026-10-14T09:00:00',occurrences,
+        material_trace:{status:'not_collected',records:[]},
+        pcba_history:{status:'not_collected',records:[]},
+        process_timeline:{status:'not_collected',events:[]},
+      },freshness:'fresh',source:'local'};
+    }
+  };
+}
+
+const repairStatus=(overrides={})=>({
+  status:'ok',implemented:true,factoryValidated:false,amesStartDate:'2026-01-01',
+  local:{rows:0,pcbas:0,repairUsers:0,coverageIntervals:0,coverageSns:0,firstEvent:null,lastEvent:null,...overrides}
+});
+
+test('security health exposes counts only and keeps validated policy green',()=>{
+  const model=buildSecurityHealth({
+    status:'ok',
+    originPolicy:{ok:true,mode:'loopback-plus-explicit-https',remoteOrigins:1,rejectedEntries:0,secret:'https://hidden.example'}
+  });
+  assert.equal(model.tone,'ok');
+  assert.equal(model.remote,1);
+  assert.equal(model.rejected,0);
+  assert.equal(model.mode,'loopback-plus-explicit-https');
+  assert.equal(JSON.stringify(model).includes('hidden.example'),false);
+});
+
+test('legacy rejected origins are visible as partial without exposing origin values',()=>{
+  const model=buildSecurityHealth({
+    status:'ok',
+    originPolicy:{ok:false,mode:'loopback-plus-explicit-https',remoteOrigins:1,rejectedEntries:3,origins:['https://must-not-render.example']}
+  });
+  assert.equal(model.tone,'partial');
+  assert.equal(model.remote,1);
+  assert.equal(model.rejected,3);
+  assert.match(model.label,/Configuração legada|Legacy configuration/);
+  assert.equal(JSON.stringify(model).includes('must-not-render'),false);
+});
+
+test('unavailable hardening diagnostics remain unknown instead of being reported safe',()=>{
+  for(const value of [null,{status:'unavailable',reason:'not_paired'},{status:'error'}]){
+    const model=buildSecurityHealth(value);
+    assert.equal(model.tone,'unknown');
+    assert.equal(model.remote,null);
+    assert.equal(model.rejected,null);
+  }
+});
+
+test('workstation health exposes only whitelisted version setup and readiness fields',()=>{
+  const model=buildWorkstationHealth({
+    status:'connected',agent_build:'0.5.25-rc1',
+    runtime:{candidate_version:'0.5.26-rc1',setup_complete:true,network:{secret:'network-secret'},workstation:{hostname:'hidden-host'}},
+    readiness:{engine:true,chrome:true,ames:true,sqlite:true,python:true,dependencies:true,playwright:true,process:false,session:'session-secret'}
+  });
+  assert.equal(model.tone,'partial');
+  assert.equal(model.build,'0.5.25-rc1');
+  assert.equal(model.candidate,'0.5.26-rc1');
+  assert.equal(model.setup,true);
+  assert.equal(model.failed,1);
+  assert.equal(model.checks.find(x=>x.key==='process')?.value,false);
+  assert.equal(model.checks.some(x=>x.key==='session'),false);
+  const serialized=JSON.stringify(model);
+  assert.equal(serialized.includes('network-secret'),false);
+  assert.equal(serialized.includes('hidden-host'),false);
+  assert.equal(serialized.includes('session-secret'),false);
+});
+
+test('workstation health is green only with complete setup and fully reported ready checks',()=>{
+  const model=buildWorkstationHealth({
+    status:'connected',agent_build:'0.5.25-rc1',runtime:{candidate_version:'0.5.25-rc1',setup_complete:true},
+    readiness:{engine:true,chrome:true,ames:true,sqlite:true,python:true,dependencies:true,playwright:true,process:true}
+  });
+  assert.equal(model.tone,'ok');
+  assert.equal(model.known,8);
+  assert.equal(model.ready,8);
+  assert.equal(model.failed,0);
+  assert.equal(model.unknown,0);
+});
+
+test('shared sync health exposes team-latest provenance without account identity',()=>{
+  const model=buildSyncHealth({sync:{
+    read_status:'ready',remote_scope:'team_latest',remote_latest_collected_at:'2026-10-14T12:00:00Z',
+    remote_heads:[
+      {line_id:'TAN10103',source_id:'posto-3',snapshot_id:'33',snapshot_revision:2,collected_at:'2026-10-14T12:00:00Z',authority:'team_latest',owner_uid:'must-not-leak'},
+      {line_id:'TAN10101',source_id:'posto-1',snapshot_id:'31',snapshot_revision:4,collected_at:'2026-10-14T11:00:00Z',authority:'team_latest'},
+    ]
+  }});
+  assert.equal(model.tone,'partial');
+  assert.equal(model.count,2);
+  assert.equal(model.authority,'team_latest');
+  assert.equal(model.latest,'2026-10-14T12:00:00Z');
+  assert.deepEqual(model.heads.map(x=>x.line_id),['TAN10101','TAN10103']);
+  assert.equal(JSON.stringify(model).includes('must-not-leak'),false);
+});
+
+test('shared sync read error preserves last valid provenance instead of erasing it',()=>{
+  const model=buildSyncHealth({sync:{read_status:'error',read_error:'technical details',remote_scope:'team_latest',remote_heads:[{line_id:'TAN10102',source_id:'posto-2',snapshot_id:'9',snapshot_revision:1,collected_at:'2026-10-14T10:00:00Z',authority:'team_latest'}]}});
+  assert.equal(model.tone,'partial');
+  assert.equal(model.has_error,true);
+  assert.equal(model.count,1);
+  assert.equal(model.heads[0].source_id,'posto-2');
+  assert.equal(JSON.stringify(model).includes('technical details'),false);
+});
+
+test('data health renders shared workstation authority and escaped source metadata',()=>{
+  const agent={status:'offline',agent_build:'build-<1>',runtime:{candidate_version:'candidate-&-2',setup_complete:true,network:{secret:'must-not-render'}},readiness:{engine:true},capabilities:{process_timeline:false},sync:{
+    read_status:'ready',remote_scope:'team_latest',remote_latest_collected_at:'2026-10-14T12:00:00Z',
+    remote_heads:[{line_id:'TAN10101',source_id:'posto-&-1',snapshot_id:'31',snapshot_revision:4,collected_at:'2026-10-14T11:00:00Z',authority:'team_latest'}]
+  }};
+  const store={agent:()=>agent,read:()=>({snapshot:null,freshness:'unknown',source:null})};
+  const root={innerHTML:'',setAttribute(){},removeAttribute(){},replaceChildren(){this.innerHTML='';},querySelectorAll(){return [];}};
+  const view=createDataHealthView(root,store);view.render();
+  assert.match(root.innerHTML,/data-workstation-health/);
+  assert.match(root.innerHTML,/Posto local/);
+  assert.match(root.innerHTML,/build-&lt;1&gt;/);
+  assert.match(root.innerHTML,/candidate-&amp;-2/);
+  assert.equal(root.innerHTML.includes('must-not-render'),false);
+  assert.match(root.innerHTML,/data-sync-health/);
+  assert.match(root.innerHTML,/Sincronização entre postos/);
+  assert.match(root.innerHTML,/Mais recente da equipe/);
+  assert.match(root.innerHTML,/posto-&amp;-1/);
+  assert.equal(root.innerHTML.includes('owner_uid'),false);
+  view.clear();
+});
+
+test('3012 cache coverage never becomes coverage of current PCBAs without linked evidence',()=>{
+  const store=fakeStore([{pcba_sn:'P1',repair_evidence_3012:[]}]);
+  const item=buildDataHealth(store,repairStatus({rows:14,coverageSns:3,coverageIntervals:5})).find(x=>x.source==='3012');
+  assert.equal(item.count,0);
+  assert.equal(item.state.tone,'partial');
+  assert.match(item.state.label,/Sem vínculo neste snapshot|No link in this snapshot/);
+  assert.match(item.state.detail,/não prova cobertura|does not prove coverage/);
+  assert.equal(item.cache.coverageSns,3);
+  assert.equal(item.cache.factoryValidated,false);
+});
+
+test('3012 without linked evidence and without exact cache stays unknown, never zero-covered',()=>{
+  const store=fakeStore([{pcba_sn:'P1',repair_evidence_3012:[]}]);
+  const item=buildDataHealth(store,repairStatus()).find(x=>x.source==='3012');
+  assert.equal(item.count,0);
+  assert.equal(item.state.tone,'unknown');
+  assert.match(item.state.label,/Não comprovado|Not proven/);
+  assert.match(item.state.detail,/não equivale a zero reparos|does not mean zero repairs/);
+});
+
+test('3012 linked evidence counts only current occurrences and does not inherit unrelated cache rows',()=>{
+  const store=fakeStore([
+    {pcba_sn:'P1',repair_evidence_3012:[{row_key:'R1'}]},
+    {pcba_sn:'P2',repair_evidence_3012:[]},
+  ]);
+  const item=buildDataHealth(store,repairStatus({rows:999,coverageSns:100,coverageIntervals:120})).find(x=>x.source==='3012');
+  assert.equal(item.count,1);
+  assert.equal(item.state.tone,'partial');
+  assert.match(item.state.detail,/1\/2/);
+  assert.equal(item.cache.rows,999);
+});

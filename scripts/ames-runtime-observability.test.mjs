@@ -1,0 +1,77 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {physicalOriginStatus,runtimeDiagnostics} from '../ames/console-monitor-runtime.mjs';
+
+test('runtime observability summarizes only sanitized operational state',()=>{
+  const result=runtimeDiagnostics({
+    status:'connected',
+    error:'',
+    readiness:{python:true,dependencies:true,playwright:false,sqlite:true},
+    runtime:{
+      scheduler:{policy:'fifo-monitor-skip-v1'},
+      setup_complete:true,
+      candidate_version:'0.5.25-rc1',
+      latest_snapshot_id:42,
+      network_guardian:{status:'healthy'},
+      secret_token:'must-not-appear'
+    }
+  },[
+    {snapshot:'41',freshness:'fresh'},
+    {snapshot:'42',freshness:'stale'},
+    {snapshot:null,freshness:'unknown'},
+  ],{
+    status:'ok',
+    level:'H1',
+    integrity:'ok',
+    performanceIndexes:{ok:true,expected:8,present:8,missing:[]},
+    hidden:'must-not-appear'
+  });
+  assert.deepEqual(result,{
+    scheduler:'fifo-monitor-skip-v1',
+    preflight:{ok:3,known:4,total:4},
+    setupComplete:true,
+    candidateVersion:'0.5.25-rc1',
+    latestSnapshotId:42,
+    guardian:'healthy',
+    hardening:'H1',
+    sqliteIntegrity:'ok',
+    performanceIndexes:{ok:true,expected:8,present:8,missing:[]},
+    diagnosticsStatus:'ok',
+    freshLines:1,
+    staleLines:1,
+    missingLines:1,
+    error:'',
+  });
+  assert.equal(JSON.stringify(result).includes('must-not-appear'),false);
+});
+
+test('runtime observability fails closed when health fields are unknown',()=>{
+  const result=runtimeDiagnostics({status:'disconnected',readiness:null,runtime:null,error:'offline'},[
+    {snapshot:null,freshness:'unknown'},
+    {snapshot:null,freshness:'unknown'},
+    {snapshot:null,freshness:'unknown'},
+  ],{status:'unavailable',reason:'not_paired'});
+  assert.equal(result.scheduler,null);
+  assert.deepEqual(result.preflight,{ok:0,known:0,total:4});
+  assert.equal(result.setupComplete,false);
+  assert.equal(result.latestSnapshotId,null);
+  assert.equal(result.guardian,null);
+  assert.equal(result.hardening,null);
+  assert.equal(result.sqliteIntegrity,null);
+  assert.equal(result.performanceIndexes,null);
+  assert.equal(result.diagnosticsStatus,'unavailable');
+  assert.equal(result.freshLines,0);
+  assert.equal(result.staleLines,0);
+  assert.equal(result.missingLines,3);
+  assert.equal(result.error,'offline');
+});
+
+test('physical origin gate accepts only the standalone CLEAN loopback',()=>{
+  assert.deepEqual(physicalOriginStatus('http://127.0.0.1:8765'),{ok:true,mode:'local'});
+  assert.deepEqual(physicalOriginStatus('http://localhost:8765/'),{ok:true,mode:'local'});
+  assert.deepEqual(physicalOriginStatus('https://central-cora-v2-git-v2-console-parity-r12-pedrokam700-6477.vercel.app'),{ok:false,mode:'unapproved'});
+  assert.deepEqual(physicalOriginStatus('https://deploy-preview-23--productcontrolcenter.netlify.app'),{ok:false,mode:'unapproved'});
+  assert.deepEqual(physicalOriginStatus('https://central-cora-v2.vercel.app'),{ok:false,mode:'unapproved'});
+  assert.deepEqual(physicalOriginStatus('https://example.com'),{ok:false,mode:'unapproved'});
+  assert.deepEqual(physicalOriginStatus('file:///C:/Central/index.html'),{ok:false,mode:'unapproved'});
+});

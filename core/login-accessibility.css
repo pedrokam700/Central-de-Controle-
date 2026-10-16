@@ -1,0 +1,35 @@
+#accountScreen { color-scheme:light; }
+#accountScreen .account-card { border:1px solid #c8cdd2; }
+#accountScreen .mark {
+  display:grid!important;
+  place-items:center!important;
+  width:32px!important;
+  height:32px!important;
+  min-width:32px!important;
+  min-height:32px!important;
+  margin:0 0 14px!important;
+  border:2px solid #111!important;
+  border-radius:8px!important;
+  background:#111!important;
+  color:#fff!important;
+  font-weight:800!important;
+  line-height:1!important;
+  box-shadow:0 0 0 2px #fff,0 0 0 3px #707070;
+}
+#accountScreen input { background:#fff!important; color:#171717!important; caret-color:#171717!important; border:1px solid #707070!important; }
+#accountScreen input::placeholder { color:#666!important; opacity:1; }
+#accountScreen input:hover { border-color:#245782!important; }
+#accountScreen :is(input,button,a):focus-visible { outline:3px solid #245782!important; outline-offset:3px; }
+#accountScreen [data-login-central] { display:inline-block; margin:18px 0 0; color:#245782; text-decoration:underline; }
+body.dark #accountScreen { color-scheme:dark; background:#11161c; color:#edf2f7; }
+body.dark #accountScreen .account-card { background:#1b222a; color:#edf2f7; border-color:#526071; }
+body.dark #accountScreen .mark {
+  background:#edf2f7!important;
+  color:#11161c!important;
+  border-color:#edf2f7!important;
+  box-shadow:0 0 0 2px #1b222a,0 0 0 3px #91c8f1;
+}
+body.dark #accountScreen input { background:#11161c!important; color:#edf2f7!important; caret-color:#edf2f7!important; border-color:#718096!important; }
+body.dark #accountScreen input::placeholder { color:#b4beca!important; }
+body.dark #accountScreen :is(label,h1,p,a) { color:#edf2f7!important; }
+body.dark #accountScreen :is(input,button,a):focus-visible { outline-color:#91c8f1!important; }

@@ -1,0 +1,106 @@
+name: A-MES Integrated Full Quality
+
+on:
+  push:
+    branches:
+      - work/ames-integrated-clean-v5-20261013
+      - work/ames-integrated-clean-v5-improvements-20261013
+      - work/ames-operator-ux-parity-20261014
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-static-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test-only dependency
+        run: python -m pip install --disable-pip-version-check openpyxl==3.1.5
+      - name: Existing Python hardening and scheduler contracts
+        run: |
+          python scripts/agent-hardening.test.py
+          python scripts/agent-operational-calendar.test.py
+          python scripts/agent-preflight.test.py
+          python scripts/agent-scheduler.test.py
+          python scripts/agent-canonical.test.py
+          python scripts/agent-update.test.py
+          python scripts/agent-clean-v3.test.py
+          python scripts/agent-integrated-v5.test.py
+          python scripts/agent-production-trust.test.py
+          python scripts/agent-performance-indexes.test.py
+          python scripts/agent-base-paging.test.py
+          python scripts/agent-offline-catalog.test.py
+          python scripts/agent-package-contract.test.py
+          python scripts/agent-candidate-config.test.py
+          python scripts/agent-origin-policy.test.py
+          python scripts/agent-2114-shift-partial.test.py
+          python scripts/agent-3022-observability.test.py
+          python scripts/agent-3022-postview-field-reset.test.py
+      - name: Existing Node contracts
+        run: |
+          node --test scripts/ames-auth-hardening.test.mjs
+          node --test scripts/ames-agent-pairing.test.mjs
+          node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
+      - name: Central quality gate
+        env:
+          PYTHON_BIN: python
+        run: node scripts/quality-gate.mjs
+
+  firestore-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install isolated Firebase test tools
+        run: npm install --prefix "$RUNNER_TEMP/ames-tests" firebase-tools@15.2.1 @firebase/rules-unit-testing@5.0.0 firebase@12.7.0
+      - name: Rules and cross-PC pipeline
+        env:
+          PYTHON_BIN: python3
+        run: |
+          export FIREBASE_TEST_MODULES="$RUNNER_TEMP/ames-tests/node_modules"
+          "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs'
+
+  console-experience:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install isolated Playwright
+        run: |
+          npm install --prefix "$RUNNER_TEMP/console-tests" playwright@1.62.1
+          "$RUNNER_TEMP/console-tests/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify nine views, shared context, themes, languages and mobile
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/console-tests/node_modules/playwright/index.mjs
+          BROWSER_OUTPUT: ${{ runner.temp }}/console-evidence
+        run: |
+          node scripts/ames-experience.browser.mjs
+          node scripts/ames-operational-context.browser.mjs
+          node scripts/ames-trace-interaction.browser.mjs
+          node scripts/ames-local-navigation.browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integrated-console-experience-${{ github.sha }}
+          path: ${{ runner.temp }}/console-evidence
+          if-no-files-found: ignore
+          retention-days: 7

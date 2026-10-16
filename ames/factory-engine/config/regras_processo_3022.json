@@ -1,0 +1,121 @@
+{
+  "version": "3022-origin-r5",
+  "description": "Matriz configuravel CPH/modelo + familia/modo de falha -> posto de referencia temporal. Evidencia temporal, nunca causa raiz automatica.",
+  "station_semantics": {
+    "A5100": {
+      "label": "Entrada da montagem principal / PCBA no LCD",
+      "note": "Referencia inicial para receiver/P-sensor pre-montados no LCD; regra depende do modelo."
+    },
+    "A5150": {
+      "label": "Vinculacao por scanner",
+      "note": "Grande ponto de vinculo fisico/logico durante montagem."
+    },
+    "A5162": {
+      "label": "Camera/tampa - limpeza e montagem",
+      "note": "Posto relevante para impureza/mancha de camera/tampa conforme regra operacional informada."
+    },
+    "A5201": {
+      "label": "Verificacao apos retorno AT",
+      "note": "Retorno da peca para a rota apos Phone_Bat_Cover; verifica parafusos/condicao antes de seguir."
+    },
+    "A5202": {
+      "label": "Teste de corrente",
+      "note": "Aparelho aberto, energizacao/validacao funcional inicial e alguns vinculos eletronicos."
+    },
+    "A5265": {
+      "label": "Primeiro posto de teste",
+      "note": "Divisor pratico entre montagem e teste no fluxo informado."
+    },
+    "A5700": {
+      "label": "Fim da linha de teste",
+      "note": "Ultimo posto da linha de montagem/teste; depois disso e packing por padrao."
+    }
+  },
+  "appearance_keywords": [
+    "impureza",
+    "impurity",
+    "poeira",
+    "dust",
+    "sujeira",
+    "dirty",
+    "dirt",
+    "mancha",
+    "stain",
+    "spot",
+    "smudge",
+    "foreign matter",
+    "foreign material",
+    "corpo estranho",
+    "lente suja",
+    "lens dirty"
+  ],
+  "rules": [
+    {
+      "id": "CAMERA_APPEARANCE_MANUAL_A5162",
+      "priority": 100,
+      "product_models": [
+        "*"
+      ],
+      "registration_modes": [
+        "MANUAL"
+      ],
+      "families": [
+        "CAMERA"
+      ],
+      "any_keywords": [
+        "impureza",
+        "impurity",
+        "poeira",
+        "dust",
+        "sujeira",
+        "dirty",
+        "dirt",
+        "mancha",
+        "stain",
+        "spot",
+        "smudge",
+        "foreign matter",
+        "foreign material",
+        "corpo estranho",
+        "lente suja",
+        "lens dirty"
+      ],
+      "reference_stations": [
+        "A5162"
+      ],
+      "analysis_kind": "APPEARANCE_ORIGIN_REFERENCE",
+      "confidence": "CONFIRMED_OPERATIONAL_RULE",
+      "reason": "Falha de aparencia de camera/tampa registrada manualmente: usar a ultima passagem concluida por A5162 antes do Defect Time atual."
+    },
+    {
+      "id": "PSENSOR_RECEIVER_A5100_PROVISIONAL",
+      "priority": 60,
+      "product_models": [
+        "*"
+      ],
+      "registration_modes": [
+        "MANUAL",
+        "AUTOMATIC",
+        "UNKNOWN"
+      ],
+      "families": [
+        "SENSOR",
+        "AUDIO"
+      ],
+      "any_keywords": [
+        "p sensor",
+        "p-sensor",
+        "psensor",
+        "proximity",
+        "receiver",
+        "earpiece"
+      ],
+      "reference_stations": [
+        "A5100"
+      ],
+      "analysis_kind": "ASSEMBLY_REFERENCE",
+      "confidence": "PROVISIONAL_MODEL_DEPENDENT",
+      "reason": "Referencia inicial informada para P-sensor/receiver pre-montados no LCD. Deve ser sobrescrita por regra CPH especifica quando a arquitetura do modelo for conhecida."
+    }
+  ]
+}

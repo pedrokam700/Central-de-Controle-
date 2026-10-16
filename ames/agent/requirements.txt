@@ -3,3 +3,4 @@ openpyxl>=3.1
 playwright>=1.55
 pyautogui>=0.9.54
 pyperclip>=1.9
+tzdata>=2025.2

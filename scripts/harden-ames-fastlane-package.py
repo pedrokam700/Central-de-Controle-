@@ -1,0 +1,148 @@
+from __future__ import annotations
+
+import argparse
+import re
+import shutil
+import zipfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+DIST = ROOT / "dist"
+PACKAGE = DIST / "ames-fastlane-test"
+PAYLOAD = PACKAGE / "payload"
+TEMPLATES = ROOT / "scripts" / "templates"
+
+# IMPORTANT: the Central app lives under /central-de-Controle-/ (trailing hyphen).
+# The previous package used /central-de-Controle/ and opened a Vercel 404 even when
+# the agent itself was healthy. Keep the branch preview explicit and make the
+# launcher fall back to the local console if this hosted route is unavailable.
+PREVIEW = "https://central-cora-v2-git-ui-ames-fastlane-sn-2ae6e4-pedrokam700-6477.vercel.app/central-de-Controle-/"
+ORIGIN = "https://central-cora-v2-git-ui-ames-fastlane-sn-2ae6e4-pedrokam700-6477.vercel.app"
+
+
+def assert_no_bad_controls(path: Path) -> None:
+    text = path.read_text(encoding="utf-8-sig")
+    bad = sorted({ord(ch) for ch in text if ord(ch) < 32 and ch not in "\r\n\t"})
+    if bad:
+        raise SystemExit(f"{path}: control chars {bad}")
+    if "```" in text:
+        raise SystemExit(f"{path}: markdown/backtick escaping artifact")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("head")
+    args = ap.parse_args()
+    head = args.head
+
+    if not PACKAGE.is_dir():
+        raise SystemExit("dist/ames-fastlane-test missing; run builder first")
+
+    # Runtime guard is fastlane-only. CLEAN V3 and frozen 3028 stay untouched.
+    guard_src = ROOT / "ames" / "agent" / "fastlane_runtime_guard.py"
+    guard_dst = PAYLOAD / "ames-agent" / "fastlane_runtime_guard.py"
+    if not guard_src.is_file():
+        raise SystemExit(f"missing {guard_src}")
+    shutil.copy2(guard_src, guard_dst)
+
+    # Canonical files replace generated variants entirely. We do not patch launchers
+    # with string surgery anymore; the exact Windows scripts are versioned and gated.
+    bootstrap_src = TEMPLATES / "agent_fastlane_bootstrap.pyw"
+    launcher_src = TEMPLATES / "INICIAR_FASTLANE_TESTE.ps1"
+    if not bootstrap_src.is_file() or not launcher_src.is_file():
+        raise SystemExit("canonical fastlane templates missing")
+
+    bootstrap = PAYLOAD / "agent_fastlane_bootstrap.pyw"
+    shutil.copy2(bootstrap_src, bootstrap)
+
+    launcher = PAYLOAD / "INICIAR_FASTLANE_TESTE.ps1"
+    launcher_text = launcher_src.read_text(encoding="utf-8")
+    launcher_text = (
+        launcher_text
+        .replace("__ORIGIN__", ORIGIN)
+        .replace("__PREVIEW__", PREVIEW)
+        .replace("__HEAD8__", head[:8])
+    )
+    if any(x in launcher_text for x in ("__ORIGIN__", "__PREVIEW__", "__HEAD8__")):
+        raise SystemExit("unresolved launcher placeholder")
+    launcher.write_text(launcher_text, encoding="utf-8-sig")
+
+    updater = PACKAGE / "APLICAR_FASTLANE_TESTE.ps1"
+    u = updater.read_text(encoding="utf-8-sig")
+    u = u.replace(
+        "Copy-Item -LiteralPath (Join-Path $payloadAgent '*')",
+        "Copy-Item -Path (Join-Path $payloadAgent '*')",
+    )
+    updater.write_text(u, encoding="utf-8-sig")
+
+    # Package-level contracts run against the exact files that go into the ZIP.
+    hardened_entry = PAYLOAD / "ames-agent" / "agent_hardened_entry.py"
+    for p in (launcher, updater, bootstrap, guard_dst, hardened_entry):
+        assert_no_bad_controls(p)
+
+    launch_text = launcher.read_text(encoding="utf-8-sig")
+    boot_text = bootstrap.read_text(encoding="utf-8")
+    hard_text = hardened_entry.read_text(encoding="utf-8")
+    guard_text = guard_dst.read_text(encoding="utf-8")
+    updater_text = updater.read_text(encoding="utf-8-sig")
+
+    if "/api/v1/ready" not in launch_text:
+        raise SystemExit("generated launcher does not use lightweight /ready")
+    if re.search(r"api/v1/health'\s+-TimeoutSec\s+2(?!\d)", launch_text):
+        raise SystemExit("generated launcher still polls heavy /health with 2s timeout")
+    if launch_text.count("/api/v1/health") != 1:
+        raise SystemExit("generated launcher must call full /health exactly once")
+    if "HTTP 401" not in launch_text:
+        raise SystemExit("launcher must fail fast on readiness authorization mismatch")
+
+    # Preview route contract: the repository folder/route has a trailing hyphen.
+    if "/central-de-Controle-/" not in launch_text:
+        raise SystemExit("launcher preview route lost trailing hyphen")
+    if "/central-de-Controle/" in launch_text:
+        raise SystemExit("launcher contains the obsolete 404 preview route")
+    if "http://127.0.0.1:8765/?build=FASTLANE-" not in launch_text:
+        raise SystemExit("launcher has no local-console fallback")
+    if "Preview HTTP 404" not in launch_text:
+        raise SystemExit("launcher does not diagnose hosted 404 explicitly")
+
+    if "fastlane_runtime_guard.install(hardened.entry)" not in boot_text:
+        raise SystemExit("bootstrap must install guard on final hardened entry")
+    if "runpy.run_path" in boot_text:
+        raise SystemExit("bootstrap must not install guard before HardenedHandler exists")
+    if "import agent_hardened_entry as hardened" not in boot_text:
+        raise SystemExit("bootstrap does not import final hardened entry explicitly")
+
+    if '"/api/v1/ready"' not in hard_text or "_PUBLIC_API" not in hard_text:
+        raise SystemExit("final hardened handler does not expose /ready as public startup contract")
+    if 'if path == "/api/v1/ready"' not in hard_text:
+        raise SystemExit("final hardened handler does not implement /ready directly")
+    ready_slice = hard_text[hard_text.find('if path == "/api/v1/ready"'):hard_text.find('if path == "/api/v1/hardening/health"')]
+    if '"package_root"' in ready_slice:
+        raise SystemExit("/ready leaks package path")
+
+    if "def install(entry_module):" not in guard_text:
+        raise SystemExit("runtime guard must target the final entry module")
+    if "original_get" in guard_text or "guarded_get" in guard_text:
+        raise SystemExit("runtime guard must not own readiness routing")
+
+    # The bootstrap is authored in payload/, but the updater MUST install it next
+    # to agent_hardened_entry.py inside ames-agent/. The live smoke mirrors this.
+    if "-Destination (Join-Path $agent 'agent_fastlane_bootstrap.pyw')" not in updater_text:
+        raise SystemExit("updater does not install bootstrap inside ames-agent")
+    if "-Destination (Join-Path $target 'INICIAR_FASTLANE_TESTE.ps1')" not in updater_text:
+        raise SystemExit("updater does not install launcher at workstation root")
+    if "Copy-Item -Path (Join-Path $payloadAgent '*') -Destination $agent" not in updater_text:
+        raise SystemExit("updater does not install fastlane agent payload")
+
+    zip_path = DIST / f"CENTRAL_AMES_FASTLANE_3012_TESTE_{head[:8]}.zip"
+    if zip_path.exists():
+        zip_path.unlink()
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in sorted(PACKAGE.rglob("*")):
+            if p.is_file():
+                zf.write(p, p.relative_to(PACKAGE.parent))
+    print(zip_path)
+
+
+if __name__ == "__main__":
+    main()

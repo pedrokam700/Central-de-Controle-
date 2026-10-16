@@ -5,17 +5,52 @@ import pathlib
 import shutil
 import sys
 import time
+import zipfile
 from http.server import ThreadingHTTPServer
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ames'/'agent'))
 from mes_scheduler import MES,mes_call,Cancelled
-target=pathlib.Path(sys.argv[1])/'agent.py'
+temp_root=pathlib.Path(sys.argv[1])
+target=temp_root/'agent.py'
 shutil.copyfile(ROOT/'ames'/'agent'/'agent.py',target)
 spec=importlib.util.spec_from_file_location('e2e_agent',target)
 a=importlib.util.module_from_spec(spec);spec.loader.exec_module(a)
 a._tcp_probe=lambda *args,**kw:True
 a.discover_engine=lambda *args:ROOT
+
+
+def build_synthetic_xlsx(path):
+    """Small structurally valid XLSX used only by the HTTP download boundary."""
+    path=pathlib.Path(path)
+    with zipfile.ZipFile(path,'w',zipfile.ZIP_DEFLATED) as z:
+        z.writestr('[Content_Types].xml','''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+ <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+ <Default Extension="xml" ContentType="application/xml"/>
+ <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+ <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>''')
+        z.writestr('_rels/.rels','''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+ <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>''')
+        z.writestr('xl/workbook.xml','''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+ <sheets><sheet name="E2E" sheetId="1" r:id="rId1"/></sheets>
+</workbook>''')
+        z.writestr('xl/_rels/workbook.xml.rels','''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+ <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>''')
+        z.writestr('xl/worksheets/sheet1.xml','''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>E2E</t></is></c></row></sheetData></worksheet>''')
+    return path
+
+
+synthetic_xlsx=build_synthetic_xlsx(temp_root/'e2e-export.xlsx')
+a.export_team_excel=lambda lines:{'path':str(synthetic_xlsx),'lines':list(lines or [])}
+a.export_snapshot_excel=lambda snapshot_id=None:{'path':str(synthetic_xlsx),'snapshot_id':snapshot_id}
 
 @mes_call
 def collect(**scope):

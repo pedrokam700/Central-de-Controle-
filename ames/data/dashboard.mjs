@@ -22,9 +22,14 @@ export function selectDashboard(store, { line_id, product, defect_code, pcba_sn,
     drilldown_available: false
   }));
   const counts = new Map();
-  for (const row of rows) counts.set(row.defect_code, (counts.get(row.defect_code) || 0) + 1);
-  const pareto = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 3).map(([code, count]) => ({ code, count }));
+  for (const row of rows) {
+    const current=counts.get(row.defect_code)||{count:0,description:''};
+    current.count++;
+    if(!current.description&&row.defect_desc)current.description=row.defect_desc;
+    counts.set(row.defect_code,current);
+  }
+  const pareto = [...counts].map(([code,value])=>({code,count:value.count,description:value.description}))
+    .sort((a,b)=>b.count-a.count||a.code.localeCompare(b.code)).slice(0,3);
   return immutable({ ...read, scope, products, defects, aggregates, pareto, rows,
     repair_statuses: [...new Set(productRows.map(row => row.repair_status))].sort(),
     defect_types: [...new Set(productRows.map(row => row.defect_type))].sort(),

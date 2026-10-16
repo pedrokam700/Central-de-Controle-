@@ -1,0 +1,22 @@
+{
+  "cdp_endpoint": "http://127.0.0.1:9222",
+  "timeouts": {
+    "control_ms": 4000,
+    "navigation_ms": 15000,
+    "table_ms": 12000
+  },
+  "cache": {
+    "enabled": true,
+    "max_age_hours": 168
+  },
+  "runtime": {
+    "screenshot_on_error": true,
+    "save_html_on_error": true,
+    "safe_mode": true
+  },
+  "mes_time": {
+    "defect_local_utc_offset_hours": -3,
+    "grid_naive_utc_offset_hours": 0,
+    "note": "3028 Defect Time e horario local da fabrica; datas ExtJS da 3074 normalmente chegam em UTC."
+  }
+}

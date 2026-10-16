@@ -1,8 +1,12 @@
+import {sessionAmes} from './core/ames-session.mjs';
+import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
 
-    import { createAmesStore, clearSessionData } from './ames/data/store.mjs';
+    import { clearSessionData } from './ames/data/store.mjs';
     import {createMesSync} from './ames/sync.mjs';
     import {firestoreTransport} from './ames/firebase-sync.mjs';
     import { createConsoleView } from './ames/console-view.mjs';
+    import { installLoginReturn } from './core/login-navigation.mjs';
+    installLoginReturn(document,window.location);
     import { createDashboardView } from './ames/dashboard-view.mjs';
     import { createProductView } from './ames/product-view.mjs';
     import { createOccurrenceView } from './ames/occurrence-view.mjs';
@@ -10,6 +14,8 @@
     import { createCoraView } from './ames/cora-view.mjs';
     import { MES_REASONING_RULES } from './ames/data/cora.mjs';
     import { createOnboardingView, savedIntegrationMode } from './ames/onboarding-view.mjs';
+    import {createOfflineOutbox,createBrowserOutboxStorage} from './core/offline-outbox.mjs';
+    import {sanitizeLegacyUserMetadata,findLegacyUserMetadata} from './core/auth-hardening.mjs';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, runTransaction
@@ -44,7 +50,7 @@
     const ADMIN_EMAIL = 'pedro.henrique@grupomultilaser.com.br';
 
     let state = {
-      ames: createAmesStore(),
+      ames: sessionAmes,
       products: [],
       reports: [],
       operationalFailures: [],
@@ -209,7 +215,7 @@
       let node;
       while (node = walker.nextNode()) {
         const parent = node.parentElement;
-        if (!parent || ['SCRIPT','STYLE'].includes(parent.tagName)) continue;
+        if (!parent || ['SCRIPT','STYLE'].includes(parent.tagName) || parent.closest('[data-ames-shell]')) continue;
         if (!originalTextNodes.has(node)) originalTextNodes.set(node, node.nodeValue);
         const original = originalTextNodes.get(node);
         const trimmed = original.trim();
@@ -222,6 +228,7 @@
         }
       }
       root.querySelectorAll('input,textarea,select,button,a,[title],[aria-label]').forEach(el => {
+        if(el.closest('[data-ames-shell]'))return;
         ['placeholder','title','aria-label'].forEach(attr => {
           if (!el.hasAttribute(attr)) return;
           if (!originalAttrs.has(el)) originalAttrs.set(el, {});
@@ -361,10 +368,8 @@
       unsubscribeData = [];
     }
 
-    function legacyUsers() {
-      try { return JSON.parse(localStorage.getItem('controleFalhas.users.v1') || '[]') || []; }
-      catch { return []; }
-    }
+    const legacyUserMetadata=sanitizeLegacyUserMetadata(localStorage);
+    function legacyUsers() { return legacyUserMetadata; }
 
     function legacyState() {
       try { return JSON.parse(localStorage.getItem('controleFalhas.v2') || 'null'); }
@@ -383,7 +388,7 @@
           docId: firebaseUser.uid,
           name: data.name || legacy?.name || firebaseUser.displayName || email.split('@')[0],
           email: data.email || email,
-          role: data.role || (isAdminEmail ? 'admin' : legacy?.role || 'user'),
+          role: data.role || (isAdminEmail ? 'admin' : 'user'),
           disabled: Boolean(data.disabled),
           createdAt: data.createdAt || now(),
           updatedAt: data.updatedAt || now()
@@ -393,7 +398,7 @@
       const profile = {
         name: legacy?.name || firebaseUser.displayName || email.split('@')[0],
         email,
-        role: isAdminEmail ? 'admin' : (legacy?.role || 'user'),
+        role: isAdminEmail ? 'admin' : 'user',
         disabled: false,
         createdAt: now(),
         updatedAt: now()
@@ -1152,6 +1157,33 @@
       }
     }
 
+    function navigateSearchRoutine(routine){
+      if(!routine)return;
+      show('daily');
+      setTimeout(()=>{
+        if(currentAccount?.role==='admin'){
+          document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');
+          dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',routine.docId);return;
+        }
+        const execution=dailyMergedExecutions().find(item=>item.routineId===routine.docId);
+        const key=execution?.executionKey||execution?.docId||'';
+        const card=key?document.querySelector(`[data-daily-exec="${CSS.escape(key)}"]`):null;
+        if(card){card.scrollIntoView({behavior:'smooth',block:'center'});card.classList.add('daily-tour-highlight');setTimeout(()=>card.classList.remove('daily-tour-highlight'),1800);}
+      },120);
+    }
+    function navigateSearchPerson(user){
+      if(!user)return;
+      show('daily');
+      if(currentAccount?.role!=='admin')return;
+      setTimeout(()=>{
+        document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');
+        dailyAdminTab='dashboard';renderDailyAdmin();
+        const select=document.querySelector('#dailyDashUser');
+        if(select&&[...select.options].some(option=>option.value===user.docId)){select.value=user.docId;renderDailyAdminDashboard();}
+        document.querySelector('#dailyAdminDashboard')?.scrollIntoView({behavior:'smooth',block:'start'});
+      },100);
+    }
+
     function commandPaletteEntries(query=''){
       const q=String(query||'').trim().toLowerCase(),items=[];
       const add=(title,sub,kind,fn,searchText='')=>{if(!q||[title,sub,kind,searchText].join(' ').toLowerCase().includes(q))items.push({title,sub,kind,fn});};
@@ -1167,7 +1199,8 @@
       state.operationalFailures.filter(r=>match(r.id,r.issue,r.owner,r.maquina,r.linha,r.estacao)).slice(0,8).forEach(r=>add(`${r.id} · ${r.issue||'Falha'}`,failureScopeSummary(r),t('Falha'),()=>{show('operations');openOperationalDetail(r.id);},[r.id,r.issue,r.maquina,r.linha].join(' ')));
       state.activities.filter(a=>match(a.id,a.title,a.area,a.description,a.nextAction)).slice(0,8).forEach(a=>add(`${a.id} · ${a.title}`,a.nextAction?`Próxima: ${a.nextAction}`:a.area,t('Atividade'),()=>{show('work');openActivityDetail(a.id);},[a.id,a.title,a.area,a.nextAction].join(' ')));
       state.flows.filter(f=>match(f.id,f.scope,f.description,f.product)).slice(0,6).forEach(f=>add(`${f.id} · ${f.scope}`,f.description||'',t('Fluxo'),()=>{show('flow');openFlowDetail(f.id);},[f.id,f.scope,f.product].join(' ')));
-      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>{show('daily');if(currentAccount?.role==='admin')setTimeout(()=>{document.querySelector('#dailyAdminPanel')?.classList.remove('hidden');dailyAdminTab='config';renderDailyAdmin();dailyEditAdminItem('routine',r.docId);},120);},[r.name,r.description,r.checklistTemplate].join(' ')));
+      state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate)).slice(0,6).forEach(r=>add(r.name,r.description||t('Rotina'),t('Rotina'),()=>navigateSearchRoutine(r),[r.name,r.description,r.checklistTemplate].join(' ')));
+      users.filter(u=>u.disabled!==true&&match(u.name,u.email,u.role)).slice(0,6).forEach(u=>add(u.name||u.email||t('Pessoa'),u.role==='admin'?'Admin':t('Pessoa'),t('Pessoa'),()=>navigateSearchPerson(u),[u.name,u.email,u.role].join(' ')));
       return items.slice(0,32);
     }
     function renderCommandPalette(query=''){
@@ -1210,7 +1243,11 @@
       const acts=state.activities.filter(a=>match(a.id,a.product,a.title,a.type,a.area,a.description,a.owner,a.updates?.map(u=>u.text)));
       if(acts.length) groups.push(['Atividades',acts.map(a=>({title:`${a.id} · ${a.title}`,sub:a.product?`${productDisplayCode(a.product)} · ${a.area}`:a.area,fn:()=>{openActivityDetail(a.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
       const flows=state.flows.filter(f=>match(f.id,f.product,f.scope,f.description,f.creator,f.followUpOwner,f.updates?.map(u=>u.text)));
-      if(flows.length) groups.push(['Fluxos',flows.map(f=>({title:`${f.id} · ${f.scope}`,sub:f.product?productDisplayCode(f.product):'Sem produto',fn:()=>{openFlowDetail(f.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      if(flows.length) groups.push(['Fluxos',flows.map(f=>({title:`${f.id} · ${f.scope}`,sub:f.product?productDisplayCode(f.product):'Sem produto',fn:()=>{show('flow');openFlowDetail(f.id);document.querySelector('#searchResultsModal').classList.add('hidden');}}))]);
+      const routines=state.routineTemplates.filter(r=>match(r.name,r.description,r.checklistTemplate));
+      if(routines.length) groups.push([currentLanguage==='en-US'?'Routines':'Rotinas',routines.map(r=>({title:r.name||t('Rotina'),sub:r.description||t('Rotina'),fn:()=>{document.querySelector('#searchResultsModal').classList.add('hidden');navigateSearchRoutine(r);}}))]);
+      const people=users.filter(u=>u.disabled!==true&&match(u.name,u.email,u.role));
+      if(people.length) groups.push([currentLanguage==='en-US'?'People':'Pessoas',people.map(u=>({title:u.name||u.email||t('Pessoa'),sub:u.role==='admin'?'Admin':t('Pessoa'),fn:()=>{document.querySelector('#searchResultsModal').classList.add('hidden');navigateSearchPerson(u);}}))]);
       document.querySelector('#searchResultsSubtitle').textContent=`Resultados para “${q}”`;
       window.__globalSearchActions=[]; let actionIndex=0;
       document.querySelector('#globalResults').innerHTML=groups.length ? groups.map(([name,arr])=>`<div class="search-result-group"><h4>${name} · ${arr.length}</h4>${arr.slice(0,12).map(x=>{const idx=actionIndex++;window.__globalSearchActions[idx]=x.fn;return `<div class="search-result" data-search-index="${idx}"><strong>${esc(x.title)}</strong><div class="secondary-text">${esc(x.sub)}</div></div>`;}).join('')}</div>`).join('') : '<div class="muted-box">Nenhum resultado encontrado.</div>';
@@ -1351,7 +1388,7 @@
           return null;
         }
 
-        if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();consoleMesView?.clear();clearSessionData(state);}
+        if(currentAuthUser?.uid && currentAuthUser.uid !== firebaseUser.uid){mesSync?.stop();consoleMesView?.clear();consoleMesView=undefined;clearSessionData(state);}
         currentAuthUser = firebaseUser;
         currentAccount = { uid: firebaseUser.uid, name: profile.name, email: profile.email, role: profile.role };
 
@@ -1409,19 +1446,8 @@
         }
         setLoginStatus('Validando acesso...', 'info');
         try {
-          let credential;
-          try {
-            credential = await signInWithEmailAndPassword(auth, email, password);
-          } catch (error) {
-            const legacy = legacyUsers().find(u => String(u.email || '').toLowerCase() === email);
-            if (['auth/user-not-found','auth/invalid-credential','auth/invalid-login-credentials'].includes(error?.code)
-                && legacy && legacy.password === password) {
-              credential = await createUserWithEmailAndPassword(auth, email, password);
-            } else {
-              throw error;
-            }
-          }
-          const legacy = legacyUsers().find(u => String(u.email || '').toLowerCase() === email);
+          const credential = await signInWithEmailAndPassword(auth, email, password);
+          const legacy = findLegacyUserMetadata(legacyUsers(), email);
           const account = await finishLogin(credential.user, legacy);
           if (!account || currentAccount?.uid !== credential.user.uid) {
             const sessionError = new Error('O Firebase autenticou a conta, mas a sessão da Central não foi concluída.');
@@ -1553,7 +1579,7 @@
         users = [];
         mesSync?.stop();
         clearSessionData(state);
-        consoleMesView?.clear();
+        consoleMesView?.clear();consoleMesView=undefined;
         dashboardMesView?.clear();
         productMesView?.clear();
         failuresMesView?.clear();
@@ -1567,7 +1593,7 @@
         return;
       }
       try {
-        const legacyUser = legacyUsers().find(u => (u.email || '').toLowerCase() === (firebaseUser.email || '').toLowerCase());
+        const legacyUser = findLegacyUserMetadata(legacyUsers(), firebaseUser.email);
         await finishLogin(firebaseUser, legacyUser);
       } catch (error) {
         console.error(error);
@@ -2340,7 +2366,7 @@
     let consoleMesView;
     let mesSync;
     function startMesSync(uid){
-      mesSync ||= createMesSync(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,setDoc,onSnapshot,runTransaction}),{changed(){
+      mesSync ||= createMesSync(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction}),{changed(){
         if(!currentAuthUser)return;
         renderDashboardMes();renderProductMes();renderFailuresMes();renderDailyMes();renderCoraMes();renderConsoleMes();
       }});
@@ -2348,7 +2374,7 @@
     }
     function renderConsoleMes() {
       if (!currentAuthUser || activeView !== 'mesConsole') return;
-      consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, { locale: () => currentLanguage, onChange() {
+      consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, { locale: () => currentLanguage, history:{list:line=>mesSync.listHistory(line),open:head=>mesSync.openHistory(head)}, onChange() {
         if (!currentAuthUser) return;
         renderDashboardMes(); renderProductMes(); renderFailuresMes(); renderDailyMes(); renderCoraMes();
         mesSync?.capture().catch(error=>{state.ames.updateAgent({sync:{status:'error',error:error.message}});});
@@ -2955,22 +2981,42 @@ const aiPilot = {
     function aiLoadHistory(id){const x=(state.failureAnalyses||[]).find(a=>(a.docId||a.id)===id);if(!x)return;aiPilot.mode=x.mode||'data';aiPilot.perspective=x.perspective||'COMPLETA';aiPilot.context=x.problem||'';aiPilot.source=x.source||'Histórico';aiPilot.rows=[];aiPilot.columns=[];const c=document.querySelector('#aiContext');if(c)c.value=aiPilot.context;aiRenderResult(x.result||{});renderAIAnalysis();}
 
     // ==================== V15V — OFFLINE / AUDIT / LLMOPS / EXPORT ====================
-    const OFFLINE_DB_NAME='central-trabalho-offline'; const OFFLINE_DB_VERSION=1; const OFFLINE_STORE='queue';
-    let offlineDbPromise=null;
-    function offlineDb(){
-      if(offlineDbPromise) return offlineDbPromise;
-      offlineDbPromise=new Promise((resolve,reject)=>{const req=indexedDB.open(OFFLINE_DB_NAME,OFFLINE_DB_VERSION);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(OFFLINE_STORE))db.createObjectStore(OFFLINE_STORE,{keyPath:'id'});};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
-      return offlineDbPromise;
+    // H2: outbox isolada por UID. A fila V1 sem dono permanece em quarentena e
+    // nunca e atribuida automaticamente ao usuario que estiver logado depois.
+    const offlineOutbox=createOfflineOutbox({storage:createBrowserOutboxStorage()});
+    let offlineSyncPromise=null;
+    async function queueOfflineWrite(collectionName,payload){
+      const uid=currentAuthUser?.uid;
+      if(!uid)throw new Error('Sessao autenticada obrigatoria para salvar offline.');
+      return offlineOutbox.enqueue({uid,collection:collectionName,payload});
     }
-    async function queueOfflineWrite(collectionName,payload){const item={id:(crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`),collection:collectionName,payload,createdAt:now()};try{const dbx=await offlineDb();await new Promise((res,rej)=>{const tx=dbx.transaction(OFFLINE_STORE,'readwrite');tx.objectStore(OFFLINE_STORE).put(item);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch{const k='centralAI.offline.queue.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push(item);localStorage.setItem(k,JSON.stringify(arr.slice(-50)));}return item;}
-    async function listOfflineQueue(){let out=[];try{const dbx=await offlineDb();out=await new Promise((res,rej)=>{const tx=dbx.transaction(OFFLINE_STORE,'readonly');const r=tx.objectStore(OFFLINE_STORE).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);});}catch{}const localKey='centralAI.offline.queue.v1';try{out=[...out,...JSON.parse(localStorage.getItem(localKey)||'[]')];}catch{}const unique=[...new Map(out.map(x=>[x.id,x])).values()];return unique;}
-    async function removeOfflineQueue(id){try{const dbx=await offlineDb();await new Promise((res,rej)=>{const tx=dbx.transaction(OFFLINE_STORE,'readwrite');tx.objectStore(OFFLINE_STORE).delete(id);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch{}try{const k='centralAI.offline.queue.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]').filter(x=>x.id!==id);localStorage.setItem(k,JSON.stringify(arr));}catch{}}
-    async function syncOfflineQueue(){if(!navigator.onLine||!currentAccount)return;const items=await listOfflineQueue().catch(()=>[]);for(const item of items){try{await addDoc(collection(db,item.collection),item.payload);await removeOfflineQueue(item.id);}catch(err){console.warn('Fila offline ainda pendente:',err.message);break;}}if(items.length)showSaveToast('Sincronização offline concluída quando a conexão voltou.','success');}
+    async function listOfflineQueue(){return currentAuthUser?.uid?offlineOutbox.pending(currentAuthUser.uid):[];}
+    async function removeOfflineQueue(id){return currentAuthUser?.uid?offlineOutbox.ack(currentAuthUser.uid,id):false;}
+    async function syncOfflineQueue(){
+      if(!navigator.onLine||!currentAccount||!currentAuthUser)return {synced:0,failed:0,remaining:0,stopped:false,legacy_quarantined:0};
+      if(offlineSyncPromise)return offlineSyncPromise;
+      const uid=currentAuthUser.uid;
+      const sessionIsCurrent=()=>currentAuthUser?.uid===uid;
+      const write=async item=>{
+        const request=setDoc(doc(db,item.collection,item.documentId),item.payload);
+        let timer;
+        const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Timeout ao confirmar escrita offline no Firestore')),15000);});
+        try{return await Promise.race([request,timeout]);}finally{clearTimeout(timer);}
+      };
+      offlineSyncPromise=offlineOutbox.replay({uid,write,sessionIsCurrent}).then(result=>{
+        window.__centralOfflineLegacyPending=result.legacy_quarantined;
+        if(result.legacy_quarantined)console.warn(`[Central] ${result.legacy_quarantined} item(ns) da fila offline V1 permanecem em quarentena sem UID; nenhum foi reenviado automaticamente.`);
+        if(result.synced)showSaveToast(`${result.synced} registro(s) offline sincronizado(s) com seguranca.`,'success');
+        return result;
+      }).finally(()=>{offlineSyncPromise=null;});
+      return offlineSyncPromise;
+    }
+    offlineOutbox.legacyPendingCount().then(count=>{window.__centralOfflineLegacyPending=count;if(count)console.warn(`[Central] ${count} item(ns) offline V1 em quarentena aguardam recuperacao explicita.`);}).catch(error=>console.warn('Diagnostico da fila offline legada indisponivel:',error.message));
     let offlineSupportRegistered=false;
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>{mesSync?.retry();syncOfflineQueue().catch(()=>{});});window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.48'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.48'){localStorage.setItem('cora.sw.loaded','15.1.13.48');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>{mesSync?.retry();syncOfflineQueue().catch(()=>{});});window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.49'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.49'){localStorage.setItem('cora.sw.loaded','15.1.13.49');location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -4732,6 +4778,12 @@ ${m.text}`).join('\n\n');
       </article>`;
     }
 
+    Object.assign(translations, {
+      "Continue no A-MES":"Continue in A-MES",
+      "O Console MES é a próxima camada factual: ele usa o mesmo contexto de linha, turno, CPH e falha para investigar dados de produção sem abrir um aplicativo paralelo.":"The MES Console is the next factual layer: it uses the same line, shift, CPH and failure context to investigate production data without opening a parallel app.",
+      "Abra o Console MES pela própria Central; o contexto operacional continua compartilhado.":"Open the MES Console from the Work Center; the operational context remains shared."
+    });
+
     function dailyTourStorageKey(){
       return 'central.daily.tour.v4.'+(currentAuthUser?.uid||currentAccount?.email||'user');
     }
@@ -4766,6 +4818,7 @@ ${m.text}`).join('\n\n');
           {selector:'#dailyAdminDashboard',adminPanel:true,adminTab:'dashboard',title:t('Leia o dashboard operacional'),text:t('Use os filtros para conferir cobertura, prazo, NG e execuções sem misturar políticas colaborativas com cobrança individual.'),tip:'Os filtros atualizam toda a leitura do dashboard.'}
         );
       }
+      steps.push({selector:'button[data-page=\"mesConsole\"]',mobileSelector:'#mobileMenuToggle',title:t('Continue no A-MES'),text:t('O Console MES é a próxima camada factual: ele usa o mesmo contexto de linha, turno, CPH e falha para investigar dados de produção sem abrir um aplicativo paralelo.'),tip:t('Abra o Console MES pela própria Central; o contexto operacional continua compartilhado.')});
       steps.push({selector:'#dailyTourButton',restoreAdmin:true,title:t('Ajuda sempre disponível'),text:t('O guia não precisa ocupar a tela no uso diário. Use este ícone quando quiser rever o passo a passo.'),tip:t('Você também pode pular etapas clicando nos indicadores do tour.')});
       return steps;
     }
@@ -4794,7 +4847,10 @@ ${m.text}`).join('\n\n');
 
     function dailyTourTarget(){
       const step=dailyTourSteps()[dailyTourStep];
-      return step?document.querySelector(step.selector):null;
+      if(!step)return null;
+      const mobile=window.matchMedia('(max-width:860px)').matches;
+      const selector=mobile&&step.mobileSelector?step.mobileSelector:step.selector;
+      return selector?document.querySelector(selector):null;
     }
 
     function setTourRect(el,left,top,width,height){
@@ -5382,6 +5438,65 @@ ${m.text}`).join('\n\n');
       document.querySelector('#dailyDashMissed').textContent=missed;
       document.querySelector('#dailyDashOverdue').textContent=overdue;
       document.querySelector('#dailyDashNg').textContent=ng;
+
+      const insightExecutions=rows.map(x=>({...x,dashboardTimingState:dailyExecutionTiming(x).state}));
+      const insightHistory=dailyAdminHistoryItems().filter(item=>{
+        const stamp=new Date(item.at||0);
+        if(Number.isNaN(stamp.getTime()))return false;
+        const key=localDateKey(stamp);
+        return key>=from&&key<=to;
+      });
+      const insightUsers=userId?users.filter(user=>user.docId===userId):users;
+      const insights=buildDailyAdminInsights({
+        executions:insightExecutions,
+        operationalFailures:state.operationalFailures,
+        reports:dashboardProductReports(),
+        activities:state.activities,
+        users:insightUsers,
+        adminHistory:insightHistory
+      });
+      const insightText=(pt,en)=>currentLanguage==='en-US'?en:pt;
+      const insightReason=reason=>{
+        if(currentLanguage!=='en-US')return reason;
+        if(reason==='Não cumprida')return 'Missed';
+        if(reason==='Atrasada')return 'Overdue';
+        if(reason==='Resultado NG')return 'NG result';
+        return String(reason||'').replace(' fora da meta',' out of target');
+      };
+      let insightHost=document.querySelector('#dailyDashInsights');
+      if(!insightHost){
+        insightHost=document.createElement('section');
+        insightHost.id='dailyDashInsights';
+        insightHost.className='panel daily-dashboard-panel';
+        document.querySelector('#dailyDashRows')?.closest('.daily-execution-panel')?.before(insightHost);
+      }
+      if(insightHost){
+        const fpyRows=insights.fpyEntries.slice(0,6).map(item=>`<div class="daily-admin-item"><div><strong>${esc(item.label||'FPY')}</strong><span>${esc([item.routineName,item.scopeName,item.dateKey].filter(Boolean).join(' · '))}</span></div><div><strong>${esc(item.value)}${item.unit?` ${esc(item.unit)}`:''}</strong></div></div>`).join('');
+        const alertRows=insights.alerts.slice(0,8).map(item=>`<div class="daily-admin-item"><div><strong>${esc(item.routineName||insightText('Rotina','Routine'))}</strong><span>${esc([item.scopeName,item.dateKey].filter(Boolean).join(' · '))}</span></div><div><span>${esc(item.reasons.map(insightReason).join(' · '))}</span></div></div>`).join('');
+        const traceItems=[
+          ...insights.linkedFailures.slice(0,4).map(item=>({kind:insightText('Falha','Failure'),title:item.id||item.docId||insightText('Falha vinculada','Linked failure'),detail:item.issue||item.description||item.category||''})),
+          ...insights.linkedReports.slice(0,3).map(item=>({kind:'Report',title:item.id||item.docId||'Report',detail:item.issue||item.component||item.material||''})),
+          ...insights.linkedActivities.slice(0,3).map(item=>({kind:insightText('Atividade','Activity'),title:item.title||item.id||item.docId||insightText('Atividade vinculada','Linked activity'),detail:item.area||item.description||''}))
+        ];
+        const traceRows=traceItems.map(item=>`<div class="daily-admin-item"><div><strong>${esc(item.kind)} · ${esc(item.title)}</strong><span>${esc(item.detail||'—')}</span></div></div>`).join('');
+        const historyRows=insights.history.slice(0,6).map(item=>`<div class="daily-admin-item"><div><strong>${esc(item.title||insightText('Alteração administrativa','Administrative change'))}</strong><span>${esc([item.actor,item.timestamp?formatDate(item.timestamp):''].filter(Boolean).join(' · '))}</span></div></div>`).join('');
+        insightHost.innerHTML=`
+          <div class="section-head compact"><div><h3>${esc(insightText('Leitura cruzada da operação','Cross-operational view'))}</h3><p>${esc(insightText('Conecta execução, dados coletados, falhas, Reports, atividades e governança sem criar um segundo dashboard.','Connects execution, collected data, failures, Reports, activities and governance without creating a second dashboard.'))}</p></div></div>
+          <div class="stats daily-admin-stats" aria-label="${esc(insightText('Indicadores cruzados','Cross indicators'))}">
+            <article class="stat daily-stat"><div class="stat-label">${esc(insightText('Falhas vinculadas','Linked failures'))}</div><div class="stat-value">${insights.counts.failures}</div><div class="stat-note">${esc(insightText('Originadas nas execuções filtradas','Originated from filtered executions'))}</div></article>
+            <article class="stat daily-stat"><div class="stat-label">Reports</div><div class="stat-value">${insights.counts.reports}</div><div class="stat-note">${esc(insightText('Reports ligados às mesmas evidências','Reports linked to the same evidence'))}</div></article>
+            <article class="stat daily-stat"><div class="stat-label">${esc(insightText('Atividades','Activities'))}</div><div class="stat-value">${insights.counts.activities}</div><div class="stat-note">${esc(insightText('Follow-ups criados a partir da rotina','Follow-ups created from the routine'))}</div></article>
+            <article class="stat daily-stat daily-stat-alert"><div class="stat-label">${esc(insightText('Fora da meta','Out of target'))}</div><div class="stat-value">${insights.counts.targetFailures}</div><div class="stat-note">${esc(insightText('Itens coletados com avaliação NG','Collected items assessed as NG'))}</div></article>
+            <article class="stat daily-stat"><div class="stat-label">${esc(insightText('Equipe ativa','Active team'))}</div><div class="stat-value">${insights.governance.activeUsers}</div><div class="stat-note">${insights.governance.activeAdmins} ${esc(insightText('admin','admin'))} · ${insights.governance.activeOperators} ${esc(insightText('usuários','users'))}</div></article>
+            <article class="stat daily-stat"><div class="stat-label">${esc(insightText('Alterações admin','Admin changes'))}</div><div class="stat-value">${insights.counts.adminChanges}</div><div class="stat-note">${esc(insightText('No período selecionado','In the selected period'))}</div></article>
+          </div>
+          <div class="daily-dashboard-grid">
+            <div class="daily-config-card"><div class="section-head compact"><div><h3>${esc(insightText('Dados coletados / FPY','Collected data / FPY'))}</h3><p>${esc(insightText('Valores salvos no checklist; FPY só aparece quando o rótulo identifica FPY.','Saved checklist values; FPY appears only when the label identifies FPY.'))}</p></div></div><div class="daily-admin-list">${fpyRows||`<div class="daily-soft-empty">${esc(insightText('Nenhuma leitura de FPY neste recorte.','No FPY reading in this selection.'))}</div>`}</div></div>
+            <div class="daily-config-card"><div class="section-head compact"><div><h3>${esc(insightText('Alertas operacionais','Operational alerts'))}</h3><p>${esc(insightText('Não cumpridas, atrasadas, NG e valores fora da meta.','Missed, overdue, NG and out-of-target values.'))}</p></div></div><div class="daily-admin-list">${alertRows||`<div class="daily-soft-empty">${esc(insightText('Nenhum alerta neste recorte.','No alerts in this selection.'))}</div>`}</div></div>
+            <div class="daily-config-card"><div class="section-head compact"><div><h3>${esc(insightText('Rastreabilidade vinculada','Linked traceability'))}</h3><p>${esc(insightText('Evidências que nasceram das execuções exibidas acima.','Evidence originating from the executions shown above.'))}</p></div></div><div class="daily-admin-list">${traceRows||`<div class="daily-soft-empty">${esc(insightText('Nenhuma evidência vinculada neste recorte.','No linked evidence in this selection.'))}</div>`}</div></div>
+            <div class="daily-config-card"><div class="section-head compact"><div><h3>${esc(insightText('Governança e histórico','Governance and history'))}</h3><p>${esc(insightText('Permissões agregadas e mudanças administrativas, sem expor UID interno.','Aggregate permissions and administrative changes without exposing internal UIDs.'))}</p></div></div><div class="daily-admin-item"><div><strong>${esc(insightText('Contas','Accounts'))}</strong><span>${insights.governance.activeUsers} ${esc(insightText('ativas','active'))} · ${insights.governance.disabledUsers} ${esc(insightText('desativadas','disabled'))}</span></div></div><div class="daily-admin-list">${historyRows||`<div class="daily-soft-empty">${esc(insightText('Nenhuma alteração administrativa no período.','No administrative changes in the period.'))}</div>`}</div></div>
+          </div>`;
+      }
 
       const byScope=new Map();
       rows.forEach(x=>{const key=x.scopeId||x.scopeName||'sem';if(!byScope.has(key))byScope.set(key,{label:x.scopeName||'Sem escopo',total:0,done:0});const r=byScope.get(key);r.total++;if(x.status==='completed')r.done++;});
@@ -6740,9 +6855,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
 
     document.querySelector('#mesConsole')?.addEventListener('click', event => {
       if (!event.target.closest('[data-console-setup]')) return;
-      show('profile');
-      document.querySelector('#amesSetupCollector')?.focus();
-      document.querySelector('#amesIntegration')?.scrollIntoView({ block: 'start' });
+      // Preparation is handled inside the Console, using the same agent/store.
     });
     document.querySelector('[data-open-integration]')?.addEventListener('click', () => {
       show('profile');
@@ -6899,7 +7012,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
           updates: []
         };
 
-        if(!navigator.onLine){const localId=`offline-${Date.now()}`;report.docId=localId;await queueOfflineWrite('reports',report);state.reports=[...state.reports,report];showSaveToast('Sem conexão. Report salvo no dispositivo e aguardará sincronização.','success');} else { await addDoc(collection(db, "reports"), report); }
+        if(!navigator.onLine){const queued=await queueOfflineWrite('reports',report);report.docId=queued.documentId;state.reports=[...state.reports,report];showSaveToast('Sem conexão. Report salvo no dispositivo e aguardará sincronização.','success');} else { await addDoc(collection(db, "reports"), report); }
         closeFailureModal();
         show('product');
         openDetail(report.id);
@@ -6999,7 +7112,7 @@ document.querySelectorAll('.product-tab').forEach(btn => {
         owner:assignment.owner||'Usuário Desconhecido',assignees:assignment.assignees,assignmentMode:assignment.assignmentMode,teamShared:assignment.teamShared,evidence,status:'pendente',createdAt:now(),updates:[],
         originType:operationalContext?.type||'',originRoutineExecutionId:pendingOriginContext?.executionKey||'',originRoutineId:pendingOriginContext?.routineId||'',originRoutineName:pendingOriginContext?.routineName||'',originScopeId:operationalContext?.scopeId||'',originScopeName:operationalContext?.scopeName||'',originScopeCode:operationalContext?.scopeCode||'',originScopeType:operationalContext?.scopeType||'',originShiftId:operationalContext?.shiftId||'',originShiftName:operationalContext?.shiftName||'',originDateKey:operationalContext?.dateKey||'',productionProductCodes:operationalContext?.productionProductCodes?.length?operationalContext.productionProductCodes:productCodes,productionProductLabels:operationalContext?.productionProductLabels?.length?operationalContext.productionProductLabels:productCodes.map(productDisplayCode),productionFamilies:operationalContext?.productionFamilies||[],productionBaseCodes:operationalContext?.productionBaseCodes||[],autoContextLinked:Boolean(inferredProduction)
       };
-      if(!navigator.onLine){item.docId=`offline-${Date.now()}`;await queueOfflineWrite('operationalFailures',item);state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
+      if(!navigator.onLine){const queued=await queueOfflineWrite('operationalFailures',item);item.docId=queued.documentId;state.operationalFailures=[...state.operationalFailures,item];showSaveToast('Sem conexão. Falha salva no dispositivo e aguardará sincronização.','success');}else{item.docId=(await addDoc(collection(db,'operationalFailures'),item)).id;}
       const origin=pendingOriginContext;
       if(origin?.type==='routineExecution'){const exec=dailyFindExecution(origin.executionKey),linked=[...new Set([...(exec?.linkedFailureIds||[]),item.id])];await setDoc(doc(db,'routineExecutions',origin.executionKey),{linkedFailureIds:linked,updatedAt:now()},{merge:true});}
       pendingOriginContext=null;
@@ -7445,5 +7558,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.48'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.48'){localStorage.setItem('cora.sw.loaded','15.1.13.48');location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.49'&&localStorage.getItem('cora.sw.loaded')!=='15.1.13.49'){localStorage.setItem('cora.sw.loaded','15.1.13.49');location.reload();}});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}

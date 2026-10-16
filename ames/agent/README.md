@@ -1,61 +1,96 @@
-# Agente 0.5.24-rc1 — candidato, NÃO GREEN fabril
+# Agente 0.5.25-rc1 — código candidato, NÃO GREEN fabril
 
-Base funcional V0.5.23; baseline de fábrica V0.5.20 para 3028/3074/2114.
-Central oficial: https://central-cora-v2.vercel.app
+Base funcional preservada da automação local e arquitetura canônica da Central V2.
+Baseline de fábrica: V0.5.20 para 3028/3074/2114; R12 local continua sendo a
+referência operacional que precisa ser comparada fisicamente antes da promoção.
 
-## Atualizar uma instalação existente
+## Estado atual
 
-1. Pare monitor/coletas e encerre o agente. Preserve a pasta antiga.
-2. Extraia este ZIP em outra pasta. Não extraia por cima da instalação.
-3. Na pasta candidata execute:
-   `ATUALIZAR_CANDIDATO.bat "C:\pasta\instalacao-existente"`
-4. O atualizador verifica os coletores, faz backup automático de código/config e
-   backup SQLite consistente em `candidate-backups/<id>`, depois aplica seis módulos.
-   Configuração local e dados são preservados. A origem exata da Central é adicionada.
-5. Inicie pelo `00_INICIAR_AQUI.bat` original. Use `ABRIR_CENTRAL_V2.bat` e conecte
-   pelo Console MES. Permita acesso à rede local no navegador se solicitado.
+- 3028 validado permanece byte-a-byte congelado no pacote candidato.
+- 3074 e 2114 continuam usando o motor local e o scheduler MES único.
+- 3022 em lote agora existe no agente canônico por `agent_entry.py` +
+  `process_r11.py`, reaproveitando o contrato temporal real provado no R11:
+  `Tela3022`, `correlacionar_falha_3022` e `extrair_passagens_processo`.
+- O adapter se recusa a anunciar `process_timeline` se o motor instalado não
+  expuser esse contrato. O código é explicitamente marcado
+  `R11_DERIVED_R12_FACTORY_GATE`; isso não equivale a afirmar paridade R12.
+- `full`, `process_only` e `reuse_only` são executados pelo mesmo agente/scheduler.
+- `process_defect_contexts` e `process_events` ficam no mesmo SQLite e também são
+  projetados para a timeline canônica `/v2`, sem transformar timing em causa.
+- A interface operacional é somente a Central V2. A UI V0.5.23/R12 é referência
+  funcional/visual e rollback de segurança, não uma segunda aplicação ativa.
 
-Instalação nova: use `00_INICIAR_AQUI.bat` da pasta candidata. O ZIP não distribui
-banco de fábrica, cookies, sessão, perfil Chrome nem senha Wi-Fi. Dependências,
-bootstrap, rede, Wi-Fi por perfil existente e migration helper são os originais.
-Para conservar a identidade sincronizada entre máquinas, migre a base existente.
-Nunca execute dois agentes contra a mesma sessão Chrome/CDP.
+## Computador que já possui a R12
+
+1. Preserve a pasta R12 e o SQLite como rollback.
+2. Pare monitor/coletas e o agente antes da atualização.
+3. Aplique o candidato canônico; o updater faz backup consistente do SQLite,
+   código, configuração e iniciadores do posto antes de substituir arquivos.
+4. Inicie por `INICIAR_POSTO_CENTRAL_V2.bat` (também publicado como
+   `00_INICIAR_AQUI.bat` no pacote fundido).
+5. O launcher verifica/instala o ambiente local quando necessário, tenta o perfil
+   Wi-Fi OPPO já salvo, aplica somente a rota temporária `172.29.185.215/32`,
+   inicia o agente canônico, abre o Chrome/CDP e então abre a única Central.
+6. O login do A-MES continua manual. Nenhuma senha/cookie/sessão/CDP/senha Wi-Fi
+   é armazenada ou enviada ao Firebase.
+
+## Computador novo
+
+O ZIP público `0.5.24-rc1` anterior foi bloqueado no onboarding porque não contém
+esta fusão atual. Não use esse ZIP esperando paridade R12.
+
+O código do pacote fundido está preparado pelo `build-agent-candidate.py`, porém a
+publicação do novo ZIP permanece bloqueada até capturarmos/compararmos a R12 exata
+do notebook da fábrica e executarmos o gate físico. Até lá, `release.json` deve
+manter `package_available=false`.
+
+## Offline / rede
+
+- O A-MES local independe da nuvem: `127.0.0.1:8765` + Chrome/CDP 9222 + rede OPPO.
+- A rota temporária usa `ActiveStore`, somente para `172.29.185.215/32`, sem trocar
+  gateway padrão, DNS ou proxy. Reiniciar o Windows remove a rota.
+- O shell da Central e suas views nativas são precacheados pelo Service Worker.
+- O Firestore é inicializado com cache persistente antes de `app.js`; após um
+  primeiro acesso online válido, conteúdo já sincronizado pode continuar
+  disponível durante perda de internet/reinício, sujeito às políticas do navegador.
+- Escritas operacionais suportadas pela fila offline permanecem locais e são
+  sincronizadas quando a internet externa retorna.
+- Um computador totalmente novo ainda precisa de internet pelo menos para o
+  primeiro login Firebase e para obter/instalar o pacote local.
 
 ## Rollback
 
-Pare o agente. Execute `ROLLBACK_CANDIDATO.bat "C:\pasta\instalacao-existente"`.
-Restaura os três módulos V0.5.23 originais incluídos no ZIP, após novo backup.
-O SQLite é preservado, inclusive coletas posteriores; a migração é aditiva.
-Para voltar especificamente ao código/config anterior à atualização:
-`py -3 ames-agent\update_candidate.py rollback "C:\pasta\instalacao" --backup "C:\pasta\candidate-backups\ID"`.
-Os bancos de backup são recuperação manual, não sobrescritos automaticamente.
-A UI isolada e `03_ABRIR_CENTRAL_LOCAL_FALLBACK.bat` continuam disponíveis.
+O updater nunca apaga/reset o SQLite. Cada atualização gera backup em
+`candidate-backups/<id>` e preserva configuração e identidade local. O rollback
+restaura os arquivos anteriores do agente e os iniciadores do posto a partir desse
+backup. A antiga interface isolada pode ser mantida fisicamente como contingência
+até o 9/9, mas não é o runtime principal da Central.
 
 ## Contrato e limites
 
-- Um agente/scheduler FIFO. Monitor ocupado pula o ciclo sem backlog.
-- SQLite, transformações e Excel fora do gate. Poll 850 ms e refresh parcial
-  apenas quando alterado e >2200 ms. Perfis/waits originais mantidos.
-- `/api/v1/v2/capabilities`, `/v2/snapshots` e `/v2/records`: revisões imutáveis,
-  cursor por revisão/linha/dataset, proveniência e cobertura explícita.
-- IDs duráveis locais identificam observações do snapshot, não IDs globais MES.
-  Duplicidades indistinguíveis já perdidas no legado não podem ser reconstruídas.
-- Históricos expõem todos os contextos possíveis; não escolhem a primeira linha.
-- Sync autenticado é por conta/linha, sem raw payload, credenciais ou sessão.
-  Outro PC entra com a mesma conta. Não há compartilhamento indiscriminado entre usuários.
-- 3022: contrato/adapter/storage/projeções prontos; coletor real ausente.
-  Somente evento válido mais recente <= Defect Time. Empates são ambiguidade.
-- Não há benchmark nem aprovação de fábrica desta versão.
+- Um agente/scheduler FIFO. Monitor de baixa prioridade pula quando MES está ocupado.
+- Lock cobre somente a seção crítica A-MES/Chrome e sempre é liberado em `finally`.
+- `/api/v1/v2/capabilities`, `/v2/snapshots` e `/v2/records`: revisão/cursor,
+  `source_id`, `record_id`, `content_hash`, proveniência e cobertura explícita.
+- IDs são duráveis localmente, não IDs globais inventados do MES.
+- Linha continua isolada; CPH é exato; ausência nunca vira zero.
+- PCBA reutilizada e Material SN reutilizado continuam conceitos separados.
+- Manual/Automatic continua significando como a falha foi registrada.
+- Regra 3022 permanece: ocorrência atual → Defect Time → posto relevante → última
+  passagem concluída válida `<= Defect Time`, nunca simplesmente o último evento.
+- CORA recebe fato/correlação/hipótese/causa humana separados.
+- CI/preview verde não substituem validação física R12 nem benchmark de fábrica.
 
-## Checklist no posto
+## Gate físico obrigatório antes de merge/promoção
 
-- [ ] Backup concluído e rollback localizado; instalar candidato, iniciar agente.
-- [ ] Chrome/CDP, rota e Wi-Fi por perfil existente; login manual A-MES.
-- [ ] Central conecta; testar linhas 1, 2 e 3 separadamente.
-- [ ] 3028, 3074, 2114, SN, reparos, período/turno e escopo.
-- [ ] Monitor durante coleta pula ciclo; cancelamento libera próxima operação.
-- [ ] Perfis fast/balanced/safe; comparar duração com V0.5.23 isolada.
-- [ ] Reuso PCBA/material, matriz, contadores e drill-down conferem com fonte.
-- [ ] Excel abre com 11 sheets; PROCESSO_3022 sem dados inventados.
-- [ ] Fechar/reabrir preserva configuração/base; outro PC lê revisões sincronizadas.
-- [ ] Fallback local disponível; testar rollback antes de declarar baseline fabril.
+- [ ] Frontend SHA corresponde exatamente ao HEAD do PR #23.
+- [ ] Backup/rollback localizados e reboot/bootstrap validados.
+- [ ] Chrome/CDP, Ethernet + OPPO, rota temporária e login manual A-MES.
+- [ ] 3028 hoje/dia anterior e L1/L2/L3 sem mistura.
+- [ ] Shift 2114 automático sem OPC manual.
+- [ ] 3074/2114 com reuso PCBA/material e PCBAs anteriores exatas.
+- [ ] 3022 simples, múltiplas passagens e retrabalho comparados com a R12 local.
+- [ ] `full`, `process_only`, `reuse_only` e cancelamento/concorrência.
+- [ ] Consulta SN, Falhas, Reuso, Processo, Base local e CORA.
+- [ ] Excel, desktop/mobile, reinício e persistência offline.
+- [ ] Performance por linha comparada com a automação R12 antes de qualquer GREEN fabril.
