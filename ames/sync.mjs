@@ -35,7 +35,7 @@ export function indexedQueue(){
   return {put:x=>run('readwrite',s=>s.put(x)),remove:id=>run('readwrite',s=>s.delete(id)),list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid)};
 }
 export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout}={}){
-  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[];
+  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,unwatchLocal,seen='',headsKey='',readGeneration=0,lastHeads=[];
   const alive=(u,g)=>u===uid&&g===generation;
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
   const clearRemoteStatus=()=>status({status:'idle',pending:0,error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null});
@@ -100,7 +100,13 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       if(['period_start','period_end','products'].some(key=>metadata[key]!==h[key]))throw Error('History metadata mismatch');
       return sanitizeSnapshot(payload);
     },
-    start(user){this.stop();uid=user;const u=uid,g=generation;unwatch=remote.watch(u,heads=>{if(!alive(u,g))return;const key=JSON.stringify(heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort());if(key===headsKey)return;headsKey=key;lastHeads=heads;receive(heads);},error=>{if(alive(u,g))status({read_status:'error',read_error:error.message});});flush();},
+    start(user){
+      this.stop();uid=user;const u=uid,g=generation,api=this;
+      unwatch=remote.watch(u,heads=>{if(!alive(u,g))return;const key=JSON.stringify(heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort());if(key===headsKey)return;headsKey=key;lastHeads=heads;receive(heads);},error=>{if(alive(u,g))status({read_status:'error',read_error:error.message});});
+      unwatchLocal=store.onLocalSnapshotsChanged?.(()=>{void api.capture().catch(error=>{if(alive(u,g))status({status:'pending',error:error.message});});});
+      void api.capture().catch(error=>{if(alive(u,g))status({status:'pending',error:error.message});});
+      flush();
+    },
     async capture(){
       if(!uid)return;const u=uid,g=generation,payloads=store.localCanonical();
       const signature=JSON.stringify(payloads.map(p=>[p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));if(signature===seen)return;
@@ -108,6 +114,6 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       if(!alive(u,g))return;seen=signature;status({status:'pending',pending:(await queue.list(u)).length});flush();
     },
     retry(){if(uid&&lastHeads.length)receive(lastHeads);return flush();},
-    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
+    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];unwatch?.();unwatch=null;unwatchLocal?.();unwatchLocal=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
   };
 }

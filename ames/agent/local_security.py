@@ -2,8 +2,9 @@
 
 The token is a workstation capability, not an A-MES/Firebase credential. It is
 created locally, never synchronized, and is passed by the launcher in the URL
-fragment (which browsers do not send to Vercel/Netlify). The Central moves it to
-sessionStorage and sends it only to http://127.0.0.1:8765.
+fragment (which browsers do not send to Vercel/Netlify). The Central stores it only in browser storage scoped to the Central origin so
+other tabs on the same workstation can reuse the pairing, and sends it only to
+http://127.0.0.1:8765. It is never synchronized to Firebase.
 """
 from __future__ import annotations
 

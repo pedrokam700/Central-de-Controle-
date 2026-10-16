@@ -25,6 +25,8 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
   let context = immutable({...EMPTY_CONTEXT});
   let contextRevision=0;
   let contextLineExplicit=false;
+  const localSnapshotListeners=new Set();
+  function notifyLocalSnapshotChange(){for(const listener of [...localSnapshotListeners]){try{listener();}catch{}}}
 
   function normalizeBatch(payloads, localRead = false) {
     const next = new Map();
@@ -106,11 +108,13 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
       for(const [line,next] of result.next){const old=local.get(line);if(next.canonical&&old?.source_id===next.source_id&&old?.snapshot_id===next.snapshot_id&&old?.revision===next.revision&&old?.content_hash===next.content_hash)result.next.set(line,old);}
       local = result.next;
       if(local.size)ensureContextLine();
+      notifyLocalSnapshotChange();
       return immutable(result.errors);
     },
     setLocalConnected(value) { localConnected = value === true; },
     replaceSyncedSnapshots(payloads){const result=normalizeBatch(payloads,true);synced=result.next;if(synced.size)ensureContextLine();return immutable(result.errors);},
     localCanonical(){return [...local.values()].map(s=>s.canonical).filter(Boolean);},
+    onLocalSnapshotsChanged(listener){if(typeof listener!=='function')throw Error('invalid_local_snapshot_listener');localSnapshotListeners.add(listener);return ()=>localSnapshotListeners.delete(listener);},
     agent() { return agent; },
     updateAgent(patch) { agent = immutable({...agent,...patch}); },
     context(){return context;},
