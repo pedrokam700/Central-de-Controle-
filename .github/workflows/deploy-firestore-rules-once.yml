@@ -1,0 +1,23 @@
+name: Deploy Firestore Rules Once
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c57ffa173a8ce7155d3ecfd88fe6799a6046d872
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install -g firebase-tools
+      - name: Deploy only Firestore rules
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: firebase deploy --only firestore:rules --project central-de-controle-88962 --token "$FIREBASE_TOKEN"
