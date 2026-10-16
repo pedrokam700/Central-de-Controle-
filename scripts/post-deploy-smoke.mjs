@@ -19,14 +19,14 @@ function args(argv){
 
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
-export async function fetchBounded(url,{maxRedirects=4,fetcher=fetch}={}){
+export async function fetchBounded(url,{maxRedirects=4,fetcher=fetch,headers={}}={}){
   let current=new URL(url),redirects=0;
   const visited=new Set();
   while(true){
     const key=current.href;
     if(visited.has(key))throw Error(`redirect_loop:${[...visited,key].join(' -> ')}`);
     visited.add(key);
-    const response=await fetcher(current,{redirect:'manual',cache:'no-store',headers:{'Cache-Control':'no-cache','User-Agent':'Central-Quality-Gate/1.0'}});
+    const response=await fetcher(current,{redirect:'manual',cache:'no-store',headers:{'Cache-Control':'no-cache','User-Agent':'Central-Quality-Gate/1.0',...headers}});
     if(response.status>=300&&response.status<400){
       const location=response.headers.get('location');
       if(!location)throw Error(`redirect_without_location:${response.status}:${current.href}`);
@@ -39,16 +39,16 @@ export async function fetchBounded(url,{maxRedirects=4,fetcher=fetch}={}){
   }
 }
 
-async function probe(origin,expected,{fetcher=fetch,maxRedirects=4}={}){
+async function probe(origin,expected,{fetcher=fetch,maxRedirects=4,headers={}}={}){
   const base=String(origin).replace(/\/$/,'');
-  const release=await fetchBounded(`${base}/release-build.json?smoke=${Date.now()}`,{fetcher,maxRedirects});
+  const release=await fetchBounded(`${base}/release-build.json?smoke=${Date.now()}`,{fetcher,maxRedirects,headers});
   if(!release.response.ok)throw Error(`release_build_http_${release.response.status}`);
   const releaseType=release.response.headers.get('content-type')||'';
   if(!/json/i.test(releaseType))throw Error(`release_build_not_json:${releaseType}`);
   const manifest=await release.response.json();
   if(String(manifest.sha||'').toLowerCase()!==expected.toLowerCase())throw Error(`sha_mismatch:${manifest.sha||'missing'}`);
 
-  const page=await fetchBounded(`${base}/Central-de-Controle-/`,{fetcher,maxRedirects});
+  const page=await fetchBounded(`${base}/Central-de-Controle-/`,{fetcher,maxRedirects,headers});
   if(!page.response.ok)throw Error(`central_http_${page.response.status}`);
   const contentType=page.response.headers.get('content-type')||'';
   if(!/text\/html/i.test(contentType))throw Error(`central_not_html:${contentType}`);
@@ -60,14 +60,14 @@ async function probe(origin,expected,{fetcher=fetch,maxRedirects=4}={}){
   return {origin:base,sha:manifest.sha,releaseRedirects:release.redirects,pageRedirects:page.redirects,finalUrl:page.url};
 }
 
-export async function waitForPreview(origins,expected,{waitMs=180000,maxRedirects=4,fetcher=fetch,log=console.log}={}){
+export async function waitForPreview(origins,expected,{waitMs=180000,maxRedirects=4,fetcher=fetch,headers={},log=console.log}={}){
   const deadline=Date.now()+waitMs;
   let last=[];
   do{
     last=[];
     for(const origin of origins){
       try{
-        const result=await probe(origin,expected,{fetcher,maxRedirects});
+        const result=await probe(origin,expected,{fetcher,maxRedirects,headers});
         log(`POST_DEPLOY_OK ${JSON.stringify(result)}`);
         return result;
       }catch(error){
@@ -82,6 +82,8 @@ export async function waitForPreview(origins,expected,{waitMs=180000,maxRedirect
 const invoked=process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href;
 if(invoked){
   const options=args(process.argv.slice(2));
-  waitForPreview(options.origins,options.sha,{waitMs:options.waitMs,maxRedirects:options.maxRedirects})
+  const oidc=String(process.env.VERCEL_TRUSTED_OIDC_TOKEN||'').trim();
+  const headers=oidc?{'x-vercel-trusted-oidc-idp-token':oidc}:{};
+  waitForPreview(options.origins,options.sha,{waitMs:options.waitMs,maxRedirects:options.maxRedirects,headers})
     .catch(error=>{console.error('POST_DEPLOY_FAIL',error.message);process.exitCode=1;});
 }
