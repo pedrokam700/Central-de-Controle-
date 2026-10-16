@@ -58,7 +58,9 @@ jobs:
           "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs'
 
   build-clean:
-    needs: [focused-quality, firestore-emulator, published-preview]
+    # Build only an internal validation fixture here, so Windows can still be
+    # diagnosed if the independent preview gate is blocked. Release stays gated.
+    needs: [focused-quality, firestore-emulator]
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:

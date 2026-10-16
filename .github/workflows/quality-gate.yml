@@ -73,7 +73,7 @@ jobs:
       - name: Upload integrated local candidate
         uses: actions/upload-artifact@v6
         with:
-          name: central-ames-integrated-${{ github.event.pull_request.head.sha || github.sha }}
+          name: ${{ github.head_ref == 'fix/ames-official-agent-shared-sync-20261016' && 'validation-only-central-ames-integrated' || 'central-ames-integrated' }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/central-ames-integrated.zip
           if-no-files-found: error
 
