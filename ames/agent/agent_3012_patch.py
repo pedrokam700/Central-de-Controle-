@@ -11,6 +11,19 @@ import production_shift
 import map_3012
 
 
+EXACT_SN_HISTORY_START = datetime(2026, 1, 24, 0, 0, 0)
+
+
+def exact_sn_history_window(now=None):
+    """Factory-confirmed lifetime window for individual 3012 SN queries."""
+    current = now or datetime.now()
+    if current.tzinfo:
+        current = current.replace(tzinfo=None)
+    start = EXACT_SN_HISTORY_START
+    end = (current + timedelta(days=1)).replace(hour=23, minute=59, second=59, microsecond=0)
+    return start, end
+
+
 def install(a, BaseHandler, canonical):
     """Layer 3012 read-only repair history on the canonical agent without touching 3028."""
     repair_3012.ensure_schema(a.STORE)
@@ -37,15 +50,14 @@ def install(a, BaseHandler, canonical):
         configured = parse_mes_time(a.CONFIG.get("ames_start_date"))
         if configured:
             return configured.replace(hour=0, minute=0, second=0, microsecond=0)
-        # Safe compatibility fallback for installations that have not yet saved
-        # the new setting. The year itself is never hardcoded in code.
+        # Broad/background queries keep the existing compatibility fallback.
         return (datetime.now() - timedelta(days=180)).replace(hour=0, minute=0, second=0, microsecond=0)
 
     def individual_window(result):
-        # Exact-SN forensic lookup intentionally covers the A-MES lifetime.
-        # Historical 2114 timestamps are evidence, not a reason to truncate the
-        # requested 3012 window.
-        return configured_start_date(), datetime.now()
+        # Individual SN lookup always covers the factory history baseline through
+        # the end of tomorrow. Historical 2114 timestamps are evidence, not a
+        # reason to truncate the requested 3012 window.
+        return exact_sn_history_window()
 
     def individual_targets(result, sn):
         targets = []; seen = set()
@@ -158,8 +170,9 @@ def install(a, BaseHandler, canonical):
         a._persist_job(a._job_update(job_id, status="running", stage="3012", progress=5, started_at=a.utc_now(), message="Preparando consulta histórica 3012"))
         try:
             exact_targets = list(dict.fromkeys(str(x or "").strip() for x in (cfg.get("sns") or ([cfg.get("sn")] if cfg.get("sn") else [])) if str(x or "").strip()))
-            start = parse_mes_time(cfg.get("start_at")) or (configured_start_date() if exact_targets else datetime.now() - timedelta(days=90))
-            end = parse_mes_time(cfg.get("end_at")) or datetime.now()
+            exact_start, exact_end = exact_sn_history_window()
+            start = parse_mes_time(cfg.get("start_at")) or (exact_start if exact_targets else datetime.now() - timedelta(days=90))
+            end = parse_mes_time(cfg.get("end_at")) or (exact_end if exact_targets else datetime.now())
             if end < start:
                 raise RuntimeError("Periodo 3012 invalido")
             if exact_targets:

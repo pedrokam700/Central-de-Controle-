@@ -17,6 +17,7 @@ QUERY_3012_JS = r"""
 async (cfg) => {
   if (!window.Ext) throw new Error('ExtJS nao encontrado na 3012.');
   const fold = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const compact = v => fold(v).replace(/[^a-z0-9]+/g,'');
   const dataOf = r => { try { return JSON.parse(JSON.stringify(r?.getData ? r.getData() : r?.data || {})); } catch(e) { return {}; } };
   const components = [];
   try {
@@ -27,30 +28,95 @@ async (cfg) => {
   } catch(e) {}
   if (!components.length && Ext.ComponentQuery?.query) { try { components.push(...Ext.ComponentQuery.query('*')); } catch(e) {} }
 
-  const label = c => fold([c?.fieldLabel, c?.boxLabel, c?.text, c?.itemId, c?.name, c?.id].filter(Boolean).join(' '));
+  // factory-redfix-3012 integrated into the canonical collector. Keep this marker
+  // while older updater closures still call the compatibility installer: the
+  // installer sees the marker and does not monkey-patch this source at runtime.
+  const ownLabel = c => fold([c?.fieldLabel,c?.boxLabel,c?.text,c?.title,c?.itemId,c?.name,c?.id].filter(Boolean).join(' '));
+  const label = c => {
+    const parts=[c?.fieldLabel,c?.boxLabel,c?.text,c?.title,c?.itemId,c?.name,c?.id];
+    try { parts.push(c?.inputEl?.dom?.name,c?.inputEl?.dom?.id,c?.inputEl?.dom?.placeholder,c?.inputEl?.dom?.getAttribute?.('aria-label')); } catch(e) {}
+    let owner=c?.ownerCt,depth=0;
+    while(owner && depth<5){
+      parts.push(owner?.fieldLabel,owner?.boxLabel,owner?.text,owner?.title,owner?.itemId,owner?.name,owner?.id);
+      owner=owner?.ownerCt; depth+=1;
+    }
+    return fold(parts.filter(Boolean).join(' '));
+  };
   const visible = c => c && !c.hidden && (typeof c.isVisible !== "function" || c.isVisible(true));
   const fields = components.filter(c => visible(c) && (typeof c.setValue === 'function' || typeof c.setRawValue === 'function'));
+  const xtype = c => fold(c?.xtype || c?.getXType?.() || '');
+  const isDate = c => !!(c && (c.isXType?.('datefield') || c.xtype === 'datefield' || xtype(c).includes('datefield') || xtype(c).includes('date field')));
+  const isTime = c => !!(c && (c.isXType?.('timefield') || c.xtype === 'timefield' || xtype(c).includes('timefield') || xtype(c).includes('time field')));
+  const scoreText = (text,pats,compactPats) => {
+    const s=fold(text), sc=compact(s); let cur=0;
+    for(let i=0;i<pats.length;i++){
+      const p=pats[i], cp=compactPats[i];
+      if(!p) continue;
+      if(s===p || (cp && sc===cp)) cur=Math.max(cur,120);
+      else if(s.startsWith(p+' ')) cur=Math.max(cur,95);
+      else if(s.includes(p)) cur=Math.max(cur,75);
+      else if(cp && cp.length>=3 && sc.includes(cp)) cur=Math.max(cur,65);
+    }
+    return cur;
+  };
+  const kindOk = (c,kind) => {
+    const date=isDate(c), clock=isTime(c), text=label(c);
+    if(kind==='date') return date;
+    if(kind==='time') return !date && (clock || /time/.test(text));
+    return !date && !clock;
+  };
+  const componentForInput = input => {
+    if(!input) return null;
+    for(const c of fields){
+      try { if(c?.inputEl?.dom===input) return c; } catch(e) {}
+    }
+    const rawId=String(input.id||'');
+    const cmpId=rawId.replace(/-inputEl$/,'');
+    try { const direct=Ext.getCmp?.(cmpId); if(direct && fields.includes(direct)) return direct; } catch(e) {}
+    return null;
+  };
+  function findDomField(patterns,kind){
+    const pats=patterns.map(fold), compactPats=patterns.map(compact);
+    const selectors='label,.x-form-item-label,.x-form-item-label-inner,.x-form-item-label-default';
+    let nodes=[]; try { nodes=[...document.querySelectorAll(selectors)]; } catch(e) {}
+    let best=null,bestScore=-1;
+    for(const node of nodes){
+      const base=scoreText(node?.textContent||'',pats,compactPats);
+      if(base<=0) continue;
+      const seen=new Set(), inputs=[];
+      const add=input=>{if(input && !seen.has(input)){seen.add(input);inputs.push(input);}};
+      try { if(node.htmlFor) add(document.getElementById(node.htmlFor)); } catch(e) {}
+      let root=node,depth=0;
+      while(root && depth<5 && !inputs.some(x=>kindOk(componentForInput(x),kind))){
+        try { for(const input of root.querySelectorAll?.('input')||[]) add(input); } catch(e) {}
+        root=root.parentElement; depth+=1;
+      }
+      for(const input of inputs){
+        const c=componentForInput(input);
+        if(!c || !kindOk(c,kind)) continue;
+        let score=base;
+        if(node.htmlFor && input.id===node.htmlFor) score+=25;
+        score+=Math.min(20,scoreText(label(c),pats,compactPats)/6);
+        if(score>bestScore){best=c;bestScore=score;}
+      }
+    }
+    return bestScore>0?best:null;
+  }
   function findField(patterns, kind="text") {
-    const pats = patterns.map(fold);
+    const direct=findDomField(patterns,kind);
+    if(direct) return direct;
+    const pats = patterns.map(fold), compactPats = patterns.map(compact);
     let best=null, score=-1;
     for (const c of fields) {
-      const date = c.isXType?.('datefield') || c.xtype === 'datefield';
-      const clock = c.isXType?.('timefield') || c.xtype === 'timefield';
-      if(kind === 'date' ? !date : date) continue;
-      if(kind === 'time' && !clock && !/time/.test(label(c))) continue;
-      const s=label(c); let cur=0;
-      for (const p of pats) {
-        if (!p) continue;
-        if (s === p) cur=Math.max(cur,100);
-        else if (s.startsWith(p+' ')) cur=Math.max(cur,80);
-        else if (s.includes(p)) cur=Math.max(cur,55);
-      }
+      if(!kindOk(c,kind)) continue;
+      const cur=scoreText(label(c),pats,compactPats);
       if (cur>score) { score=cur; best=c; }
     }
     return score>0?best:null;
   }
-  function setText(patterns,value,kind="text") {
-    const c=findField(patterns,kind);
+  const meta = (c,value) => ({label:label(c),ownLabel:ownLabel(c),itemId:c.itemId||null,name:c.name||null,id:c.id||null,value,raw:String(c.getRawValue?.()??'')});
+  function setText(patterns,value) {
+    const c=findField(patterns,'text');
     if(!c) { if(value) throw new Error('Filtro 3012 ausente: '+patterns[0]); return null; }
     const old=c.getValue?.(); let actual=value ?? '';
     const isCombo=c.isXType?.('combobox') || c.xtype==='combobox';
@@ -64,15 +130,40 @@ async (cfg) => {
     } else c.setValue(actual);
     c.fireEvent?.('change',c,actual,old);c.checkChange?.();c.fireEvent?.('blur',c);
     if(String(c.getValue?.()??'')!==String(actual)||c.isValid?.()===false)throw new Error('3012: filtro nao aplicado: '+patterns[0]);
-    return {label:label(c),itemId:c.itemId||null,name:c.name||null,value:actual};
+    return meta(c,actual);
   }
   function setDate(patterns,value) {
     const c=findField(patterns,'date'); if(!c)throw new Error('Data 3012 ausente: '+patterns[0]);
     const parts=String(value).slice(0,10).split('-').map(Number), d=new Date(parts[0],parts[1]-1,parts[2]);
-    const old=c.getValue?.();c.setValue(d);c.fireEvent?.('change',c,d,old);c.checkChange?.();c.fireEvent?.('blur',c);
-    const got=c.getValue?.();
-    if(!(got instanceof Date)||got.getFullYear()!==d.getFullYear()||got.getMonth()!==d.getMonth()||got.getDate()!==d.getDate()||c.isValid?.()===false)throw new Error('Data 3012 nao aplicada');
-    return {label:label(c),itemId:c.itemId||null,name:c.name||null,value};
+    const old=c.getValue?.();
+    c.setValue(d);
+    if(!String(c.getRawValue?.()??'').trim() && typeof c.setRawValue==='function'){
+      let formatted=value;
+      try { formatted=c.formatDate?.(d) || Ext.Date?.format?.(d,c.format||'Y-m-d') || value; } catch(e) {}
+      c.setRawValue(formatted);
+    }
+    c.fireEvent?.('select',c,d);c.fireEvent?.('change',c,d,old);c.checkChange?.();c.fireEvent?.('blur',c);
+    let got=c.getValue?.();
+    if(!(got instanceof Date)){
+      try { got=c.parseDate?.(c.getRawValue?.()); } catch(e) {}
+    }
+    if(!(got instanceof Date)||got.getFullYear()!==d.getFullYear()||got.getMonth()!==d.getMonth()||got.getDate()!==d.getDate()||c.isValid?.()===false)throw new Error('Data 3012 nao aplicada: '+patterns[0]);
+    return meta(c,value);
+  }
+  function setTime(patterns,value) {
+    const c=findField(patterns,'time'); if(!c)throw new Error('Hora 3012 ausente: '+patterns[0]);
+    const parts=String(value||'00:00').split(':').map(Number), hh=parts[0]||0, mm=parts[1]||0;
+    const matches=got=>{
+      if(got instanceof Date) return got.getHours()===hh && got.getMinutes()===mm;
+      const raw=String(c.getRawValue?.()??got??'');
+      const m=raw.match(/(\d{1,2}):(\d{2})/);
+      return !!m && Number(m[1])===hh && Number(m[2])===mm;
+    };
+    const old=c.getValue?.(); c.setValue(value);
+    if(!matches(c.getValue?.()) && typeof c.setValue==='function') c.setValue(new Date(2008,0,1,hh,mm,0,0));
+    c.fireEvent?.('select',c,c.getValue?.());c.fireEvent?.('change',c,c.getValue?.(),old);c.checkChange?.();c.fireEvent?.('blur',c);
+    if(!matches(c.getValue?.())||c.isValid?.()===false)throw new Error('Hora 3012 nao aplicada: '+patterns[0]);
+    return meta(c,value);
   }
 
   const applied={};
@@ -83,9 +174,11 @@ async (cfg) => {
   applied.repairCode=setText(['repair code'],cfg.repairCode);
   applied.defectType=setText(['defect type'],cfg.defectType);
   applied.dateFrom=setDate(['defect time start','defect start'],cfg.dateFrom);
-  applied.timeFrom=setText(['defect time start','start time'],cfg.timeFrom,"time");
+  applied.timeFrom=setTime(['defect time start','start time'],cfg.timeFrom);
   applied.dateTo=setDate(['defect time end','defect end'],cfg.dateTo);
-  applied.timeTo=setText(['defect time end','end time'],cfg.timeTo,"time");
+  applied.timeTo=setTime(['defect time end','end time'],cfg.timeTo);
+  if(applied.dateFrom?.id && applied.dateFrom.id===applied.dateTo?.id)throw new Error('3012: datas inicial/final resolveram o mesmo campo');
+  if(applied.timeFrom?.id && applied.timeFrom.id===applied.timeTo?.id)throw new Error('3012: horas inicial/final resolveram o mesmo campo');
 
   function storeFields(store) {
     const out=[];
@@ -117,7 +210,7 @@ async (cfg) => {
 
   const buttons=components.filter(c=>visible(c) && (c.isButton || c.xtype==='button' || typeof c.handler==='function'));
   let viewButton=null,best=-1;
-  for(const b of buttons){const s=label(b);let sc=0;if(s==='view')sc=100;else if(s.includes(' view ' )||s.endsWith(' view')||s.startsWith('view '))sc=80;else if(s.includes('query')||s.includes('search'))sc=40;if(sc>best){best=sc;viewButton=b;}}
+  for(const b of buttons){const s=ownLabel(b);let sc=0;if(s==='view')sc=100;else if(s.includes(' view ' )||s.endsWith(' view')||s.startsWith('view '))sc=80;else if(s.includes('query')||s.includes('search'))sc=40;if(sc>best){best=sc;viewButton=b;}}
   if(!viewButton || best<40) throw new Error('Botao View da 3012 nao identificado.');
 
   const proxy=store.getProxy?.() || store.proxy;

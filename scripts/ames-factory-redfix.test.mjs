@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import {spawnSync} from 'node:child_process';
 
 const patch=fs.readFileSync(new URL('../ames/agent/factory_redfix.py',import.meta.url),'utf8');
+const collector3012=fs.readFileSync(new URL('../ames/agent/ames_3012_live.py',import.meta.url),'utf8');
+const agent3012=fs.readFileSync(new URL('../ames/agent/agent_3012_patch.py',import.meta.url),'utf8');
 const guard=fs.readFileSync(new URL('../ames/agent/fastlane_runtime_guard.py',import.meta.url),'utf8');
 const process3022=fs.readFileSync(new URL('../ames/factory-engine/ames/tela_3022.py',import.meta.url),'utf8');
 const evidence=fs.readFileSync(new URL('../ames/evidence-view.mjs',import.meta.url),'utf8');
@@ -15,13 +17,18 @@ test('factory RED guards install without modifying production 3022 collector',()
   assert.match(patch,/cancel_aware_live_event/);
   assert.match(patch,/2114_VISIBLE_PCBA_MISMATCH/);
   assert.match(patch,/factory-redfix-3012/);
+  assert.match(collector3012,/factory-redfix-3012 integrated into the canonical collector/);
+  assert.match(collector3012,/findDomField/);
+  assert.match(collector3012,/ownerCt/);
+  assert.match(collector3012,/compactPats/);
   assert.doesNotMatch(process3022,/factory-redfix-3012|2114_VISIBLE_PCBA_MISMATCH|cancel_aware_live_event/);
 });
 
-test('cancel checkpoint, 2114 visible-PCBA fail-closed and 3012 grouped fields are executable contracts',()=>{
+test('cancel checkpoint, 2114 visible-PCBA fail-closed and canonical 3012 field resolution are executable contracts',()=>{
   const py=pythonBin();assert.ok(py,'Python required');
   const code=String.raw`
 import sys,threading,types
+from datetime import datetime
 sys.path.insert(0,'ames/agent')
 import factory_redfix as f
 
@@ -55,12 +62,29 @@ except RuntimeError as exc:
 import ames_3012_live as live
 f._install_3012_field_resolution()
 assert 'factory-redfix-3012' in live.QUERY_3012_JS
+assert 'findDomField' in live.QUERY_3012_JS
 assert 'ownerCt' in live.QUERY_3012_JS
 assert 'compactPats' in live.QUERY_3012_JS
-print('factory redfix contracts OK')
+assert 'setTime' in live.QUERY_3012_JS
+row=live.normalize_3012_row({'lotId':'002527TEST','repairComment':'comentario AT preservado','repairUser':'AT01','repairTime':'2026-10-16 09:10:00'})
+assert row['repair_comment']=='comentario AT preservado'
+assert row['repair_user']=='AT01'
+
+import agent_3012_patch as p3012
+start,end=p3012.exact_sn_history_window(datetime(2026,10,16,9,30,0))
+assert start==datetime(2026,1,24,0,0,0)
+assert end==datetime(2026,10,17,23,59,59)
+print('factory redfix + 3012 contracts OK')
 `;
   const run=spawnSync(py,['-c',code],{cwd:process.cwd(),encoding:'utf8'});
   assert.equal(run.status,0,run.stderr||run.stdout);
+});
+
+test('exact-SN 3012 policy is pinned to factory baseline while broad query fallback stays separate',()=>{
+  assert.match(agent3012,/EXACT_SN_HISTORY_START = datetime\(2026, 1, 24, 0, 0, 0\)/);
+  assert.match(agent3012,/current \+ timedelta\(days=1\)/);
+  assert.match(agent3012,/exact_start, exact_end = exact_sn_history_window\(\)/);
+  assert.match(agent3012,/exact_end if exact_targets else datetime\.now\(\)/);
 });
 
 test('SN correlation alerts are visually explicit while preserving no-root-cause wording',()=>{
