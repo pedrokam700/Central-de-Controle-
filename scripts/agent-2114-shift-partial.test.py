@@ -2,6 +2,7 @@
 
 These tests intentionally do not claim factory validation.  They prove that:
 - shift preparation requires a committed confirmation, not the first visual hit;
+- the physical DOM trigger beside Shift is attempted before ExtJS helper fallbacks;
 - the composite navigator can degrade 2114 without killing other sources;
 - fluxo_2114 returns structured partial evidence when Shift is unavailable;
 - one 2114 PCBA error does not abort the remaining 2114 batch;
@@ -99,6 +100,8 @@ def test_shift_waits_for_committed_confirmation():
     assert "gridpanel" in shift_2114.SELECT_SHIFT_JS
     assert "itemdblclick" in shift_2114.SELECT_SHIFT_JS
     assert "lookup_open_requested" in shift_2114.SELECT_SHIFT_JS
+    assert "physical_dom_trigger" in shift_2114.SELECT_SHIFT_JS
+    assert shift_2114.SELECT_SHIFT_JS.index("physical_dom_trigger") < shift_2114.SELECT_SHIFT_JS.index("owner_onTriggerClick"), "physical Shift trigger must be attempted before ExtJS fallback"
 
 
 def test_navigation_shift_is_nonfatal_unless_strict():
