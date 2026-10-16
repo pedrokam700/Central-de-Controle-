@@ -44,6 +44,7 @@ jobs:
           python scripts/agent-origin-policy.test.py
           python scripts/agent-2114-shift-partial.test.py
           python scripts/agent-3022-observability.test.py
+          python scripts/agent-3022-postview-field-reset.test.py
       - name: Existing Node contracts
         run: |
           node --test scripts/ames-auth-hardening.test.mjs
