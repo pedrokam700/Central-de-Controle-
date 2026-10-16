@@ -6,6 +6,7 @@ import {spawnSync} from 'node:child_process';
 const patch=fs.readFileSync(new URL('../ames/agent/factory_redfix.py',import.meta.url),'utf8');
 const guard=fs.readFileSync(new URL('../ames/agent/fastlane_runtime_guard.py',import.meta.url),'utf8');
 const process3022=fs.readFileSync(new URL('../ames/factory-engine/ames/tela_3022.py',import.meta.url),'utf8');
+const evidence=fs.readFileSync(new URL('../ames/evidence-view.mjs',import.meta.url),'utf8');
 
 function pythonBin(){for(const candidate of [process.env.PYTHON_BIN,'python3','python'].filter(Boolean)){const p=spawnSync(candidate,['--version'],{encoding:'utf8'});if(p.status===0)return candidate;}return null;}
 
@@ -60,4 +61,12 @@ print('factory redfix contracts OK')
 `;
   const run=spawnSync(py,['-c',code],{cwd:process.cwd(),encoding:'utf8'});
   assert.equal(run.status,0,run.stderr||run.stdout);
+});
+
+test('SN correlation alerts are visually explicit while preserving no-root-cause wording',()=>{
+  assert.match(evidence,/ALERTA DE CORRELAÇÃO — REQUER ANÁLISE/);
+  assert.match(evidence,/var\(--danger,#d92d20\)/);
+  assert.match(evidence,/data-has-alerts/);
+  assert.match(evidence,/não confirma causa raiz/);
+  assert.match(evidence,/PRIORIDADE ALTA/);
 });
