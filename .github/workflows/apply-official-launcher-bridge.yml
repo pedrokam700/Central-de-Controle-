@@ -6,6 +6,7 @@ on:
       - fix/ames-official-agent-shared-sync-20261016
     paths:
       - scripts/apply-official-launcher-bridge.py
+      - .github/workflows/apply-official-launcher-bridge.yml
 
 permissions:
   contents: write
