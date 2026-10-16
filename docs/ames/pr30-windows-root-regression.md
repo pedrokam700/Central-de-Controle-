@@ -41,10 +41,16 @@ the exact root setup and command lines extracted from the shipped BAT through
 local HTTP 200, package SHA, and frontend gate SHA remain required.
 
 The final CLEAN artifact is uploaded only after focused quality, Firestore /
-cross-PC, package build, and Windows smoke succeed. Earlier workflow artifacts
+cross-PC, exact-SHA Vercel preview, package build, and Windows smoke succeed. Earlier workflow artifacts
 are explicitly named `validation-only` and are not the release handoff.
 
 **Factory physical gate: PENDING.** No production promotion or merge is part
 of this correction. V0.5.25 official and all collector sources, including
 3012/3022, remain unchanged. Factory Chrome/CDP and cross-PC evidence are still
 required; local regression results do not close those gates.
+
+The PR #30 preview gate previously probed Netlify and returned HTTP 401 even
+though the package points to Vercel. For this branch, both workflows now probe
+the same candidate Vercel origin and require the current 40-character SHA and
+canonical Central HTML. Other branches retain their existing preview target.
+No production URL or deployment settings are changed.

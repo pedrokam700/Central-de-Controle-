@@ -58,7 +58,7 @@ jobs:
           "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs'
 
   build-clean:
-    needs: [focused-quality, firestore-emulator]
+    needs: [focused-quality, firestore-emulator, published-preview]
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -197,7 +197,7 @@ jobs:
           if-no-files-found: error
 
   release-clean:
-    needs: [focused-quality, firestore-emulator, build-clean, windows-smoke]
+    needs: [focused-quality, firestore-emulator, published-preview, build-clean, windows-smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -211,3 +211,21 @@ jobs:
           path: validated/central-ames-integrated.zip
           if-no-files-found: error
           retention-days: 7
+
+  published-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Require the same exact Vercel preview used by the package
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: >-
+          node scripts/post-deploy-smoke.mjs
+          --origin "https://central-cora-v2-git-fix-ames-official-a-b3407a-pedrokam700-6477.vercel.app"
+          --sha "$EXPECTED_SHA"
+          --wait-ms 300000
+          --max-redirects 4
