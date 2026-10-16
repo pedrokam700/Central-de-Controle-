@@ -1,13 +1,18 @@
 # Central A-MES — release atual
 
-Release candidata atual: **V0.5.23**.
+Release oficial atual: **V0.5.25 — GREEN de fábrica**.
 
-- Índice completo: `../v0.5.23/README.md`
-- Manifesto: `../v0.5.23/MANIFEST.json`
-- Pacote: `AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`
-- SHA-256: `1c0e7a37af4fb4b0b08b377d7c17c6895be5891e27c2ba9d37a9cc8cb6708167`
-- Google Drive file ID: `1C_yuDdIUs3rDHAcmJD23_9Ey-UnVDrry`
-- Library: `/Central de trabalho/AMES_Central_Offline_V0_5_23_CONSOLIDADA_FABRICA.zip`
-- Central V2 candidata: `https://central-cora-v2.vercel.app/`
+- Índice completo: `../v0.5.25/README.md`
+- Manifesto: `../v0.5.25/MANIFEST.json`
+- Pacote: `AMES_Central_Offline_V0_5_25_OFICIAL.zip`
+- SHA-256: `18a06ea508274ddfa50492d51c6a01a71262f7fbf721fd43eb380b77562219d6`
+- Tamanho: `899917` bytes
+- Google Drive file ID: `13V1TrND4mKHuBaSWdc5MAagVeaURu8Py`
+- Central oficial: `https://central-cora-v2.vercel.app/`
+- Deployment Vercel oficial: `dpl_AMc1KhxjmxtXFBGsxThb6LUA4WvD`
+- Candidato físico aprovado: `581ba30a69003c0fb8ece91b969f628fb96b92a1`
+- Merge oficial: `cae458664f56fd2bb05f00d7fbc1e3d786395c55`
 
-**V0.5.23 NÃO está GREEN.** A baseline funcional validada em fábrica continua V0.5.20. O GitHub é a fonte canônica de versão/manifesto/arquitetura; o ZIP exato é identificado pelo SHA-256 e mantido no Drive/Library.
+**V0.5.25 está GREEN e passa a ser a baseline funcional oficial a partir de 16/10/2026.**
+
+Os itens de UX/polimento posteriores permanecem rastreados separadamente e não reabrem este gate físico.
