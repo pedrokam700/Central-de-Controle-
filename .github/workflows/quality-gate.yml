@@ -158,7 +158,7 @@ jobs:
       - name: Verify exact SHA and canonical route on deployed preview
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-          PREVIEW_ORIGIN: ${{ github.head_ref == 'fix/ames-official-agent-shared-sync-20261016' && 'https://central-cora-v2-git-fix-ames-official-a-b3407a-pedrokam700-6477.vercel.app' || format('https://deploy-preview-{0}--productcontrolcenter.netlify.app', github.event.pull_request.number) }}
+          PREVIEW_ORIGIN: ${{ format('https://deploy-preview-{0}--productcontrolcenter.netlify.app', github.event.pull_request.number) }}
         run: >-
           node scripts/post-deploy-smoke.mjs
           --origin "$PREVIEW_ORIGIN"
