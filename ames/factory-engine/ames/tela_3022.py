@@ -40,9 +40,9 @@ def _result_identity_3022(rows, fields, target):
     """Return only explicit response identity from the 3022 result itself.
 
     The physical AWIP3022 history grid normally does not repeat the queried
-    PCBA/SN in each history row.  Therefore the editable query field is *not*
-    treated as result identity here.  It is validated separately together with
-    proof that the history store actually refreshed after View.
+    PCBA/SN in each history row. The editable query field is validated only at
+    submit time. A-MES is allowed to clear/recreate that field after View; the
+    returned dataset is proven separately by the grid/store refresh lifecycle.
     """
     values = [normalizar_sn(v) for row in rows for k, v in row.items()
               if _pcba_column(k, row=True) and normalizar_sn(v)]
@@ -801,6 +801,7 @@ class Tela3022:
         telemetry = {"query_started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                      "milestones_ms": {"query_start": 0.0}, "polls": 0, "input_retries": 0,
                      "poll_errors": 0, "mismatch_polls": 0, "status": "UNCONFIRMED",
+                     "target_confirmed_before_submit": False, "query_context_ok": False,
                      "timeout_s": timeout_s, "empty_confirm_s": empty_confirm_s}
         def mark(name):
             telemetry["milestones_ms"].setdefault(name, round((time.perf_counter() - started) * 1000, 2))
@@ -848,6 +849,10 @@ class Tela3022:
                 mark("input_filled")
                 if normalizar_sn(campo.input_value(timeout=1000)) != pcba_sn:
                     raise RuntimeError("3022 input não confirmou a PCBA alvo")
+                # This is the only valid lifetime for the editable query control.
+                # The physical A-MES page may clear/recreate it as soon as View runs.
+                telemetry["target_confirmed_before_submit"] = True
+                telemetry["query_context_ok"] = True  # compatibility: means confirmed at submit time
                 mark("input_applied")
                 last_input_error = None
                 break
@@ -927,9 +932,11 @@ class Tela3022:
                                                    "STORE_DATASET_EVENT" if store_event else None)
                 if loading is True or refreshed:
                     mark("response_started_observed")
-                query_context_ok = normalizar_sn(campo.input_value(timeout=600)) == pcba_sn
-                telemetry["query_context_ok"] = query_context_ok
-                if not refreshed or loading is True or not query_context_ok:
+                # Do not re-read `campo` after View. On the real 3022 ExtJS page the
+                # query control may be cleared or replaced even though the new history
+                # dataset has already arrived. Freshness is a result-store property,
+                # not a post-submit input-field property.
+                if not refreshed or loading is True:
                     empty_since = None
                     time.sleep(0.12)
                     continue
@@ -944,7 +951,7 @@ class Tela3022:
                 confirmation = telemetry.get("refresh_evidence") or "STORE_RESPONSE_CONFIRMED"
                 telemetry["confirmation"] = confirmation
                 mark("response_confirmed")
-                mark("identity_confirmed")  # query identity; row SN is optional
+                mark("identity_confirmed")  # target confirmed pre-submit; row SN remains optional
                 if rows:
                     focus = preparar_foco_montagem_teste(rows)
                     mark("parse_completed")
@@ -1028,7 +1035,7 @@ class Tela3022:
         count = len((last_grid or {}).get("rows") or [])
         raise RuntimeError(
             f"A 3022 não confirmou atualização para {pcba_sn}. "
-            f"Contexto SN: {telemetry.get('query_context_ok', False)}; "
+            f"alvo antes do View: {telemetry.get('target_confirmed_before_submit', False)}; "
             f"refresh: {telemetry.get('refresh_proven', False)}; "
             f"última grade: {count}; último erro: {ultima_exc}"
         )
