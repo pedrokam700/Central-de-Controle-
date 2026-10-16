@@ -55,32 +55,3 @@ t=replace_once(t,old,new,'canonical web launcher packaging')
 t=t.replace('5. Central e Console MES usam o MESMO frontend local: http://127.0.0.1:8765/Central-de-Controle-/','5. O launcher abre a Central web exata (preview validado no candidato; dominio oficial na versao publicada) e pareia o agente local 127.0.0.1:8765.')
 t=t.replace('6. Console MES e uma view interna da Central: entrar/sair nao abre outra aplicacao nem exige um segundo login.','6. Console MES e uma view interna da mesma Central web; o frontend local permanece apenas como fallback/suporte offline.')
 p.write_text(t,encoding='utf-8')
-
-p=Path('.github/workflows/ames-official-agent-sync-candidate.yml')
-t=p.read_text(encoding='utf-8')
-old="""      - name: Build standalone CLEAN
-        run: |
-          python scripts/build-integrated-candidate.py \"$RUNNER_TEMP/central-ames-integrated.zip\"
-"""
-new="""      - name: Build standalone CLEAN
-        env:
-          CENTRAL_PREVIEW_URLS: https://central-cora-v2-git-fix-ames-official-a-b3407a-pedrokam700-6477.vercel.app
-        run: |
-          python scripts/build-integrated-candidate.py \"$RUNNER_TEMP/central-ames-integrated.zip\"
-"""
-t=replace_once(t,old,new,'candidate preview build env')
-t=t.replace("required={'00_INICIAR_AQUI.bat','01_INSTALAR_UMA_VEZ.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','frontend/Central-de-Controle-/index.html','CANDIDATE_MANIFEST.json'}",
-"required={'00_INICIAR_AQUI.bat','INICIAR_POSTO_CENTRAL_V2.bat','FRONTEND_GATE.json','01_INSTALAR_UMA_VEZ.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','frontend/Central-de-Controle-/index.html','CANDIDATE_MANIFEST.json'}")
-needle="""              assert manifest['sha']=='${{ github.sha }}'
-"""
-insert="""              assert manifest['sha']=='${{ github.sha }}'
-              entry=f.read('00_INICIAR_AQUI.bat').decode('utf-8','replace')
-              assert 'INICIAR_POSTO_CENTRAL_V2.bat' in entry and 'FRONTEND_GATE.json' in entry
-              gate=json.loads(f.read('FRONTEND_GATE.json'))
-              assert gate['expected_sha']=='${{ github.sha }}'
-              assert any('central-cora-v2-git-fix-ames-official' in u for u in gate['preview_urls'])
-              cfg=json.loads(f.read('ames-agent/config.example.json'))
-              assert any('central-cora-v2-git-fix-ames-official' in u for u in cfg['allowed_origins'])
-"""
-t=replace_once(t,needle,insert,'package web launcher assertions')
-p.write_text(t,encoding='utf-8')
