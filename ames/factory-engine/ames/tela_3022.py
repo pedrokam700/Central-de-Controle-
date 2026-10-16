@@ -752,35 +752,48 @@ class Tela3022:
                 pass
         return out
 
-    def _history_response(self, frame, grid_id, action):
-        """One response lifecycle on the selected visible history store.
+    def _grid_store_token(self, frame, grid_id):
+        """Stable runtime identity for the concrete ExtJS store bound to a grid."""
+        return frame.evaluate(r"""id => {
+          const g = window.Ext && Ext.getCmp(id), s = g && g.getStore && g.getStore();
+          if (!s) return null;
+          if (!s.__ames3022StoreToken) {
+            const root = globalThis.__ames3022StoreTokens || (globalThis.__ames3022StoreTokens = {next: 1});
+            const token = 'store-' + (root.next++);
+            try { Object.defineProperty(s, '__ames3022StoreToken', {value: token, configurable: true}); }
+            catch(e) { s.__ames3022StoreToken = token; }
+          }
+          return String(s.__ames3022StoreToken || '');
+        }""", grid_id)
 
-        Ext Store.load emits load; Ajax + loadData emits datachanged. Both are
-        real dataset events, including identical rows, unlike a typed SN or a
-        content hash. Listeners are removed on every exit, including timeout.
-        """
+    def _history_response(self, frame, grid_id, action, token):
+        """Observe one submitted query without assuming grid/store identity survives View."""
         return frame.evaluate(r"""args => {
-          const g = window.Ext && Ext.getCmp(args.id), s = g && g.getStore();
-          if (!s) throw new Error('3022 history store unavailable');
-          if (args.action === 'arm' || args.action === 'dispose') {
-            const old = s.__ames3022Response;
-            if (old) {
-              s.un('datachanged', old.changed); s.un('load', old.loaded);
-              delete s.__ames3022Response;
-            }
+          if (!window.Ext) throw new Error('3022 ExtJS unavailable');
+          const root = globalThis.__ames3022Responses || (globalThis.__ames3022Responses = {});
+          const dispose = st => {
+            if (!st || !st.store) return;
+            try { st.store.un('datachanged', st.changed); } catch(e) {}
+            try { st.store.un('load', st.loaded); } catch(e) {}
+          };
+          if (args.action === 'dispose') {
+            const st = root[args.token]; dispose(st); delete root[args.token]; return null;
           }
           if (args.action === 'arm') {
-            const state = {changes:0, loads:0, success:null};
+            const prior = root[args.token]; dispose(prior); delete root[args.token];
+            const g = Ext.getCmp(args.id), s = g && g.getStore && g.getStore();
+            if (!s) throw new Error('3022 history store unavailable');
+            const state = {store:s, grid_id:args.id, changes:0, loads:0, success:null};
             state.changed = () => { state.changes += 1; };
             state.loaded = (_store, _records, success) => {
               state.loads += 1; state.success = success !== false;
             };
             s.on('datachanged', state.changed); s.on('load', state.loaded);
-            s.__ames3022Response = state;
+            root[args.token] = state;
           }
-          const st = s.__ames3022Response;
-          return st ? {changes:st.changes, loads:st.loads, success:st.success} : null;
-        }""", {"id": grid_id, "action": action})
+          const st = root[args.token];
+          return st ? {grid_id:st.grid_id, changes:st.changes, loads:st.loads, success:st.success} : null;
+        }""", {"id": grid_id, "action": action, "token": token})
 
     def consultar(self, pcba_sn, timeout_s=18.0, empty_confirm_s=3.0):
         started = time.perf_counter()
@@ -803,9 +816,9 @@ class Tela3022:
             raise
         finally:
             if self._active_response is not None:
-                frame, grid_id = self._active_response
+                frame, token = self._active_response
                 try:
-                    self._history_response(frame, grid_id, "dispose")
+                    self._history_response(frame, None, "dispose", token)
                 except Exception:
                     telemetry["response_cleanup_failed"] = True
                 self._active_response = None
@@ -851,10 +864,13 @@ class Tela3022:
         before = extract_extjs_store_grid(page, self.cfg["expected_headers"],
                                           frame=query_frame, visible_only=True)
         grid_id = before["grid_id"]
+        store_token = self._grid_store_token(query_frame, grid_id)
         before_sig = _grid_signature_3022(before)
         telemetry["before_grid"] = before_sig
-        self._active_response = (query_frame, grid_id)
-        self._history_response(query_frame, grid_id, "arm")
+        telemetry["before_binding"] = {"grid_id": grid_id, "store_token": store_token}
+        response_token = f"q-{time.perf_counter_ns()}"
+        self._active_response = (query_frame, response_token)
+        self._history_response(query_frame, grid_id, "arm", response_token)
         mark("submit")
         view.click(timeout=5000)
         mark("view_clicked")
@@ -866,8 +882,29 @@ class Tela3022:
         while time.time() - inicio < timeout_s:
             telemetry["polls"] += 1
             try:
-                grid = extract_extjs_store_grid(page, self.cfg["expected_headers"],
-                                                frame=query_frame, visible_only=True, grid_id=grid_id)
+                rebound = False
+                rebound_reason = None
+                try:
+                    grid = extract_extjs_store_grid(page, self.cfg["expected_headers"],
+                                                    frame=query_frame, visible_only=True, grid_id=grid_id)
+                except Exception:
+                    grid = extract_extjs_store_grid(page, self.cfg["expected_headers"],
+                                                    frame=query_frame, visible_only=True)
+                    if grid.get("grid_id") != grid_id:
+                        rebound = True
+                        rebound_reason = "GRID_REPLACED_AFTER_VIEW"
+                        grid_id = grid.get("grid_id")
+                current_store_token = self._grid_store_token(query_frame, grid.get("grid_id"))
+                if store_token and current_store_token and current_store_token != store_token:
+                    rebound = True
+                    rebound_reason = rebound_reason or "STORE_REBOUND_AFTER_VIEW"
+                if rebound:
+                    telemetry["binding_rebinds"] = telemetry.get("binding_rebinds", 0) + 1
+                    telemetry["binding_rebound"] = True
+                    telemetry["binding_rebound_reason"] = rebound_reason
+                    mark("binding_rebound_observed")
+                    store_token = current_store_token
+
                 last_grid = grid
                 mark("first_grid")
                 rows = grid.get("rows") or []
@@ -875,14 +912,19 @@ class Tela3022:
                 if rows:
                     mark("first_rows_observed")
                 telemetry["after_grid"] = _grid_signature_3022(grid)
-                telemetry["grid_changed"] = before_sig != telemetry["after_grid"]  # telemetry only
+                telemetry["after_binding"] = {"grid_id": grid.get("grid_id"), "store_token": current_store_token}
+                telemetry["grid_changed"] = before_sig != telemetry["after_grid"]
                 telemetry["store_loading"] = loading
-                response = grid.get("store_response") or {}  # same JS turn as rows/loading
+                response = self._history_response(query_frame, None, "read", response_token) or {}
                 telemetry["store_response"] = response
                 if response.get("success") is False:
                     raise RuntimeError("3022 consulta falhou na store")
-                refreshed = bool(response.get("changes") or response.get("loads"))
+                store_event = bool(response.get("changes") or response.get("loads"))
+                refreshed = store_event or rebound or bool(telemetry.get("binding_rebound"))
                 telemetry["refresh_proven"] = refreshed
+                telemetry["refresh_evidence"] = (rebound_reason if rebound else
+                                                   telemetry.get("binding_rebound_reason") if telemetry.get("binding_rebound") else
+                                                   "STORE_DATASET_EVENT" if store_event else None)
                 if loading is True or refreshed:
                     mark("response_started_observed")
                 query_context_ok = normalizar_sn(campo.input_value(timeout=600)) == pcba_sn
@@ -899,7 +941,7 @@ class Tela3022:
                 if identity == "MISMATCH":
                     telemetry["mismatch_polls"] += 1
                     raise RuntimeError("3022 retornou identidade explícita diferente da PCBA consultada")
-                confirmation = "STORE_RESPONSE_CONFIRMED"
+                confirmation = telemetry.get("refresh_evidence") or "STORE_RESPONSE_CONFIRMED"
                 telemetry["confirmation"] = confirmation
                 mark("response_confirmed")
                 mark("identity_confirmed")  # query identity; row SN is optional
