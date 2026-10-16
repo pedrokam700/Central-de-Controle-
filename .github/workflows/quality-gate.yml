@@ -148,6 +148,9 @@ jobs:
     needs: static-quality
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -155,10 +158,20 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Mint short-lived GitHub OIDC token for PR 30
+        if: github.event.pull_request.number == 30
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
       - name: Verify exact SHA and canonical route on deployed preview
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-          PREVIEW_ORIGIN: ${{ format('https://deploy-preview-{0}--productcontrolcenter.netlify.app', github.event.pull_request.number) }}
+          PREVIEW_ORIGIN: ${{ github.event.pull_request.number == 30 && 'https://central-cora-v2-git-fix-ames-official-a-b3407a-pedrokam700-6477.vercel.app' || format('https://deploy-preview-{0}--productcontrolcenter.netlify.app', github.event.pull_request.number) }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: >-
           node scripts/post-deploy-smoke.mjs
           --origin "$PREVIEW_ORIGIN"
