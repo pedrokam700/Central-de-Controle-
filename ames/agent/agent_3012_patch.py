@@ -50,8 +50,9 @@ def install(a, BaseHandler, canonical):
         configured = parse_mes_time(a.CONFIG.get("ames_start_date"))
         if configured:
             return configured.replace(hour=0, minute=0, second=0, microsecond=0)
-        # Broad/background queries keep the existing compatibility fallback.
-        return (datetime.now() - timedelta(days=180)).replace(hour=0, minute=0, second=0, microsecond=0)
+        # The factory baseline for 3012 exact-history work is canonical when the
+        # workstation has not explicitly configured an earlier/later start.
+        return EXACT_SN_HISTORY_START
 
     def individual_window(result):
         # Individual SN lookup always covers the factory history baseline through
@@ -290,7 +291,7 @@ def install(a, BaseHandler, canonical):
             self._send({
                 "implemented": True,
                 "factory_validated": False,
-                "source": "AWIP3012_DIRECT_EXTJS",
+                "source": ames_3012_live.SOURCE_3012,
                 "ames_start_date": configured_start_date().date().isoformat(),
                 "local": repair_3012.stats(a.STORE),
                 "offline_sn": True,

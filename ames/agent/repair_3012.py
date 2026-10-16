@@ -6,6 +6,8 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 from store import stable_json, utc_now
 
+TRUSTED_COVERAGE_SOURCE = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2"
+
 TABLE_SQL = r"""
 CREATE TABLE IF NOT EXISTS repair_history_3012(
   row_key TEXT PRIMARY KEY,
@@ -148,6 +150,11 @@ def missing_windows(store, sn: str, start_at: datetime, end_at: datetime) -> Lis
         raise ValueError("Periodo 3012 invalido")
     spans: List[Tuple[datetime, datetime]] = []
     for row in coverage(store, sn):
+        # Old 3012 collectors could mark an exact-SN interval complete after a
+        # wrongly resolved field/store returned zero rows. Only mapped V2 proof
+        # is trusted to suppress a future MES query.
+        if str(row.get("source") or "") != TRUSTED_COVERAGE_SOURCE:
+            continue
         start = _parse_dt(row.get("start_at")); end = _parse_dt(row.get("end_at"))
         if not start or not end or end < start_at or start > end_at:
             continue
@@ -214,7 +221,7 @@ def ingest(store, payload: Dict[str, Any], *, workstation: str | None = None) ->
     store.record_audit(
         "INGEST_3012",
         workstation=workstation,
-        details={"records": len(rows), "inserted": inserted, "updated": updated, "coverage": covered, "query": meta, "source": "AWIP3012_DIRECT_EXTJS"},
+        details={"records": len(rows), "inserted": inserted, "updated": updated, "coverage": covered, "query": meta, "source": str((payload or {}).get("source") or "")},
     )
     return {"records": len(rows), "inserted": inserted, "updated": updated, "coverage": covered}
 

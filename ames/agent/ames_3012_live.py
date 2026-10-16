@@ -12,294 +12,232 @@ from urllib.parse import urlsplit, urlunsplit
 ROUTE_3012 = "UAWIP.form.VwDefectRepairView"
 HOME_SURFACE = "/asymes/home"
 OPC_SURFACE = "/asymes/opc"
+QUERY_CONTRACT = "3012-home-mapped-v2"
+SOURCE_3012 = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2"
+CHECKPOINT_CONTRACT = QUERY_CONTRACT
 
 QUERY_3012_JS = r"""
 async (cfg) => {
   if (!window.Ext) throw new Error('ExtJS nao encontrado na 3012.');
-  const fold = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-  const compact = v => fold(v).replace(/[^a-z0-9]+/g,'');
-  const dataOf = r => { try { return JSON.parse(JSON.stringify(r?.getData ? r.getData() : r?.data || {})); } catch(e) { return {}; } };
-  const components = [];
-  try {
-    const all = Ext.ComponentManager && Ext.ComponentManager.all;
-    if (all?.items) components.push(...all.items);
-    else if (all?.getArray) components.push(...all.getArray());
-    else if (all?.each) all.each(x => components.push(x));
-  } catch(e) {}
-  if (!components.length && Ext.ComponentQuery?.query) { try { components.push(...Ext.ComponentQuery.query('*')); } catch(e) {} }
-
-  // factory-redfix-3012 integrated into the canonical collector. Keep this marker
-  // while older updater closures still call the compatibility installer: the
-  // installer sees the marker and does not monkey-patch this source at runtime.
-  const visible = c => c && !c.hidden && (typeof c.isVisible !== 'function' || c.isVisible(true));
-  const ownLabel = c => fold([c?.fieldLabel,c?.boxLabel,c?.text,c?.title,c?.itemId,c?.name,c?.id].filter(Boolean).join(' '));
-  const label = c => {
-    const parts=[c?.fieldLabel,c?.boxLabel,c?.text,c?.title,c?.itemId,c?.name,c?.id];
-    try { parts.push(c?.inputEl?.dom?.name,c?.inputEl?.dom?.id,c?.inputEl?.dom?.placeholder,c?.inputEl?.dom?.getAttribute?.('aria-label')); } catch(e) {}
-    let owner=c?.ownerCt,depth=0;
-    while(owner && depth<5){
-      parts.push(owner?.fieldLabel,owner?.boxLabel,owner?.text,owner?.title,owner?.itemId,owner?.name,owner?.id);
-      owner=owner?.ownerCt; depth+=1;
-    }
-    return fold(parts.filter(Boolean).join(' '));
-  };
-  const fields = components.filter(c => visible(c) && (typeof c.setValue === 'function' || typeof c.setRawValue === 'function'));
-  const xtype = c => fold(c?.xtype || c?.getXType?.() || '');
-  const isDate = c => !!(c && (c.isXType?.('datefield') || c.xtype === 'datefield' || xtype(c).includes('datefield') || xtype(c).includes('date field')));
-  const isTime = c => !!(c && !isDate(c) && (c.isXType?.('timefield') || c.xtype === 'timefield' || xtype(c).includes('timefield') || xtype(c).includes('time field') || /\btime\b/.test(label(c))));
-  const scoreText = (text,pats,compactPats) => {
-    const s=fold(text), sc=compact(s); let cur=0;
-    for(let i=0;i<pats.length;i++){
-      const p=pats[i], cp=compactPats[i];
-      if(!p) continue;
-      if(s===p || (cp && sc===cp)) cur=Math.max(cur,120);
-      else if(s.startsWith(p+' ')) cur=Math.max(cur,95);
-      else if(s.includes(p)) cur=Math.max(cur,75);
-      else if(cp && cp.length>=3 && sc.includes(cp)) cur=Math.max(cur,65);
-    }
-    return cur;
-  };
-  const componentForInput = input => {
-    if(!input) return null;
-    for(const c of fields){
-      try { if(c?.inputEl?.dom===input) return c; } catch(e) {}
-    }
-    const rawId=String(input.id||'');
-    const cmpId=rawId.replace(/-inputEl$/,'');
-    try { const direct=Ext.getCmp?.(cmpId); if(direct && fields.includes(direct)) return direct; } catch(e) {}
-    return null;
-  };
-  const kindOk = (c,kind) => kind==='date' ? isDate(c) : kind==='time' ? isTime(c) : (!isDate(c) && !isTime(c));
-  function findDomField(patterns,kind){
-    const pats=patterns.map(fold), compactPats=patterns.map(compact);
-    const selectors='label,.x-form-item-label,.x-form-item-label-inner,.x-form-item-label-default';
-    let nodes=[]; try { nodes=[...document.querySelectorAll(selectors)]; } catch(e) {}
-    let best=null,bestScore=-1;
-    for(const node of nodes){
-      const base=scoreText(node?.textContent||'',pats,compactPats);
-      if(base<=0) continue;
-      const seen=new Set(), inputs=[];
-      const add=input=>{if(input && !seen.has(input)){seen.add(input);inputs.push(input);}};
-      try { if(node.htmlFor) add(document.getElementById(node.htmlFor)); } catch(e) {}
-      let root=node,depth=0;
-      while(root && depth<6){
-        try { for(const input of root.querySelectorAll?.('input')||[]) add(input); } catch(e) {}
-        const matches=inputs.map(componentForInput).filter(c=>c && kindOk(c,kind));
-        if(matches.length) break;
-        root=root.parentElement; depth+=1;
-      }
-      for(const input of inputs){
-        const c=componentForInput(input);
-        if(!c || !kindOk(c,kind)) continue;
-        let score=base;
-        if(node.htmlFor && input.id===node.htmlFor) score+=25;
-        score+=Math.min(20,scoreText(label(c),pats,compactPats)/6);
-        if(score>bestScore){best=c;bestScore=score;}
-      }
-    }
-    return bestScore>0?best:null;
-  }
-  function findField(patterns, kind='text') {
-    const direct=findDomField(patterns,kind);
-    if(direct) return direct;
-    const pats = patterns.map(fold), compactPats = patterns.map(compact);
-    let best=null, score=-1;
-    for (const c of fields) {
-      if(!kindOk(c,kind)) continue;
-      const cur=scoreText(label(c),pats,compactPats);
-      if (cur>score) { score=cur; best=c; }
-    }
-    return score>0?best:null;
-  }
-  const descendsFrom=(c,owner)=>{
-    let x=c,depth=0;
-    while(x && depth<8){ if(x===owner) return true; x=x.ownerCt; depth+=1; }
-    return false;
-  };
-  function resolveDateTimePair(patterns){
-    const date=findField(patterns,'date');
-    if(!date) throw new Error('Data 3012 ausente: '+patterns[0]);
-    let owner=date.ownerCt,depth=0;
-    while(owner && depth<7){
-      const scoped=fields.filter(c=>visible(c) && descendsFrom(c,owner));
-      const dates=scoped.filter(isDate), times=scoped.filter(isTime);
-      if(dates.length===1 && dates[0]===date && times.length===1) return {date,time:times[0],scope:owner.id||owner.itemId||null};
-      owner=owner.ownerCt; depth+=1;
-    }
-    const time=findField(patterns,'time');
-    if(!time) throw new Error('Hora 3012 ausente: '+patterns[0]);
-    return {date,time,scope:null};
-  }
-  const meta = (c,value) => ({label:label(c),ownLabel:ownLabel(c),itemId:c.itemId||null,name:c.name||null,id:c.id||null,value,raw:String(c.getRawValue?.()??'')});
-  function setText(patterns,value) {
-    const c=findField(patterns,'text');
-    if(!c) { if(value) throw new Error('Filtro 3012 ausente: '+patterns[0]); return null; }
-    const old=c.getValue?.(); let actual=value ?? '';
-    const isCombo=c.isXType?.('combobox') || c.xtype==='combobox';
-    if(isCombo && actual!=='') {
-      const store=c.getStore?.()||c.store, records=store?.getRange?.()||[];
-      const get=(r,k)=>r.get?r.get(k):r.data?.[k];
-      const matches=records.filter(r=>String(get(r,c.valueField))===String(actual)||String(get(r,c.displayField))===String(actual));
-      if(matches.length!==1)throw new Error('3012: valor de combo nao resolvido: '+patterns[0]);
-      actual=get(matches[0],c.valueField); c.select?.(matches[0]); c.setValue(actual);
-      c.fireEvent?.('select',c,matches);
-    } else c.setValue(actual);
-    c.fireEvent?.('change',c,actual,old);c.checkChange?.();c.fireEvent?.('blur',c);
-    if(String(c.getValue?.()??'')!==String(actual)||c.isValid?.()===false)throw new Error('3012: filtro nao aplicado: '+patterns[0]);
-    return meta(c,actual);
-  }
-  const expectedDate=value=>{
-    const parts=String(value).slice(0,10).split('-').map(Number);
-    return new Date(parts[0],parts[1]-1,parts[2]);
-  };
-  function dateMatches(c,value){
-    const d=expectedDate(value); let got=c.getValue?.();
-    if(!(got instanceof Date)){ try { got=c.parseDate?.(c.getRawValue?.()); } catch(e) {} }
-    return got instanceof Date && got.getFullYear()===d.getFullYear() && got.getMonth()===d.getMonth() && got.getDate()===d.getDate();
-  }
-  function setDateComponent(c,value,labelName){
-    const d=expectedDate(value), old=c.getValue?.();
-    c.setValue(d);
-    if(!String(c.getRawValue?.()??'').trim() && typeof c.setRawValue==='function'){
-      let formatted=value;
-      try { formatted=c.formatDate?.(d) || Ext.Date?.format?.(d,c.format||'Y-m-d') || value; } catch(e) {}
-      c.setRawValue(formatted);
-    }
-    c.fireEvent?.('select',c,d);c.fireEvent?.('change',c,d,old);c.checkChange?.();c.fireEvent?.('blur',c);
-    if(!dateMatches(c,value)||c.isValid?.()===false) throw new Error('Data 3012 nao aplicada: '+labelName);
-    return meta(c,value);
-  }
-  function timeMatches(c,value){
-    const parts=String(value||'00:00').split(':').map(Number), hh=parts[0]||0, mm=parts[1]||0;
-    const raw=String(c.getRawValue?.()??'');
-    const m=raw.match(/(\d{1,2}):(\d{2})/);
-    if(m) return Number(m[1])===hh && Number(m[2])===mm;
-    const got=c.getValue?.();
-    return got instanceof Date && got.getHours()===hh && got.getMinutes()===mm;
-  }
-  function setTimeComponent(c,value,labelName){
-    const old=c.getValue?.();
-    // Never inject an arbitrary calendar date into a time field. ExtJS timefields
-    // may internally use 2008 as an epoch; feeding that Date back into this form
-    // can corrupt the paired Defect Time date on the real 3012 page.
-    c.setValue(value);
-    if(!timeMatches(c,value) && typeof c.setRawValue==='function') c.setRawValue(value);
-    try {
-      const input=c?.inputEl?.dom;
-      if(input){ input.value=String(value); input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); }
-    } catch(e) {}
-    c.fireEvent?.('change',c,c.getValue?.(),old);c.checkChange?.();c.fireEvent?.('blur',c);
-    if(!timeMatches(c,value)||c.isValid?.()===false) throw new Error('Hora 3012 nao aplicada: '+labelName);
-    return meta(c,value);
-  }
-
-  const startPair=resolveDateTimePair(['defect time start','defect start']);
-  const endPair=resolveDateTimePair(['defect time end','defect end']);
-  const pairIds=[startPair.date?.id,startPair.time?.id,endPair.date?.id,endPair.time?.id].filter(Boolean);
-  if(new Set(pairIds).size!==pairIds.length) throw new Error('3012: Start/End nao resolveram quatro campos distintos');
-
-  const applied={};
-  applied.sn=setText(['sn','sn imei','lot id'],cfg.sn);
-  applied.line=setText(['line','line id'],cfg.line);
-  applied.model=setText(['model','product model'],cfg.model);
-  applied.defectCode=setText(['defect code'],cfg.defectCode);
-  applied.repairCode=setText(['repair code'],cfg.repairCode);
-  applied.defectType=setText(['defect type'],cfg.defectType);
-  applied.dateFrom=setDateComponent(startPair.date,cfg.dateFrom,'defect time start');
-  applied.timeFrom=setTimeComponent(startPair.time,cfg.timeFrom,'defect time start');
-  applied.dateTo=setDateComponent(endPair.date,cfg.dateTo,'defect time end');
-  applied.timeTo=setTimeComponent(endPair.time,cfg.timeTo,'defect time end');
-  if(!dateMatches(startPair.date,cfg.dateFrom)) throw new Error('3012: Defect Time Start foi alterado ao preencher a hora');
-  if(!dateMatches(endPair.date,cfg.dateTo)) throw new Error('3012: Defect Time End foi alterado ao preencher a hora');
-  applied.dateTimeScopes={start:startPair.scope,end:endPair.scope};
-
-  function storeFields(store) {
+  const CONTRACT='3012-home-mapped-v2';
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const clean=v=>String(v??'').trim();
+  const fold=v=>clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const dataOf=r=>{try{return JSON.parse(JSON.stringify(r?.getData?r.getData():r?.data||{}));}catch(e){return {};}};
+  const liveComponents=()=>{
     const out=[];
     try {
-      const model=store.getModel?.() || store.model;
-      const fs=model?.getFields?.() || model?.fields?.items || [];
-      for(const f of fs) out.push(String(f?.name||f?.getName?.()||''));
+      const all=Ext.ComponentManager&&Ext.ComponentManager.all;
+      if(all?.items) out.push(...all.items);
+      else if(all?.getArray) out.push(...all.getArray());
+      else if(all?.each) all.each(x=>out.push(x));
     } catch(e) {}
-    try { const first=store.getAt?.(0); if(first) out.push(...Object.keys(dataOf(first))); } catch(e) {}
-    return [...new Set(out.filter(Boolean))];
-  }
-  function scoreStore(store) {
-    const names=storeFields(store).map(fold); const joined=' '+names.join(' ')+' '; let score=0;
-    for(const needle of ['repair comment','repair user','repair time','repair code','defect code','defect desc','defect user','defect oper']) if(joined.includes(needle)) score+=20;
-    if(joined.includes('repair comment')) score+=80;
-    if(joined.includes('repair user')) score+=40;
-    return {score,names};
-  }
-  const storeCandidates=[];
-  for(const c of components.filter(visible)) {
-    let store=null; try { store=c.getStore?.() || c.store; } catch(e) {}
-    if(!store || !store.loadPage) continue;
-    const s=scoreStore(store); if(s.score>0) storeCandidates.push({c,store,...s});
-  }
-  storeCandidates.sort((a,b)=>b.score-a.score);
-  const chosen=storeCandidates[0];
-  if(!chosen || chosen.score<60) throw new Error('Grid principal da 3012 nao identificado com seguranca.');
-  const store=chosen.store;
+    if(!out.length&&Ext.ComponentQuery?.query){try{out.push(...Ext.ComponentQuery.query('*'));}catch(e){}}
+    return out;
+  };
+  const visible=c=>c&&!c.hidden&&(typeof c.isVisible!=='function'||c.isVisible(true));
+  const byItemId=(itemId,{visibleOnly=false}={})=>{
+    const matches=liveComponents().filter(c=>String(c?.itemId||'')===itemId&&(!visibleOnly||visible(c)));
+    if(matches.length!==1) throw new Error(`3012_MAP_MISMATCH:${itemId}:${matches.length}`);
+    return matches[0];
+  };
+  const optionalByItemId=itemId=>liveComponents().find(c=>String(c?.itemId||'')===itemId)||null;
+  const meta=(c,value)=>({itemId:c?.itemId||null,name:c?.name||null,xtype:c?.xtype||c?.getXType?.()||null,value,raw:clean(c?.getRawValue?.())});
+  const itemMeta=c=>c?{itemId:c.itemId||null,name:c.name||null,xtype:c.xtype||c.getXType?.()||null,raw:clean(c.getRawValue?.()??c.getValue?.())}:null;
+  const emit=(c,name,...args)=>{try{c?.fireEvent?.(name,c,...args);}catch(e){}};
+  const setMappedField=(itemId,value)=>{
+    const c=byItemId(itemId,{visibleOnly:true});
+    const actual=value??'';
+    const old=c.getValue?.();
+    try { c.focus?.(); } catch(e) {}
+    if(typeof c.setValue!=='function') throw new Error(`3012_MAP_MISMATCH:${itemId}:no-setValue`);
+    c.setValue(actual);
+    emit(c,'change',actual,old); c.checkChange?.(); emit(c,'blur');
+    if(actual!==''&&c.isValid?.()===false) throw new Error(`3012_FILTER_INVALID:${itemId}`);
+    return meta(c,actual);
+  };
+  const parseDate=(dateValue,timeValue='00:00')=>{
+    const d=String(dateValue).slice(0,10).split('-').map(Number);
+    const t=String(timeValue||'00:00').split(':').map(Number);
+    if(d.length!==3||!d[0]||!d[1]||!d[2]) throw new Error('3012_DATE_INVALID:'+dateValue);
+    return new Date(d[0],d[1]-1,d[2],t[0]||0,t[1]||0,0,0);
+  };
+  const dateMatches=(c,value)=>{
+    const want=parseDate(value); let got=c?.getValue?.();
+    if(!(got instanceof Date)){try{got=c?.parseDate?.(c?.getRawValue?.());}catch(e){}}
+    return got instanceof Date&&got.getFullYear()===want.getFullYear()&&got.getMonth()===want.getMonth()&&got.getDate()===want.getDate();
+  };
+  const timeMatches=(c,value)=>{
+    const [hh,mm]=String(value||'00:00').split(':').map(Number);
+    const raw=clean(c?.getRawValue?.()); const m=raw.match(/(\d{1,2}):(\d{2})/);
+    if(m) return Number(m[1])===(hh||0)&&Number(m[2])===(mm||0);
+    const got=c?.getValue?.();
+    return got instanceof Date&&got.getHours()===(hh||0)&&got.getMinutes()===(mm||0);
+  };
+  const applyDateTime=(root,dateValue,timeValue)=>{
+    const parent=byItemId(root,{visibleOnly:true});
+    const date=byItemId(root+'__Date',{visibleOnly:true});
+    const time=byItemId(root+'__Time',{visibleOnly:true});
+    const data=optionalByItemId(root+'__Data');
+    const full=parseDate(dateValue,timeValue);
+    const dateOnly=parseDate(dateValue,'00:00');
+    const parentOld=parent.getValue?.();
+    if(typeof parent.setValue==='function'){
+      parent.setValue(full); emit(parent,'change',full,parentOld); parent.checkChange?.();
+    }
+    const dateOld=date.getValue?.(); date.setValue(dateOnly); emit(date,'select',dateOnly); emit(date,'change',dateOnly,dateOld); date.checkChange?.(); emit(date,'blur');
+    const timeOld=time.getValue?.(); time.setValue(timeValue);
+    if(!timeMatches(time,timeValue)&&typeof time.setRawValue==='function') time.setRawValue(timeValue);
+    try {
+      const input=time?.inputEl?.dom;
+      if(input){input.value=String(timeValue);input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));}
+    } catch(e) {}
+    emit(time,'change',time.getValue?.(),timeOld); time.checkChange?.(); emit(time,'blur');
+    if(typeof parent.setValue==='function'){
+      const old=parent.getValue?.(); parent.setValue(full); emit(parent,'change',full,old); parent.checkChange?.(); emit(parent,'blur');
+    }
+    if(!dateMatches(date,dateValue)) throw new Error(`3012_DATE_NOT_APPLIED:${root}`);
+    if(!timeMatches(time,timeValue)) throw new Error(`3012_TIME_NOT_APPLIED:${root}`);
+    const hiddenRaw=clean(data?.getValue?.()??data?.getRawValue?.());
+    const parentRaw=clean(parent?.getRawValue?.()??parent?.getValue?.());
+    if(/(^|\D)2008(\D|$)/.test(hiddenRaw)||/(^|\D)2008(\D|$)/.test(parentRaw)) throw new Error(`3012_EPOCH_2008:${root}`);
+    return {parent:meta(parent,full.toISOString()),date:meta(date,dateValue),time:meta(time,timeValue),data:itemMeta(data),hiddenRaw,parentRaw};
+  };
 
-  const buttons=components.filter(c=>visible(c) && (c.isButton || c.xtype==='button' || typeof c.handler==='function'));
-  let viewButton=null,best=-1;
-  for(const b of buttons){const s=ownLabel(b);let sc=0;if(s==='view')sc=100;else if(s.includes(' view ')||s.endsWith(' view')||s.startsWith('view '))sc=80;else if(s.includes('query')||s.includes('search'))sc=40;if(sc>best){best=sc;viewButton=b;}}
-  if(!viewButton || best<40) throw new Error('Botao View da 3012 nao identificado.');
-  const physicalViewElement=()=>{
-    const candidates=[viewButton?.btnEl?.dom,viewButton?.el?.dom];
-    for(const root of candidates){
+  const applied={};
+  applied.sn=setMappedField('txtSnImei',cfg.sn);
+  applied.defectType=setMappedField('cdvDefectType',cfg.defectType);
+  applied.repairCode=setMappedField('cdvRepairedCode',cfg.repairCode);
+  applied.department=setMappedField('cdvDepartmentNew','');
+  applied.area=setMappedField('cdvAreaNew','');
+  applied.line=setMappedField('cdvLineCodeNew',cfg.line);
+  applied.model=setMappedField('cdvProdModel',cfg.model);
+  applied.defectCode=setMappedField('cdvDefectCode',cfg.defectCode);
+  applied.dateFrom=applyDateTime('dteFromDate',cfg.dateFrom,cfg.timeFrom);
+  applied.dateTo=applyDateTime('dteToDate',cfg.dateTo,cfg.timeTo);
+
+  const storeFields=store=>{
+    const out=[];
+    try {const model=store?.getModel?.()||store?.model;for(const f of model?.getFields?.()||model?.fields?.items||[])out.push(String(f?.name||f?.getName?.()||''));}catch(e){}
+    try {const first=store?.getAt?.(0);if(first)out.push(...Object.keys(dataOf(first)));}catch(e){}
+    return [...new Set(out.filter(Boolean))];
+  };
+  const validRepairStore=store=>{
+    const fields=storeFields(store).map(v=>clean(v).toLowerCase().replace(/[^a-z0-9]+/g,''));const names=new Set(fields);
+    return names.has('repaircomment')&&names.has('repairuser')&&names.has('repairtime')&&names.has('defectcode');
+  };
+  const resolveMain=()=>{
+    const grid=byItemId('grdDefectRepair',{visibleOnly:true});
+    const store=grid?.getStore?.()||grid?.store;
+    if(!store||!validRepairStore(store)) throw new Error('3012_GRID_CONTRACT_MISMATCH:grdDefectRepair');
+    return {grid,store};
+  };
+  const viewButton=byItemId('btnView',{visibleOnly:true});
+  const initial=resolveMain();
+  let initialStore=initial.store;
+  const tokenRoot=globalThis.__central3012StoreTokens||(globalThis.__central3012StoreTokens={next:1});
+  const storeToken=store=>{
+    if(!store) return null;
+    if(!store.__central3012StoreToken){
+      const value='3012-store-'+(tokenRoot.next++);
+      try{Object.defineProperty(store,'__central3012StoreToken',{value,configurable:true});}catch(e){store.__central3012StoreToken=value;}
+    }
+    return String(store.__central3012StoreToken||'');
+  };
+  const initialToken=storeToken(initialStore);
+  const snapshotParams=store=>{try{return JSON.parse(JSON.stringify((store?.getProxy?.()||store?.proxy)?.extraParams||{}));}catch(e){return {};}};
+  const beforeParams=snapshotParams(initialStore);
+  const beforeParamsText=JSON.stringify(beforeParams);
+  const observed=new Map();
+  const observe=store=>{
+    if(observed.has(store)) return observed.get(store);
+    const state={store,token:storeToken(store),before:0,loads:0,changes:0,success:null,requestParams:null};
+    state.beforeFn=(_store,operation)=>{state.before+=1;try{state.requestParams=JSON.parse(JSON.stringify(operation?.getParams?.()||operation?.params||snapshotParams(store)));}catch(e){state.requestParams=snapshotParams(store);}};
+    state.loadFn=(_store,_records,success)=>{state.loads+=1;state.success=success!==false;};
+    state.changeFn=()=>{state.changes+=1;};
+    try{store.on?.('beforeload',state.beforeFn);}catch(e){}
+    try{store.on?.('load',state.loadFn);}catch(e){}
+    try{store.on?.('datachanged',state.changeFn);}catch(e){}
+    observed.set(store,state);return state;
+  };
+  const cleanup=()=>{for(const st of observed.values()){try{st.store.un?.('beforeload',st.beforeFn);}catch(e){}try{st.store.un?.('load',st.loadFn);}catch(e){}try{st.store.un?.('datachanged',st.changeFn);}catch(e){}}};
+  observe(initialStore); initialStore.currentPage=1;
+  const physicalElement=()=>{
+    for(const root of [viewButton?.btnEl?.dom,viewButton?.el?.dom]){
       if(!root) continue;
-      if(typeof root.click==='function' && /^(A|BUTTON|INPUT)$/i.test(String(root.tagName||''))) return root;
-      try { const nested=root.querySelector?.('a,button,input[type="button"],input[type="submit"]'); if(nested) return nested; } catch(e) {}
+      if(typeof root.click==='function'&&/^(A|BUTTON|INPUT)$/i.test(String(root.tagName||''))) return root;
+      try{const nested=root.querySelector?.('a,button,input[type="button"],input[type="submit"]');if(nested)return nested;}catch(e){}
     }
     return null;
   };
-  const clickView=()=>{
-    const el=physicalViewElement();
-    if(el){
-      try { el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true})); } catch(e) {}
-      try { el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true})); } catch(e) {}
-      el.click();
-      return 'physical_dom_click';
+  const trigger=mode=>{
+    if(mode==='physical_dom_click'){
+      const el=physicalElement(); if(!el) throw new Error('no physical element');
+      try{el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));}catch(e){}
+      try{el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}catch(e){}
+      el.click();return;
     }
-    if(typeof viewButton.fireEvent==='function'){ viewButton.fireEvent('click',viewButton); return 'ext_click_event'; }
-    if(typeof viewButton.handler==='function'){ viewButton.handler.call(viewButton.scope||viewButton,viewButton); return 'handler_fallback'; }
-    throw new Error('Botao View 3012 sem acao fisica disponivel.');
+    if(mode==='ext_click_event'){
+      if(typeof viewButton.fireEvent!=='function') throw new Error('no Ext click event');
+      viewButton.fireEvent('click',viewButton);return;
+    }
+    if(mode==='handler_fallback'){
+      if(typeof viewButton.handler!=='function') throw new Error('no handler');
+      viewButton.handler.call(viewButton.scope||viewButton,viewButton);return;
+    }
   };
-
-  const proxy=store.getProxy?.() || store.proxy;
-  const beforeParams=JSON.parse(JSON.stringify(proxy?.extraParams||{}));
+  let reboundAt=0;
+  const stateNow=()=>{
+    const cur=resolveMain();const st=observe(cur.store);const token=storeToken(cur.store);
+    const rebound=token!==initialToken;
+    if(rebound&&!reboundAt) reboundAt=Date.now();
+    const params=snapshotParams(cur.store);
+    const paramsChanged=JSON.stringify(params)!==beforeParamsText;
+    const started=[...observed.values()].some(x=>x.before||x.loads||x.changes)||rebound||paramsChanged;
+    return {cur,st,token,rebound,params,paramsChanged,started,loading:cur.store?.isLoading?.()===true};
+  };
+  const viewAttempts=[];
   let viewAction=null;
-  const waitLoad = () => new Promise((resolve,reject)=>{
-    let done=false;
-    const cleanup=()=>{clearTimeout(timer);store.un?.('load',finish);};
-    const finish=(loadedStore,records,success)=>{if(done)return;done=true;cleanup();success===false?reject(new Error('3012 retornou falha ao carregar a grid.')):resolve((records||[]).map(dataOf));};
-    const timer=setTimeout(()=>{if(done)return;done=true;cleanup();reject(new Error('Timeout aguardando nova carga 3012; View foi acionado mas a store nao respondeu.'));},30000);
-    if(typeof store.on!=='function'){cleanup();reject(new Error('Store 3012 sem evento load'));return;}
-    store.on('load',finish,null,{single:true});
-    store.currentPage=1;
-    try { viewAction=clickView(); }
-    catch(e) { done=true;cleanup();reject(e); }
-  });
-  const firstPage=await waitLoad();
-  await new Promise(r=>setTimeout(r,120));
-  const params=JSON.parse(JSON.stringify((store.getProxy?.()||store.proxy)?.extraParams||{}));
-  const total=Number(store.getTotalCount?.() ?? firstPage.length ?? 0);
-  const pageSize=Number(store.pageSize||firstPage.length||100)||100;
-  const pages=Math.max(1,Math.ceil(total/pageSize));
-  if(pages>10000)throw new Error('3012 excedeu limite de paginacao');
-  const records=[...firstPage]; const pageResults=[{page:1,count:firstPage.length}];
+  for(const mode of ['physical_dom_click','ext_click_event','handler_fallback']){
+    try{trigger(mode);viewAttempts.push({mode,status:'invoked'});}catch(e){viewAttempts.push({mode,status:'unavailable',error:String(e?.message||e)});continue;}
+    const until=Date.now()+700;
+    while(Date.now()<until){const s=stateNow();if(s.started){viewAction=mode;break;}await sleep(50);}
+    if(viewAction) break;
+  }
+  if(!viewAction){cleanup();throw new Error('3012_VIEW_NOT_EXECUTED:'+JSON.stringify(viewAttempts));}
 
+  const deadline=Date.now()+30000;let finalState=null;let freshness=null;
+  while(Date.now()<deadline){
+    const s=stateNow();
+    if(s.st.success===false){cleanup();throw new Error('3012_STORE_LOAD_FAILED');}
+    if(!s.loading&&s.st.loads>0&&s.st.success!==false){finalState=s;freshness='STORE_LOAD_CONFIRMED';break;}
+    if(!s.loading&&s.st.changes>0){finalState=s;freshness='STORE_DATASET_EVENT';break;}
+    if(!s.loading&&s.rebound&&reboundAt&&Date.now()-reboundAt>=350){finalState=s;freshness='STORE_REBOUND_AFTER_VIEW';break;}
+    await sleep(70);
+  }
+  if(!finalState){cleanup();throw new Error('3012_RESPONSE_NOT_CONFIRMED: View executou, mas nenhuma resposta nova da grid foi comprovada.');}
+  const store=finalState.cur.store;
+  const params=snapshotParams(store);
+  const finalToken=storeToken(store);
+  const proofState=observed.get(store);
+  const records=[];
+  try{for(const r of store.getRange?.()||[])records.push(dataOf(r));}catch(e){try{store.each?.(r=>records.push(dataOf(r)));}catch(_) {}}
+  const total=Number(store.getTotalCount?.()??records.length??0);
+  const pageSize=Number(store.pageSize||records.length||100)||100;
+  const pages=Math.max(1,Math.ceil(total/pageSize));
+  const pageResults=[{page:1,count:records.length}];
+  if(pages>10000){cleanup();throw new Error('3012 excedeu limite de paginacao');}
   async function loadPage(pageNo){
     return await new Promise((resolve,reject)=>{
       let done=false;const timer=setTimeout(()=>{if(!done){done=true;reject(new Error('Timeout 3012 pagina '+pageNo));}},30000);
-      try { store.loadPage(pageNo,{callback:(rs,op,success)=>{if(done)return;done=true;clearTimeout(timer);if(success===false)reject(new Error('Falha 3012 pagina '+pageNo));else resolve((rs||[]).map(dataOf));}}); }
-      catch(e){if(!done){done=true;clearTimeout(timer);reject(e);}}
+      try{store.loadPage(pageNo,{callback:(rs,op,success)=>{if(done)return;done=true;clearTimeout(timer);if(success===false)reject(new Error('Falha 3012 pagina '+pageNo));else resolve((rs||[]).map(dataOf));}});}catch(e){if(!done){done=true;clearTimeout(timer);reject(e);}}
     });
   }
   for(let p=2;p<=pages;p++){const rs=await loadPage(p);records.push(...rs);pageResults.push({page:p,count:rs.length});}
-  if(records.length!==total)throw new Error('3012 incompleta: '+records.length+' / '+total);
-  return {records,total,pageSize,pages,pageResults,applied,proxyParams:params,beforeParams,storeFields:chosen.names,storeScore:chosen.score,gridItemId:chosen.c?.itemId||null,viewAction};
+  if(records.length!==total){cleanup();throw new Error('3012 incompleta: '+records.length+' / '+total);}
+  const queryProof={contract:CONTRACT,viewAction,viewAttempts,freshness,initialStoreToken:initialToken,finalStoreToken:finalToken,storeRebound:finalToken!==initialToken,requestParams:proofState?.requestParams||null,proxyParams:params};
+  cleanup();
+  return {records,total,pageSize,pages,pageResults,applied,proxyParams:params,beforeParams,storeFields:storeFields(store),gridItemId:finalState.cur.grid?.itemId||null,viewAction,queryProof};
 }
 """
 
@@ -474,10 +412,17 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
     targets=[str(x).strip() for x in (sns or []) if str(x).strip()] or [""]
     chunks=_chunks(start,end,chunk_days)
     checkpoint_path=Path(checkpoint_path) if checkpoint_path else None
-    checkpoint={"done":[],"rows":[]}
+    checkpoint={"contract":CHECKPOINT_CONTRACT,"done":[],"rows":[]}
     if checkpoint_path and checkpoint_path.exists():
-        try:checkpoint=json.loads(checkpoint_path.read_text(encoding="utf-8"))
-        except Exception:checkpoint={"done":[],"rows":[]}
+        try:
+            loaded=json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            # Pre-V2 checkpoints may contain false zero-row successes produced by
+            # the old fuzzy field/store resolver. Never let them suppress a real
+            # mapped V2 MES query.
+            if loaded.get("contract")==CHECKPOINT_CONTRACT:
+                checkpoint=loaded
+        except Exception:
+            checkpoint={"contract":CHECKPOINT_CONTRACT,"done":[],"rows":[]}
     done=set(checkpoint.get("done") or []);records=[dict(x) for x in checkpoint.get("rows") or []]
     diagnostics=[]
 
@@ -497,16 +442,20 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
                 if sn and any(sn not in (r.get('pcba_sn'),r.get('imei')) for r in normalized):
                     raise RuntimeError('3012 retornou outra SN; filtros/grade nao confirmados')
                 records.extend(normalized);done.add(chunk_key)
+                proof=dict(raw.get("queryProof") or {})
+                if proof.get("contract")!=QUERY_CONTRACT or not proof.get("freshness"):
+                    raise RuntimeError("3012 respondeu sem prova do contrato mapeado V2")
                 diagnostics.append({"sn":sn,"from":cfg["dateFrom"]+" "+cfg["timeFrom"],"to":cfg["dateTo"]+" "+cfg["timeTo"],"rows":len(normalized),
-                                    "total":raw.get("total"),"pages":raw.get("pages"),"store_score":raw.get("storeScore"),"fields":raw.get("storeFields"),"applied":raw.get("applied"),"surface":"home","view_action":raw.get("viewAction")})
+                                    "total":raw.get("total"),"pages":raw.get("pages"),"fields":raw.get("storeFields"),"applied":raw.get("applied"),"surface":"home",
+                                    "view_action":raw.get("viewAction"),"query_proof":proof,"proxy_params":raw.get("proxyParams")})
                 if checkpoint_path:
                     checkpoint_path.parent.mkdir(parents=True,exist_ok=True)
-                    checkpoint_path.write_text(json.dumps({"done":sorted(done),"rows":records,"updated_at":datetime.now().isoformat(timespec="seconds")},ensure_ascii=False,indent=2,default=str),encoding="utf-8")
+                    checkpoint_path.write_text(json.dumps({"contract":CHECKPOINT_CONTRACT,"done":sorted(done),"rows":records,"updated_at":datetime.now().isoformat(timespec="seconds")},ensure_ascii=False,indent=2,default=str),encoding="utf-8")
 
     unique={}
     for row in records:unique[row["row_key"]]=row
     rows=list(unique.values());rows.sort(key=lambda r:str(r.get("defect_time") or ""),reverse=True)
-    return {"source":"AWIP3012_HOME_DIRECT_EXTJS","surface":"home","view":ROUTE_3012,"generated_at":datetime.now().isoformat(timespec="seconds"),
+    return {"source":SOURCE_3012,"contract":QUERY_CONTRACT,"surface":"home","view":ROUTE_3012,"generated_at":datetime.now().isoformat(timespec="seconds"),
             "query":{"sns":targets,"start_at":start.isoformat(timespec="minutes"),"end_at":end.isoformat(timespec="minutes"),"line":line,"model":model,
                      "defect_code":defect_code,"repair_code":repair_code,"defect_type":defect_type,"chunk_days":chunk_days},
             "rows":rows,"records_count":len(rows),"chunks":diagnostics}

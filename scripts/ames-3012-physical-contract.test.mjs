@@ -14,12 +14,16 @@ function pythonBin(){
   return null;
 }
 
-test('3012 never injects the ExtJS 2008 time epoch into the physical date/time filters',()=>{
+test('3012 uses the exact mapped composite date/time controls and versioned runtime proof',()=>{
   assert.doesNotMatch(collector,/new Date\(2008\s*,/);
-  assert.match(collector,/resolveDateTimePair/);
-  assert.match(collector,/Start\/End nao resolveram quatro campos distintos/);
-  assert.match(collector,/Defect Time Start foi alterado ao preencher a hora/);
-  assert.match(collector,/Defect Time End foi alterado ao preencher a hora/);
+  for(const id of ['txtSnImei','dteFromDate','dteToDate','btnView','grdDefectRepair']) assert.match(collector,new RegExp(id));
+  assert.match(collector,/root\+'__Date'/);
+  assert.match(collector,/root\+'__Time'/);
+  assert.match(collector,/root\+'__Data'/);
+  assert.match(collector,/3012-home-mapped-v2/);
+  assert.match(collector,/AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2/);
+  assert.match(collector,/3012_VIEW_NOT_EXECUTED/);
+  assert.match(collector,/STORE_REBOUND_AFTER_VIEW/);
 });
 
 test('3012 exact SN window remains 24 Jan 2026 through the end of tomorrow',()=>{
@@ -27,14 +31,14 @@ test('3012 exact SN window remains 24 Jan 2026 through the end of tomorrow',()=>
   assert.match(patch,/current \+ timedelta\(days=1\)\)\.replace\(hour=23, minute=59, second=59/);
 });
 
-test('3012 View uses the visible physical button before internal fallbacks and waits for a new store load',()=>{
-  assert.match(collector,/physicalViewElement/);
-  assert.match(collector,/MouseEvent\('mousedown'/);
-  assert.match(collector,/MouseEvent\('mouseup'/);
-  assert.match(collector,/el\.click\(\)/);
+test('3012 View proves execution before accepting a response and follows store lifecycle',()=>{
   assert.match(collector,/physical_dom_click/);
-  assert.match(collector,/store\.on\('load',finish,null,\{single:true\}\)/);
-  assert.match(collector,/View foi acionado mas a store nao respondeu/);
+  assert.match(collector,/ext_click_event/);
+  assert.match(collector,/handler_fallback/);
+  assert.match(collector,/beforeload/);
+  assert.match(collector,/STORE_LOAD_CONFIRMED/);
+  assert.match(collector,/STORE_DATASET_EVENT/);
+  assert.match(collector,/STORE_REBOUND_AFTER_VIEW/);
 });
 
 test('3012 normalization preserves AT repair comment and repair evidence',()=>{
