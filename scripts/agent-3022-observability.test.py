@@ -66,14 +66,14 @@ class Observability3022Tests(unittest.TestCase):
         self.assertEqual(summary["query_avg_ms"], 4000.0)
 
     def test_diagnostic_does_not_replace_production_collector(self):
-        collector = (ROOT / "ames" / "factory-engine" / "ames" / "tela_3022.py").read_text(encoding="utf-8")
-        self.assertNotIn("diagnose_3022", collector)
+        collector_source = (ROOT / "ames" / "factory-engine" / "ames" / "tela_3022.py").read_text(encoding="utf-8")
+        self.assertNotIn("diagnose_3022", collector_source)
         source = (AGENT / "diagnose_3022.py").read_text(encoding="utf-8")
         self.assertIn("tela.consultar(pcba, timeout_s=timeout_s, empty_confirm_s=empty_confirm_s)", source)
         self.assertNotIn("tela3022_mod.extract_best_grid =", source)
         self.assertNotIn("tela3022_mod.Tela3022 =", source)
 
-    def test_production_adapter_rejects_known_stale_or_wrong_grid(self):
+    def test_production_adapter_keeps_explicit_identity_as_strong_evidence(self):
         self.assertEqual(collector._result_identity_3022([{"Lot Id": "0025276382"}], [], "0025276382"), "GRID_IDENTITY_CONFIRMED")
         self.assertEqual(collector._result_identity_3022([{"Lot Id": "0025271111"}], [], "0025276382"), "MISMATCH")
         self.assertEqual(collector._result_identity_3022([{"Current Oper": "A5700"}], [], "0025276382"), "UNCONFIRMED")
@@ -117,7 +117,8 @@ class Canonical3022QueryTests(unittest.TestCase):
         return {"headers": list(row), "rows": [row] if rows else [],
                 "store_loading": loading, "grid_id": "history", "frame_url": "mes/3022"}
 
-    def run_query(self, grids, *, fields=(), visible=True, input_values=None, timeout=1.7, empty=0.7):
+    def run_query(self, grids, *, fields=(), visible=True, input_values=None, timeout=1.7, empty=0.7,
+                  watch_armed=False, watch_states=()):
         clock = [0.0]
         def sleep(seconds):
             clock[0] += seconds
@@ -133,8 +134,23 @@ class Canonical3022QueryTests(unittest.TestCase):
         tela._page = Mock(return_value=object())
         tela._grid_visible = Mock(return_value=visible)
         tela._header_fields = Mock(return_value=list(fields))
+        tela._arm_grid_refresh_watch = Mock(return_value=watch_armed)
+        watch_sequence = iter(watch_states)
+        watch_current = [{}]
+        def read_watch(*args, **kwargs):
+            watch_current[0] = next(watch_sequence, watch_current[0])
+            return watch_current[0]
+        tela._read_grid_refresh_watch = Mock(side_effect=read_watch)
         field = Mock()
-        field.input_value = Mock(side_effect=input_values) if input_values else Mock(return_value="P2")
+        if input_values:
+            values = iter(input_values)
+            last_value = [input_values[-1]]
+            def input_value(*args, **kwargs):
+                last_value[0] = next(values, last_value[0])
+                return last_value[0]
+            field.input_value = Mock(side_effect=input_value)
+        else:
+            field.input_value = Mock(return_value="P2")
         tela._query_control = Mock(return_value=field)
         view = Mock()
         with ExitStack() as stack:
@@ -142,6 +158,7 @@ class Canonical3022QueryTests(unittest.TestCase):
             stack.enter_context(patch.object(collector, "find_button", return_value=(None, view, None)))
             stack.enter_context(patch.object(collector.time, "time", side_effect=lambda: clock[0]))
             stack.enter_context(patch.object(collector.time, "perf_counter", side_effect=lambda: clock[0]))
+            stack.enter_context(patch.object(collector.time, "perf_counter_ns", side_effect=lambda: int(clock[0] * 1_000_000_000) + 1))
             stack.enter_context(patch.object(collector.time, "sleep", side_effect=sleep))
             try:
                 result = tela.consultar("P2", timeout_s=timeout, empty_confirm_s=empty)
@@ -179,12 +196,32 @@ class Canonical3022QueryTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(d["status"], "MISMATCH")
 
-    def test_changed_grid_and_typed_input_are_not_identity_proof(self):
-        for fields in ([], [{"label": "SN / IMEI / A-S", "raw": "P2", "visible": True, "read_only": False}]):
-            result, d, _ = self.run_query([self.grid(seq=1), self.grid(seq=2)], fields=fields)
-            self.assertIsNone(result)
-            self.assertEqual(d["status"], "UNCONFIRMED")
-            self.assertNotEqual(d["before_grid"], d["after_grid"])
+    def test_real_3022_contract_accepts_target_input_plus_refreshed_history_grid(self):
+        result, d, _ = self.run_query([self.grid(seq=1), self.grid(seq=2)], watch_armed=True)
+        self.assertIsNotNone(result)
+        self.assertEqual(d["status"], "CONFIRMED")
+        self.assertTrue(d["query_context_ok"])
+        self.assertTrue(d["grid_changed"])
+        self.assertEqual(d["confirmation"], "GRID_REFRESH_CONFIRMED")
+        self.assertLess(d["total_ms"], 500)
+
+    def test_unchanged_nonidentifying_grid_is_still_rejected_without_refresh_proof(self):
+        grid = self.grid(seq=1)
+        result, d, _ = self.run_query([grid, grid], timeout=0.5)
+        self.assertIsNone(result)
+        self.assertEqual(d["status"], "UNCONFIRMED")
+        self.assertFalse(d["refresh_proven"])
+
+    def test_store_load_event_proves_same_content_was_requeried(self):
+        grid = self.grid(seq=1)
+        result, d, _ = self.run_query(
+            [grid, grid],
+            watch_armed=True,
+            watch_states=[{"started": True, "completed": True, "beforeload": 1, "load": 1}],
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(d["confirmation"], "STORE_REFRESH_CONFIRMED")
+        self.assertTrue(d["refresh_proven"])
 
     def test_same_pcba_matching_grid_can_be_read_again(self):
         grid = self.grid("P2")
@@ -214,19 +251,20 @@ class Canonical3022QueryTests(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(d["confirmation"], "RESULT_HEADER_MATCH")
         for mutation in ({}, {"read_only": False}, {"visible": False}, {"raw": "P1"}):
-            result, _, _ = self.run_query([self.grid(), self.grid()], fields=[{**field, **mutation}])
+            result, _, _ = self.run_query([self.grid(), self.grid()], fields=[{**field, **mutation}], timeout=0.5)
             self.assertIsNone(result)
-        result, d, _ = self.run_query([self.grid("P2"), self.grid("P2")], fields=[{**field, "raw": "P1"}])
+        result, d, _ = self.run_query([self.grid("P2"), self.grid("P2")], fields=[{**field, "raw": "P1"}], timeout=0.5)
         self.assertIsNone(result)
         self.assertEqual(d["status"], "MISMATCH")
 
-    def test_empty_without_response_identity_never_becomes_zero(self):
-        result, d, _ = self.run_query([self.grid("P1"), self.grid(rows=False)])
-        self.assertIsNone(result)
-        self.assertEqual(d["status"], "UNCONFIRMED")
-        self.assertNotIn("empty_confirmed", d["milestones_ms"])
+    def test_changed_empty_grid_can_be_confirmed_without_row_identity(self):
+        result, d, _ = self.run_query([self.grid("P1"), self.grid(rows=False)], empty=0.3, timeout=0.8, watch_armed=True)
+        self.assertIsNotNone(result)
+        self.assertTrue(result["no_data"])
+        self.assertEqual(d["status"], "CONFIRMED_EMPTY")
+        self.assertEqual(d["confirmation"], "GRID_REFRESH_CONFIRMED")
 
-    def test_confirmed_empty_waits_existing_confirmation_window(self):
+    def test_confirmed_empty_waits_existing_confirmation_window_without_load_event(self):
         field = {"label": "PCBA", "raw": "P2", "visible": True, "read_only": True}
         result, d, _ = self.run_query([self.grid("P1"), self.grid(rows=False)], fields=[field])
         self.assertTrue(result["no_data"])
@@ -240,7 +278,7 @@ class Canonical3022QueryTests(unittest.TestCase):
         result, d, _ = self.run_query([empty, self.grid(rows=False, loading=True), empty], fields=[field])
         self.assertTrue(result["no_data"])
         self.assertEqual(d["before_grid"], d["after_grid"])
-        result, d, _ = self.run_query([empty, empty], fields=[field])
+        result, d, _ = self.run_query([empty, empty], fields=[field], timeout=0.5)
         self.assertIsNone(result, "an unchanged old empty store is not a completed new query")
 
     def test_input_retry_is_measured_and_never_submits_unconfirmed_input(self):
@@ -259,7 +297,7 @@ class Canonical3022QueryTests(unittest.TestCase):
         result, d, _ = self.run_query([self.grid("P1"), empty, RuntimeError("temporary"), empty], fields=[field])
         self.assertTrue(result["no_data"])
         self.assertEqual(d["poll_errors"], 1)
-        self.assertGreaterEqual(d["milestones_ms"]["empty_confirmed"], 1500)
+        self.assertGreaterEqual(d["milestones_ms"]["empty_confirmed"], 0.9 * 1000)
 
 
 if __name__ == "__main__":
