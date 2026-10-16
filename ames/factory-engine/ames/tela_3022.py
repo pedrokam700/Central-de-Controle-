@@ -1,4 +1,5 @@
 import json
+import hashlib
 import re
 import time
 import fnmatch
@@ -19,6 +20,34 @@ DEFAULT_TEST_END_CODE = "A5700"
 # Eventos que representam passagem concluída por um posto. A evidência real
 # observada na 3022 usa END LOT para as etapas de montagem/teste e packing.
 PROCESS_PASS_DESCS = {"END LOT"}
+
+
+def _grid_signature_3022(grid):
+    if grid is None:
+        return None
+    payload = {"headers": grid.get("headers") or [], "rows": grid.get("rows") or []}
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
+    return {"sha256_16": digest, "rows": len(payload["rows"]), "headers": len(payload["headers"])}
+
+
+def _pcba_column(key, *, row=False):
+    # Exact primary identifiers only: IMEI/component SN may legitimately differ.
+    key = re.sub(r"[^a-z0-9]", "", str(key).split("__", 1)[0].lower())
+    return key in {"lotid", "pcba", "pcbasn", "pcbaid", "pcbaserialnumber"} or (row and key in {"sn", "serialnumber"})
+
+
+def _result_identity_3022(rows, fields, target):
+    values = [normalizar_sn(v) for row in rows for k, v in row.items()
+              if _pcba_column(k, row=True) and normalizar_sn(v)]
+    headers = [normalizar_sn(f.get("raw") or f.get("value")) for f in fields
+               if f.get("visible") is True and f.get("read_only") is True
+               and any(_pcba_column(f.get(k)) for k in ("label", "name", "itemId"))
+               and normalizar_sn(f.get("raw") or f.get("value"))]
+    if any(v != target for v in values + headers):
+        return "MISMATCH"
+    if rows and all(any(_pcba_column(k, row=True) and normalizar_sn(v) == target for k, v in row.items()) for row in rows):
+        return "GRID_IDENTITY_CONFIRMED"
+    return "RESULT_HEADER_MATCH" if headers else "UNCONFIRMED"
 
 
 def _row_value(row, aliases):
@@ -687,21 +716,29 @@ class Tela3022:
         )
         return campo
 
-    def _header_fields(self, page):
+    def _header_fields(self, page, frame_url=None):
         """Best-effort read of visible ExtJS fields shown above the history grid."""
         js = r"""
         () => {
           if (!window.Ext || !Ext.ComponentQuery) return [];
-          return Ext.ComponentQuery.query('field').map(f => {
+          return Ext.ComponentQuery.query('field').filter(f => {
+            try {
+              const el = (f.inputEl && f.inputEl.dom) || (f.el && f.el.dom);
+              const r = el && el.getBoundingClientRect(), s = el && getComputedStyle(el);
+              return (!f.isVisible || f.isVisible(true)) && r && r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+            } catch(e) { return false; }
+          }).map(f => {
             let value = null, raw = null;
             try { value = f.getValue ? f.getValue() : null; } catch(e) {}
             try { raw = f.getRawValue ? f.getRawValue() : null; } catch(e) {}
-            return {label:String(f.fieldLabel||''), name:String(f.name||''), itemId:String(f.itemId||''), value:value, raw:raw};
+            return {label:String(f.fieldLabel||''), name:String(f.name||''), itemId:String(f.itemId||''), value:value, raw:raw, visible:true, read_only:!!(f.readOnly || (f.isXType && f.isXType('displayfield')))};
           }).filter(x => String(x.raw??x.value??'').trim() !== '');
         }
         """
         out = []
         for frame in page.frames:
+            if frame_url is not None and frame.url != frame_url:
+                continue
             try:
                 for item in frame.evaluate(js) or []:
                     if item not in out:
@@ -710,7 +747,45 @@ class Tela3022:
                 pass
         return out
 
+    def _grid_visible(self, page, grid):
+        # Scope confirmation to the exact grid selected by the existing extractor.
+        for frame in page.frames:
+            if frame.url != grid.get("frame_url") or not grid.get("grid_id"):
+                continue
+            try:
+                return frame.evaluate(r"""id => {
+                  const g = window.Ext && Ext.getCmp(id), el = g && g.el && g.el.dom;
+                  if (!g || !el || (g.isVisible && !g.isVisible(true))) return false;
+                  const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+                  return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+                }""", grid["grid_id"]) is True
+            except Exception:
+                return False
+        return False
+
     def consultar(self, pcba_sn, timeout_s=18.0, empty_confirm_s=3.0):
+        started = time.perf_counter()
+        telemetry = {"query_started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                     "milestones_ms": {"query_start": 0.0}, "polls": 0, "input_retries": 0,
+                     "poll_errors": 0, "mismatch_polls": 0, "status": "UNCONFIRMED",
+                     "timeout_s": timeout_s, "empty_confirm_s": empty_confirm_s}
+        def mark(name):
+            telemetry["milestones_ms"].setdefault(name, round((time.perf_counter() - started) * 1000, 2))
+        try:
+            result = self._consultar(pcba_sn, timeout_s, empty_confirm_s, telemetry, mark)
+            telemetry["status"] = "CONFIRMED_EMPTY" if result["no_data"] else "CONFIRMED"
+            result["query_diagnostics"] = telemetry
+            return result
+        except Exception as exc:
+            if telemetry["status"] == "UNCONFIRMED" and telemetry.get("last_identity") == "MISMATCH":
+                telemetry["status"] = "MISMATCH"
+            exc.query_diagnostics = telemetry
+            raise
+        finally:
+            telemetry["total_ms"] = round((time.perf_counter() - started) * 1000, 2)
+            self.last_query_diagnostics = telemetry
+
+    def _consultar(self, pcba_sn, timeout_s, empty_confirm_s, telemetry, mark):
         pcba_sn = normalizar_sn(pcba_sn)
         if not pcba_sn:
             raise ValueError("SN vazio.")
@@ -730,21 +805,36 @@ class Tela3022:
             try:
                 campo.wait_for(state="visible", timeout=1600)
                 campo.fill(pcba_sn, timeout=3000)
+                if normalizar_sn(campo.input_value(timeout=1000)) != pcba_sn:
+                    raise RuntimeError("3022 input não confirmou a PCBA alvo")
+                mark("input_applied")
                 last_input_error = None
                 break
             except Exception as exc:
                 last_input_error = exc
                 if attempt == 0:
+                    telemetry["input_retries"] += 1
                     time.sleep(0.25)
         if last_input_error is not None:
             raise RuntimeError(f"3022 não encontrou um campo SN/IMEI visível e estável: {last_input_error}")
+        before = None
+        try:
+            before = extract_best_grid(page, expected_headers=self.cfg["expected_headers"],
+                                       frame_hints=("3022", "Current Oper", "Tran Time", "View Lot History"))
+        except Exception:
+            pass
+        telemetry["before_grid"] = _grid_signature_3022(before)
+        mark("submit")
         view.click(timeout=5000)
+        mark("view_clicked")
 
         inicio = time.time()
         ultima_exc = None
         empty_since = None
         last_grid = None
+        loading_grid = None
         while time.time() - inicio < timeout_s:
+            telemetry["polls"] += 1
             try:
                 grid = extract_best_grid(
                     page,
@@ -752,10 +842,36 @@ class Tela3022:
                     frame_hints=("3022", "Current Oper", "Tran Time", "View Lot History")
                 )
                 last_grid = grid
+                mark("first_grid")
+                telemetry["after_grid"] = _grid_signature_3022(grid)
                 rows = grid.get("rows") or []
                 loading = grid.get("store_loading")
+                visible = self._grid_visible(page, grid)
+                fields = self._header_fields(page, grid.get("frame_url")) if visible else []
+                identity = _result_identity_3022(rows, fields, pcba_sn)
+                telemetry["last_identity"] = identity
+                telemetry["grid_visible"] = visible
+                if identity == "MISMATCH":
+                    telemetry["mismatch_polls"] += 1
+                grid_key = (grid.get("frame_url"), grid.get("grid_id"))
+                if visible and loading is True:
+                    loading_grid = grid_key
+                changed = before is not None and telemetry["before_grid"] != telemetry["after_grid"]
+                telemetry["grid_changed"] = changed
+                telemetry["store_loading"] = loading
+                telemetry["loading_observed"] = loading_grid == grid_key
+                refreshed = changed or (loading_grid == grid_key and loading is False)
+                confirmed = visible and loading is not True and (
+                    identity == "GRID_IDENTITY_CONFIRMED" or (identity == "RESULT_HEADER_MATCH" and refreshed))
+                if not confirmed:
+                    empty_since = None
+                    time.sleep(0.4)
+                    continue
+                mark("identity_confirmed")
+                telemetry["confirmation"] = identity
                 if rows:
                     focus = preparar_foco_montagem_teste(rows)
+                    mark("parse_completed")
                     return {
                         "query_sn": pcba_sn,
                         "headers": grid.get("headers") or [],
@@ -779,13 +895,16 @@ class Tela3022:
                             "post_test_count": focus["post_test_count"],
                             "process_passage_count": len(focus.get("process_passages") or []),
                         },
-                        "header_fields": self._header_fields(page),
+                        "header_fields": fields,
+                        "response_identity": identity,
                         "no_data": False,
                     }
-                if loading is not True:
+                if loading is False:
                     if empty_since is None:
                         empty_since = time.time()
                     if time.time() - empty_since >= empty_confirm_s:
+                        mark("empty_confirmed")
+                        mark("parse_completed")
                         return {
                             "query_sn": pcba_sn,
                             "headers": grid.get("headers") or [],
@@ -809,17 +928,20 @@ class Tela3022:
                                 "post_test_count": 0,
                                 "process_passage_count": 0,
                             },
-                            "header_fields": self._header_fields(page),
+                            "header_fields": fields,
+                            "response_identity": identity,
                             "no_data": True,
                         }
                 else:
                     empty_since = None
             except Exception as exc:
+                telemetry["poll_errors"] += 1
+                empty_since = None
                 ultima_exc = exc
             time.sleep(0.4)
         count = len((last_grid or {}).get("rows") or [])
         raise RuntimeError(
-            f"A 3022 não confirmou dados para {pcba_sn}. Última grade: {count}. Último erro: {ultima_exc}"
+            f"A 3022 não confirmou dados para {pcba_sn}. Estado: {telemetry.get('last_identity', 'UNCONFIRMED')}. Última grade: {count}. Último erro: {ultima_exc}"
         )
 
 

@@ -27,29 +27,6 @@ def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
 
 
-def _grid_signature(grid):
-    grid=grid or {}
-    payload={"headers":grid.get("headers") or [],"rows":grid.get("rows") or []}
-    return hashlib.sha256(_json(payload).encode("utf-8")).hexdigest()
-
-
-def _identity_token(value):
-    return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
-
-
-def _grid_query_identity(rows, pcba):
-    target=_identity_token(pcba);values=[]
-    for row in rows or []:
-        if not isinstance(row,dict):continue
-        for key,value in row.items():
-            k=str(key or "").lower().replace("_"," ")
-            if any(tag in k for tag in ("lot id","pcba","sn","imei")):
-                token=_identity_token(value)
-                if token:values.append(token)
-    if not values:return "UNKNOWN"
-    return "CONFIRMED" if target in values else "CONTRADICTED"
-
-
 def engine_support(engine_dir: Path | None) -> Dict[str, Any]:
     if not engine_dir:
         return {"ready": False, "reason": "engine_missing"}
@@ -306,42 +283,24 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                     if line_callback:
                         line_callback(f"3022 MES [{i}/{len(targets)}] {pcba}")
                     try:
-                        before_grid=None
-                        try:
-                            before_grid=tela3022_mod.extract_best_grid(
-                                tela._page(), expected_headers=(getattr(tela,"cfg",{}) or {}).get("expected_headers") or []
-                            )
-                        except Exception:
-                            before_grid=None
                         rr=tela.consultar(pcba)
-                        rows=(rr or {}).get("rows") or []
-                        if rows and before_grid is not None:
-                            try:
-                                after_grid=tela3022_mod.extract_best_grid(
-                                    tela._page(), expected_headers=(getattr(tela,"cfg",{}) or {}).get("expected_headers") or []
-                                )
-                            except Exception:
-                                after_grid=None
-                            identity=_grid_query_identity(rows,pcba)
-                            changed=bool(after_grid is not None and _grid_signature(after_grid)!=_grid_signature(before_grid))
-                            if identity=="CONTRADICTED":
-                                raise RuntimeError(f"3022 retornou grade identificada para outra PCBA ao consultar {pcba}")
-                            if (before_grid.get("rows") or []) and not changed and identity!="CONFIRMED":
-                                raise RuntimeError(f"3022 não comprovou atualização da grade para {pcba}; resposta anterior não será reutilizada")
-                            rr["response_identity"]="GRID_IDENTITY_CONFIRMED" if identity=="CONFIRMED" else ("GRID_CHANGED_AFTER_QUERY" if changed else "FIRST_NONEMPTY_RESPONSE")
+                        diagnostics=(rr or {}).get("query_diagnostics") or {}
+                        if diagnostics.get("status") not in {"CONFIRMED", "CONFIRMED_EMPTY"}:
+                            raise RuntimeError("3022 sem confirmação do coletor; resposta anterior não será reutilizada")
                         query_ms=round((time.perf_counter()-started)*1000.0,2)
                         query_times.append(query_ms)
                         captured.append({"pcba_sn":pcba,"status":"COLLECTED","result":rr,"query_ms":query_ms})
                         if event_callback:
-                            event_callback({"stage":"3022","kind":"pcba","phase":"mes","current":i,"total":len(targets),"pcba":pcba,"status":"COLLECTED","query_ms":query_ms,"rows":len((rr or {}).get("rows") or [])})
+                            event_callback({"stage":"3022","kind":"pcba","phase":"mes","current":i,"total":len(targets),"pcba":pcba,"status":"COLLECTED","query_ms":query_ms,"rows":len((rr or {}).get("rows") or []),"query_diagnostics":diagnostics})
                     except Exception as exc:
                         query_ms=round((time.perf_counter()-started)*1000.0,2)
                         query_times.append(query_ms)
                         err=f"{type(exc).__name__}: {exc}"
-                        captured.append({"pcba_sn":pcba,"status":"ERROR","error":err,"query_ms":query_ms})
+                        diagnostics=getattr(exc,"query_diagnostics",{})
+                        captured.append({"pcba_sn":pcba,"status":"ERROR","error":err,"query_ms":query_ms,"query_diagnostics":diagnostics})
                         warnings.append(f"3022 {pcba}: {err}")
                         if event_callback:
-                            event_callback({"stage":"3022","kind":"pcba","phase":"mes","current":i,"total":len(targets),"pcba":pcba,"status":"ERROR","error":err,"query_ms":query_ms})
+                            event_callback({"stage":"3022","kind":"pcba","phase":"mes","current":i,"total":len(targets),"pcba":pcba,"status":"ERROR","error":err,"query_ms":query_ms,"query_diagnostics":diagnostics})
                     if inter_query_pause and i < len(targets):
                         time.sleep(inter_query_pause)
     finally:
@@ -352,7 +311,7 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
     for i,item in enumerate(captured,1):
         pcba=item["pcba_sn"]
         if item.get("status") != "COLLECTED":
-            entries.append({"pcba_sn":pcba,"status":"ERROR","error":item.get("error"),"query_ms":item.get("query_ms")})
+            entries.append({"pcba_sn":pcba,"status":"ERROR","error":item.get("error"),"query_ms":item.get("query_ms"),"query_diagnostics":item.get("query_diagnostics") or {}})
             continue
         try:
             if line_callback:
@@ -415,7 +374,7 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                     })
                 if events:
                     process_timeline.ingest(store,events);event_count+=len(events)
-            entries.append({"pcba_sn":pcba,"status":"COMPLETE","events":len(passages),"contexts":len(contexts),"query_ms":item.get("query_ms"),"response_identity":rr.get("response_identity")})
+            entries.append({"pcba_sn":pcba,"status":"COMPLETE","events":len(passages),"contexts":len(contexts),"query_ms":item.get("query_ms"),"response_identity":rr.get("response_identity"),"query_diagnostics":rr.get("query_diagnostics") or {}})
             if event_callback:
                 event_callback({"stage":"3022","kind":"pcba","phase":"local","current":i,"total":len(captured),"pcba":pcba,"status":"PROCESSED","events":len(passages),"query_ms":item.get("query_ms")})
         except Exception as exc:
