@@ -19,6 +19,11 @@ def install(entry_module):
     if getattr(handler, "_fastlane_runtime_guard_installed", False):
         return
 
+    # Factory RED 2026-10-16: focused runtime guards only. This deliberately
+    # leaves bootstrap/8765 and production 3022 waits/selectors/acceptance alone.
+    import factory_redfix
+    factory_redfix.install(entry_module)
+
     # Install only after 3012/process migrations and the final hardened handler
     # exist. This makes optional datasets discoverable without inventing tables.
     import offline_catalog
