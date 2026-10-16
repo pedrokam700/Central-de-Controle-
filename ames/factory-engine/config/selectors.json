@@ -83,13 +83,23 @@
       "Query"
     ],
     "expected_headers": [
-      "Current Oper Code",
-      "Current Oper",
+      "Phone Status",
+      "Line Code",
+      "Mat Id",
+      "Order Id",
+      "Working Oper Code",
       "Working Oper",
       "Station",
+      "Tran Desc",
+      "Tran Desc English",
+      "TRAN CMF3",
+      "Current Oper Code",
+      "Current Oper",
       "Tran User Id",
+      "Tran User",
       "Tran Time",
-      "Shift Desc"
+      "Shift English",
+      "Cutoff Date"
     ]
   }
 }

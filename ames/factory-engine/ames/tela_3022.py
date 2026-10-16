@@ -43,11 +43,20 @@ def _result_identity_3022(rows, fields, target):
                if f.get("visible") is True and f.get("read_only") is True
                and any(_pcba_column(f.get(k)) for k in ("label", "name", "itemId"))
                and normalizar_sn(f.get("raw") or f.get("value"))]
-    if any(v != target for v in values + headers):
+    # Factory evidence from AWIP3022 shows the real history grid does not expose
+    # the queried PCBA/SN as a row identifier. The stable query field
+    # "SN / IMEI / A-S" remains visible after View and is therefore usable as
+    # query context only when the grid is independently proven refreshed.
+    query_context = [normalizar_sn(f.get("raw") or f.get("value")) for f in fields
+                     if f.get("visible") is True and f.get("query_context") is True
+                     and normalizar_sn(f.get("raw") or f.get("value"))]
+    if any(v != target for v in values + headers + query_context):
         return "MISMATCH"
     if rows and all(any(_pcba_column(k, row=True) and normalizar_sn(v) == target for k, v in row.items()) for row in rows):
         return "GRID_IDENTITY_CONFIRMED"
-    return "RESULT_HEADER_MATCH" if headers else "UNCONFIRMED"
+    if headers:
+        return "RESULT_HEADER_MATCH"
+    return "QUERY_CONTEXT_MATCH" if query_context else "UNCONFIRMED"
 
 
 def _row_value(row, aliases):
@@ -731,7 +740,10 @@ class Tela3022:
             let value = null, raw = null;
             try { value = f.getValue ? f.getValue() : null; } catch(e) {}
             try { raw = f.getRawValue ? f.getRawValue() : null; } catch(e) {}
-            return {label:String(f.fieldLabel||''), name:String(f.name||''), itemId:String(f.itemId||''), value:value, raw:raw, visible:true, read_only:!!(f.readOnly || (f.isXType && f.isXType('displayfield')))};
+            const readOnly = !!(f.readOnly || (f.isXType && f.isXType('displayfield')));
+            const identityText = [f.fieldLabel,f.name,f.itemId,f.id].filter(Boolean).join(' ').toLowerCase();
+            const queryContext = !readOnly && ((identityText.includes('sn') && identityText.includes('imei')) || identityText.includes('a-s'));
+            return {label:String(f.fieldLabel||''), name:String(f.name||''), itemId:String(f.itemId||''), value:value, raw:raw, visible:true, read_only:readOnly, query_context:queryContext};
           }).filter(x => String(x.raw??x.value??'').trim() !== '');
         }
         """
@@ -862,7 +874,9 @@ class Tela3022:
                 telemetry["loading_observed"] = loading_grid == grid_key
                 refreshed = changed or (loading_grid == grid_key and loading is False)
                 confirmed = visible and loading is not True and (
-                    identity == "GRID_IDENTITY_CONFIRMED" or (identity == "RESULT_HEADER_MATCH" and refreshed))
+                    identity == "GRID_IDENTITY_CONFIRMED" or
+                    (identity in {"RESULT_HEADER_MATCH", "QUERY_CONTEXT_MATCH"} and refreshed)
+                )
                 if not confirmed:
                     empty_since = None
                     time.sleep(0.4)
