@@ -12,19 +12,21 @@ const evidence=fs.readFileSync(new URL('../ames/evidence-view.mjs',import.meta.u
 
 function pythonBin(){for(const candidate of [process.env.PYTHON_BIN,'python3','python'].filter(Boolean)){const p=spawnSync(candidate,['--version'],{encoding:'utf8'});if(p.status===0)return candidate;}return null;}
 
-test('factory RED guards install without modifying production 3022 collector',()=>{
+test('factory RED guards preserve mapped 3012 V2 and do not modify production 3022 collector',()=>{
   assert.match(guard,/factory_redfix\.install\(entry_module\)/);
   assert.match(patch,/cancel_aware_live_event/);
   assert.match(patch,/2114_VISIBLE_PCBA_MISMATCH/);
-  assert.match(patch,/factory-redfix-3012/);
-  assert.match(collector3012,/factory-redfix-3012 integrated into the canonical collector/);
-  assert.match(collector3012,/findDomField/);
-  assert.match(collector3012,/ownerCt/);
-  assert.match(collector3012,/compactPats/);
+  assert.match(patch,/QUERY_CONTRACT.*3012-home-mapped-v2/s);
+  assert.match(collector3012,/QUERY_CONTRACT = "3012-home-mapped-v2"/);
+  assert.match(collector3012,/SOURCE_3012 = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2"/);
+  assert.match(collector3012,/byItemId\('grdDefectRepair'/);
+  assert.match(collector3012,/byItemId\('btnView'/);
+  assert.match(collector3012,/applyDateTime\('dteFromDate'/);
+  assert.match(collector3012,/applyDateTime\('dteToDate'/);
   assert.doesNotMatch(process3022,/factory-redfix-3012|2114_VISIBLE_PCBA_MISMATCH|cancel_aware_live_event/);
 });
 
-test('cancel checkpoint, 2114 visible-PCBA fail-closed and canonical 3012 field resolution are executable contracts',()=>{
+test('cancel checkpoint, 2114 visible-PCBA fail-closed and mapped 3012 redfix idempotence are executable contracts',()=>{
   const py=pythonBin();assert.ok(py,'Python required');
   const code=String.raw`
 import sys,threading,types
@@ -60,12 +62,13 @@ except RuntimeError as exc:
     assert '2114_VISIBLE_PCBA_MISMATCH' in str(exc)
 
 import ames_3012_live as live
+before=live.QUERY_3012_JS
 f._install_3012_field_resolution()
-assert 'factory-redfix-3012' in live.QUERY_3012_JS
-assert 'findDomField' in live.QUERY_3012_JS
-assert 'ownerCt' in live.QUERY_3012_JS
-assert 'compactPats' in live.QUERY_3012_JS
-assert 'setTime' in live.QUERY_3012_JS
+assert live.QUERY_3012_JS==before, 'legacy fuzzy redfix rewrote mapped V2 collector'
+assert live.QUERY_CONTRACT=='3012-home-mapped-v2'
+assert live.SOURCE_3012=='AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2'
+for marker in ['txtSnImei','grdDefectRepair','btnView','dteFromDate','dteToDate','STORE_REBOUND_AFTER_VIEW','3012_VIEW_NOT_EXECUTED']:
+    assert marker in live.QUERY_3012_JS, marker
 row=live.normalize_3012_row({'lotId':'002527TEST','repairComment':'comentario AT preservado','repairUser':'AT01','repairTime':'2026-10-16 09:10:00'})
 assert row['repair_comment']=='comentario AT preservado'
 assert row['repair_user']=='AT01'
@@ -74,7 +77,7 @@ import agent_3012_patch as p3012
 start,end=p3012.exact_sn_history_window(datetime(2026,10,16,9,30,0))
 assert start==datetime(2026,1,24,0,0,0)
 assert end==datetime(2026,10,17,23,59,59)
-print('factory redfix + 3012 contracts OK')
+print('factory guards + mapped 3012 V2 contracts OK')
 `;
   const run=spawnSync(py,['-c',code],{cwd:process.cwd(),encoding:'utf8'});
   assert.equal(run.status,0,run.stderr||run.stdout);
