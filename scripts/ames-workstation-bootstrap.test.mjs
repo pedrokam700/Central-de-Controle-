@@ -12,7 +12,7 @@ const hardenedEntry=fs.readFileSync('ames/agent/agent_hardened_entry.py','utf8')
 const localSecurity=fs.readFileSync('ames/agent/local_security.py','utf8');
 const builder=fs.readFileSync('scripts/build-agent-candidate.py','utf8');
 const updater=fs.readFileSync('ames/agent/update_candidate.py','utf8');
-const updaterMatch=updater.match(/FILES=\((.*?)\)\nROOT_FILES=/s);
+const updaterMatch=updater.match(/FILES=\((.*?)\)\r?\nROOT_FILES=/s);
 assert.ok(updaterMatch,'update_candidate.py sem contrato FILES');
 const updaterFiles=new Set([...updaterMatch[1].matchAll(/'([^']+\.py)'/g)].map(m=>m[1]));
 
@@ -142,4 +142,15 @@ test('candidate builder inclui ferramentas de posto e deriva hardening do contra
     assert.ok(updaterFiles.has(name),`contrato ativo do updater nao inclui ${name}`);
   }
   assert.match(builder,/if any\('local_agent_token' in name for name in files\):raise ValueError/);
+});
+
+// Real behavior is exercised by ames-root-path.windows.mjs in Windows CI.
+test('native PowerShell boundary never receives a quoted trailing backslash',()=>{
+  for(const line of launcher.split(/\r?\n/).filter(line=>line.includes('-Root '))){
+    assert.ok(line.includes('-Root "%ROOT%\\."'),line);
+  }
+  assert.match(launcher,/DisableDelayedExpansion/);
+  assert.match(diag,/ROOT_INVALID/);
+  assert.match(diag,/STATE_UNREADABLE/);
+  assert.match(diag,/LOG_UNREADABLE/);
 });

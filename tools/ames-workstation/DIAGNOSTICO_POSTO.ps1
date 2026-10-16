@@ -1,25 +1,39 @@
 param([string]$Root='.')
 $ErrorActionPreference='Continue'
-$resolved=(Resolve-Path -LiteralPath $Root -ErrorAction SilentlyContinue)
-$rootPath=if($resolved){$resolved.Path}else{$Root}
+# Older BAT launchers can leave a literal closing quote in native argv.
+# Repair only edge whitespace/quotes; reject malformed interior paths explicitly.
+try {
+  $candidate=$Root.Trim().Trim([char]34).Trim()
+  if([string]::IsNullOrWhiteSpace($candidate) -or $candidate.IndexOfAny([IO.Path]::GetInvalidPathChars()) -ge 0){throw 'invalid root'}
+  $fullPath=[IO.Path]::GetFullPath($candidate)
+  $resolved=Resolve-Path -LiteralPath $fullPath -ErrorAction Stop
+  if($resolved.Provider.Name -ne 'FileSystem' -or -not (Test-Path -LiteralPath $resolved.ProviderPath -PathType Container -ErrorAction Stop)){throw 'not a directory'}
+  $rootPath=$resolved.ProviderPath
+}catch{
+  Write-Host '[ERRO] ROOT_INVALID: pasta do pacote invalida, inexistente ou inacessivel. Execute o launcher da pasta extraida.'
+  exit 2
+}
 $tokenPath=Join-Path $rootPath 'ames-agent\data\local_agent_token'
 $statePath=Join-Path $rootPath 'logs\agent_startup_state.json'
 $headers=$null
 $tokenStatus='ausente'
-if(Test-Path -LiteralPath $tokenPath){
-  try{
+try{
+  if(Test-Path -LiteralPath $tokenPath -PathType Leaf -ErrorAction Stop){
     $token=(Get-Content -LiteralPath $tokenPath -Raw -ErrorAction Stop).Trim()
     if($token.Length -ge 32){$headers=@{'X-Central-Agent-Token'=$token};$tokenStatus='presente/valido'}else{$tokenStatus='presente/invalido'}
-  }catch{$tokenStatus='presente/ilegivel'}
-}
+  }
+}catch{$tokenStatus='presente/ilegivel'}
 
 function Show-Tail {
   param([string]$Path,[string]$Label)
   if(-not $Path){return}
-  if(-not (Test-Path -LiteralPath $Path)){Write-Host ("${Label}: arquivo nao existe: $Path");return}
-  $lines=@(Get-Content -LiteralPath $Path -Tail 40 -ErrorAction SilentlyContinue)
-  Write-Host ("--- $Label ---")
-  if($lines.Count){$lines|ForEach-Object{Write-Host $_}}else{Write-Host '(vazio)'}
+  try{
+    if(-not (Test-Path -LiteralPath $Path -PathType Leaf -ErrorAction Stop)){Write-Host ("${Label}: arquivo nao existe: $Path");return}
+    $lines=@(Get-Content -LiteralPath $Path -Tail 40 -ErrorAction Stop)
+    Write-Host ("--- $Label ---")
+    if($lines.Count){$lines|ForEach-Object{Write-Host $_}}else{Write-Host '(vazio)'}
+  }catch{Write-Host ("${Label}: LOG_UNREADABLE (caminho invalido ou arquivo inacessivel)")}
+
 }
 
 Write-Host '=== CENTRAL V2 / A-MES - DIAGNOSTICO DO POSTO ==='
@@ -65,18 +79,21 @@ if(-not $headers){
 }
 
 Write-Host '[9] Estado persistido do ultimo startup + logs'
-if(Test-Path -LiteralPath $statePath){
-  try{
-    $state=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+try{
+  if(Test-Path -LiteralPath $statePath -PathType Leaf -ErrorAction Stop){
+    $state=Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
     $state|ConvertTo-Json -Depth 5
     Show-Tail -Path ([string]$state.stderr) -Label 'stderr do ultimo startup'
     Show-Tail -Path ([string]$state.stdout) -Label 'stdout do ultimo startup'
-  }catch{Write-Host ('STATE: FALHOU - '+$_.Exception.Message)}
-}else{
-  Write-Host 'agent_startup_state.json ainda nao existe.'
-  $latest=Get-ChildItem -LiteralPath (Join-Path $rootPath 'logs') -Filter 'agent_*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 4
-  foreach($file in $latest){Show-Tail -Path $file.FullName -Label $file.Name}
-}
+  }else{
+    Write-Host 'agent_startup_state.json ainda nao existe.'
+    $logsPath=Join-Path $rootPath 'logs'
+    if(Test-Path -LiteralPath $logsPath -PathType Container -ErrorAction Stop){
+      $latest=Get-ChildItem -LiteralPath $logsPath -Filter 'agent_*.log' -ErrorAction Stop | Sort-Object LastWriteTime -Descending | Select-Object -First 4
+      foreach($file in $latest){Show-Tail -Path $file.FullName -Label $file.Name}
+    }
+  }
+}catch{Write-Host 'STATE_UNREADABLE: estado do ultimo startup invalido ou inacessivel.'}
 
 Write-Host '[10] Central local servida pelo agente'
 try{$r=Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8765/Central-de-Controle-/' -TimeoutSec 4;Write-Host ('Central local: HTTP '+$r.StatusCode)}catch{Write-Host ('Central local: FALHOU - '+$_.Exception.Message)}

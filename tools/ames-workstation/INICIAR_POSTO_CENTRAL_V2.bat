@@ -1,17 +1,19 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions DisableDelayedExpansion
 cd /d "%~dp0"
 rem Quando empacotado este arquivo fica na raiz do candidato.
 set "ROOT=%~dp0"
 if exist "%ROOT%..\..\ames-agent\agent.py" set "ROOT=%ROOT%..\..\"
-for %%I in ("%ROOT%.") do set "ROOT=%%~fI\"
+for %%I in ("%ROOT%.") do set "ROOT=%%~fI"
+rem Native Windows argv consumes the closing quote after a trailing backslash.
+rem ROOT is canonical; append \. at the PowerShell boundary (also safe for C:\).
 
 set "CENTRAL="
 set "EXPECTED_FRONTEND_SHA="
 set "AGENT_TOKEN="
 if /I "%~1"=="/prod" (
   set "CENTRAL=https://central-cora-v2.vercel.app/Central-de-Controle-/"
-) else if exist "%ROOT%FRONTEND_GATE.json" (
+) else if exist "%ROOT%\FRONTEND_GATE.json" (
   for /f "usebackq delims=" %%S in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$g=ConvertFrom-Json (Get-Content -Raw (Join-Path $env:ROOT 'FRONTEND_GATE.json'));Write-Output ([string]$g.expected_sha)"`) do set "EXPECTED_FRONTEND_SHA=%%S"
   for /f "usebackq delims=" %%U in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$gate=ConvertFrom-Json (Get-Content -Raw (Join-Path $env:ROOT 'FRONTEND_GATE.json'));$state=Join-Path $env:ROOT 'FRONTEND_GATE_STATE.json';foreach($candidate in @($gate.preview_urls)){try{$base=([string]$candidate).TrimEnd('/');$probe=$base+'/release-build.json?gate='+[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();$r=Invoke-RestMethod $probe -TimeoutSec 8;if([string]$r.sha -eq [string]$gate.expected_sha){$j=ConvertTo-Json @{expected_sha=[string]$gate.expected_sha;url=$base;validated_at=(Get-Date).ToUniversalTime().ToString('o')} -Compress;Set-Content -Path $state -Value $j -Encoding UTF8;Write-Output ($base+'/Central-de-Controle-/');exit 0}}catch{}};if(Test-Path $state){try{$s=ConvertFrom-Json (Get-Content -Raw $state);$u=([string]$s.url).TrimEnd('/');if([string]$s.expected_sha -eq [string]$gate.expected_sha -and @($gate.preview_urls) -contains $u){Write-Output ($u+'/Central-de-Controle-/');exit 0}}catch{}};exit 3"`) do set "CENTRAL=%%U"
   if not defined CENTRAL (
@@ -34,10 +36,10 @@ if defined EXPECTED_FRONTEND_SHA echo Frontend exigido: %EXPECTED_FRONTEND_SHA%
 echo Central selecionada: %CENTRAL%
 echo.
 
-if not exist "%ROOT%.venv\Scripts\python.exe" (
-  if exist "%ROOT%01_INSTALAR_UMA_VEZ.bat" (
+if not exist "%ROOT%\.venv\Scripts\python.exe" (
+  if exist "%ROOT%\01_INSTALAR_UMA_VEZ.bat" (
     echo [1/7] Primeiro uso: instalando ambiente local uma unica vez...
-    call "%ROOT%01_INSTALAR_UMA_VEZ.bat" /auto
+    call "%ROOT%\01_INSTALAR_UMA_VEZ.bat" /auto
     if errorlevel 1 goto :fail
   ) else (
     echo [ERRO] .venv ausente e instalador 01_INSTALAR_UMA_VEZ.bat nao encontrado.
@@ -53,8 +55,8 @@ echo [2/7] Validando dependencias criticas do motor...
 call :depscheck
 if errorlevel 1 (
   echo       Ambiente incompleto detectado. Reparando automaticamente...
-  if exist "%ROOT%09_REPARAR_DEPENDENCIAS.bat" (
-    call "%ROOT%09_REPARAR_DEPENDENCIAS.bat" /auto
+  if exist "%ROOT%\09_REPARAR_DEPENDENCIAS.bat" (
+    call "%ROOT%\09_REPARAR_DEPENDENCIAS.bat" /auto
   ) else (
     rem O bundle de migracao deve conseguir recuperar um posto mesmo que a R12
     rem antiga nao possua o reparador separado. Mantemos o mesmo reparo da R11
@@ -69,7 +71,7 @@ if errorlevel 1 (
   echo       pandas/openpyxl/playwright/pyautogui/pyperclip: OK
 )
 
-if not exist "%ROOT%ames-agent\config.json" if exist "%ROOT%ames-agent\config.example.json" copy /Y "%ROOT%ames-agent\config.example.json" "%ROOT%ames-agent\config.json" >nul
+if not exist "%ROOT%\ames-agent\config.json" if exist "%ROOT%\ames-agent\config.example.json" copy /Y "%ROOT%\ames-agent\config.example.json" "%ROOT%\ames-agent\config.json" >nul
 
 echo [3/7] Verificando redes e garantindo rota persistente A-MES...
 call :probe
@@ -83,12 +85,12 @@ if errorlevel 1 (
 )
 rem Mesmo que o A-MES ja responda, garantimos a rota persistente. Isso migra
 rem automaticamente postos antigos que ainda tinham apenas ActiveStore.
-if exist "%ROOT%suporte\ames-workstation\ROTA_AMES_APLICAR.bat" (
-  call "%ROOT%suporte\ames-workstation\ROTA_AMES_APLICAR.bat"
+if exist "%ROOT%\suporte\ames-workstation\ROTA_AMES_APLICAR.bat" (
+  call "%ROOT%\suporte\ames-workstation\ROTA_AMES_APLICAR.bat"
   if errorlevel 1 goto :fail
-) else if exist "%ROOT%12_APLICAR_ROTA_AMES_TEMPORARIA.bat" (
+) else if exist "%ROOT%\12_APLICAR_ROTA_AMES_TEMPORARIA.bat" (
   rem Fallback apenas para instalacoes antigas ainda nao migradas.
-  call "%ROOT%12_APLICAR_ROTA_AMES_TEMPORARIA.bat"
+  call "%ROOT%\12_APLICAR_ROTA_AMES_TEMPORARIA.bat"
   if errorlevel 1 goto :fail
 ) else (
   call :probe
@@ -105,7 +107,7 @@ if errorlevel 1 (
 echo       Ethernet + TAXXX_5G: rota A-MES ativa/persistente e acesso OK.
 
 echo [4/7] Iniciando/verificando agente canonico...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%suporte\ames-workstation\START_AGENT_CANONICAL.ps1" -Root "%ROOT%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\suporte\ames-workstation\START_AGENT_CANONICAL.ps1" -Root "%ROOT%\."
 if errorlevel 1 goto :fail
 for /f "usebackq delims=" %%T in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Join-Path $env:ROOT 'ames-agent\data\local_agent_token';if(Test-Path $p){$t=(Get-Content -Raw $p).Trim();if($t.Length -ge 32){Write-Output $t;exit 0}};exit 3"`) do set "AGENT_TOKEN=%%T"
 if not defined AGENT_TOKEN (
@@ -138,14 +140,14 @@ echo   e o Firebase sincroniza ao voltar.
 exit /b 0
 
 :depscheck
-"%ROOT%.venv\Scripts\python.exe" -c "import pandas,openpyxl,playwright,pyautogui,pyperclip; from playwright.sync_api import sync_playwright" >nul 2>nul
+"%ROOT%\.venv\Scripts\python.exe" -c "import pandas,openpyxl,playwright,pyautogui,pyperclip; from playwright.sync_api import sync_playwright" >nul 2>nul
 exit /b %errorlevel%
 
 :depsrepair
-"%ROOT%.venv\Scripts\python.exe" -m ensurepip --upgrade >nul 2>nul
-"%ROOT%.venv\Scripts\python.exe" -m pip install --disable-pip-version-check --upgrade pip
+"%ROOT%\.venv\Scripts\python.exe" -m ensurepip --upgrade >nul 2>nul
+"%ROOT%\.venv\Scripts\python.exe" -m pip install --disable-pip-version-check --upgrade pip
 if errorlevel 1 exit /b 1
-"%ROOT%.venv\Scripts\python.exe" -m pip install --disable-pip-version-check "pandas>=2.2" "openpyxl>=3.1" "playwright>=1.55" "pyautogui>=0.9.54" "pyperclip>=1.9"
+"%ROOT%\.venv\Scripts\python.exe" -m pip install --disable-pip-version-check "pandas>=2.2" "openpyxl>=3.1" "playwright>=1.55" "pyautogui>=0.9.54" "pyperclip>=1.9"
 if errorlevel 1 exit /b 1
 exit /b 0
 
@@ -156,6 +158,6 @@ exit /b %errorlevel%
 :fail
 echo.
 echo [ERRO] O posto NAO ficou pronto. Nao inicie coleta ate corrigir a etapa acima.
-if exist "%ROOT%suporte\ames-workstation\DIAGNOSTICO_POSTO.ps1" powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%suporte\ames-workstation\DIAGNOSTICO_POSTO.ps1" -Root "%ROOT%"
+if exist "%ROOT%\suporte\ames-workstation\DIAGNOSTICO_POSTO.ps1" powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\suporte\ames-workstation\DIAGNOSTICO_POSTO.ps1" -Root "%ROOT%\."
 pause
 exit /b 1
