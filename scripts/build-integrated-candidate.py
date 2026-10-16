@@ -1,5 +1,6 @@
 """Build one standalone clean local Central + A-MES candidate from canonical sources."""
 import argparse, hashlib, json, os, subprocess, tempfile, zipfile
+from urllib.parse import urlsplit
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
@@ -48,6 +49,15 @@ def build(destination, development=False):
  if 'ames-agent/config.example.json' not in payload:raise ValueError('config.example.json missing from clean bundle')
  config_example=json.loads(payload['ames-agent/config.example.json'].decode('utf-8'))
  if not config_example.get('ames_start_date'):raise ValueError('Clean bundle requires configurable ames_start_date default')
+ preview_urls=[u.strip().rstrip('/') for u in os.environ.get('CENTRAL_PREVIEW_URLS','').split(';') if u.strip()]
+ if preview_urls:
+  origins=[]
+  for value in preview_urls:
+   parsed=urlsplit(value)
+   if parsed.scheme!='https' or not parsed.netloc:raise ValueError('CENTRAL_PREVIEW_URLS requires absolute https URLs')
+   origins.append(f'{parsed.scheme}://{parsed.netloc}')
+  config_example['allowed_origins']=list(dict.fromkeys([*(config_example.get('allowed_origins') or []),*origins]))
+  payload['ames-agent/config.example.json']=(json.dumps(config_example,ensure_ascii=False,indent=2)+'\n').encode('utf-8')
  for name,expected in HASHES.items():
   if hashlib.sha256(payload['ames-agent/'+name]).hexdigest()!=expected:raise ValueError('Frozen collector changed: '+name)
  for p in (ROOT/'ames/factory-engine').rglob('*'):
@@ -62,8 +72,16 @@ def build(destination, development=False):
   payload[name]=(ws/name).read_bytes()
  payload['09_REPARAR_DEPENDENCIAS.bat']=(ws/'09_REPARAR_DEPENDENCIAS_CLEAN.bat').read_bytes()
  payload['network/ensure_ames_route.ps1']=(ws/'ensure_ames_route.ps1').read_bytes()
- launcher=b'@echo off\r\ncd /d "%~dp0"\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0START_LOCAL_CANDIDATE.ps1"\r\nif errorlevel 1 pause\r\n'
- for name in ['00_INICIAR_AQUI.bat','INICIAR_POSTO_CENTRAL_V2.bat','INICIAR_CENTRAL_AMES.cmd']:payload[name]=launcher
+ for name in ['ROTA_AMES_APLICAR.bat','ROTA_AMES_REMOVER.bat']:
+  source=ws/name
+  if source.is_file():payload['suporte/ames-workstation/'+name]=source.read_bytes()
+ canonical_launcher=(ws/'INICIAR_POSTO_CENTRAL_V2.bat').read_bytes()
+ payload['INICIAR_POSTO_CENTRAL_V2.bat']=canonical_launcher
+ entry=(b'@echo off\r\ncd /d "%~dp0"\r\nif exist "%~dp0FRONTEND_GATE.json" (\r\n  call "%~dp0INICIAR_POSTO_CENTRAL_V2.bat"\r\n) else (\r\n  call "%~dp0INICIAR_POSTO_CENTRAL_V2.bat" /prod\r\n)\r\nif errorlevel 1 pause\r\n')
+ payload['00_INICIAR_AQUI.bat']=entry
+ payload['INICIAR_CENTRAL_AMES.cmd']=entry
+ if preview_urls:
+  payload['FRONTEND_GATE.json']=(json.dumps({'expected_sha':sha,'preview_urls':preview_urls},ensure_ascii=False,indent=2)+'\n').encode('utf-8')
  with tempfile.TemporaryDirectory() as temp:
   subprocess.run(['node','scripts/build-static.mjs'],cwd=ROOT,env={**os.environ,'CENTRAL_STATIC_OUT':temp,'COMMIT':sha},check=True)
   for p in Path(temp).rglob('*'):
@@ -92,8 +110,8 @@ INSTALACAO / TESTE:
 2. Extraia ESTE ZIP em uma pasta NOVA e independente.
 3. Execute apenas 00_INICIAR_AQUI.bat.
 4. O primeiro uso cria .venv, config.json e SQLite somente dentro desta nova pasta.
-5. Central e Console MES usam o MESMO frontend local: http://127.0.0.1:8765/Central-de-Controle-/
-6. Console MES e uma view interna da Central: entrar/sair nao abre outra aplicacao nem exige um segundo login.
+5. O launcher abre a Central web exata (preview validado no candidato; dominio oficial na versao publicada) e pareia o agente local 127.0.0.1:8765.
+6. Console MES e uma view interna da mesma Central web; o frontend local permanece apenas como fallback/suporte offline.
 7. O primeiro login da Central pode exigir internet. Depois, Auth/Firestore usam persistencia/cache do navegador quando disponiveis.
 
 ESTE PACOTE NAO E UM UPDATER:
