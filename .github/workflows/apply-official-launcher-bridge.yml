@@ -1,0 +1,40 @@
+name: Apply official launcher bridge
+
+on:
+  push:
+    branches:
+      - fix/ames-official-agent-shared-sync-20261016
+    paths:
+      - scripts/apply-official-launcher-bridge.py
+      - .github/workflows/apply-official-launcher-bridge.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply canonical launcher packaging correction
+        run: |
+          python scripts/apply-official-launcher-bridge.py
+          python -m py_compile scripts/build-integrated-candidate.py
+          git diff --check
+      - name: Commit source correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/build-integrated-candidate.py
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+          else
+            git commit -m "fix(ames): package canonical web launcher"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
