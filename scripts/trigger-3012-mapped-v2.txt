@@ -1,1 +1,1 @@
-apply mapped 3012 runtime contract
+apply mapped 3012 runtime contract v2
