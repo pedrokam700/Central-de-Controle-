@@ -19,7 +19,12 @@ Object.assign(EXTRA_EN,{
   'Manual/Automatic é modo de registro da falha; reparo e retorno permanecem evidências separadas.':'Manual/Automatic is the failure registration mode; repair and return remain separate evidence.',
   'Com filtro de falha, a timeline mostra as PCBAs pertencentes aos contextos dessa falha. Os eventos abaixo são passagens 3022 reais; não são automaticamente o ponto de geração da falha.':'With a failure filter, the timeline shows PCBAs belonging to that failure context. The events below are real 3022 passages; they are not automatically the failure generation point.',
   'Hoje/Ontem usam o início operacional configurado neste posto.':'Today/Yesterday use this workstation’s configured operational start.',
-  'Consultar outro período':'Query another period'
+  'Consultar outro período':'Query another period',
+  'Ocorrências: maior → menor':'Occurrences: most → fewest',
+  'Ocorrências: menor → maior':'Occurrences: fewest → most',
+  'Falha: A → Z':'Failure: A → Z',
+  'Falha: Z → A':'Failure: Z → A',
+  'Primeiro veja o nome da falha e a quantidade. Clique em uma falha para abrir só suas ocorrências.':'Start with the failure name and count. Click a failure to open only its occurrences.'
 });
 
 export function createFailureProcessAddon(root,store,filterRoot){
