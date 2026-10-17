@@ -19,9 +19,13 @@ import local_security
 import operational_calendar
 import origin_policy
 import performance_indexes
+import sn_lookup_context
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
 PERFORMANCE_INDEX_STATE = performance_indexes.install(entry.a.STORE)
+# The live SN bridge only derives exact 3022 production context from the result
+# already returned by the validated collectors; it never navigates A-MES itself.
+sn_lookup_context.install(entry.a)
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)

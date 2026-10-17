@@ -13,13 +13,17 @@ test('existing top3 route is renamed without creating a tenth Console view',()=>
   assert.equal(canonical.length,9);
 });
 
-test('Top 3 stays a quick summary but each failure opens the canonical occurrence drilldown',()=>{
+test('Top 3 stays a quick summary while selected failure opens expanded locally',()=>{
   assert.match(summary,/Top 3 & FPY · resumo rápido/);
   assert.match(summary,/data-daily-top3-defect/);
   assert.match(summary,/\[data-top3-analytics\] \[data-dfa="defect"\]/);
-  assert.match(summary,/\[data-top3-analytics\] \[data-dfa-mode="occurrences"\]/);
+  assert.match(summary,/\[data-top3-analytics\] \[data-dfa-mode="ranking"\]/);
+  assert.match(summary,/\.ames-dfa-rank-item/);
+  assert.match(summary,/detail\.open=true/);
   assert.match(summary,/data-daily-open-ranking/);
-  assert.match(summary,/store\.updateContext\?\.\(\{defect:code\|\|null\}\)/);
+  const openFailure=summary.slice(summary.indexOf('function openAnalyticsFailure'),summary.indexOf('function openFullRanking'));
+  assert.doesNotMatch(openFailure,/store\.updateContext\?\.\(\{defect:/);
+  assert.match(openFailure,/dispatchAnalytics\(select,String\(code\|\|''\)\)/);
   assert.match(summary,/syncContextToAnalytics\(\)/);
   assert.match(summary,/queueMicrotask\(\(\)=>\{/);
 });
