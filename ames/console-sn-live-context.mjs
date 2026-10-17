@@ -2,6 +2,7 @@ import {formatFactoryDateTime as time} from './data/time-display.mjs';
 import {buildLiveSnForensics} from './data/sn-forensics.mjs';
 import {productionEvidenceForOccurrence,trustedProductionEvidence} from './data/production-evidence.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
+import {decorateSnMaterialBindings} from './console-sn-material-bindings.mjs';
 
 const lang=()=>globalThis.document?.documentElement?.lang||'pt-BR';
 const t=(pt,en)=>lang().startsWith('en')?en:pt;
@@ -49,6 +50,7 @@ function decorate(root,result){
   }
   patchFailureCards(root,evidence.current,evidence.previous.length);
   patchProcessCards(root,evidence.production);
+  decorateSnMaterialBindings(root,evidence.model);
 }
 
 export function withSnLiveContext(base,root,store){
