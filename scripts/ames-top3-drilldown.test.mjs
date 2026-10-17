@@ -16,7 +16,7 @@ test('Top 3 drill-down does not collapse the shared Top 3 context',()=>{
   const body=functionBody('openAnalyticsFailure','openFullRanking');
   assert.doesNotMatch(body,/store\.updateContext\?\.\(\{defect:/);
   assert.match(body,/dispatchAnalytics\(select,String\(code\|\|''\)\)/);
-  assert.match(body,/data-dfa-mode=\\"ranking\\"/);
+  assert.match(body,/data-dfa-mode="ranking"/);
 });
 
 test('Top 3 drill-down opens the selected failure detail immediately',()=>{
@@ -30,5 +30,5 @@ test('return to full ranking clears only the local analytics defect filter',()=>
   const body=functionBody('openFullRanking','render');
   assert.doesNotMatch(body,/store\.updateContext\?\.\(\{defect:/);
   assert.match(body,/dispatchAnalytics\(defect,''\)/);
-  assert.match(body,/data-dfa-mode=\\"ranking\\"/);
+  assert.match(body,/data-dfa-mode="ranking"/);
 });
