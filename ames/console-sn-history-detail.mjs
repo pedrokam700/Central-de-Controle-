@@ -5,7 +5,7 @@ import {provenRepairUserName} from './console-sn-repair-evidence.mjs';
 
 const text=value=>String(value??'').trim();
 const value=(row,...keys)=>keys.map(key=>row?.[key]).find(item=>item!==undefined&&item!==null&&text(item)!=='')??null;
-const number=value=>{const n=Number(value);return Number.isFinite(n)&&n>=0?n:null;};
+const number=input=>{if(input===null||input===undefined||text(input)==='')return null;const n=Number(input);return Number.isFinite(n)&&n>=0?n:null;};
 const instant=value=>{const raw=text(value);if(!raw)return null;const n=Date.parse(raw);return Number.isFinite(n)?n:null;};
 const same=(a,b)=>text(a)!==''&&text(a)===text(b);
 const sameInstant=(a,b)=>{const aa=instant(a),bb=instant(b);return aa!==null&&bb!==null&&aa===bb;};
