@@ -2,6 +2,28 @@ import {formatFactoryDateTime as time} from './data/time-display.mjs';
 import {sameFailureOccurrence,trustedProductionEvidence,genericReturnEvidence} from './data/production-evidence.mjs';
 import {reuseLinks} from './data/reuse-analysis.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
+import {EXTRA_EN} from './console-i18n-extra.mjs';
+
+Object.assign(EXTRA_EN,{
+  'Evidências':'Evidence',
+  'Ver cadeia de evidências':'View evidence chain',
+  'parcial':'partial',
+  'fonte/dimensão não comprovada':'source/dimension not proven',
+  'Ocorrência':'Occurrence',
+  'Histórico anterior':'Previous history',
+  'Componentes reutilizados':'Reused components',
+  'PCBA(s) anterior(es)':'previous PCBA(s)',
+  'com mesma falha/família':'with same failure/family',
+  'Processo comprovado':'Proven process',
+  'Retorno':'Return',
+  'Reparo':'Repair',
+  'Proveniência do snapshot':'Snapshot provenance',
+  'PCBA 2º+':'PCBA 2nd+',
+  'Item 2º+':'2nd+ item',
+  'Correlação':'Correlation',
+  'não correlacionado':'not correlated',
+  'Fonte posterior ausente não apaga evidência já comprovada; correlação não confirma causa raiz.':'A missing later source does not erase already proven evidence; correlation does not confirm root cause.'
+});
 
 const text=value=>String(value??'').trim();
 const own=(object,key)=>Object.prototype.hasOwnProperty.call(object||{},key);
@@ -67,7 +89,7 @@ export function failureOccurrenceEvidence(snapshot={},occurrence={}){
 function badge(label,tone=''){return `<span class="status${tone?` ${tone}`:''}">${esc(label)}</span>`;}
 function unavailable(locale,label){return `<div><small>${esc(label)}</small><b>—</b><span>${esc(t(locale,'fonte/dimensão não comprovada','source/dimension not proven'))}</span></div>`;}
 function renderDetails(evidence,locale,read={}){
-  const {occurrence,production,returnEvidence:ret,history,reuse,relations,materials,repair}=evidence;
+  const {occurrence,production,returnEvidence:ret,history,materials,repair}=evidence;
   const materialSame=materials.rows.filter(row=>/MESMA FALHA|MESMA FAMÍLIA/i.test(text(row.relations)));
   const rows=[];
   rows.push(`<div><small>3028 · ${esc(t(locale,'Ocorrência','Occurrence'))}</small><b>${esc([occurrence.defect_code,occurrence.pcba_sn].filter(Boolean).join(' · '))}</b><span>${esc(time(occurrence.defect_time))} · ${esc(occurrence.line_id||'—')} · ${esc(occurrence.product_model||occurrence.product_key||'—')}</span></div>`);
