@@ -45,12 +45,13 @@ export function freshnessLabel(value,language=PT){
 }
 
 export function readinessLabel(value,language=PT){
-  if(value===true)return automationText(language,'OK','OK');
+  if(value===true)return 'OK';
   if(value===false)return automationText(language,'Indisponível','Unavailable');
   return automationText(language,'Não informado','Unknown');
 }
 
-export function formatBytes(value,language=PT){
+export function formatBytes(value){
+  if(value===null||value===undefined||value==='')return '—';
   const n=Number(value);
   if(!Number.isFinite(n)||n<0)return '—';
   if(n<1024)return `${Math.round(n)} B`;
