@@ -1,12 +1,12 @@
 import {collectionStatus} from './collection-status.mjs';
 import { LINE_IDS } from './data/contract.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
-import {readHardeningDiagnostics} from './agent-diagnostics.mjs';
-import {automationLanguage,automationText,formatAutomationTime,sourceLabel,freshnessLabel,readinessLabel,formatBytes,diagnosticsLabel} from './automation-support.mjs';
+import {readHardeningDiagnostics,readAgentJobDiagnostics} from './agent-diagnostics.mjs';
+import {automationLanguage,automationText,formatAutomationTime,formatDuration,sourceLabel,freshnessLabel,readinessLabel,formatBytes,diagnosticsLabel} from './automation-support.mjs';
 
 export function createAutomationView(root,store,client) {
   let config,agentKey='',mounted=false,disposed=false;
-  let supportDiagnostics=null,supportBusy=false,supportError='';
+  let supportDiagnostics=null,supportJobs=null,supportBusy=false,supportError='';
   const text=(pt,en)=>automationText(automationLanguage(),pt,en);
 
   function renderSupport(state){
@@ -21,6 +21,10 @@ export function createAutomationView(root,store,client) {
     const backup=runtime.latest_backup;
     const monitor=state.monitor;
     const sync=state.sync;
+    const recentJobs=supportJobs?.jobs||[];
+    const latestSuccess=recentJobs.find(item=>item.status==='done')||null;
+    const latestError=recentJobs.find(item=>item.status==='error')||null;
+    const jobLine=(item,label)=>item?`<p><b>${label}:</b> <span title="${esc(item.finished_at||item.started_at||item.created_at||'')}">${esc(formatAutomationTime(item.finished_at||item.started_at||item.created_at,{language,timeZone:timezone}))}</span> · ${esc(item.kind||'—')} · ${esc(formatDuration(item.started_at,item.finished_at,{language}))}${item.stage?` · ${esc(item.stage)}`:''}</p>`:`<p><b>${label}:</b> —</p>`;
     let diagnosticHtml=`<p>${automationText(language,'Diagnóstico detalhado ainda não consultado. A leitura é local e somente leitura; não executa comandos no MES.','Detailed diagnostics have not been read yet. This is local and read-only; it does not execute MES commands.')}</p>`;
     if(supportBusy)diagnosticHtml=`<p role="status">${automationText(language,'Lendo diagnóstico local...','Reading local diagnostics...')}</p>`;
     else if(supportError)diagnosticHtml=`<p class="notice warn">${esc(supportError)}</p>`;
@@ -30,6 +34,7 @@ export function createAutomationView(root,store,client) {
         ${indexes?`<p><b>${automationText(language,'Índices locais','Local indexes')}:</b> ${indexes.ok?automationText(language,'OK','OK'):automationText(language,'atenção','attention')} · ${esc(indexes.present??'—')}/${esc(indexes.expected??'—')}${indexes.missing?.length?` · ${automationText(language,'faltando','missing')}: ${indexes.missing.slice(0,8).map(esc).join(', ')}`:''}</p>`:''}
         ${origins?`<p><b>${automationText(language,'Política de origem','Origin policy')}:</b> ${origins.ok?automationText(language,'OK','OK'):automationText(language,'atenção','attention')} · ${esc(origins.mode||'—')} · local ${esc(origins.localOrigins??'—')} · remote ${esc(origins.remoteOrigins??'—')} · rejected ${esc(origins.rejectedEntries??'—')}</p>`:''}`;
     }
+    if(supportJobs&&supportJobs.status!=='ok')diagnosticHtml+=`<p><b>${automationText(language,'Histórico de jobs','Job history')}:</b> ${esc(diagnosticsLabel(supportJobs.status,supportJobs.reason,language))}</p>`;
     host.innerHTML=`<div class="ames-reuse-kpis">
       <article class="stat"><span class="stat-label">${automationText(language,'POSTO','WORKSTATION')}</span><strong>${esc(state.status||'disconnected')}</strong><span class="stat-note">Build/SHA: ${esc(state.agent_build||state.capabilities?.agent_build||'—')}<br>Runtime: ${esc(runtime.candidate_version||'—')}</span></article>
       <article class="stat"><span class="stat-label">${automationText(language,'SAÚDE LOCAL','LOCAL HEALTH')}</span><strong>${automationText(language,'SQLite','SQLite')} ${esc(readinessLabel(readiness.sqlite,language))}</strong><span class="stat-note">Engine ${esc(readinessLabel(readiness.engine,language))} · Chrome ${esc(readinessLabel(readiness.chrome,language))} · A-MES ${esc(readinessLabel(readiness.ames,language))} · 3022 ${esc(readinessLabel(readiness.process,language))}</span></article>
@@ -38,7 +43,9 @@ export function createAutomationView(root,store,client) {
     <div class="table-wrap"><table><thead><tr><th>${automationText(language,'Linha','Line')}</th><th>${automationText(language,'Origem','Source')}</th><th>${automationText(language,'Atualidade','Freshness')}</th><th>${automationText(language,'Última coleta','Last collection')}</th><th>Snapshot</th></tr></thead><tbody>${lineRows}</tbody></table></div>
     <p><b>${automationText(language,'Monitor','Monitor')}:</b> ${monitor?(monitor.enabled?automationText(language,'ativo','active'):automationText(language,'desativado','disabled')):automationText(language,'não informado','unknown')}${monitor?.interval_minutes?` · ${esc(monitor.interval_minutes)} min`:''}${monitor?.next_run_at?` · ${automationText(language,'próximo','next')}: <span title="${esc(monitor.next_run_at)}">${esc(formatAutomationTime(monitor.next_run_at,{language,timeZone:timezone}))}</span>`:''}</p>
     <p><b>${automationText(language,'Sincronização','Sync')}:</b> ${sync?`${esc(sync.status||'—')} · ${esc(sync.pending??'—')} ${automationText(language,'pendente(s)','pending')} · ${automationText(language,'leitura remota','remote read')} ${esc(sync.read_status||'—')}`:automationText(language,'não informada','unknown')}</p>
-    <p><b>${automationText(language,'Último backup conhecido','Latest known backup')}:</b> ${backup?`<span title="${esc(backup.created_at||'')}">${esc(formatAutomationTime(backup.created_at,{language,timeZone:timezone}))}</span> · ${esc(formatBytes(backup.bytes,language))} · ${esc(backup.reason||'—')}`:'—'}</p>
+    <p><b>${automationText(language,'Último backup conhecido','Latest known backup')}:</b> ${backup?`<span title="${esc(backup.created_at||'')}">${esc(formatAutomationTime(backup.created_at,{language,timeZone:timezone}))}</span> · ${esc(formatBytes(backup.bytes))} · ${esc(backup.reason||'—')}`:'—'}</p>
+    ${jobLine(latestSuccess,automationText(language,'Último sucesso','Last success'))}
+    ${jobLine(latestError,automationText(language,'Último erro','Last error'))}${latestError?.error?`<p class="notice warn"><b>${automationText(language,'Erro','Error')}:</b> ${esc(latestError.error)}</p>`:''}
     <div class="mes-context-panel"><h4>${automationText(language,'Diagnóstico técnico do posto','Workstation technical diagnostics')}</h4>${diagnosticHtml}<div class="mes-pagination"><button type="button" class="button secondary" data-agent-support-refresh${supportBusy?' disabled':''}>${supportBusy?automationText(language,'Lendo...','Reading...'):automationText(language,'Atualizar diagnóstico','Refresh diagnostics')}</button></div></div>`;
   }
 
@@ -71,7 +78,7 @@ export function createAutomationView(root,store,client) {
     if(supportButton){
       if(supportBusy)return;
       supportBusy=true;supportError='';renderSupport(store.agent());
-      try{supportDiagnostics=await readHardeningDiagnostics();}
+      try{[supportDiagnostics,supportJobs]=await Promise.all([readHardeningDiagnostics(),readAgentJobDiagnostics()]);}
       catch(error){supportError=error?.message||text('Falha ao ler diagnóstico local.','Failed to read local diagnostics.');}
       finally{supportBusy=false;if(!disposed)renderSupport(store.agent());}
       return;
