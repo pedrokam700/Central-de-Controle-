@@ -35,11 +35,11 @@ test('source and freshness never convert unknown or missing evidence into zero/O
   assert.equal(readinessLabel(false,'en-US'),'Unavailable');
 });
 
-test('support diagnostics remain descriptive and bounded',()=>{
+test('support diagnostics remain descriptive and preserve unknown values',()=>{
   assert.equal(diagnosticsLabel('ok',null,'pt-BR'),'Disponível');
   assert.equal(diagnosticsLabel('unavailable','not_paired','en-US'),'Workstation not paired');
   assert.equal(formatBytes(0),'0 B');
   assert.equal(formatBytes(1024),'1.0 KB');
-  assert.equal(formatBytes(null),'0 B');
+  assert.equal(formatBytes(null),'—');
   assert.equal(formatBytes(undefined),'—');
 });
