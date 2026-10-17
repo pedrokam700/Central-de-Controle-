@@ -27,6 +27,17 @@ export function formatAutomationTime(value,{language=PT,timeZone='America/Sao_Pa
   }catch{return raw;}
 }
 
+export function formatDuration(start,end,{language=PT}={}){
+  const from=instant(start),to=instant(end);
+  if(from===null||to===null||to<from)return '—';
+  const seconds=Math.round((to-from)/1000);
+  if(seconds<60)return `${seconds} s`;
+  const minutes=Math.floor(seconds/60),rest=seconds%60;
+  if(minutes<60)return rest?`${minutes} min ${rest} s`:`${minutes} min`;
+  const hours=Math.floor(minutes/60),mins=minutes%60;
+  return mins?`${hours} h ${mins} min`:`${hours} h`;
+}
+
 export function sourceLabel(source,language=PT){
   const map={
     local:['Agente local','Local agent'],
