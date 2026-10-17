@@ -4,6 +4,7 @@ import {productionEvidenceForOccurrence,trustedProductionEvidence} from './data/
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {decorateSnMaterialBindings} from './console-sn-material-bindings.mjs';
 import {decorateSnRepairEvidence} from './console-sn-repair-evidence.mjs';
+import {decorateSnHistoryDetail} from './console-sn-history-detail.mjs';
 
 const lang=()=>globalThis.document?.documentElement?.lang||'pt-BR';
 const t=(pt,en)=>lang().startsWith('en')?en:pt;
@@ -53,6 +54,7 @@ function decorate(root,result){
   patchProcessCards(root,evidence.production);
   decorateSnRepairEvidence(root,evidence.model,result);
   decorateSnMaterialBindings(root,evidence.model);
+  decorateSnHistoryDetail(root,evidence.model,result);
 }
 
 export function withSnLiveContext(base,root,store){
