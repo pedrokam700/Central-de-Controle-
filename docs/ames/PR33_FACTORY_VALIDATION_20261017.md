@@ -9,18 +9,34 @@ Este checklist valida fisicamente os nove blocos da PR #33 sem ampliar o escopo 
 
 ## 0. Estado antes do teste físico
 
-Base funcional imediatamente anterior a este checklist: `6ab2710ff618855f1a57ef11f528184518d051a2`.
+A dependência comum de onboarding/manifesto foi isolada na PR #34 e mergeada na `main` como `e285d2adba07c023ca53d1c76159ad92c0e0db3c`. A PR #33 recebeu somente a mesma correção fail-closed do manifesto, sem incorporar o restante da PR #32 e sem alterar coletores.
+
+HEAD canônico da PR #33 para este gate físico: `adc59c42e33c4eed6b7df2294c7a4960a9b54824`.
 
 No workflow desse SHA:
 
-- A-MES Node: `394` testes, `392` PASS e `2` FAIL;
-- os dois FAIL são os já isolados da PR #32 em onboarding/manifesto (`ames-capabilities.test.mjs` e `ames-onboarding.test.mjs`, ambos por `Manifesto pendente não pode anunciar pacote antigo`);
+- A-MES Node contract suites: **PASS**;
+- scheduler/canonical/updater Python contracts: **PASS**;
+- CLEAN V3 integration and Shift contract: **PASS**;
+- Central quality gate: **PASS**;
+- Console themes, languages and mobile: **PASS**;
 - Agent + sync E2E com Firestore Rules: **PASS**;
-- browser/experiência: falha conhecida ao aguardar o texto antigo `Installation on a new computer is still blocked`;
-- o job estático parou antes da etapa de build e, portanto, **não gerou CLEAN/local candidate para teste físico**;
-- o único artefato desse workflow é a evidência de browser `console-experience-6ab2710ff618855f1a57ef11f528184518d051a2`.
+- build e upload do candidate integrado: **PASS**;
+- build e upload do bundle de migração R12: **PASS**.
 
-**Estado atual do gate físico: BLOCKED até existir um pacote canônico do HEAD exato sem contornar o quality gate.**
+Artifacts canônicos do SHA exato:
+
+- candidate integrado: `central-ames-integrated-adc59c42e33c4eed6b7df2294c7a4960a9b54824`
+  - artifact id: `12098837882`
+  - digest: `sha256:5aa9989da6f61f559ac8ebc54c86d6ac22e76d36272b9d221bcb405f702f0fea`
+- migração R12 existente: `central-v2-r12-migration-adc59c42e33c4eed6b7df2294c7a4960a9b54824`
+  - artifact id: `12098957261`
+  - digest: `sha256:96409b0b9aff51f15be146194f53efaf44cea1cb0be97b5540108cf585a2c43c`
+- evidência de browser: `console-experience-adc59c42e33c4eed6b7df2294c7a4960a9b54824`
+  - artifact id: `12097799782`
+  - digest: `sha256:92e03f8d35d141e51c88faac880e9947873c98cd99fc17e66032bc3150d69797`
+
+**Estado atual do gate físico: READY FOR PHYSICAL VALIDATION — usar somente pacote/bundle cujo SHA seja exatamente `adc59c42e33c4eed6b7df2294c7a4960a9b54824`.**
 
 Não vale:
 
@@ -35,9 +51,9 @@ Não vale:
 Preencher antes de abrir o A-MES:
 
 - Resultado geral: `[ ] PASS  [ ] FAIL  [ ] BLOCKED`
-- SHA exato do HEAD testado: `______________________________`
-- SHA/identificador do pacote CLEAN/local candidate: `______________________________`
-- Origem do pacote / workflow: `______________________________`
+- SHA exato do HEAD testado: `adc59c42e33c4eed6b7df2294c7a4960a9b54824`
+- SHA/identificador do pacote CLEAN/local candidate: `central-ames-integrated-adc59c42e33c4eed6b7df2294c7a4960a9b54824`
+- Origem do pacote / workflow: `Central Quality Gate run 39026847325`
 - Data/hora do teste: `______________________________`
 - Linha MES: `[ ] TAN10101  [ ] TAN10102  [ ] TAN10103`
 - CPH exato: `______________________________`
@@ -245,4 +261,4 @@ Anexar ao comentário da PR #33 ou ao handoff do teste:
 10. ordenação e Falhas agrupadas;
 11. qualquer erro de console relevante.
 
-Até existir o CLEAN/local candidate canônico do SHA exato, o resultado oficial deste documento permanece **BLOCKED — pacote físico ainda não produzido pelo gate normal**.
+O resultado oficial deste documento agora é **READY FOR PHYSICAL VALIDATION** no SHA `adc59c42e33c4eed6b7df2294c7a4960a9b54824`; somente o teste físico real pode promover para GREEN físico.
