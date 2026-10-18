@@ -52,9 +52,11 @@ test('explicitly completed source can prove zero, but cached snapshot is not liv
   const cached={snapshot:snap,source:'local_cache',source_state:'cached',freshness:'stale'};
   assert.equal(mesSourceProvenance(cached,'3074').state,SOURCE_STATE.CACHED);
   assert.equal(mesSourceProvenance(cached,'3022').state,SOURCE_STATE.ERROR,'cache cannot mask source error');
-  const canonicalComplete={...snap,coverage:{status:'complete',datasets:{defects:{transport_complete:true}}},occurrences:[]};
+  const canonicalComplete={...snap,coverage:{status:'complete',datasets:{defects:{transport_complete:true,source_complete:true}}},occurrences:[]};
   assert.equal(mesSourceProvenance(local(canonicalComplete),'3028').state,SOURCE_STATE.ZERO);
   assert.equal(mesSourceProvenance(local({...snap,occurrences:[]}),'3028').count,null);
+  const transported={...canonicalComplete,coverage:{status:'complete',datasets:{defects:{transport_complete:true}}}};
+  assert.equal(mesSourceProvenance(local(transported),'3028').state,SOURCE_STATE.PARTIAL,'transport is not evidence of complete MES query');
 });
 
 test('the failure evidence UI shows per-source provenance, period and unknowns without a false zero',()=>{
@@ -65,6 +67,10 @@ test('the failure evidence UI shows per-source provenance, period and unknowns w
   assert.match(html,/data-ames-source-view="3074" data-ames-source-state="unavailable"/);
   assert.match(html,/data-ames-source-view="2114" data-ames-source-state="partial"/);
   assert.match(html,/collector-1/);
+  assert.match(html,/data-ames-source-view="3012" data-ames-source-state="not_collected"/,'3028 repair fields do not certify 3012');
+  const confirmed=failureOccurrenceEvidence(snapshot,{...occurrence,repair_evidence_3012:[{pcba_sn:'PCBA-1',defect_code:'F1',repair_comment:'Linked 3012'}]});
+  assert.equal(confirmed.repair.source_confirmed,true);
+  assert.match(renderFailureOccurrenceEvidence(confirmed,'pt-BR',local(snapshot)),/data-ames-source-view="3012" data-ames-source-state="partial"/);
   assert.match(html,/2026-10-16T07:30:00-03:00/);
   assert.match(html,/Posto\/PC informado<\/span>|Posto\/PC informado/);
   assert.match(html,/2114<\/small><b>—/,'empty partial history cannot be shown as zero');
