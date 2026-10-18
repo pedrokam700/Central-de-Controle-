@@ -86,3 +86,50 @@ test('evidence chain is bilingual without rewriting MES identifiers',()=>{
   assert.match(html,/BRM00075/);
   assert.match(html,/F1/);
 });
+
+test('undated, future or other-PCBA 2114 evidence is not labelled an earlier failure',()=>{
+  const snap=snapshot();
+  snap.pcba_history.records=[
+    {pcba_sn:'PCB-A',defect_code:'F1',defect_time:'2026-10-09T08:00:00-03:00'},
+    {pcba_sn:'PCB-A',defect_code:'F1',defect_time:null},
+    {pcba_sn:'PCB-A',defect_code:'F1',defect_time:'garbled'},
+    {pcba_sn:'PCB-A',defect_code:'F1',defect_time:'2026-10-20T08:00:00-03:00'},
+    {pcba_sn:'PCB-OTHER',defect_code:'F1',defect_time:'2026-10-09T08:00:00-03:00'},
+  ];
+  const evidence=failureOccurrenceEvidence(snap,occurrence);
+  assert.equal(evidence.history.rows.length,1,'only proven prior event for this PCBA qualifies');
+  assert.equal(evidence.history.rows[0].defect_time,'2026-10-09T08:00:00-03:00');
+  const missingFailureTime=failureOccurrenceEvidence(snap,{...occurrence,defect_time:null});
+  assert.equal(missingFailureTime.history.available,false);
+  assert.equal(missingFailureTime.history.rows.length,0);
+});
+
+test('correlation badges need exact PCBA+defect code+failure time but board reuse is PCBA-level',()=>{
+  const snap=snapshot();
+  snap.insights.drilldowns.pcba_same_failure=[
+    { 'Defect Code atual':'F1','Defect Time atual':occurrence.defect_time },
+    { PCBA:'PCB-OTHER','Defect Code atual':'F1','Defect Time atual':occurrence.defect_time },
+    { PCBA:'PCB-A','Defect Code atual':'F1' },
+    { PCBA:'PCB-A','Defect Time atual':occurrence.defect_time },
+    { PCBA:'PCB-A','Defect Code atual':'F1','Defect Time atual':'2026-10-16T10:00:00-03:00' },
+    { PCBA:'PCB-A','Defect Code atual':'F1','Defect Time atual':occurrence.defect_time },
+  ];
+  snap.insights.drilldowns.pcba_second_use=[{PCBA:'PCB-A'}];
+  const evidence=failureOccurrenceEvidence(snap,occurrence);
+  assert.equal(evidence.relations.matches.length,1,'do not correlate partial identity with wrong occurrence');
+  assert.equal(evidence.reuse.matches.length,1,'board-level reuse remains valid');
+  const html=renderFailureOccurrenceEvidence(evidence,'pt-BR',{snapshot:snap,source:'local'});
+  assert.match(html,/PCBA 2º\+/);
+  assert.match(html,/Correlação/);
+});
+
+test('partial-only correlation identities never promote a badge across occurrences',()=>{
+  const snap=snapshot();
+  snap.insights.drilldowns.pcba_same_failure=[{PCBA:'PCB-A','Defect Code atual':'F1'}];
+  snap.insights.drilldowns.pcba_second_use=[];
+  const evidence=failureOccurrenceEvidence(snap,occurrence);
+  assert.equal(evidence.relations.matches.length,0);
+  assert.equal(evidence.reuse.matches.length,0);
+  const html=renderFailureOccurrenceEvidence(evidence,'pt-BR',{snapshot:snap,source:'local'});
+  assert.doesNotMatch(html,/<span class="status warn">Correlação<\/span>/);
+});
