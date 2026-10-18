@@ -31,3 +31,16 @@ Não alterar coletores 3012/3022/3028/3074/2114, Firebase, porta 8765, `main` ne
 - Checar casos 09:50 local (antes de 13:00Z), 10:10 local (depois de 13:00Z), data sem hora, PCBA/código divergentes e duplicidade; o resultado não pode variar com timezone do PC.
 
 Essas alterações são exclusivamente do consumidor de evidência e testes; os coletores congelados permanecem intocados.
+
+## Bloqueio de colisão de `defect_key` entre PCBAs
+
+Um `defect_key` só pode complementar a identidade de uma ocorrência quando a PCBA coincide explicitamente na fonte de falha e no contexto 3022. Se ambas as fontes trouxerem código/horário, divergência de qualquer um invalida a correlação mesmo quando a chave é igual. Chave compartilhada em outra PCBA ou PCBA ausente **não comprova processo/turno** da placa atual.
+
+Contrato focalizado em `scripts/ames-production-evidence-analytics.test.mjs`:
+- `defect_key` idêntico com PCBA diferente → `false`;
+- PCBA ausente em qualquer lado → `false`;
+- mesma chave/placa mas falha/hora explicitamente conflitantes → `false`;
+- mesma chave/placa/hora expressa em UTC vs. horário da fábrica → `true`;
+- dois contextos 3022, primeiro de PCBA diferente com chave colidente e segundo exato → somente o segundo fornece estação/turno.
+
+**Não se aplica a coletores, não cria nova lógica de turno e não diagnostica causa raiz.**
