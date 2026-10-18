@@ -40,3 +40,27 @@ test('daily analytics does not use Defect Time as production fallback',()=>{
   assert.match(analytics,/Registro da falha \(MES\)/);
   assert.match(analytics,/não é usado como fallback de produção/);
 });
+
+test('matching defect_key never overrides PCBA identity or conflicting explicit failure fields',()=>{
+  const keyed={...occurrence,defect_key:'DUPLICATED-IN-ANOTHER-SNAPSHOT'};
+  assert.equal(sameFailureOccurrence(keyed,{...keyed,pcba_sn:'P2'}),false);
+  assert.equal(sameFailureOccurrence(keyed,{...keyed,pcba_sn:''}),false);
+  assert.equal(sameFailureOccurrence({...keyed,pcba_sn:''},keyed),false);
+  assert.equal(sameFailureOccurrence(keyed,{...keyed,defect_code:'WRONG'}),false);
+  assert.equal(sameFailureOccurrence(keyed,{...keyed,defect_time:'2026-10-15T11:00:00-03:00'}),false);
+  assert.equal(sameFailureOccurrence(keyed,{...keyed,defect_time:'2026-10-15T13:00:00Z'}),true);
+  assert.equal(sameFailureOccurrence(keyed,{...keyed,defect_key:'OTHER-KEY'}),false);
+});
+
+test('the 3022 proof for another PCBA is rejected even when defect_key collides',()=>{
+  const keyed={...occurrence,defect_key:'COLLISION'};
+  const reference={reference_station_code:'A5100',reference_event_time:'2026-10-15T09:40:00-03:00',production_shift:'1st Shift',production_shift_source:'3022',production_shift_basis:'reference_process'};
+  const wrong={...keyed,...reference,pcba_sn:'P2'};
+  const exact={...keyed,...reference,reference_station_code:'A5162'};
+  const untrusted=productionEvidenceForOccurrence(keyed,[wrong]);
+  assert.equal(untrusted.trusted,false);
+  assert.equal(untrusted.station,null);
+  const trusted=productionEvidenceForOccurrence(keyed,[wrong,exact]);
+  assert.equal(trusted.trusted,true);
+  assert.equal(trusted.station,'A5162');
+});
