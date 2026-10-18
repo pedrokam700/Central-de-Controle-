@@ -52,3 +52,6 @@ Contrato focalizado em `scripts/ames-production-evidence-analytics.test.mjs`:
 - Múltiplas representações equivalentes da mesma evidência, inclusive UTC versus horário da fábrica, podem comprovar o mesmo contexto.
 - Não combinar a estação de uma linha com o horário de outra para sintetizar prova. Um evento posterior à falha ou horário inválido nunca comprova geração/turno anterior.
 - Regressões específicas em `scripts/ames-production-evidence-analytics.test.mjs`. Fonte bruta preservada, sem intervenção no coletor 3022.
+
+## Evidência para o próximo gate físico
+Para cada caso A-MES real, anotar o Defect Time 2114 e os timestamps exatos das passagens 3022, com estação e fuso original. Se houver dois contextos de referência legítimos e diferentes, anexar ambos e classificar a prova temporal como inconclusiva, sem escolher arbitrariamente um dos dois.
