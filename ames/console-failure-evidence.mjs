@@ -1,5 +1,5 @@
 import {formatFactoryDateTime as time} from './data/time-display.mjs';
-import {sameFailureOccurrence,trustedProductionEvidence,genericReturnEvidence} from './data/production-evidence.mjs';
+import {sameFailureOccurrence,trustedProductionEvidence,genericReturnEvidence,parseFailureInstant} from './data/production-evidence.mjs';
 import {reuseLinks} from './data/reuse-analysis.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {EXTRA_EN} from './console-i18n-extra.mjs';
@@ -33,7 +33,7 @@ const t=(locale,pt,en)=>String(locale||'pt-BR').startsWith('en')?en:pt;
 const value=(row,...keys)=>keys.map(key=>row?.[key]).find(item=>item!==undefined&&item!==null&&text(item)!=='')??null;
 const first=(...values)=>values.find(item=>item!==undefined&&item!==null&&text(item)!=='')??null;
 const same=(a,b)=>text(a)!==''&&text(a)===text(b);
-const sameInstant=(a,b)=>{const aa=Date.parse(text(a)),bb=Date.parse(text(b));return Number.isFinite(aa)&&Number.isFinite(bb)&&aa===bb;};
+const sameInstant=(a,b)=>{const aa=parseFailureInstant(a),bb=parseFailureInstant(b);return aa!==null&&bb!==null&&aa===bb;};
 
 function drillRows(snapshot,key){const value=snapshot?.insights?.drilldowns?.[key];return Array.isArray(value)?value:[];}
 function pcbaOf(row){return text(first(row?.current_pcba_sn,row?.pcba_sn,row?.['PCBA atual'],row?.PCBA,row?.['PCBA']));}
@@ -59,12 +59,12 @@ function exactContext(snapshot,occurrence){return (snapshot?.process_timeline?.c
 function historyRows(snapshot,occurrence){
   const rows=snapshot?.pcba_history?.records;
   if(!Array.isArray(rows))return {available:false,rows:[]};
-  const defect=Date.parse(text(occurrence.defect_time));
+  const defect=parseFailureInstant(occurrence.defect_time);
   // Missing/unparseable timestamps cannot prove that a failure occurred
   // BEFORE the selected occurrence. Keep them in raw evidence, not here.
-  const matches=Number.isFinite(defect)?rows.filter(row=>{
-    const prior=Date.parse(text(row.defect_time));
-    return same(row.pcba_sn,occurrence.pcba_sn)&&Number.isFinite(prior)&&prior<defect;
+  const matches=defect!==null?rows.filter(row=>{
+    const prior=parseFailureInstant(row.defect_time);
+    return same(row.pcba_sn,occurrence.pcba_sn)&&prior!==null&&prior<defect;
   }):[];
   // A partial or unscoped empty history is not proof of zero prior failures.
   return {available:matches.length>0,rows:matches};
@@ -170,7 +170,11 @@ export function withFailureOccurrenceEvidence(base,root,store){
     for(const tr of table.querySelectorAll('tbody tr')){
       tr.querySelector('[data-failure-evidence-cell]')?.remove();const cells=[...tr.children];if(cells.length<4)continue;
       const code=text(cells[1]?.textContent),pcba=text(cells[2]?.textContent),at=text(cells[3]?.textContent);
-      const occurrence=rows.find(row=>same(row.pcba_sn,pcba)&&(!code||same(row.defect_code,code))&&(!at||same(text(row.defect_time),at)||sameInstant(row.defect_time,at)));
+      // A visible row is not proof of a particular MES occurrence unless
+      // PCBA, defect code and factory-local Defect Time all match exactly.
+      // Ambiguous identical triples also stay uncorrelated (no false evidence).
+      const candidates=rows.filter(row=>same(row.pcba_sn,pcba)&&same(row.defect_code,code)&&sameInstant(row.defect_time,at));
+      const occurrence=candidates.length===1?candidates[0]:null;
       const td=table.ownerDocument.createElement('td');td.dataset.failureEvidenceCell='1';
       td.innerHTML=occurrence?renderFailureOccurrenceEvidence(failureOccurrenceEvidence(snapshot,occurrence),document.documentElement.lang||'pt-BR',read):`<span class="status">${esc(t(document.documentElement.lang,'não correlacionado','not correlated'))}</span>`;tr.append(td);
     }
