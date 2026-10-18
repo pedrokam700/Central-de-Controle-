@@ -62,6 +62,6 @@ test('bilingual live SN details escape MES values and remain collapsed until req
 test('live SN UI adds the source details without invoking a new MES request',()=>{
   const source=fs.readFileSync(new URL('../ames/console-sn-offline-fastlane.mjs',import.meta.url),'utf8');
   assert.match(source,/renderSnLiveSourceProvenance\(result,model,locale\(\)\)/);
-  assert.match(source,/section\.append\(panel\.firstElementChild\)/);
+  assert.match(source,/section\.after\(panel\.firstElementChild\)/);
   assert.match(source,/renderLiveSources\(root,store\)/);
 });
