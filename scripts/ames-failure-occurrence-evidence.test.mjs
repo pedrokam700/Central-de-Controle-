@@ -128,8 +128,16 @@ test('partial-only correlation identities never promote a badge across occurrenc
   snap.insights.drilldowns.pcba_same_failure=[{PCBA:'PCB-A','Defect Code atual':'F1'}];
   snap.insights.drilldowns.pcba_second_use=[];
   const evidence=failureOccurrenceEvidence(snap,occurrence);
-  assert.equal(evidence.relations.matches.length,0);
+  assert.equal(evidence.relations.matches.length,0,'the PCBA-level occurrence correlation must fail closed');
   assert.equal(evidence.reuse.matches.length,0);
-  const html=renderFailureOccurrenceEvidence(evidence,'pt-BR',{snapshot:snap,source:'local'});
+  const validMaterial=renderFailureOccurrenceEvidence(evidence,'pt-BR',{snapshot:snap,source:'local'});
+  assert.match(validMaterial,/<span class="status warn">Correlação<\/span>/,'independently proven component correlation must be preserved');
+  // Isolate occurrence drilldowns from unrelated, valid material evidence.
+  snap.material_trace.records=[];
+  snap.insights.drilldowns.material_analysis=[];
+  snap.insights.drilldowns.correlation_same_failure=[];
+  const isolated=failureOccurrenceEvidence(snap,occurrence);
+  const html=renderFailureOccurrenceEvidence(isolated,'pt-BR',{snapshot:snap,source:'local'});
+  assert.equal(isolated.relations.matches.length,0);
   assert.doesNotMatch(html,/<span class="status warn">Correlação<\/span>/);
 });
