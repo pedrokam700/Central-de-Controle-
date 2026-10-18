@@ -21,3 +21,13 @@ Somente após teste da PR #33 e da PR #35:
 5. Anexar SHA, prints, horário da fábrica, SN, linha, estado de fonte e PASS/FAIL/BLOCKED.
 
 Não alterar coletores 3012/3022/3028/3074/2114, Firebase, porta 8765, `main` nem os pacotes físicos das PRs anteriores. Não mergear antes de teste físico e CI apropriados.
+
+## Correção adicional — fuso horário de fábrica / identidade exata
+
+- As datas `Defect Time` sem fuso são interpretadas com a regra canônica da fábrica (`-03:00`) e não pela timezone do navegador ou do runner. Valores com `Z`/offset preservam o instante real.
+- Horário ausente, somente data (`YYYY-MM-DD`) ou horário inválido **não** comprovam falha anterior nem vínculo à ocorrência.
+- Comparações entre uma data 2114 sem fuso e uma data 3028 com offset devem reconhecer o mesmo instante ou uma ordem válida.
+- Ao localizar a ocorrência apresentada na tabela Falhas, exigir PCBA + código + horário comprovados e uma **única** ocorrência correspondente. Sem essa prova exibir `não correlacionado` preservando a linha 3028, sem escolher a primeira ocorrência parecida.
+- Checar casos 09:50 local (antes de 13:00Z), 10:10 local (depois de 13:00Z), data sem hora, PCBA/código divergentes e duplicidade; o resultado não pode variar com timezone do PC.
+
+Essas alterações são exclusivamente do consumidor de evidência e testes; os coletores congelados permanecem intocados.
