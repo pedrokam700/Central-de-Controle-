@@ -43,10 +43,25 @@ export function sameFailureOccurrence(a={},b={}){
   return Boolean(code(a)&&code(a)===code(b)&&sameInstant(defectTime(a),defectTime(b)));
 }
 
+// A source-labelled reference is usable as production timing evidence only
+// when it has its own valid timestamp no later than this exact MES defect.
+function provenReference(occurrence,reference){
+  const candidate=trustedProductionEvidence(reference);
+  if(!candidate.trusted)return null;
+  const defectAt=instant(defectTime(occurrence)),processAt=instant(candidate.event_time);
+  return defectAt!==null&&processAt!==null&&processAt<=defectAt?candidate:null;
+}
+
 export function productionEvidenceForOccurrence(occurrence={},contexts=[]){
-  const own=trustedProductionEvidence(occurrence);if(own.trusted)return own;
-  const context=(contexts||[]).find(row=>sameFailureOccurrence(occurrence,row));
-  return context?trustedProductionEvidence({...occurrence,...context}):trustedProductionEvidence({});
+  const own=provenReference(occurrence,occurrence);
+  if(own)return own;
+  const matched=Array.isArray(contexts)?contexts.filter(row=>row&&sameFailureOccurrence(occurrence,row)):[];
+  const proven=matched.map(row=>provenReference(occurrence,row)).filter(Boolean);
+  if(!proven.length)return trustedProductionEvidence({});
+  // Distinct trusted 3022 contexts for the same occurrence must not be
+  // resolved by array order. Identical repeated evidence is harmless.
+  const identity=row=>JSON.stringify([row.station,instant(row.event_time),row.shift,row.operational_date]);
+  return proven.every(row=>identity(row)===identity(proven[0]))?proven[0]:trustedProductionEvidence({});
 }
 
 export function genericReturnEvidence(row={}){
