@@ -81,7 +81,11 @@ function materialLinks(snapshot,occurrence){
 }
 function repairEvidence(occurrence){
   const fields={user:occurrence.repair_user||null,time:occurrence.repair_time||null,code:occurrence.repair_code||null,comment:occurrence.repair_comment||null,reason:occurrence.defect_reason_desc||occurrence.repair_desc||null};
-  return {present:Object.values(fields).some(item=>text(item)!==''),...fields};
+  const sourceRows=Array.isArray(occurrence.repair_evidence_3012)?occurrence.repair_evidence_3012:[];
+  const exactRows=sourceRows.filter(row=>row&&typeof row==='object'&&(!row.pcba_sn||same(row.pcba_sn,occurrence.pcba_sn))&&(!row.defect_code||same(row.defect_code,occurrence.defect_code)));
+  // Repair User/Comment can also arrive through 3028; never label these as
+  // directly collected from 3012 without a linked 3012 evidence record.
+  return {present:Object.values(fields).some(item=>text(item)!=='')||exactRows.length>0,source_confirmed:exactRows.length>0,...fields};
 }
 
 export function failureOccurrenceEvidence(snapshot={},occurrence={}){
@@ -100,7 +104,7 @@ function renderDetails(evidence,locale,read={}){
   if(history.available)rows.push(`<div><small>2114 · ${esc(t(locale,'Histórico anterior','Previous history'))}</small><b>${esc(String(history.rows.length))}</b>${history.rows.slice(0,3).map(row=>`<span>${esc([row.defect_code,row.defect_desc].filter(Boolean).join(' · ')||'—')} · ${esc(time(row.defect_time))}</span>`).join('')}</div>`);else rows.push(unavailable(locale,'2114'));
   if(materials.available)rows.push(`<div><small>3074 · ${esc(t(locale,'Componentes reutilizados','Reused components'))}</small><b>${esc(String(materials.rows.length))}</b>${materials.rows.slice(0,4).map(row=>`<span>${esc([row.item_type,row.material,row.usage].filter(Boolean).join(' · ')||row.material||'—')}${row.previous_pcbas?` · ${esc(t(locale,'PCBA(s) anterior(es)','previous PCBA(s)'))}: ${esc(row.previous_pcbas)}`:''}</span>`).join('')}${materialSame.length?`<span><b>${esc(materialSame.length)}</b> ${esc(t(locale,'com mesma falha/família','with same failure/family'))}</span>`:''}</div>`);else rows.push(unavailable(locale,'3074'));
   if(production.trusted)rows.push(`<div><small>3022 · ${esc(t(locale,'Processo comprovado','Proven process'))}</small><b>${esc([production.station,evidence.context?.reference_operation_name].filter(Boolean).join(' · '))}</b><span>${esc(time(production.event_time))} · ${esc(production.shift||'—')} · ${esc(production.operational_date||'—')}</span>${ret.proven?`<span>${esc(t(locale,'Retorno','Return'))}: ${esc([ret.station,ret.operation].filter(Boolean).join(' · '))} · ${esc(time(ret.event_time))}</span>`:''}</div>`);else rows.push(unavailable(locale,'3022'));
-  if(repair.present)rows.push(`<div><small>3012 · ${esc(t(locale,'Reparo','Repair'))}</small><b>${esc([repair.code,repair.user].filter(Boolean).join(' · ')||'—')}</b><span>${esc(repair.time?time(repair.time):'—')}</span>${repair.comment?`<span style="white-space:pre-wrap">${esc(repair.comment)}</span>`:''}${repair.reason?`<span>${esc(repair.reason)}</span>`:''}</div>`);else rows.push(unavailable(locale,'3012'));
+  if(repair.present)rows.push(`<div><small>${repair.source_confirmed?'3012':esc(t(locale,'Reparo · origem 3012 não comprovada','Repair · 3012 source unproven'))} · ${esc(t(locale,'Reparo','Repair'))}</small><b>${esc([repair.code,repair.user].filter(Boolean).join(' · ')||'—')}</b><span>${esc(repair.time?time(repair.time):'—')}</span>${repair.comment?`<span style="white-space:pre-wrap">${esc(repair.comment)}</span>`:''}${repair.reason?`<span>${esc(repair.reason)}</span>`:''}</div>`);else rows.push(unavailable(locale,'3012'));
   rows.push(renderSnapshotFacts(read,locale));
   rows.push(renderSourceFacts(read,locale,evidence));
   return rows.join('');
@@ -120,7 +124,7 @@ function renderSnapshotFacts(read,locale){
 }
 function renderSourceFacts(read,locale,evidence){
   const cells=MES_SOURCE_VIEWS.map(view=>{
-    const p=mesSourceProvenance(read,view,{observed:view==='3012'&&evidence.repair.present});
+    const p=mesSourceProvenance(read,view,{observed:view==='3012'&&evidence.repair.source_confirmed});
     const count=p.count===null?'':` · ${esc(t(locale,'registros no snapshot','snapshot records'))}: ${esc(p.count)}`;
     return `<div data-ames-source-view="${view}" data-ames-source-state="${esc(p.state)}"><small>${view} · ${esc(t(locale,'Estado da fonte','Source state'))}</small><b>${esc(sourceStateLabel(p.state,locale))}</b><span>${esc(t(locale,'Evidência neste snapshot; não comprova cobertura completa da consulta MES.','Evidence in this snapshot; it does not prove full MES query coverage.'))}${count}</span></div>`;
   }).join('');
@@ -134,7 +138,7 @@ export function renderFailureOccurrenceEvidence(evidence,locale='pt-BR',read={})
   if(evidence.materials.rows.length)tags.push(badge(`${t(locale,'Item 2º+','2nd+ item')} ${evidence.materials.rows.length}`,'warn'));
   if(evidence.relations.matches.length||evidence.materials.rows.some(row=>/MESMA FALHA|MESMA FAMÍLIA/i.test(text(row.relations))))tags.push(badge(t(locale,'Correlação','Correlation'),'warn'));
   if(evidence.production.trusted)tags.push(badge(`3022 ${evidence.production.station||''}`.trim(),'ok'));
-  if(evidence.repair.present)tags.push(badge('3012','ok'));
+  if(evidence.repair.present)tags.push(badge(evidence.repair.source_confirmed?'3012':t(locale,'Reparo','Repair'),evidence.repair.source_confirmed?'ok':''));
   const partial=[!evidence.history.available,!evidence.materials.available,!evidence.production.trusted&&!evidence.context,!evidence.repair.present].filter(Boolean).length;
   return `<div class="ames-failure-evidence-summary" style="display:flex;gap:4px;flex-wrap:wrap">${tags.join('')}</div><details class="ames-failure-evidence-detail" style="margin-top:5px"><summary style="cursor:pointer;font-weight:750">${esc(t(locale,'Ver cadeia de evidências','View evidence chain'))}${partial?` · ${esc(t(locale,'parcial','partial'))}`:''}</summary><div class="ames-sn-repair-cycles" style="margin-top:7px">${renderDetails(evidence,locale,read)}</div><small style="display:block;margin-top:6px">${esc(t(locale,'Fonte posterior ausente não apaga evidência já comprovada; correlação não confirma causa raiz.','A missing later source does not erase already proven evidence; correlation does not confirm root cause.'))}</small></details>`;
 }
