@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {failureOccurrenceEvidence,renderFailureOccurrenceEvidence} from '../ames/console-failure-evidence.mjs';
+import {parseFailureInstant} from '../ames/data/production-evidence.mjs';
+import fs from 'node:fs';
 
 const occurrence={
   pcba_sn:'PCB-A',defect_code:'F1',defect_desc:'LCD LEAK',defect_time:'2026-10-17T10:00:00-03:00',line_id:'TAN10101',product_model:'CPH2817',repair_status:'Y',repair_user:'BRM00075',repair_time:'2026-10-17T11:00:00-03:00',repair_code:'MB_REPAIR',repair_comment:'Comentário completo do AT',defect_reason_desc:'MainBoard repair',
@@ -140,4 +142,38 @@ test('partial-only correlation identities never promote a badge across occurrenc
   const html=renderFailureOccurrenceEvidence(isolated,'pt-BR',{snapshot:snap,source:'local'});
   assert.equal(isolated.relations.matches.length,0);
   assert.doesNotMatch(html,/<span class="status warn">Correlação<\/span>/);
+});
+
+test('factory-local 2114 timestamps compare to explicit UTC timestamps without shifting a failure into the past',()=>{
+  const snap=snapshot();
+  const at={...occurrence,defect_time:'2026-10-17T13:00:00Z'};
+  snap.pcba_history.records=[
+    {pcba_sn:'PCB-A',defect_code:'F1',defect_time:'2026-10-17 09:50:00'}, // 12:50Z: earlier
+    {pcba_sn:'PCB-A',defect_code:'F1',defect_time:'2026-10-17 10:10:00'}, // 13:10Z: later
+    {pcba_sn:'PCB-A',defect_code:'F1',defect_time:'2026-10-17'},          // date only: unknown
+  ];
+  const evidence=failureOccurrenceEvidence(snap,at);
+  assert.equal(evidence.history.rows.length,1,'factory-local 10:10 is NOT before 13:00Z');
+  assert.equal(evidence.history.rows[0].defect_time,'2026-10-17 09:50:00');
+  assert.equal(parseFailureInstant('2026-10-17 10:00:00'),parseFailureInstant('2026-10-17T13:00:00Z'));
+  assert.equal(parseFailureInstant('2026-10-17'),null,'date only cannot prove order');
+});
+
+test('exact occurrence drilldown accepts identical UTC and factory wall time, rejects unknown times',()=>{
+  const snap=snapshot(),list=snap.insights.drilldowns;
+  list.pcba_same_failure=[
+    {PCBA:'PCB-A','Defect Code atual':'F1','Defect Time atual':'2026-10-17T13:00:00Z'},
+    {PCBA:'PCB-A','Defect Code atual':'F1','Defect Time atual':'2026-10-17'},
+  ];
+  const found=failureOccurrenceEvidence(snap,{...occurrence,defect_time:'2026-10-17 10:00:00'});
+  assert.equal(found.relations.matches.length,1,'UTC and naive factory time refer to the same instant');
+  const unknown=failureOccurrenceEvidence(snap,{...occurrence,defect_time:'2026-10-17'});
+  assert.equal(unknown.relations.matches.length,0);
+});
+
+test('rendered row mapping requires all three event identity fields and a unique occurrence',()=>{
+  const source=fs.readFileSync(new URL('../ames/console-failure-evidence.mjs',import.meta.url),'utf8');
+  assert.match(source,/const candidates=rows\.filter\(row=>same\(row\.pcba_sn,pcba\)&&same\(row\.defect_code,code\)&&sameInstant\(row\.defect_time,at\)\)/);
+  assert.match(source,/const occurrence=candidates\.length===1\?candidates\[0\]:null/);
+  assert.doesNotMatch(source,/Date\.parse\(text\(row\.defect_time\)\)/);
 });
