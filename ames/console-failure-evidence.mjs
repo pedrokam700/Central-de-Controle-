@@ -37,20 +37,35 @@ const sameInstant=(a,b)=>{const aa=Date.parse(text(a)),bb=Date.parse(text(b));re
 
 function drillRows(snapshot,key){const value=snapshot?.insights?.drilldowns?.[key];return Array.isArray(value)?value:[];}
 function pcbaOf(row){return text(first(row?.current_pcba_sn,row?.pcba_sn,row?.['PCBA atual'],row?.PCBA,row?.['PCBA']));}
+// Correlation drilldowns refer to a specific occurrence, not simply any board
+// that once had the same defect code. Without all three identities, the record
+// cannot safely be promoted into this occurrence's evidence chain.
 function drillMatches(row,occurrence){
-  if(pcbaOf(row)&&!same(pcbaOf(row),occurrence.pcba_sn))return false;
-  const code=first(row?.defect_code,row?.['Defect Code atual'],row?.['Defect Code']);
-  if(code&&occurrence.defect_code&&!same(code,occurrence.defect_code))return false;
+  const pcba=pcbaOf(row),code=first(row?.defect_code,row?.['Defect Code atual'],row?.['Defect Code']);
   const at=first(row?.defect_time,row?.['Defect Time atual'],row?.['Defect Time']);
-  if(at&&occurrence.defect_time&&!sameInstant(at,occurrence.defect_time))return false;
-  return Boolean(pcbaOf(row)||code||at);
+  return same(pcba,occurrence.pcba_sn)&&same(code,occurrence.defect_code)&&sameInstant(at,occurrence.defect_time);
+}
+// Reuse of the BOARD itself is a board-level fact and need not be tied to a
+// particular fault. But any supplied fault identity must still match.
+function boardReuseMatches(row,occurrence){
+  if(!same(pcbaOf(row),occurrence.pcba_sn))return false;
+  const code=first(row?.defect_code,row?.['Defect Code atual'],row?.['Defect Code']);
+  const at=first(row?.defect_time,row?.['Defect Time atual'],row?.['Defect Time']);
+  if(code&&!same(code,occurrence.defect_code))return false;
+  if(at&&!sameInstant(at,occurrence.defect_time))return false;
+  return true;
 }
 function exactContext(snapshot,occurrence){return (snapshot?.process_timeline?.contexts||[]).find(context=>sameFailureOccurrence(occurrence,context))||null;}
 function historyRows(snapshot,occurrence){
   const rows=snapshot?.pcba_history?.records;
   if(!Array.isArray(rows))return {available:false,rows:[]};
   const defect=Date.parse(text(occurrence.defect_time));
-  const matches=rows.filter(row=>same(row.pcba_sn,occurrence.pcba_sn)&&(!Number.isFinite(defect)||!Number.isFinite(Date.parse(text(row.defect_time)))||Date.parse(text(row.defect_time))<defect));
+  // Missing/unparseable timestamps cannot prove that a failure occurred
+  // BEFORE the selected occurrence. Keep them in raw evidence, not here.
+  const matches=Number.isFinite(defect)?rows.filter(row=>{
+    const prior=Date.parse(text(row.defect_time));
+    return same(row.pcba_sn,occurrence.pcba_sn)&&Number.isFinite(prior)&&prior<defect;
+  }):[];
   // A partial or unscoped empty history is not proof of zero prior failures.
   return {available:matches.length>0,rows:matches};
 }
@@ -64,7 +79,7 @@ function relationState(snapshot,occurrence){
 function ownReuseState(snapshot,occurrence){
   const drill=snapshot?.insights?.drilldowns||{};
   const keys=['pcba_second_use','pcba_3plus_use','pcba_reused_with_prior_failure'];
-  const matches=keys.flatMap(key=>drillRows(snapshot,key).filter(row=>drillMatches(row,occurrence)).map(row=>({key,row})));
+  const matches=keys.flatMap(key=>drillRows(snapshot,key).filter(row=>boardReuseMatches(row,occurrence)).map(row=>({key,row})));
   const available=own(drill,'pcba_second_use')||own(drill,'pcba_3plus_use')||own(drill,'pcba_reused_with_prior_failure');
   return {available,matches};
 }
