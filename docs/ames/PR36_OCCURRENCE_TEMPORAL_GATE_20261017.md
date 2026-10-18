@@ -44,3 +44,11 @@ Contrato focalizado em `scripts/ames-production-evidence-analytics.test.mjs`:
 - dois contextos 3022, primeiro de PCBA diferente com chave colidente e segundo exato → somente o segundo fornece estação/turno.
 
 **Não se aplica a coletores, não cria nova lógica de turno e não diagnostica causa raiz.**
+
+## Gate adicional — seleção de referência 3022 (sem arbitragem por ordem)
+- Um contexto só comprova a referência de processo quando a própria linha possui `production_shift_source=3022`, `production_shift_basis=reference_process`, posto e timestamp válido **até o Defect Time** da ocorrência.
+- Um contexto parcial que venha primeiro não esconde o contexto comprovado que venha depois.
+- Dois contextos comprovados, porém divergentes na estação, momento, turno ou dia operacional, deixam **a referência desconhecida**; não selecionar o primeiro, o último, o mais próximo nem inferir por heurística.
+- Múltiplas representações equivalentes da mesma evidência, inclusive UTC versus horário da fábrica, podem comprovar o mesmo contexto.
+- Não combinar a estação de uma linha com o horário de outra para sintetizar prova. Um evento posterior à falha ou horário inválido nunca comprova geração/turno anterior.
+- Regressões específicas em `scripts/ames-production-evidence-analytics.test.mjs`. Fonte bruta preservada, sem intervenção no coletor 3022.
