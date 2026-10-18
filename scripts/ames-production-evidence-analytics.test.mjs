@@ -64,3 +64,42 @@ test('the 3022 proof for another PCBA is rejected even when defect_key collides'
   assert.equal(trusted.trusted,true);
   assert.equal(trusted.station,'A5162');
 });
+
+test('a partial matching context cannot hide a later complete reference for the same occurrence',()=>{
+  const partial={...occurrence,production_shift_source:'3022',production_shift_basis:'reference_process',reference_station_code:'A9999'};
+  const complete={...partial,reference_station_code:'A5100',reference_event_time:'2026-10-15T09:10:00-03:00',production_shift:'1st Shift'};
+  const evidence=productionEvidenceForOccurrence(occurrence,[partial,complete]);
+  assert.equal(evidence.trusted,true);
+  assert.equal(evidence.station,'A5100');
+  assert.equal(evidence.shift,'1st Shift');
+});
+
+test('two different proven references for one occurrence are ambiguous rather than selected by list order',()=>{
+  const base={...occurrence,production_shift_source:'3022',production_shift_basis:'reference_process',reference_station_code:'A5100',reference_event_time:'2026-10-15T09:10:00-03:00',production_shift:'1st Shift'};
+  const other={...base,reference_station_code:'A5162'};
+  const first=productionEvidenceForOccurrence(occurrence,[base,other]);
+  const reverse=productionEvidenceForOccurrence(occurrence,[other,base]);
+  assert.equal(first.trusted,false);
+  assert.equal(reverse.trusted,false);
+  assert.equal(first.shift,null);
+  assert.equal(reverse.station,null);
+  // Repeated equivalent evidence, even in UTC, is not a conflict.
+  const duplicate={...base,reference_event_time:'2026-10-15T12:10:00Z'};
+  const same=productionEvidenceForOccurrence(occurrence,[base,duplicate]);
+  assert.equal(same.trusted,true);
+  assert.equal(same.station,'A5100');
+});
+
+test('future or unparseable 3022 reference times cannot prove earlier production',()=>{
+  const template={...occurrence,production_shift_source:'3022',production_shift_basis:'reference_process',reference_station_code:'A5100',production_shift:'1st Shift'};
+  const future={...template,reference_event_time:'2026-10-15T10:10:00-03:00'};
+  const unknown={...template,reference_event_time:'invalid'};
+  const prior={...template,reference_event_time:'2026-10-15T09:50:00-03:00'};
+  assert.equal(productionEvidenceForOccurrence(occurrence,[future]).trusted,false);
+  assert.equal(productionEvidenceForOccurrence(occurrence,[unknown]).trusted,false);
+  assert.equal(productionEvidenceForOccurrence({...occurrence,defect_time:'2026-10-15'},[prior]).trusted,false);
+  assert.equal(productionEvidenceForOccurrence(occurrence,[future,prior]).station,'A5100');
+  const contaminated={...occurrence,production_shift_source:'3022',production_shift_basis:'reference_process',reference_station_code:'A5100'};
+  const missingTime={...occurrence,production_shift_source:'3022',production_shift_basis:'reference_process',reference_event_time:'2026-10-15T09:50:00-03:00'};
+  assert.equal(productionEvidenceForOccurrence(contaminated,[missingTime]).trusted,false,'partial fields from different records must not be merged into proof');
+});
