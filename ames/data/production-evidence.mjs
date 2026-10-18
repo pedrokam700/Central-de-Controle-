@@ -29,8 +29,18 @@ export function trustedProductionEvidence(row={}){
 }
 
 export function sameFailureOccurrence(a={},b={}){
-  if(a.defect_key&&b.defect_key)return text(a.defect_key)===text(b.defect_key);
-  return Boolean(pcba(a)&&pcba(a)===pcba(b)&&code(a)&&code(a)===code(b)&&sameInstant(defectTime(a),defectTime(b)));
+  // A defect_key can be local to a collector, line, or snapshot. Matching keys
+  // alone must never borrow 3022 evidence from a different (or unknown) PCBA.
+  const board=pcba(a);
+  if(!board||board!==pcba(b))return false;
+  if(a.defect_key&&b.defect_key){
+    if(text(a.defect_key)!==text(b.defect_key))return false;
+    // Even if the keys match, reject conflicting explicit occurrence fields.
+    if(code(a)&&code(b)&&code(a)!==code(b))return false;
+    if(defectTime(a)&&defectTime(b)&&!sameInstant(defectTime(a),defectTime(b)))return false;
+    return true;
+  }
+  return Boolean(code(a)&&code(a)===code(b)&&sameInstant(defectTime(a),defectTime(b)));
 }
 
 export function productionEvidenceForOccurrence(occurrence={},contexts=[]){
