@@ -51,7 +51,7 @@ export function mesSourceProvenance(read={},view,{observed=false}={}){
     state=observed?SOURCE_STATE.PARTIAL:SOURCE_STATE.NOT_COLLECTED;
   }else if(snapshot&&view==='3028'){
     const rows=recordsOf(snapshot,view);
-    const complete=snapshot?.coverage?.status==='complete'&&snapshot?.coverage?.datasets?.defects?.transport_complete===true;
+    const complete=snapshot?.coverage?.status==='complete'&&snapshot?.coverage?.datasets?.defects?.transport_complete===true&&snapshot?.coverage?.datasets?.defects?.source_complete===true;
     state=rows===null?SOURCE_STATE.NOT_COLLECTED:complete
       ?sourceStateFromTrace({status:'complete'},{recordCount:rows.length,countProven:true})
       :SOURCE_STATE.PARTIAL;
