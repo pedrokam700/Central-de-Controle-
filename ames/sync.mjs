@@ -35,51 +35,97 @@ export function indexedQueue(){
   return {put:x=>run('readwrite',s=>s.put(x)),remove:id=>run('readwrite',s=>s.delete(id)),list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid)};
 }
 export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout}={}){
-  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[];
+  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null;
   const alive=(u,g)=>u===uid&&g===generation;
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
-  const clearRemoteStatus=()=>status({status:'idle',pending:0,error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null});
+  const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null});
   async function flush(){
-    if(!uid||running||!online())return;running=true;const u=uid,g=generation;
+    if(!uid||running)return;running=true;const u=uid,g=generation;
     try{
       let entries=await queue.list(u);
+      if(!alive(u,g))return;
+      status({pending:entries.length,status:entries.length?'pending':(store.agent().sync?.last_sent?'synchronized':'idle')});
+      if(!online())return;
       while(entries.length&&alive(u,g)){
-      // Drop superseded queued revisions only after the newer head is committed.
-      entries.sort((a,b)=>b.head.snapshot_num-a.head.snapshot_num||b.head.snapshot_revision-a.head.snapshot_revision);
-      let historyError;
-      for(const entry of entries){
-        if(!alive(u,g))return;
-        for(let i=0;i<entry.parts.length;i++){if(!alive(u,g))return;await remote.putPart(u,entry.head,i,entry.parts[i]);}
-        if(!alive(u,g))return;await remote.commitHead(u,entry.head);
-        if(!alive(u,g))return;
-        // Unpublished history rules must not block CURRENT updates for other lines.
-        // Keep denied history in the outbox for retry after rules are approved.
-        if(remote.commitHistory){
-          try{await remote.commitHistory(u,entry.head,entry.history||historyMetadata(JSON.parse(entry.parts.join(''))));}
-          catch(error){historyError=error;continue;}
+        entries.sort((a,b)=>b.head.snapshot_num-a.head.snapshot_num||b.head.snapshot_revision-a.head.snapshot_revision);
+        const errors=[];
+        for(const entry of entries){
+          let stage='parts';
+          try{
+            if(!alive(u,g))return;
+            for(let i=0;i<entry.parts.length;i++){if(!alive(u,g))return;await remote.putPart(u,entry.head,i,entry.parts[i]);}
+            if(!alive(u,g))return;stage='head';await remote.commitHead(u,entry.head);
+            if(!alive(u,g))return;stage='history';
+            if(remote.commitHistory)await remote.commitHistory(u,entry.head,entry.history||historyMetadata(JSON.parse(entry.parts.join(''))));
+            if(!alive(u,g))return;await queue.remove(entry.id);if(!alive(u,g))return;
+            status({last_sent:{...syncHeadMetadata(entry.head),sent_at:new Date().toISOString()}});
+          }catch(error){
+            // A permanent error on one line must not block unrelated lines.
+            if(!alive(u,g))return;
+            errors.push({line_id:entry.head.line_id,stage,code:error.code||'',message:error.message});
+          }
         }
-        if(!alive(u,g))return;await queue.remove(entry.id);
+        if(!alive(u,g))return;
+        entries=await queue.list(u);
+        if(!alive(u,g))return;
+        status({pending:entries.length,publish_errors:errors});
+        if(errors.length)throw Error(errors.map(e=>`${e.line_id} / ${e.stage}: ${e.message}`).join('; '));
       }
-      if(historyError)throw historyError;
-      entries=await queue.list(u);
-      }
-      retry=1000;if(alive(u,g))status({status:'synchronized',pending:0,error:''});
-    }catch(error){if(alive(u,g)){status({status:'pending',error:error.message});unschedule(timer);timer=schedule(flush,retry);retry=Math.min(retry*2,60000);}}
+      retry=1000;if(alive(u,g))status({status:store.agent().sync?.last_sent?'synchronized':'idle',pending:0,error:'',publish_errors:[]});
+    }catch(error){if(alive(u,g)){status({status:'pending',error:error.message});unschedule(timer);timer=schedule(()=>{if(alive(u,g))flush();},retry);retry=Math.min(retry*2,60000);}}
     finally{if(alive(u,g))running=false;}
   }
-  async function receive(heads){
+  async function receive(heads,meta=lastReadMeta){
     const u=uid,g=generation,read=++readGeneration;
     try{
       const payloads=[];
       for(const h of heads){
-        if(!LINE_IDS.includes(h.line_id)||!h.owner_uid||typeof h.owner_uid!=='string'||h.schema!==CANONICAL_SCHEMA)throw Error('Escopo remoto inválido');
+        if(!LINE_IDS.includes(h.line_id)||!h.owner_uid||typeof h.owner_uid!=='string'||h.schema!==CANONICAL_SCHEMA||!Number.isInteger(h.parts)||h.parts<1||h.parts>5000)throw Error('Escopo remoto inválido');
         const parts=[];for(let i=0;i<h.parts;i++){if(!alive(u,g)||read!==readGeneration)return;parts.push(await remote.getPart(h.owner_uid,h,i));}
         const text=parts.join('');if(await sha(text)!==h.hash)throw Error('Snapshot remoto incompleto ou alterado');
         const p=JSON.parse(text);if(p.line_id!==h.line_id||p.source_id!==h.source_id||p.snapshot_revision!==h.snapshot_revision||p.snapshot_id!==h.snapshot_id)throw Error('Manifesto remoto divergente');
         normalizeCanonical(p);payloads.push(p);
       }
-      if(alive(u,g)&&read===readGeneration){unschedule(readTimer);readRetry=1000;store.replaceSyncedSnapshots(payloads);status({read_status:'ready',read_error:'',...syncHeadsMetadata(heads)});}
+      if(alive(u,g)&&read===readGeneration){unschedule(readTimer);readRetry=1000;store.replaceSyncedSnapshots(payloads);const stamp=new Date().toISOString();status({read_status:meta.from_cache?'cached':'ready',read_error:'',last_received_at:stamp,...(!meta.from_cache?{server_received_at:meta.received_at||null}:{}),...syncHeadsMetadata(heads)});}
     }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
+  }
+  function subscribe(){
+    if(!uid)return;
+    const u=uid,g=generation,w=++watchGeneration;
+    unwatch?.();unwatch=null;watchFailed=false;headsKey='';hasHeads=false;
+    status({read_status:'connecting',read_error:''});
+    const failed=error=>{
+      if(!alive(u,g)||w!==watchGeneration)return;
+      watchFailed=true;readGeneration++;status({read_status:'error',read_error:error.message});
+      unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())subscribe();},readRetry);readRetry=Math.min(readRetry*2,60000);
+    };
+    try{
+      unwatch=remote.watch(u,(heads,meta={})=>{
+        if(!alive(u,g)||w!==watchGeneration||watchFailed)return;
+        const key=JSON.stringify([heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort(),!!meta.from_cache]);
+        if(key===headsKey)return;
+        headsKey=key;
+        // An empty local Firestore cache cannot revoke previously verified data.
+        if(meta.from_cache&&!heads.length&&lastHeads.length){status({read_status:'cached'});return;}
+        hasHeads=true;lastHeads=heads;lastReadMeta={...meta,received_at:new Date().toISOString()};void receive(heads,lastReadMeta);
+      },failed);
+    }catch(error){failed(error);}
+  }
+  async function capture(){
+    if(!uid)return;
+    if(capturing){await capturing;if(!uid)return;return capture();}
+    const u=uid,g=generation;
+    const work=(async()=>{
+      const payloads=store.localCanonical();
+      const signature=JSON.stringify(payloads.map(p=>[p.line_id,p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));
+      if(signature===seen)return;
+      for(const p of payloads){const entry=await publication(u,p);if(!alive(u,g))return;await queue.put(entry);}
+      if(!alive(u,g))return;
+      seen=signature;const pending=(await queue.list(u)).length;
+      if(alive(u,g)){status({status:pending?'pending':'idle',pending});void flush();}
+    })();
+    capturing=work;
+    try{await work;}finally{if(capturing===work)capturing=null;}
   }
   return {
     async listHistory(line){
@@ -100,14 +146,9 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       if(['period_start','period_end','products'].some(key=>metadata[key]!==h[key]))throw Error('History metadata mismatch');
       return sanitizeSnapshot(payload);
     },
-    start(user){this.stop();uid=user;const u=uid,g=generation;unwatch=remote.watch(u,heads=>{if(!alive(u,g))return;const key=JSON.stringify(heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort());if(key===headsKey)return;headsKey=key;lastHeads=heads;receive(heads);},error=>{if(alive(u,g))status({read_status:'error',read_error:error.message});});flush();},
-    async capture(){
-      if(!uid)return;const u=uid,g=generation,payloads=store.localCanonical();
-      const signature=JSON.stringify(payloads.map(p=>[p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));if(signature===seen)return;
-      for(const p of payloads){const entry=await publication(u,p);if(!alive(u,g))return;await queue.put(entry);}
-      if(!alive(u,g))return;seen=signature;status({status:'pending',pending:(await queue.list(u)).length});flush();
-    },
-    retry(){if(uid&&lastHeads.length)receive(lastHeads);return flush();},
-    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
+    start(user){this.stop();uid=user;subscribe();void flush();},
+    capture,
+    retry(){if(watchFailed)subscribe();else if(uid&&hasHeads)void receive(lastHeads,{...lastReadMeta,from_cache:lastReadMeta.from_cache||!online()});return flush();},
+    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
   };
 }

@@ -50,7 +50,7 @@ test('primeiro install sem Firebase SDK não substitui worker anterior',async()=
 });
 test('install failure retains previous worker; activation deletes only own old builds',async()=>{
   const bad=harness({installFails:true});await assert.rejects(bad.lifecycle('install'));assert.equal(bad.activated(),false);
-  const h=harness();await h.lifecycle('activate');assert.deepEqual(h.deleted,['central-cora-v15v-15-1-13-45']);
+  const h=harness();await h.lifecycle('activate');assert.deepEqual(h.deleted,['central-cora-v15v-15-1-13-45','central-cora-v15v-15-1-13-49']);
 });
 test('cache excludes user URLs, unknown versions, API requests, other origins and writes',async()=>{
   const h=harness();for(const path of [base+'index.html?oobCode=secret',base+'app.js?v=OLD',base+'api/user',base+'private.json','https://firebase.example/app.js'])assert.equal(await h.request(path),undefined);
@@ -61,4 +61,38 @@ test('HTTP errors, redirected login and HTML masquerading as JS never poison cac
     const h=harness(options);await h.lifecycle('install');await h.request(base+'app.js?v=15.1.13.49');assert.deepEqual(h.puts,[]);assert.match(await h.entries.get(base+'app.js').text(),/^cached/);
   }
   const good=harness();await good.request(base+'app.js?v=15.1.13.49');assert.deepEqual(good.puts,[base+'app.js']);
+});
+
+// Follow actual static module dependencies, so a new import cannot silently
+// break the installed offline shell while a hand-picked asset test stays green.
+test('offline cache covers the actual transitive application import graph',async()=>{
+  const {default:path}=await import('node:path'),h=harness({offline:true});await h.lifecycle('install');
+  const seen=new Set();
+  async function visit(file){
+    if(seen.has(file))return;seen.add(file);
+    const response=await h.request(base+file);assert.equal(response?.status,200,`not precached: ${file}`);
+    const text=fs.readFileSync(file,'utf8');
+    for(const match of text.matchAll(/(?:from\s*|import\s*\(\s*|import\s*)['"](\.[^'"]+)['"]/g)){
+      const target=path.posix.normalize(path.posix.join(path.posix.dirname(file),match[1].split('?')[0]));
+      if(/\.m?js$/.test(target))await visit(target);
+    }
+  }
+  await visit('app.js');await visit('offline-bootstrap.mjs');await visit('core/central-roundtrip.mjs');assert(seen.size>70);
+});
+test('an installed shell does not mix modules from a newer deployment',async()=>{
+  const h=harness();await h.lifecycle('install');
+  const response=await h.request(base+'app.js?v=15.1.13.49');assert.match(await response.text(),/^cached/);assert.deepEqual(h.puts,[]);
+});
+
+test('both application cache-update listeners accept the exact SHA and reload only once',()=>{
+  const app=fs.readFileSync('app.js','utf8'),listeners=[],values=new Map();let reloads=0;
+  // Extract the two actual listener expressions, not a reimplementation of the callback.
+  const starts=[app.indexOf("navigator.serviceWorker.addEventListener('message'"),app.indexOf("navigator.serviceWorker?.addEventListener?.('message'")];
+  assert(starts.every(i=>i>=0));
+  for(const start of starts){const match=app.slice(start).match(/^([^\n]+?location\.reload\(\);\})(?:if[\s\S]+?openCentralAlert\(e\.data\.data\|\|\{\}\);)?\}\);/);assert(match);const code=match[0];
+    vm.runInNewContext(code,{navigator:{serviceWorker:{addEventListener:(_name,fn)=>listeners.push(fn)}},localStorage:{getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v)},location:{reload:()=>reloads++},syncOfflineQueue:async()=>{},openCentralAlert:()=>{}});
+  }
+  assert.equal(listeners.length,2);
+  for(const fn of listeners)fn({data:{type:'cora-cache-updated',version:'15.1.13.49',cache_revision:'a'.repeat(40)}});
+  assert.equal(reloads,1);assert.equal(values.get('cora.sw.loaded'),'a'.repeat(40));
 });

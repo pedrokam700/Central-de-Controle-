@@ -200,10 +200,10 @@ if (build) {
   );
 
   assertCheck(
-    app.includes("localStorage.getItem('cora.sw.loaded')!=='" + build + "'") ||
-      app.includes('localStorage.getItem("cora.sw.loaded")!=="' + build + '"'),
-    'app.js: guard de reload usa BUILD ' + build,
-    'app.js: guard de reload não usa BUILD ' + build
+    app.includes("localStorage.getItem('cora.sw.loaded')!==(e.data.cache_revision||e.data.version)") &&
+      app.includes("localStorage.getItem('cora.sw.loaded')!==(event.data.cache_revision||event.data.version)"),
+    'app.js: guard de reload usa revisão do cache por SHA',
+    'app.js: guard de reload não usa revisão do cache por SHA'
   );
 
   assertCheck(

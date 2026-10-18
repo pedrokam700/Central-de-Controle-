@@ -124,6 +124,7 @@ export function createPreparationView(root, store, client) {
   function render() {
     if (disposed) return;
     const agent = store.agent(), connected = agent.status === 'connected';
+    const pairing=!!client.canOpenOfficial?.(),connectionError=agent.connection_error?.message||'';
     const checks = workstationChecks(agent), ready = checks.every(c => c.state === 'ok');
     const maintenance = workstationMaintenance(agent);
     const visible = expanded || (!connected && mode !== 'viewer');
@@ -132,10 +133,12 @@ export function createPreparationView(root, store, client) {
       ? `${esc(backup.created_at || t('data não informada', 'date not reported'))} · ${esc(formatBytes(backup.bytes))}${backup.reason ? ` · ${esc(backup.reason)}` : ''}`
       : t('Nenhum ponto criado nesta sessão foi reportado à Central.', 'No recovery point created in this session has been reported to Work Center.');
     root.hidden=!visible;
-    const key=JSON.stringify([checking,checked,expanded,mode,connected,checks,maintenance,backupBusy,maintenanceMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
+    const key=JSON.stringify([checking,checked,expanded,mode,connected,pairing,connectionError,checks,maintenance,backupBusy,maintenanceMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
     if(key===last)return;last=key;
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
+      ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}
+      ${pairing?`<button type="button" class="button secondary" data-pair-official>${t('Abrir HTTPS oficial pareado neste computador','Open paired official HTTPS on this computer')}</button><p>${t('Autoriza somente o agente deste computador na nova aba oficial. Não compartilhe a URL de pareamento. O computador sem MES precisa apenas dos dados da equipe.','Authorizes only this computer’s agent in the new official tab. Do not share the pairing URL. A computer without MES only needs team data.')}</p>`:''}
       ${visible ? `<p>Consulte os dados compartilhados ou prepare este computador para coleta. O login A-MES permanece manual.</p>
       <div class="mes-pagination"><button type="button" class="button secondary" data-use-shared>Usar somente dados compartilhados</button><button type="button" class="button secondary" data-prepare-pc>Preparar este computador</button></div>` : ''}
       ${expanded ? `<details open><summary>Pré-teste do posto</summary><ul>${checks.map(c => `<li data-check-state="${c.state}">${esc(c.label)} — <span>${c.state === 'ok' ? 'Verificado' : c.state === 'missing' ? 'Pendente' : 'Não verificado'}</span></li>`).join('')}</ul><p>${ready ? 'Pronto para teste' : 'Conclua os itens pendentes e confirme o login manual A-MES antes da coleta.'}</p><button type="button" class="button secondary" data-preflight ${checking ? 'disabled' : ''}>Verificar novamente</button>
@@ -145,6 +148,7 @@ export function createPreparationView(root, store, client) {
     root.querySelector('[data-use-shared]')?.addEventListener('click', () => choose('viewer'));
     root.querySelector('[data-prepare-pc]')?.addEventListener('click', () => choose('collector'));
     root.querySelector('[data-preflight]')?.addEventListener('click', check);
+    root.querySelector('[data-pair-official]')?.addEventListener('click',()=>client.openOfficial());
     root.querySelector('[data-workstation-backup]')?.addEventListener('click', backupNow);
     root.querySelector('[data-map-3012]')?.addEventListener('click', map3012Now);
     onboarding?.clear(); onboarding = null;

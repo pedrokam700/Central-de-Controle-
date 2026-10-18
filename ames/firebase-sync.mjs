@@ -44,8 +44,8 @@ export function firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc
     },
     watch(uid,receive,error){
       if(session()!==uid)throw Error('Sessão de sincronização encerrada');
-      const heads=new Map(),loaded=new Set();
-      const unsub=LINES.map(line=>onSnapshot(teamHead(line),s=>{loaded.add(line);if(s.exists())heads.set(line,s.data());else heads.delete(line);if(loaded.size===LINES.length)receive([...heads.values()]);},error));
+      const heads=new Map(),loaded=new Set(),cached=new Map();
+      const unsub=LINES.map(line=>onSnapshot(teamHead(line),{includeMetadataChanges:true},s=>{loaded.add(line);cached.set(line,!!s.metadata?.fromCache||!!s.metadata?.hasPendingWrites);if(s.exists())heads.set(line,s.data());else heads.delete(line);if(loaded.size===LINES.length)receive([...heads.values()],{from_cache:[...cached.values()].some(Boolean)});},error));
       return ()=>unsub.forEach(stop=>stop());
     }
   };

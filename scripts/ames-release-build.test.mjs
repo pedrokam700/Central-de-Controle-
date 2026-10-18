@@ -38,6 +38,8 @@ test('build estático grava SHA/branch/provider reais do deploy sem depender da 
       project:'central-cora-v2'
     });
     assert.ok(fs.existsSync(path.join(out,'Central-de-Controle-','index.html')));
+    const sw=fs.readFileSync(path.join(out,'Central-de-Controle-','sw.js'),'utf8');
+    assert(sw.includes('const CACHE_REVISION='+JSON.stringify(sha)));
     assert.match(result.stdout,/deployment sha:/);
     assert.match(result.stdout,new RegExp(sha));
   } finally {

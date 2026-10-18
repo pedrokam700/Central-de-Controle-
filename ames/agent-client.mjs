@@ -29,14 +29,15 @@ const boundedOffset=(value,max=100000)=>{const n=Number(value);return Number.isI
 export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
   let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false, lastPartial=-1,lastRefresh=0,pendingSubmission=null;
   const workstationToken=bootstrapAgentToken(agentToken);
+  const canOpenOfficial=()=>!!workstationToken&&globalThis.location?.protocol==='http:'&&['127.0.0.1','localhost'].includes(globalThis.location?.hostname)&&globalThis.location?.port==='8765';
   const publish=patch=>{store.updateAgent(patch);changed();};
   async function request(path,body,blob=false) {
     const token=generation;
     const headers={};
     if(body!==undefined)headers['Content-Type']='application/json';
     if(workstationToken)headers['X-Central-Agent-Token']=workstationToken;
-    const response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(requestTimeout(path))]),cache:'no-store',credentials:'omit'});
-    if(response.status===401)throw new Error('Agente local não autorizado. Abra a Central pelo launcher deste posto.');
+    let response;try{response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(requestTimeout(path))]),cache:'no-store',credentials:'omit'});}catch(error){error.code ||= 'agent-network';throw error;}
+    if(response.status===401)throw Object.assign(new Error('Agente local não autorizado nesta aba. Abra pelo launcher ou use o pareamento HTTPS no posto local.'),{code:'agent-unauthorized'});
     if(!response.ok)throw new Error(`Agente: HTTP ${response.status}`);
     const data=blob?await response.blob():await response.json();
     if(token!==generation)throw new DOMException('Sessão encerrada','AbortError');
@@ -131,10 +132,19 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     if(busy)throw new Error('Uma solicitação já está em andamento.');
     busy=true;const token=generation;
     try {publish({error:''});const result=await work();if(token!==generation)throw new DOMException('Sessão encerrada','AbortError');return result;}
-    catch(e){if(token===generation){if(quiet){store.setLocalConnected(false);publish({status:'disconnected',readiness:null,error:''});}else publish({error:e.message});}throw e;}
+    catch(e){if(token===generation){if(quiet||['agent-network','agent-unauthorized'].includes(e.code)){store.setLocalConnected(false);publish({status:'disconnected',readiness:null,connection_error:{code:e.code||'agent-check',message:e.message},error:quiet?'':e.message});}else publish({error:e.message});}throw e;}
     finally{if(token===generation)busy=false;}
   }
   return Object.freeze({
+    paired:()=>!!workstationToken,
+    canOpenOfficial,
+    openOfficial(){
+      if(!canOpenOfficial())throw Error('Pareamento disponível somente no posto local autorizado.');
+      // Fixed trusted destination, fragment only, never a configurable redirect or cloud field.
+      const target=new URL('https://central-cora-v2.vercel.app/Central-de-Controle-/');
+      target.hash=new URLSearchParams({ames_agent_token:workstationToken}).toString();
+      globalThis.window.open(target.href,'_blank','noopener,noreferrer');
+    },
     connect:(options={})=>action(async()=>{
       let ready=null;
       try{ready=await request('/ready');}
@@ -170,7 +180,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         network:health.network||null,
         network_guardian:health.network_guardian||null
       };
-      publish({status:'connected',config,capabilities,runtime,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.preflight?.playwright??health.playwright_ready??null,python:health.preflight?.python??null,dependencies:health.preflight?.dependencies??null,sqlite:health.preflight?.sqlite??null,session:null},agent_build:health.agent_build||ready?.agent_build||'',error:''});
+      publish({status:'connected',connection_error:null,config,capabilities,runtime,readiness:{engine:!!health.engine_found,chrome:!!health.chrome_cdp_reachable,ames:!!health.ames_reachable,process:!!health.auto_3022_ready,playwright:health.preflight?.playwright??health.playwright_ready??null,python:health.preflight?.python??null,dependencies:health.preflight?.dependencies??null,sqlite:health.preflight?.sqlite??null,session:null},agent_build:health.agent_build||ready?.agent_build||'',error:''});
       const monitor=await request('/monitor');publish({monitor:{enabled:!!monitor.enabled,interval_minutes:monitor.interval_minutes,next_run_at:monitor.next_run_at}});
       await refresh();
     },options),
@@ -228,6 +238,6 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(configPatch?{config:configPatch}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
-    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
+    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',connection_error:null,config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
   });
 }

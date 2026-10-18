@@ -136,6 +136,7 @@ jobs:
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/console-tests/node_modules/playwright/index.mjs"
           export BROWSER_OUTPUT="$RUNNER_TEMP/console-evidence"
           node scripts/ames-experience.browser.mjs
+          node scripts/ames-sync-reload.browser.mjs
       - uses: actions/upload-artifact@v6
         if: always()
         with:

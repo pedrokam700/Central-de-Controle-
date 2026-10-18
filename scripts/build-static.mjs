@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
 const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
 const names=['index.html','app.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest'];
 const allowed=/\.(mjs|css|svg|png|json)$/;
@@ -42,13 +43,13 @@ for(const name of [...new Set(names)]){
   fs.mkdirSync(path.dirname(target),{recursive:true});
   if(name==='index.html')fs.writeFileSync(target,deployedIndex(fs.readFileSync(name,'utf8')));
   else if(name==='app.js')fs.writeFileSync(target,deployedApp(fs.readFileSync(name,'utf8')));
+  else if(name==='sw.js')fs.writeFileSync(target,fs.readFileSync(name,'utf8').replace("const CACHE_REVISION='integration-20261018';",'const CACHE_REVISION='+JSON.stringify(sha||'integration-20261018')+';'));
   else fs.copyFileSync(name,target);
 }
 // Entrada raiz é um arquivo real, não um redirect/rewrite do provedor. Isso evita
 // conflitos com Pretty URLs/canonicalização e mantém a Central no base path único.
 fs.mkdirSync(out,{recursive:true});
 fs.writeFileSync(path.join(out,'index.html'),rootEntry());
-const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
 const branch=process.env.VERCEL_GIT_COMMIT_REF||process.env.BRANCH||process.env.GITHUB_REF_NAME||null;
 const provider=process.env.VERCEL?'vercel':process.env.NETLIFY?'netlify':process.env.GITHUB_ACTIONS?'github-actions':'unknown';
 fs.writeFileSync(path.join(out,'release-build.json'),JSON.stringify({sha,branch,provider,build:'15.1.13.49',project:'central-cora-v2'}));
