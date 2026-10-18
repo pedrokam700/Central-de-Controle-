@@ -3,6 +3,8 @@ import {sameFailureOccurrence,trustedProductionEvidence,genericReturnEvidence} f
 import {reuseLinks} from './data/reuse-analysis.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {EXTRA_EN} from './console-i18n-extra.mjs';
+import {MES_SOURCE_VIEWS,mesSourceProvenance,snapshotProvenance} from './data/observation-provenance.mjs';
+import {sourceStateLabel} from './data/source-provenance.mjs';
 
 Object.assign(EXTRA_EN,{
   'Evidências':'Evidence',
@@ -48,7 +50,9 @@ function historyRows(snapshot,occurrence){
   const rows=snapshot?.pcba_history?.records;
   if(!Array.isArray(rows))return {available:false,rows:[]};
   const defect=Date.parse(text(occurrence.defect_time));
-  return {available:true,rows:rows.filter(row=>same(row.pcba_sn,occurrence.pcba_sn)&&(!Number.isFinite(defect)||!Number.isFinite(Date.parse(text(row.defect_time)))||Date.parse(text(row.defect_time))<defect))};
+  const matches=rows.filter(row=>same(row.pcba_sn,occurrence.pcba_sn)&&(!Number.isFinite(defect)||!Number.isFinite(Date.parse(text(row.defect_time)))||Date.parse(text(row.defect_time))<defect));
+  // A partial or unscoped empty history is not proof of zero prior failures.
+  return {available:matches.length>0,rows:matches};
 }
 function relationState(snapshot,occurrence){
   const drill=snapshot?.insights?.drilldowns||{};
@@ -72,8 +76,8 @@ function materialLinks(snapshot,occurrence){
     if(link.defect_time&&occurrence.defect_time&&!sameInstant(link.defect_time,occurrence.defect_time))return false;
     return true;
   });
-  const available=Array.isArray(snapshot?.material_trace?.records)||own(snapshot?.insights?.drilldowns||{},'material_analysis');
-  return {available,rows};
+  // An empty partial 3074 collection cannot prove this component had zero prior PCBA bindings.
+  return {available:rows.length>0,rows};
 }
 function repairEvidence(occurrence){
   const fields={user:occurrence.repair_user||null,time:occurrence.repair_time||null,code:occurrence.repair_code||null,comment:occurrence.repair_comment||null,reason:occurrence.defect_reason_desc||occurrence.repair_desc||null};
@@ -97,10 +101,31 @@ function renderDetails(evidence,locale,read={}){
   if(materials.available)rows.push(`<div><small>3074 · ${esc(t(locale,'Componentes reutilizados','Reused components'))}</small><b>${esc(String(materials.rows.length))}</b>${materials.rows.slice(0,4).map(row=>`<span>${esc([row.item_type,row.material,row.usage].filter(Boolean).join(' · ')||row.material||'—')}${row.previous_pcbas?` · ${esc(t(locale,'PCBA(s) anterior(es)','previous PCBA(s)'))}: ${esc(row.previous_pcbas)}`:''}</span>`).join('')}${materialSame.length?`<span><b>${esc(materialSame.length)}</b> ${esc(t(locale,'com mesma falha/família','with same failure/family'))}</span>`:''}</div>`);else rows.push(unavailable(locale,'3074'));
   if(production.trusted)rows.push(`<div><small>3022 · ${esc(t(locale,'Processo comprovado','Proven process'))}</small><b>${esc([production.station,evidence.context?.reference_operation_name].filter(Boolean).join(' · '))}</b><span>${esc(time(production.event_time))} · ${esc(production.shift||'—')} · ${esc(production.operational_date||'—')}</span>${ret.proven?`<span>${esc(t(locale,'Retorno','Return'))}: ${esc([ret.station,ret.operation].filter(Boolean).join(' · '))} · ${esc(time(ret.event_time))}</span>`:''}</div>`);else rows.push(unavailable(locale,'3022'));
   if(repair.present)rows.push(`<div><small>3012 · ${esc(t(locale,'Reparo','Repair'))}</small><b>${esc([repair.code,repair.user].filter(Boolean).join(' · ')||'—')}</b><span>${esc(repair.time?time(repair.time):'—')}</span>${repair.comment?`<span style="white-space:pre-wrap">${esc(repair.comment)}</span>`:''}${repair.reason?`<span>${esc(repair.reason)}</span>`:''}</div>`);else rows.push(unavailable(locale,'3012'));
-  rows.push(`<div><small>${esc(t(locale,'Proveniência do snapshot','Snapshot provenance'))}</small><b>${esc(snapshotLabel(read))}</b><span>${esc(read.freshness||'—')}</span></div>`);
+  rows.push(renderSnapshotFacts(read,locale));
+  rows.push(renderSourceFacts(read,locale,evidence));
   return rows.join('');
 }
 function snapshotLabel(read={}){return [read.snapshot?.snapshot_id||'—',read.source||'none',read.snapshot?.collected_at||'—'].join(' · ');}
+const fact=value=>value===null||value===undefined||value===''?'—':String(value);
+function renderSnapshotFacts(read,locale){
+  const p=snapshotProvenance(read);
+  const period=p.period_start||p.period_end?[fact(p.period_start),fact(p.period_end)].join(' → '):'—';
+  return `<div data-ames-snapshot-provenance><small>${esc(t(locale,'Proveniência do snapshot','Snapshot provenance'))}</small><b>${esc(snapshotLabel(read))}</b>
+    <span>${esc(t(locale,'Revisão','Revision'))}: ${esc(p.revision??'—')} · ${esc(t(locale,'Linha','Line'))}: ${esc(fact(p.line_id))} · ${esc(t(locale,'Cobertura','Coverage'))}: ${esc(fact(p.coverage))}</span>
+    <span>${esc(t(locale,'Período MES comprovado','Proven MES period'))}: ${esc(period)}</span>
+    <span>${esc(t(locale,'ID da origem','Source ID'))}: ${esc(fact(p.source_id))} · ${esc(t(locale,'Posto/PC informado','Reported workstation'))}: ${esc(fact(p.workstation_id))}</span>
+    <span>${esc(t(locale,'Transporte','Transport'))}: ${esc(fact(p.transport))} · ${esc(t(locale,'Atualidade','Freshness'))}: ${esc(fact(p.freshness))} · ${esc(t(locale,'Hash (prefixo)','Hash (prefix)'))}: ${esc(p.content_hash?p.content_hash.slice(0,16):'—')}</span>
+    <span>${esc(t(locale,'A identificação da fonte não comprova o nome do computador; período desconhecido não é inferido da data de coleta.','A source ID does not prove a computer name; an unknown query period is not inferred from collection time.'))}</span>
+  </div>`;
+}
+function renderSourceFacts(read,locale,evidence){
+  const cells=MES_SOURCE_VIEWS.map(view=>{
+    const p=mesSourceProvenance(read,view,{observed:view==='3012'&&evidence.repair.present});
+    const count=p.count===null?'':` · ${esc(t(locale,'registros no snapshot','snapshot records'))}: ${esc(p.count)}`;
+    return `<div data-ames-source-view="${view}" data-ames-source-state="${esc(p.state)}"><small>${view} · ${esc(t(locale,'Estado da fonte','Source state'))}</small><b>${esc(sourceStateLabel(p.state,locale))}</b><span>${esc(t(locale,'Evidência neste snapshot; não comprova cobertura completa da consulta MES.','Evidence in this snapshot; it does not prove full MES query coverage.'))}${count}</span></div>`;
+  }).join('');
+  return `<div data-ames-source-provenance><small>${esc(t(locale,'Fontes consultadas e lacunas','Source evidence and gaps'))}</small><span>${esc(t(locale,'Zero somente quando a fonte confirma consulta completa; dados em cache não são leitura atual.','Zero only when the source confirms a completed query; cached data is not a current read.'))}</span><div class="ames-sn-repair-cycles">${cells}</div></div>`;
+}
 
 export function renderFailureOccurrenceEvidence(evidence,locale='pt-BR',read={}){
   const tags=[badge('3028','ok')];
