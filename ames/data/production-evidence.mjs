@@ -7,6 +7,8 @@ function instant(value){
   const prepared=/[Zz]$|[+-]\d{2}:?\d{2}$/.test(raw)?raw:/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw)?raw.replace(' ','T')+'-03:00':'';
   if(!prepared)return null;const n=Date.parse(prepared);return Number.isFinite(n)?n:null;
 }
+// Shared proof parser for factory-local MES Defect Time and offset-aware data.
+export {instant as parseFailureInstant};
 function sameInstant(a,b){const x=instant(a),y=instant(b);return x!==null&&x===y;}
 
 export function trustedProductionEvidence(row={}){
