@@ -17,7 +17,7 @@ export function currentDataLabel(store,line) {
 export function operationalRange(store,offset=0,now=new Date()){
   const cfg=store.agent?.()?.config||{},timezone=cfg.timezone||'America/Sao_Paulo';
   const clock=String(cfg.production_day_start||cfg.day_start||'07:00');
-  if(!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(clock))throw Error('Início operacional inválido');
+  if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(clock))throw Error('Início operacional inválido');
   const fields=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
   const dayMs=86400000,dayKey=ms=>new Date(ms).toISOString().slice(0,10);
   let day=Date.UTC(Number(fields.year),Number(fields.month)-1,Number(fields.day));
