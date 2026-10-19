@@ -53,7 +53,7 @@ def get_agent(url, *, origin=None, expect=200):
     except HTTPError as exc:
         status, raw = exc.code, exc.read()
     assert status == expect, (url, status, expect)
-    if url.endswith(".html"):
+    if url.endswith(".html") or url.endswith("/Central-de-Controle-/"):
         return raw.decode("utf-8")
     return json.loads(raw)
 
