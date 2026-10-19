@@ -122,7 +122,7 @@ def stage(destination: Path, *, expected_sha: str | None = None) -> dict:
 
     forbidden = ("config.json", "local_agent_token", "ames_local.sqlite3", "cookies.json")
     for rel in payload:
-        if rel.endswith(forbidden) or "/data/" in rel:
+        if rel.endswith(forbidden) or rel.startswith("ames-agent/data/"):
             raise ValueError("Private or runtime data in stage: " + rel)
     destination.mkdir(parents=True, exist_ok=False)
     for rel, data in payload.items():
