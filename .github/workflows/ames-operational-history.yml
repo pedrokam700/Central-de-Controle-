@@ -19,6 +19,7 @@ jobs:
       - name: Immutable SQLite revisions and historical endpoint
         run: |
           python3 scripts/agent-local-history.test.py
+          python3 scripts/agent-trace-target.test.py
           python3 scripts/agent-canonical.test.py
           python3 scripts/agent-operational-day-selection.test.py
   reading-browser:

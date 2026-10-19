@@ -219,6 +219,12 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const scope=type==='sn'?null:collectionScope(value);let path,body;
       if(type==='deep'){
         path='/deep-trace';body={...scope};
+        if(store.agent().capabilities?.exact_trace_targets!==true)throw Error('Atualize o agente para rastrear o snapshot exato do período selecionado.');
+        body.snapshot_targets=Object.fromEntries(scope.lines.map(line=>{
+          const read=store.read(line),p=read.snapshot?.canonical,period=p?.summary?.period;
+          if(read.source!=='local'||!p||p.source_id!==store.agent().capabilities.source_id||!period?.start_at||!period?.end_at)throw Error('Selecione uma revisão local com período comprovado para '+line+'.');
+          return [line,{source_id:p.source_id,snapshot_id:p.snapshot_id,snapshot_revision:p.snapshot_revision,content_hash:p.content_hash,period}];
+        }));
         if(value.trace_mode!==undefined){
           if(!['full','process_only','reuse_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
           if(value.trace_mode==='process_only'&&store.agent().capabilities?.process_timeline!==true)throw Error('process_only exige coleta 3022 em lote. Conecte um agente 3022-R12+ ou aguarde a incorporação do coletor 3022 no agente canônico.');
@@ -230,9 +236,12 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       else if(type==='sn'){path='/sn-lookup';body={sn:String(value.sn||'').trim(),include_3022:true};if(!body.sn)throw Error('Informe o SN.');}
       else if(type==='imported'){path='/runs';body={mode:'manual',source_path:value.source_path,lines:scope.lines,shift:value.shift||null};if(!body.source_path)throw Error('Envie o arquivo antes de iniciar.');}
       else throw new Error('Coleta inválida.');
-      const signature=JSON.stringify([path,body]);
+      // A response timeout may be followed by a publication refresh. Retrying the
+      // same selected snapshot must replay its original revision/request identity.
+      const retryScope=type==='deep'?{...body,snapshot_targets:Object.fromEntries(Object.entries(body.snapshot_targets).map(([line,{snapshot_revision,content_hash,...target}])=>[line,target]))}:body;
+      const signature=JSON.stringify([path,retryScope]);
       if(pendingSubmission&&pendingSubmission.signature!==signature)throw Error('Confirme a solicitação anterior repetindo o mesmo escopo antes de iniciar outra.');
-      pendingSubmission ||= {signature,id:crypto.randomUUID()};body.request_id=pendingSubmission.id;
+      pendingSubmission ||= {signature,id:crypto.randomUUID(),body};body={...pendingSubmission.body,request_id:pendingSubmission.id};
       if(type==='deep')publish({submitting:true,error:''});
       let job;try{job=await request(path,body);if(!job?.id)throw Error('O agente não retornou um job.');}finally{if(type==='deep')publish({submitting:false});}
       pendingSubmission=null;publish({job:{id:job.id,kind:job.kind,status:job.status,stage:job.stage,message:job.message,scope:{trace_mode:value.trace_mode}},error:''});
