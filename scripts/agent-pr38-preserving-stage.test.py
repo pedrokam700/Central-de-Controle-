@@ -6,6 +6,8 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -137,6 +139,25 @@ def test_preserving_update_and_rollback():
         assert "allow_local_fallback" in launcher and "Get-FileHash -Algorithm SHA256" in launcher
         assert "http://127.0.0.1:8765/Central-de-Controle-/" in launcher
         assert "if not defined CENTRAL" in launcher
+        # Run the launcher gate's actual PowerShell check on Windows,
+        # including an index tamper. No factory network or port is used.
+        shell=shutil.which("powershell") or shutil.which("pwsh")
+        if shell:
+            expression=re.search(r'for /f "usebackq delims=" %%L in `powershell -NoProfile -ExecutionPolicy Bypass -Command "([^"]+)"`\) do set "CENTRAL=%%L"',launcher)
+            assert expression, "Local gate PowerShell not found"
+            env={**os.environ,"ROOT":str(staged)}
+            def gate_check():
+                return subprocess.run([shell,"-NoProfile","-Command",expression.group(1)],
+                    env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                    text=True,timeout=18)
+            verified_gate=gate_check()
+            assert verified_gate.returncode==0,verified_gate.stderr[-600:]
+            assert verified_gate.stdout.strip()=="http://127.0.0.1:8765/Central-de-Controle-/"
+            html_file=staged/"frontend/Central-de-Controle-/index.html"
+            original_html=html_file.read_bytes()
+            html_file.write_bytes(original_html+b"\nTAMPERED\n")
+            assert gate_check().returncode!=0,"Tampered HTML obtained local launcher approval"
+            html_file.write_bytes(original_html)
 
 
         current = root / "existing_workstation"
