@@ -116,7 +116,8 @@ def stage(destination: Path, *, expected_sha: str | None = None) -> dict:
          "files": extra, "physical_gate": "PENDING"}, sort_keys=True, indent=2
     ).encode()
     payload["FRONTEND_GATE.json"] = json.dumps(
-        {"expected_sha": sha, "preview_urls": [], "factory_gate_required": True},
+        {"expected_sha": sha, "preview_urls": [], "allow_local_fallback": True,
+         "factory_gate_required": True},
         sort_keys=True, indent=2
     ).encode()
 
