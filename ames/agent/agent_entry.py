@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import source_capture
 import time
 from urllib.parse import urlparse
 
@@ -168,6 +169,15 @@ def _run_deep_trace_job(job_id, cfg):
                                                     line_callback=text,event_callback=event,max_pcbas=max_pcbas,
                                                     shared_query_memo=shared_query_memo,performance=performance)
                 enrich=a.enrich_snapshot_from_integrated(sid,payload)
+                # Persist each source separately, even if a later stage fails.
+                # This is a local-only raw journal tied to the ORIGINAL selected
+                # snapshot/revision/period; jobs for other days cannot replace it.
+                for source in ('3074','2114'):
+                    raw=payload.get('trace_'+source)
+                    if raw is not None:
+                        source_capture.capture_source(a.STORE,target=cfg['snapshot_targets'][line],
+                            line=line,job_id=job_id,view=source,result=raw,
+                            status=_source_stage(raw))
                 line_result.update({"enrichment":enrich,"3074":payload.get("trace_3074",{}),"2114":payload.get("trace_2114",{})})
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
 
@@ -177,6 +187,9 @@ def _run_deep_trace_job(job_id, cfg):
                 p=process_r11.collect_and_persist(a.STORE,engine,records,snapshot_id=sid,line=line,max_pcbas=max_pcbas,
                                                   performance=performance,line_callback=lambda msg:text("3022 "+msg),event_callback=event)
                 line_result["3022"]=p
+                if p is not None:
+                    source_capture.capture_source(a.STORE,target=cfg['snapshot_targets'][line],
+                        line=line,job_id=job_id,view='3022',result=p,status=_source_stage(p))
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
             results[line]=line_result
 
