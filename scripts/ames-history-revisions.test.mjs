@@ -35,7 +35,7 @@ test('history refresh remains a custom period collection and does not mutate cur
 });
 
 test('calendar filters use factory timezone and avoid calendar-yesterday shortcut',()=>{
-  assert.match(history,/America\\/Sao_Paulo/);
+  assert.match(history,/America\/Sao_Paulo/);
   assert.match(history,/production_day_start/);
   assert.match(history,/non_production_dates/);
   assert.match(history,/extra_production_dates/);
