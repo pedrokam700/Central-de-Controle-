@@ -233,6 +233,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     start(user){this.stop();uid=user;subscribe();void flush();},
     ensureOperationalDay(){if(uid&&factoryWindow(now(),currentConfig()).start_at!==watchDay)subscribe();},
     capture,
+    async hasHistoricalMarker(marker){return !!(uid&&queue.hasHistory&&await queue.hasHistory(uid+':'+marker));},
     async stageHistorical(payload,{marker}={}){
       if(!uid)return false;
       const intent=String(payload?.summary?.period?.mode||'').toLowerCase();
