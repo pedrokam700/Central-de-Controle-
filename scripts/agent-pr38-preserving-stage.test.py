@@ -114,7 +114,7 @@ def test_preserving_update_and_rollback():
         assert old_app.read_text() == "BASELINE FRONTEND"
         assert old_root.read_text() == "BASELINE LAUNCHER"
         assert not (current / "frontend/release-build.json").exists()
-        assert not (current / "factory-engine").exists()
+        assert not any(p.is_file() for p in (current / "factory-engine").rglob("*"))
         assert (agent / "agent_hardened_entry.py").read_text() == "BASELINE_ORIGINAL agent_hardened_entry.py"
         for name, expected in updater.HASHES.items():
             assert hashlib.sha256((agent / name).read_bytes()).hexdigest() == expected
