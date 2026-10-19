@@ -40,6 +40,36 @@ def test_production_windows_keep_0700_boundary():
     check(pend.startswith("2026-10-10T07:00"), "dia anterior deve terminar 07:00")
 
 
+def test_previous_production_day_skips_weekend_and_supports_exceptions():
+    cfg = {"timezone": "America/Sao_Paulo", "production_day_start": "07:00"}
+    monday = datetime(2026, 10, 19, 9, 45)
+    start, end = cal.previous_day_window(cfg, monday)
+    check(start.startswith("2026-10-16T07:00"), "segunda deve buscar sexta")
+    check(end.startswith("2026-10-17T07:00"), "janela da sexta encerra sábado 07:00")
+    cfg["non_production_dates"] = ["2026-10-16"]
+    start, end = cal.previous_day_window(cfg, monday)
+    check(start.startswith("2026-10-15T07:00"), "sexta parada deve recuar para quinta")
+    cfg["extra_production_dates"] = ["2026-10-18"]
+    start, end = cal.previous_day_window(cfg, monday)
+    check(start.startswith("2026-10-18T07:00"), "domingo excepcional deve ser considerado")
+    check(end.startswith("2026-10-19T07:00"), "janela excepcional mantém a virada 07:00")
+    check(cal.shift_for(cfg, datetime(2026, 10, 19, 7, 15))["id"] == "2", "07:15 ainda pertence ao 2º turno")
+
+
+def test_calendar_exceptions_fail_closed():
+    for bad in [
+        {"non_production_dates": ["2026-02-30"]},
+        {"extra_production_dates": "2026-10-18"},
+        {"non_production_dates": ["2026-10-16"], "extra_production_dates": ["2026-10-16"]},
+    ]:
+        try:
+            cal.normalized(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"exceção inválida deve ser rejeitada: {bad}")
+
+
 def test_shift_classification_crosses_midnight():
     cfg = {"timezone": "America/Sao_Paulo"}
     check(cal.shift_for(cfg, datetime(2026, 10, 10, 8, 0))["id"] == "1", "08:00 deve ser 1º turno")
@@ -198,6 +228,8 @@ if __name__ == "__main__":
     tests = [
         test_legacy_day_start_is_migrated_without_shift_reinterpretation,
         test_production_windows_keep_0700_boundary,
+        test_previous_production_day_skips_weekend_and_supports_exceptions,
+        test_calendar_exceptions_fail_closed,
         test_shift_classification_crosses_midnight,
         test_invalid_calendar_fails_closed,
         test_candidate_config_normalizes_safe_values,
