@@ -35,10 +35,10 @@ export function indexedQueue(){
   return {put:x=>run('readwrite',s=>s.put(x)),remove:id=>run('readwrite',s=>s.delete(id)),list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid)};
 }
 export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout}={}){
-  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null;
+  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set();
   const alive=(u,g)=>u===uid&&g===generation;
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
-  const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null});
+  const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null,identity_blocked:[],last_publish_timing:null});
   async function flush(){
     if(!uid||running)return;running=true;const u=uid,g=generation;
     try{
@@ -47,31 +47,51 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       status({pending:entries.length,status:entries.length?'pending':(store.agent().sync?.last_sent?'synchronized':'idle')});
       if(!online())return;
       while(entries.length&&alive(u,g)){
+        if(!entries.some(e=>!identityBlocked.has(e.head.line_id))){
+          status({status:'identity_blocked',pending:entries.length,identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values()],error:'Publicação bloqueada por identidade; histórico local e fila preservados.'});
+          break;
+        }
         entries.sort((a,b)=>b.head.snapshot_num-a.head.snapshot_num||b.head.snapshot_revision-a.head.snapshot_revision);
         const errors=[];
         for(const entry of entries){
-          let stage='parts';
+          if(identityBlocked.has(entry.head.line_id))continue;
+          let stage='parts',stageAt=Date.now(),partsMs=0,headMs=0,historyMs=0;
           try{
             if(!alive(u,g))return;
-            for(let i=0;i<entry.parts.length;i++){if(!alive(u,g))return;await remote.putPart(u,entry.head,i,entry.parts[i]);}
+            if(!uploadedParts.has(entry.id)){
+              for(let i=0;i<entry.parts.length;i++){if(!alive(u,g))return;await remote.putPart(u,entry.head,i,entry.parts[i]);}
+              uploadedParts.add(entry.id);
+            }
+            partsMs=Date.now()-stageAt;stageAt=Date.now();
             if(!alive(u,g))return;stage='head';await remote.commitHead(u,entry.head);
+            headMs=Date.now()-stageAt;stageAt=Date.now();
             if(!alive(u,g))return;stage='history';
             if(remote.commitHistory)await remote.commitHistory(u,entry.head,entry.history||historyMetadata(JSON.parse(entry.parts.join(''))));
-            if(!alive(u,g))return;await queue.remove(entry.id);if(!alive(u,g))return;
-            status({last_sent:{...syncHeadMetadata(entry.head),sent_at:new Date().toISOString()}});
+            historyMs=Date.now()-stageAt;
+            if(!alive(u,g))return;await queue.remove(entry.id);uploadedParts.delete(entry.id);if(!alive(u,g))return;
+            status({last_sent:{...syncHeadMetadata(entry.head),sent_at:new Date().toISOString()},last_publish_timing:{line_id:entry.head.line_id,parts:entry.parts.length,parts_ms:partsMs,head_ms:headMs,history_ms:historyMs,total_ms:partsMs+headMs+historyMs}});
           }catch(error){
             // A permanent error on one line must not block unrelated lines.
             if(!alive(u,g))return;
-            errors.push({line_id:entry.head.line_id,stage,code:error.code||'',message:error.message});
+            const identityConflict=stage==='head'&&/outra instalação|migration helper/i.test(String(error.message||''));
+            const item={line_id:entry.head.line_id,stage,code:identityConflict?'installation_identity_conflict':error.code||'',message:error.message};
+            if(identityConflict){
+              // Requires explicit reconciliation of the original installation.
+              // Never discard its queued history, bypass Firestore Rules or retry forever.
+              if(remote.inspectIdentity){try{item.identity=await remote.inspectIdentity(u,entry.head);}catch{item.identity={available:false};}}
+              identityBlocked.set(entry.head.line_id,item);
+            }
+            errors.push(item);
           }
         }
         if(!alive(u,g))return;
         entries=await queue.list(u);
         if(!alive(u,g))return;
-        status({pending:entries.length,publish_errors:errors});
-        if(errors.length)throw Error(errors.map(e=>`${e.line_id} / ${e.stage}: ${e.message}`).join('; '));
+        const transient=errors.filter(e=>e.code!=='installation_identity_conflict');
+        status({pending:entries.length,identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values(),...transient]});
+        if(transient.length)throw Error(transient.map(e=>`${e.line_id} / ${e.stage}: ${e.message}`).join('; '));
       }
-      retry=1000;if(alive(u,g))status({status:store.agent().sync?.last_sent?'synchronized':'idle',pending:0,error:'',publish_errors:[]});
+      retry=1000;if(alive(u,g)&&!identityBlocked.size)status({status:store.agent().sync?.last_sent?'synchronized':'idle',pending:0,error:'',publish_errors:[]});
     }catch(error){if(alive(u,g)){status({status:'pending',error:error.message});unschedule(timer);timer=schedule(()=>{if(alive(u,g))flush();},retry);retry=Math.min(retry*2,60000);}}
     finally{if(alive(u,g))running=false;}
   }
@@ -149,6 +169,6 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     start(user){this.stop();uid=user;subscribe();void flush();},
     capture,
     retry(){if(watchFailed)subscribe();else if(uid&&hasHeads)void receive(lastHeads,{...lastReadMeta,from_cache:lastReadMeta.from_cache||!online()});return flush();},
-    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
+    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;identityBlocked.clear();uploadedParts.clear();unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
   };
 }
