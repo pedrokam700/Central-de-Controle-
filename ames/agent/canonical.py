@@ -11,6 +11,7 @@ import production_shift
 from datetime import datetime, timezone
 
 SCHEMA = 'central-ames-v2'
+PROJECTION_VERSION = 8  # adds non-assertive five-source evidence coverage
 LINES = ('TAN10101', 'TAN10102', 'TAN10103')
 DATASETS = ('defects','pcba_history','material_reuse','history_contexts','process_timeline')
 TABLES = ('defect_observations','line_metrics','pcba_history','material_reuse','history_contexts','snapshot_payloads','mes_process_timeline')
@@ -111,7 +112,7 @@ def export_revision(store,sid,line,insight_builder=None):
         if not snap:raise ValueError('Snapshot not found')
         epochrow=con.execute('SELECT epoch FROM mes_source_clock WHERE snapshot_id=?',(sid,)).fetchone();epoch=epochrow[0] if epochrow else 0
         previous=con.execute('SELECT * FROM mes_revisions WHERE snapshot_id=? AND line=? ORDER BY revision DESC LIMIT 1',(sid,line)).fetchone()
-        if previous and previous['epoch']==epoch and json.loads(previous['payload']).get('projection_version')==7:return json.loads(previous['payload'])
+        if previous and previous['epoch']==epoch and json.loads(previous['payload']).get('projection_version')==PROJECTION_VERSION:return json.loads(previous['payload'])
         source=con.execute("SELECT value FROM schema_meta WHERE key='ames_source_id'").fetchone()[0]
         tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         process_contexts=[dict(r) for r in con.execute('SELECT * FROM process_defect_contexts WHERE snapshot_id=? AND line=?',(sid,line))] if 'process_defect_contexts' in tables else []
@@ -166,11 +167,56 @@ def export_revision(store,sid,line,insight_builder=None):
             coverage[dataset]={'status':'not_collected' if dataset=='process_timeline' and not rows else 'partial','stored_total':len(rows),'unassigned_rows':unassigned,'ambiguous_context_rows':ambiguous,'transport_complete':True,'source_complete':False,'scope':'stored_snapshot_line_context','reason':'Legacy source has no durable MES ID or completeness proof'}
         metrics=[dict(r) for r in con.execute('SELECT * FROM line_metrics WHERE snapshot_id=? AND line=?',(sid,line))]
         m=metrics[0] if len(metrics)==1 else {}
+
+        # B3.4: per-source evidence coverage is intentionally NOT an MES source
+        # completeness certification. Empty rows may mean not queried, partial
+        # lookup or a true empty result; these cannot be distinguished yet.
+        source_datasets={
+            '3028':('defects',),
+            '3074':('material_reuse',),
+            '2114':('pcba_history','history_contexts'),
+            '3022':('process_timeline',),
+        }
+        source_coverage={}
+        for view,names in source_datasets.items():
+            totals={name:len(sets[name]) for name in names}
+            # A metrics-only 3028 snapshot is still observable evidence.
+            total=sum(totals.values())+(1 if view=='3028' and m else 0)
+            source_coverage[view]={
+                'status':'observed_partial' if total else 'unknown',
+                'stored_rows':sum(totals.values()),
+                'dataset_rows':totals,
+                'transport_complete':True,
+                'source_complete':False,
+                'population_complete':False,
+                'proof':'stored_snapshot_line_rows' if total else 'no_source_execution_evidence',
+                'scope':'snapshot_line_context',
+            }
+        # The 3012 repair table is workstation-wide. A PCBA match supplies
+        # candidates only, never proof of a repair on this occurrence or line.
+        # Count DISTINCT repair rows despite the same PCBA appearing in multiple
+        # defects, histories and material components.
+        candidate_keys=set()
+        for row in sets['defects']:
+            for evidence in row.get('repair_evidence_3012') or []:
+                key=evidence.get('row_key')
+                if key is not None:candidate_keys.add(str(key))
+        source_coverage['3012']={
+            'status':'candidate_partial' if candidate_keys else 'unknown',
+            'stored_rows':len(candidate_keys),
+            'dataset_rows':{'repair_candidates':len(candidate_keys)},
+            'transport_complete':True,
+            'source_complete':False,
+            'population_complete':False,
+            'association':'same_pcba_candidate_only',
+            'proof':'same_pcba_repair_rows' if candidate_keys else 'no_line_specific_repair_proof',
+            'scope':'workstation_history_candidate_for_snapshot_line',
+        }
         insights=None
         if insight_builder:
             try:insights=insight_builder(line=line,snapshot_id=sid)
             except Exception:pass
-        payload={'projection_version':7,'schema':SCHEMA,'schema_version':2,'source_id':source,'snapshot_id':str(sid),'line_id':line,'collected_at':snap['collected_at'],'source_view':'3028','source_timestamp':None,'summary':{'period':dict(con.execute('SELECT start_at,end_at,mode FROM analysis_windows WHERE id=?',(snap['window_id'],)).fetchone() or {}),'line':line,'snapshot_id':str(sid),'collected_at':snap['collected_at'],'fpy':m.get('fpy'),'check_fpy':m.get('check_fpy'),'quantity':m.get('quantity'),'defect_rows':len(sets['defects'])},'datasets':sets,'coverage':coverage,'insights':insights,'process_contexts':process_contexts,'capabilities':{'process_timeline':bool(sets['process_timeline'])}}
+        payload={'projection_version':PROJECTION_VERSION,'schema':SCHEMA,'schema_version':2,'source_id':source,'snapshot_id':str(sid),'line_id':line,'collected_at':snap['collected_at'],'source_view':'3028','source_timestamp':None,'summary':{'period':dict(con.execute('SELECT start_at,end_at,mode FROM analysis_windows WHERE id=?',(snap['window_id'],)).fetchone() or {}),'line':line,'snapshot_id':str(sid),'collected_at':snap['collected_at'],'fpy':m.get('fpy'),'check_fpy':m.get('check_fpy'),'quantity':m.get('quantity'),'defect_rows':len(sets['defects'])},'datasets':sets,'coverage':coverage,'source_coverage':source_coverage,'insights':insights,'process_contexts':process_contexts,'capabilities':{'process_timeline':bool(sets['process_timeline'])}}
         fingerprint=digest(payload)
         if previous and previous['content_hash']==fingerprint:
             con.execute('UPDATE mes_revisions SET epoch=? WHERE snapshot_id=? AND line=? AND revision=?',(epoch,sid,line,previous['revision']));return json.loads(previous['payload'])
@@ -218,7 +264,7 @@ def history_index(store,line):
              EXISTS(SELECT 1 FROM defect_observations d WHERE d.snapshot_id=s.id AND d.line=?))
             ORDER BY s.id DESC""",(line,line)).fetchall()
         for r in rows:
-            if latest.get(r['id'])==(r['epoch'],7):continue
+            if latest.get(r['id'])==(r['epoch'],PROJECTION_VERSION):continue
             products=[x[0] for x in con.execute('SELECT DISTINCT product_model FROM defect_observations WHERE snapshot_id=? AND line=?',(r['id'],line)) if x[0]]
             out.append({'snapshot_id':str(r['id']),'line_id':line,'source_id':source,
                         'snapshot_revision':None,'revision_pending':True,'collected_at':r['collected_at'],
