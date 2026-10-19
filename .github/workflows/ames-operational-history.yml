@@ -23,6 +23,7 @@ jobs:
           python3 scripts/agent-saved-sn-history.test.py
           python3 scripts/agent-trace-target.test.py
           python3 scripts/agent-source-capture.test.py
+          python3 scripts/agent-capture-manifest.test.py
           python3 scripts/agent-canonical.test.py
           python3 scripts/agent-operational-day-selection.test.py
   reading-browser:
