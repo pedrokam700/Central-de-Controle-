@@ -177,7 +177,7 @@ def _run_deep_trace_job(job_id, cfg):
                     if raw is not None:
                         source_capture.capture_source(a.STORE,target=cfg['snapshot_targets'][line],
                             line=line,job_id=job_id,view=source,result=raw,
-                            status=_source_stage(raw))
+                            status=(_source_stage(raw.get('source_status') or raw.get('status')) if isinstance(raw,dict) and _source_stage(raw.get('source_status') or raw.get('status')) in ('done','partial','error') else 'partial'))
                 line_result.update({"enrichment":enrich,"3074":payload.get("trace_3074",{}),"2114":payload.get("trace_2114",{})})
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
 
@@ -189,7 +189,7 @@ def _run_deep_trace_job(job_id, cfg):
                 line_result["3022"]=p
                 if p is not None:
                     source_capture.capture_source(a.STORE,target=cfg['snapshot_targets'][line],
-                        line=line,job_id=job_id,view='3022',result=p,status=_source_stage(p))
+                        line=line,job_id=job_id,view='3022',result=p,status=(_source_stage(p.get('source_status') or p.get('status')) if isinstance(p,dict) and _source_stage(p.get('source_status') or p.get('status')) in ('done','partial','error') else 'partial'))
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
             results[line]=line_result
 
