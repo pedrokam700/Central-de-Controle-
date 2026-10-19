@@ -13,14 +13,27 @@ export function currentDataLabel(store,line) {
   const read=store.read(line);return labels[coverageState(read)];
 }
 
-function operationalRange(store,offset=0){
-  const configured=String(store.agent?.()?.day_start||'07:30');
-  const match=configured.match(/^(\d{1,2}):(\d{2})/),hour=Number(match?.[1]??7),minute=Number(match?.[2]??30),now=new Date();
-  const start=new Date(now.getFullYear(),now.getMonth(),now.getDate(),hour,minute,0,0);
-  if(now<start)start.setDate(start.getDate()-1);
-  start.setDate(start.getDate()+offset);
-  const end=new Date(start);end.setDate(end.getDate()+1);
-  return {start:inputDate(start),end:inputDate(end),label:`${pad(start.getHours())}:${pad(start.getMinutes())} → ${pad(end.getHours())}:${pad(end.getMinutes())}`};
+// Factory wall clock is deliberate: B may be in another browser timezone.
+export function operationalRange(store,offset=0,now=new Date()){
+  const cfg=store.agent?.()?.config||{},timezone=cfg.timezone||'America/Sao_Paulo';
+  const clock=String(cfg.production_day_start||cfg.day_start||'07:00');
+  if(!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(clock))throw Error('Início operacional inválido');
+  const fields=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
+  const dayMs=86400000,dayKey=ms=>new Date(ms).toISOString().slice(0,10);
+  let day=Date.UTC(Number(fields.year),Number(fields.month)-1,Number(fields.day));
+  if(fields.hour+':'+fields.minute<clock)day-=dayMs;
+  const closed=new Set(cfg.non_production_dates||[]),extra=new Set(cfg.extra_production_dates||[]);
+  if(offset<0){
+    let count=0;
+    for(let i=0;i<731&&count<Math.abs(offset);i++){
+      day-=dayMs;
+      const date=dayKey(day),weekday=new Date(day).getUTCDay();
+      if(extra.has(date)||weekday>=1&&weekday<=5&&!closed.has(date))count++;
+    }
+    if(count<Math.abs(offset))throw Error('Dia produtivo anterior não comprovado');
+  }else if(offset>0)day+=offset*dayMs;
+  const date=dayKey(day),next=dayKey(day+dayMs);
+  return {start:date+'T'+clock,end:next+'T'+clock,label:clock+' → '+clock};
 }
 
 export function createHistoryView(root,store,client,history) {
@@ -64,7 +77,7 @@ export function createHistoryView(root,store,client,history) {
   }
   function render(){
     if(!root.querySelector('form')){
-      root.innerHTML=`<details class="mes-context-panel" data-history-panel><summary>${t('Histórico de períodos','Period history')}</summary><div class="mes-pagination"><button type="button" class="button secondary" data-history-quick="0">${t('Hoje','Today')}</button><button type="button" class="button secondary" data-history-quick="-1">${t('Ontem','Yesterday')}</button><span class="mes-context">${t('Hoje/Ontem usam o início operacional configurado neste posto.','Today/Yesterday use this workstation configured operational start.')}</span></div><form><div class="mes-filters"><label>${t('Linha','Line')}<select name="line">${LINE_IDS.map(l=>`<option>${l}</option>`).join('')}</select></label><label>${t('Início','Start')}<input type="datetime-local" name="start"></label><label>${t('Fim','End')}<input type="datetime-local" name="end"></label><label>CPH ${t('exato','exact')}<input name="product" placeholder="CPH"></label></div><button type="submit" class="button secondary">${t('Consultar outro período','Query another period')}</button></form><section data-period-results></section><section data-period-snapshot></section></details>`;
+      root.innerHTML=`<details open class="mes-context-panel" data-history-panel><summary>${t('Histórico de produção','Production history')}</summary><div class="mes-pagination"><button type="button" class="button secondary" data-history-quick="0">${t('Hoje','Today')}</button><button type="button" class="button secondary" data-history-quick="-1">${t('Último dia de produção','Last production day')}</button><span class="mes-context">${t('Janelas 3028 de 07:00 a 07:00; calendário produtivo e exceções configuráveis.','3028 periods start at 07:00; production calendar and exceptions are configurable.')}</span></div><form><div class="mes-filters"><label>${t('Linha','Line')}<select name="line">${LINE_IDS.map(l=>`<option>${l}</option>`).join('')}</select></label><label>${t('Início','Start')}<input type="datetime-local" name="start"></label><label>${t('Fim','End')}<input type="datetime-local" name="end"></label><label>CPH ${t('exato','exact')}<input name="product" placeholder="CPH"></label></div><button type="submit" class="button secondary">${t('Consultar outro período','Query another period')}</button></form><section data-period-results></section><section data-period-snapshot></section></details>`;
       root.querySelector('form').addEventListener('submit',e=>{e.preventDefault();line=e.currentTarget.elements.line.value;void load();});
       root.querySelector('select').addEventListener('change',e=>{line=e.target.value;generation++;entries=[];selected=null;selectedEntry=null;root.querySelector('[data-period-results]').replaceChildren();showSelected();});
       root.querySelectorAll('[data-history-quick]').forEach(button=>button.addEventListener('click',()=>quickPeriod(Number(button.dataset.historyQuick))));
