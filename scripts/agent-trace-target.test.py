@@ -15,6 +15,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ames/agent'))
 from store import Store
 import canonical
+import source_capture
 
 LINE='TAN10101';OTHER='TAN10102'
 
@@ -41,7 +42,7 @@ class TraceTargetTests(unittest.TestCase):
         source=ast.parse((ROOT/'ames/agent/agent_entry.py').read_text())
         names={'_trace_snapshot_ids','_run_deep_trace_job','start_deep_trace_job','_source_stage','_aggregate_stage'}
         nodes=[n for n in source.body if isinstance(n,ast.FunctionDef) and n.name in names]
-        self.env={'a':a,'canonical':canonical,'json':json,'time':time,'_process_support':lambda:{'ready':True},'urlparse':urlparse}
+        self.env={'a':a,'canonical':canonical,'json':json,'time':time,'_process_support':lambda:{'ready':True},'urlparse':urlparse,'source_capture':source_capture}
         exec(compile(ast.Module(body=nodes,type_ignores=[]),'<actual trace functions>','exec'),self.env)
         cls=next(n for n in source.body if isinstance(n,ast.ClassDef) and n.name=='Handler')
         method=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='do_POST')
@@ -58,6 +59,11 @@ class TraceTargetTests(unittest.TestCase):
         records,kwargs=self.calls[0];self.assertEqual({r['snapshot_id'] for r in records},{self.sid})
         self.assertEqual({r['line'] for r in records},{LINE});self.assertEqual({r['defect_code'] for r in records},{'D1'})
         self.assertEqual(canonical.read_revision(self.store,self.sid,LINE,1),self.first)
+        captured=source_capture.capture_index(self.store,self.sid,LINE)
+        self.assertEqual({x['source_view'] for x in captured},{'3074','2114'})
+        self.assertEqual({x['parent_snapshot_revision'] for x in captured},{1})
+        self.assertEqual({x['period']['mode'] for x in captured},{'previous_day'})
+        self.assertEqual({x['source_status'] for x in captured},{'done'})
         updated=canonical.export_revision(self.store,self.sid,LINE)
         self.assertEqual(updated['snapshot_revision'],2);self.assertEqual(updated['summary'],self.first['summary'])
         self.assertIsNone(self.store.base_rows(newer,line=LINE)[0].get('repair_status_current'))
@@ -78,6 +84,7 @@ class TraceTargetTests(unittest.TestCase):
         self.env['_run_deep_trace_job']('J',self.cfg)
         self.assertEqual(self.calls,[]);self.assertEqual(self.jobs[-1]['status'],'error')
         self.assertIn('revision changed',self.jobs[-1]['error'])
+        self.assertEqual(source_capture.capture_index(self.store,self.sid,LINE),[])
         self.assertEqual(canonical.read_revision(self.store,self.sid,LINE,1),self.first)
 
     def test_handler_preserves_snapshot_target_contract(self):
