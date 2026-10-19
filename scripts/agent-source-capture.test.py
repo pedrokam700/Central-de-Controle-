@@ -45,7 +45,9 @@ class SourceCaptureTests(unittest.TestCase):
         self.assertEqual(self.store.get_snapshot_payload_revision(self.sid,'3028_live_raw',1)['raw_records'][0]['fpy'],97.2)
         self.assertEqual(canonical.read_revision(self.store,self.sid,LINE,1)['snapshot_revision'],1)
         other=canonical.export_revision(self.store,self.sid,LINE)
-        self.assertGreater(other['snapshot_revision'],1)
+        # Raw source captures are revisioned separately. Identical derived
+        # canonical facts must NOT acquire a fabricated new operational revision.
+        self.assertEqual(other['snapshot_revision'],1)
         self.assertEqual(self.target['source_id'],canonical.source_id(self.store))
         rebuilt=Store(self.store.path);rebuilt.initialize()
         self.assertEqual(source_capture.capture_index(rebuilt,self.sid,LINE),source_capture.capture_index(self.store,self.sid,LINE))
