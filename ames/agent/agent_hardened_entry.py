@@ -115,6 +115,34 @@ class HardenedHandler(entry.Handler):
         if not self._authorized(path):
             self._reject_unauthorized()
             return
+        if path == "/api/v1/saved-sn-history":
+            # Metadata-only index; raw SN search result is only returned when the
+            # caller supplies the exact local job ID + current entry hash.
+            # This endpoint is behind the existing workstation token/origin gate.
+            q=parse_qs(urlparse(self.path).query)
+            job_id=(q.get('job_id') or [None])[0]
+            if job_id is not None:
+                try:
+                    payload=entry.a.STORE.open_saved_sn_lookup(
+                        job_id,(q.get('entry_hash') or [''])[0]
+                    )
+                    self._send(payload)
+                except RuntimeError:
+                    self._send({'error':'saved_sn_result_changed'},409)
+                except (ValueError,TypeError):
+                    self._send({'error':'invalid_or_missing_saved_sn_result'},400)
+            else:
+                try:
+                    self._send(entry.a.STORE.saved_sn_lookups(
+                        sn=(q.get('sn') or [None])[0],
+                        start=(q.get('start') or [None])[0],
+                        end=(q.get('end') or [None])[0],
+                        before=(q.get('before') or [None])[0],
+                        limit=(q.get('limit') or [20])[0],
+                    ))
+                except (ValueError,TypeError):
+                    self._send({'error':'invalid_saved_sn_query'},400)
+            return
         if path == "/api/v1/v2/history-candidates":
             q = parse_qs(urlparse(self.path).query)
             try:
