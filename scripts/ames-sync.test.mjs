@@ -142,3 +142,45 @@ test('different current installations cannot silently replace one another on PC 
   assert.deepEqual(store.agent().sync.origin_conflict_lines,['TAN10103']);
   sync.stop();
 });
+
+test('day index downloads newest valid revision only, yet falls back from newer advanced query',async()=>{
+  const samples=[];
+  for(let i=1;i<=22;i++){
+    const payload=canonicalFixture('TAN10103');
+    payload.snapshot_id=String(i);
+    payload.summary.snapshot_id=payload.snapshot_id;
+    payload.collected_at='2026-10-09T10:'+String(i).padStart(2,'0')+':00Z';
+    payload.summary.collected_at=payload.collected_at;
+    payload.summary.period={mode:'today',start_at:'2026-10-09T07:00',end_at:'2026-10-09T10:30'};
+    for(const rows of Object.values(payload.datasets))for(const row of rows)row.snapshot_id=payload.snapshot_id;
+    samples.push(await publication('A',payload,{now:FACTORY_NOW}));
+  }
+  const custom=canonicalFixture('TAN10103');
+  custom.snapshot_id='23';custom.summary.snapshot_id='23';
+  custom.collected_at='2026-10-09T10:23:00Z';
+  custom.summary.collected_at=custom.collected_at;
+  custom.summary.period={mode:'custom',start_at:'2026-10-09T07:00',end_at:'2026-10-09T10:23'};
+  for(const rows of Object.values(custom.datasets))for(const row of rows)row.snapshot_id='23';
+  samples.push(await publication('A',custom,{now:FACTORY_NOW}));
+  const allParts=new Map(),heads=[];
+  for(const item of samples){
+    item.parts.forEach((part,i)=>allParts.set(item.head.key+':'+i,part));
+    heads.push({...item.head,...item.history});
+  }
+  let reads=0;
+  const remote={
+    getPart:async(_u,h,i)=>{reads++;return allParts.get(h.key+':'+i);},
+    watch:(_u,receive)=>{receive(heads,{day_index_available:true,from_cache:false});return ()=>{};}
+  };
+  const queue={put:async()=>{},remove:async()=>{},list:async()=>[]},store=createAmesStore();
+  const sync=createMesSync(store,remote,{queue,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
+  sync.start('B');
+  await new Promise(done=>setTimeout(done,90));
+  assert.equal(store.read('TAN10103').snapshot.snapshot_id,'22','advanced query cannot supersede valid today');
+  assert.equal(reads,2,'newest custom and newest valid live only, not all 23 historical revisions');
+  assert.equal(store.agent().sync.last_receive_timing.downloaded,2);
+  assert.equal(store.agent().sync.last_receive_timing.skipped_versions,21);
+  assert.equal(store.agent().sync.last_receive_timing.candidates,23);
+  assert.equal(store.agent().sync.read_status,'ready');
+  sync.stop();
+});
