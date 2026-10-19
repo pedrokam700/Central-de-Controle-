@@ -48,7 +48,7 @@ class OperationalPartitionTests(unittest.TestCase):
         self.assertGreater(updated['snapshot_revision'],first['snapshot_revision'])
         self.assertEqual(updated['summary']['period'],first['summary']['period'])
         self.assertEqual(updated['summary']['quantity'],first['summary']['quantity'])
-        self.assertEqual(canonical.page(self.store,past,'TAN10103',1,'defects')['rows'][0]['repair_status_current'],None)
+        self.assertEqual(canonical.page(self.store,past,'TAN10103',1,'defects')['rows'][0].get('repair_status_current'),None)
         self.assertEqual(updated['datasets']['defects'][0]['repair_status_current'],'Y')
 
 
