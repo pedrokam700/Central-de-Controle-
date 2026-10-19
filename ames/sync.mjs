@@ -50,32 +50,37 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       status({pending:entries.length,status:entries.length?'pending':(store.agent().sync?.last_sent?'synchronized':'idle')});
       if(!online())return;
       while(entries.length&&alive(u,g)){
-        if(!entries.some(e=>entryScope(e)==='history'||!identityBlocked.has(e.head.line_id))){
-          status({status:'identity_blocked',pending:entries.length,identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values()],error:'Publicação bloqueada por identidade; histórico local e fila preservados.'});
-          break;
-        }
         entries.sort((a,b)=>b.head.snapshot_num-a.head.snapshot_num||b.head.snapshot_revision-a.head.snapshot_revision);
         const errors=[];
         for(const entry of entries){
-          if(identityBlocked.has(entry.head.line_id)&&entryScope(entry)==='today')continue;
           let stage='parts',stageAt=Date.now(),partsMs=0,headMs=0,historyMs=0;
           try{
             if(!alive(u,g))return;
             if(!uploadedParts.has(entry.id)){
-              for(let i=0;i<entry.parts.length;i++){if(!alive(u,g))return;await remote.putPart(u,entry.head,i,entry.parts[i]);}
+              for(let i=0;i<entry.parts.length;i+=4){
+                if(!alive(u,g))return;
+                await Promise.all(entry.parts.slice(i,i+4).map((part,j)=>remote.putPart(u,entry.head,i+j,part)));
+              }
               uploadedParts.add(entry.id);
             }
             partsMs=Date.now()-stageAt;stageAt=Date.now();
-            if(!alive(u,g))return;stage='head';
-            // Old outbox entries have no publish_scope: recompute fail-closed from
-            // their immutable sanitized payload before any shared-head write.
-            const payload=JSON.parse(entry.parts.join(''));
-            const scope=publicationIntent(payload,now(),currentConfig());
-            if(scope==='today')await remote.commitHead(u,entry.head);
-            headMs=Date.now()-stageAt;stageAt=Date.now();
+            // Immutable history is now the authoritative multi-installation
+            // transport. Publish it first, before the legacy mutable pointer.
             if(!alive(u,g))return;stage='history';
             if(remote.commitHistory)await remote.commitHistory(u,entry.head,entry.history||historyMetadata(JSON.parse(entry.parts.join(''))));
-            historyMs=Date.now()-stageAt;
+            historyMs=Date.now()-stageAt;stageAt=Date.now();
+            if(!alive(u,g))return;stage='head';
+            const scope=entryScope(entry);
+            if(scope==='today'&&!identityBlocked.has(entry.head.line_id)){
+              try{await remote.commitHead(u,entry.head);}
+              catch(error){
+                if(!/outra instalação|migration helper/i.test(String(error.message||'')))throw error;
+                const warning={line_id:entry.head.line_id,stage:'legacy_head',code:'installation_identity_conflict',message:'Cabeçalho legado preservado; revisão imutável publicada para a equipe.'};
+                if(remote.inspectIdentity){try{warning.identity=await remote.inspectIdentity(u,entry.head);}catch{warning.identity={available:false};}}
+                identityBlocked.set(entry.head.line_id,warning);
+              }
+            }
+            headMs=Date.now()-stageAt;
             if(!alive(u,g))return;await queue.remove(entry.id);uploadedParts.delete(entry.id);if(!alive(u,g))return;
             status({last_sent:{...syncHeadMetadata(entry.head),sent_at:new Date().toISOString()},last_publish_timing:{line_id:entry.head.line_id,parts:entry.parts.length,parts_ms:partsMs,head_ms:headMs,history_ms:historyMs,total_ms:partsMs+headMs+historyMs}});
           }catch(error){
@@ -99,7 +104,8 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         status({pending:entries.length,identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values(),...transient]});
         if(transient.length)throw Error(transient.map(e=>`${e.line_id} / ${e.stage}: ${e.message}`).join('; '));
       }
-      retry=1000;if(alive(u,g)&&!identityBlocked.size)status({status:store.agent().sync?.last_sent?'synchronized':'idle',pending:0,error:'',publish_errors:[]});
+      retry=1000;
+      if(alive(u,g))status({status:identityBlocked.size?'shared_history_legacy_conflict':store.agent().sync?.last_sent?'synchronized':'idle',pending:0,error:'',identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values()]});
     }catch(error){if(alive(u,g)){status({status:'pending',error:error.message});unschedule(timer);timer=schedule(()=>{if(alive(u,g))flush();},retry);retry=Math.min(retry*2,60000);}}
     finally{if(alive(u,g))running=false;}
   }
