@@ -241,6 +241,17 @@ CREATE TABLE IF NOT EXISTS snapshot_payloads(
   FOREIGN KEY(snapshot_id) REFERENCES snapshots(id)
 );
 
+-- Local raw evidence only. This journal is not a Firebase transport dataset.
+CREATE TABLE IF NOT EXISTS snapshot_payload_revisions(
+  snapshot_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(snapshot_id,kind,revision),
+  FOREIGN KEY(snapshot_id) REFERENCES snapshots(id)
+);
+
 CREATE TABLE IF NOT EXISTS cora_documents(
   doc_id TEXT PRIMARY KEY,
   snapshot_id INTEGER,
@@ -433,13 +444,36 @@ class Store:
             return int(cur.lastrowid)
 
     def save_snapshot_payload(self, snapshot_id: int, kind: str, payload: Any) -> None:
-        """Persist raw extracted evidence so schema evolution never loses data."""
+        """Preserve old raw evidence before replacing the compatible current head."""
+        kind=str(kind);value=stable_json(payload);at=utc_now()
         with self.connect() as con:
+            con.execute('BEGIN IMMEDIATE')
+            old=con.execute('SELECT payload_json,created_at FROM snapshot_payloads WHERE snapshot_id=? AND kind=?',(snapshot_id,kind)).fetchone()
+            # Capture the legacy head on first update, without rewriting old DBs
+            # in bulk. Also captures a head written during a rollback to old code.
+            versions=([(old['payload_json'],old['created_at'])] if old else [])+[(value,at)]
+            for raw,created in versions:
+                latest=con.execute('SELECT revision,payload_json FROM snapshot_payload_revisions WHERE snapshot_id=? AND kind=? ORDER BY revision DESC LIMIT 1',(snapshot_id,kind)).fetchone()
+                if latest and latest['payload_json']==raw:continue
+                con.execute('INSERT INTO snapshot_payload_revisions(snapshot_id,kind,revision,payload_json,created_at) VALUES(?,?,?,?,?)',
+                            (snapshot_id,kind,latest['revision']+1 if latest else 1,raw,created))
             con.execute(
                 """INSERT OR REPLACE INTO snapshot_payloads(snapshot_id,kind,payload_json,created_at)
                    VALUES(?,?,?,?)""",
-                (snapshot_id, str(kind), stable_json(payload), utc_now()),
+                (snapshot_id, kind, value, at),
             )
+
+    def snapshot_payload_history(self, snapshot_id: int, kind: str) -> List[Dict[str, Any]]:
+        """Local revision metadata; never expose raw payloads in a history index."""
+        with self.connect() as con:
+            return [dict(r) for r in con.execute('SELECT snapshot_id,kind,revision,created_at FROM snapshot_payload_revisions WHERE snapshot_id=? AND kind=? ORDER BY revision',(snapshot_id,str(kind)))]
+
+    def get_snapshot_payload_revision(self, snapshot_id: int, kind: str, revision: int) -> Any:
+        if type(revision) is not int or revision<1:raise ValueError('Invalid raw revision')
+        with self.connect() as con:
+            row=con.execute('SELECT payload_json FROM snapshot_payload_revisions WHERE snapshot_id=? AND kind=? AND revision=?',(snapshot_id,str(kind),revision)).fetchone()
+        if not row:raise ValueError('Raw revision unavailable')
+        return json.loads(row['payload_json'])
 
     def get_snapshot_payload(self, snapshot_id: int, kinds: Iterable[str] | None = None) -> Optional[Dict[str, Any]]:
         with self.connect() as con:

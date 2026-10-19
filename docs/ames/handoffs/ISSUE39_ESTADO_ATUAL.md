@@ -1,4 +1,4 @@
-# ISSUE #39 — HANDOFF OPERACIONAL — A2 + B1 + B2
+# ISSUE #39 — HANDOFF OPERACIONAL — A2 + B1 + B2 + B3.1
 
 ## Fonte de verdade e restrições
 - Repo `pedrokam700/Central-de-Controle-`, PR #40, branch `work/ames-operational-history-kpis-20261019`.
@@ -11,7 +11,7 @@
 - A2 `c3a26edcc56f35afdab17dc4bccf4a205debafa7`: seletor compacto nas Linhas + leitura das nove views. 414 contratos Node PASS localmente.
 - CI A2 **GREEN** no SHA exato: run **39301191945**, jobs **118226514140** (contratos) e **118226513786** (browser). Browser comprova Hoje/passado/Hoje, linha ausente, nove panes, PT/EN/mobile, zero mutações MES. Não é Full Quality nem prova física.
 - B1 `776277a9974214c1148a34f308967a99ff91eeb1`: revisões locais exatas. CI **GREEN**, run **39302554518**, jobs **118231230042** (contratos Node/Python) e **118231229594** (browser).
-- B2: SHA do commit que contém este handoff, registrado no comentário da PR40 após publicação. CI pendente até consultar esse SHA.
+- B2 `0343f069c8eec65bd800e6a83eefde7b7c408666`: CI GREEN, run 39303294356 (contratos + browser).
 
 ## Estado por bloco
 - **A PARCIAL, checkpoint funcional salvo.** `reading-period.mjs`, `store.mjs`, `reading-period-controller.mjs`, `console-reading-period.mjs`, `console-view.mjs`, `console-legacy-parity.mjs`, `sw.js`.
@@ -61,3 +61,14 @@
 - Checkout isolado `operational-history`; working tree deve ficar limpa após cada checkpoint.
 - Git fetch funciona; git push neste ambiente não tem credencial. Publicar via GitHub Git Data API (blobs/tree/commit), verificar tree SHA igual ao conteúdo testado e update_ref com expected_sha. Preservar commit local em recovery/* e reconciliar apenas árvores idênticas. Nunca reset/clean destrutivo.
 - A Central autenticada aberta pode publicar; aba fechada não publica. Replay integral de revisões nunca observadas pelo navegador continua não comprovado. Não modificar o estado das PRs anteriores.
+
+## Checkpoint B3.1 — preservação bruta, escopo pequeno por cota
+- Remoto revalidado em `0343f069c8eec65bd800e6a83eefde7b7c408666`, PR40 aberta/draft; árvore limpa antes de iniciar.
+- Defeito comprovado: `save_snapshot_payload` substituía payload anterior do mesmo snapshot/kind. Corrigido no Store existente com tabela aditiva `snapshot_payload_revisions` no MESMO SQLite; nenhum DB/store/agente paralelo.
+- Transação BEGIN IMMEDIATE preserva o head legado antes de substituí-lo e acrescenta somente versões diferentes. Leitura atual de snapshot_payloads mantém o contrato anterior. Metadata/read exatos disponíveis no Store; nenhuma rota pública nova, dados brutos não publicados no Firebase.
+- Revisões persistem após restart, mudanças parciais não destroem o payload completo anterior, concorrência não perde versões; falha ao escrever o head desfaz também a revisão da transação. source_id preservado. Sem exclusão automática.
+- Histórico bruto anterior já sobrescrito antes deste patch NÃO é recuperável por esta mudança. Baseline legado é capturado na próxima gravação de cada snapshot/kind; não há backfill maciço. Código antigo continua lendo/escrevendo head; ao voltar ao novo, o head legado atual é capturado, mas alterações intermediárias durante rollback antigo não podem ser recuperadas.
+- Arquivos: `ames/agent/store.py`, `scripts/agent-raw-history.test.py`, workflow da branch e este handoff. Coletores, bootstrap/8765, Firebase produção, main e PRs congeladas intactos. Não atualizar fábrica.
+- Testes locais **18/18 Python PASS**: raw-history (4), local-history (3), canonical (5), trace-target (4), operational-day-selection (2). CI SHA exato e LAST_SAFE_SHA no comentário de publicação; sem repetir suíte Node completa, pois nenhuma alteração JS.
+- **A/B PARCIAIS; C/D/E pendentes; fábrica PENDING.** B3.1 é persistência local, ainda não recuperação pela UI nem compartilhamento sanitizado destas versões. Não declarar B completo.
+- Próximo passo B3.2: recuperar/projetar consultas SN já salvas em `jobs.result_json` (`agent.py::_persist_job`, chamado pelo `agent_3012_patch.py::run_sn_lookup`), sem refazer coleta. Separar origem/período comprovados e dados sem linha, sanitizar antes de transporte. Completar a verificação das cinco fontes e associação 3012 candidata antes dos KPIs. Não refazer A1/A2/B1/B2/B3.1.
