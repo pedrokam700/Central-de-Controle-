@@ -129,7 +129,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     finally{if(alive(u,g))running=false;}
   }
   async function receive(heads,meta=lastReadMeta){
-    const u=uid,g=generation,read=++readGeneration;
+    const u=uid,g=generation,read=++readGeneration,receivedAt=Date.now();
     try{
       const candidates=meta.day_index_available?heads.filter(h=>h.period_start):heads;
       const byLine=new Map();
@@ -138,43 +138,65 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         if(!byLine.has(h.line_id))byLine.set(h.line_id,[]);
         byLine.get(h.line_id).push(h);
       }
-      const payloads=[],selectedHeads=[],originConflictLines=[],timings=[];
+      const payloads=[],selectedHeads=[],originConflictLines=[];
+      let downloaded=0,cacheHits=0,skippedVersions=0,downloadMs=0;
       for(const [line,variants] of byLine){
         const recent=variants.sort((a,b)=>Date.parse(b.collected_at||0)-Date.parse(a.collected_at||0)||Number(b.snapshot_num)-Number(a.snapshot_num)||Number(b.snapshot_revision)-Number(a.snapshot_revision));
-        const valid=[];
+        const byInstallation=new Map();
         for(const h of recent){
           if(!alive(u,g)||read!==readGeneration)return;
-          let payload=remotePayloadCache.get(h.owner_uid+':'+h.key);
+          const installation=h.owner_uid+':'+h.source_id;
+          // The day index is append-only. Only its newest verified *live*
+          // revision per installation can represent Today. Keep checking other
+          // installations so competing producers are never silently hidden.
+          if(meta.day_index_available&&byInstallation.has(installation)){
+            skippedVersions++;continue;
+          }
+          const cacheKey=h.owner_uid+':'+h.key;
+          let payload=remotePayloadCache.get(cacheKey);
           if(!payload){
             const started=Date.now(),parts=[];
-            // Bounded read concurrency: high part counts must not serialize network RTT.
             for(let i=0;i<h.parts;i+=4){
+              if(!alive(u,g)||read!==readGeneration)return;
               const batch=await Promise.all(Array.from({length:Math.min(4,h.parts-i)},(_,j)=>remote.getPart(h.owner_uid,h,i+j)));
               parts.push(...batch);
             }
-            const body=parts.join('');if(await sha(body)!==h.hash)throw Error('Snapshot remoto incompleto ou alterado');
+            const body=parts.join('');
+            if(await sha(body)!==h.hash)throw Error('Snapshot remoto incompleto ou alterado');
             payload=JSON.parse(body);
             if(payload.line_id!==h.line_id||payload.source_id!==h.source_id||payload.snapshot_revision!==h.snapshot_revision||payload.snapshot_id!==h.snapshot_id)throw Error('Manifesto remoto divergente');
             normalizeCanonical(payload);
-            remotePayloadCache.set(h.owner_uid+':'+h.key,payload);
-            timings.push({line_id:h.line_id,parts:h.parts,read_ms:Date.now()-started});
+            downloaded++;downloadMs+=Date.now()-started;
+            remotePayloadCache.set(cacheKey,payload);
+            // Avoid retaining an entire production day of large revisional
+            // payloads in browser memory. Original evidence remains immutable.
+            if(remotePayloadCache.size>24)remotePayloadCache.delete(remotePayloadCache.keys().next().value);
+          }else cacheHits++;
+          if(!meta.day_index_available||isTodaySnapshot(payload,now(),currentConfig())){
+            if(!byInstallation.has(installation))byInstallation.set(installation,{head:h,payload});
           }
-          if(!meta.day_index_available||isTodaySnapshot(payload,now(),currentConfig()))valid.push({head:h,payload});
         }
-        if(!valid.length)continue;
-        const installations=new Set(valid.map(v=>v.head.owner_uid+':'+v.head.source_id));
-        if(installations.size>1){
-          // Both identities retain their immutable evidence. Never silently pick
-          // a competing producer for the same line and production day.
+        if(!byInstallation.size)continue;
+        if(byInstallation.size>1){
           originConflictLines.push(line);continue;
         }
-        selectedHeads.push(valid[0].head);payloads.push(valid[0].payload);
+        const selected=byInstallation.values().next().value;
+        selectedHeads.push(selected.head);payloads.push(selected.payload);
       }
       if(alive(u,g)&&read===readGeneration){
         unschedule(readTimer);readRetry=1000;
         store.replaceSyncedSnapshots(payloads);
         const stamp=new Date().toISOString();
-        status({read_status:originConflictLines.length?'origin_conflict':meta.from_cache?'cached':'ready',read_error:originConflictLines.length?'Múltiplas instalações publicaram a mesma linha e dia. Nenhuma foi escolhida automaticamente.':'',origin_conflict_lines:originConflictLines,last_receive_timing:timings.at(-1)||null,last_received_at:stamp,...(!meta.from_cache?{server_received_at:meta.received_at||null}:{}),...syncHeadsMetadata(selectedHeads,meta.day_index_available?'operational_day_history':'team_latest')});
+        status({
+          read_status:originConflictLines.length?'origin_conflict':meta.from_cache?'cached':'ready',
+          read_error:originConflictLines.length?'Múltiplas instalações publicaram a mesma linha e dia. Nenhuma foi escolhida automaticamente.':'',
+          origin_conflict_lines:originConflictLines,
+          last_receive_timing:{read_ms:Date.now()-receivedAt,download_ms:downloadMs,
+            candidates:candidates.length,downloaded,cache_hits:cacheHits,skipped_versions:skippedVersions},
+          last_received_at:stamp,
+          ...(!meta.from_cache?{server_received_at:meta.received_at||null}:{}),
+          ...syncHeadsMetadata(selectedHeads,meta.day_index_available?'operational_day_history':'team_latest')
+        });
       }
     }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads,lastReadMeta);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
   }
