@@ -139,3 +139,43 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # No upload-artifact: stage is NOT an installable bundle.
       # A real factory package requires separate review/authorization and gates.
+
+  factory-preserving-test-artifact:
+    # The artifact only exists when EVERY active quality and preservation gate
+    # on this exact SHA has completed successfully. Never auto-install it.
+    needs:
+      - full-static-quality
+      - console-experience
+      - firestore-emulator
+      - windows-identity-preservation
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build exact SHA preserving update and hash-verify all files
+        shell: bash
+        run: |
+          python scripts/build-pr38-factory-test-update.py "$RUNNER_TEMP/PR38_ATUALIZAR_EXISTENTE_TESTE.zip" --expected-sha "${{ github.sha }}"
+          python - "$RUNNER_TEMP/PR38_ATUALIZAR_EXISTENTE_TESTE.zip" "${{ github.sha }}" <<'PY'
+          import hashlib, importlib.util, pathlib, sys
+          path=pathlib.Path('scripts/build-pr38-factory-test-update.py')
+          spec=importlib.util.spec_from_file_location('factory_candidate',path)
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          verified=mod.verify(pathlib.Path(sys.argv[1]),sys.argv[2])
+          assert verified['physical_gate']=='PENDING'
+          print('PR38 verified candidate SHA:',verified['sha'])
+          print('PR38 candidate SHA256:',hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+          PY
+      - name: Upload ONLY TEST candidate; factory acceptance remains PENDING
+        uses: actions/upload-artifact@v4
+        with:
+          name: PR38-PRESERVING-TEST-ONLY-${{ github.sha }}
+          path: ${{ runner.temp }}/PR38_ATUALIZAR_EXISTENTE_TESTE.zip
+          if-no-files-found: error
+          retention-days: 7
