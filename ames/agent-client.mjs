@@ -194,6 +194,33 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(!Array.isArray(rows)||rows.some(h=>h.line_id!==line||!Number.isSafeInteger(Number(h.snapshot_id))||Number(h.snapshot_id)<1))throw Error('Índice local de histórico inválido');
       return rows;
     },
+    // B3.4b3: scalar metadata about raw captures only. Never import raw
+    // 3074/2114/3022 results into live Store or Firebase publication.
+    sourceCaptures:async({snapshot_id,line_id,snapshot_revision,content_hash,source_view=null,before=null,limit=20}={})=>{
+      check();
+      const sid=Number(snapshot_id),rev=Number(snapshot_revision),n=Number(limit);
+      if(!LINE_IDS.includes(line_id)||!Number.isSafeInteger(sid)||sid<1||
+         !Number.isSafeInteger(rev)||rev<1||!Number.isInteger(n)||n<1||n>50||
+         !(/^[a-f0-9]{64}$/).test(content_hash||''))throw Error('Identidade de captura inválida');
+      if(source_view!==null&&!['3074','2114','3022'].includes(source_view))throw Error('Fonte da captura inválida');
+      const q=new URLSearchParams({snapshot_id:String(sid),line:line_id,
+        snapshot_revision:String(rev),content_hash,limit:String(n)});
+      if(source_view)q.set('source_view',source_view);
+      if(before)q.set('before',String(before));
+      const data=await request('/source-captures?'+q);
+      if(data?.schema!=='ames-local-source-capture-v1'||data.metadata_only!==true||
+         data.local_only!==true||data.source_complete!==false||
+         String(data.snapshot_id)!==String(sid)||data.line_id!==line_id||
+         data.snapshot_revision!==rev||data.content_hash!==content_hash||
+         !Array.isArray(data.items)||data.items.length>n||
+         data.items.some(x=>x.snapshot_id!==String(sid)||x.line_id!==line_id||
+           x.snapshot_revision!==rev||x.local_only!==true||x.source_complete!==false||
+           !['3074','2114','3022'].includes(x.source_view)||
+           (source_view&&x.source_view!==source_view)||
+           Object.hasOwn(x,'result')||Object.hasOwn(x,'payload_json')||
+           Object.hasOwn(x,'repair_comment')))throw Error('Índice de capturas incompatível');
+      return data;
+    },
     // B3.2: on-workstation saved individual SN searches; never publish raw job
     // results to Firebase or treat query time as an operational production date.
     savedSnHistory:async({sn='',start=null,end=null,before=null,limit=20}={})=>{
