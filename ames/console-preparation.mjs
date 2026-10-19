@@ -127,7 +127,9 @@ export function createPreparationView(root, store, client) {
     const pairing=!!client.canOpenOfficial?.(),connectionError=agent.connection_error?.message||'';
     const checks = workstationChecks(agent), ready = checks.every(c => c.state === 'ok');
     const maintenance = workstationMaintenance(agent);
-    const visible = expanded || (!connected && mode !== 'viewer');
+    // Pairing must remain reachable even when the local agent is already ready.
+    // Previously the entire preparation panel was hidden once connected.
+    const visible = expanded || pairing || (!connected && mode !== 'viewer');
     const backup = maintenance.latest_backup;
     const backupSummary = backup
       ? `${esc(backup.created_at || t('data não informada', 'date not reported'))} · ${esc(formatBytes(backup.bytes))}${backup.reason ? ` · ${esc(backup.reason)}` : ''}`
