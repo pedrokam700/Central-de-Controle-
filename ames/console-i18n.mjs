@@ -11,6 +11,7 @@ Dashboards de reuso|Reuse dashboards
 Processo / 3022 & AT|Process / 3022 & AT
 Base local|Local database
 Histórico de produção|Production history
+Ainda não há evidência comprovada para Hoje nesta linha. Dados de outro período não serão exibidos aqui.|No verified evidence for Today on this line. Data from another period will not be shown here.
 Último dia de produção|Last production day
 Histórico por data|Production history by date
 Consulta avançada|Advanced query
