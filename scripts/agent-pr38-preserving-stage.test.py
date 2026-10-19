@@ -180,6 +180,12 @@ def test_preserving_update_and_rollback():
         # First verify an *existing* runnable agent, with its established identity.
         preflight = probe_agent_start(agent, original_source, prior_snapshot, integrated=False)
         assert preflight["original_source_preserved"]
+        # The baseline itself may normalize its config during cold start.
+        # The updater's promise is to restore the exact state presented to it
+        # immediately before update, not an artificial pre-boot fixture.
+        actual_pre_update_cfg = json.loads((agent / "config.json").read_text())
+        for key, value in original_cfg.items():
+            assert actual_pre_update_cfg[key] == value, (key, value)
 
         # Apply the same trusted updater as production, but to disposable data.
         with patch.object(updater.socket, "create_connection", side_effect=OSError):
@@ -210,7 +216,7 @@ def test_preserving_update_and_rollback():
             updater.rollback(current, backup)
         assert snapshot(database) == original_source
         assert database.latest_snapshot_id() == newer_snapshot
-        assert json.loads((agent / "config.json").read_text()) == original_cfg
+        assert json.loads((agent / "config.json").read_text()) == actual_pre_update_cfg
         assert old_app.read_text() == "BASELINE FRONTEND"
         assert old_root.read_text() == "BASELINE LAUNCHER"
         assert not (current / "frontend/release-build.json").exists()
