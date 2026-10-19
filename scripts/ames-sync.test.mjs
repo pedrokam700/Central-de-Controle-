@@ -70,6 +70,8 @@ test('identity mismatch is quarantined; other lines publish and historical outbo
   assert.equal(pending.size,0,'immutable history already committed and acknowledged');
   assert.deepEqual(history.sort(),['TAN10102','TAN10103']);
   assert.equal(store.agent().sync.status,'shared_history_legacy_conflict');
+  assert.equal(store.agent().sync.last_sent.line_id,'TAN10103');
+  assert.equal(store.agent().sync.last_sent.authority,'operational_day_history','blocked mutable team head is never reported as committed');
   assert.equal(store.agent().sync.publish_errors[0].identity.owner_source_matches,false);
   assert(['TAN10102','TAN10103'].includes(store.agent().sync.last_publish_timing.line_id));
   const priorParts=partWrites.get('TAN10103');
@@ -96,6 +98,7 @@ test('advanced and previous production periods cannot commit team latest',async(
   sync.start('A');await sync.capture();await new Promise(resolve=>setTimeout(resolve,30));
   assert.equal(heads.length,0,'September must not replace current head');
   assert.equal(history.length,1,'historical revision remains auditable');
+  assert.equal(store.agent().sync.last_sent.authority,'operational_day_history');
   assert.equal(queueEntries.size,0);
   sync.stop();
 });
