@@ -39,6 +39,10 @@ try{
  assert(after.pcba_history.records.length);assert.equal(after.material_trace.records[0].material_sn,'M');
  const context=selectCoraContext(state.ames,{line_id:scope.lines[0],product:'CPH2859V',pcba_sn:'P',material_sn:'M'});assert(context.material_3074.length);assert.equal(context.human_confirmed_causes.length,0);
  assert.equal(selectTrace(state.ames,{line_id:scope.lines[0],product:'CPH2859V',pcba_sn:'P'},before).status,'invalidated');
+ // E2E clock follows the synthetic agent's operational day, never runner UTC.
+ const snapshotDay=String(after.canonical?.summary?.period?.start_at||'').slice(0,10);
+ assert.match(snapshotDay,/^\d{4}-\d{2}-\d{2}$/);
+ const factoryClock=()=>new Date(snapshotDay+'T12:00:00-03:00');
  const blob=await client.excel();assert.equal(await blob.slice(0,2).text(),'PK');
  await client.collect('sn',{...scope,sn:'P'});assert.equal((await finish()).status,'done');assert.equal(state.ames.agent().job.result.sn,'P');
  const request={sn:'P',include_3022:false,request_id:'e2e-request-1'},first=await api('/sn-lookup',request),again=await api('/sn-lookup',request);assert.equal(first.id,again.id);
@@ -46,16 +50,16 @@ try{
  await client.collect('sn',{...scope,sn:'BLOCK'});await eventually(async()=>(await api('/health')).mes_scheduler.busy,'gate');await client.cancel();assert.equal((await finish()).status,'cancelled');
  const authA={currentUser:{uid:'E2E'}},dbA=env.authenticatedContext('E2E').firestore(),remoteA=firestoreTransport({...fb,db:dbA,auth:authA});
  const queueData=new Map(),queue={put:async e=>queueData.set(e.id,e),remove:async id=>queueData.delete(id),list:async uid=>[...queueData.values()].filter(e=>e.uid===uid)};
- let online=false;sync=createMesSync(state.ames,remoteA,{queue,online:()=>online});sync.start('E2E');await sync.capture();assert.equal(queueData.size,3);online=true;await sync.retry();assert.equal(queueData.size,0);
- const sameAccount=createAmesStore(),sameReader=createMesSync(sameAccount,remoteA,{queue,online:()=>false});sameReader.start('E2E');await eventually(()=>!!sameAccount.read(scope.lines[0]).snapshot,'same-account remote PC');assert.equal(sameAccount.read(scope.lines[0]).snapshot.revision,after.revision);sameReader.stop();
+ let online=false;sync=createMesSync(state.ames,remoteA,{queue,online:()=>online,now:factoryClock});sync.start('E2E');await sync.capture();assert.equal(queueData.size,3);online=true;await sync.retry();assert.equal(queueData.size,0);
+ const sameAccount=createAmesStore(),sameReader=createMesSync(sameAccount,remoteA,{queue,online:()=>false,now:factoryClock});sameReader.start('E2E');await eventually(()=>!!sameAccount.read(scope.lines[0]).snapshot,'same-account remote PC');assert.equal(sameAccount.read(scope.lines[0]).snapshot.revision,after.revision);sameReader.stop();
  const authB={currentUser:{uid:'OTHER'}},dbB=env.authenticatedContext('OTHER').firestore(),remoteB=firestoreTransport({...fb,db:dbB,auth:authB});
- const teammate=createAmesStore();reader=createMesSync(teammate,remoteB,{queue,online:()=>false});reader.start('OTHER');await eventually(()=>!!teammate.read(scope.lines[0]).snapshot,'teammate remote PC');assert.equal(teammate.read(scope.lines[0]).snapshot.revision,after.revision);assert.equal(teammate.read(scope.lines[0]).source,'remote');
+ const teammate=createAmesStore();reader=createMesSync(teammate,remoteB,{queue,online:()=>false,now:factoryClock});reader.start('OTHER');await eventually(()=>!!teammate.read(scope.lines[0]).snapshot,'teammate remote PC');assert.equal(teammate.read(scope.lines[0]).snapshot.revision,after.revision);assert.equal(teammate.read(scope.lines[0]).source,'remote');
  const history=await reader.listHistory(scope.lines[0]);assert.equal(history.length,1);const historical=await reader.openHistory(history[0]);assert.equal(historical.snapshot_id,after.snapshot_id);assert.equal(historical.line_id,scope.lines[0]);assert.equal(historical.source_id,after.source_id);
  // Keep B subscribed while the autonomous factory-side path produces another snapshot.
  sync.stop();client.clear();const ticks=[];online=false;
  integration=createMesIntegration(state.ames,remoteA,{
    transport:{agentToken:'emulator-only',fetcher:(url,options)=>fetch(url.replace('127.0.0.1:8765','127.0.0.1:'+port),options)},
-   syncOptions:{queue,online:()=>online},schedule:fn=>{ticks.push(fn);return fn;},unschedule:fn=>{const i=ticks.indexOf(fn);if(i>=0)ticks.splice(i,1);}
+   syncOptions:{queue,online:()=>online,now:factoryClock},schedule:fn=>{ticks.push(fn);return fn;},unschedule:fn=>{const i=ticks.indexOf(fn);if(i>=0)ticks.splice(i,1);}
  });
  integration.start('E2E');await eventually(()=>ticks.length>0,'session starts without Console');
  await eventually(()=>queueData.size>0,'offline outbox populated');
