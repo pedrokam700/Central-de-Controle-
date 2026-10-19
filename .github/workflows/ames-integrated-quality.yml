@@ -30,6 +30,7 @@ jobs:
         run: |
           python scripts/agent-hardening.test.py
           python scripts/agent-operational-calendar.test.py
+          python scripts/agent-operational-day-selection.test.py
           python scripts/agent-preflight.test.py
           python scripts/agent-scheduler.test.py
           python scripts/agent-canonical.test.py
@@ -75,7 +76,7 @@ jobs:
           PYTHON_BIN: python3
         run: |
           export FIREBASE_TEST_MODULES="$RUNNER_TEMP/ames-tests/node_modules"
-          "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs'
+          "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs && node scripts/ames-pr38-day.emulator.mjs'
 
   console-experience:
     runs-on: ubuntu-latest
