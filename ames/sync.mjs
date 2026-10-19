@@ -3,18 +3,18 @@ import {LINE_IDS} from './data/contract.mjs';
 import {historyMetadata} from './data/history.mjs';
 import {publicationIntent,factoryWindow,isTodaySnapshot} from './data/operational-period.mjs';
 const sha=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(b=>b.toString(16).padStart(2,'0')).join('');
-const syncHeadMetadata=head=>Object.freeze({
+const syncHeadMetadata=(head,authority='team_latest')=>Object.freeze({
   line_id:head.line_id,
   source_id:String(head.source_id||''),
   snapshot_id:String(head.snapshot_id??''),
   snapshot_revision:Number(head.snapshot_revision)||0,
   collected_at:head.collected_at||null,
-  authority:'team_latest'
+  authority
 });
-const syncHeadsMetadata=heads=>{
-  const remote_heads=heads.map(syncHeadMetadata).sort((a,b)=>a.line_id.localeCompare(b.line_id));
+const syncHeadsMetadata=(heads,authority='team_latest')=>{
+  const remote_heads=heads.map(h=>syncHeadMetadata(h,authority)).sort((a,b)=>a.line_id.localeCompare(b.line_id));
   const latest=remote_heads.map(h=>h.collected_at).filter(Boolean).sort().at(-1)||null;
-  return {remote_scope:'team_latest',remote_heads,remote_line_count:remote_heads.length,remote_latest_collected_at:latest};
+  return {remote_scope:authority,remote_heads,remote_line_count:remote_heads.length,remote_latest_collected_at:latest};
 };
 export function sanitizeSnapshot(payload){
   normalizeCanonical(payload);
@@ -155,7 +155,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         unschedule(readTimer);readRetry=1000;
         store.replaceSyncedSnapshots(payloads);
         const stamp=new Date().toISOString();
-        status({read_status:originConflictLines.length?'origin_conflict':meta.from_cache?'cached':'ready',read_error:originConflictLines.length?'Múltiplas instalações publicaram a mesma linha e dia. Nenhuma foi escolhida automaticamente.':'',origin_conflict_lines:originConflictLines,last_receive_timing:timings.at(-1)||null,last_received_at:stamp,...(!meta.from_cache?{server_received_at:meta.received_at||null}:{}),...syncHeadsMetadata(selectedHeads)});
+        status({read_status:originConflictLines.length?'origin_conflict':meta.from_cache?'cached':'ready',read_error:originConflictLines.length?'Múltiplas instalações publicaram a mesma linha e dia. Nenhuma foi escolhida automaticamente.':'',origin_conflict_lines:originConflictLines,last_receive_timing:timings.at(-1)||null,last_received_at:stamp,...(!meta.from_cache?{server_received_at:meta.received_at||null}:{}),...syncHeadsMetadata(selectedHeads,meta.day_index_available?'operational_day_history':'team_latest')});
       }
     }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads,lastReadMeta);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
   }
