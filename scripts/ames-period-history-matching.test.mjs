@@ -41,3 +41,14 @@ test('Today view relies on verified current 3028 evidence, not historical end eq
   assert.match(ui,/Dados de outro período não serão exibidos aqui/);
   assert.match(ui,/client\.collect\('today'/);
 });
+
+test('historical revision shows linkage and AT evidence without turning candidates into confirmed repair',()=>{
+  const ui=fs.readFileSync(new URL('../ames/console-history.mjs',import.meta.url),'utf8');
+  assert.match(ui,/repair_status_current/);
+  assert.match(ui,/Y · vinculado/);
+  assert.match(ui,/N · não vinculado/);
+  assert.match(ui,/repair_evidence_3012/);
+  assert.match(ui,/associação à falha não confirmada/);
+  assert.match(ui,/evidence\.slice\(0,5\)/);
+  assert.doesNotMatch(ui,/reparo confirmado da ocorrência|confirmed repair for the occurrence/i);
+});
