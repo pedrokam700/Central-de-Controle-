@@ -11,6 +11,16 @@ Dashboards de reuso|Reuse dashboards
 Processo / 3022 & AT|Process / 3022 & AT
 Base local|Local database
 Histórico de produção|Production history
+Hoje, último dia produtivo e revisões antigas. A coleta do dia anterior não modifica os indicadores de Hoje.|Today, last production day and previous revisions. Collecting an earlier day does not change Today's indicators.
+Abrir histórico|Open history
+O histórico pode estar somente no SQLite deste computador ou na base compartilhada.|History may exist only in this computer's SQLite or in shared storage.
+Coleta local disponível; envio para a equipe ainda não confirmado. Confira a sincronização abaixo.|Local collection available; team publication not confirmed. Check synchronization below.
+Há revisão imutável, mas o cabeçalho legado continua em conflito; confira a leitura no outro posto.|Immutable revision exists, but the legacy head still conflicts; verify reading on the other workstation.
+Última publicação confirmada pela fila; confira a leitura no outro posto.|Latest publication acknowledged by the queue; verify reading on the other workstation.
+Há revisões salvas neste computador. Local ≠ publicado no Firebase; o outro posto só recebe as versões marcadas como compartilhadas.|Revisions are saved on this computer. Local does not mean published to Firebase; the other workstation only receives versions marked as shared.
+Local · não confirmado na equipe|Local · not confirmed with team
+Compartilhado|Shared
+Compartilhamento|Sharing
 Ainda não há evidência comprovada para Hoje nesta linha. Dados de outro período não serão exibidos aqui.|No verified evidence for Today on this line. Data from another period will not be shown here.
 Último dia de produção|Last production day
 Histórico por data|Production history by date
