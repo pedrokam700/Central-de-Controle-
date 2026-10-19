@@ -760,6 +760,36 @@ class Store:
             ).fetchone()
         return int(row["sid"]) if row and row["sid"] is not None else None
 
+    def operational_snapshot_ids_by_line(self, lines: Iterable[str], start_at: str) -> Dict[str, int]:
+        """Latest *live* evidence for exactly one 3028 production window.
+
+        Advanced/previous-day/manual snapshots are intentionally excluded even if
+        their SQLite id or collection timestamp is newer. No fallback to an older
+        operational day is allowed for the current dashboard.
+        """
+        requested = sorted({str(line).strip() for line in lines if str(line).strip()})
+        if not requested or not start_at or len(start_at) < 16:
+            return {}
+        boundary = start_at[:16]  # Factory wall-clock date and 07:00; offsets may differ.
+        values: Dict[str, int] = {}
+        with self.connect() as con:
+            for line in requested:
+                row = con.execute(
+                    """SELECT s.id
+                       FROM snapshots s
+                       JOIN analysis_windows w ON w.id=s.window_id
+                       WHERE s.status='complete'
+                         AND w.mode IN ('today','live','monitor_today')
+                         AND substr(w.start_at,1,16)=?
+                         AND (EXISTS(SELECT 1 FROM line_metrics m WHERE m.snapshot_id=s.id AND m.line=?)
+                           OR EXISTS(SELECT 1 FROM defect_observations d WHERE d.snapshot_id=s.id AND d.line=?))
+                       ORDER BY s.id DESC LIMIT 1""",
+                    (boundary, line, line),
+                ).fetchone()
+                if row:
+                    values[line] = int(row["id"])
+        return values
+
     def latest_snapshot_ids_by_line(self, lines: Iterable[str] | None = None) -> Dict[str, int]:
         requested = [str(x).strip() for x in (lines or []) if str(x).strip()]
         with self.connect() as con:
