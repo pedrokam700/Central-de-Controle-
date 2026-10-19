@@ -1,0 +1,90 @@
+name: PR38 CLEAN exact validated SHA for download
+on:
+  push:
+    branches:
+      - release/pr38-clean-download-20261019
+permissions:
+  contents: read
+jobs:
+  clean-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a06bc5f7ac6cd861352cce1338d2cc398ebec29d
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build CLEAN from exact PR38 source, no factory data
+        shell: bash
+        run: |
+          python -m compileall -q ames/agent ames/factory-engine
+          python scripts/build-integrated-candidate.py "$RUNNER_TEMP/PR38_CLEAN_INTEGRADA_a06bc5f7.zip"
+          python - <<'PY'
+          from pathlib import Path
+          import os,zipfile,json,hashlib
+          expected='a06bc5f7ac6cd861352cce1338d2cc398ebec29d'
+          p=Path(os.environ['RUNNER_TEMP'])/'PR38_CLEAN_INTEGRADA_a06bc5f7.zip'
+          with zipfile.ZipFile(p) as z:
+              m=json.loads(z.read('CANDIDATE_MANIFEST.json'))
+              assert m['sha']==expected
+              assert m['standalone_clean'] is True and m['integrated_shell'] is True
+              assert m['physical_gate']=='PENDING'
+              assert all(hashlib.sha256(z.read(n)).hexdigest()==h for n,h in m['files'].items())
+              assert 'ames-agent/ames_3028.py' in m['files']
+              assert 'ames-agent/ames_3028_live.py' in m['files']
+              assert 'ames-agent/requirements.txt' in m['files']
+              assert 'ames-agent/config.example.json' in m['files']
+              assert '01_INSTALAR_UMA_VEZ.bat' in m['files']
+              assert '00_INICIAR_AQUI.bat' in m['files']
+              assert not any(n.startswith('ames-agent/data/') for n in m['files'])
+              print('CLEAN sha:',expected,'files:',len(m['files']))
+              print('CLEAN sha256:',hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PR38-CLEAN-INTEGRADA-a06bc5f7
+          path: ${{ runner.temp }}/PR38_CLEAN_INTEGRADA_a06bc5f7.zip
+          retention-days: 7
+          if-no-files-found: error
+  clean-windows-smoke:
+    needs: clean-build
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PR38-CLEAN-INTEGRADA-a06bc5f7
+          path: download
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inspect and install CLEAN in new temporary Windows directory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip=(Get-ChildItem download -Filter '*.zip' | Select-Object -First 1).FullName
+          if(-not $zip){throw 'CLEAN ZIP missing'}
+          Expand-Archive -LiteralPath $zip -DestinationPath package -Force
+          if(-not(Test-Path package\00_INICIAR_AQUI.bat)){throw 'Missing launcher'}
+          if(Test-Path package\ames-agent\config.json){throw 'Private config accidentally bundled'}
+          if(Test-Path package\ames-agent\data\ames_local.sqlite3){throw 'Operational database accidentally bundled'}
+          $manifest=Get-Content package\CANDIDATE_MANIFEST.json -Raw|ConvertFrom-Json
+          if($manifest.sha -ne 'a06bc5f7ac6cd861352cce1338d2cc398ebec29d') {throw 'Exact SHA mismatch'}
+          if(-not($manifest.standalone_clean -and $manifest.integrated_shell)){throw 'Not the integrated CLEAN'}
+          Write-Host 'CLEAN exact-SHA and privacy smoke GREEN'
+      - name: First-use installation smoke with isolated Windows folder
+        shell: cmd
+        working-directory: package
+        timeout-minutes: 14
+        run: |
+          call 01_INSTALAR_UMA_VEZ.bat /auto
+          if errorlevel 1 exit /b %errorlevel%
+          if not exist ".venv\Scripts\python.exe" exit /b 41
+          if not exist "ames-agent\config.json" exit /b 42
+          if not exist "ames-agent\data\ames_local.sqlite3" exit /b 43
