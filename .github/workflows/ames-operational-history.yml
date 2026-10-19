@@ -42,3 +42,47 @@ jobs:
         run: |
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/history-tests/node_modules/playwright/index.mjs"
           node scripts/ames-reading-period.browser.mjs
+  reading-windows:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test exact-source SQLite history under isolated Windows
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "tzdata>=2025.2"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($script in @(
+            'scripts/agent-source-capture.test.py',
+            'scripts/agent-capture-manifest.test.py',
+            'scripts/agent-trace-target.test.py',
+            'scripts/agent-canonical.test.py',
+            'scripts/agent-raw-history.test.py'
+          )) {
+            python $script
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+  reading-firestore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install isolated emulator tools
+        run: npm install --prefix "$RUNNER_TEMP/history-firestore" firebase-tools@15.2.1 @firebase/rules-unit-testing@5.0.0 firebase@12.7.0
+      - name: Verify no cross-PC release-rule regression
+        shell: bash
+        run: |
+          export FIREBASE_TEST_MODULES="$RUNNER_TEMP/history-firestore/node_modules"
+          for suite in scripts/ames-rules.emulator.mjs scripts/ames-pr38-day.emulator.mjs; do
+            "$RUNNER_TEMP/history-firestore/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes "node $suite"
+          done
