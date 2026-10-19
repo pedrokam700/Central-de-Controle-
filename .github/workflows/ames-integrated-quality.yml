@@ -76,7 +76,11 @@ jobs:
           PYTHON_BIN: python3
         run: |
           export FIREBASE_TEST_MODULES="$RUNNER_TEMP/ames-tests/node_modules"
-          "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs && node scripts/ames-pr38-day.emulator.mjs'
+          # Fresh Firestore process for each contract: leaked listener state from
+          # an earlier suite must never contaminate the A/B cross-PC gate.
+          for suite in scripts/ames-rules.emulator.mjs scripts/ames-e2e.emulator.mjs scripts/ames-pr38-day.emulator.mjs; do
+            "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes "node $suite"
+          done
 
   console-experience:
     runs-on: ubuntu-latest
