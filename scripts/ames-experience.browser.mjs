@@ -85,7 +85,7 @@ try{
   assert.deepEqual([...untranslated],[],'Portuguese UI text remains in the English Console');
   await page.evaluate(()=>qa.lang('en-US'));
   assert.match(await page.locator('[data-console-view=monitor]').innerText(),/^◉\s*Monitoring$/);
-  await page.locator('[data-console-view=base]').click();await page.locator('[data-history-panel] summary').click();
+  await page.locator('[data-console-view=base]').click();await page.locator('[data-history-mode=advanced]').click();
   await page.getByRole('button',{name:'Query another period',exact:true}).click();await page.getByRole('button',{name:'Open without replacing current',exact:true}).click();
   await page.waitForSelector('[data-period-snapshot] table');assert.match(await page.locator('[data-period-snapshot]').innerText(),/SYNTHETIC-PCBA/);
   await page.locator('[data-console-view=knowledge]').click();await page.locator('[data-knowledge-q]').fill('SYNTHETIC-PCBA');await page.locator('[data-knowledge-run]').click();assert.match(await page.locator('[data-knowledge-result]').innerText(),/SYNTHETIC-PCBA/);
