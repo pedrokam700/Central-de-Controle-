@@ -10,6 +10,23 @@ const pad=n=>String(n).padStart(2,'0');
 const inputDate=date=>`${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 const revisionLabel=entry=>`${entry.snapshot_id??'—'} · r${Number(entry.snapshot_revision)||0}`;
 
+const linkageStatus=value=>{
+  const code=String(value??'').trim().toUpperCase();
+  if(code==='Y')return t('Y · vinculado','Y · linked');
+  if(code==='N')return t('N · não vinculado','N · not linked');
+  return t('Não comprovado','Unverified');
+};
+// 3012 records are same-PCBA candidates, NOT a proven repair for this occurrence.
+function repairEvidenceCell(row){
+  const evidence=Array.isArray(row.repair_evidence_3012)?row.repair_evidence_3012:[];
+  if(!evidence.length)return '—';
+  const shown=evidence.slice(0,5);
+  const label=t('Registros 3012 candidatos; associação à falha não confirmada','Candidate 3012 records; no confirmed failure association');
+  const preview=shown.map(e=>`<li>${esc(displayTime(e.repair_time))} · ${esc(e.repair_comment||e.repair_desc||'—')}</li>`).join('');
+  return `<details><summary>${evidence.length} · ${t('evidência(s) candidata(s)','candidate record(s)')}</summary><p class="mes-context">${label}</p><ul>${preview}</ul>${evidence.length>5?`<p class="mes-context">${t('Mostrando cinco primeiros registros','Showing the first five records')}</p>`:''}</details>`;
+}
+
+
 export function currentDataLabel(store,line) {
   const read=store.read(line);return labels[coverageState(read)];
 }
@@ -108,7 +125,7 @@ export function createHistoryView(root,store,client,history) {
     const host=root.querySelector('[data-period-snapshot]');if(!host)return;
     if(!selected){host.replaceChildren();return;}
     const rows=selected.datasets?.defects||[],contexts=selected.process_contexts||selected.datasets?.process_contexts||[],coverage=selected.coverage?.defects||{};
-    host.innerHTML=`<section class="mes-context-panel"><div class="section-head"><div><h3>${t('VISUALIZAÇÃO HISTÓRICA','HISTORICAL VIEW')} · ${esc(selected.line_id)}</h3><p>${t('Esta visualização é somente leitura e não substitui o snapshot atual da Central.','This view is read-only and does not replace the current Work Center snapshot.')}</p></div><span class="status">${esc(revisionLabel(selectedEntry||selected))}</span></div><div class="ames-summary-grid"><div class="stat"><span class="stat-label">${t('Coletado em','Collected at')}</span><strong class="stat-value">${esc(displayTime(selected.collected_at))}</strong></div><div class="stat"><span class="stat-label">${t('Origem','Source')}</span><strong class="stat-value">${esc(selected.source_id||'—')}</strong></div><div class="stat"><span class="stat-label">${t('Falhas','Failures')}</span><strong class="stat-value">${rows.length}</strong></div><div class="stat"><span class="stat-label">3022 · ${t('contextos','contexts')}</span><strong class="stat-value">${contexts.length}</strong></div></div><p>${coverage.source_complete===true?t('Cobertura de falhas completa','Complete failure coverage'):t('Cobertura de falhas parcial/indisponível','Partial/unavailable failure coverage')}</p><div class="table-wrap"><table><thead><tr><th>PCBA</th><th>CPH</th><th>Defect Code</th><th>${t('Registro da falha (MES)','Failure record (MES)')}</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.pcba_sn||'—')}</td><td>${esc(r.product_model||'—')}</td><td>${esc(r.defect_code||'—')}</td><td>${esc(displayValue('defect_time',r.defect_time))}</td></tr>`).join('')}</tbody></table></div></section>`;
+    host.innerHTML=`<section class="mes-context-panel"><div class="section-head"><div><h3>${t('VISUALIZAÇÃO HISTÓRICA','HISTORICAL VIEW')} · ${esc(selected.line_id)}</h3><p>${t('Esta visualização é somente leitura e não substitui o snapshot atual da Central.','This view is read-only and does not replace the current Work Center snapshot.')}</p></div><span class="status">${esc(revisionLabel(selectedEntry||selected))}</span></div><div class="ames-summary-grid"><div class="stat"><span class="stat-label">${t('Coletado em','Collected at')}</span><strong class="stat-value">${esc(displayTime(selected.collected_at))}</strong></div><div class="stat"><span class="stat-label">${t('Origem','Source')}</span><strong class="stat-value">${esc(selected.source_id||'—')}</strong></div><div class="stat"><span class="stat-label">${t('Falhas','Failures')}</span><strong class="stat-value">${rows.length}</strong></div><div class="stat"><span class="stat-label">3022 · ${t('contextos','contexts')}</span><strong class="stat-value">${contexts.length}</strong></div></div><p>${coverage.source_complete===true?t('Cobertura de falhas completa','Complete failure coverage'):t('Cobertura de falhas parcial/indisponível','Partial/unavailable failure coverage')}</p><div class="table-wrap"><table><thead><tr><th>PCBA</th><th>CPH</th><th>Defect Code</th><th>${t('Registro da falha (MES)','Failure record (MES)')}</th><th>${t('Vínculo (2114)','Linkage (2114)')}</th><th>${t('AT (3012) · candidatos','AT (3012) · candidates')}</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.pcba_sn||'—')}</td><td>${esc(r.product_model||'—')}</td><td>${esc(r.defect_code||'—')}</td><td>${esc(displayValue('defect_time',r.defect_time))}</td><td>${esc(linkageStatus(r.repair_status_current))}</td><td>${repairEvidenceCell(r)}</td></tr>`).join('')}</tbody></table></div></section>`;
   }
   async function load(){
     if(!history){error=t('Histórico compartilhado indisponível. Verifique a conexão e as permissões.','Shared history unavailable. Check connection and permissions.');results();return;}
