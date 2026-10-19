@@ -8,10 +8,11 @@ import hashlib
 import json
 import uuid
 import production_shift
+import repair_association
 from datetime import datetime, timezone
 
 SCHEMA = 'central-ames-v2'
-PROJECTION_VERSION = 8  # adds non-assertive five-source evidence coverage
+PROJECTION_VERSION = 9  # preserves proof grades and temporal provenance for 3012 candidates
 LINES = ('TAN10101', 'TAN10102', 'TAN10103')
 DATASETS = ('defects','pcba_history','material_reuse','history_contexts','process_timeline')
 TABLES = ('defect_observations','line_metrics','pcba_history','material_reuse','history_contexts','snapshot_payloads','mes_process_timeline')
@@ -148,7 +149,7 @@ def export_revision(store,sid,line,insight_builder=None):
                     row['repair_evidence_3012']=[{k:r.get(k) for k in ('row_key','pcba_sn','defect_code','defect_desc','defect_time','defect_user','repair_user','repair_time','repair_code','repair_desc','repair_comment','repaired_location','reason_desc','defect_reason_type','defect_reason_desc','product_id','product_model','line','sample_batch_id','defect_oper')} for r in repair_rows if r.get('pcba_sn')==sn]
                     # Separate candidates, never overwrite a 3028/2114 fact with 3012.
                     for repair in row['repair_evidence_3012']:
-                        repair.update(source_view='3012',association='same_pcba_candidate',raw_ref='sqlite:3012:'+str(repair['row_key']))
+                        repair.update(repair_association.classify_3012_for_occurrence(raw,repair))
                 if dataset=='material_reuse':
                     try:
                         material_raw=json.loads(raw.get('raw_json') or '{}')
@@ -200,7 +201,7 @@ def export_revision(store,sid,line,insight_builder=None):
         for row in sets['defects']:
             for evidence in row.get('repair_evidence_3012') or []:
                 key=evidence.get('row_key')
-                if key is not None:candidate_keys.add(str(key))
+                if key is not None and evidence.get('candidate_for_occurrence') is True:candidate_keys.add(str(key))
         source_coverage['3012']={
             'status':'candidate_partial' if candidate_keys else 'unknown',
             'stored_rows':len(candidate_keys),
@@ -208,7 +209,7 @@ def export_revision(store,sid,line,insight_builder=None):
             'transport_complete':True,
             'source_complete':False,
             'population_complete':False,
-            'association':'same_pcba_candidate_only',
+            'association':'candidate_only_never_proven',
             'proof':'same_pcba_repair_rows' if candidate_keys else 'no_line_specific_repair_proof',
             'scope':'workstation_history_candidate_for_snapshot_line',
         }
