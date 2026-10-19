@@ -115,7 +115,7 @@ class BoundedPartialJournal:
         if view not in VIEWS:
             return False
         kind=str(event.get('kind') or '')
-        pcba=str(event.get('pcba') or '')
+        pcba=str(event.get('pcba') or event.get('sn') or (event.get('item') or {}).get('pcba_sn') or '')
         progress_only=False
         if view=='3074' and kind=='pcba_result' and event.get('item') is not None:
             item={'event_kind':kind,'pcba':pcba,'item':event['item']}
