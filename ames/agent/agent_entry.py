@@ -123,6 +123,8 @@ def _run_deep_trace_job(job_id, cfg):
             unique=len({str(r.get("pcba_sn") or "").strip() for r in records if str(r.get("pcba_sn") or "").strip()})
             line_result={"snapshot_id":sid,"scope":{"records":len(records),"unique_pcbas":unique,"defect_codes":codes,"max_failures":max_failures,"max_pcbas":max_pcbas,"trace_mode":mode}}
             last_persist=[0.0]
+            partial_journal=source_capture.BoundedPartialJournal(
+                a.STORE,target=cfg['snapshot_targets'][line],line=line,job_id=job_id)
             def event(ev,_line=line,_idx=idx,_sid=sid):
                 nonlocal job
                 did_ingest=False;stage=str((ev or {}).get("stage") or "");kind=str((ev or {}).get("kind") or "")
@@ -137,6 +139,13 @@ def _run_deep_trace_job(job_id, cfg):
                     if state.get("result"):
                         try:a._attach_2114_to_current(_sid,{"pcbas":[{"pcba_sn":(ev or {}).get("pcba"),"status":"COMPLETE","result":state.get("result"),"error":None}]});did_ingest=True
                         except Exception:pass
+                # Progress journaling is sparse and bounded. The MES collector
+                # must continue if local storage has a transient error; report
+                # the error rather than silently treating coverage as complete.
+                try:
+                    partial_journal.observe(ev)
+                except Exception as journal_error:
+                    print('[PARTIAL SOURCE JOURNAL]',type(journal_error).__name__,str(journal_error)[:180])
                 job=a._job_live_event(job_id,ev,_line,_idx,total,_sid)
                 if stage=="3022":
                     cur=int((ev or {}).get("current") or 0);count=max(0,int((ev or {}).get("total") or 0))
