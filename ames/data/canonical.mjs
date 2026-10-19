@@ -39,7 +39,7 @@ export function normalizeCanonical(payload){
   return immutable({...base,source_schema:CANONICAL_SCHEMA,revision,snapshot_revision:revision,source_id:payload.source_id,content_hash:payload.content_hash,
     occurrences,pcba_history:{status:'partial',records:datasets.pcba_history},material_trace:{status:'partial',records:datasets.material_reuse},history_contexts:datasets.history_contexts,
     process_timeline:{status:payload.capabilities?.process_timeline?'partial':'not_collected',events:processEvents,contexts:processContexts},
-    coverage:{...base.coverage,datasets:payload.coverage,reasons:['Source coverage remains partial; transport covers the stored revision']},canonical:payload});
+    coverage:{...base.coverage,datasets:payload.coverage,sources:payload.source_coverage||null,reasons:['Source coverage remains partial; transport covers the stored revision']},canonical:payload});
 }
 export function sourceRecords(snapshot,{product,pcba_sn,material_sn}={}){
   const key=product===undefined?null:productKey(product);
