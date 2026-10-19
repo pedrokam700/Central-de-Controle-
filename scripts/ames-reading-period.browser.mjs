@@ -19,13 +19,14 @@ import {createAmesStore} from './ames/data/store.mjs';
 import {createConsoleView} from './ames/console-view.mjs';
 const store=createAmesStore({now:()=>Date.parse('2026-10-19T15:00:00Z')}),old=${JSON.stringify(old)};
 store.replaceSyncedSnapshots([${JSON.stringify(today)}]);
-let mutations=0;
-const client={collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{}};
+let mutations=0,savedReads=0,savedOpens=0;
+const savedEntry={job_id:'J123',query_sn:'PCBA-TEST',query_created_at:'2026-10-16T14:00:00Z',query_status:'done',entry_hash:'b'.repeat(64),line_id:null,production_date:null,clock_kind:'query_created_at',local_only:true};
+const client={collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},savedSnHistory:async()=>{savedReads++;return {items:[savedEntry],next_cursor:null,clock_kind:'query_created_at',local_only:true};},openSavedSnHistory:async()=>{savedOpens++;return {job_id:savedEntry.job_id,entry_hash:savedEntry.entry_hash,query_created_at:savedEntry.query_created_at,line_id:null,production_date:null,result:{trace_3074:{rows:[{sn:'PART',note:'<script>unsafe</script>'}]},trace_3012:{rows:[{association:'same_pcba_candidate'}]}}};}};
 const history={list:async line=>line===old.line_id?[{line_id:line,source_id:old.source_id,snapshot_id:old.snapshot_id,snapshot_revision:1,collected_at:old.collected_at,period_start:old.summary.period.start_at,period_end:old.summary.period.end_at,history_source:'shared'}]:[],open:async()=>old};
 const view=createConsoleView(document.querySelector('#mesConsole'),store,{agentClient:client,history});
 document.querySelectorAll('.page').forEach(el=>el.classList.add('hidden'));
 document.querySelector('#mesConsoleView')?.classList.remove('hidden');document.querySelector('#accountScreen')?.classList.add('hidden');
-window.qa={store,view,mutations:()=>mutations};view.render();
+window.qa={store,view,mutations:()=>mutations,savedReads:()=>savedReads,savedOpens:()=>savedOpens};view.render();
 `;
 const html=fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<script type="module" src="/Central-de-Controle-/qa-context.mjs"></script>';
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -63,6 +64,27 @@ try{
    assert.equal(await page.locator('[data-read-period=previous]').innerText(),'Last production day');
    assert(await page.locator('[data-global-reading-period]').evaluate(e=>e.scrollWidth<=e.clientWidth+2));
  }
+
+ // B3.3: saved queries are separate from production-period revisions.
+ // Nothing is loaded from SQLite until the operator explicitly requests it.
+ await page.setViewportSize({width:1440,height:1000});
+ await page.evaluate(()=>{document.documentElement.lang='pt-BR';qa.store.updateAgent({status:'connected'});qa.view.render();});
+ await page.locator('[data-console-view=sn]').click();
+ assert.equal(await page.locator('[data-sn-saved-toggle]').count(),1);
+ assert.equal(await page.evaluate(()=>qa.savedReads()),0);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ await page.locator('[data-sn-saved-toggle]').click();
+ await page.locator('[data-sn-saved-search] input[name=sn]').fill('PCBA-TEST');
+ await page.locator('[data-sn-saved-search] button[type=submit]').click();
+ await page.waitForFunction(()=>qa.savedReads()===1);
+ await page.locator('[data-sn-saved-open]').click();
+ await page.waitForFunction(()=>qa.savedOpens()===1);
+ await page.locator('[data-sn-saved-detail] details').first().evaluate(e=>e.open=true);
+ await page.locator('[data-sn-saved-detail] pre').first().waitFor();
+ assert.equal(await page.locator('[data-sn-saved-detail] script').count(),0);
+ assert.match(await page.locator('[data-sn-saved-detail]').innerText(),/same_pcba_candidate|unsafe/);
+ assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.snapshot_id),'TODAY-SNAPSHOT');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'Navigation must never schedule MES');assert.deepEqual(errors,[]);
  console.log('PASS: nine views share exact historical scope; no MES mutations; Today restored; PT/EN and mobile selector');
 }finally{await browser.close();await new Promise(r=>server.close(r));}
