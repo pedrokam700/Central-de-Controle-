@@ -208,6 +208,12 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(source_view)q.set('source_view',source_view);
       if(before)q.set('before',String(before));
       const data=await request('/source-captures?'+q);
+      const scalarKeys=new Set(['snapshot_id','line_id','snapshot_revision','source_view',
+        'source_status','capture_revision','job_id','stored_at','source_id','progress_only',
+        'checkpoint_kind','sample_count','source_complete','population_complete',
+        'local_only','period_start','period_end','period_mode']);
+      if(data?.items?.some(x=>!x||Object.keys(x).some(k=>!scalarKeys.has(k))))
+        throw Error('Campos inesperados no índice de capturas');
       if(data?.schema!=='ames-local-source-capture-v1'||data.metadata_only!==true||
          data.local_only!==true||data.source_complete!==false||
          String(data.snapshot_id)!==String(sid)||data.line_id!==line_id||
