@@ -44,3 +44,35 @@ test('offline/reconnect publishes once; active teammates read sanitized latest l
   assert.deepEqual(syncStatus.remote_heads,[{line_id:'TAN10101',source_id:'source',snapshot_id:'1',snapshot_revision:1,collected_at:'2026-10-09T10:00:00Z',authority:'team_latest'}]);assert.equal('owner_uid' in syncStatus.remote_heads[0],false);
   readerB.stop();assert.equal(teammate.agent().sync.read_status,'idle');assert.equal(teammate.agent().sync.remote_line_count,0);assert.deepEqual(teammate.agent().sync.remote_heads,[]);teammate.clear();assert.equal(teammate.read('TAN10101').snapshot,null);sync.stop();
 });
+
+test('identity mismatch is quarantined; other lines publish and historical outbox survives',async()=>{
+  const pending=new Map(),partWrites=new Map(),commits=[],attempts=new Map();
+  const queue={put:async e=>pending.set(e.id,e),list:async uid=>[...pending.values()].filter(e=>e.uid===uid),remove:async id=>pending.delete(id)};
+  const remote={
+    putPart:async(_u,h)=>partWrites.set(h.line_id,(partWrites.get(h.line_id)||0)+1),
+    commitHead:async(_u,h)=>{
+      attempts.set(h.line_id,(attempts.get(h.line_id)||0)+1);
+      if(h.line_id==='TAN10103')throw Error('Esta linha pertence a outra instalação. Use o migration helper para preservar a identidade da base.');
+      commits.push(h.line_id);
+    },
+    inspectIdentity:async()=>({available:true,owner_exists:true,owner_source_matches:false,shared_exists:true,shared_owner_is_current:true}),
+    watch:(_uid,cb)=>{cb([]);return()=>{}}
+  };
+  const store=createAmesStore();
+  store.replaceLocalSnapshots([canonicalFixture('TAN10102'),canonicalFixture('TAN10103')]);
+  store.setLocalConnected(true);
+  const sync=createMesSync(store,remote,{queue,online:()=>true,schedule:()=>0,unschedule:()=>{}});
+  sync.start('A');await sync.capture();await new Promise(resolve=>setTimeout(resolve,30));
+  assert.deepEqual(commits,['TAN10102']);
+  assert.equal(attempts.get('TAN10103'),1);
+  assert.equal(pending.size,1);
+  assert.equal(store.agent().sync.status,'identity_blocked');
+  assert.equal(store.agent().sync.publish_errors[0].identity.owner_source_matches,false);
+  assert.equal(store.agent().sync.last_publish_timing.line_id,'TAN10102');
+  const priorParts=partWrites.get('TAN10103');
+  await sync.retry();
+  assert.equal(attempts.get('TAN10103'),1,'permanent conflict must not retry on verification');
+  assert.equal(partWrites.get('TAN10103'),priorParts,'do not retransmit blocked parts');
+  assert.equal(pending.size,1,'history must remain in outbox');
+  sync.stop();
+});
