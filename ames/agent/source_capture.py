@@ -80,3 +80,82 @@ def capture_index(store,snapshot_id,line):
           'source_status':x['source_status'],'source_complete':False,
           'captured_at':row['created_at'],'local_only':True})
     return entries
+
+
+# B3.4b2: bounded durable sampling of real MES progress events. This is NOT a
+# replay log and does not establish complete source/population coverage.
+MAX_PARTIAL_ITEMS = 12
+MAX_EVENT_BYTES = 12 * 1024
+MAX_PARTIAL_WRITES = 4
+
+
+class BoundedPartialJournal:
+    """Save a few real partial checkpoints, never one SQLite write per event.
+
+    Retain at most 12 unique entries per source/job, individually <=12 KiB.
+    Each source produces <=4 SQLite revisions from progress, plus the final
+    full result that the worker stores separately. This prevents unbounded
+    write amplification during long factory queries.
+    """
+
+    def __init__(self, store, *, target, line, job_id):
+        self.store=store
+        self.target=target
+        self.line=line
+        self.job_id=job_id
+        self.entries={view:[] for view in VIEWS}
+        self.seen={view:set() for view in VIEWS}
+        self.writes={view:0 for view in VIEWS}
+        self.dropped={view:0 for view in VIEWS}
+
+    def observe(self, event):
+        if not isinstance(event, dict):
+            return False
+        view=str(event.get('stage') or '')
+        if view not in VIEWS:
+            return False
+        kind=str(event.get('kind') or '')
+        pcba=str(event.get('pcba') or '')
+        progress_only=False
+        if view=='3074' and kind=='pcba_result' and event.get('item') is not None:
+            item={'event_kind':kind,'pcba':pcba,'item':event['item']}
+        elif view=='2114' and kind=='pcba' and event.get('status')=='COMPLETE':
+            result=(event.get('state') or {}).get('result')
+            if result is None:return False
+            item={'event_kind':kind,'pcba':pcba,'status':'COMPLETE','result':result}
+        elif view=='3022' and kind=='pcba':
+            # The 3022 callback does not expose its raw passage rows. Never
+            # present this small metadata as complete 3022 source evidence.
+            progress_only=True
+            item={'event_kind':kind,'pcba':pcba,'phase':str(event.get('phase') or ''),
+                  'status':str(event.get('status') or ''),'current':event.get('current'),
+                  'total':event.get('total'),'rows_reported':event.get('rows')}
+        else:
+            return False
+        raw=stable_json(item).encode('utf-8')
+        if len(raw)>MAX_EVENT_BYTES:
+            self.dropped[view]+=1
+            return False
+        key=(pcba,kind,str(item.get('phase') or ''))
+        if key in self.seen[view]:
+            return False
+        if len(self.entries[view])>=MAX_PARTIAL_ITEMS:
+            self.dropped[view]+=1
+            return False
+        self.seen[view].add(key)
+        self.entries[view].append(item)
+        count=len(self.entries[view])
+        if self.writes[view]>=MAX_PARTIAL_WRITES:
+            return True
+        # First evidence is durable immediately. Later checkpoints are sparse.
+        if count!=1 and count%4!=1 and count!=MAX_PARTIAL_ITEMS:
+            return True
+        self.writes[view]+=1
+        capture_source(self.store,target=self.target,line=self.line,job_id=self.job_id,
+            view=view,status='partial',
+            result={'checkpoint_kind':'bounded_partial_progress','items':list(self.entries[view]),
+                'progress_only':progress_only if view=='3022' else False,
+                'source_complete':False,'population_complete':False,
+                'sample_limited_to':MAX_PARTIAL_ITEMS,'sample_count':count,
+                'dropped_before_checkpoint':self.dropped[view]})
+        return True
