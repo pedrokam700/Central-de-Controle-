@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildDataHealth,buildSecurityHealth,buildWorkstationHealth,buildSyncHealth,createDataHealthView} from '../ames/console-data-health.mjs';
+import {buildDataHealth,buildSecurityHealth,buildWorkstationHealth,buildSyncHealth,factorySyncEvidence,createDataHealthView} from '../ames/console-data-health.mjs';
 
 function fakeStore(occurrences=[]){
   return {
@@ -162,4 +162,36 @@ test('3012 linked evidence counts only current occurrences and does not inherit 
   assert.equal(item.state.tone,'partial');
   assert.match(item.state.detail,/1\/2/);
   assert.equal(item.cache.rows,999);
+});
+test('factory A/B diagnostic excludes account, installation identity, SN and raw errors',()=>{
+  const sample=factorySyncEvidence({
+    status:'connected',agent_build:'0.5.25-rc1',user_uid:'UID_DO_NOT_COPY',
+    sync:{
+      status:'shared_history_legacy_conflict',read_status:'ready',pending:0,
+      source_id:'SOURCE_ID_DO_NOT_COPY',cookie:'COOKIE_DO_NOT_COPY',
+      identity_blocked:['TAN10103','UNTRUSTED_DO_NOT_COPY'],
+      publish_errors:[{line_id:'TAN10103',message:'PASSWORD_DO_NOT_COPY'}],
+      origin_conflict_lines:[],
+      last_sent:{line_id:'TAN10103',snapshot_id:'19',snapshot_revision:2,
+        authority:'operational_day_history',sent_at:'2026-10-19T14:00:00Z',
+        source_id:'INSTALLATION_DO_NOT_COPY'},
+      last_publish_timing:{line_id:'TAN10103',parts_ms:300,head_ms:15,history_ms:40,total_ms:355},
+      remote_scope:'operational_day_history',
+      last_received_at:'2026-10-19T14:00:10Z',server_received_at:'2026-10-19T14:00:09Z',
+      remote_heads:[{line_id:'TAN10103',snapshot_id:'19',snapshot_revision:2,
+        collected_at:'2026-10-19T13:55:00Z',authority:'operational_day_history',
+        owner_uid:'UID_B_DO_NOT_COPY',source_id:'INSTALLATION_B_DO_NOT_COPY',
+        pcba_sn:'PCBA_DO_NOT_COPY'}],
+      last_receive_timing:{read_ms:85,download_ms:63,candidates:23,downloaded:2,cache_hits:0,skipped_versions:21}
+    }
+  },new Date('2026-10-19T14:01:00Z'));
+  assert.equal(sample.schema,'ames-pr38-factory-a-b-v1');
+  assert.equal(sample.publishing.last_sent.authority,'operational_day_history');
+  assert.equal(sample.receiving.skipped_versions,21);
+  assert.deepEqual(sample.publishing.blocked_lines,['TAN10103']);
+  const output=JSON.stringify(sample);
+  for(const secret of ['UID_DO_NOT_COPY','SOURCE_ID_DO_NOT_COPY','COOKIE_DO_NOT_COPY',
+    'PASSWORD_DO_NOT_COPY','INSTALLATION_DO_NOT_COPY','INSTALLATION_B_DO_NOT_COPY',
+    'PCBA_DO_NOT_COPY'])assert.equal(output.includes(secret),false,secret);
+  assert.equal(output.includes('TAN10103'),true);
 });
