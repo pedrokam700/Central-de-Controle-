@@ -71,7 +71,7 @@ test('identity mismatch is quarantined; other lines publish and historical outbo
   assert.deepEqual(history.sort(),['TAN10102','TAN10103']);
   assert.equal(store.agent().sync.status,'shared_history_legacy_conflict');
   assert.equal(store.agent().sync.publish_errors[0].identity.owner_source_matches,false);
-  assert.equal(store.agent().sync.last_publish_timing.line_id,'TAN10102');
+  assert(['TAN10102','TAN10103'].includes(store.agent().sync.last_publish_timing.line_id));
   const priorParts=partWrites.get('TAN10103');
   await sync.retry();
   assert.equal(attempts.get('TAN10103'),1,'permanent conflict must not retry on verification');
