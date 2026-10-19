@@ -14,6 +14,14 @@ function fixture(id,date,mode){
  return p;
 }
 const today=fixture('TODAY-SNAPSHOT','2026-10-19','today'),old=fixture('FRIDAY-SNAPSHOT','2026-10-16','previous_day');
+old.source_coverage={
+ '3028':{status:'observed_partial',stored_rows:3,source_complete:false,transport_complete:true},
+ '3074':{status:'unknown',stored_rows:0,source_complete:false,transport_complete:true},
+ '2114':{status:'observed_partial',stored_rows:2,source_complete:false,transport_complete:true},
+ '3022':{status:'unknown',stored_rows:0,source_complete:false,transport_complete:true},
+ '3012':{status:'candidate_partial',stored_rows:1,source_complete:false,transport_complete:true,association:'same_pcba_candidate_only'}
+};
+
 const harness=`
 import {createAmesStore} from './ames/data/store.mjs';
 import {createConsoleView} from './ames/console-view.mjs';
@@ -53,6 +61,13 @@ try{
    assert.equal(await pane.isVisible(),true);assert.match(await pane.locator('[data-shared-period]').innerText(),/16/);
    assert(!((await pane.innerText()).includes('TODAY-SNAPSHOT')),id+' leaked Today');
  }
+ await page.locator('[data-console-view=base]').click();
+ const proof=page.locator('[data-console-pane=base] [data-five-source-coverage]');
+ assert.equal(await proof.count(),1);
+ assert.equal(await proof.locator('[data-source-view="3074"]').getAttribute('data-source-status'),'unknown');
+ assert.equal(await proof.locator('[data-source-view="3012"]').getAttribute('data-source-status'),'candidate_partial');
+ assert.match(await proof.innerText(),/3012/);
+ assert(!/3074[^\n]*0 (?:registro|row)/i.test(await proof.innerText()),'Missing 3074 is not zero');
  await page.locator('[data-console-view=monitor]').click();await page.locator('[data-line-tab="TAN10102"]').click();
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10102').snapshot),null);
  await page.locator('[data-line-tab="TAN10101"]').click();await page.locator('[data-read-period=today]').click();
