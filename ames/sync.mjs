@@ -35,9 +35,11 @@ export function indexedQueue(){
   const run=async(mode,work)=>{const d=await open();return new Promise((resolve,reject)=>{const t=d.transaction('pending',mode),s=t.objectStore('pending');let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
   return {put:x=>run('readwrite',s=>s.put(x)),remove:id=>run('readwrite',s=>s.delete(id)),list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid)};
 }
-export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig={timezone:'America/Sao_Paulo',dayStart:'07:00'}}={}){
+export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set();
   const alive=(u,g)=>u===uid&&g===generation;
+  const currentConfig=()=>typeof productionConfig==='function'?productionConfig():productionConfig;
+  const entryScope=e=>publicationIntent(JSON.parse(e.parts.join('')),now(),currentConfig());
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
   const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null,identity_blocked:[],last_publish_timing:null});
   async function flush(){
@@ -48,14 +50,14 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       status({pending:entries.length,status:entries.length?'pending':(store.agent().sync?.last_sent?'synchronized':'idle')});
       if(!online())return;
       while(entries.length&&alive(u,g)){
-        if(!entries.some(e=>!identityBlocked.has(e.head.line_id))){
+        if(!entries.some(e=>entryScope(e)==='history'||!identityBlocked.has(e.head.line_id))){
           status({status:'identity_blocked',pending:entries.length,identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values()],error:'Publicação bloqueada por identidade; histórico local e fila preservados.'});
           break;
         }
         entries.sort((a,b)=>b.head.snapshot_num-a.head.snapshot_num||b.head.snapshot_revision-a.head.snapshot_revision);
         const errors=[];
         for(const entry of entries){
-          if(identityBlocked.has(entry.head.line_id))continue;
+          if(identityBlocked.has(entry.head.line_id)&&entryScope(entry)==='today')continue;
           let stage='parts',stageAt=Date.now(),partsMs=0,headMs=0,historyMs=0;
           try{
             if(!alive(u,g))return;
@@ -68,7 +70,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
             // Old outbox entries have no publish_scope: recompute fail-closed from
             // their immutable sanitized payload before any shared-head write.
             const payload=JSON.parse(entry.parts.join(''));
-            const scope=publicationIntent(payload,now(),productionConfig);
+            const scope=publicationIntent(payload,now(),currentConfig());
             if(scope==='today')await remote.commitHead(u,entry.head);
             headMs=Date.now()-stageAt;stageAt=Date.now();
             if(!alive(u,g))return;stage='history';
@@ -145,7 +147,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       const payloads=store.localCanonical();
       const signature=JSON.stringify(payloads.map(p=>[p.line_id,p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));
       if(signature===seen)return;
-      for(const p of payloads){const entry=await publication(u,p,{now:now(),productionConfig});if(!alive(u,g))return;await queue.put(entry);}
+      for(const p of payloads){const entry=await publication(u,p,{now:now(),productionConfig:currentConfig()});if(!alive(u,g))return;await queue.put(entry);}
       if(!alive(u,g))return;
       seen=signature;const pending=(await queue.list(u)).length;
       if(alive(u,g)){status({status:pending?'pending':'idle',pending});void flush();}
