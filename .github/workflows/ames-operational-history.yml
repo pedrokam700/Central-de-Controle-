@@ -26,6 +26,7 @@ jobs:
           python3 scripts/agent-capture-manifest.test.py
           python3 scripts/agent-canonical.test.py
           python3 scripts/agent-repair-association.test.py
+          python3 scripts/agent-3012-capture.test.py
           python3 scripts/agent-operational-day-selection.test.py
   reading-browser:
     runs-on: ubuntu-latest
@@ -62,6 +63,7 @@ jobs:
             'scripts/agent-trace-target.test.py',
             'scripts/agent-canonical.test.py',
             'scripts/agent-repair-association.test.py',
+            'scripts/agent-3012-capture.test.py',
             'scripts/agent-raw-history.test.py'
           )) {
             python $script
