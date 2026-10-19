@@ -52,6 +52,8 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       day_start:cfg.day_start,
       production_day_start:cfg.production_day_start||cfg.day_start||'07:00',
       timezone:cfg.timezone||'America/Sao_Paulo',
+      non_production_dates:Array.isArray(cfg.non_production_dates)?cfg.non_production_dates.filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)).slice(0,730):[],
+      extra_production_dates:Array.isArray(cfg.extra_production_dates)?cfg.extra_production_dates.filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)).slice(0,730):[],
       work_shifts:cfg.work_shifts||null,
       monitor_interval_minutes:cfg.monitor_interval_minutes,
       backup_retention:cfg.backup_retention,
