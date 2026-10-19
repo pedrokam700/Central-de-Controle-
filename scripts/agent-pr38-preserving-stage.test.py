@@ -59,7 +59,7 @@ def test_preserving_update_and_rollback():
         (agent / "config.json").write_text(json.dumps(original_cfg))
         database = Store(agent / "data" / "ames_local.sqlite3")
         database.initialize()
-        canonical.ensure(database)
+        canonical.initialize(database)
         original_source = snapshot(database)
         prior_snapshot = database.create_snapshot(window_id=None, source_kind="before_PR38")
         old_app = current / "frontend/Central-de-Controle-/app.js"
