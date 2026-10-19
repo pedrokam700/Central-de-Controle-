@@ -5,6 +5,9 @@ identity. The raw result is never an automatic Firebase transport dataset.
 """
 import hashlib
 import re
+import base64
+import binascii
+import json
 
 import canonical
 from store import stable_json, utc_now
@@ -159,3 +162,116 @@ class BoundedPartialJournal:
                 'sample_limited_to':MAX_PARTIAL_ITEMS,'sample_count':count,
                 'dropped_before_checkpoint':self.dropped[view]})
         return True
+
+
+def capture_manifest(store, *, snapshot_id, line, snapshot_revision, content_hash,
+                     source_view=None, before=None, limit=20):
+    """Authorized, paged METADATA only. No raw blob leaves SQLite.
+
+    The requested parent MUST be an immutable canonical revision. A capture
+    from a different production day, line, workstation or revision cannot
+    be silently selected, even if its job ID or PCBA is the same.
+    """
+    if line not in canonical.LINES:
+        raise ValueError('Invalid capture line')
+    try:
+        sid=int(snapshot_id)
+        rev=int(snapshot_revision)
+        n=int(limit)
+    except (TypeError,ValueError,OverflowError) as exc:
+        raise ValueError('Invalid capture identity/limit') from exc
+    if (str(snapshot_id)!=str(sid) or str(snapshot_revision)!=str(rev)
+            or sid<1 or rev<1 or n<1 or n>50):
+        raise ValueError('Invalid capture identity/limit')
+    if not isinstance(content_hash,str) or not re.fullmatch(r'[0-9a-f]{64}',content_hash):
+        raise ValueError('Invalid canonical capture hash')
+    if source_view not in (None,*VIEWS):
+        raise ValueError('Invalid source capture view')
+    parent=canonical.read_revision(store,sid,line,rev)
+    period=parent['summary']['period']
+    if parent['content_hash']!=content_hash or parent['source_id']!=canonical.source_id(store):
+        raise ValueError('Source or canonical revision mismatch')
+    scope=hashlib.sha256(stable_json([sid,line,rev,content_hash,source_view]).encode()).hexdigest()
+    cursor=None
+    if before:
+        if not isinstance(before,str) or len(before)>512:
+            raise ValueError('Invalid capture cursor')
+        try:
+            data=json.loads(base64.urlsafe_b64decode(before+'='*((-len(before))%4)).decode())
+            if (not isinstance(data,list) or len(data)!=4 or data[3]!=scope
+                or not isinstance(data[0],str) or not isinstance(data[1],str)
+                or not isinstance(data[2],int) or data[2]<1
+                or len(data[0])>64 or len(data[1])>180):
+                raise ValueError('Invalid capture cursor')
+            cursor=data
+        except (UnicodeDecodeError,ValueError,TypeError,binascii.Error,OverflowError) as exc:
+            raise ValueError('Invalid capture cursor') from exc
+    elif before is not None and before!='':
+        raise ValueError('Invalid capture cursor')
+    # Only project individual scalar JSON values. Never select payload_json
+    # itself, raw result, repair comments, SN, material serial or tokens.
+    fields={
+        'source_view':'$.source_view',
+        'source_status':'$.source_status',
+        'job_id':'$.job_id',
+        'capture_parent_revision':'$.parent_snapshot_revision',
+        'source_id':'$.source_id',
+        'sample_count':'$.result.sample_count',
+        'checkpoint_kind':'$.result.checkpoint_kind',
+        'progress_only':'$.result.progress_only',
+    }
+    sql_columns=','.join(f"json_extract(r.payload_json,'{selector}') AS {key}" for key,selector in fields.items())
+    where=["r.snapshot_id=?",
+           "substr(r.kind,1,15)='source_capture_'",
+           "json_extract(r.payload_json,'$.schema')=?",
+           "json_extract(r.payload_json,'$.line_id')=?",
+           "json_extract(r.payload_json,'$.source_id')=?",
+           "json_extract(r.payload_json,'$.parent_snapshot_revision')=?",
+           "json_extract(r.payload_json,'$.parent_content_hash')=?",
+           "json_extract(r.payload_json,'$.period.start_at') IS ?",
+           "json_extract(r.payload_json,'$.period.end_at') IS ?",
+           "json_extract(r.payload_json,'$.period.mode') IS ?"]
+    params=[sid,SCHEMA,line,parent['source_id'],rev,content_hash,
+            period.get('start_at'),period.get('end_at'),period.get('mode')]
+    if source_view:
+        where.append("json_extract(r.payload_json,'$.source_view')=?")
+        params.append(source_view)
+    if cursor:
+        where.append("(r.created_at<? OR (r.created_at=? AND r.kind<?)"
+                     " OR (r.created_at=? AND r.kind=? AND r.revision<?))")
+        params.extend([cursor[0],cursor[0],cursor[1],cursor[0],cursor[1],cursor[2]])
+    sql=(f"SELECT r.created_at AS stored_at,r.kind AS stored_kind,r.revision AS capture_revision,{sql_columns} "
+         "FROM snapshot_payload_revisions r WHERE "+' AND '.join(where)+
+         " ORDER BY r.created_at DESC,r.kind DESC,r.revision DESC LIMIT ?")
+    with store.connect() as con:
+        rows=[dict(row) for row in con.execute(sql,(*params,n+1))]
+    more=len(rows)>n
+    rows=rows[:n]
+    items=[]
+    for row in rows:
+        # Never trust a local raw envelope enough to claim complete MES
+        # collection. 3022 progress has no passage rows in the callback.
+        if row['source_view'] not in VIEWS:
+            continue
+        items.append({
+            'snapshot_id':str(sid),'line_id':line,'snapshot_revision':rev,
+            'source_view':row['source_view'],'source_status':row['source_status']
+                if row['source_status'] in ('partial','done','error') else 'partial',
+            'capture_revision':row['capture_revision'],'job_id':row['job_id'],
+            'stored_at':row['stored_at'],'source_id':row['source_id'],
+            'progress_only':bool(row['progress_only']),
+            'checkpoint_kind':row['checkpoint_kind'] if row['checkpoint_kind']=='bounded_partial_progress' else None,
+            'sample_count':row['sample_count'] if type(row['sample_count']) is int and row['sample_count']>0 else None,
+            'source_complete':False,'population_complete':False,'local_only':True,
+            'period_start':period.get('start_at'),'period_end':period.get('end_at'),
+            'period_mode':period.get('mode'),
+        })
+    next_cursor=None
+    if more and rows:
+        last=rows[-1]
+        packed=stable_json([last['stored_at'],last['stored_kind'],last['capture_revision'],scope])
+        next_cursor=base64.urlsafe_b64encode(packed.encode()).decode().rstrip('=')
+    return {'schema':SCHEMA,'source_id':parent['source_id'],'line_id':line,
+            'snapshot_id':str(sid),'snapshot_revision':rev,'content_hash':content_hash,
+            'period':period,'items':items,'next_cursor':next_cursor,
+            'local_only':True,'metadata_only':True,'source_complete':False}
