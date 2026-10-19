@@ -1,6 +1,7 @@
 import {normalizeCanonical,CANONICAL_SCHEMA} from './data/canonical.mjs';
 import {LINE_IDS} from './data/contract.mjs';
 import {historyMetadata} from './data/history.mjs';
+import {publicationIntent} from './data/operational-period.mjs';
 const sha=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const syncHeadMetadata=head=>Object.freeze({
   line_id:head.line_id,
@@ -21,12 +22,12 @@ export function sanitizeSnapshot(payload){
   const clean=value=>Array.isArray(value)?value.map(clean):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([k])=>!/^_|password|senha|cookie|credential|authorization|token|^raw$|raw_json|^raw_payload$|details_json|query_meta_json|session|cdp|wi.?fi|secret/i.test(k)).map(([k,v])=>[k,clean(v)])):value;
   return clean(Object.fromEntries(allowed.filter(k=>k in payload).map(k=>[k,payload[k]])));
 }
-export async function publication(uid,payload){
+export async function publication(uid,payload,{now=new Date(),productionConfig}={}){
   const safe=sanitizeSnapshot(payload),text=JSON.stringify(safe),hash=await sha(text);
   const key=await sha(JSON.stringify([safe.source_id,safe.snapshot_id,safe.snapshot_revision,hash]));
   const parts=[];for(let i=0;i<text.length;){let end=Math.min(i+150000,text.length);if(end<text.length&&/[\uD800-\uDBFF]/.test(text[end-1]))end--;parts.push(text.slice(i,end));i=end;}
   const head={schema:CANONICAL_SCHEMA,owner_uid:uid,line_id:safe.line_id,source_id:safe.source_id,snapshot_id:safe.snapshot_id,snapshot_num:Number(safe.snapshot_id),snapshot_revision:safe.snapshot_revision,key,hash,parts:parts.length,collected_at:safe.collected_at};
-  return {id:uid+':'+safe.line_id+':'+key,uid,head,parts,history:historyMetadata(safe)};
+  return {id:uid+':'+safe.line_id+':'+key,uid,head,parts,history:historyMetadata(safe),publish_scope:publicationIntent(safe,now,productionConfig)};
 }
 export function indexedQueue(){
   let db;
@@ -34,7 +35,7 @@ export function indexedQueue(){
   const run=async(mode,work)=>{const d=await open();return new Promise((resolve,reject)=>{const t=d.transaction('pending',mode),s=t.objectStore('pending');let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
   return {put:x=>run('readwrite',s=>s.put(x)),remove:id=>run('readwrite',s=>s.delete(id)),list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid)};
 }
-export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout}={}){
+export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig={timezone:'America/Sao_Paulo',dayStart:'07:00'}}={}){
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set();
   const alive=(u,g)=>u===uid&&g===generation;
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
@@ -63,7 +64,12 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
               uploadedParts.add(entry.id);
             }
             partsMs=Date.now()-stageAt;stageAt=Date.now();
-            if(!alive(u,g))return;stage='head';await remote.commitHead(u,entry.head);
+            if(!alive(u,g))return;stage='head';
+            // Old outbox entries have no publish_scope: recompute fail-closed from
+            // their immutable sanitized payload before any shared-head write.
+            const payload=JSON.parse(entry.parts.join(''));
+            const scope=publicationIntent(payload,now(),productionConfig);
+            if(scope==='today')await remote.commitHead(u,entry.head);
             headMs=Date.now()-stageAt;stageAt=Date.now();
             if(!alive(u,g))return;stage='history';
             if(remote.commitHistory)await remote.commitHistory(u,entry.head,entry.history||historyMetadata(JSON.parse(entry.parts.join(''))));
@@ -139,7 +145,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       const payloads=store.localCanonical();
       const signature=JSON.stringify(payloads.map(p=>[p.line_id,p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));
       if(signature===seen)return;
-      for(const p of payloads){const entry=await publication(u,p);if(!alive(u,g))return;await queue.put(entry);}
+      for(const p of payloads){const entry=await publication(u,p,{now:now(),productionConfig});if(!alive(u,g))return;await queue.put(entry);}
       if(!alive(u,g))return;
       seen=signature;const pending=(await queue.list(u)).length;
       if(alive(u,g)){status({status:pending?'pending':'idle',pending});void flush();}
