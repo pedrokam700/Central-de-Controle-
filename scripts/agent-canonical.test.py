@@ -50,7 +50,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(proof['3022']['stored_rows'],0)
         self.assertEqual(proof['3012']['status'],'unknown')
         self.assertEqual(proof['3012']['stored_rows'],0)
-        self.assertEqual(proof['3012']['association'],'same_pcba_candidate_only')
+        self.assertEqual(proof['3012']['association'],'candidate_only_never_proven')
         self.assertEqual(original,canonical.read_revision(self.store,self.sid,'TAN10101',1))
         with self.store.connect() as con:
             con.execute('CREATE TABLE IF NOT EXISTS repair_history_3012(row_key TEXT PRIMARY KEY,pcba_sn TEXT NOT NULL,repair_time TEXT)')
