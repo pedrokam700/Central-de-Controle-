@@ -36,6 +36,38 @@ class ContractTests(unittest.TestCase):
             mat=p['datasets']['material_reuse'][0];self.assertEqual(mat['material_sn'],'M');self.assertTrue(mat['bind_id']);self.assertIsNone(mat['unbind_id'])
             self.assertFalse(p['coverage']['defects']['source_complete']);self.assertTrue(p['coverage']['defects']['transport_complete'])
         rows=self.store.dataset_rows('pcba_history',self.sid);self.assertIsNone(rows[0]['line']);self.assertTrue(rows[0]['line_ambiguous'])
+    def test_five_sources_keep_unknown_distinct_from_zero_and_3012_candidates(self):
+        original=canonical.export_revision(self.store,self.sid,'TAN10101')
+        self.assertEqual(original['projection_version'],canonical.PROJECTION_VERSION)
+        proof=original['source_coverage']
+        self.assertEqual(set(proof),{'3028','3074','2114','3022','3012'})
+        for view in ('3028','3074','2114'):
+            self.assertEqual(proof[view]['status'],'observed_partial')
+            self.assertFalse(proof[view]['source_complete'])
+            self.assertFalse(proof[view]['population_complete'])
+            self.assertTrue(proof[view]['transport_complete'])
+        self.assertEqual(proof['3022']['status'],'unknown')
+        self.assertEqual(proof['3022']['stored_rows'],0)
+        self.assertEqual(proof['3012']['status'],'unknown')
+        self.assertEqual(proof['3012']['stored_rows'],0)
+        self.assertEqual(proof['3012']['association'],'same_pcba_candidate_only')
+        self.assertEqual(original,canonical.read_revision(self.store,self.sid,'TAN10101',1))
+        with self.store.connect() as con:
+            con.execute('CREATE TABLE IF NOT EXISTS repair_history_3012(row_key TEXT PRIMARY KEY,pcba_sn TEXT NOT NULL,repair_time TEXT)')
+            con.execute("INSERT INTO repair_history_3012 VALUES('R1','P','2026-10-10T00:00:00Z')")
+            con.execute("INSERT INTO repair_history_3012 VALUES('R2','OTHER','2026-10-10T00:00:00Z')")
+        # The real refresh bridge adds triggers for a newly created source.
+        canonical.install_evidence_triggers(self.store.connect())
+        revised=canonical.export_revision(self.store,self.sid,'TAN10101')
+        self.assertEqual(revised['snapshot_revision'],2)
+        self.assertEqual(revised['source_coverage']['3012']['status'],'candidate_partial')
+        self.assertEqual(revised['source_coverage']['3012']['stored_rows'],1)
+        self.assertEqual(revised['source_coverage']['3012']['dataset_rows']['repair_candidates'],1)
+        self.assertTrue(all(e['association']=='same_pcba_candidate'
+          for d in revised['datasets']['defects'] for e in d.get('repair_evidence_3012',[])))
+        self.assertEqual(canonical.read_revision(self.store,self.sid,'TAN10101',1),original)
+        self.assertFalse(revised['source_coverage']['3012']['source_complete'])
+
     def test_cursor_complete_and_scope_bound(self):
         with self.store.connect() as c:
             for i in range(5):c.execute('INSERT INTO pcba_history(snapshot_id,pcba_sn,hist_seq,defect_code,defect_desc) VALUES(?,?,?,?,?)',(self.sid,'P',str(i+2),'D','test'))
