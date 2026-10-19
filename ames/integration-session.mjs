@@ -16,7 +16,7 @@ export function createMesIntegration(store, remote, {changed=()=>{}, transport={
     try{
       if(store.agent().status==='connected')await client.refresh();
       else if(client.paired())await client.connect({quiet:true});
-      if(active&&g===generation)await capture();
+      if(active&&g===generation){sync.ensureOperationalDay();await capture();}
     }catch{ /* client owns local diagnostics; cloud reading remains independent */ }
     finally{if(active&&g===generation)timer=schedule(()=>tick(g),interval);}
   }
