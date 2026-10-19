@@ -1,5 +1,6 @@
 import { LINE_IDS } from './data/contract.mjs';
 import { coverageState, matchesPeriod } from './data/history.mjs';
+import { isTodaySnapshot } from './data/operational-period.mjs';
 import { formatFactoryDateTime as displayTime, displayValue } from './data/time-display.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 
@@ -58,7 +59,30 @@ export function createHistoryView(root,store,client,history) {
   }
   function results(){
     const host=root.querySelector('[data-period-results]');if(!host)return;summary();
-    const values=formValues(),matches=entries.filter(e=>matchesPeriod(e,values)),canCollect=store.agent().status==='connected'&&values.start&&values.end;
+    const values=formValues(),matches=tab==='today'?[]:entries.filter(e=>matchesPeriod(e,values)),canCollect=store.agent().status==='connected'&&values.start&&values.end;
+    if(tab==='today'){
+      // The mutable end of a live 3028 window never equals tomorrow at 07:00.
+      // Use the already verified current-day canonical store instead of
+      // misclassifying its history index as "not collected".
+      const current=store.read(line),snapshot=current.snapshot,canonical=snapshot?.canonical;
+      const cfg=store.agent().config||{};
+      const verified=canonical&&isTodaySnapshot(canonical,new Date(),{
+        timezone:cfg.timezone||'America/Sao_Paulo',
+        dayStart:cfg.production_day_start||cfg.day_start||'07:00'
+      });
+      const range=operationalRange(store,0);
+      const failures=canonical?.datasets?.defects||[];
+      host.innerHTML=loading?`<p role="status">${t('Consultando histórico…','Loading history…')}</p>`:
+        `${verified?`<div class="ames-history-current"><p><b>${t('Evidência do dia operacional confirmada','Current production-day evidence verified')}</b> · ${esc(range.start.replace('T',' '))} → ${esc(range.end.replace('T',' '))}</p><p>${t('Última extração','Last extraction')}: ${esc(displayTime(canonical.collected_at))} · ${t('Origem','Source')}: ${esc(current.source)} · ${t('Revisão','Revision')}: ${esc(revisionLabel(canonical))}</p><p>${t('Ocorrências armazenadas','Stored occurrences')}: <b>${failures.length}</b> · ${t('Cobertura','Coverage')}: ${canonical.coverage?.defects?.source_complete===true?t('Completa','Complete'):t('Parcial/não comprovada','Partial/unverified')}</p></div>`:`<p class="mes-context">${t('Ainda não há evidência comprovada para Hoje nesta linha. Dados de outro período não serão exibidos aqui.','No verified evidence for Today on this line. Another period will not appear here.')}</p>`}
+        ${canCollect?`<button type="button" class="button secondary" data-history-today-collect>${t('Atualizar Hoje','Refresh Today')}</button>`:''}`;
+      host.querySelector('[data-history-today-collect]')?.addEventListener('click',async()=>{
+        loading=true;results();
+        try{await client.collect('today',{lines:[line],performance:'balanced'});message=t('Atualização do dia iniciada. Aguarde a próxima revisão.','Today refresh started. Wait for the next revision.');}
+        catch(e){error=e.message;}
+        finally{if(!disposed){loading=false;results();}}
+      });
+      return;
+    }
     host.innerHTML=loading?`<p role="status">${t('Consultando histórico…','Loading history…')}</p>`:error?`<p role="status" class="notice warn">${esc(error)}</p>`:
       `${message?`<p role="status" class="mes-context">${esc(message)}</p>`:''}${matches.length?`<div class="table-wrap"><table><thead><tr><th>${t('Período','Period')}</th><th>CPH</th><th>${t('Versão','Version')}</th><th>${t('Coleta','Collected')}</th><th>${t('Posto/origem','Workstation/source')}</th><th></th></tr></thead><tbody>${matches.map((e,i)=>`<tr><td>${esc(e.period_start&&e.period_end?e.period_start+' → '+e.period_end:t('Período não informado pela fonte','Period not reported by source'))}</td><td>${esc(e.products||'—')}</td><td><b>${esc(revisionLabel(e))}</b></td><td>${esc(displayTime(e.collected_at))}</td><td>${esc(e.source_id||'—')}</td><td><button type="button" class="button secondary" data-history-open="${i}">${t('Abrir sem substituir atual','Open without replacing current')}</button></td></tr>`).join('')}</tbody></table></div><p class="mes-context">${t('Cada linha é uma versão preservada. Uma atualização do mesmo período cria/publica nova evidência; versões anteriores continuam disponíveis.','Each row is a preserved version. Refreshing the same period creates/publishes new evidence; older versions remain available.')}</p>`:`<p>${t('Período ainda não coletado','Period not collected yet')}</p>`}
       ${canCollect?`<button type="button" class="button secondary" data-history-collect>${matches.length?t('Atualizar este período (preservar histórico)','Refresh this period (preserve history)'):t('Coletar este período','Collect this period')}</button>`:''}`;
