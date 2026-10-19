@@ -43,7 +43,11 @@ for(const name of [...new Set(names)]){
   fs.mkdirSync(path.dirname(target),{recursive:true});
   if(name==='index.html')fs.writeFileSync(target,deployedIndex(fs.readFileSync(name,'utf8')));
   else if(name==='app.js')fs.writeFileSync(target,deployedApp(fs.readFileSync(name,'utf8')));
-  else if(name==='sw.js')fs.writeFileSync(target,fs.readFileSync(name,'utf8').replace("const CACHE_REVISION='integration-20261018';",'const CACHE_REVISION='+JSON.stringify(sha||'integration-20261018')+';'));
+  else if(name==='sw.js'){
+    const source=fs.readFileSync(name,'utf8');
+    if(!/^const CACHE_REVISION=[^;]+;/m.test(source))throw new Error('Service worker sem revisão de cache');
+    fs.writeFileSync(target,source.replace(/^const CACHE_REVISION=[^;]+;/m,'const CACHE_REVISION='+JSON.stringify(sha||'integration-20261019-pr38')+';'));
+  }
   else fs.copyFileSync(name,target);
 }
 // Entrada raiz é um arquivo real, não um redirect/rewrite do provedor. Isso evita
