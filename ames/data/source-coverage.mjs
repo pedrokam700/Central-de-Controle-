@@ -8,7 +8,7 @@ export function fiveSourceEvidence(payload){
     const row=mapped?.[view];
     const status=row?.status;
     const observed=status==='observed_partial'||status==='candidate_partial';
-    const count=observed&&Number.isSafeInteger(row?.stored_rows)&&row.stored_rows>=0?row.stored_rows:null;
+    const count=observed&&Number.isSafeInteger(row?.stored_rows)&&row.stored_rows>0?row.stored_rows:null;
     return Object.freeze({
       view,status:observed?status:'unknown',count,
       sourceComplete:row?.source_complete===true,
