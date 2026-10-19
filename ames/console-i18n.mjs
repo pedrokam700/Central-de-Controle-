@@ -14,7 +14,7 @@ Histórico de produção|Production history
 Hoje, último dia produtivo e revisões antigas. A coleta do dia anterior não modifica os indicadores de Hoje.|Today, last production day and previous revisions. Collecting an earlier day does not change Today's indicators.
 Abrir histórico|Open history
 Abrir a Central local deste computador para controlar o A-MES|Open this workstation's local Central to control A-MES
-O endereço 127.0.0.1 pertence ao computador onde o navegador está aberto, não ao posto remoto. O site HTTPS precisa de pareamento explícito para controlar o agente.|The 127.0.0.1 address belongs to the computer where this browser runs, not the remote workstation. HTTPS requires explicit pairing to control the agent.
+O endereço do agente local pertence ao computador onde o navegador está aberto, não ao posto remoto. O site HTTPS precisa de pareamento explícito para controlar o agente.|The local agent address belongs to the computer running this browser, not the remote workstation. HTTPS requires explicit pairing to control the agent.
 O histórico pode estar somente no SQLite deste computador ou na base compartilhada.|History may exist only in this computer's SQLite or in shared storage.
 Coleta local disponível; envio para a equipe ainda não confirmado. Confira a sincronização abaixo.|Local collection available; team publication not confirmed. Check synchronization below.
 Há revisão imutável, mas o cabeçalho legado continua em conflito; confira a leitura no outro posto.|Immutable revision exists, but the legacy head still conflicts; verify reading on the other workstation.
