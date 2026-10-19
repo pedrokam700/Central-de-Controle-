@@ -143,7 +143,7 @@ def test_preserving_update_and_rollback():
         # including an index tamper. No factory network or port is used.
         shell=shutil.which("powershell") or shutil.which("pwsh")
         if shell:
-            expression=re.search(r'for /f "usebackq delims=" %%L in `powershell -NoProfile -ExecutionPolicy Bypass -Command "([^"]+)"`\) do set "CENTRAL=%%L"',launcher)
+            expression=re.search(r'for /f "usebackq delims=" %%L in \(`powershell -NoProfile -ExecutionPolicy Bypass -Command "([^"]+)"`\) do set "CENTRAL=%%L"',launcher)
             assert expression, "Local gate PowerShell not found"
             env={**os.environ,"ROOT":str(staged)}
             def gate_check():
