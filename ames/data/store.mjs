@@ -52,10 +52,10 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
 
   function readLine(line){
     requireLine(line);
-    const saved=selectedPeriod?historical.get(JSON.stringify([selectedPeriod,line])):null;
+    const saved=selectedPeriod&&selectedPeriod.mode!=='today'?historical.get(JSON.stringify([selectedPeriod,line])):null;
     const eligible=s=>s&&matchesReadingPeriod(s.canonical||s,selectedPeriod)?s:null;
     const snapshot = saved?.snapshot || (localConnected && eligible(local.get(line))) || eligible(synced.get(line)) || eligible(remote.get(line)) || eligible(local.get(line)) || null;
-    const source = !snapshot ? 'none' : saved? saved.source : snapshot === local.get(line) ? (localConnected ? 'local' : 'local_cache') : 'remote';
+    const source = !snapshot ? 'none' : saved? (saved.source==='local'&&!localConnected?'local_cache':saved.source) : snapshot === local.get(line) ? (localConnected ? 'local' : 'local_cache') : 'remote';
     const source_state=!snapshot?SOURCE_STATE.NOT_COLLECTED:source==='local_cache'?SOURCE_STATE.CACHED:SOURCE_STATE.OK;
     const collected = instant(snapshot?.collected_at);
     const age = collected === null ? null : now() - collected;

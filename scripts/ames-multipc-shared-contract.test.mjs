@@ -1,3 +1,5 @@
+import {createAmesStore} from '../ames/data/store.mjs';
+import {canonicalAgentFixture,productFixture} from './ames-fixtures.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -30,7 +32,15 @@ test('shared publication identity keeps revisions distinct and reports team auth
 test('another workstation can consume shared snapshots without replacing the local SQLite architecture',()=>{
   assert.match(sync,/store\.replaceSyncedSnapshots\(payloads\)/);
   assert.match(store,/let synced = new Map\(\)/);
-  assert.match(store,/\(localConnected && local\.get\(line\)\) \|\| synced\.get\(line\) \|\| remote\.get\(line\)/);
+  const runtime=createAmesStore(),line='TAN10101';
+  const local=canonicalAgentFixture(productFixture(line,1)),shared=canonicalAgentFixture(productFixture(line,2));
+  local.source_id='local-original';shared.source_id='shared-workstation';
+  runtime.replaceLocalSnapshots([local]);runtime.replaceSyncedSnapshots([shared]);
+  assert.equal(runtime.read(line).snapshot.source_id,'shared-workstation');
+  runtime.setLocalConnected(true);assert.equal(runtime.read(line).snapshot.source_id,'local-original');
+  runtime.selectReadingPeriod('custom',{start:'2000-01-01T07:00',end:'2000-01-02T07:00'});
+  assert.equal(runtime.read(line).snapshot,null,'other periods cannot leak through source priority');
+  assert.equal(runtime.localCanonical()[0].source_id,'local-original');
   assert.match(store,/replaceSyncedSnapshots\(payloads\)/);
   assert.doesNotMatch(sync,/new\s+SQLite|indexedDB\.open\([^)]*snapshot/i);
 });
