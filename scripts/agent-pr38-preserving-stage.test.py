@@ -220,7 +220,13 @@ def test_preserving_update_and_rollback():
         assert old_app.read_text() == "BASELINE FRONTEND"
         assert old_root.read_text() == "BASELINE LAUNCHER"
         assert not (current / "frontend/release-build.json").exists()
-        assert not any(p.is_file() for p in (current / "factory-engine").rglob("*"))
+        # A real cold start creates __pycache__/*.pyc runtime artifacts.
+        # Rollback restores/removes only manifest-owned source files, never
+        # deletes runtime-generated user/state files just to empty a folder.
+        backup_manifest = json.loads((backup / "backup.json").read_text())
+        for rel in backup_manifest["root_absent"]:
+            assert not (current / rel).is_file(), ("Staged source survived rollback", rel)
+        assert not any(p.suffix == ".py" for p in (current / "factory-engine").rglob("*"))
         assert (agent / "agent_hardened_entry.py").read_bytes().endswith(b"\n# BASELINE_ORIGINAL\n")
         restored = probe_agent_start(agent, original_source, newer_snapshot, integrated=False)
         assert restored["original_source_preserved"] and restored["read_only_auth_enforced"]
