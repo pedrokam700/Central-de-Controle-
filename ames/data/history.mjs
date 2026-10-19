@@ -19,16 +19,21 @@ export function historyMetadata(payload) {
 // as minutes in America/Sao_Paulo, never by collection timestamp.
 export function factoryWallMinute(value){
   const raw=String(value||'').trim().replace(' ','T');
-  const m=/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/i.exec(raw);
+  const m=/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:\d{2})?$/i.exec(raw);
   if(!m)return null;
-  if(!m[4])return m[1]+'T'+m[2]+':'+m[3];
+  // Minute-only inputs and exact :00 seconds represent the same boundary.
+  // Nonzero seconds must remain distinct to prevent mixing adjacent windows.
+  const seconds=(sec,fraction)=>sec&&((sec!=='00')||/[^0]/.test(fraction||''))?
+    ':'+sec+(fraction&&/[^0]/.test(fraction)?'.'+fraction.replace(/0+$/,''):''):'';
+  if(!m[6])return m[1]+'T'+m[2]+':'+m[3]+seconds(m[4],m[5]);
   const date=new Date(raw);
   if(!Number.isFinite(date.getTime()))return null;
   const fields=Object.fromEntries(new Intl.DateTimeFormat('en-US',{
     timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',
-    day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
+    day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
   }).formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
-  return fields.year+'-'+fields.month+'-'+fields.day+'T'+fields.hour+':'+fields.minute;
+  return fields.year+'-'+fields.month+'-'+fields.day+'T'+fields.hour+':'+fields.minute+
+    seconds(fields.second,m[5]);
 }
 export function matchesPeriod(entry,{start='',end='',product=''}={}) {
   // A collection timestamp is never used as a substitute for the requested MES period.
