@@ -187,6 +187,13 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       await refresh();
     },options),
     refresh:()=>action(refresh),
+    localHistoryList:async(line)=>{
+      check();
+      if(!LINE_IDS.includes(line))throw Error('Linha de histórico inválida');
+      const rows=await request('/local-history?'+new URLSearchParams({line}));
+      if(!Array.isArray(rows)||rows.some(h=>h.line_id!==line||!Number.isSafeInteger(Number(h.snapshot_id))||Number(h.snapshot_id)<1))throw Error('Índice local de histórico inválido');
+      return rows;
+    },
     historyCandidates:async({before=null,limit=20}={})=>{
       check();
       const query=new URLSearchParams({limit:String(Math.min(40,Math.max(1,Number(limit)||20)))});
