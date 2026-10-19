@@ -90,8 +90,9 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
             historyMs=Date.now()-stageAt;stageAt=Date.now();
             if(!alive(u,g))return;stage='head';
             const scope=entryScope(entry);
+            let legacyCommitted=false;
             if(scope==='today'&&!identityBlocked.has(entry.head.line_id)){
-              try{await remote.commitHead(u,entry.head);}
+              try{await remote.commitHead(u,entry.head);legacyCommitted=true;}
               catch(error){
                 if(!/outra instalação|migration helper/i.test(String(error.message||'')))throw error;
                 const warning={line_id:entry.head.line_id,stage:'legacy_head',code:'installation_identity_conflict',message:'Cabeçalho legado preservado; revisão imutável publicada para a equipe.'};
@@ -101,7 +102,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
             }
             headMs=Date.now()-stageAt;
             if(!alive(u,g))return;await queue.remove(entry.id);uploadedParts.delete(entry.id);if(entry.history_marker&&queue.markHistory)await queue.markHistory(entry.history_marker);if(!alive(u,g))return;
-            status({last_sent:{...syncHeadMetadata(entry.head),sent_at:new Date().toISOString()},last_publish_timing:{line_id:entry.head.line_id,parts:entry.parts.length,parts_ms:partsMs,head_ms:headMs,history_ms:historyMs,total_ms:partsMs+headMs+historyMs}});
+            status({last_sent:{...syncHeadMetadata(entry.head,legacyCommitted?'team_latest':'operational_day_history'),sent_at:new Date().toISOString()},last_publish_timing:{line_id:entry.head.line_id,parts:entry.parts.length,parts_ms:partsMs,head_ms:headMs,history_ms:historyMs,total_ms:partsMs+headMs+historyMs}});
           }catch(error){
             // A permanent error on one line must not block unrelated lines.
             if(!alive(u,g))return;
