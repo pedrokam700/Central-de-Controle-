@@ -55,11 +55,35 @@ def normalized(config: Dict[str, Any]) -> Dict[str, Any]:
         _clock(item["end"], f"work_shifts.{key}.end")
         shifts[key] = item
 
+    # Exception dates are operational policy, never silently inferred from weekends.
+    def dates(field: str) -> frozenset[str]:
+        raw = config.get(field) or []
+        if not isinstance(raw, list) or len(raw) > 730:
+            raise ValueError(f"{field} deve ser uma lista de datas YYYY-MM-DD")
+        result = set()
+        for value in raw:
+            if not isinstance(value, str):
+                raise ValueError(f"{field} inválido")
+            try:
+                parsed = datetime.strptime(value, "%Y-%m-%d").date()
+            except ValueError as exc:
+                raise ValueError(f"{field} inválido: esperado YYYY-MM-DD") from exc
+            if parsed.isoformat() != value:
+                raise ValueError(f"{field} inválido: esperado YYYY-MM-DD")
+            result.add(value)
+        return frozenset(result)
+
+    closed = dates("non_production_dates")
+    extra = dates("extra_production_dates")
+    if closed & extra:
+        raise ValueError("Uma data não pode ser produção e parada simultaneamente")
     return {
         "timezone": timezone,
         "production_day_start": production_day_start,
         "work_shifts": shifts,
         "legacy_day_start": config.get("day_start"),
+        "non_production_dates": closed,
+        "extra_production_dates": extra,
     }
 
 
@@ -102,10 +126,18 @@ def today_window(config: Dict[str, Any], now: datetime | None = None) -> tuple[s
 
 
 def previous_day_window(config: Dict[str, Any], now: datetime | None = None) -> tuple[str, str]:
+    """Last fully closed production window, not simply yesterday's date."""
+    calendar = normalized(config)
     start_today, _ = today_window(config, now)
-    end = datetime.fromisoformat(start_today)
-    start = end - timedelta(days=1)
-    return start.isoformat(timespec="minutes"), end.isoformat(timespec="minutes")
+    candidate = datetime.fromisoformat(start_today) - timedelta(days=1)
+    for _ in range(731):
+        date = candidate.date().isoformat()
+        open_day = (candidate.weekday() < 5 and date not in calendar["non_production_dates"]) or date in calendar["extra_production_dates"]
+        if open_day:
+            end = candidate + timedelta(days=1)
+            return candidate.isoformat(timespec="minutes"), end.isoformat(timespec="minutes")
+        candidate -= timedelta(days=1)
+    raise ValueError("Calendário sem dia produtivo anterior confirmado")
 
 
 def shift_for(config: Dict[str, Any], moment: datetime | None = None) -> Dict[str, Any]:
