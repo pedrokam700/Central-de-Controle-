@@ -99,3 +99,46 @@ test('advanced and previous production periods cannot commit team latest',async(
   assert.equal(queueEntries.size,0);
   sync.stop();
 });
+
+test('Line 3 reaches PC B from immutable day index despite an old legacy owner head',async()=>{
+  const current=canonicalFixture('TAN10103');
+  const old=canonicalFixture('TAN10103');
+  old.source_id='old-installation';
+  old.summary.period={mode:'previous_day',start_at:'2026-10-08T07:00',end_at:'2026-10-09T07:00'};
+  const livePublication=await publication('A',current,{now:FACTORY_NOW});
+  const oldPublication=await publication('A',old,{now:FACTORY_NOW});
+  const content=new Map();
+  for(const item of [livePublication,oldPublication])item.parts.forEach((part,i)=>content.set(item.head.key+':'+i,part));
+  const remote={
+    getPart:async(_uid,h,i)=>content.get(h.key+':'+i),
+    watch:(_uid,cb)=>{cb([oldPublication.head,{...livePublication.head,...livePublication.history}],{day_index_available:true,from_cache:false});return()=>{}}
+  };
+  const empty={put:async()=>{},remove:async()=>{},list:async()=>[]};
+  const store=createAmesStore();
+  const sync=createMesSync(store,remote,{queue:empty,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
+  sync.start('B');await new Promise(resolve=>setTimeout(resolve,40));
+  assert.equal(store.read('TAN10103').snapshot.source_id,'source');
+  assert.equal(store.agent().sync.remote_scope,'operational_day_history');
+  assert.equal(store.agent().sync.remote_line_count,1);
+  assert.equal(store.agent().sync.read_status,'ready');
+  sync.stop();
+});
+
+test('different current installations cannot silently replace one another on PC B',async()=>{
+  const first=canonicalFixture('TAN10103'),second=canonicalFixture('TAN10103');
+  second.source_id='new-source';
+  const p1=await publication('A',first,{now:FACTORY_NOW}),p2=await publication('B',second,{now:FACTORY_NOW});
+  const parts=new Map();
+  for(const p of [p1,p2])p.parts.forEach((v,i)=>parts.set(p.head.key+':'+i,v));
+  const remote={
+    getPart:async(_u,h,i)=>parts.get(h.key+':'+i),
+    watch:(_uid,cb)=>{cb([{...p1.head,...p1.history},{...p2.head,...p2.history}],{day_index_available:true,from_cache:false});return()=>{}}
+  };
+  const queue={put:async()=>{},remove:async()=>{},list:async()=>[]},store=createAmesStore();
+  const sync=createMesSync(store,remote,{queue,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
+  sync.start('C');await new Promise(resolve=>setTimeout(resolve,40));
+  assert.equal(store.read('TAN10103').snapshot,null);
+  assert.equal(store.agent().sync.read_status,'origin_conflict');
+  assert.deepEqual(store.agent().sync.origin_conflict_lines,['TAN10103']);
+  sync.stop();
+});
