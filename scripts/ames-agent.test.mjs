@@ -96,3 +96,13 @@ test('timeout retry retains request identity and unchanged revisions avoid datas
   await assert.rejects(h.client.collect('deep',scope),{name:'TimeoutError'});const id=h.calls.find(c=>c.key==='deep-trace').body.request_id;
   h.routes['deep-trace']={id:'J',status:'queued'};await h.client.collect('deep',scope);assert.equal(h.calls.filter(c=>c.key==='deep-trace').at(-1).body.request_id,id);h.client.clear();
 });
+test('local history requests the exact revision and rejects latest substitution by an older agent',async()=>{
+ const h=harness();await h.client.connect();
+ const f=structuredClone(h.f);f.legacy.summary.snapshot_id='17';const p=canonicalAgentFixture(f);h.routes['local-history']=p;
+ await h.client.historicalPayload(p.snapshot_id,line,p.snapshot_revision);
+ const url=new URL(h.calls.at(-1).url);assert.equal(url.searchParams.get('snapshot_revision'),String(p.snapshot_revision));
+ await assert.rejects(h.client.historicalPayload(p.snapshot_id,line,p.snapshot_revision+1),/divergente/);
+ const before=h.calls.length;await assert.rejects(h.client.historicalPayload(p.snapshot_id,line,0),/inválida/);assert.equal(h.calls.length,before);
+ await h.client.historicalPayload(p.snapshot_id,line);assert.equal(new URL(h.calls.at(-1).url).searchParams.has('snapshot_revision'),false);
+ h.client.clear();
+});

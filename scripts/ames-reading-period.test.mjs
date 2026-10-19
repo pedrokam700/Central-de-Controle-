@@ -65,3 +65,12 @@ test('loader does not mix late historical reads after switching back Today',asyn
  const pending=c.select('previous');await new Promise(r=>setImmediate(r));
  await c.select('today');release(p);await pending;assert.equal(s.read(line).snapshot,null);assert.equal(s.readingPeriod().mode,'today');
 });
+test('only explicitly pending local entries may materialize a revision',async()=>{
+ for(const [source,pending,revision,accepted] of [['local',true,null,true],['local',false,null,false],['shared',true,null,false],['local',false,2,false]]){
+  const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('2','2026-10-16','previous_day');
+  const h={...entry(p),history_source:source,revision_pending:pending,snapshot_revision:revision};
+  const c=createReadingPeriodController(s,{list:async l=>l===line?[h]:[],open:async()=>p});
+  await c.select('previous');assert.equal(!!s.read(line).snapshot,accepted);
+  assert.equal(s.agent().period_read.errors.length,accepted?0:1);
+ }
+});

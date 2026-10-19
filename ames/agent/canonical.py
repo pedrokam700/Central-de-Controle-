@@ -181,6 +181,51 @@ def export_revision(store,sid,line,insight_builder=None):
         con.execute('INSERT INTO mes_revisions VALUES(?,?,?,?,?,?)',(sid,line,revision,epoch,fingerprint,encoded(payload)))
         return payload
 
+def read_revision(store,sid,line,revision):
+    """Read the requested immutable export; never substitute the latest version."""
+    if line not in LINES or int(sid)<1 or int(revision)<1:
+        raise ValueError('Invalid historical identity')
+    with store.connect() as con:
+        row=con.execute('SELECT payload FROM mes_revisions WHERE snapshot_id=? AND line=? AND revision=?',
+                        (int(sid),line,int(revision))).fetchone()
+    if not row:raise ValueError('Historical revision unavailable')
+    return json.loads(row['payload'])
+
+def history_index(store,line):
+    """Index saved exports plus explicitly unversioned local updates. No MES I/O.
+
+    Listing does not create revisions. A pending entry is materialized only when
+    opened; every already exported revision remains independently addressable.
+    """
+    if line not in LINES:raise ValueError('Explicit supported line required')
+    out=[];latest={}
+    with store.connect() as con:
+        con.execute('BEGIN')
+        source=con.execute("SELECT value FROM schema_meta WHERE key='ames_source_id'").fetchone()[0]
+        for r in con.execute('SELECT * FROM mes_revisions WHERE line=? ORDER BY snapshot_id DESC,revision DESC',(line,)):
+            p=json.loads(r['payload']);period=p.get('summary',{}).get('period',{})
+            latest.setdefault(r['snapshot_id'],(r['epoch'],p.get('projection_version')))
+            products=sorted({d['product'] for d in p.get('datasets',{}).get('defects',[]) if d.get('product')})
+            out.append({'snapshot_id':p['snapshot_id'],'line_id':line,'source_id':p['source_id'],
+                        'snapshot_revision':p['snapshot_revision'],'content_hash':p['content_hash'],
+                        'collected_at':p['collected_at'],'period_start':period.get('start_at'),
+                        'period_end':period.get('end_at'),'period_mode':period.get('mode'),
+                        'products':','.join(products),'revision_pending':False})
+        rows=con.execute("""SELECT s.id,s.collected_at,w.start_at,w.end_at,w.mode,COALESCE(c.epoch,0) AS epoch
+            FROM snapshots s LEFT JOIN analysis_windows w ON w.id=s.window_id
+            LEFT JOIN mes_source_clock c ON c.snapshot_id=s.id WHERE s.status='complete' AND
+            (EXISTS(SELECT 1 FROM line_metrics m WHERE m.snapshot_id=s.id AND m.line=?) OR
+             EXISTS(SELECT 1 FROM defect_observations d WHERE d.snapshot_id=s.id AND d.line=?))
+            ORDER BY s.id DESC""",(line,line)).fetchall()
+        for r in rows:
+            if latest.get(r['id'])==(r['epoch'],7):continue
+            products=[x[0] for x in con.execute('SELECT DISTINCT product_model FROM defect_observations WHERE snapshot_id=? AND line=?',(r['id'],line)) if x[0]]
+            out.append({'snapshot_id':str(r['id']),'line_id':line,'source_id':source,
+                        'snapshot_revision':None,'revision_pending':True,'collected_at':r['collected_at'],
+                        'period_start':r['start_at'],'period_end':r['end_at'],'period_mode':r['mode'],
+                        'products':','.join(sorted(products))})
+    return out
+
 def manifest(payload):
     return {**{k:v for k,v in payload.items() if k not in ('datasets','insights')},'datasets':{k:{'count':len(v),'coverage':payload['coverage'][k]} for k,v in payload['datasets'].items()}}
 

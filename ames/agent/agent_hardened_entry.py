@@ -170,17 +170,14 @@ class HardenedHandler(entry.Handler):
             if line not in entry.canonical.LINES:
                 self._send({'error':'invalid_line'},400);return
             sid=(q.get('snapshot_id') or [None])[0]
+            revision=(q.get('snapshot_revision') or [None])[0]
             try:
                 if sid:
-                    self._send(entry.canonical.export_revision(entry.a.STORE,int(sid),line,entry.a.trace_insights))
+                    self._send(entry.canonical.read_revision(entry.a.STORE,int(sid),line,int(revision)) if revision is not None else
+                               entry.canonical.export_revision(entry.a.STORE,int(sid),line,entry.a.trace_insights))
                 else:
-                    with entry.a.STORE.connect() as con:
-                        rows=con.execute("SELECT DISTINCT s.id,s.collected_at,w.start_at,w.end_at FROM snapshots s LEFT JOIN analysis_windows w ON w.id=s.window_id WHERE s.status='complete' AND (EXISTS(SELECT 1 FROM line_metrics m WHERE m.snapshot_id=s.id AND m.line=?) OR EXISTS(SELECT 1 FROM defect_observations d WHERE d.snapshot_id=s.id AND d.line=?)) ORDER BY s.id DESC",(line,line)).fetchall()
-                        out=[]
-                        for r in rows:
-                            products=[x[0] for x in con.execute("SELECT DISTINCT product_model FROM defect_observations WHERE snapshot_id=? AND line=?",(r['id'],line)) if x[0]]
-                            out.append({'snapshot_id':r['id'],'line_id':line,'collected_at':r['collected_at'],'period_start':r['start_at'],'period_end':r['end_at'],'products':','.join(products),'source_id':entry.canonical.source_id(entry.a.STORE)})
-                    self._send(out)
+                    if revision is not None:raise ValueError('Snapshot required for revision')
+                    self._send(entry.canonical.history_index(entry.a.STORE,line))
             except (ValueError,RuntimeError) as exc:self._send({'error':str(exc)},400)
             return
         if path == "/api/v1/ready":

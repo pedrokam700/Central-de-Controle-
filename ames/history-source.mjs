@@ -22,7 +22,7 @@ export function createMesHistorySource(sync,client,store){
       if(local.status==='fulfilled'){
         for(const h of local.value){
           const key=[h.line_id,h.source_id,h.snapshot_id,h.snapshot_revision].join(':');
-          if(!rows.has(key))rows.set(key,{...h,history_source:'local'});
+          if(!rows.has(key))rows.set(key,{...h,history_source:'local',revision_pending:h.snapshot_revision==null});
         }
       }
       if(cloud.status==='rejected'&&local.status==='rejected')throw Error('Histórico remoto e local indisponíveis');
@@ -30,13 +30,14 @@ export function createMesHistorySource(sync,client,store){
       // No local-only version is evidence that Firebase actually synchronized.
       return [...rows.values()].sort((a,b)=>Date.parse(b.collected_at||'')-Date.parse(a.collected_at||'')||
         Number(b.snapshot_id||0)-Number(a.snapshot_id||0)||
+        Number(b.revision_pending===true)-Number(a.revision_pending===true)||
         Number(b.snapshot_revision||0)-Number(a.snapshot_revision||0));
     },
     async open(entry){
       validLine(entry?.line_id);
       if(entry.history_source==='local'){
         if(store.agent().status!=='connected')throw Error('Agente local desconectado; esta revisão ainda não está compartilhada');
-        return client.historicalPayload(entry.snapshot_id,entry.line_id);
+        return client.historicalPayload(entry.snapshot_id,entry.line_id,entry.snapshot_revision??null);
       }
       return sync.openHistory(entry);
     }

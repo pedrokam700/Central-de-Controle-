@@ -1,6 +1,6 @@
 import { AGENT_URL, SCHEDULER_POLICY, collectionScope, r12CompatibleBuild } from './data/agent-contract.mjs';
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
-import {CANONICAL_SCHEMA,DATASETS} from './data/canonical.mjs';
+import {CANONICAL_SCHEMA,DATASETS,normalizeCanonical} from './data/canonical.mjs';
 
 const AGENT_TOKEN_KEY='central.ames.agentToken.v1';
 function bootstrapAgentToken(explicit=''){
@@ -202,12 +202,15 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(!Array.isArray(response?.candidates))throw Error('Índice de histórico incompatível');
       return response;
     },
-    historicalPayload:async(snapshotId,line)=>{
+    historicalPayload:async(snapshotId,line,revision=null)=>{
       check();
       if(!LINE_IDS.includes(line)||!Number.isSafeInteger(Number(snapshotId))||Number(snapshotId)<1)throw Error('Histórico local inválido');
-      const payload=await request('/local-history?'+new URLSearchParams({line,snapshot_id:String(snapshotId)}));
+      if(revision!==null&&(!Number.isSafeInteger(revision)||revision<1))throw Error('Revisão histórica inválida');
+      const query=new URLSearchParams({line,snapshot_id:String(snapshotId)});
+      if(revision!==null)query.set('snapshot_revision',String(revision));
+      const payload=await request('/local-history?'+query);
       normalizeCanonical(payload);
-      if(payload.line_id!==line||String(payload.snapshot_id)!==String(snapshotId))throw Error('Revisão histórica divergente');
+      if(payload.line_id!==line||String(payload.snapshot_id)!==String(snapshotId)||(revision!==null&&payload.snapshot_revision!==revision))throw Error('Revisão histórica divergente');
       return payload;
     },
     saveConfig:value=>action(async()=>{check();const scope=collectionScope(value);const cfg={configured_lines:scope.lines,performance:scope.performance};const saved=await request('/config',cfg);publish({config:publicConfig(saved?.config||saved)});}),
