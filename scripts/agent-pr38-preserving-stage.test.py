@@ -136,7 +136,7 @@ def test_preserving_update_and_rollback():
         assert gate["expected_sha"]==sha
         assert gate["allow_local_fallback"] is True and gate["preview_urls"] == []
         launcher=(staged / "INICIAR_POSTO_CENTRAL_V2.bat").read_text()
-        assert "allow_local_fallback" in launcher and "Get-FileHash -Algorithm SHA256" in launcher
+        assert "allow_local_fallback" in launcher and "[System.Security.Cryptography.SHA256]::Create()" in launcher
         assert "http://127.0.0.1:8765/Central-de-Controle-/" in launcher
         assert "if not defined CENTRAL" in launcher
         # Run the launcher gate's actual PowerShell check on Windows,
