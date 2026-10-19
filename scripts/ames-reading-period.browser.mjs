@@ -147,6 +147,21 @@ try{
  assert.equal(await page.locator('[data-source-capture-toggle]').count(),0);
  assert.equal(await page.evaluate(()=>qa.captureReads()),1,'shared revision cannot request this computer’s localhost');
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'history navigation must never schedule MES');
+ // Global read-period Base must offer the same local index for the SAME revision.
+ await page.locator('[data-console-view=monitor]').click();
+ await page.locator('[data-read-period=custom]').click();
+ await page.locator('[data-reading-range] input[name=start]').fill('2026-10-15T07:00');
+ await page.locator('[data-reading-range] input[name=end]').fill('2026-10-15T12:00');
+ await page.locator('[data-reading-range] button[type=submit]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready'&&String(qa.store.read('TAN10101').snapshot?.snapshot_id)==='17');
+ await page.locator('[data-console-view=base]').click();
+ await page.locator('[data-stored-captures] [data-source-capture-toggle]').waitFor();
+ assert.equal(await page.evaluate(()=>qa.captureReads()),1,'no metadata auto-read on global period navigation');
+ await page.locator('[data-stored-captures] [data-source-capture-toggle]').click();
+ await page.waitForFunction(()=>qa.captureReads()===2);
+ await page.locator('[data-stored-captures] [data-capture-source="3022"]').waitFor();
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
+
  assert.deepEqual(errors,[]);
  console.log('PASS: nine views share exact historical scope; no MES mutations; Today restored; PT/EN and mobile selector');
 }finally{await browser.close();await new Promise(r=>server.close(r));}
