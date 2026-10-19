@@ -2367,7 +2367,7 @@ import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
     let mesSync;
     let mesIntegration;
     function startMesSync(uid){
-      mesIntegration ||= createMesIntegration(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction}),{changed(){
+      mesIntegration ||= createMesIntegration(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction,query,where}),{changed(){
         if(!currentAuthUser)return;
         renderDashboardMes();renderProductMes();renderFailuresMes();renderDailyMes();renderCoraMes();renderConsoleMes();
       }});
