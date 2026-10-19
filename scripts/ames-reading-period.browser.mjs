@@ -16,6 +16,14 @@ function fixture(id,date,mode){
 const today=fixture('TODAY-SNAPSHOT','2026-10-19','today'),old=fixture('FRIDAY-SNAPSHOT','2026-10-16','previous_day');
 const local=fixture(17,'2026-10-15','custom');
 local.content_hash='b'.repeat(64);
+// Serialized insights survive the same sanitization used by shared snapshots.
+const oldDefect=old.datasets.defects[0];
+old.insights={schema:'ames-insights-v1',ready:true,line:old.line_id,snapshot_id:old.snapshot_id,
+ drilldowns:{pcba_analysis:[{PCBA:oldDefect.pcba_sn,'Defect Code':oldDefect.defect_code,
+ 'Defect Time':oldDefect.defect_time,'Uso da PCBA na falha':'2º uso','Modelo':oldDefect.product_model}],
+ material_analysis:[0,1].map(()=>({'PCBA atual':oldDefect.pcba_sn,'Material SN':'PART-<img src=x>',
+ 'Tipo material':'GENERIC','Defect Code atual':oldDefect.defect_code,'Defect Time atual':oldDefect.defect_time,
+ 'Uso material na falha':'3º uso','Part Number':'PN-X'}))}};
 old.source_coverage={
  '3028':{status:'observed_partial',stored_rows:3,source_complete:false,transport_complete:true},
  '3074':{status:'unknown',stored_rows:0,source_complete:false,transport_complete:true},
@@ -81,6 +89,21 @@ try{
    assert.equal(await pane.isVisible(),true);assert.match(await pane.locator('[data-shared-period]').innerText(),/16/);
    assert(!((await pane.innerText()).includes('TODAY-SNAPSHOT')),id+' leaked Today');
  }
+ await page.locator('[data-console-view=reuse]').click();
+ const cohorts=page.locator('[data-reuse-cohorts]');
+ assert.match(await cohorts.innerText(),/Denominador não comprovado/);
+ assert.equal(await cohorts.locator('[data-cohort-kind=pcbas][data-cohort-metric=second_use] strong').innerText(),'1');
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=third_plus_use] strong').innerText(),'1');
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=failed] strong').innerText(),'0');
+ await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=associated]').click();
+ assert.equal(await cohorts.locator('[data-cohort-row]').count(),1);
+ assert.equal(await cohorts.locator('img').count(),0);
+ await cohorts.locator('[data-cohort-row]').evaluate(e=>e.open=true);
+ assert.match(await cohorts.locator('[data-cohort-detail]').innerText(),/FRIDAY-SNAPSHOT/);
+ await cohorts.locator('select[name=part_number]').selectOption('PN-X');
+ await cohorts.locator('form button[type=submit]').click();
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=observed] strong').innerText(),'1');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
  await page.locator('[data-console-view=base]').click();
  const proof=page.locator('[data-console-pane=base] [data-five-source-coverage]');
  assert.equal(await proof.count(),1);
