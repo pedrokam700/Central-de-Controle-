@@ -14,6 +14,8 @@ function fixture(id,date,mode){
  return p;
 }
 const today=fixture('TODAY-SNAPSHOT','2026-10-19','today'),old=fixture('FRIDAY-SNAPSHOT','2026-10-16','previous_day');
+const local=fixture(17,'2026-10-15','custom');
+local.content_hash='b'.repeat(64);
 old.source_coverage={
  '3028':{status:'observed_partial',stored_rows:3,source_complete:false,transport_complete:true},
  '3074':{status:'unknown',stored_rows:0,source_complete:false,transport_complete:true},
@@ -25,16 +27,34 @@ old.source_coverage={
 const harness=`
 import {createAmesStore} from './ames/data/store.mjs';
 import {createConsoleView} from './ames/console-view.mjs';
-const store=createAmesStore({now:()=>Date.parse('2026-10-19T15:00:00Z')}),old=${JSON.stringify(old)};
+const store=createAmesStore({now:()=>Date.parse('2026-10-19T15:00:00Z')}),old=${JSON.stringify(old)},local=${JSON.stringify(local)};
 store.replaceSyncedSnapshots([${JSON.stringify(today)}]);
-let mutations=0,savedReads=0,savedOpens=0;
+let mutations=0,savedReads=0,savedOpens=0,captureReads=0;
 const savedEntry={job_id:'J123',query_sn:'PCBA-TEST',query_created_at:'2026-10-16T14:00:00Z',query_status:'done',entry_hash:'b'.repeat(64),line_id:null,production_date:null,clock_kind:'query_created_at',local_only:true};
-const client={collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},savedSnHistory:async()=>{savedReads++;return {items:[savedEntry],next_cursor:null,clock_kind:'query_created_at',local_only:true};},openSavedSnHistory:async()=>{savedOpens++;return {job_id:savedEntry.job_id,entry_hash:savedEntry.entry_hash,query_created_at:savedEntry.query_created_at,line_id:null,production_date:null,result:{trace_3074:{rows:[{sn:'PART',note:'<script>unsafe</script>'}]},trace_3012:{rows:[{association:'same_pcba_candidate'}]}}};}};
-const history={list:async line=>line===old.line_id?[{line_id:line,source_id:old.source_id,snapshot_id:old.snapshot_id,snapshot_revision:1,collected_at:old.collected_at,period_start:old.summary.period.start_at,period_end:old.summary.period.end_at,history_source:'shared'}]:[],open:async()=>old};
+const client={collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
+ sourceCaptures:async params=>{
+  captureReads++;
+  if(params.snapshot_id!==17||params.snapshot_revision!==1||params.content_hash!==local.content_hash)throw Error('wrong capture target');
+  return {schema:'ames-local-source-capture-v1',metadata_only:true,local_only:true,source_complete:false,
+    source_id:local.source_id,period:local.summary.period,items:[{
+      source_view:'3022',source_status:'partial',capture_revision:1,
+      job_id:'JOB-<img src=x onerror=alert(1)>',stored_at:'2026-10-15T14:00:00Z',
+      source_id:local.source_id,snapshot_id:String(local.snapshot_id),line_id:local.line_id,
+      snapshot_revision:local.snapshot_revision,period_start:local.summary.period.start_at,
+      period_end:local.summary.period.end_at,period_mode:local.summary.period.mode,
+      source_complete:false,population_complete:false,local_only:true,
+      checkpoint_kind:'bounded_partial_progress',progress_only:true,sample_count:1
+    }],next_cursor:null};
+ },
+ savedSnHistory:async()=>{savedReads++;return {items:[savedEntry],next_cursor:null,clock_kind:'query_created_at',local_only:true};},openSavedSnHistory:async()=>{savedOpens++;return {job_id:savedEntry.job_id,entry_hash:savedEntry.entry_hash,query_created_at:savedEntry.query_created_at,line_id:null,production_date:null,result:{trace_3074:{rows:[{sn:'PART',note:'<script>unsafe</script>'}]},trace_3012:{rows:[{association:'same_pcba_candidate'}]}}};}};
+const history={list:async line=>line===old.line_id?[
+ {line_id:line,source_id:old.source_id,snapshot_id:old.snapshot_id,snapshot_revision:1,collected_at:old.collected_at,period_start:old.summary.period.start_at,period_end:old.summary.period.end_at,history_source:'shared'},
+ {line_id:line,source_id:local.source_id,snapshot_id:local.snapshot_id,snapshot_revision:local.snapshot_revision,collected_at:local.collected_at,period_start:local.summary.period.start_at,period_end:local.summary.period.end_at,history_source:'local'}
+ ]:[],open:async entry=>String(entry.snapshot_id)===String(local.snapshot_id)?local:old};
 const view=createConsoleView(document.querySelector('#mesConsole'),store,{agentClient:client,history});
 document.querySelectorAll('.page').forEach(el=>el.classList.add('hidden'));
 document.querySelector('#mesConsoleView')?.classList.remove('hidden');document.querySelector('#accountScreen')?.classList.add('hidden');
-window.qa={store,view,mutations:()=>mutations,savedReads:()=>savedReads,savedOpens:()=>savedOpens};view.render();
+window.qa={store,view,mutations:()=>mutations,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads};view.render();
 `;
 const html=fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<script type="module" src="/Central-de-Controle-/qa-context.mjs"></script>';
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -100,6 +120,33 @@ try{
  assert.match(await page.locator('[data-sn-saved-detail]').innerText(),/same_pcba_candidate|unsafe/);
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.snapshot_id),'TODAY-SNAPSHOT');
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
- assert.equal(await page.evaluate(()=>qa.mutations()),0,'Navigation must never schedule MES');assert.deepEqual(errors,[]);
+ // B3.4b6: local snapshot metadata is lazy, source-locked, read-only and escaped.
+ await page.locator('[data-console-view=base]').click();
+ await page.locator('[data-history-mode=history]').click();
+ await page.locator('[data-base-history] form input[name=start]').fill('2026-10-15T07:00');
+ await page.locator('[data-base-history] form input[name=end]').fill('2026-10-15T12:00');
+ await page.locator('[data-base-history] form button[type=submit]').click();
+ await page.locator('[data-history-open]').waitFor();
+ await page.evaluate(()=>qa.store.updateAgent({status:'connected',capabilities:{source_id:'preserved-workstation'}}));
+ await page.locator('[data-history-open]').click();
+ await page.locator('[data-source-capture-toggle]').waitFor();
+ assert.equal(await page.evaluate(()=>qa.captureReads()),0,'capture metadata must be lazy');
+ await page.locator('[data-source-capture-toggle]').click();
+ await page.locator('[data-capture-source="3022"]').waitFor();
+ assert.equal(await page.evaluate(()=>qa.captureReads()),1);
+ assert.match(await page.locator('[data-capture-source="3022"]').innerText(),/somente progresso/i);
+ assert.equal(await page.locator('[data-history-captures] img').count(),0,'job ID cannot create HTML');
+ // A different stored day/workstation is not a local capture.
+ await page.locator('[data-history-mode=history]').click();
+ await page.locator('[data-base-history] form input[name=start]').fill('2026-10-16T07:00');
+ await page.locator('[data-base-history] form input[name=end]').fill('2026-10-16T12:00');
+ await page.locator('[data-base-history] form button[type=submit]').click();
+ await page.locator('[data-history-open]').waitFor();
+ await page.locator('[data-history-open]').click();
+ await page.locator('[data-source-capture-status]').waitFor();
+ assert.equal(await page.locator('[data-source-capture-toggle]').count(),0);
+ assert.equal(await page.evaluate(()=>qa.captureReads()),1,'shared revision cannot request this computer’s localhost');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'history navigation must never schedule MES');
+ assert.deepEqual(errors,[]);
  console.log('PASS: nine views share exact historical scope; no MES mutations; Today restored; PT/EN and mobile selector');
 }finally{await browser.close();await new Promise(r=>server.close(r));}
