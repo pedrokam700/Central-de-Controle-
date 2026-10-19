@@ -37,7 +37,7 @@ export function operationalRange(store,offset=0,now=new Date()){
 }
 
 export function createHistoryView(root,store,client,history) {
-  let line=LINE_IDS[0],tab='today',loading=false,error='',message='',entries=[],selected=null,selectedEntry=null,disposed=false,generation=0;
+  let line=LINE_IDS[0],tab='today',loading=false,error='',message='',entries=[],selected=null,selectedEntry=null,disposed=false,generation=0,renderedLanguage='';
   const formValues=()=>root.querySelector('form')?Object.fromEntries(new FormData(root.querySelector('form'))):{};
   function setPeriod(start,end){const form=root.querySelector('form');if(!form)return;form.elements.start.value=start;form.elements.end.value=end;}
   function quickPeriod(offset){const range=operationalRange(store,offset);setPeriod(range.start,range.end);line=root.querySelector('form').elements.line.value;void load();}
@@ -54,7 +54,7 @@ export function createHistoryView(root,store,client,history) {
     const inputs=root.querySelector('form');
     if(inputs){inputs.elements.start.readOnly=tab==='today'||tab==='previous';inputs.elements.end.readOnly=tab==='today'||tab==='previous';}
     if(tab==='today'||tab==='previous')quickPeriod(tab==='today'?0:-1);
-    else{entries=[];const host=root.querySelector('[data-period-results]');if(host)host.replaceChildren();summary();}
+    else{setPeriod('','');entries=[];const host=root.querySelector('[data-period-results]');if(host)host.replaceChildren();summary();void load();}
   }
   function results(){
     const host=root.querySelector('[data-period-results]');if(!host)return;summary();
@@ -94,6 +94,8 @@ export function createHistoryView(root,store,client,history) {
     finally{if(!disposed&&token===generation){loading=false;results();}}
   }
   function render(){
+    const language=document.documentElement.lang.startsWith('en')?'en':'pt';
+    if(renderedLanguage!==language){generation++;root.replaceChildren();renderedLanguage=language;}
     if(!root.querySelector('form')){
       root.innerHTML=`<details open class="mes-context-panel ames-history-root" data-history-panel><summary>${t('Histórico de produção','Production history')}</summary><nav class="ames-history-tabs" aria-label="${t('Modo do histórico','History mode')}"><button type="button" class="button secondary" aria-pressed="true" data-history-mode="today">${t('Hoje','Today')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="previous">${t('Último dia de produção','Last production day')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="history">${t('Histórico por data','History by date')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="advanced">${t('Consulta avançada','Advanced query')}</button></nav><section class="ames-history-overview" data-production-context></section><p class="mes-context">${t('O 3028 usa 07:00 → 07:00; turnos 07:30/17:30 permanecem distintos. Dados não comprovados nunca viram zero.','3028 uses 07:00 → 07:00; shifts 07:30/17:30 remain distinct. Missing evidence is never zero.')}</p><form><div class="mes-filters"><label>${t('Linha','Line')}<select name="line">${LINE_IDS.map(l=>`<option>${l}</option>`).join('')}</select></label><label>${t('Início','Start')}<input type="datetime-local" name="start"></label><label>${t('Fim','End')}<input type="datetime-local" name="end"></label><label>CPH ${t('exato','exact')}<input name="product" placeholder="CPH"></label></div><button type="submit" class="button secondary">${t('Consultar outro período','Query another period')}</button></form><section data-period-results></section><section data-period-snapshot></section></details>`;
       root.querySelector('form').addEventListener('submit',e=>{e.preventDefault();line=e.currentTarget.elements.line.value;void load();});
