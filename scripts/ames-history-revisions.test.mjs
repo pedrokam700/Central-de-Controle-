@@ -39,6 +39,7 @@ test('calendar filters use factory timezone and avoid calendar-yesterday shortcu
   assert.match(history,/production_day_start/);
   assert.match(history,/non_production_dates/);
   assert.match(history,/extra_production_dates/);
-  assert.match(history,/data-history-quick="-1"/);
+  assert.match(history,/data-history-mode="previous"/);
+  assert.match(history,/data-history-mode="advanced"/);
   assert.match(history,/<details open/);
 });
