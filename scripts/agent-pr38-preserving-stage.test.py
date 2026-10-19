@@ -151,6 +151,15 @@ def test_preserving_update_and_rollback():
                     env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                     text=True,timeout=18)
             verified_gate=gate_check()
+            if verified_gate.returncode:
+                debug=expression.group(1).replace("catch{exit 3}","catch{Write-Error $_;exit 3}")
+                debug=debug.replace("if($g.allow_local_fallback -ne $true){exit 3}","if($g.allow_local_fallback -ne $true){throw 'fallback-disabled'}")
+                debug=debug.replace("if($g.expected_sha -ne $m.sha -or $g.expected_sha -ne $v.sha){exit 3}","if($g.expected_sha -ne $m.sha -or $g.expected_sha -ne $v.sha){throw 'sha-mismatch'}")
+                debug=debug.replace("if(-not $e){exit 3}","if(-not $e){throw 'manifest-entry-missing'}")
+                debug=debug.replace("if($hash -ne ([string]$e.Value).ToLowerInvariant()){exit 3}","if($hash -ne ([string]$e.Value).ToLowerInvariant()){throw 'hash-mismatch'}")
+                replay=subprocess.run([shell,"-NoProfile","-Command",debug],env=env,
+                    stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=18)
+                assert replay.returncode==0,("gate diagnostic",replay.returncode,replay.stdout[-600:],replay.stderr[-1200:])
             assert verified_gate.returncode==0,(
                 "PowerShell verification rc=",verified_gate.returncode,
                 "stdout=",verified_gate.stdout[-1600:],
