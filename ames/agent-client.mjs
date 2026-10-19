@@ -194,6 +194,33 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(!Array.isArray(rows)||rows.some(h=>h.line_id!==line||!Number.isSafeInteger(Number(h.snapshot_id))||Number(h.snapshot_id)<1))throw Error('Índice local de histórico inválido');
       return rows;
     },
+    // B3.2: on-workstation saved individual SN searches; never publish raw job
+    // results to Firebase or treat query time as an operational production date.
+    savedSnHistory:async({sn='',start=null,end=null,before=null,limit=20}={})=>{
+      check();
+      if(!Number.isInteger(Number(limit))||Number(limit)<1||Number(limit)>50)throw Error('Limite de histórico SN inválido');
+      const q=new URLSearchParams({limit:String(limit)});
+      if(sn)q.set('sn',String(sn));
+      if(start)q.set('start',String(start));
+      if(end)q.set('end',String(end));
+      if(before)q.set('before',String(before));
+      const response=await request('/saved-sn-history?'+q);
+      if(!Array.isArray(response?.items)||response?.clock_kind!=='query_created_at'||response.local_only!==true||
+        response.items.some(x=>x?.line_id!==null||x?.production_date!==null||
+          x?.clock_kind!=='query_created_at'||!(/^[a-f0-9]{64}$/).test(x?.entry_hash||'')))throw Error('Índice de consultas SN incompatível');
+      return response;
+    },
+    openSavedSnHistory:async(entry)=>{
+      check();
+      if(!(/^[A-Za-z0-9_-]{1,128}$/).test(entry?.job_id||'')||
+        !(/^[a-f0-9]{64}$/).test(entry?.entry_hash||''))throw Error('Identidade de consulta SN inválida');
+      const q=new URLSearchParams({job_id:entry.job_id,entry_hash:entry.entry_hash});
+      const value=await request('/saved-sn-history?'+q);
+      if(value?.job_id!==entry.job_id||value?.entry_hash!==entry.entry_hash||
+        value?.clock_kind!=='query_created_at'||value?.local_only!==true||
+        value?.line_id!==null||value?.production_date!==null)throw Error('Resultado SN divergente');
+      return value;
+    },
     historyCandidates:async({before=null,limit=20}={})=>{
       check();
       const query=new URLSearchParams({limit:String(Math.min(40,Math.max(1,Number(limit)||20)))});
