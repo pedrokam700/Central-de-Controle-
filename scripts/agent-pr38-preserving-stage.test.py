@@ -130,6 +130,14 @@ def test_preserving_update_and_rollback():
         assert info["kind"] == "preserving_stage_not_package"
         assert info["physical_gate"] == "PENDING"
         assert info["frontend_files"] > 20 and info["factory_engine_files"] > 0
+        gate=json.loads((staged / "FRONTEND_GATE.json").read_text())
+        assert gate["expected_sha"]==sha
+        assert gate["allow_local_fallback"] is True and gate["preview_urls"] == []
+        launcher=(staged / "INICIAR_POSTO_CENTRAL_V2.bat").read_text()
+        assert "allow_local_fallback" in launcher and "Get-FileHash -Algorithm SHA256" in launcher
+        assert "http://127.0.0.1:8765/Central-de-Controle-/" in launcher
+        assert "if not defined CENTRAL" in launcher
+
 
         current = root / "existing_workstation"
         agent = current / "ames-agent"
