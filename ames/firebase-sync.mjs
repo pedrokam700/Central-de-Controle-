@@ -8,7 +8,7 @@ function compareHead(a,b){
   const sub=(Number(a?.snapshot_revision)||0)-(Number(b?.snapshot_revision)||0);if(sub)return sub;
   return String(a?.key||'').localeCompare(String(b?.key||''));
 }
-export function firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction}){
+export function firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction,query,where}){
   const session=()=>{const uid=auth.currentUser?.uid;if(!uid)throw Error('Sessão de sincronização encerrada');return uid;};
   const ownerScope=(uid,line)=>{if(session()!==uid)throw Error('Sessão de sincronização encerrada');return ['amesUsers',uid,'lines',validLine(line)];};
   const readableScope=(ownerUid,line)=>{session();if(!ownerUid||typeof ownerUid!=='string')throw Error('Publicador MES inválido');return ['amesUsers',ownerUid,'lines',validLine(line)];};
@@ -55,10 +55,33 @@ export function firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc
         if(!teamValue||compareHead(head,teamValue)>0||teamValue.owner_uid===uid&&teamValue.key===head.key)transaction.set(shared,head);
       });
     },
-    watch(uid,receive,error){
+    watch(uid,receive,error,{startAt=null}={}){
       if(session()!==uid)throw Error('Sessão de sincronização encerrada');
-      const heads=new Map(),loaded=new Set(),cached=new Map();
-      const unsub=LINES.map(line=>onSnapshot(teamHead(line),{includeMetadataChanges:true},s=>{loaded.add(line);cached.set(line,!!s.metadata?.fromCache||!!s.metadata?.hasPendingWrites);if(s.exists())heads.set(line,s.data());else heads.delete(line);if(loaded.size===LINES.length)receive([...heads.values()],{from_cache:[...cached.values()].some(Boolean)});},error));
+      const legacy=new Map(),days=new Map(),loaded=new Set(),cached=new Map();
+      const useDayIndex=!!(query&&where&&startAt&&/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(startAt));
+      const required=LINES.length*(useDayIndex?2:1),unsub=[];
+      const emit=()=>{if(loaded.size!==required)return;
+        receive([...legacy.values(),...[...days.values()].flat()],{from_cache:[...cached.values()].some(Boolean),day_index_available:useDayIndex});
+      };
+      for(const line of LINES){
+        const key='legacy:'+line;
+        unsub.push(onSnapshot(teamHead(line),{includeMetadataChanges:true},s=>{
+          loaded.add(key);cached.set(key,!!s.metadata?.fromCache||!!s.metadata?.hasPendingWrites);
+          if(s.exists())legacy.set(line,s.data());else legacy.delete(line);
+          emit();
+        },error));
+        if(useDayIndex){
+          const key='day:'+line;
+          const upper=new Date(Date.parse(startAt+'Z')+60000).toISOString().slice(0,16);
+          const source=query(collection(db,'amesTeamLines',line,'history'),
+            where('period_start','>=',startAt),where('period_start','<',upper));
+          unsub.push(onSnapshot(source,{includeMetadataChanges:true},s=>{
+            loaded.add(key);cached.set(key,!!s.metadata?.fromCache||!!s.metadata?.hasPendingWrites);
+            days.set(line,s.docs.map(d=>d.data()));
+            emit();
+          },error));
+        }
+      }
       return ()=>unsub.forEach(stop=>stop());
     }
   };
