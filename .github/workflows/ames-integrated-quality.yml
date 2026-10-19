@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+# Keep the newest SHA authoritative. Superseded pushes on the same branch
+# must not retain runners or block the Windows gate.
+concurrency:
+  group: ames-integrated-quality-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   full-static-quality:
     runs-on: ubuntu-latest
