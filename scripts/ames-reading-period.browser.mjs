@@ -148,6 +148,8 @@ try{
  assert.equal(await page.evaluate(()=>qa.captureReads()),1,'shared revision cannot request this computer’s localhost');
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'history navigation must never schedule MES');
  // Global read-period Base must offer the same local index for the SAME revision.
+ // The real client sets localConnected after an authenticated successful refresh.
+ await page.evaluate(()=>qa.store.setLocalConnected(true));
  await page.locator('[data-console-view=monitor]').click();
  await page.locator('[data-read-period=custom]').click();
  await page.locator('[data-reading-range] input[name=start]').fill('2026-10-15T07:00');
