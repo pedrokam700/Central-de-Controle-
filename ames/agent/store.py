@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import base64
+import binascii
 import re
 import json
 import sqlite3
@@ -397,7 +398,7 @@ class Store:
                         or not all(isinstance(x,str) and 0<len(x)<=128 for x in parsed[:2])):
                     raise ValueError('Invalid SN history cursor')
                 cursor=parsed
-            except (ValueError,UnicodeDecodeError,TypeError,OverflowError) as exc:
+            except (ValueError,UnicodeDecodeError,TypeError,OverflowError,binascii.Error) as exc:
                 raise ValueError('Invalid SN history cursor') from exc
 
         clauses=["kind='sn_lookup'","result_json IS NOT NULL","result_json!='null'"]
