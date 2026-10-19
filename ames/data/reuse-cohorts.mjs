@@ -105,7 +105,7 @@ export function buildReuseCohorts(snapshot={},filters={}){
   add(components,JSON.stringify([String(item),type]),'component',normalized,event,'3074');
  }
  const filter=rows=>rows.filter(r=>(!filters.product||r.products.includes(filters.product))&&
-  (!filters.item_type||r.item_type===filters.item_type)&&(!filters.part_number||r.part_numbers.includes(filters.part_number))&&
+  (r.kind==='pcba'||!filters.item_type||r.item_type===filters.item_type)&&(r.kind==='pcba'||!filters.part_number||r.part_numbers.includes(filters.part_number))&&
   (!filters.sn||r.sn.toLowerCase().includes(String(filters.sn).toLowerCase())));
  const pcbaRows=filter(finish(pcbas)),componentRows=filter(finish(components));
  return {pcbas:{rows:pcbaRows,...summarizeReusePopulation(pcbaRows)},

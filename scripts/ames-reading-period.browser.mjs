@@ -104,6 +104,31 @@ try{
  await cohorts.locator('form button[type=submit]').click();
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=observed] strong').innerText(),'1');
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ // D: stored trends use history transport only, and retain gaps/revision evidence.
+ await page.locator('[data-console-view=top3]').click();
+ const trends=page.locator('[data-console-pane=top3] [data-history-trends]');
+ assert.equal(await trends.locator('[data-history-day]').count(),0,'navigation alone does not read history payloads');
+ await trends.locator('form button[type=submit]').click();
+ await trends.locator('[data-history-day]').first().waitFor();
+ assert.equal(await trends.locator('[data-history-day]').count(),7);
+ assert.equal(await trends.locator('[data-history-day-open]').count(),1);
+ assert.match(await trends.locator('[data-history-day="2026-10-15"]').innerText(),/Não coletado/,'custom window is not daily production');
+ await trends.locator('[data-history-day-open]').click();
+ assert.match(await trends.locator('[data-history-day-detail]').innerText(),/FRIDAY-SNAPSHOT/);
+ assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.snapshot_id),'FRIDAY-SNAPSHOT');
+ await trends.locator('select[name=days]').selectOption('30');
+ await trends.locator('form button[type=submit]').click();
+ await page.waitForFunction(()=>document.querySelectorAll('[data-console-pane=top3] [data-history-day]').length===30);
+ for(const width of [390,1440]){
+  await page.setViewportSize({width,height:900});
+  await page.evaluate(()=>{document.documentElement.lang='en-US';qa.view.render();});
+  assert.match(await trends.innerText(),/Stored history trends/);
+  assert.equal(await trends.locator('[data-history-day]').count(),30);
+  assert(await trends.locator('svg').evaluate(e=>e.getBoundingClientRect().width<=e.parentElement.clientWidth+2));
+ }
+ await page.evaluate(()=>{document.documentElement.lang='pt-BR';qa.view.render();});
+ await page.setViewportSize({width:1440,height:1000});
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
  await page.locator('[data-console-view=base]').click();
  const proof=page.locator('[data-console-pane=base] [data-five-source-coverage]');
  assert.equal(await proof.count(),1);
