@@ -162,3 +162,35 @@ test('saved SN queries use authenticated local jobs only, carry query clock and 
   await assert.rejects(h.client.savedSnHistory({limit:0}),/Limite/);
   h.client.clear();
 });
+
+
+test('source capture metadata from exact immutable revision is local, bounded and never accepted with raw MES payloads',async()=>{
+  const h=harness();await h.client.connect();
+  const scope={snapshot_id:'19',line_id:'TAN10103',snapshot_revision:2,content_hash:'a'.repeat(64)};
+  const record={snapshot_id:'19',line_id:'TAN10103',snapshot_revision:2,source_view:'3074',
+    capture_revision:1,job_id:'JOB1',local_only:true,source_complete:false,source_status:'partial'};
+  h.routes['source-captures']={schema:'ames-local-source-capture-v1',metadata_only:true,
+    local_only:true,source_complete:false,...scope,items:[record],next_cursor:null};
+  const beforeState=JSON.stringify(h.store.agent());
+  const data=await h.client.sourceCaptures({...scope,source_view:'3074'});
+  assert.equal(data.items.length,1);
+  const q=new URL(h.calls.at(-1).url).searchParams;
+  assert.equal(q.get('snapshot_id'),'19');
+  assert.equal(q.get('line'),'TAN10103');
+  assert.equal(q.get('snapshot_revision'),'2');
+  assert.equal(q.get('content_hash'),'a'.repeat(64));
+  assert.equal(q.get('source_view'),'3074');
+  assert.equal(JSON.stringify(h.store.agent()),beforeState);
+  h.routes['source-captures'].items=[{...record,result:{private_at:'should-not-enter'}}];
+  await assert.rejects(h.client.sourceCaptures(scope),/incompatível/);
+  h.routes['source-captures'].items=[{...record,source_view:'3012'}];
+  await assert.rejects(h.client.sourceCaptures(scope),/incompatível/);
+  h.routes['source-captures'].items=[record];
+  h.routes['source-captures'].content_hash='b'.repeat(64);
+  await assert.rejects(h.client.sourceCaptures(scope),/incompatível/);
+  const count=h.calls.length;
+  await assert.rejects(h.client.sourceCaptures({...scope,line_id:'OTHER'}),/inválida/);
+  await assert.rejects(h.client.sourceCaptures({...scope,source_view:'3012'}),/inválida/);
+  assert.equal(h.calls.length,count);
+  h.client.clear();
+});
