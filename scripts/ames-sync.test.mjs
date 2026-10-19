@@ -47,7 +47,7 @@ test('offline/reconnect publishes once; active teammates read sanitized latest l
 });
 
 test('identity mismatch is quarantined; other lines publish and historical outbox survives',async()=>{
-  const pending=new Map(),partWrites=new Map(),commits=[],attempts=new Map();
+  const pending=new Map(),partWrites=new Map(),commits=[],attempts=new Map(),history=[];
   const queue={put:async e=>pending.set(e.id,e),list:async uid=>[...pending.values()].filter(e=>e.uid===uid),remove:async id=>pending.delete(id)};
   const remote={
     putPart:async(_u,h)=>partWrites.set(h.line_id,(partWrites.get(h.line_id)||0)+1),
@@ -57,6 +57,7 @@ test('identity mismatch is quarantined; other lines publish and historical outbo
       commits.push(h.line_id);
     },
     inspectIdentity:async()=>({available:true,owner_exists:true,owner_source_matches:false,shared_exists:true,shared_owner_is_current:true}),
+    commitHistory:async(_u,h)=>history.push(h.line_id),
     watch:(_uid,cb)=>{cb([]);return()=>{}}
   };
   const store=createAmesStore();
@@ -66,15 +67,16 @@ test('identity mismatch is quarantined; other lines publish and historical outbo
   sync.start('A');await sync.capture();await new Promise(resolve=>setTimeout(resolve,30));
   assert.deepEqual(commits,['TAN10102']);
   assert.equal(attempts.get('TAN10103'),1);
-  assert.equal(pending.size,1);
-  assert.equal(store.agent().sync.status,'identity_blocked');
+  assert.equal(pending.size,0,'immutable history already committed and acknowledged');
+  assert.deepEqual(history.sort(),['TAN10102','TAN10103']);
+  assert.equal(store.agent().sync.status,'shared_history_legacy_conflict');
   assert.equal(store.agent().sync.publish_errors[0].identity.owner_source_matches,false);
   assert.equal(store.agent().sync.last_publish_timing.line_id,'TAN10102');
   const priorParts=partWrites.get('TAN10103');
   await sync.retry();
   assert.equal(attempts.get('TAN10103'),1,'permanent conflict must not retry on verification');
   assert.equal(partWrites.get('TAN10103'),priorParts,'do not retransmit blocked parts');
-  assert.equal(pending.size,1,'history must remain in outbox');
+  assert.equal(pending.size,0,'successful immutable history must not remain pending');
   sync.stop();
 });
 
