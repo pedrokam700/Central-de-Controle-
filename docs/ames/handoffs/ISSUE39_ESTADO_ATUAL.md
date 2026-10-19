@@ -72,3 +72,17 @@
 - Testes locais **18/18 Python PASS**: raw-history (4), local-history (3), canonical (5), trace-target (4), operational-day-selection (2). CI SHA exato e LAST_SAFE_SHA no comentário de publicação; sem repetir suíte Node completa, pois nenhuma alteração JS.
 - **A/B PARCIAIS; C/D/E pendentes; fábrica PENDING.** B3.1 é persistência local, ainda não recuperação pela UI nem compartilhamento sanitizado destas versões. Não declarar B completo.
 - Próximo passo B3.2: recuperar/projetar consultas SN já salvas em `jobs.result_json` (`agent.py::_persist_job`, chamado pelo `agent_3012_patch.py::run_sn_lookup`), sem refazer coleta. Separar origem/período comprovados e dados sem linha, sanitizar antes de transporte. Completar a verificação das cinco fontes e associação 3012 candidata antes dos KPIs. Não refazer A1/A2/B1/B2/B3.1.
+
+
+## Checkpoint B3.2 — Índice local e leitura exata das consultas SN salvas
+
+- **Código testado:** SHA 0dd4a18c3755c9a208cb3e6e65a2605a97d6a7a7. [CI GREEN](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/39308734328): reading-contract 51/51 Node, 24/24 Python (local-history 3, raw-history 4, saved-SN 6, trace-target 4, canonical 5, operational-day 2), reading-browser nove views PT/EN/mobile, nenhuma mutação MES. Não é Full Quality nem teste físico.
+- ames/agent/store.py: métodos saved_sn_lookups e open_saved_sn_lookup usam a tabela jobs/result_json JÁ EXISTENTE; página máxima 50, cursor estável com escopo dos filtros, filtro SN e horário de criação da CONSULTA com fuso explícito. Não atribuem dia produtivo ou linha inferida. O índice não inclui resultado bruto. Leitura exata exige ID + hash SHA-256 da identidade/conteúdo/status, recusando alteração.
+- ames/agent/agent_hardened_entry.py: GET /api/v1/saved-sn-history, protegido pelo mesmo token/origin do agente canônico. Retorna metadados apenas no índice; resultado bruto apenas na leitura autorizada local.
+- ames/agent-client.mjs: savedSnHistory e openSavedSnHistory com validação da identidade e sem publicar no Firebase nem modificar o snapshot Hoje.
+- scripts/agent-saved-sn-history.test.py: seis testes para paginação com horários iguais, resultado parcial, SN/período de consulta, alteração de hash/config, restart/source_id, cursor inválido, 401 sem autorização e ausência de escrita. scripts/ames-agent.test.mjs cobre o cliente.
+- Workflow .github/workflows/ames-operational-history.yml inclui os testes B3.2. O código estava em HEAD 0dd4a18c; ESTE commit documental terá SHA posterior e deve passar seu próprio gate.
+- Limites: jobs.result_json NÃO é um journal imutável de estados intermediários. Quando job/config/status mudar, hash antigo falha e usuário deve recarregar índice. Não recupera dados sobrescritos/excluídos antes da correção. Não infere ocorrência/linha/dia da SN isolada. Histórico SN ainda NÃO é exibido na UI; não há replay sanitizado para Firebase. Coleta e agentes da fábrica intactos.
+- **Próximo bloco exato B3.3:** integrar pesquisa e abertura paginada do histórico local SN à Central com relógio de consulta distinto do dia operacional, sem inserir bruto em heads, Today, Firestore ou relacionar 3012 à falha apenas por PCBA. Depois auditar projeção completa das fontes 3028/3074/2114/3022/3012, parciais e relacionamentos comprovados antes de C. A/B ainda parciais; C/D/E não iniciados; fábrica pendente.
+- Não refazer A1/A2/B1/B2/B3.1/B3.2. Revalidar HEAD e CI da PR40. Não alterar PR38/main/PR35/PR36, SQLite produtivo, source_id, porta 8765 ou Firebase de produção.
+
