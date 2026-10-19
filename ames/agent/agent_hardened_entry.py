@@ -19,6 +19,7 @@ import local_security
 import operational_calendar
 import origin_policy
 import performance_indexes
+import source_capture
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
 PERFORMANCE_INDEX_STATE = performance_indexes.install(entry.a.STORE)
@@ -114,6 +115,24 @@ class HardenedHandler(entry.Handler):
             return
         if not self._authorized(path):
             self._reject_unauthorized()
+            return
+        if path == "/api/v1/source-captures":
+            # Auth checked above, and no raw MES/AT content in this response.
+            # The caller must name the exact immutable parent revision.
+            q=parse_qs(urlparse(self.path).query)
+            try:
+                self._send(source_capture.capture_manifest(
+                    entry.a.STORE,
+                    snapshot_id=(q.get('snapshot_id') or [None])[0],
+                    line=(q.get('line') or [None])[0],
+                    snapshot_revision=(q.get('snapshot_revision') or [None])[0],
+                    content_hash=(q.get('content_hash') or [None])[0],
+                    source_view=(q.get('source_view') or [None])[0],
+                    before=(q.get('before') or [None])[0],
+                    limit=(q.get('limit') or ['20'])[0],
+                ))
+            except (ValueError,TypeError,OverflowError):
+                self._send({'error':'invalid_source_capture_scope'},400)
             return
         if path == "/api/v1/saved-sn-history":
             # Metadata-only index; raw SN search result is only returned when the
