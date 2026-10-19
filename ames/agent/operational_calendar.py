@@ -162,6 +162,8 @@ def public_contract(config: Dict[str, Any]) -> Dict[str, Any]:
         "timezone": value["timezone"],
         "production_day_start": value["production_day_start"],
         "work_shifts": value["work_shifts"],
+        "non_production_dates": sorted(value["non_production_dates"]),
+        "extra_production_dates": sorted(value["extra_production_dates"]),
         "semantics": {
             "production_day_start": "3028 today/previous-day window boundary",
             "work_shifts": "2114/operational shift classification",
