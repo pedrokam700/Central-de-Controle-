@@ -183,6 +183,8 @@ test('source capture metadata from exact immutable revision is local, bounded an
   assert.equal(JSON.stringify(h.store.agent()),beforeState);
   h.routes['source-captures'].items=[{...record,result:{private_at:'should-not-enter'}}];
   await assert.rejects(h.client.sourceCaptures(scope),/incompatível/);
+  h.routes['source-captures'].items=[{...record,unreviewed_raw:{personal:'NOPE'}}];
+  await assert.rejects(h.client.sourceCaptures(scope),/inesperados/);
   h.routes['source-captures'].items=[{...record,source_view:'3012'}];
   await assert.rejects(h.client.sourceCaptures(scope),/incompatível/);
   h.routes['source-captures'].items=[record];
