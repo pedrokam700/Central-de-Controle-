@@ -32,6 +32,7 @@ test('corrupt source completeness and missing evidence counts fail closed',()=>{
   '3012':{status:'some_untrusted_state',stored_rows:100,source_complete:false}
  }}});
  assert.equal(z[1].count,null);
+ assert.equal(fiveSourceEvidence({source_coverage:{'3028':{status:'observed_partial',stored_rows:0}}})[0].count,null);
  assert.equal(z[1].status,'observed_partial');
  assert.equal(z[4].status,'unknown');
  assert.equal(z[4].count,null);
