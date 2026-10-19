@@ -52,6 +52,8 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       day_start:cfg.day_start,
       production_day_start:cfg.production_day_start||cfg.day_start||'07:00',
       timezone:cfg.timezone||'America/Sao_Paulo',
+      non_production_dates:Array.isArray(cfg.non_production_dates)?cfg.non_production_dates.filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)).slice(0,730):[],
+      extra_production_dates:Array.isArray(cfg.extra_production_dates)?cfg.extra_production_dates.filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)).slice(0,730):[],
       work_shifts:cfg.work_shifts||null,
       monitor_interval_minutes:cfg.monitor_interval_minutes,
       backup_retention:cfg.backup_retention,
@@ -185,6 +187,29 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       await refresh();
     },options),
     refresh:()=>action(refresh),
+    localHistoryList:async(line)=>{
+      check();
+      if(!LINE_IDS.includes(line))throw Error('Linha de histórico inválida');
+      const rows=await request('/local-history?'+new URLSearchParams({line}));
+      if(!Array.isArray(rows)||rows.some(h=>h.line_id!==line||!Number.isSafeInteger(Number(h.snapshot_id))||Number(h.snapshot_id)<1))throw Error('Índice local de histórico inválido');
+      return rows;
+    },
+    historyCandidates:async({before=null,limit=20}={})=>{
+      check();
+      const query=new URLSearchParams({limit:String(Math.min(40,Math.max(1,Number(limit)||20)))});
+      if(before!==null)query.set('before',String(before));
+      const response=await request('/v2/history-candidates?'+query);
+      if(!Array.isArray(response?.candidates))throw Error('Índice de histórico incompatível');
+      return response;
+    },
+    historicalPayload:async(snapshotId,line)=>{
+      check();
+      if(!LINE_IDS.includes(line)||!Number.isSafeInteger(Number(snapshotId))||Number(snapshotId)<1)throw Error('Histórico local inválido');
+      const payload=await request('/local-history?'+new URLSearchParams({line,snapshot_id:String(snapshotId)}));
+      normalizeCanonical(payload);
+      if(payload.line_id!==line||String(payload.snapshot_id)!==String(snapshotId))throw Error('Revisão histórica divergente');
+      return payload;
+    },
     saveConfig:value=>action(async()=>{check();const scope=collectionScope(value);const cfg={configured_lines:scope.lines,performance:scope.performance};const saved=await request('/config',cfg);publish({config:publicConfig(saved?.config||saved)});}),
     collect:(type,value)=>action(async()=>{
       check();if(store.agent().job&&!['done','error','cancelled','skipped'].includes(store.agent().job.status))throw new Error('Aguarde ou cancele o job atual.');

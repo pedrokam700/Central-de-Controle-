@@ -8,6 +8,8 @@ import {pathToFileURL} from 'node:url';
 import {canonicalAgentFixture,productFixture} from './ames-fixtures.mjs';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
 const fixture=canonicalAgentFixture(productFixture('TAN10101',2));
+const fixtureDay=String(fixture.collected_at).slice(0,10);
+fixture.summary.period={mode:'today',start_at:fixtureDay+'T07:00',end_at:fixtureDay+'T10:00'};
 fixture.snapshot_id='1';fixture.summary.snapshot_id='1';
 for(const rows of Object.values(fixture.datasets))for(const row of rows)row.snapshot_id='1';
 const harness=`
@@ -16,7 +18,7 @@ import {createMesIntegration} from '/ames/integration-session.mjs';
 import {indexedQueue} from '/ames/sync.mjs';
 const store=createAmesStore(),queue=indexedQueue(),writes=[];let online=false;
 const remote={watch:()=>()=>{},putPart:async()=>{},commitHead:async(u,h)=>writes.push(h),commitHistory:async()=>{}};
-const integration=createMesIntegration(store,remote,{syncOptions:{online:()=>online},schedule:()=>0,unschedule:()=>{}});
+const integration=createMesIntegration(store,remote,{syncOptions:{online:()=>online,now:()=>new Date('${fixtureDay}T12:00:00Z')},schedule:()=>0,unschedule:()=>{}});
 window.qa={store,queue,writes,integration,seed:async()=>{store.replaceLocalSnapshots([${JSON.stringify(fixture)}]);await integration.sync.capture();},online:()=>{online=true;return integration.sync.retry();}};
 integration.start('A');
 `;

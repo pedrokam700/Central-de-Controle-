@@ -56,7 +56,7 @@ test('unpublished history rules retain retry data but never block CURRENT on ano
   const remote={watch:()=>()=>{},putPart:async()=>{},commitHead:async(_u,h)=>committed.push(h.line_id),commitHistory:async()=>{throw Error('permission-denied');}};
   const sync=createMesSync(createAmesStore(),remote,{queue:{list:async()=>entries,remove:async id=>{entries=entries.filter(e=>e.id!==id);}},online:()=>true,schedule:()=>0,unschedule:()=>{}});
   sync.start('collector');await new Promise(resolve=>setImmediate(resolve));
-  assert.deepEqual(committed.sort(),['TAN10101','TAN10102']);assert.equal(entries.length,2);sync.stop();
+  assert.deepEqual(committed,[],'history authorization must succeed before promoting a mutable head');assert.equal(entries.length,2);sync.stop();
 });
 test('migration download accepts only a live artifact for the exact frontend SHA',async()=>{
   const sha='a'.repeat(40),artifact={name:'central-v2-r12-migration-'+sha,id:123,expired:false,workflow_run:{id:456,head_sha:sha}};

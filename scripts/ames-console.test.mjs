@@ -42,7 +42,7 @@ test('source Defect Type stays escaped observation, not cause or material reuse'
 });
 test('console shell entry uses same store, guards session/view and reuses renderer', () => {
   const source=fs.readFileSync('app.js','utf8'); const {store}=setup(); let creates=0,renders=0;
-  const context=vm.createContext({state:{ames:store},document:{querySelector:()=>({})},createConsoleView(_root,s){assert.equal(s,store);creates++;return {render(){renders++;}};}});
+  const context=vm.createContext({state:{ames:store},document:{querySelector:()=>({})},createConsoleView(_root,s){assert.equal(s,store);creates++;return {render(){renders++;}};},createMesHistorySource:()=>({list:async()=>[],open:async()=>null})});
   vm.runInContext("let currentAuthUser=null,activeView='mesConsole',currentLanguage='pt-BR';"+source.slice(source.indexOf('    let consoleMesView;'),source.indexOf('    let dashboardMesView;'))+'renderConsoleMes();',context);
   assert.equal(creates,0); vm.runInContext("currentAuthUser={uid:'A'};mesIntegration={client:{},verify(){}};activeView='home';renderConsoleMes();activeView='mesConsole';renderConsoleMes();renderConsoleMes();",context);
   assert.equal(creates,1);assert.equal(renders,2);

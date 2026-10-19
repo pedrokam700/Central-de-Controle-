@@ -11,7 +11,7 @@ test('history UI allows refreshing an already collected period without replacing
   assert.match(history,/Abrir sem substituir atual/);
   assert.match(history,/Cada linha é uma versão preservada/);
   assert.match(history,/Hoje/);
-  assert.match(history,/Ontem/);
+  assert.match(history,/Último dia de produção/);
   assert.match(history,/não substitui o snapshot atual/);
 });
 
@@ -32,4 +32,14 @@ test('sync history identity preserves distinct content revisions',()=>{
 test('history refresh remains a custom period collection and does not mutate current snapshot directly',()=>{
   assert.match(history,/client\.collect\('custom'/);
   assert.doesNotMatch(history,/replaceSyncedSnapshots|replaceSnapshot|setSnapshot/);
+});
+
+test('calendar filters use factory timezone and avoid calendar-yesterday shortcut',()=>{
+  assert.match(history,/America\/Sao_Paulo/);
+  assert.match(history,/production_day_start/);
+  assert.match(history,/non_production_dates/);
+  assert.match(history,/extra_production_dates/);
+  assert.match(history,/data-history-mode="previous"/);
+  assert.match(history,/data-history-mode="advanced"/);
+  assert.match(history,/<details open/);
 });

@@ -3,6 +3,7 @@ import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
 
     import { clearSessionData } from './ames/data/store.mjs';
     import {createMesIntegration} from './ames/integration-session.mjs';
+    import {createMesHistorySource} from './ames/history-source.mjs';
     import {firestoreTransport} from './ames/firebase-sync.mjs';
     import { createConsoleView } from './ames/console-view.mjs';
     import { installLoginReturn } from './core/login-navigation.mjs';
@@ -2367,7 +2368,7 @@ import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
     let mesSync;
     let mesIntegration;
     function startMesSync(uid){
-      mesIntegration ||= createMesIntegration(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction}),{changed(){
+      mesIntegration ||= createMesIntegration(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction,query,where}),{changed(){
         if(!currentAuthUser)return;
         renderDashboardMes();renderProductMes();renderFailuresMes();renderDailyMes();renderCoraMes();renderConsoleMes();
       }});
@@ -2378,7 +2379,7 @@ import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
       if (!currentAuthUser || activeView !== 'mesConsole') return;
       consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, {
         locale: () => currentLanguage, agentClient:mesIntegration.client, verify:()=>mesIntegration.verify(),
-        history:{list:line=>mesSync.listHistory(line),open:head=>mesSync.openHistory(head)}
+        history:createMesHistorySource(mesSync,mesIntegration.client,state.ames)
       });
       consoleMesView.render();
     }

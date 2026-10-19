@@ -23,7 +23,8 @@ test('shared publication identity keeps revisions distinct and reports team auth
   assert.match(sync,/remote_scope:'team_latest'/);
   assert.match(sync,/remote_heads/);
   assert.match(sync,/remote_latest_collected_at/);
-  assert.match(sync,/authority:'team_latest'/);
+  assert.match(sync,/operational_day_history/);
+  assert.match(sync,/authority='team_latest'/);
 });
 
 test('another workstation can consume shared snapshots without replacing the local SQLite architecture',()=>{

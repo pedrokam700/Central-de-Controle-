@@ -760,6 +760,76 @@ class Store:
             ).fetchone()
         return int(row["sid"]) if row and row["sid"] is not None else None
 
+    def historical_candidates(self, before_snapshot_id: Optional[int], limit: int, current_start: str) -> Dict[str, Any]:
+        """Bounded index scan for background *SQLite only* history reconciliation.
+
+        An advanced/custom investigation is intentionally excluded. No MES
+        extraction or source identity migration is performed by this reader.
+        """
+        limit = max(1, min(int(limit), 40))
+        cursor = int(before_snapshot_id) if before_snapshot_id is not None else None
+        if cursor is not None and cursor <= 0:
+            raise ValueError("invalid_history_cursor")
+        with self.connect() as con:
+            snapshots = con.execute(
+                """SELECT s.id,w.mode,w.start_at,w.end_at,
+                          COALESCE(c.epoch,0) AS epoch
+                   FROM snapshots s
+                   JOIN analysis_windows w ON w.id=s.window_id
+                   LEFT JOIN mes_source_clock c ON c.snapshot_id=s.id
+                   WHERE s.status='complete' AND w.start_at IS NOT NULL
+                     AND substr(w.start_at,1,16) < ?
+                     AND w.mode IN ('today','live','monitor_today','previous_day','historical_refresh')
+                     AND (? IS NULL OR s.id < ?)
+                   ORDER BY s.id DESC LIMIT ?""",
+                (current_start[:16], cursor, cursor, limit),
+            ).fetchall()
+            results = []
+            for s in snapshots:
+                rows = con.execute(
+                    """SELECT line FROM line_metrics WHERE snapshot_id=?
+                       UNION SELECT line FROM defect_observations WHERE snapshot_id=?""",
+                    (s["id"], s["id"]),
+                ).fetchall()
+                for row in rows:
+                    if row["line"]:
+                        results.append({
+                            "snapshot_id": int(s["id"]), "line_id": row["line"],
+                            "epoch": int(s["epoch"]), "mode": s["mode"],
+                            "period_start": s["start_at"], "period_end": s["end_at"],
+                        })
+        return {"candidates": results, "next_cursor": snapshots[-1]["id"] if len(snapshots)==limit else None}
+
+    def operational_snapshot_ids_by_line(self, lines: Iterable[str], start_at: str) -> Dict[str, int]:
+        """Latest *live* evidence for exactly one 3028 production window.
+
+        Advanced/previous-day/manual snapshots are intentionally excluded even if
+        their SQLite id or collection timestamp is newer. No fallback to an older
+        operational day is allowed for the current dashboard.
+        """
+        requested = sorted({str(line).strip() for line in lines if str(line).strip()})
+        if not requested or not start_at or len(start_at) < 16:
+            return {}
+        boundary = start_at[:16]  # Factory wall-clock date and 07:00; offsets may differ.
+        values: Dict[str, int] = {}
+        with self.connect() as con:
+            for line in requested:
+                row = con.execute(
+                    """SELECT s.id
+                       FROM snapshots s
+                       JOIN analysis_windows w ON w.id=s.window_id
+                       WHERE s.status='complete'
+                         AND w.mode IN ('today','live','monitor_today')
+                         AND substr(w.start_at,1,16)=?
+                         AND (EXISTS(SELECT 1 FROM line_metrics m WHERE m.snapshot_id=s.id AND m.line=?)
+                           OR EXISTS(SELECT 1 FROM defect_observations d WHERE d.snapshot_id=s.id AND d.line=?))
+                       ORDER BY s.id DESC LIMIT 1""",
+                    (boundary, line, line),
+                ).fetchone()
+                if row:
+                    values[line] = int(row["id"])
+        return values
+
     def latest_snapshot_ids_by_line(self, lines: Iterable[str] | None = None) -> Dict[str, int]:
         requested = [str(x).strip() for x in (lines or []) if str(x).strip()]
         with self.connect() as con:

@@ -175,12 +175,17 @@ export function buildSyncHealth(agent={}){
       snapshot_id:String(head.snapshot_id??''),
       snapshot_revision:Number(head.snapshot_revision)||0,
       collected_at:head.collected_at||null,
-      authority:head.authority==='team_latest'?'team_latest':null
+      authority:['team_latest','operational_day_history'].includes(head.authority)?head.authority:null
     }))
     .sort((a,b)=>LINE_IDS.indexOf(a.line_id)-LINE_IDS.indexOf(b.line_id));
   const readStatus=normalizedStatus(sync.read_status);
   const latest=sync.remote_latest_collected_at||heads.map(head=>head.collected_at).filter(Boolean).sort().at(-1)||null;
-  const authority=sync.remote_scope==='team_latest'||heads.some(head=>head.authority==='team_latest')?'team_latest':null;
+  const authority=sync.remote_scope==='operational_day_history'?'operational_day_history':sync.remote_scope==='team_latest'||heads.some(head=>head.authority==='team_latest')?'team_latest':null;
+  if(readStatus==='origin_conflict')return {
+    tone:'error',label:t('Origens concorrentes — verificação necessária','Competing sources — review required'),
+    detail:t('Mais de uma instalação apresentou dados para a mesma linha e dia operacional. Nenhuma origem foi escolhida automaticamente.','More than one installation reported the same production line and day. No origin was selected automatically.'),
+    heads,count:heads.length,latest,authority,read_status:readStatus,has_error:true
+  };
   if(readStatus==='cached')return {
     tone:'partial',label:t('Cache compartilhado; servidor não confirmado','Shared cache; server not confirmed'),
     detail:t('Evidência preservada no navegador. Aguarde reconexão para confirmar a versão do servidor.','Evidence preserved in this browser. Reconnect to confirm the server version.'),
@@ -211,6 +216,53 @@ export function buildSyncHealth(agent={}){
   };
 }
 
+// Physical A/B test evidence: metadata only. No source_id, UID, PCBA, MES
+// cookies, raw payloads, hostnames, or free-form error messages are copied.
+export function factorySyncEvidence(agent={},at=new Date()){
+  const sync=agent?.sync||{};
+  const line=value=>LINE_IDS.includes(value)?value:null;
+  const num=value=>Number.isFinite(value)&&value>=0&&value<=86400000?Math.round(value):null;
+  const timing=(v,fields)=>Object.fromEntries(fields.map(k=>[k,num(v?.[k])]));
+  const sent=sync.last_sent||{},rHeads=Array.isArray(sync.remote_heads)?sync.remote_heads:[];
+  const safeTimestamp=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)?value.slice(0,35):null;
+  const safeVersion=value=>typeof value==='string'&&/^[A-Za-z0-9_.-]{1,80}$/.test(value)?value:null;
+  const safeId=value=>/^\d+$/.test(String(value||''))?String(value):null;
+  const authority=value=>['team_latest','operational_day_history'].includes(value)?value:null;
+  return {
+    schema:'ames-pr38-factory-a-b-v1',
+    captured_at:at.toISOString(),
+    agent_build:safeVersion(agent?.agent_build),
+    local_agent_connected:agent?.status==='connected',
+    publishing:{
+      status:typeof sync.status==='string'&&/^[a-z_]{1,50}$/.test(sync.status)?sync.status:'unknown',
+      pending:Number.isInteger(sync.pending)?Math.max(0,sync.pending):null,
+      blocked_lines:(sync.identity_blocked||[]).map(line).filter(Boolean),
+      last_sent:line(sent.line_id)?{
+        line_id:sent.line_id,snapshot_id:safeId(sent.snapshot_id),
+        revision:Number.isInteger(sent.snapshot_revision)?sent.snapshot_revision:null,
+        authority:authority(sent.authority),sent_at:safeTimestamp(sent.sent_at)
+      }:null,
+      last_timings_ms:timing(sync.last_publish_timing,['parts_ms','head_ms','history_ms','total_ms'])
+    },
+    receiving:{
+      status:typeof sync.read_status==='string'&&/^[a-z_]{1,50}$/.test(sync.read_status)?sync.read_status:'unknown',
+      authority:authority(sync.remote_scope),received_at:safeTimestamp(sync.last_received_at),
+      listener_event_at:safeTimestamp(sync.server_received_at),
+      conflict_lines:(sync.origin_conflict_lines||[]).map(line).filter(Boolean),
+      visible_heads:rHeads.filter(h=>line(h?.line_id)).map(h=>({
+        line_id:h.line_id,snapshot_id:safeId(h.snapshot_id),
+        revision:Number.isInteger(h.snapshot_revision)?h.snapshot_revision:null,
+        collected_at:safeTimestamp(h.collected_at),authority:authority(h.authority)
+      })),
+      last_timings_ms:timing(sync.last_receive_timing,['read_ms','download_ms']),
+      candidates:Number.isInteger(sync.last_receive_timing?.candidates)?sync.last_receive_timing.candidates:null,
+      downloaded:Number.isInteger(sync.last_receive_timing?.downloaded)?sync.last_receive_timing.downloaded:null,
+      cache_hits:Number.isInteger(sync.last_receive_timing?.cache_hits)?sync.last_receive_timing.cache_hits:null,
+      skipped_versions:Number.isInteger(sync.last_receive_timing?.skipped_versions)?sync.last_receive_timing.skipped_versions:null
+    }
+  };
+}
+
 export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
   let last='',security=null,securityFor='',securityLoading=false,repairStatus=null,repairFor='',repairLoading=false,disposed=false;
   async function loadSecurity(agent){if(disposed||securityLoading||agent.status!=='connected')return;const identity=String(agent.agent_build||agent.capabilities?.agent_build||'connected');if(securityFor===identity&&security)return;securityLoading=true;securityFor=identity;try{security=await readHardeningDiagnostics();}catch(error){security={status:'unavailable',reason:error?.name==='AbortError'?'aborted':'error'};}finally{securityLoading=false;if(!disposed){last='';render();}}}
@@ -220,14 +272,24 @@ export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
     if(agent.status==='connected'){void loadSecurity(agent);void loadRepairStatus(agent);}else{if(security||securityFor){security=null;securityFor='';securityLoading=false;}if(repairStatus||repairFor){repairStatus=null;repairFor='';repairLoading=false;}}
     const model=buildDataHealth(store,repairStatus),workstationState=buildWorkstationHealth(agent),securityState=buildSecurityHealth(security),syncState=buildSyncHealth(agent);
     const key=JSON.stringify([model,agent.status,agent.agent_build,agent.connection_error,agent.sync,workstationState,syncState,security,securityLoading,repairStatus,repairLoading,typeof document==='undefined'?'':document.documentElement.lang]);if(key===last)return;last=key;
-    const syncAuthority=syncState.authority==='team_latest'?t('Mais recente da equipe','Latest team snapshot'):t('Não informada','Not provided');
+    const syncAuthority=syncState.authority==='operational_day_history'?t('Revisão imutável do dia operacional','Immutable operational-day revision'):syncState.authority==='team_latest'?t('Mais recente da equipe','Latest team snapshot'):t('Não informada','Not provided');
     const syncLines=syncState.heads.map((head,index)=>`${t('Linha','Line')} ${LINE_IDS.indexOf(head.line_id)+1||index+1} · ${esc(head.line_id)} · ${t('Origem','Source')} ${esc(head.source_id||'—')} · Snapshot ${esc(head.snapshot_id||'—')} r${esc(head.snapshot_revision)} · ${esc(head.collected_at||'—')}`).join('<br>');
-    const sync=agent.sync||{},sent=sync.last_sent;
-    const syncDetails=`<br><small>${t('Fila pendente','Pending queue')}: ${Number.isInteger(sync.pending)?sync.pending:'—'} · ${t('Publicação','Publication')}: ${esc(sync.status||'—')}<br>${t('Último snapshot enviado','Last snapshot sent')}: ${sent?`${esc(sent.line_id)} / ${esc(sent.source_id)} / ${esc(sent.snapshot_id)} r${esc(sent.snapshot_revision)} · ${esc(sent.sent_at)}`:'—'}<br>${t('Último recebimento','Last received')}: ${esc(sync.last_received_at||'—')} · ${t('Confirmação do servidor','Server confirmation')}: ${esc(sync.server_received_at||'—')}<br>${t('Erro de publicação','Publication error')}: ${esc(sync.error||'—')}<br>${t('Erro de leitura','Read error')}: ${esc(sync.read_error||'—')}</small>`;
+    const sync=agent.sync||{},sent=sync.last_sent,blockCount=Array.isArray(sync.identity_blocked)?sync.identity_blocked.length:0;
+    const syncDetails=`<br><small>${t('Fila pendente','Pending queue')}: ${Number.isInteger(sync.pending)?sync.pending:'—'} · ${t('Publicação','Publication')}: ${esc(sync.status||'—')}<br>${t('Último snapshot enviado','Last snapshot sent')}: ${sent?`${esc(sent.line_id)} / ${esc(sent.source_id)} / ${esc(sent.snapshot_id)} r${esc(sent.snapshot_revision)} · ${esc(sent.sent_at)}`:'—'}<br>${t('Último recebimento','Last received')}: ${esc(sync.last_received_at||'—')} · ${t('Evento remoto recebido (relógio local)','Remote listener event (local clock)')}: ${esc(sync.server_received_at||'—')}<br>${t('Erro de publicação','Publication error')}: ${esc(sync.error||'—')}<br>${t('Erro de leitura','Read error')}: ${esc(sync.read_error||'—')}<br>${t('Cabeçalho legado bloqueado','Legacy head blocked')}: ${blockCount?esc(sync.identity_blocked.join(', ')):'—'} · ${t('Conflito de origens','Origin conflict')}: ${esc((sync.origin_conflict_lines||[]).join(', ')||'—')}<br>${t('Duração do último envio','Last publish duration')}: ${sync.last_publish_timing?.total_ms??'—'} ms · ${t('Recebimento','Receive duration')}: ${sync.last_receive_timing?.read_ms??'—'} ms · ${t('Revisões no índice','Indexed revisions')}: ${sync.last_receive_timing?.candidates??'—'} · ${t('Baixadas','Downloaded')}: ${sync.last_receive_timing?.downloaded??'—'} · ${t('Evitadas','Skipped')}: ${sync.last_receive_timing?.skipped_versions??'—'}<br>${t('Tempos locais de leitura e publicação não representam a latência total A → B.','Local read and publish timings are not the full A → B latency.')}</small>`;
     const setupLabel=workstationState.setup===true?t('concluído','complete'):workstationState.setup===false?t('pendente','pending'):'—';
     const workstationChecks=workstationState.checks.map(check=>`${esc(check.label)}: ${check.value===true?t('pronto','ready'):check.value===false?t('falha','failed'):'—'}`).join(' · ');
     root.setAttribute('data-no-i18n','');
-    root.innerHTML=`<section class="mes-context-panel ames-data-health"><div class="section-head"><div><h3>${t('Saúde e cobertura dos dados','Data health and coverage')}</h3><p>${t('Mostra o que foi realmente carregado. Ausência de evidência nunca é apresentada como zero.','Shows what was actually loaded. Missing evidence is never presented as zero.')}</p></div><span class="ames-health-agent ${agent.status==='connected'?'ok':'unknown'}">${agent.status==='connected'?t('Agente conectado','Agent connected'):t('Dados compartilhados / cache','Shared data / cache')}</span></div><div class="ames-data-health-grid">${model.map(item=>`<article class="ames-health-card ${item.state.tone}" data-source-state="${esc(item.state.source_state)}"><div class="ames-health-card-head"><div><b>${esc(item.label)}</b><span>${esc(item.name)}</span></div><span class="ames-health-state">${esc(item.state.label)}</span></div><strong>${item.displayCount??'—'}</strong><small>${esc(item.unit)}</small><p>${esc(item.state.detail)}</p><footer><span>${esc(item.latest||t('coleta não informada','collection not provided'))}</span><button type="button" class="button secondary" data-health-evidence="${esc(item.source)}">${t('Ver evidência','View evidence')}</button></footer></article>`).join('')}</div><div class="notice ${workstationState.tone==='partial'?'warn':''}" data-workstation-health><b>${t('Posto local','Local workstation')} · ${esc(workstationState.label)}</b><br>${esc(workstationState.detail)}${agent.connection_error?`<br><span role="status">${esc(agent.connection_error.code)}: ${esc(agent.connection_error.message)}</span>`:''}<br><small>${t('Build instalado','Installed build')}: ${esc(workstationState.build||'—')} · ${t('Candidato informado','Reported candidate')}: ${esc(workstationState.candidate||'—')} · ${t('Setup','Setup')}: ${esc(setupLabel)}${workstationChecks?`<br>${workstationChecks}`:''}</small></div><div class="notice ${syncState.tone==='partial'||syncState.tone==='error'?'warn':''}" data-sync-health><b>${t('Sincronização entre postos','Cross-workstation sync')} · ${esc(syncState.label)}</b><br>${esc(syncState.detail)}<br><small>${t('Autoridade','Authority')}: ${esc(syncAuthority)} · ${t('Última coleta remota','Latest remote collection')}: ${esc(syncState.latest||'—')}${syncLines?`<br>${syncLines}`:''}</small>${syncDetails}</div><div class="notice ${securityState.tone==='partial'?'warn':''}" data-security-health><b>${t('Segurança local','Local security')} · ${esc(securityState.label)}</b><br>${esc(securityState.detail)}<br><small>${t('Origens remotas autorizadas','Authorized remote origins')}: ${securityState.remote??'—'} · ${t('Entradas rejeitadas','Rejected entries')}: ${securityState.rejected??'—'}${securityState.mode?` · ${esc(securityState.mode)}`:''}</small></div></section>`;
+    root.innerHTML=`<section class="mes-context-panel ames-data-health"><div class="section-head"><div><h3>${t('Saúde e cobertura dos dados','Data health and coverage')}</h3><p>${t('Mostra o que foi realmente carregado. Ausência de evidência nunca é apresentada como zero.','Shows what was actually loaded. Missing evidence is never presented as zero.')}</p></div><span class="ames-health-agent ${agent.status==='connected'?'ok':'unknown'}">${agent.status==='connected'?t('Agente conectado','Agent connected'):t('Dados compartilhados / cache','Shared data / cache')}</span></div><div class="ames-data-health-grid">${model.map(item=>`<article class="ames-health-card ${item.state.tone}" data-source-state="${esc(item.state.source_state)}"><div class="ames-health-card-head"><div><b>${esc(item.label)}</b><span>${esc(item.name)}</span></div><span class="ames-health-state">${esc(item.state.label)}</span></div><strong>${item.displayCount??'—'}</strong><small>${esc(item.unit)}</small><p>${esc(item.state.detail)}</p><footer><span>${esc(item.latest||t('coleta não informada','collection not provided'))}</span><button type="button" class="button secondary" data-health-evidence="${esc(item.source)}">${t('Ver evidência','View evidence')}</button></footer></article>`).join('')}</div><div class="notice ${workstationState.tone==='partial'?'warn':''}" data-workstation-health><b>${t('Posto local','Local workstation')} · ${esc(workstationState.label)}</b><br>${esc(workstationState.detail)}${agent.connection_error?`<br><span role="status">${esc(agent.connection_error.code)}: ${esc(agent.connection_error.message)}</span>`:''}<br><small>${t('Build instalado','Installed build')}: ${esc(workstationState.build||'—')} · ${t('Candidato informado','Reported candidate')}: ${esc(workstationState.candidate||'—')} · ${t('Setup','Setup')}: ${esc(setupLabel)}${workstationChecks?`<br>${workstationChecks}`:''}</small></div><div class="notice ${syncState.tone==='partial'||syncState.tone==='error'?'warn':''}" data-sync-health><b>${t('Sincronização entre postos','Cross-workstation sync')} · ${esc(syncState.label)}</b><br>${esc(syncState.detail)}<br><small>${t('Autoridade','Authority')}: ${esc(syncAuthority)} · ${t('Última coleta remota','Latest remote collection')}: ${esc(syncState.latest||'—')}${syncLines?`<br>${syncLines}`:''}</small>${syncDetails}<p><button type="button" class="button secondary" data-sync-copy>${t('Copiar diagnóstico A/B (sem dados sensíveis)','Copy A/B diagnostic (no sensitive data)')}</button> <span role="status" data-sync-copy-status></span></p></div><div class="notice ${securityState.tone==='partial'?'warn':''}" data-security-health><b>${t('Segurança local','Local security')} · ${esc(securityState.label)}</b><br>${esc(securityState.detail)}<br><small>${t('Origens remotas autorizadas','Authorized remote origins')}: ${securityState.remote??'—'} · ${t('Entradas rejeitadas','Rejected entries')}: ${securityState.rejected??'—'}${securityState.mode?` · ${esc(securityState.mode)}`:''}</small></div></section>`;
+    root.querySelector?.('[data-sync-copy]')?.addEventListener('click',async()=>{
+      const status=root.querySelector('[data-sync-copy-status]');
+      try{
+        if(!navigator.clipboard?.writeText)throw Error('clipboard_unavailable');
+        await navigator.clipboard.writeText(JSON.stringify(factorySyncEvidence(store.agent()),null,2));
+        if(status)status.textContent=t('Diagnóstico copiado. Identifique este posto como A ou B ao enviar.','Diagnostic copied. Label this workstation A or B when sharing.');
+      }catch{
+        if(status)status.textContent=t('Cópia indisponível neste navegador. Não altere as permissões do agente.','Clipboard unavailable in this browser. Do not change agent permissions.');
+      }
+    });
     root.querySelectorAll('[data-health-evidence]').forEach(button=>button.addEventListener('click',()=>{const item=model.find(x=>x.source===button.dataset.healthEvidence);if(!item)return;const fields=[[t('Estado','Status'),item.state.label],[t('Proveniência','Provenance'),sourceStateLabel(item.state.source_state,locale())],[t('Registros visíveis','Visible records'),item.displayCount??'—'],[t('Última coleta','Last collection'),item.latest||'—'],[t('Build do agente','Agent build'),agent.agent_build||agent.capabilities?.agent_build||'—']];const notes=[t('0 só é mostrado quando a fonte foi comprovadamente consultada e retornou zero. Fonte não coletada, parcial sem cobertura ou com erro fica como —/estado explícito.','0 is shown only when the source was proven queried and returned zero. Uncollected, unproven partial, or failed sources remain — with an explicit status.')];if(item.source==='3012'&&item.cache){fields.push([t('Registros no SQLite 3012','3012 SQLite records'),item.cache.rows??'—'],[t('SNs com cobertura registrada','SNs with recorded coverage'),item.cache.coverageSns??'—'],[t('Intervalos de cobertura','Coverage intervals'),item.cache.coverageIntervals??'—'],['AMES_START_DATE',item.cache.amesStartDate||'—'],[t('Validação física 3012','3012 physical validation'),item.cache.factoryValidated?t('validada','validated'):t('pendente','pending')]);}onEvidence({title:`${item.label} · ${item.name}`,description:item.state.detail,fields,lines:item.reads.map(x=>({label:`${t('Linha','Line')} ${x.index} · ${x.line}`,snapshot:x.read.snapshot?.snapshot_id||t('sem snapshot','no snapshot'),freshness:x.read.freshness,detail:sourceStateLabel(readSourceState(x.read),locale())})),notes});}));
   }
   return {render,clear(){disposed=true;root?.replaceChildren();root?.removeAttribute('data-no-i18n');last='';security=null;securityFor='';repairStatus=null;repairFor='';}};

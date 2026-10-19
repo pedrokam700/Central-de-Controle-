@@ -10,6 +10,28 @@ Rastreabilidade|Traceability
 Dashboards de reuso|Reuse dashboards
 Processo / 3022 & AT|Process / 3022 & AT
 Base local|Local database
+Histórico de produção|Production history
+Hoje, último dia produtivo e revisões antigas. A coleta do dia anterior não modifica os indicadores de Hoje.|Today, last production day and previous revisions. Collecting an earlier day does not change Today's indicators.
+Abrir histórico|Open history
+Abrir a Central local deste computador para controlar o A-MES|Open this workstation's local Central to control A-MES
+O endereço do agente local pertence ao computador onde o navegador está aberto, não ao posto remoto. O site HTTPS precisa de pareamento explícito para controlar o agente.|The local agent address belongs to the computer running this browser, not the remote workstation. HTTPS requires explicit pairing to control the agent.
+O histórico pode estar somente no SQLite deste computador ou na base compartilhada.|History may exist only in this computer's SQLite or in shared storage.
+Coleta local disponível; envio para a equipe ainda não confirmado. Confira a sincronização abaixo.|Local collection available; team publication not confirmed. Check synchronization below.
+Há revisão imutável, mas o cabeçalho legado continua em conflito; confira a leitura no outro posto.|Immutable revision exists, but the legacy head still conflicts; verify reading on the other workstation.
+Última publicação confirmada pela fila; confira a leitura no outro posto.|Latest publication acknowledged by the queue; verify reading on the other workstation.
+Há revisões salvas neste computador. Local ≠ publicado no Firebase; o outro posto só recebe as versões marcadas como compartilhadas.|Revisions are saved on this computer. Local does not mean published to Firebase; the other workstation only receives versions marked as shared.
+Local · não confirmado na equipe|Local · not confirmed with team
+Compartilhado|Shared
+Compartilhamento|Sharing
+Ainda não há evidência comprovada para Hoje nesta linha. Dados de outro período não serão exibidos aqui.|No verified evidence for Today on this line. Data from another period will not be shown here.
+Último dia de produção|Last production day
+Histórico por data|Production history by date
+Consulta avançada|Advanced query
+Linha:|Line:
+Última extração:|Last extraction:
+Conforme evidência da revisão|According to revision evidence
+O 3028 usa 07:00 → 07:00; turnos 07:30/17:30 permanecem distintos. Dados não comprovados nunca viram zero.|3028 uses 07:00 → 07:00; shifts 07:30/17:30 remain distinct. Unverified data never becomes zero.
+Histórico de produção em destaque: Hoje, dia produtivo anterior, revisões AT, calendário e consultas isoladas.|Production history: Today, last production day, AT revisions, calendar and isolated queries.
 CORA conhecimento|CORA knowledge
 CORA · conhecimento|CORA · knowledge
 Central de trabalho|Work Center

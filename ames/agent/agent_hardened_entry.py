@@ -115,6 +115,35 @@ class HardenedHandler(entry.Handler):
         if not self._authorized(path):
             self._reject_unauthorized()
             return
+        if path == "/api/v1/v2/history-candidates":
+            q = parse_qs(urlparse(self.path).query)
+            try:
+                cursor = (q.get("before") or [None])[0]
+                limit = (q.get("limit") or ["20"])[0]
+                start, _ = operational_calendar.today_window(entry.a.CONFIG)
+                self._send(entry.a.STORE.historical_candidates(cursor, limit, start))
+            except (TypeError, ValueError) as exc:
+                self._send({"error": "invalid_history_query", "message": str(exc)}, 400)
+            return
+        if path == "/api/v1/v2/snapshots":
+            # Strong temporal guard at the source, not just a UI filter.
+            # History/advanced queries remain in SQLite but cannot become Today.
+            start, _ = operational_calendar.today_window(entry.a.CONFIG)
+            line_ids = entry.a.STORE.operational_snapshot_ids_by_line(
+                entry.a.CONFIG.get("configured_lines") or [], start
+            )
+            heads = [
+                entry.canonical.manifest(entry.canonical.export_revision(
+                    entry.a.STORE, sid, line, entry.a.trace_insights
+                ))
+                for line, sid in line_ids.items()
+            ]
+            self._send({
+                "schema": entry.canonical.SCHEMA, "scope": "today",
+                "operational_date": start[:10], "period_start_at": start,
+                "snapshots": heads,
+            })
+            return
         if path == "/api/v1/base":
             q = parse_qs(urlparse(self.path).query)
             dataset = (q.get("dataset") or ["defects"])[0]

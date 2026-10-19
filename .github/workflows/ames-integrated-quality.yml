@@ -6,10 +6,17 @@ on:
       - work/ames-integrated-clean-v5-20261013
       - work/ames-integrated-clean-v5-improvements-20261013
       - work/ames-operator-ux-parity-20261014
+      - work/ames-identity-operational-history-20261019
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Keep the newest SHA authoritative. Superseded pushes on the same branch
+# must not retain runners or block the Windows gate.
+concurrency:
+  group: ames-integrated-quality-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   full-static-quality:
@@ -29,6 +36,7 @@ jobs:
         run: |
           python scripts/agent-hardening.test.py
           python scripts/agent-operational-calendar.test.py
+          python scripts/agent-operational-day-selection.test.py
           python scripts/agent-preflight.test.py
           python scripts/agent-scheduler.test.py
           python scripts/agent-canonical.test.py
@@ -40,6 +48,7 @@ jobs:
           python scripts/agent-base-paging.test.py
           python scripts/agent-offline-catalog.test.py
           python scripts/agent-package-contract.test.py
+          python scripts/agent-pr38-preserving-stage.test.py
           python scripts/agent-candidate-config.test.py
           python scripts/agent-origin-policy.test.py
           python scripts/agent-2114-shift-partial.test.py
@@ -74,7 +83,11 @@ jobs:
           PYTHON_BIN: python3
         run: |
           export FIREBASE_TEST_MODULES="$RUNNER_TEMP/ames-tests/node_modules"
-          "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes 'node scripts/ames-rules.emulator.mjs && node scripts/ames-e2e.emulator.mjs'
+          # Fresh Firestore process for each contract: leaked listener state from
+          # an earlier suite must never contaminate the A/B cross-PC gate.
+          for suite in scripts/ames-rules.emulator.mjs scripts/ames-e2e.emulator.mjs scripts/ames-pr38-day.emulator.mjs; do
+            "$RUNNER_TEMP/ames-tests/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes "node $suite"
+          done
 
   console-experience:
     runs-on: ubuntu-latest
@@ -103,4 +116,66 @@ jobs:
           name: integrated-console-experience-${{ github.sha }}
           path: ${{ runner.temp }}/console-evidence
           if-no-files-found: ignore
+          retention-days: 7
+
+  windows-identity-preservation:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Windows factory timezone database for isolated test
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check "tzdata>=2025.2"
+      - name: Stage exact-HEAD in disposable temp and verify original identity plus rollback
+        shell: pwsh
+        run: |
+          python scripts/agent-pr38-preserving-stage.test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # No upload-artifact: stage is NOT an installable bundle.
+      # A real factory package requires separate review/authorization and gates.
+
+  factory-preserving-test-artifact:
+    # The artifact only exists when EVERY active quality and preservation gate
+    # on this exact SHA has completed successfully. Never auto-install it.
+    needs:
+      - full-static-quality
+      - console-experience
+      - firestore-emulator
+      - windows-identity-preservation
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build exact SHA preserving update and hash-verify all files
+        shell: bash
+        run: |
+          python scripts/build-pr38-factory-test-update.py "$RUNNER_TEMP/PR38_ATUALIZAR_EXISTENTE_TESTE.zip" --expected-sha "${{ github.sha }}"
+          python - "$RUNNER_TEMP/PR38_ATUALIZAR_EXISTENTE_TESTE.zip" "${{ github.sha }}" <<'PY'
+          import hashlib, importlib.util, pathlib, sys
+          path=pathlib.Path('scripts/build-pr38-factory-test-update.py')
+          spec=importlib.util.spec_from_file_location('factory_candidate',path)
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          verified=mod.verify(pathlib.Path(sys.argv[1]),sys.argv[2])
+          assert verified['physical_gate']=='PENDING'
+          print('PR38 verified candidate SHA:',verified['sha'])
+          print('PR38 candidate SHA256:',hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+          PY
+      - name: Upload ONLY TEST candidate; factory acceptance remains PENDING
+        uses: actions/upload-artifact@v4
+        with:
+          name: PR38-PRESERVING-TEST-ONLY-${{ github.sha }}
+          path: ${{ runner.temp }}/PR38_ATUALIZAR_EXISTENTE_TESTE.zip
+          if-no-files-found: error
           retention-days: 7
