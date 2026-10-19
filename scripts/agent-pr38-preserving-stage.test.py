@@ -151,7 +151,12 @@ def test_preserving_update_and_rollback():
                     env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                     text=True,timeout=18)
             verified_gate=gate_check()
-            assert verified_gate.returncode==0,verified_gate.stderr[-600:]
+            assert verified_gate.returncode==0,(
+                "PowerShell verification rc=",verified_gate.returncode,
+                "stdout=",verified_gate.stdout[-1600:],
+                "stderr=",verified_gate.stderr[-1600:],
+                "expression=",expression.group(1).replace("$env:ROOT","<TEMP_ROOT>")[:250]
+            )
             assert verified_gate.stdout.strip()=="http://127.0.0.1:8765/Central-de-Controle-/"
             html_file=staged/"frontend/Central-de-Controle-/index.html"
             original_html=html_file.read_bytes()
