@@ -36,7 +36,7 @@ const VIEWS = Object.freeze([
   ['trace','⌘','Rastreabilidade','Rastreabilidade','Coleta seletiva full, process_only ou reuse_only sem misturar linhas e respeitando capacidades do agente.'],
   ['reuse','▥','Dashboards de reuso','Dashboards de reuso','Segundo uso de PCBA e Material SN, recorrência e vínculos históricos.'],
   ['process','≡','Processo / 3022 & AT','Processo / 3022 & AT','Timeline 3022 e histórico 3012 de defeito, reparo e análise.'],
-  ['base','▦','Histórico de produção','Histórico de produção','Hoje, último dia produtivo, revisões AT, calendário e consultas isoladas; base SQLite preservada.'],
+  ['base','▦','Base local','Base local','Histórico de produção em destaque: Hoje, dia produtivo anterior, revisões AT, calendário e consultas isoladas.'],
   ['knowledge','C','CORA conhecimento','CORA · conhecimento','Busca operacional com separação entre fato, correlação, hipótese e causa confirmada.']
 ]);
 const VIEW_GROUPS = Object.freeze([
