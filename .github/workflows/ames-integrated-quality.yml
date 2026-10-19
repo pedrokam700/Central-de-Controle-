@@ -6,6 +6,7 @@ on:
       - work/ames-integrated-clean-v5-20261013
       - work/ames-integrated-clean-v5-improvements-20261013
       - work/ames-operator-ux-parity-20261014
+      - work/ames-identity-operational-history-20261019
   workflow_dispatch:
 
 permissions:
