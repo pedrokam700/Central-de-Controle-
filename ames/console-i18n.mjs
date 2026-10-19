@@ -10,6 +10,15 @@ Rastreabilidade|Traceability
 Dashboards de reuso|Reuse dashboards
 Processo / 3022 & AT|Process / 3022 & AT
 Base local|Local database
+Histórico de produção|Production history
+Último dia de produção|Last production day
+Histórico por data|Production history by date
+Consulta avançada|Advanced query
+Linha:|Line:
+Última extração:|Last extraction:
+Conforme evidência da revisão|According to revision evidence
+O 3028 usa 07:00 → 07:00; turnos 07:30/17:30 permanecem distintos. Dados não comprovados nunca viram zero.|3028 uses 07:00 → 07:00; shifts 07:30/17:30 remain distinct. Unverified data never becomes zero.
+Histórico de produção em destaque: Hoje, dia produtivo anterior, revisões AT, calendário e consultas isoladas.|Production history: Today, last production day, AT revisions, calendar and isolated queries.
 CORA conhecimento|CORA knowledge
 CORA · conhecimento|CORA · knowledge
 Central de trabalho|Work Center
