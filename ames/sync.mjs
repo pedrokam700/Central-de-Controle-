@@ -30,24 +30,30 @@ export async function publication(uid,payload,{now=new Date(),productionConfig}=
   return {id:uid+':'+safe.line_id+':'+key,uid,head,parts,history:historyMetadata(safe),publish_scope:publicationIntent(safe,now,productionConfig)};
 }
 export function indexedQueue(){
-  let db;
+  let db,markersDb;
+  // Preserve the already proven IndexedDB outbox schema/version EXACTLY.
   const open=()=>db||(db=new Promise((resolve,reject)=>{
-    const r=indexedDB.open('central-ames-outbox-v2',2);
-    r.onupgradeneeded=()=>{
-      if(!r.result.objectStoreNames.contains('pending'))r.result.createObjectStore('pending',{keyPath:'id'});
-      if(!r.result.objectStoreNames.contains('history_synced'))r.result.createObjectStore('history_synced',{keyPath:'id'});
-    };
+    const r=indexedDB.open('central-ames-outbox-v2',1);
+    r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('pending'))r.result.createObjectStore('pending',{keyPath:'id'});};
     r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
   }));
-  const run=async(mode,work,table='pending')=>{const d=await open();return new Promise((resolve,reject)=>{const t=d.transaction(table,mode),s=t.objectStore(table);let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
+  // Non-critical metadata is stored independently, never upgrading/locking the
+  // factory's pending evidence database during the candidate rollout.
+  const openMarkers=()=>markersDb||(markersDb=new Promise((resolve,reject)=>{
+    const r=indexedDB.open('central-ames-history-markers-v1',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('sent',{keyPath:'id'});
+    r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
+  }));
+  const run=async(mode,work,marker=false)=>{const d=await (marker?openMarkers():open());return new Promise((resolve,reject)=>{const t=d.transaction(marker?'sent':'pending',mode),s=t.objectStore(marker?'sent':'pending');let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
   return {
     put:x=>run('readwrite',s=>s.put(x)),
     remove:id=>run('readwrite',s=>s.delete(id)),
     list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid),
-    hasHistory:async id=>!!(await run('readonly',s=>s.get(id),'history_synced')),
-    markHistory:id=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),'history_synced')
+    hasHistory:async id=>!!(await run('readonly',s=>s.get(id),true)),
+    markHistory:id=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),true)
   };
 }
+
 export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),watchDay='';
   const alive=(u,g)=>u===uid&&g===generation;
