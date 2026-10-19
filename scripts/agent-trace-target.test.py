@@ -37,6 +37,7 @@ class TraceTargetTests(unittest.TestCase):
         a=types.SimpleNamespace(STORE=self.store,CONFIG={},ENGINE_DIR='synthetic-engine',DATA_DIR=pathlib.Path(self.tmp.name),
             normalize_lines=lambda lines:lines,utc_now=lambda:'synthetic-now',_job_update=lambda job_id,**kw:{'id':job_id,**kw},
             _persist_job=lambda job:self.jobs.append(job),_select_trace_records=lambda rows,**kw:rows,MES=types.SimpleNamespace(critical=nullcontext),
+            _job_live_event=lambda jid,ev,line,idx,total,sid:{'id':jid,'stage':ev.get('stage'),'event':ev.get('kind')},
             run_deep_v016_records=collect,enrich_snapshot_from_integrated=enrich,
             _launch_mes_job=lambda kind,cfg,worker:self.admissions.append(cfg) or {'id':'J'})
         source=ast.parse((ROOT/'ames/agent/agent_entry.py').read_text())
@@ -86,6 +87,28 @@ class TraceTargetTests(unittest.TestCase):
         self.assertIn('revision changed',self.jobs[-1]['error'])
         self.assertEqual(source_capture.capture_index(self.store,self.sid,LINE),[])
         self.assertEqual(canonical.read_revision(self.store,self.sid,LINE,1),self.first)
+
+    def test_interrupted_deep_trace_retains_partial_3074_and_2114_evidence(self):
+        def stopped(engine,records,**kwargs):
+            notify=kwargs['event_callback']
+            notify({'stage':'3074','kind':'pcba_result','sn':'SAME-PCBA',
+                'item':{'pcba_sn':'SAME-PCBA','materials':[{'item_sn':'LCD-001','previous_pcbas':['OLD-1','OLD-2']}]}})
+            notify({'stage':'2114','kind':'pcba','pcba':'SAME-PCBA','status':'COMPLETE',
+                'state':{'result':{'rows':[{'repair_state':'unknown','device':'P'}]}}})
+            raise RuntimeError('simulated mid-collection interruption')
+        self.env['a'].run_deep_v016_records=stopped
+        self.env['_run_deep_trace_job']('J_INTERRUPTED',self.cfg)
+        self.assertEqual(self.jobs[-1]['status'],'error')
+        saved=source_capture.capture_index(self.store,self.sid,LINE)
+        self.assertEqual({x['source_view'] for x in saved},{'3074','2114'})
+        self.assertEqual({x['parent_snapshot_revision'] for x in saved},{1})
+        material=self.store.get_snapshot_payload_revision(self.sid,'source_capture_3074_J_INTERRUPTED',1)
+        self.assertEqual(material['result']['items'][0]['item']['materials'][0]['previous_pcbas'],['OLD-1','OLD-2'])
+        self.assertTrue(all(x['source_status']=='partial' for x in saved))
+        self.assertEqual(canonical.read_revision(self.store,self.sid,LINE,1),self.first)
+        newer=self.store.create_snapshot(window_id=None,source_kind='synthetic')
+        self.store.ingest_defects(newer,[{'line':LINE,'pcba_sn':'OTHER-PCBA','defect_code':'D9'}])
+        self.assertEqual(source_capture.capture_index(self.store,newer,LINE),[])
 
     def test_handler_preserves_snapshot_target_contract(self):
         response=[]
