@@ -37,12 +37,27 @@ export function operationalRange(store,offset=0,now=new Date()){
 }
 
 export function createHistoryView(root,store,client,history) {
-  let line=LINE_IDS[0],loading=false,error='',message='',entries=[],selected=null,selectedEntry=null,disposed=false,generation=0;
+  let line=LINE_IDS[0],tab='today',loading=false,error='',message='',entries=[],selected=null,selectedEntry=null,disposed=false,generation=0;
   const formValues=()=>root.querySelector('form')?Object.fromEntries(new FormData(root.querySelector('form'))):{};
   function setPeriod(start,end){const form=root.querySelector('form');if(!form)return;form.elements.start.value=start;form.elements.end.value=end;}
   function quickPeriod(offset){const range=operationalRange(store,offset);setPeriod(range.start,range.end);line=root.querySelector('form').elements.line.value;void load();}
+  function summary(){
+    const host=root.querySelector('[data-production-context]');if(!host)return;
+    const read=store.read(line),p=read.snapshot;
+    const window=tab==='today'?operationalRange(store,0):tab==='previous'?operationalRange(store,-1):null;
+    const heading={today:t('Hoje · Monitoramento','Today · Monitoring'),previous:t('Último dia produtivo','Last production day'),history:t('Histórico por data','Production history by date'),advanced:t('Consulta avançada isolada','Isolated advanced query')}[tab];
+    host.innerHTML=`<div class="ames-history-head"><div><strong>${esc(heading)}</strong><p>${window?esc(window.start.replace('T',' ')+' → '+window.end.replace('T',' ')):t('Escolha a linha e o período; consultas investigativas não atualizam o painel Hoje.','Choose line and period; investigations never update Today.')}</p></div><div class="ames-history-state">${tab==='today'?esc(labels[coverageState(read)]):t('Histórico preservado','Preserved history')}</div></div><div class="ames-history-facts"><span>${t('Linha','Line')}: <b>${esc(line)}</b></span><span>${t('Snapshot','Snapshot')}: <b>${tab==='today'?esc(p?revisionLabel(p):'—'):'—'}</b></span><span>${t('Última extração','Last extraction')}: <b>${tab==='today'?esc(p?displayTime(p.collected_at):'—'):'—'}</b></span><span>${t('Origem','Origin')}: <b>${tab==='today'?esc(read.source||'—'):t('Local / compartilhada','Local / shared')}</b></span><span>AT: <b>${t('Conforme evidência da revisão','Per revision evidence')}</b></span></div>`;
+  }
+  function chooseTab(next){
+    tab=next;message='';error='';selected=null;selectedEntry=null;showSelected();
+    root.querySelectorAll('[data-history-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.historyMode===tab)));
+    const inputs=root.querySelector('form');
+    if(inputs){inputs.elements.start.readOnly=tab==='today'||tab==='previous';inputs.elements.end.readOnly=tab==='today'||tab==='previous';}
+    if(tab==='today'||tab==='previous')quickPeriod(tab==='today'?0:-1);
+    else{entries=[];const host=root.querySelector('[data-period-results]');if(host)host.replaceChildren();summary();}
+  }
   function results(){
-    const host=root.querySelector('[data-period-results]');if(!host)return;
+    const host=root.querySelector('[data-period-results]');if(!host)return;summary();
     const values=formValues(),matches=entries.filter(e=>matchesPeriod(e,values)),canCollect=store.agent().status==='connected'&&values.start&&values.end;
     host.innerHTML=loading?`<p role="status">${t('Consultando histórico…','Loading history…')}</p>`:error?`<p role="status" class="notice warn">${esc(error)}</p>`:
       `${message?`<p role="status" class="mes-context">${esc(message)}</p>`:''}${matches.length?`<div class="table-wrap"><table><thead><tr><th>${t('Período','Period')}</th><th>CPH</th><th>${t('Versão','Version')}</th><th>${t('Coleta','Collected')}</th><th>${t('Posto/origem','Workstation/source')}</th><th></th></tr></thead><tbody>${matches.map((e,i)=>`<tr><td>${esc(e.period_start&&e.period_end?e.period_start+' → '+e.period_end:t('Período não informado pela fonte','Period not reported by source'))}</td><td>${esc(e.products||'—')}</td><td><b>${esc(revisionLabel(e))}</b></td><td>${esc(displayTime(e.collected_at))}</td><td>${esc(e.source_id||'—')}</td><td><button type="button" class="button secondary" data-history-open="${i}">${t('Abrir sem substituir atual','Open without replacing current')}</button></td></tr>`).join('')}</tbody></table></div><p class="mes-context">${t('Cada linha é uma versão preservada. Uma atualização do mesmo período cria/publica nova evidência; versões anteriores continuam disponíveis.','Each row is a preserved version. Refreshing the same period creates/publishes new evidence; older versions remain available.')}</p>`:`<p>${t('Período ainda não coletado','Period not collected yet')}</p>`}
@@ -56,8 +71,11 @@ export function createHistoryView(root,store,client,history) {
     host.querySelector('[data-history-collect]')?.addEventListener('click',async()=>{
       const hadMatches=matches.length>0;loading=true;error='';message='';results();
       try{
-        await client.collect('custom',{lines:[line],performance:'balanced',start_at:values.start,end_at:values.end,defect_codes:[],max_failures:0,max_pcbas:0});
-        message=hadMatches?t('Atualização iniciada/concluída sem apagar as versões anteriores. A nova revisão aparecerá aqui após a sincronização.','Refresh started/completed without deleting older versions. The new revision will appear here after synchronization.'):t('Coleta iniciada/concluída. A versão aparecerá aqui após a sincronização.','Collection started/completed. The version will appear here after synchronization.');
+        if(tab==='previous')await client.collect('previous_day',{lines:[line],performance:'balanced'});
+        else if(tab==='today')await client.collect('today',{lines:[line],performance:'balanced'});
+        else await client.collect('custom',{lines:[line],performance:'balanced',start_at:values.start,end_at:values.end,defect_codes:[],max_failures:0,max_pcbas:0});
+        message=tab==='advanced'?t('Consulta investigativa iniciada no banco local; o painel Hoje dos demais postos não será alterado.','Local investigation started; other workstations Today will not change.'):
+          t('Coleta iniciada; aguarde a conclusão e a próxima revisão. O histórico existente permanece preservado.','Collection started; wait for the next revision; prior history remains preserved.');
       }catch(e){error=e.message;}
       finally{if(!disposed){loading=false;results();}}
     });
@@ -77,11 +95,12 @@ export function createHistoryView(root,store,client,history) {
   }
   function render(){
     if(!root.querySelector('form')){
-      root.innerHTML=`<details open class="mes-context-panel" data-history-panel><summary>${t('Histórico de produção','Production history')}</summary><div class="mes-pagination"><button type="button" class="button secondary" data-history-quick="0">${t('Hoje','Today')}</button><button type="button" class="button secondary" data-history-quick="-1">${t('Último dia de produção','Last production day')}</button><span class="mes-context">${t('Janelas 3028 de 07:00 a 07:00; calendário produtivo e exceções configuráveis.','3028 periods start at 07:00; production calendar and exceptions are configurable.')}</span></div><form><div class="mes-filters"><label>${t('Linha','Line')}<select name="line">${LINE_IDS.map(l=>`<option>${l}</option>`).join('')}</select></label><label>${t('Início','Start')}<input type="datetime-local" name="start"></label><label>${t('Fim','End')}<input type="datetime-local" name="end"></label><label>CPH ${t('exato','exact')}<input name="product" placeholder="CPH"></label></div><button type="submit" class="button secondary">${t('Consultar outro período','Query another period')}</button></form><section data-period-results></section><section data-period-snapshot></section></details>`;
+      root.innerHTML=`<details open class="mes-context-panel ames-history-root" data-history-panel><summary>${t('Histórico de produção','Production history')}</summary><nav class="ames-history-tabs" aria-label="${t('Modo do histórico','History mode')}"><button type="button" class="button secondary" aria-pressed="true" data-history-mode="today">${t('Hoje','Today')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="previous">${t('Último dia de produção','Last production day')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="history">${t('Histórico por data','History by date')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="advanced">${t('Consulta avançada','Advanced query')}</button></nav><section class="ames-history-overview" data-production-context></section><p class="mes-context">${t('O 3028 usa 07:00 → 07:00; turnos 07:30/17:30 permanecem distintos. Dados não comprovados nunca viram zero.','3028 uses 07:00 → 07:00; shifts 07:30/17:30 remain distinct. Missing evidence is never zero.')}</p><form><div class="mes-filters"><label>${t('Linha','Line')}<select name="line">${LINE_IDS.map(l=>`<option>${l}</option>`).join('')}</select></label><label>${t('Início','Start')}<input type="datetime-local" name="start"></label><label>${t('Fim','End')}<input type="datetime-local" name="end"></label><label>CPH ${t('exato','exact')}<input name="product" placeholder="CPH"></label></div><button type="submit" class="button secondary">${t('Consultar outro período','Query another period')}</button></form><section data-period-results></section><section data-period-snapshot></section></details>`;
       root.querySelector('form').addEventListener('submit',e=>{e.preventDefault();line=e.currentTarget.elements.line.value;void load();});
       root.querySelector('select').addEventListener('change',e=>{line=e.target.value;generation++;entries=[];selected=null;selectedEntry=null;root.querySelector('[data-period-results]').replaceChildren();showSelected();});
-      root.querySelectorAll('[data-history-quick]').forEach(button=>button.addEventListener('click',()=>quickPeriod(Number(button.dataset.historyQuick))));
-    }
+      root.querySelectorAll('[data-history-mode]').forEach(button=>button.addEventListener('click',()=>chooseTab(button.dataset.historyMode)));
+      chooseTab('today');
+    }else summary();
   }
   return {render,clear(){disposed=true;generation++;root.replaceChildren();}};
 }
