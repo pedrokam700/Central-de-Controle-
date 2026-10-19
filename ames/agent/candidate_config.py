@@ -11,11 +11,12 @@ import operational_calendar
 
 BASE_ALLOWED = {
     "configured_lines", "line_aliases", "day_start", "production_day_start", "timezone", "work_shifts",
+    "non_production_dates", "extra_production_dates",
     "monitor_interval_minutes", "performance", "chrome_profile_dir", "ames_host", "ames_port", "ames_start_url",
     "setup_complete", "backup_retention", "auto_backup_on_start", "allowed_origins",
 }
 CANDIDATE_ALLOWED = BASE_ALLOWED | {"ames_start_date"}
-CALENDAR_KEYS = {"day_start", "production_day_start", "timezone", "work_shifts"}
+CALENDAR_KEYS = {"day_start", "production_day_start", "timezone", "work_shifts", "non_production_dates", "extra_production_dates"}
 PERFORMANCE_VALUES = {"fast", "balanced", "safe"}
 _START_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _HOST_RE = re.compile(r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*$")
@@ -168,6 +169,8 @@ def _normalize_calendar(current: Dict[str, Any], changed: Dict[str, Any]) -> Dic
     changed["production_day_start"] = normalized["production_day_start"]
     changed["day_start"] = normalized["production_day_start"]
     changed["work_shifts"] = normalized["work_shifts"]
+    changed["non_production_dates"] = sorted(normalized["non_production_dates"])
+    changed["extra_production_dates"] = sorted(normalized["extra_production_dates"])
     return changed
 
 
