@@ -175,12 +175,17 @@ export function buildSyncHealth(agent={}){
       snapshot_id:String(head.snapshot_id??''),
       snapshot_revision:Number(head.snapshot_revision)||0,
       collected_at:head.collected_at||null,
-      authority:head.authority==='team_latest'?'team_latest':null
+      authority:['team_latest','operational_day_history'].includes(head.authority)?head.authority:null
     }))
     .sort((a,b)=>LINE_IDS.indexOf(a.line_id)-LINE_IDS.indexOf(b.line_id));
   const readStatus=normalizedStatus(sync.read_status);
   const latest=sync.remote_latest_collected_at||heads.map(head=>head.collected_at).filter(Boolean).sort().at(-1)||null;
-  const authority=sync.remote_scope==='team_latest'||heads.some(head=>head.authority==='team_latest')?'team_latest':null;
+  const authority=sync.remote_scope==='operational_day_history'?'operational_day_history':sync.remote_scope==='team_latest'||heads.some(head=>head.authority==='team_latest')?'team_latest':null;
+  if(readStatus==='origin_conflict')return {
+    tone:'error',label:t('Origens concorrentes — verificação necessária','Competing sources — review required'),
+    detail:t('Mais de uma instalação apresentou dados para a mesma linha e dia operacional. Nenhuma origem foi escolhida automaticamente.','More than one installation reported the same production line and day. No origin was selected automatically.'),
+    heads,count:heads.length,latest,authority,read_status:readStatus,has_error:true
+  };
   if(readStatus==='cached')return {
     tone:'partial',label:t('Cache compartilhado; servidor não confirmado','Shared cache; server not confirmed'),
     detail:t('Evidência preservada no navegador. Aguarde reconexão para confirmar a versão do servidor.','Evidence preserved in this browser. Reconnect to confirm the server version.'),
@@ -220,10 +225,10 @@ export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
     if(agent.status==='connected'){void loadSecurity(agent);void loadRepairStatus(agent);}else{if(security||securityFor){security=null;securityFor='';securityLoading=false;}if(repairStatus||repairFor){repairStatus=null;repairFor='';repairLoading=false;}}
     const model=buildDataHealth(store,repairStatus),workstationState=buildWorkstationHealth(agent),securityState=buildSecurityHealth(security),syncState=buildSyncHealth(agent);
     const key=JSON.stringify([model,agent.status,agent.agent_build,agent.connection_error,agent.sync,workstationState,syncState,security,securityLoading,repairStatus,repairLoading,typeof document==='undefined'?'':document.documentElement.lang]);if(key===last)return;last=key;
-    const syncAuthority=syncState.authority==='team_latest'?t('Mais recente da equipe','Latest team snapshot'):t('Não informada','Not provided');
+    const syncAuthority=syncState.authority==='operational_day_history'?t('Revisão imutável do dia operacional','Immutable operational-day revision'):syncState.authority==='team_latest'?t('Mais recente da equipe','Latest team snapshot'):t('Não informada','Not provided');
     const syncLines=syncState.heads.map((head,index)=>`${t('Linha','Line')} ${LINE_IDS.indexOf(head.line_id)+1||index+1} · ${esc(head.line_id)} · ${t('Origem','Source')} ${esc(head.source_id||'—')} · Snapshot ${esc(head.snapshot_id||'—')} r${esc(head.snapshot_revision)} · ${esc(head.collected_at||'—')}`).join('<br>');
-    const sync=agent.sync||{},sent=sync.last_sent;
-    const syncDetails=`<br><small>${t('Fila pendente','Pending queue')}: ${Number.isInteger(sync.pending)?sync.pending:'—'} · ${t('Publicação','Publication')}: ${esc(sync.status||'—')}<br>${t('Último snapshot enviado','Last snapshot sent')}: ${sent?`${esc(sent.line_id)} / ${esc(sent.source_id)} / ${esc(sent.snapshot_id)} r${esc(sent.snapshot_revision)} · ${esc(sent.sent_at)}`:'—'}<br>${t('Último recebimento','Last received')}: ${esc(sync.last_received_at||'—')} · ${t('Confirmação do servidor','Server confirmation')}: ${esc(sync.server_received_at||'—')}<br>${t('Erro de publicação','Publication error')}: ${esc(sync.error||'—')}<br>${t('Erro de leitura','Read error')}: ${esc(sync.read_error||'—')}</small>`;
+    const sync=agent.sync||{},sent=sync.last_sent,blockCount=Array.isArray(sync.identity_blocked)?sync.identity_blocked.length:0;
+    const syncDetails=`<br><small>${t('Fila pendente','Pending queue')}: ${Number.isInteger(sync.pending)?sync.pending:'—'} · ${t('Publicação','Publication')}: ${esc(sync.status||'—')}<br>${t('Último snapshot enviado','Last snapshot sent')}: ${sent?`${esc(sent.line_id)} / ${esc(sent.source_id)} / ${esc(sent.snapshot_id)} r${esc(sent.snapshot_revision)} · ${esc(sent.sent_at)}`:'—'}<br>${t('Último recebimento','Last received')}: ${esc(sync.last_received_at||'—')} · ${t('Confirmação do servidor','Server confirmation')}: ${esc(sync.server_received_at||'—')}<br>${t('Erro de publicação','Publication error')}: ${esc(sync.error||'—')}<br>${t('Erro de leitura','Read error')}: ${esc(sync.read_error||'—')}<br>${t('Cabeçalho legado bloqueado','Legacy head blocked')}: ${blockCount?esc(sync.identity_blocked.join(', ')):'—'} · ${t('Conflito de origens','Origin conflict')}: ${esc((sync.origin_conflict_lines||[]).join(', ')||'—')}<br>${t('Duração do último envio','Last publish duration')}: ${sync.last_publish_timing?.total_ms??'—'} ms · ${t('Recebimento','Receive duration')}: ${sync.last_receive_timing?.read_ms??'—'} ms</small>`;
     const setupLabel=workstationState.setup===true?t('concluído','complete'):workstationState.setup===false?t('pendente','pending'):'—';
     const workstationChecks=workstationState.checks.map(check=>`${esc(check.label)}: ${check.value===true?t('pronto','ready'):check.value===false?t('falha','failed'):'—'}`).join(' · ');
     root.setAttribute('data-no-i18n','');
