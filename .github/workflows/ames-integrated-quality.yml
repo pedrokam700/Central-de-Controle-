@@ -123,6 +123,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Windows factory timezone database for isolated test
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check "tzdata>=2025.2"
       - name: Stage exact-HEAD in disposable temp and verify original identity plus rollback
         shell: pwsh
         run: |
