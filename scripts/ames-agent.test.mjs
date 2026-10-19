@@ -138,3 +138,27 @@ test('deep trace uses the selected local past revision even when publication hea
  assert.equal(h.calls.find(c=>c.key==='deep-trace').body.snapshot_targets[line].snapshot_id,'12');
  assert.equal(h.store.localCanonical()[0].snapshot_id,'17');h.client.clear();
 });
+
+
+test('saved SN queries use authenticated local jobs only, carry query clock and validate identity before opening',async()=>{
+  const h=harness();await h.client.connect();
+  const entry={job_id:'ab0123',query_sn:'P01',entry_hash:'a'.repeat(64),query_created_at:'2026-10-19T15:00:00+00:00',clock_kind:'query_created_at',line_id:null,production_date:null,local_only:true};
+  h.routes['saved-sn-history']={items:[entry],next_cursor:null,clock_kind:'query_created_at',local_only:true};
+  const index=await h.client.savedSnHistory({sn:'P01',start:'2026-10-19T00:00:00Z',limit:15});
+  assert.equal(index.items[0].entry_hash,entry.entry_hash);
+  const q=new URL(h.calls.at(-1).url).searchParams;
+  assert.equal(q.get('sn'),'P01');
+  assert.equal(q.get('start'),'2026-10-19T00:00:00Z');
+  assert.equal(q.get('limit'),'15');
+  assert(!JSON.stringify(h.store.agent()).includes('ab0123'));
+  h.routes['saved-sn-history']={job_id:entry.job_id,entry_hash:entry.entry_hash,clock_kind:'query_created_at',local_only:true,line_id:null,production_date:null,result:{trace_3074:{rows:[{evidence:'LOCAL-ONLY'}]}}};
+  const exact=await h.client.openSavedSnHistory(entry);
+  assert.equal(exact.result.trace_3074.rows[0].evidence,'LOCAL-ONLY');
+  assert.equal(new URL(h.calls.at(-1).url).searchParams.get('entry_hash'),entry.entry_hash);
+  assert.equal(JSON.stringify(h.store.agent()).includes('LOCAL-ONLY'),false);
+  await assert.rejects(h.client.openSavedSnHistory({...entry,entry_hash:'invalid'}),/Identidade/);
+  h.routes['saved-sn-history']={...exact,entry_hash:'b'.repeat(64)};
+  await assert.rejects(h.client.openSavedSnHistory(entry),/divergente/);
+  await assert.rejects(h.client.savedSnHistory({limit:0}),/Limite/);
+  h.client.clear();
+});
