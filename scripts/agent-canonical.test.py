@@ -54,10 +54,10 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(original,canonical.read_revision(self.store,self.sid,'TAN10101',1))
         with self.store.connect() as con:
             con.execute('CREATE TABLE IF NOT EXISTS repair_history_3012(row_key TEXT PRIMARY KEY,pcba_sn TEXT NOT NULL,repair_time TEXT)')
+            # The real repair-history bridge adds source-clock triggers on init.
+            canonical.install_evidence_triggers(con)
             con.execute("INSERT INTO repair_history_3012 VALUES('R1','P','2026-10-10T00:00:00Z')")
             con.execute("INSERT INTO repair_history_3012 VALUES('R2','OTHER','2026-10-10T00:00:00Z')")
-        # The real refresh bridge adds triggers for a newly created source.
-        canonical.install_evidence_triggers(self.store.connect())
         revised=canonical.export_revision(self.store,self.sid,'TAN10101')
         self.assertEqual(revised['snapshot_revision'],2)
         self.assertEqual(revised['source_coverage']['3012']['status'],'candidate_partial')
