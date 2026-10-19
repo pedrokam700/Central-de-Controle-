@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import re
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -353,6 +355,123 @@ class Store:
             )
         from canonical import initialize
         initialize(self)
+
+    # B3.2 — saved individual SN searches are local jobs, not production-day
+    # observations. Read only from the existing jobs table; no MES re-query.
+    def saved_sn_lookups(self, *, sn=None, start=None, end=None, before=None, limit=20) -> Dict[str, Any]:
+        try:
+            n=int(limit)
+        except (ValueError,TypeError):
+            raise ValueError('Invalid SN history limit')
+        if n<1 or n>50:
+            raise ValueError('SN history limit outside 1..50')
+        query_sn=str(sn or '').strip().upper()
+        if len(query_sn)>128:
+            raise ValueError('Invalid SN history filter')
+
+        def instant(value):
+            if not value:
+                return None
+            if not isinstance(value,str) or len(value)>48:
+                raise ValueError('Invalid query-time bound')
+            try:
+                dt=datetime.fromisoformat(value.replace('Z','+00:00'))
+            except ValueError:
+                raise ValueError('Invalid query-time bound')
+            if dt.tzinfo is None:
+                raise ValueError('Query time must include a timezone')
+            return dt.astimezone(timezone.utc).isoformat()
+
+        start_utc,end_utc=instant(start),instant(end)
+        if start_utc and end_utc and datetime.fromisoformat(start_utc)>=datetime.fromisoformat(end_utc):
+            raise ValueError('Invalid query-time range')
+        fingerprint=hashlib.sha256(stable_json([query_sn,start_utc,end_utc]).encode('utf-8')).hexdigest()
+        cursor=None
+        if before is not None:
+            if not isinstance(before,str) or len(before)>512:
+                raise ValueError('Invalid SN history cursor')
+            try:
+                raw=base64.urlsafe_b64decode(before+'='*((-len(before))%4))
+                parsed=json.loads(raw.decode('utf-8'))
+                if (not isinstance(parsed,list) or len(parsed)!=3 or parsed[2]!=fingerprint
+                        or not all(isinstance(x,str) and 0<len(x)<=128 for x in parsed[:2])):
+                    raise ValueError('Invalid SN history cursor')
+                cursor=parsed
+            except (ValueError,UnicodeDecodeError,TypeError,OverflowError) as exc:
+                raise ValueError('Invalid SN history cursor') from exc
+
+        clauses=["kind='sn_lookup'","result_json IS NOT NULL","result_json!='null'"]
+        params=[]
+        if query_sn:
+            clauses.append("UPPER(CAST(CASE WHEN json_valid(config_json) THEN json_extract(config_json,'$.sn') END AS TEXT))=?")
+            params.append(query_sn)
+        if start_utc:
+            clauses.append('julianday(created_at)>=julianday(?)');params.append(start_utc)
+        if end_utc:
+            clauses.append('julianday(created_at)<julianday(?)');params.append(end_utc)
+        if cursor:
+            clauses.append('(created_at<? OR (created_at=? AND id<?))')
+            params.extend([cursor[0],cursor[0],cursor[1]])
+        where=' AND '.join(clauses)
+        with self.connect() as con:
+            rows=[dict(r) for r in con.execute(
+                f"""SELECT id,kind,status,created_at,finished_at,config_json,result_json
+                    FROM jobs WHERE {where}
+                    ORDER BY created_at DESC,id DESC LIMIT ?""",
+                (*params,n+1))]
+        more=len(rows)>n
+        rows=rows[:n]
+        metadata=[]
+        for row in rows:
+            try:
+                config=json.loads(row['config_json'] or '{}')
+            except (ValueError,TypeError):
+                config={}
+            raw=row['result_json']
+            result_hash=hashlib.sha256(raw.encode('utf-8')).hexdigest()
+            identity_hash=hashlib.sha256(stable_json([
+                row['id'],row['created_at'],row['config_json'],raw,row['status'],row['finished_at']
+            ]).encode('utf-8')).hexdigest()
+            metadata.append({
+                'job_id':row['id'],'query_sn':str(config.get('sn') or '').strip(),
+                'query_created_at':row['created_at'],'query_finished_at':row['finished_at'],
+                'query_status':row['status'],'result_sha256':result_hash,
+                'entry_hash':identity_hash,'line_id':None,'production_date':None,
+                'clock_kind':'query_created_at','coverage':'unverified',
+                'source_view':'sn_lookup','local_only':True,
+            })
+        next_cursor=None
+        if more and rows:
+            last=rows[-1]
+            token=stable_json([last['created_at'],last['id'],fingerprint]).encode('utf-8')
+            next_cursor=base64.urlsafe_b64encode(token).decode('ascii').rstrip('=')
+        return {'items':metadata,'next_cursor':next_cursor,'clock_kind':'query_created_at','local_only':True}
+
+    def open_saved_sn_lookup(self, job_id: str, entry_hash: str) -> Dict[str, Any]:
+        if not isinstance(job_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',job_id):
+            raise ValueError('Invalid saved SN job ID')
+        if not isinstance(entry_hash,str) or not re.fullmatch(r'[0-9a-f]{64}',entry_hash):
+            raise ValueError('Invalid saved SN entry hash')
+        with self.connect() as con:
+            row=con.execute(
+                """SELECT id,kind,status,created_at,finished_at,config_json,result_json
+                   FROM jobs WHERE id=? AND kind='sn_lookup' AND result_json IS NOT NULL""",
+                (job_id,)).fetchone()
+        if not row:
+            raise ValueError('Saved SN result unavailable')
+        row=dict(row)
+        current=hashlib.sha256(stable_json([
+            row['id'],row['created_at'],row['config_json'],row['result_json'],
+            row['status'],row['finished_at']
+        ]).encode('utf-8')).hexdigest()
+        if current!=entry_hash:
+            raise RuntimeError('Saved SN result has changed; refresh the index')
+        return {
+            'job_id':job_id,'query_created_at':row['created_at'],
+            'clock_kind':'query_created_at','production_date':None,'line_id':None,
+            'entry_hash':current,'local_only':True,'coverage':'unverified',
+            'result':json.loads(row['result_json'])
+        }
 
     def record_audit(self, event_type: str, *, workstation: str | None = None, snapshot_id: int | None = None,
                      line: str | None = None, details: Any = None) -> int:
