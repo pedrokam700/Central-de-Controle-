@@ -115,6 +115,16 @@ class HardenedHandler(entry.Handler):
         if not self._authorized(path):
             self._reject_unauthorized()
             return
+        if path == "/api/v1/v2/history-candidates":
+            q = parse_qs(urlparse(self.path).query)
+            try:
+                cursor = (q.get("before") or [None])[0]
+                limit = (q.get("limit") or ["20"])[0]
+                start, _ = operational_calendar.today_window(entry.a.CONFIG)
+                self._send(entry.a.STORE.historical_candidates(cursor, limit, start))
+            except (TypeError, ValueError) as exc:
+                self._send({"error": "invalid_history_query", "message": str(exc)}, 400)
+            return
         if path == "/api/v1/v2/snapshots":
             # Strong temporal guard at the source, not just a UI filter.
             # History/advanced queries remain in SQLite but cannot become Today.
