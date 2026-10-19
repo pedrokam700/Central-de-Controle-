@@ -58,7 +58,7 @@ export function firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc
     watch(uid,receive,error,{startAt=null}={}){
       if(session()!==uid)throw Error('Sessão de sincronização encerrada');
       const legacy=new Map(),days=new Map(),loaded=new Set(),cached=new Map();
-      const useDayIndex=!!(query&&where&&startAt&&/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(startAt));
+      const useDayIndex=!!(query&&where&&startAt&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(startAt));
       const required=LINES.length*(useDayIndex?2:1),unsub=[];
       const emit=()=>{if(loaded.size!==required)return;
         receive([...legacy.values(),...[...days.values()].flat()],{from_cache:[...cached.values()].some(Boolean),day_index_available:useDayIndex});
