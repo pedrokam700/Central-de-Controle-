@@ -16,6 +16,19 @@ export function firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc
   const readablePart=(ownerUid,h,i)=>doc(db,...readableScope(ownerUid,h.line_id),'snapshots',h.key,'parts',String(i));
   const teamHead=line=>doc(db,'amesTeamLines',validLine(line));
   return {
+    async inspectIdentity(uid,head){
+      // Read-only diagnosis. Do not expose UIDs, source IDs, payloads or credentials.
+      const [owned,shared]=await Promise.all([getDoc(doc(db,...ownerScope(uid,head.line_id))),getDoc(teamHead(head.line_id))]);
+      ownerScope(uid,head.line_id);
+      const a=owned.exists()?owned.data():null,b=shared.exists()?shared.data():null;
+      return {
+        available:true,owner_exists:!!a,owner_source_matches:a?a.source_id===head.source_id:null,
+        owner_snapshot_num:a?Number(a.snapshot_num)||null:null,
+        shared_exists:!!b,shared_owner_is_current:b?b.owner_uid===uid:null,
+        shared_source_matches:b?b.source_id===head.source_id:null,
+        shared_snapshot_num:b?Number(b.snapshot_num)||null:null
+      };
+    },
     async listHistory(line){session();const rows=await getDocs(collection(db,'amesTeamLines',validLine(line),'history'));session();return rows.docs.map(d=>d.data()).sort((a,b)=>compareHead(b,a));},
     async commitHistory(uid,head,metadata){
       ownerScope(uid,head.line_id);
