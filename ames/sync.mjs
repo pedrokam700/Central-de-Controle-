@@ -1,7 +1,7 @@
 import {normalizeCanonical,CANONICAL_SCHEMA} from './data/canonical.mjs';
 import {LINE_IDS} from './data/contract.mjs';
 import {historyMetadata} from './data/history.mjs';
-import {publicationIntent} from './data/operational-period.mjs';
+import {publicationIntent,factoryWindow,isTodaySnapshot} from './data/operational-period.mjs';
 const sha=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const syncHeadMetadata=head=>Object.freeze({
   line_id:head.line_id,
@@ -36,7 +36,7 @@ export function indexedQueue(){
   return {put:x=>run('readwrite',s=>s.put(x)),remove:id=>run('readwrite',s=>s.delete(id)),list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid)};
 }
 export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
-  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set();
+  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),watchDay='';
   const alive=(u,g)=>u===uid&&g===generation;
   const currentConfig=()=>typeof productionConfig==='function'?productionConfig():productionConfig;
   const entryScope=e=>publicationIntent(JSON.parse(e.parts.join('')),now(),currentConfig());
@@ -106,21 +106,58 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
   async function receive(heads,meta=lastReadMeta){
     const u=uid,g=generation,read=++readGeneration;
     try{
-      const payloads=[];
-      for(const h of heads){
+      const candidates=meta.day_index_available?heads.filter(h=>h.period_start):heads;
+      const byLine=new Map();
+      for(const h of candidates){
         if(!LINE_IDS.includes(h.line_id)||!h.owner_uid||typeof h.owner_uid!=='string'||h.schema!==CANONICAL_SCHEMA||!Number.isInteger(h.parts)||h.parts<1||h.parts>5000)throw Error('Escopo remoto inválido');
-        const parts=[];for(let i=0;i<h.parts;i++){if(!alive(u,g)||read!==readGeneration)return;parts.push(await remote.getPart(h.owner_uid,h,i));}
-        const text=parts.join('');if(await sha(text)!==h.hash)throw Error('Snapshot remoto incompleto ou alterado');
-        const p=JSON.parse(text);if(p.line_id!==h.line_id||p.source_id!==h.source_id||p.snapshot_revision!==h.snapshot_revision||p.snapshot_id!==h.snapshot_id)throw Error('Manifesto remoto divergente');
-        normalizeCanonical(p);payloads.push(p);
+        if(!byLine.has(h.line_id))byLine.set(h.line_id,[]);
+        byLine.get(h.line_id).push(h);
       }
-      if(alive(u,g)&&read===readGeneration){unschedule(readTimer);readRetry=1000;store.replaceSyncedSnapshots(payloads);const stamp=new Date().toISOString();status({read_status:meta.from_cache?'cached':'ready',read_error:'',last_received_at:stamp,...(!meta.from_cache?{server_received_at:meta.received_at||null}:{}),...syncHeadsMetadata(heads)});}
-    }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
+      const payloads=[],selectedHeads=[],originConflictLines=[],timings=[];
+      for(const [line,variants] of byLine){
+        const recent=variants.sort((a,b)=>Date.parse(b.collected_at||0)-Date.parse(a.collected_at||0)||Number(b.snapshot_num)-Number(a.snapshot_num)||Number(b.snapshot_revision)-Number(a.snapshot_revision));
+        const valid=[];
+        for(const h of recent){
+          if(!alive(u,g)||read!==readGeneration)return;
+          let payload=remotePayloadCache.get(h.owner_uid+':'+h.key);
+          if(!payload){
+            const started=Date.now(),parts=[];
+            // Bounded read concurrency: high part counts must not serialize network RTT.
+            for(let i=0;i<h.parts;i+=4){
+              const batch=await Promise.all(Array.from({length:Math.min(4,h.parts-i)},(_,j)=>remote.getPart(h.owner_uid,h,i+j)));
+              parts.push(...batch);
+            }
+            const body=parts.join('');if(await sha(body)!==h.hash)throw Error('Snapshot remoto incompleto ou alterado');
+            payload=JSON.parse(body);
+            if(payload.line_id!==h.line_id||payload.source_id!==h.source_id||payload.snapshot_revision!==h.snapshot_revision||payload.snapshot_id!==h.snapshot_id)throw Error('Manifesto remoto divergente');
+            normalizeCanonical(payload);
+            remotePayloadCache.set(h.owner_uid+':'+h.key,payload);
+            timings.push({line_id:h.line_id,parts:h.parts,read_ms:Date.now()-started});
+          }
+          if(!meta.day_index_available||isTodaySnapshot(payload,now(),currentConfig()))valid.push({head:h,payload});
+        }
+        if(!valid.length)continue;
+        const installations=new Set(valid.map(v=>v.head.owner_uid+':'+v.head.source_id));
+        if(installations.size>1){
+          // Both identities retain their immutable evidence. Never silently pick
+          // a competing producer for the same line and production day.
+          originConflictLines.push(line);continue;
+        }
+        selectedHeads.push(valid[0].head);payloads.push(valid[0].payload);
+      }
+      if(alive(u,g)&&read===readGeneration){
+        unschedule(readTimer);readRetry=1000;
+        store.replaceSyncedSnapshots(payloads);
+        const stamp=new Date().toISOString();
+        status({read_status:originConflictLines.length?'origin_conflict':meta.from_cache?'cached':'ready',read_error:originConflictLines.length?'Múltiplas instalações publicaram a mesma linha e dia. Nenhuma foi escolhida automaticamente.':'',origin_conflict_lines:originConflictLines,last_receive_timing:timings.at(-1)||null,last_received_at:stamp,...(!meta.from_cache?{server_received_at:meta.received_at||null}:{}),...syncHeadsMetadata(selectedHeads)});
+      }
+    }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads,lastReadMeta);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
   }
   function subscribe(){
     if(!uid)return;
     const u=uid,g=generation,w=++watchGeneration;
-    unwatch?.();unwatch=null;watchFailed=false;headsKey='';hasHeads=false;
+    unwatch?.();unwatch=null;watchFailed=false;headsKey='';hasHeads=false;lastHeads=[];
+    watchDay=factoryWindow(now(),currentConfig()).start_at;
     status({read_status:'connecting',read_error:''});
     const failed=error=>{
       if(!alive(u,g)||w!==watchGeneration)return;
@@ -136,7 +173,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         // An empty local Firestore cache cannot revoke previously verified data.
         if(meta.from_cache&&!heads.length&&lastHeads.length){status({read_status:'cached'});return;}
         hasHeads=true;lastHeads=heads;lastReadMeta={...meta,received_at:new Date().toISOString()};void receive(heads,lastReadMeta);
-      },failed);
+      },failed,{startAt:watchDay});
     }catch(error){failed(error);}
   }
   async function capture(){
@@ -175,8 +212,9 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       return sanitizeSnapshot(payload);
     },
     start(user){this.stop();uid=user;subscribe();void flush();},
+    ensureOperationalDay(){if(uid&&factoryWindow(now(),currentConfig()).start_at!==watchDay)subscribe();},
     capture,
     retry(){if(watchFailed)subscribe();else if(uid&&hasHeads)void receive(lastHeads,{...lastReadMeta,from_cache:lastReadMeta.from_cache||!online()});return flush();},
-    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;identityBlocked.clear();uploadedParts.clear();unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
+    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;identityBlocked.clear();uploadedParts.clear();remotePayloadCache.clear();watchDay='';unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
   };
 }
