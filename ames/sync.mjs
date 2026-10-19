@@ -31,9 +31,22 @@ export async function publication(uid,payload,{now=new Date(),productionConfig}=
 }
 export function indexedQueue(){
   let db;
-  const open=()=>db||(db=new Promise((resolve,reject)=>{const r=indexedDB.open('central-ames-outbox-v2',1);r.onupgradeneeded=()=>r.result.createObjectStore('pending',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);}));
-  const run=async(mode,work)=>{const d=await open();return new Promise((resolve,reject)=>{const t=d.transaction('pending',mode),s=t.objectStore('pending');let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
-  return {put:x=>run('readwrite',s=>s.put(x)),remove:id=>run('readwrite',s=>s.delete(id)),list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid)};
+  const open=()=>db||(db=new Promise((resolve,reject)=>{
+    const r=indexedDB.open('central-ames-outbox-v2',2);
+    r.onupgradeneeded=()=>{
+      if(!r.result.objectStoreNames.contains('pending'))r.result.createObjectStore('pending',{keyPath:'id'});
+      if(!r.result.objectStoreNames.contains('history_synced'))r.result.createObjectStore('history_synced',{keyPath:'id'});
+    };
+    r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
+  }));
+  const run=async(mode,work,table='pending')=>{const d=await open();return new Promise((resolve,reject)=>{const t=d.transaction(table,mode),s=t.objectStore(table);let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
+  return {
+    put:x=>run('readwrite',s=>s.put(x)),
+    remove:id=>run('readwrite',s=>s.delete(id)),
+    list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid),
+    hasHistory:async id=>!!(await run('readonly',s=>s.get(id),'history_synced')),
+    markHistory:id=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),'history_synced')
+  };
 }
 export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),watchDay='';
@@ -81,7 +94,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
               }
             }
             headMs=Date.now()-stageAt;
-            if(!alive(u,g))return;await queue.remove(entry.id);uploadedParts.delete(entry.id);if(!alive(u,g))return;
+            if(!alive(u,g))return;await queue.remove(entry.id);uploadedParts.delete(entry.id);if(entry.history_marker&&queue.markHistory)await queue.markHistory(entry.history_marker);if(!alive(u,g))return;
             status({last_sent:{...syncHeadMetadata(entry.head),sent_at:new Date().toISOString()},last_publish_timing:{line_id:entry.head.line_id,parts:entry.parts.length,parts_ms:partsMs,head_ms:headMs,history_ms:historyMs,total_ms:partsMs+headMs+historyMs}});
           }catch(error){
             // A permanent error on one line must not block unrelated lines.
@@ -220,6 +233,20 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     start(user){this.stop();uid=user;subscribe();void flush();},
     ensureOperationalDay(){if(uid&&factoryWindow(now(),currentConfig()).start_at!==watchDay)subscribe();},
     capture,
+    async stageHistorical(payload,{marker}={}){
+      if(!uid)return false;
+      const intent=String(payload?.summary?.period?.mode||'').toLowerCase();
+      if(!['today','live','monitor_today','previous_day','historical_refresh'].includes(intent))return false;
+      if(!payload?.summary?.period?.start_at||!payload?.line_id)return false;
+      if(marker&&queue.hasHistory&&await queue.hasHistory(uid+':'+marker))return false;
+      const u=uid,g=generation,entry=await publication(u,payload,{now:now(),productionConfig:currentConfig()});
+      if(!alive(u,g))return false;
+      if(entry.publish_scope!=='history')return false;
+      if(marker)entry.history_marker=u+':'+marker;
+      await queue.put(entry);
+      if(!alive(u,g))return false;
+      status({status:'pending',pending:(await queue.list(u)).length});void flush();return true;
+    },
     retry(){if(watchFailed)subscribe();else if(uid&&hasHeads)void receive(lastHeads,{...lastReadMeta,from_cache:lastReadMeta.from_cache||!online()});return flush();},
     stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;identityBlocked.clear();uploadedParts.clear();remotePayloadCache.clear();watchDay='';unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
   };
