@@ -68,7 +68,7 @@ test('public local agent identification sends no token and never probes MES or l
  const requests=[],store=fakeStore();
  const fetcher=async(uri,opt)=>{
    requests.push({uri,opt});return {ok:true,json:async()=>({
-     ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:123,
+     ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:123,workstation_pairing_flow:2,
      workstation_token:'MUST_NOT_LEAK',source_id:'MUST_NOT_LEAK'
    })};
  };
@@ -91,4 +91,13 @@ test('unknown /ready or browser loopback denial is not falsely classified as mis
    const client=createAgentClient(fakeStore(),{fetcher});
    assert.deepEqual(await client.detectInstalled(),{state:'unknown'});
  }
+});
+
+test('old local agent must be identified as outdated, not incorrectly promised a working HTTPS pair',async()=>{
+ const store=fakeStore();
+ const client=createAgentClient(store,{fetcher:async()=>({ok:true,json:async()=>({
+  ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:345
+ })})});
+ assert.deepEqual(await client.detectInstalled(),{state:'outdated'});
+ assert.deepEqual(store.agent().workstation_probe,{state:'outdated'});
 });
