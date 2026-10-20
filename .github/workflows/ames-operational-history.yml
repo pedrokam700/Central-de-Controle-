@@ -29,6 +29,7 @@ jobs:
           python3 scripts/agent-repair-association.test.py
           python3 scripts/agent-3012-capture.test.py
           python3 scripts/agent-operational-day-selection.test.py
+          python3 scripts/agent-operational-calendar.test.py
           python3 scripts/agent-origin-policy.test.py
           python3 scripts/agent-package-contract.test.py
           python3 scripts/agent-performance-indexes.test.py
@@ -79,6 +80,7 @@ jobs:
             'scripts/agent-raw-history.test.py',
             'scripts/agent-assembly-scope.test.py',
             'scripts/agent-individual-assembly.test.py',
+            'scripts/agent-operational-calendar.test.py',
             'scripts/agent-3022-origin-fallback.test.py',
             'scripts/agent-3022-canonical-contract.test.py'
           )) {
