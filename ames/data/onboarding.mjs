@@ -5,6 +5,7 @@ export const integrationMode = value => ['collector', 'viewer'].includes(value) 
 export function installationDetection(agent={},paired=false){
   if(agent.status==='connected')return 'verified';
   if(agent.connection_error?.code==='agent-unauthorized')return 'pairing_required';
+  if(agent.workstation_probe?.state==='detected')return 'pairing_required';
   if(paired)return 'paired_unreachable';
   // A failed HTTPS loopback/CORS/PNA request cannot prove there is no agent.
   return 'not_verified';
