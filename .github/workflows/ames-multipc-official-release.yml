@@ -21,7 +21,9 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 55); do
-            candidate="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" --jq '.workflow_runs[] | select(.name == "A-MES Operational History") | [.id,.status,.conclusion] | @tsv' | head -1)"
+            # Do not pipe gh api into head -1 under pipefail: early reader exit
+            # produces SIGPIPE (141) even for a valid exact-SHA GREEN run.
+            candidate="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" --jq '.workflow_runs | map(select(.name == "A-MES Operational History")) | .[0] | if . == null then empty else [.id,.status,.conclusion] | @tsv end')"
             if [ -n "$candidate" ]; then
               read -r run state verdict <<< "$candidate"
               if [ "$state" = "completed" ]; then
