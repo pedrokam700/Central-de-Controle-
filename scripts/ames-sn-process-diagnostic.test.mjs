@@ -25,6 +25,24 @@ test('3022 passage at 03:10 is second shift and previous production day',()=>{
  assert.equal(d.passage_shift,'2nd Shift');
  assert.equal(d.passage_operational_date,'2026-10-20');
 });
+test('shift edges 03:30, 07:30 and 17:30 are distinct from 07:00 production boundary',()=>{
+ for(const [clock,shift,date] of [
+   ['03:29:59','2nd Shift','2026-10-20'],
+   ['03:30:00','Fora dos turnos','2026-10-20'],
+   ['06:59:59','Fora dos turnos','2026-10-20'],
+   ['07:00:00','Fora dos turnos','2026-10-21'],
+   ['07:29:59','Fora dos turnos','2026-10-21'],
+   ['07:30:00','1st Shift','2026-10-21'],
+   ['17:29:59','1st Shift','2026-10-21'],
+   ['17:30:00','2nd Shift','2026-10-21'],
+ ]){
+  const d=processPassageDiagnostic({...unmapped,
+   previous_event_time:'2026-10-21T'+clock+'-03:00',
+   defect_time_utc:'2026-10-22T00:00:00Z'});
+  assert.equal(d.passage_shift,shift,clock);
+  assert.equal(d.passage_operational_date,date,clock);
+ }
+});
 test('do not present future events, unzoned timestamps or non-3022 as proven passage',()=>{
  for(const row of [
   {...unmapped,previous_event_time:'2026-10-20T15:10:00Z'},
