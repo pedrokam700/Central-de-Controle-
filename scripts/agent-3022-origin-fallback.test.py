@@ -80,9 +80,24 @@ class OriginTests(unittest.TestCase):
         shift=production_shift.classify
         self.assertEqual(shift('2026-10-21T06:59:00-03:00')['production_operational_date'],'2026-10-20')
         self.assertEqual(shift('2026-10-21T07:00:00-03:00')['production_operational_date'],'2026-10-21')
-        self.assertEqual(shift('2026-10-21T07:15:00-03:00')['production_shift'],'2nd Shift')
+        self.assertEqual(shift('2026-10-21T07:15:00-03:00')['production_shift'],'Outside scheduled shifts')
+        self.assertEqual(shift('2026-10-21T03:29:00-03:00')['production_shift'],'2nd Shift')
+        self.assertEqual(shift('2026-10-21T03:30:00-03:00')['production_shift'],'Outside scheduled shifts')
+        self.assertEqual(shift('2026-10-21T06:59:00-03:00')['production_shift'],'Outside scheduled shifts')
         self.assertEqual(shift('2026-10-21T07:30:00-03:00')['production_shift'],'1st Shift')
         self.assertEqual(shift('2026-10-21T17:30:00-03:00')['production_shift'],'2nd Shift')
+    def test_3022_reference_in_gap_is_not_second_shift_and_not_mes_shift(self):
+        evidence={'source':'3022','reference_station_code':'A5150',
+            'reference_event_time':'2026-10-21T04:00:00-03:00',
+            'defect_time_utc':'2026-10-21T11:30:00+00:00',
+            'work_shift':'2nd Shift'}
+        proof=production_shift.from_context(evidence)
+        self.assertEqual(proof['production_shift'],'Outside scheduled shifts')
+        self.assertEqual(proof['production_operational_date'],'2026-10-20')
+        evidence['reference_event_time']='2026-10-21T07:15:00-03:00'
+        proof=production_shift.from_context(evidence)
+        self.assertEqual(proof['production_shift'],'Outside scheduled shifts')
+        self.assertEqual(proof['production_operational_date'],'2026-10-21')
     def test_midpoint_reference_shift_from_observed_3022_only(self):
         context={'source':'3022','reference_station_code':'A5150',
             'reference_confidence':'OPERATIONAL_ESTIMATE_NOT_CAUSE',
