@@ -86,7 +86,7 @@ export function createFailuresParityView(root,store,client){
     const needle=q.trim().toLowerCase();
     const baseFiltered=rows.filter(r=>{const removed=r.present_in_3028===false,s=String(r.repair_status||'').toUpperCase();const statusOk=!status||(status==='REMOVED'?removed:status==='N'?!removed&&(s==='N'||s==='OPEN'):status==='Y'?!removed&&(s==='Y'||s==='CLOSED'||s==='FINALIZADO'):true);const text=[r.pcba_sn,r.defect_code,r.defect_desc,r.repair_comment,r.repair_user,r.defect_type,r.product_model].join(' ').toLowerCase();return statusOk&&(!shift||r.production_shift===shift)&&(!needle||text.includes(needle));});
     const grouped=new Map();for(const r of baseFiltered){const name=failureName(r),entry=grouped.get(name)||{name,count:0,codes:new Set(),latest:''};entry.count++;if(r.defect_code)entry.codes.add(String(r.defect_code));const when=String(r.defect_time||'');if(when>entry.latest)entry.latest=when;grouped.set(name,entry);}const groups=sortFailureGroups([...grouped.values()],sort);
-    const groupRank=new Map(groups.map((item,index)=>[item.name,index]);
+    const groupRank=new Map(groups.map((item,index)=>[item.name,index]));
     let filtered=group?baseFiltered.filter(r=>failureName(r)===group):baseFiltered;
     filtered=[...filtered].sort((a,b)=>{const nameOrder=(groupRank.get(failureName(a))??Number.MAX_SAFE_INTEGER)-(groupRank.get(failureName(b))??Number.MAX_SAFE_INTEGER);if(nameOrder)return nameOrder;return String(b.defect_time||'').localeCompare(String(a.defect_time||''));});
     const key=JSON.stringify([line,q,status,shift,sort,group,store.agent().status,store.contextRevision?.()]);if(key===last&&snapshot===lastSnapshot)return;last=key;lastSnapshot=snapshot;
