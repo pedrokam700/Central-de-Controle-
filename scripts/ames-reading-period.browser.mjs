@@ -424,7 +424,8 @@ try{
  await page.locator('[data-onboarding-guide]').waitFor();
  try{await page.locator('[data-official-clean-download]').waitFor({timeout:9000});}
  catch(e){console.error('ONBOARD_DEBUG',await page.locator('[data-onboarding-guide]').innerText(),await page.evaluate(()=>({url:location.href,language:document.documentElement.lang})));throw e;}
- assert.equal((await page.locator('[data-official-clean-download]').getAttribute('href')).includes('https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.26-multipc-20261020/AMES_Central_CLEAN_ef43b72e.zip'),true);
+ const verifiedDownload=await page.locator('[data-official-clean-download]').getAttribute('href');
+ assert.match(verifiedDownload,/^https:\/\/github\.com\/pedrokam700\/Central-de-Controle-\/releases\/download\/ames-v0\.5\.\d+-multipc-\d{8}\/AMES_Central_CLEAN_[a-f0-9]{8}\.zip$/,'only immutable verified official GitHub CLEAN (latest or safe fallback)');
  assert.equal(await page.locator('[data-installation-detection=verified]').count(),1);
  assert.equal(await page.locator('[data-setup-new]').count(),1);
  assert.equal(await page.locator('[data-setup-existing]').count(),1);
