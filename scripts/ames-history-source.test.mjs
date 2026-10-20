@@ -74,7 +74,8 @@ test('Central wiring, discoverable shortcut and secure HTTPS pairing stay explic
  assert.match(app,/createMesHistorySource\(mesSync,mesIntegration\.client,state\.ames\)/);
  assert.match(ui,/data-open-production-history/);
  assert.match(ui,/switchView\('base'\)/);
- assert.match(preparation,/const visible = expanded \\|\\| \\(\\!connected/,'connected agent is compact until setup is requested');
+ assert.match(preparation,/const visible = expanded/,'operator may explicitly open setup');
+ assert.match(preparation,/!connected && mode/,'connected agent does not force setup into normal operation');
  assert.match(preparation,/data-pair-official/,'on-demand setup still offers explicit secure pairing');
  assert.match(ui,/data-console-setup/,'configuration remains available from top toolbar');
  assert.match(preparation,/client\.openOfficial\(\)/);
