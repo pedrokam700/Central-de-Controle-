@@ -6,6 +6,8 @@ collector/scheduler. R12 factory validation remains mandatory before promotion.
 from __future__ import annotations
 
 import argparse
+import json
+import source_capture
 import time
 from urllib.parse import urlparse
 
@@ -52,6 +54,46 @@ def _aggregate_stage(results, source):
     return "done"
 
 
+def _trace_snapshot_ids(cfg, require_current=False):
+    """Resolve only explicit local revisions, before admission and again in queue.
+
+    Never replace a requested period with the newest snapshot of a line. The
+    original export already exists in mes_revisions and remains immutable.
+    """
+    lines=cfg.get('lines');targets=cfg.get('snapshot_targets')
+    if not isinstance(lines,list) or not lines or any(line not in canonical.LINES for line in lines):
+        raise ValueError('Explicit trace lines required')
+    if not isinstance(targets,dict) or set(targets)!=set(lines):
+        raise ValueError('Exact snapshot targets required; refresh Central/agent')
+    ids={}
+    with a.STORE.connect() as con:
+        con.execute('BEGIN')
+        source=con.execute("SELECT value FROM schema_meta WHERE key='ames_source_id'").fetchone()[0]
+        for line in lines:
+            t=targets[line]
+            if not isinstance(t,dict) or t.get('source_id')!=source:
+                raise ValueError('Trace source mismatch')
+            sid=t.get('snapshot_id');revision=t.get('snapshot_revision')
+            if not str(sid).isdigit() or int(sid)<1 or type(revision) is not int or revision<1:
+                raise ValueError('Invalid trace snapshot/revision')
+            row=con.execute('SELECT * FROM mes_revisions WHERE snapshot_id=? AND line=? AND revision=?',(int(sid),line,revision)).fetchone()
+            if not row:raise ValueError('Trace revision unavailable')
+            payload=json.loads(row['payload']);period=payload.get('summary',{}).get('period',{})
+            if not period.get('start_at') or not period.get('end_at') or period!=t.get('period') or payload['content_hash']!=t.get('content_hash'):
+                raise ValueError('Trace period/content mismatch')
+            current=con.execute('''SELECT s.status,COALESCE(c.epoch,0) AS epoch FROM snapshots s
+                LEFT JOIN mes_source_clock c ON c.snapshot_id=s.id WHERE s.id=? AND
+                (EXISTS(SELECT 1 FROM line_metrics m WHERE m.snapshot_id=s.id AND m.line=?) OR
+                 EXISTS(SELECT 1 FROM defect_observations d WHERE d.snapshot_id=s.id AND d.line=?))''',(int(sid),line,line)).fetchone()
+            if not current or current['status']!='complete':raise ValueError('Trace snapshot/line unavailable')
+            if require_current:
+                latest=con.execute('SELECT MAX(revision) FROM mes_revisions WHERE snapshot_id=? AND line=?',(int(sid),line)).fetchone()[0]
+                if latest!=revision or current['epoch']!=row['epoch']:
+                    raise ValueError('Trace revision changed; reload the selected period')
+            ids[line]=int(sid)
+    return ids
+
+
 def _run_deep_trace_job(job_id, cfg):
     mode=str(cfg.get("trace_mode") or "full").strip().lower()
     if mode not in {"full","process_only","reuse_only"}:
@@ -64,24 +106,25 @@ def _run_deep_trace_job(job_id, cfg):
                       scope={"trace_mode":mode})
     a._persist_job(job)
     try:
+        ids=_trace_snapshot_ids(cfg,require_current=True)
         engine=a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR)
         if not engine:raise RuntimeError("Motor V0.16 nao encontrado")
         lines=a.normalize_lines(cfg.get("lines") or a.CONFIG.get("configured_lines") or [])
         codes=[str(x).strip() for x in (cfg.get("defect_codes") or []) if str(x).strip()]
         max_failures=max(0,int(cfg.get("max_failures") or 0));max_pcbas=max(0,int(cfg.get("max_pcbas") or 0))
         performance=str(cfg.get("performance") or a.CONFIG.get("performance") or "balanced").lower()
-        ids=a.STORE.latest_snapshot_ids_by_line(lines)
-        if not ids:raise RuntimeError("Nenhum snapshot 3028 atual encontrado para rastrear")
         active=[ln for ln in lines if ids.get(ln)];results={};shared_query_memo={};total=max(1,len(active))
         for idx,line in enumerate(active,1):
             sid=ids[line]
-            records=a.STORE.base_rows(sid,limit=100000)
+            records=a.STORE.base_rows(sid,line=line,limit=100000)
             records=a._select_trace_records(records,defect_codes=codes,max_failures=max_failures,max_pcbas=max_pcbas)
             if not records:
                 results[line]={"snapshot_id":sid,"skipped":True,"reason":"Nenhuma falha no escopo selecionado"};continue
             unique=len({str(r.get("pcba_sn") or "").strip() for r in records if str(r.get("pcba_sn") or "").strip()})
             line_result={"snapshot_id":sid,"scope":{"records":len(records),"unique_pcbas":unique,"defect_codes":codes,"max_failures":max_failures,"max_pcbas":max_pcbas,"trace_mode":mode}}
             last_persist=[0.0]
+            partial_journal=source_capture.BoundedPartialJournal(
+                a.STORE,target=cfg['snapshot_targets'][line],line=line,job_id=job_id)
             def event(ev,_line=line,_idx=idx,_sid=sid):
                 nonlocal job
                 did_ingest=False;stage=str((ev or {}).get("stage") or "");kind=str((ev or {}).get("kind") or "")
@@ -96,6 +139,13 @@ def _run_deep_trace_job(job_id, cfg):
                     if state.get("result"):
                         try:a._attach_2114_to_current(_sid,{"pcbas":[{"pcba_sn":(ev or {}).get("pcba"),"status":"COMPLETE","result":state.get("result"),"error":None}]});did_ingest=True
                         except Exception:pass
+                # Progress journaling is sparse and bounded. The MES collector
+                # must continue if local storage has a transient error; report
+                # the error rather than silently treating coverage as complete.
+                try:
+                    partial_journal.observe(ev)
+                except Exception as journal_error:
+                    print('[PARTIAL SOURCE JOURNAL]',type(journal_error).__name__,str(journal_error)[:180])
                 job=a._job_live_event(job_id,ev,_line,_idx,total,_sid)
                 if stage=="3022":
                     cur=int((ev or {}).get("current") or 0);count=max(0,int((ev or {}).get("total") or 0))
@@ -128,6 +178,15 @@ def _run_deep_trace_job(job_id, cfg):
                                                     line_callback=text,event_callback=event,max_pcbas=max_pcbas,
                                                     shared_query_memo=shared_query_memo,performance=performance)
                 enrich=a.enrich_snapshot_from_integrated(sid,payload)
+                # Persist each source separately, even if a later stage fails.
+                # This is a local-only raw journal tied to the ORIGINAL selected
+                # snapshot/revision/period; jobs for other days cannot replace it.
+                for source in ('3074','2114'):
+                    raw=payload.get('trace_'+source)
+                    if raw is not None:
+                        source_capture.capture_source(a.STORE,target=cfg['snapshot_targets'][line],
+                            line=line,job_id=job_id,view=source,result=raw,
+                            status=(_source_stage(raw.get('source_status') or raw.get('status')) if isinstance(raw,dict) and _source_stage(raw.get('source_status') or raw.get('status')) in ('done','partial','error') else 'partial'))
                 line_result.update({"enrichment":enrich,"3074":payload.get("trace_3074",{}),"2114":payload.get("trace_2114",{})})
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
 
@@ -137,6 +196,9 @@ def _run_deep_trace_job(job_id, cfg):
                 p=process_r11.collect_and_persist(a.STORE,engine,records,snapshot_id=sid,line=line,max_pcbas=max_pcbas,
                                                   performance=performance,line_callback=lambda msg:text("3022 "+msg),event_callback=event)
                 line_result["3022"]=p
+                if p is not None:
+                    source_capture.capture_source(a.STORE,target=cfg['snapshot_targets'][line],
+                        line=line,job_id=job_id,view='3022',result=p,status=(_source_stage(p.get('source_status') or p.get('status')) if isinstance(p,dict) and _source_stage(p.get('source_status') or p.get('status')) in ('done','partial','error') else 'partial'))
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
             results[line]=line_result
 
@@ -156,6 +218,7 @@ def _run_deep_trace_job(job_id, cfg):
 
 
 def start_deep_trace_job(cfg):
+    _trace_snapshot_ids(cfg)
     return a._launch_mes_job("deep_trace",cfg,_run_deep_trace_job)
 
 
@@ -203,7 +266,7 @@ class Handler(a.Handler):
                 self._send({"schema":canonical.SCHEMA,"candidate_version":a.CANDIDATE_VERSION,"source_id":canonical.source_id(a.STORE),
                             "package_root":str(a.BASE_DIR.parent.resolve()),"scheduler":a.MES.snapshot(),"process_timeline":bool(support.get("ready")),
                             "process_contract":"R11_DERIVED_R12_FACTORY_GATE","process_support":support,"cursor":True,"revision":True,
-                            "durable_local_ids":True,"native_console":True,"network_guardian":True})
+                            "durable_local_ids":True,"native_console":True,"network_guardian":True,"exact_trace_targets":True})
             except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
             return
         if u.path=="/api/v1/health":
@@ -239,6 +302,7 @@ class Handler(a.Handler):
                 body=self._body();mode=str(body.get("trace_mode") or "full")
                 if mode not in {"full","process_only","reuse_only"}:raise ValueError("trace_mode invalido")
                 self._send(start_deep_trace_job({"request_id":body.get("request_id"),"lines":body.get("lines") or a.CONFIG.get("configured_lines") or [],
+                                                 "snapshot_targets":body.get("snapshot_targets"),
                                                  "defect_codes":body.get("defect_codes") or [],"max_failures":body.get("max_failures") or 0,
                                                  "max_pcbas":body.get("max_pcbas") or 0,"performance":body.get("performance") or a.CONFIG.get("performance") or "balanced",
                                                  "trace_mode":mode}),202)

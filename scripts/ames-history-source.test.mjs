@@ -14,7 +14,7 @@ test('previous productive day saved on A is discoverable locally when Firebase t
     openHistory:async()=>{throw Error('never open remote');}
   },{
     localHistoryList:async line=>{assert.equal(line,'TAN10103');return [local];},
-    historicalPayload:async(sid,line)=>{opened++;assert.equal(sid,'2');assert.equal(line,'TAN10103');return {line_id:line,snapshot_id:sid};}
+    historicalPayload:async(sid,line,revision)=>{opened++;assert.equal(sid,'2');assert.equal(line,'TAN10103');assert.equal(revision,1);return {line_id:line,snapshot_id:sid};}
   },{agent:()=>({status:'connected'})});
   const rows=await source.list('TAN10103');
   assert.equal(rows.length,1);
@@ -31,6 +31,15 @@ test('remote versions are marked shared and never discarded when local agent is 
  const rows=await source.list('TAN10103');
  assert.equal(rows.length,1);assert.equal(rows[0].history_source,'shared');
  assert.equal((await source.open(rows[0])).source,'shared');
+});
+test('unversioned local update stays distinct from a shared revision and opens explicitly',async()=>{
+ const source=createMesHistorySource({listHistory:async()=>[local]}, {
+  localHistoryList:async()=>[{...local,snapshot_revision:undefined}],
+  historicalPayload:async(sid,line,revision)=>{assert.equal(revision,null);return {snapshot_revision:2};}
+ },{agent:()=>({status:'connected'})});
+ const rows=await source.list('TAN10103');assert.equal(rows.length,2);
+ assert.equal(rows[0].revision_pending,true);assert.equal(rows[0].history_source,'local');
+ assert.equal(rows[1].history_source,'shared');assert.equal((await source.open(rows[0])).snapshot_revision,2);
 });
 test('do not claim unconfirmed local version is shared; de-duplicate versions with same owner and revision',async()=>{
  const source=createMesHistorySource({

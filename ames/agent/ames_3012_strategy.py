@@ -29,6 +29,7 @@ def collect_exact_sn_cached(
     defect_code: str = "",
     repair_code: str = "",
     defect_type: str = "",
+    job_id: str | None = None,
 ) -> Dict[str, Any]:
     """Collect only temporal gaps for exact SNs, using local 3012 coverage as cache.
 
@@ -95,7 +96,7 @@ def collect_exact_sn_cached(
                     f"Consulta ampla 3012 falhou e foi retomada em blocos: {type(first_exc).__name__}: {first_exc}"
                 )
 
-            persisted = repair_3012.ingest(store, payload, workstation=workstation)
+            persisted = repair_3012.ingest(store, payload, workstation=workstation, job_id=job_id)
             for key in persistence:
                 persistence[key] += int(persisted.get(key) or 0)
             all_rows.extend(payload.get("rows") or [])

@@ -19,6 +19,7 @@ import local_security
 import operational_calendar
 import origin_policy
 import performance_indexes
+import source_capture
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
 PERFORMANCE_INDEX_STATE = performance_indexes.install(entry.a.STORE)
@@ -115,6 +116,52 @@ class HardenedHandler(entry.Handler):
         if not self._authorized(path):
             self._reject_unauthorized()
             return
+        if path == "/api/v1/source-captures":
+            # Auth checked above, and no raw MES/AT content in this response.
+            # The caller must name the exact immutable parent revision.
+            q=parse_qs(urlparse(self.path).query)
+            try:
+                self._send(source_capture.capture_manifest(
+                    entry.a.STORE,
+                    snapshot_id=(q.get('snapshot_id') or [None])[0],
+                    line=(q.get('line') or [None])[0],
+                    snapshot_revision=(q.get('snapshot_revision') or [None])[0],
+                    content_hash=(q.get('content_hash') or [None])[0],
+                    source_view=(q.get('source_view') or [None])[0],
+                    before=(q.get('before') or [None])[0],
+                    limit=(q.get('limit') or ['20'])[0],
+                ))
+            except (ValueError,TypeError,OverflowError):
+                self._send({'error':'invalid_source_capture_scope'},400)
+            return
+        if path == "/api/v1/saved-sn-history":
+            # Metadata-only index; raw SN search result is only returned when the
+            # caller supplies the exact local job ID + current entry hash.
+            # This endpoint is behind the existing workstation token/origin gate.
+            q=parse_qs(urlparse(self.path).query)
+            job_id=(q.get('job_id') or [None])[0]
+            if job_id is not None:
+                try:
+                    payload=entry.a.STORE.open_saved_sn_lookup(
+                        job_id,(q.get('entry_hash') or [''])[0]
+                    )
+                    self._send(payload)
+                except RuntimeError:
+                    self._send({'error':'saved_sn_result_changed'},409)
+                except (ValueError,TypeError):
+                    self._send({'error':'invalid_or_missing_saved_sn_result'},400)
+            else:
+                try:
+                    self._send(entry.a.STORE.saved_sn_lookups(
+                        sn=(q.get('sn') or [None])[0],
+                        start=(q.get('start') or [None])[0],
+                        end=(q.get('end') or [None])[0],
+                        before=(q.get('before') or [None])[0],
+                        limit=(q.get('limit') or [20])[0],
+                    ))
+                except (ValueError,TypeError):
+                    self._send({'error':'invalid_saved_sn_query'},400)
+            return
         if path == "/api/v1/v2/history-candidates":
             q = parse_qs(urlparse(self.path).query)
             try:
@@ -170,17 +217,14 @@ class HardenedHandler(entry.Handler):
             if line not in entry.canonical.LINES:
                 self._send({'error':'invalid_line'},400);return
             sid=(q.get('snapshot_id') or [None])[0]
+            revision=(q.get('snapshot_revision') or [None])[0]
             try:
                 if sid:
-                    self._send(entry.canonical.export_revision(entry.a.STORE,int(sid),line,entry.a.trace_insights))
+                    self._send(entry.canonical.read_revision(entry.a.STORE,int(sid),line,int(revision)) if revision is not None else
+                               entry.canonical.export_revision(entry.a.STORE,int(sid),line,entry.a.trace_insights))
                 else:
-                    with entry.a.STORE.connect() as con:
-                        rows=con.execute("SELECT DISTINCT s.id,s.collected_at,w.start_at,w.end_at FROM snapshots s LEFT JOIN analysis_windows w ON w.id=s.window_id WHERE s.status='complete' AND (EXISTS(SELECT 1 FROM line_metrics m WHERE m.snapshot_id=s.id AND m.line=?) OR EXISTS(SELECT 1 FROM defect_observations d WHERE d.snapshot_id=s.id AND d.line=?)) ORDER BY s.id DESC",(line,line)).fetchall()
-                        out=[]
-                        for r in rows:
-                            products=[x[0] for x in con.execute("SELECT DISTINCT product_model FROM defect_observations WHERE snapshot_id=? AND line=?",(r['id'],line)) if x[0]]
-                            out.append({'snapshot_id':r['id'],'line_id':line,'collected_at':r['collected_at'],'period_start':r['start_at'],'period_end':r['end_at'],'products':','.join(products),'source_id':entry.canonical.source_id(entry.a.STORE)})
-                    self._send(out)
+                    if revision is not None:raise ValueError('Snapshot required for revision')
+                    self._send(entry.canonical.history_index(entry.a.STORE,line))
             except (ValueError,RuntimeError) as exc:self._send({'error':str(exc)},400)
             return
         if path == "/api/v1/ready":

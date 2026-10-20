@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Tuple
 
 from store import stable_json, utc_now
+import repair_3012_capture
 
 TRUSTED_COVERAGE_SOURCE = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2"
 
@@ -99,6 +100,7 @@ def _iso(value: datetime) -> str:
 def ensure_schema(store) -> None:
     with store.connect() as con:
         con.executescript(TABLE_SQL)
+        repair_3012_capture.ensure(con)
         columns = {r[1] for r in con.execute('PRAGMA table_info(repair_history_3012)')}
         for name in ('product_id','reason_desc'):
             if name not in columns:
@@ -119,7 +121,10 @@ def record_coverage(store, payload: Dict[str, Any]) -> int:
     sns = list(dict.fromkeys(str(x or "").strip() for x in (query.get("sns") or []) if str(x or "").strip()))
     start = _parse_dt(query.get("start_at"))
     end = _parse_dt(query.get("end_at"))
-    if not sns or not start or not end or end < start:
+    if (not sns or not start or not end or end < start or
+            any(str(query.get(field) or "").strip() for field in
+                ("line","model","defect_code","repair_code","defect_type"))):
+        # Filtered or broad searches do not prove full exact-SN coverage.
         return 0
     now = utc_now()
     source = str((payload or {}).get("source") or "AWIP3012_DIRECT_EXTJS")
@@ -183,7 +188,7 @@ def missing_windows(store, sn: str, start_at: datetime, end_at: datetime) -> Lis
     return gaps
 
 
-def ingest(store, payload: Dict[str, Any], *, workstation: str | None = None) -> Dict[str, Any]:
+def ingest(store, payload: Dict[str, Any], *, workstation: str | None = None, job_id: str | None = None) -> Dict[str, Any]:
     ensure_schema(store)
     rows = list((payload or {}).get("rows") or [])
     meta = dict((payload or {}).get("query") or {})
@@ -193,7 +198,10 @@ def ingest(store, payload: Dict[str, Any], *, workstation: str | None = None) ->
             key = str(row.get("row_key") or "").strip()
             if not key:
                 continue
-            exists = con.execute("SELECT 1 FROM repair_history_3012 WHERE row_key=?", (key,)).fetchone()
+            previous = con.execute("SELECT * FROM repair_history_3012 WHERE row_key=?", (key,)).fetchone()
+            exists = previous is not None
+            if previous:
+                repair_3012_capture.archive(con, dict(previous))
             values = [row.get(name) for name in FIELDS]
             if exists:
                 sets = ",".join(f"{name}=?" for name in FIELDS)
@@ -210,6 +218,8 @@ def ingest(store, payload: Dict[str, Any], *, workstation: str | None = None) ->
                     [key, *values, stable_json(meta), stable_json(row.get("raw") or row), now, now],
                 )
                 inserted += 1
+            saved = con.execute("SELECT * FROM repair_history_3012 WHERE row_key=?", (key,)).fetchone()
+            repair_3012_capture.archive(con, dict(saved), job_id=job_id)
         if con.execute("SELECT 1 FROM sqlite_master WHERE name='mes_source_clock'").fetchone():
             sns = list({r.get('pcba_sn') for r in rows if r.get('pcba_sn')})
             for sn in sns:

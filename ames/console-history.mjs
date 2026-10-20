@@ -3,6 +3,7 @@ import { coverageState, matchesPeriod } from './data/history.mjs';
 import { isTodaySnapshot } from './data/operational-period.mjs';
 import { formatFactoryDateTime as displayTime, displayValue } from './data/time-display.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
+import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
 
 const labels={fresh:'Atualizado',partial:'Parcial',stale:'Desatualizado',not_collected:'Não coletado'};
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
@@ -55,7 +56,7 @@ export function operationalRange(store,offset=0,now=new Date()){
 }
 
 export function createHistoryView(root,store,client,history) {
-  let line=LINE_IDS[0],tab='today',loading=false,error='',message='',entries=[],selected=null,selectedEntry=null,disposed=false,generation=0,renderedLanguage='';
+  let line=LINE_IDS[0],tab='today',loading=false,error='',message='',entries=[],selected=null,selectedEntry=null,disposed=false,generation=0,renderedLanguage='',capturePanel=null;
   const formValues=()=>root.querySelector('form')?Object.fromEntries(new FormData(root.querySelector('form'))):{};
   function setPeriod(start,end){const form=root.querySelector('form');if(!form)return;form.elements.start.value=start;form.elements.end.value=end;}
   function quickPeriod(offset){const range=operationalRange(store,offset);setPeriod(range.start,range.end);line=root.querySelector('form').elements.line.value;void load();}
@@ -123,9 +124,12 @@ export function createHistoryView(root,store,client,history) {
   }
   function showSelected(){
     const host=root.querySelector('[data-period-snapshot]');if(!host)return;
+    capturePanel?.clear();capturePanel=null;
     if(!selected){host.replaceChildren();return;}
     const rows=selected.datasets?.defects||[],contexts=selected.process_contexts||selected.datasets?.process_contexts||[],coverage=selected.coverage?.defects||{};
-    host.innerHTML=`<section class="mes-context-panel"><div class="section-head"><div><h3>${t('VISUALIZAÇÃO HISTÓRICA','HISTORICAL VIEW')} · ${esc(selected.line_id)}</h3><p>${t('Esta visualização é somente leitura e não substitui o snapshot atual da Central.','This view is read-only and does not replace the current Work Center snapshot.')}</p></div><span class="status">${esc(revisionLabel(selectedEntry||selected))}</span></div><div class="ames-summary-grid"><div class="stat"><span class="stat-label">${t('Coletado em','Collected at')}</span><strong class="stat-value">${esc(displayTime(selected.collected_at))}</strong></div><div class="stat"><span class="stat-label">${t('Origem','Source')}</span><strong class="stat-value">${esc(selected.source_id||'—')}</strong></div><div class="stat"><span class="stat-label">${t('Falhas','Failures')}</span><strong class="stat-value">${rows.length}</strong></div><div class="stat"><span class="stat-label">3022 · ${t('contextos','contexts')}</span><strong class="stat-value">${contexts.length}</strong></div></div><p>${coverage.source_complete===true?t('Cobertura de falhas completa','Complete failure coverage'):t('Cobertura de falhas parcial/indisponível','Partial/unavailable failure coverage')}</p><div class="table-wrap"><table><thead><tr><th>PCBA</th><th>CPH</th><th>Defect Code</th><th>${t('Registro da falha (MES)','Failure record (MES)')}</th><th>${t('Vínculo (2114)','Linkage (2114)')}</th><th>${t('AT (3012) · candidatos','AT (3012) · candidates')}</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.pcba_sn||'—')}</td><td>${esc(r.product_model||'—')}</td><td>${esc(r.defect_code||'—')}</td><td>${esc(displayValue('defect_time',r.defect_time))}</td><td>${esc(linkageStatus(r.repair_status_current))}</td><td>${repairEvidenceCell(r)}</td></tr>`).join('')}</tbody></table></div></section>`;
+    host.innerHTML=`<section class="mes-context-panel"><div class="section-head"><div><h3>${t('VISUALIZAÇÃO HISTÓRICA','HISTORICAL VIEW')} · ${esc(selected.line_id)}</h3><p>${t('Esta visualização é somente leitura e não substitui o snapshot atual da Central.','This view is read-only and does not replace the current Work Center snapshot.')}</p></div><span class="status">${esc(revisionLabel(selectedEntry||selected))}</span></div><div class="ames-summary-grid"><div class="stat"><span class="stat-label">${t('Coletado em','Collected at')}</span><strong class="stat-value">${esc(displayTime(selected.collected_at))}</strong></div><div class="stat"><span class="stat-label">${t('Origem','Source')}</span><strong class="stat-value">${esc(selected.source_id||'—')}</strong></div><div class="stat"><span class="stat-label">${t('Falhas','Failures')}</span><strong class="stat-value">${rows.length}</strong></div><div class="stat"><span class="stat-label">3022 · ${t('contextos','contexts')}</span><strong class="stat-value">${contexts.length}</strong></div></div><p>${coverage.source_complete===true?t('Cobertura de falhas completa','Complete failure coverage'):t('Cobertura de falhas parcial/indisponível','Partial/unavailable failure coverage')}</p><div class="table-wrap"><table><thead><tr><th>PCBA</th><th>CPH</th><th>Defect Code</th><th>${t('Registro da falha (MES)','Failure record (MES)')}</th><th>${t('Vínculo (2114)','Linkage (2114)')}</th><th>${t('AT (3012) · candidatos','AT (3012) · candidates')}</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.pcba_sn||'—')}</td><td>${esc(r.product_model||'—')}</td><td>${esc(r.defect_code||'—')}</td><td>${esc(displayValue('defect_time',r.defect_time))}</td><td>${esc(linkageStatus(r.repair_status_current))}</td><td>${repairEvidenceCell(r)}</td></tr>`).join('')}</tbody></table></div><section data-history-captures></section></section>`;
+    capturePanel=createSourceCaptureHistory(host.querySelector('[data-history-captures]'),client,store);
+    capturePanel.show(selected,selectedEntry);
   }
   async function load(){
     if(!history){error=t('Histórico compartilhado indisponível. Verifique a conexão e as permissões.','Shared history unavailable. Check connection and permissions.');results();return;}
@@ -136,14 +140,14 @@ export function createHistoryView(root,store,client,history) {
   }
   function render(){
     const language=document.documentElement.lang.startsWith('en')?'en':'pt';
-    if(renderedLanguage!==language){generation++;root.replaceChildren();renderedLanguage=language;}
+    if(renderedLanguage!==language){generation++;capturePanel?.clear();capturePanel=null;root.replaceChildren();renderedLanguage=language;}
     if(!root.querySelector('form')){
       root.innerHTML=`<details open class="mes-context-panel ames-history-root" data-history-panel><summary>${t('Histórico de produção','Production history')}</summary><nav class="ames-history-tabs" aria-label="${t('Modo do histórico','History mode')}"><button type="button" class="button secondary" aria-pressed="true" data-history-mode="today">${t('Hoje','Today')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="previous">${t('Último dia de produção','Last production day')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="history">${t('Histórico por data','History by date')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="advanced">${t('Consulta avançada','Advanced query')}</button></nav><section class="ames-history-overview" data-production-context></section><p class="mes-context">${t('O 3028 usa 07:00 → 07:00; turnos 07:30/17:30 permanecem distintos. Dados não comprovados nunca viram zero.','3028 uses 07:00 → 07:00; shifts 07:30/17:30 remain distinct. Missing evidence is never zero.')}</p><form><div class="mes-filters"><label>${t('Linha','Line')}<select name="line">${LINE_IDS.map(l=>`<option>${l}</option>`).join('')}</select></label><label>${t('Início','Start')}<input type="datetime-local" name="start"></label><label>${t('Fim','End')}<input type="datetime-local" name="end"></label><label>CPH ${t('exato','exact')}<input name="product" placeholder="CPH"></label></div><button type="submit" class="button secondary">${t('Consultar outro período','Query another period')}</button></form><section data-period-results></section><section data-period-snapshot></section></details>`;
       root.querySelector('form').addEventListener('submit',e=>{e.preventDefault();line=e.currentTarget.elements.line.value;void load();});
       root.querySelector('select').addEventListener('change',e=>{line=e.target.value;generation++;entries=[];selected=null;selectedEntry=null;root.querySelector('[data-period-results]').replaceChildren();showSelected();});
       root.querySelectorAll('[data-history-mode]').forEach(button=>button.addEventListener('click',()=>chooseTab(button.dataset.historyMode)));
       chooseTab('today');
-    }else summary();
+    }else{summary();capturePanel?.show(selected,selectedEntry);}
   }
-  return {render,clear(){disposed=true;generation++;root.replaceChildren();}};
+  return {render,clear(){disposed=true;generation++;capturePanel?.clear();capturePanel=null;root.replaceChildren();}};
 }

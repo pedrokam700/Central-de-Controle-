@@ -1,6 +1,7 @@
 import { immutable, instant, normalizeLegacySnapshot, productKey, requireLine, LINE_IDS } from './contract.mjs';
 import { normalizeAgentRead } from './agent-contract.mjs';
 import {normalizeCanonical,CANONICAL_SCHEMA} from './canonical.mjs';
+import {readingPeriod, matchesReadingPeriod} from './reading-period.mjs';
 import {SOURCE_STATE} from './source-provenance.mjs';
 
 const EMPTY_CONTEXT=Object.freeze({line_id:null,lines:[],period:null,product:null,shift:null,defect:null});
@@ -25,6 +26,8 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
   let context = immutable({...EMPTY_CONTEXT});
   let contextRevision=0;
   let contextLineExplicit=false;
+  let selectedPeriod=null, periodGeneration=0;
+  let historical=new Map();
 
   function normalizeBatch(payloads, localRead = false) {
     const next = new Map();
@@ -49,13 +52,15 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
 
   function readLine(line){
     requireLine(line);
-    const snapshot = (localConnected && local.get(line)) || synced.get(line) || remote.get(line) || local.get(line) || null;
-    const source = !snapshot ? 'none' : snapshot === local.get(line) ? (localConnected ? 'local' : 'local_cache') : 'remote';
+    const saved=selectedPeriod&&selectedPeriod.mode!=='today'?historical.get(JSON.stringify([selectedPeriod,line])):null;
+    const eligible=s=>s&&matchesReadingPeriod(s.canonical||s,selectedPeriod)?s:null;
+    const snapshot = saved?.snapshot || (localConnected && eligible(local.get(line))) || eligible(synced.get(line)) || eligible(remote.get(line)) || eligible(local.get(line)) || null;
+    const source = !snapshot ? 'none' : saved? (saved.source==='local'&&!localConnected?'local_cache':saved.source) : snapshot === local.get(line) ? (localConnected ? 'local' : 'local_cache') : 'remote';
     const source_state=!snapshot?SOURCE_STATE.NOT_COLLECTED:source==='local_cache'?SOURCE_STATE.CACHED:SOURCE_STATE.OK;
     const collected = instant(snapshot?.collected_at);
     const age = collected === null ? null : now() - collected;
     return immutable({
-      source, source_state, snapshot, local_connected: localConnected,
+      source, source_state, snapshot, reading_period:selectedPeriod, local_connected: localConnected,
       age_ms: age,
       freshness: age === null || age < 0 ? 'unknown' : age > maxAgeMs || source === 'local_cache' ? 'stale' : 'fresh'
     });
@@ -113,6 +118,26 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
     localCanonical(){return [...local.values()].map(s=>s.canonical).filter(Boolean);},
     agent() { return agent; },
     updateAgent(patch) { agent = immutable({...agent,...patch}); },
+    readingPeriod(){return selectedPeriod;},
+    periodGeneration(){return periodGeneration;},
+    selectReadingPeriod(mode,options={}){
+      const next=immutable(readingPeriod(mode,{...options,now:options.now||new Date(now()),config:agent.config||{}}));
+      if(JSON.stringify(next)!==JSON.stringify(selectedPeriod)){
+        selectedPeriod=next;periodGeneration++;contextRevision++;
+        // Date filters from a different read period must not hide the selected revision.
+        context=immutable({...context,period:null});
+      }
+      return periodGeneration;
+    },
+    installHistoricalSnapshot(payload,{source='remote',generation=periodGeneration}={}){
+      if(generation!==periodGeneration||!selectedPeriod)return false;
+      const snapshot=normalizeCanonical(payload);
+      if(!matchesReadingPeriod(payload,selectedPeriod))throw Error('historical_period_mismatch');
+      if(!['local','local_cache','remote'].includes(source))throw Error('invalid_history_source');
+      historical.set(JSON.stringify([selectedPeriod,snapshot.line_id]),{snapshot,source});
+      contextRevision++;
+      return true;
+    },
     context(){return context;},
     contextRevision(){return contextRevision;},
     preferredLine(){return ensureContextLine();},
@@ -155,6 +180,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
       local = new Map(); remote = new Map(); synced = new Map(); localConnected = false; issues = [];
       agent = immutable({status:'disconnected',config:null,job:null,error:''});
       context = immutable({...EMPTY_CONTEXT});contextLineExplicit=false;contextRevision+=1;
+      selectedPeriod=null;historical=new Map();periodGeneration++;
     }
   });
 }

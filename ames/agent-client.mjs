@@ -1,6 +1,6 @@
 import { AGENT_URL, SCHEDULER_POLICY, collectionScope, r12CompatibleBuild } from './data/agent-contract.mjs';
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
-import {CANONICAL_SCHEMA,DATASETS} from './data/canonical.mjs';
+import {CANONICAL_SCHEMA,DATASETS,normalizeCanonical} from './data/canonical.mjs';
 
 const AGENT_TOKEN_KEY='central.ames.agentToken.v1';
 function bootstrapAgentToken(explicit=''){
@@ -194,6 +194,66 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(!Array.isArray(rows)||rows.some(h=>h.line_id!==line||!Number.isSafeInteger(Number(h.snapshot_id))||Number(h.snapshot_id)<1))throw Error('Índice local de histórico inválido');
       return rows;
     },
+    // B3.4b3: scalar metadata about raw captures only. Never import raw
+    // 3074/2114/3022 results into live Store or Firebase publication.
+    sourceCaptures:async({snapshot_id,line_id,snapshot_revision,content_hash,source_view=null,before=null,limit=20}={})=>{
+      check();
+      const sid=Number(snapshot_id),rev=Number(snapshot_revision),n=Number(limit);
+      if(!LINE_IDS.includes(line_id)||!Number.isSafeInteger(sid)||sid<1||
+         !Number.isSafeInteger(rev)||rev<1||!Number.isInteger(n)||n<1||n>50||
+         !(/^[a-f0-9]{64}$/).test(content_hash||''))throw Error('Identidade de captura inválida');
+      if(source_view!==null&&!['3074','2114','3022'].includes(source_view))throw Error('Fonte da captura inválida');
+      const q=new URLSearchParams({snapshot_id:String(sid),line:line_id,
+        snapshot_revision:String(rev),content_hash,limit:String(n)});
+      if(source_view)q.set('source_view',source_view);
+      if(before)q.set('before',String(before));
+      const data=await request('/source-captures?'+q);
+      const scalarKeys=new Set(['snapshot_id','line_id','snapshot_revision','source_view',
+        'source_status','capture_revision','job_id','stored_at','source_id','progress_only',
+        'checkpoint_kind','sample_count','source_complete','population_complete',
+        'local_only','period_start','period_end','period_mode']);
+      if(data?.items?.some(x=>!x||Object.keys(x).some(k=>!scalarKeys.has(k))))
+        throw Error('Campos inesperados no índice de capturas');
+      if(data?.schema!=='ames-local-source-capture-v1'||data.metadata_only!==true||
+         data.local_only!==true||data.source_complete!==false||
+         String(data.snapshot_id)!==String(sid)||data.line_id!==line_id||
+         data.snapshot_revision!==rev||data.content_hash!==content_hash||
+         !Array.isArray(data.items)||data.items.length>n||
+         data.items.some(x=>x.snapshot_id!==String(sid)||x.line_id!==line_id||
+           x.snapshot_revision!==rev||x.local_only!==true||x.source_complete!==false||
+           !['3074','2114','3022'].includes(x.source_view)||
+           (source_view&&x.source_view!==source_view)||
+           Object.hasOwn(x,'result')||Object.hasOwn(x,'payload_json')||
+           Object.hasOwn(x,'repair_comment')))throw Error('Índice de capturas incompatível');
+      return data;
+    },
+    // B3.2: on-workstation saved individual SN searches; never publish raw job
+    // results to Firebase or treat query time as an operational production date.
+    savedSnHistory:async({sn='',start=null,end=null,before=null,limit=20}={})=>{
+      check();
+      if(!Number.isInteger(Number(limit))||Number(limit)<1||Number(limit)>50)throw Error('Limite de histórico SN inválido');
+      const q=new URLSearchParams({limit:String(limit)});
+      if(sn)q.set('sn',String(sn));
+      if(start)q.set('start',String(start));
+      if(end)q.set('end',String(end));
+      if(before)q.set('before',String(before));
+      const response=await request('/saved-sn-history?'+q);
+      if(!Array.isArray(response?.items)||response?.clock_kind!=='query_created_at'||response.local_only!==true||
+        response.items.some(x=>x?.line_id!==null||x?.production_date!==null||
+          x?.clock_kind!=='query_created_at'||!(/^[a-f0-9]{64}$/).test(x?.entry_hash||'')))throw Error('Índice de consultas SN incompatível');
+      return response;
+    },
+    openSavedSnHistory:async(entry)=>{
+      check();
+      if(!(/^[A-Za-z0-9_-]{1,128}$/).test(entry?.job_id||'')||
+        !(/^[a-f0-9]{64}$/).test(entry?.entry_hash||''))throw Error('Identidade de consulta SN inválida');
+      const q=new URLSearchParams({job_id:entry.job_id,entry_hash:entry.entry_hash});
+      const value=await request('/saved-sn-history?'+q);
+      if(value?.job_id!==entry.job_id||value?.entry_hash!==entry.entry_hash||
+        value?.clock_kind!=='query_created_at'||value?.local_only!==true||
+        value?.line_id!==null||value?.production_date!==null)throw Error('Resultado SN divergente');
+      return value;
+    },
     historyCandidates:async({before=null,limit=20}={})=>{
       check();
       const query=new URLSearchParams({limit:String(Math.min(40,Math.max(1,Number(limit)||20)))});
@@ -202,12 +262,15 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(!Array.isArray(response?.candidates))throw Error('Índice de histórico incompatível');
       return response;
     },
-    historicalPayload:async(snapshotId,line)=>{
+    historicalPayload:async(snapshotId,line,revision=null)=>{
       check();
       if(!LINE_IDS.includes(line)||!Number.isSafeInteger(Number(snapshotId))||Number(snapshotId)<1)throw Error('Histórico local inválido');
-      const payload=await request('/local-history?'+new URLSearchParams({line,snapshot_id:String(snapshotId)}));
+      if(revision!==null&&(!Number.isSafeInteger(revision)||revision<1))throw Error('Revisão histórica inválida');
+      const query=new URLSearchParams({line,snapshot_id:String(snapshotId)});
+      if(revision!==null)query.set('snapshot_revision',String(revision));
+      const payload=await request('/local-history?'+query);
       normalizeCanonical(payload);
-      if(payload.line_id!==line||String(payload.snapshot_id)!==String(snapshotId))throw Error('Revisão histórica divergente');
+      if(payload.line_id!==line||String(payload.snapshot_id)!==String(snapshotId)||(revision!==null&&payload.snapshot_revision!==revision))throw Error('Revisão histórica divergente');
       return payload;
     },
     saveConfig:value=>action(async()=>{check();const scope=collectionScope(value);const cfg={configured_lines:scope.lines,performance:scope.performance};const saved=await request('/config',cfg);publish({config:publicConfig(saved?.config||saved)});}),
@@ -216,6 +279,12 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const scope=type==='sn'?null:collectionScope(value);let path,body;
       if(type==='deep'){
         path='/deep-trace';body={...scope};
+        if(store.agent().capabilities?.exact_trace_targets!==true)throw Error('Atualize o agente para rastrear o snapshot exato do período selecionado.');
+        body.snapshot_targets=Object.fromEntries(scope.lines.map(line=>{
+          const read=store.read(line),p=read.snapshot?.canonical,period=p?.summary?.period;
+          if(read.source!=='local'||!p||p.source_id!==store.agent().capabilities.source_id||!period?.start_at||!period?.end_at)throw Error('Selecione uma revisão local com período comprovado para '+line+'.');
+          return [line,{source_id:p.source_id,snapshot_id:p.snapshot_id,snapshot_revision:p.snapshot_revision,content_hash:p.content_hash,period}];
+        }));
         if(value.trace_mode!==undefined){
           if(!['full','process_only','reuse_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
           if(value.trace_mode==='process_only'&&store.agent().capabilities?.process_timeline!==true)throw Error('process_only exige coleta 3022 em lote. Conecte um agente 3022-R12+ ou aguarde a incorporação do coletor 3022 no agente canônico.');
@@ -227,9 +296,12 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       else if(type==='sn'){path='/sn-lookup';body={sn:String(value.sn||'').trim(),include_3022:true};if(!body.sn)throw Error('Informe o SN.');}
       else if(type==='imported'){path='/runs';body={mode:'manual',source_path:value.source_path,lines:scope.lines,shift:value.shift||null};if(!body.source_path)throw Error('Envie o arquivo antes de iniciar.');}
       else throw new Error('Coleta inválida.');
-      const signature=JSON.stringify([path,body]);
+      // A response timeout may be followed by a publication refresh. Retrying the
+      // same selected snapshot must replay its original revision/request identity.
+      const retryScope=type==='deep'?{...body,snapshot_targets:Object.fromEntries(Object.entries(body.snapshot_targets).map(([line,{snapshot_revision,content_hash,...target}])=>[line,target]))}:body;
+      const signature=JSON.stringify([path,retryScope]);
       if(pendingSubmission&&pendingSubmission.signature!==signature)throw Error('Confirme a solicitação anterior repetindo o mesmo escopo antes de iniciar outra.');
-      pendingSubmission ||= {signature,id:crypto.randomUUID()};body.request_id=pendingSubmission.id;
+      pendingSubmission ||= {signature,id:crypto.randomUUID(),body};body={...pendingSubmission.body,request_id:pendingSubmission.id};
       if(type==='deep')publish({submitting:true,error:''});
       let job;try{job=await request(path,body);if(!job?.id)throw Error('O agente não retornou um job.');}finally{if(type==='deep')publish({submitting:false});}
       pendingSubmission=null;publish({job:{id:job.id,kind:job.kind,status:job.status,stage:job.stage,message:job.message,scope:{trace_mode:value.trace_mode}},error:''});

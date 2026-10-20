@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 import ames_3012_live
 import ames_3012_strategy
 import repair_3012
+import repair_3012_capture
 import local_sn
 import production_shift
 import map_3012
@@ -78,7 +79,7 @@ def install(a, BaseHandler, canonical):
         maximum = max(1, int(a.CONFIG.get("3012_individual_max_pcbas", 25) or 25))
         return targets[:maximum], max(0, len(targets) - maximum)
 
-    def collect_cached_exact(targets, start, end):
+    def collect_cached_exact(targets, start, end, *, job_id=None):
         return ames_3012_strategy.collect_exact_sn_cached(
             store=a.STORE,
             collector=collect_3012,
@@ -89,6 +90,7 @@ def install(a, BaseHandler, canonical):
             end_at=end,
             checkpoint_dir=a.DATA_DIR / "checkpoints" / "3012",
             workstation=a.WORKSTATION,
+            job_id=job_id,
             fallback_chunk_days=max(1, int(a.CONFIG.get("3012_sn_chunk_days", 90) or 90)),
         )
 
@@ -128,7 +130,17 @@ def install(a, BaseHandler, canonical):
                 job = a._job_update(job_id, stage="3012", progress=88, message=f"3012 · histórico/cache de {len(targets)} PCBA(s)")
                 a._persist_job(job)
                 try:
-                    payload = collect_cached_exact(targets, start, end)
+                    repair_3012_capture.begin(a.STORE, job_id, "sn_lookup",
+                        {"sn":sn,"include_3012":include_3012,"include_3022":include_3022},
+                        {"sns":targets,"start_at":start.isoformat(),"end_at":end.isoformat()})
+                    try:
+                        payload = collect_cached_exact(targets, start, end, job_id=job_id)
+                        repair_3012_capture.finish(a.STORE, job_id, payload.get("rows") or [],
+                            payload.get("source"), {"cache":payload.get("cache") or {},
+                            "ranges":payload.get("ranges") or []})
+                    except Exception:
+                        repair_3012_capture.fail(a.STORE,job_id)
+                        raise
                     result["trace_3012"] = payload
                     by_pcba = {}
                     for row in payload.get("rows") or []:
@@ -176,8 +188,15 @@ def install(a, BaseHandler, canonical):
             end = parse_mes_time(cfg.get("end_at")) or (exact_end if exact_targets else datetime.now())
             if end < start:
                 raise RuntimeError("Periodo 3012 invalido")
+            effective = {"sns":exact_targets,"start_at":start.isoformat(),"end_at":end.isoformat()}
+            if not exact_targets:
+                effective.update({name:cfg.get(name) or "" for name in
+                                  ("line","model","defect_code","repair_code","defect_type")})
+            repair_3012_capture.begin(a.STORE,job_id,
+                "repair_query_exact" if exact_targets else "repair_query_broad",
+                cfg,effective)
             if exact_targets:
-                payload = collect_cached_exact(exact_targets, start, end)
+                payload = collect_cached_exact(exact_targets, start, end, job_id=job_id)
                 persisted = payload.get("persistence") or {"records": 0, "inserted": 0, "updated": 0}
             else:
                 digest = canonical.digest({**cfg, "start_at": start.isoformat(), "end_at": end.isoformat()})[:16]
@@ -195,7 +214,10 @@ def install(a, BaseHandler, canonical):
                     chunk_days=max(1, int(cfg.get("chunk_days") or 31)),
                     checkpoint_path=a.DATA_DIR / "checkpoints" / "3012" / f"3012_BROAD_{digest}.json",
                 )
-                persisted = repair_3012.ingest(a.STORE, payload, workstation=a.WORKSTATION)
+                persisted = repair_3012.ingest(a.STORE, payload, workstation=a.WORKSTATION, job_id=job_id)
+            repair_3012_capture.finish(a.STORE,job_id,payload.get("rows") or [],
+                payload.get("source"),{"cache":payload.get("cache") or {},
+                "ranges":payload.get("chunks") or payload.get("ranges") or []})
             result = {
                 "source": payload.get("source"),
                 "query": payload.get("query"),
@@ -207,6 +229,10 @@ def install(a, BaseHandler, canonical):
             }
             a._persist_job(a._job_update(job_id, status="done", stage="done", progress=100, finished_at=a.utc_now(), message=f"3012 concluída · {payload.get('records_count', 0)} registro(s)", result=result))
         except Exception as exc:
+            try:
+                repair_3012_capture.fail(a.STORE, job_id)
+            except Exception:
+                pass
             a._persist_job(a._job_update(job_id, status="error", stage="error", finished_at=a.utc_now(), message=str(exc), error=f"{type(exc).__name__}: {exc}"))
 
     def start_query(cfg):
