@@ -12,6 +12,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ames'/'agent'))
 from store import Store
 import canonical
+import workstation_pairing
 
 LINE='TAN10101'
 
@@ -26,7 +27,7 @@ class LocalHistoryTests(unittest.TestCase):
         tree=ast.parse((ROOT/'ames/agent/agent_hardened_entry.py').read_text())
         cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='HardenedHandler')
         method=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='do_GET')
-        env={'urlparse':urlparse,'parse_qs':parse_qs,'entry':types.SimpleNamespace(
+        env={'urlparse':urlparse,'parse_qs':parse_qs,'workstation_pairing':workstation_pairing,'entry':types.SimpleNamespace(
             canonical=canonical,a=types.SimpleNamespace(STORE=self.store,BASE_DIR=pathlib.Path(self.tmp.name),trace_insights=None))}
         exec(compile(ast.Module(body=[method],type_ignores=[]),'<real GET handler>','exec'),env)
         self.handler=types.SimpleNamespace(_authorized=lambda path:True,_send=lambda value,status=200:setattr(self,'response',(status,value)))
