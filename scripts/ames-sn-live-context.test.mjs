@@ -105,3 +105,17 @@ test('no valid failure anchor must not reintroduce all previously linked compone
  assert.deepEqual(model.materials,[]);
  assert.equal(model.material_selection.status,'no_defect_anchor');
 });
+
+test('raw 2114 Manual/Automatic alias and 3012 Defect Time provenance survive the live SN model',()=>{
+ const r=baseResult();
+ r.trace_2114.current_failure={
+  'Defect Code':'CAM','Defect Description':'Camera impurity',
+  'TestTools Auto Defect Or Defect By Hand':'Manual',
+  'Defect Time':'2026-10-19 10:30:00',
+  'Defect Time Source':'3012'
+ };
+ const model=snLiveSummaryEvidence(r).model;
+ assert.equal(model.current.manual_or_auto,'Manual');
+ assert.equal(model.current.defect_time,'2026-10-19 10:30:00');
+ assert.equal(model.current.defect_time_source,'3012');
+});

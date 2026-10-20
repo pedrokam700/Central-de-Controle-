@@ -80,7 +80,7 @@ export function preferredAnalysisEvent(rows,pcba){
 
 function failureEntry(row,{pcba,repairs=[],process=[],source='2114'}={}){
   if(!row)return null;const actualPcba=pcba||pcbaOf(row);
-  return {pcba_sn:actualPcba,defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),manual_or_auto:value(row,'manual_or_auto','Manual/Automatic'),repair_status:value(row,'repair_status','Repair Status'),relation:value(row,'relation'),failure_family:value(row,'failure_family','Failure Family'),repairs:repairsFor(repairs,{pcba:actualPcba,code:defectCode(row),time:defectTime(row)},row.repair_evidence_3012||[]),analysis_event:preferredAnalysisEvent(process,actualPcba),source,raw:row};
+  return {pcba_sn:actualPcba,defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),defect_time_source:value(row,'Defect Time Source','defect_time_source')||source,manual_or_auto:value(row,'manual_or_auto','Manual/Automatic','TestTools Auto Defect Or Defect By Hand'),repair_status:value(row,'repair_status','Repair Status'),relation:value(row,'relation'),failure_family:value(row,'failure_family','Failure Family'),repairs:repairsFor(repairs,{pcba:actualPcba,code:defectCode(row),time:defectTime(row)},row.repair_evidence_3012||[]),analysis_event:preferredAnalysisEvent(process,actualPcba),source,raw:row};
 }
 function parseList(value){if(Array.isArray(value))return value.map(text).filter(Boolean);try{const out=JSON.parse(value||'[]');return Array.isArray(out)?out.map(text).filter(Boolean):[];}catch{return text(value).split(/[,;|\n]/).map(x=>x.trim()).filter(Boolean);}}
 
