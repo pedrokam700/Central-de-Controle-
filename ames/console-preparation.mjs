@@ -132,7 +132,7 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     // A verified local agent should not bury the operation dashboard beneath
     // onboarding every time it rerenders. Pairing remains one click away via
     // the persistent "Configurar posto" button.
-    const visible = expanded || !connected;
+    const visible = expanded || !connected || mode === 'viewer';
 
     const detector=installationDetection(agent,!!client.paired?.());
     const shared=sharingState(agent);
