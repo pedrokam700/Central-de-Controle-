@@ -218,6 +218,24 @@ try{
  assert.equal(await snLive.locator('[data-sn-temporal-detail]').count(),1);
  assert.equal(await snLive.locator('[data-sn-history-detail]').count(),1);
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'SN live decoration cannot collect MES');
+ // PR35 block 15 lifecycle: a new query replaces, rather than stacks on,
+ // the previous query's provenance and all read-only forensic decorators.
+ await page.evaluate(()=>{
+   qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
+     sn:'PCBA-SECOND',detected_type:'PCBA',
+     trace_2114:{status:'unavailable'},trace_3074:{status:'not_collected'},
+     trace_3022:{status:'not_collected'},trace_3012:{status:'not_collected'}
+   }}});
+   qa.view.render();
+ });
+ assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1,'source panel must not duplicate across SN queries');
+ assert.equal(await snLive.locator('[data-sn-source-state]').count(),5,'new SN retains all five distinct source statuses');
+ assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1,'smart alerts panel must not duplicate');
+ await page.evaluate(()=>{document.documentElement.lang='en-US';qa.view.render();});
+ await page.waitForFunction(()=>document.querySelector('[data-sn-live-provenance] summary')?.textContent?.includes('Source provenance'));
+ assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1,'changing language must not stack source panels');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'query switching and translation must be read-only');
+ await page.evaluate(()=>{document.documentElement.lang='pt-BR';qa.view.render();});
  assert.equal(await page.locator('[data-sn-saved-toggle]').count(),1);
  assert.equal(await page.evaluate(()=>qa.savedReads()),0);
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
