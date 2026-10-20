@@ -424,7 +424,11 @@ try{
  assert.equal(await page.locator('[data-setup-existing]').count(),1);
  await page.evaluate(()=>{qa.store.updateAgent({status:'connected',connection_error:null});qa.view.render();});
  await page.locator('[data-installation-detection=verified]').waitFor();
- assert.equal(await page.evaluate(()=>qa.mutations()),0,'detection and pairing guidance never start MES');
+ await page.locator('[data-onboarding-guide] [data-integration-mode=viewer]').click();
+ await page.locator('[data-setup-viewer]').waitFor();
+ assert.equal(await page.locator('[data-official-clean-download]').count(),0,'viewer does not need CLEAN');
+ assert.match(await page.locator('[data-setup-viewer]').innerText(),/não precisa de A-MES/);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'viewer and pairing guidance never start MES');
  await page.locator('[data-console-view=top3]').click();
  await page.locator('[data-console-view=monitor]').click();
  assert.equal(await page.locator('[data-console-preparation]').isHidden(),true,'setup collapses after navigation');
