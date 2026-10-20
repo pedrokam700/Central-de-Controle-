@@ -2,6 +2,29 @@ import { immutable } from './contract.mjs';
 
 export const INTEGRATION_MODE_KEY = 'central.ames.integration-mode.v1';
 export const integrationMode = value => ['collector', 'viewer'].includes(value) ? value : null;
+export function installationDetection(agent={},paired=false){
+  if(agent.status==='connected')return 'verified';
+  if(agent.connection_error?.code==='agent-unauthorized')return 'pairing_required';
+  if(paired)return 'paired_unreachable';
+  // A failed HTTPS loopback/CORS/PNA request cannot prove there is no agent.
+  return 'not_verified';
+}
+export function sharingState(agent={}){
+  const sync=agent.sync||{},heads=Array.isArray(sync.remote_heads)?sync.remote_heads:[];
+  const confirmed=sync.read_status==='ready'&&Boolean(sync.server_received_at);
+  const pending=Number.isInteger(sync.pending)?sync.pending:null;
+  const conflict=sync.read_status==='origin_conflict'||(sync.origin_conflict_lines||[]).length>0;
+  return Object.freeze({
+    publishing:agent.status==='connected'&&(pending>0||sync.status==='pending')?'pending':
+      sync.status==='synchronized'?'sent':sync.status==='shared_history_legacy_conflict'?'legacy_conflict':'not_confirmed',
+    receiving:conflict?'conflict':sync.read_status==='error'?'error':
+      sync.read_status==='cached'?'cached':confirmed?'server_confirmed':'not_confirmed',
+    pending,receivedLines:heads.filter(x=>x?.line_id&&x?.snapshot_id).map(x=>x.line_id),
+    lastSentAt:sync.last_sent?.sent_at||null,
+    lastReceivedAt:sync.server_received_at||null
+  });
+}
+
 function readRuntime(value) {
   if (!value || typeof value !== 'object') return null;
   const agent = new URL(value.agent_health_url);
