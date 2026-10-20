@@ -1,7 +1,7 @@
 name: A-MES Operational History
 on:
   push:
-    branches: [work/ames-operational-history-kpis-20261019, work/ames-pr35-pr36-integration-20261019, fix/ames-official-single-workstation-pairing-20261020]
+    branches: [main, work/ames-operational-history-kpis-20261019, work/ames-pr35-pr36-integration-20261019, fix/ames-official-single-workstation-pairing-20261020]
   workflow_dispatch:
 permissions:
   contents: read
@@ -114,7 +114,7 @@ jobs:
   # Standalone artifact ONLY for a gated, operator-authorized physical preview.
   # Never deploys or modifies the currently installed agent/Firebase/main.
   package-pr42:
-    if: github.ref == 'refs/heads/work/ames-pr35-pr36-integration-20261019' || github.ref == 'refs/heads/fix/ames-official-single-workstation-pairing-20261020'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/work/ames-pr35-pr36-integration-20261019' || github.ref == 'refs/heads/fix/ames-official-single-workstation-pairing-20261020'
     needs: [reading-contract, reading-browser, reading-windows, reading-firestore]
     runs-on: ubuntu-latest
     timeout-minutes: 12
