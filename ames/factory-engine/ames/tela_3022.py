@@ -506,7 +506,7 @@ def _assembly_station_at_defect(eventos, defect_time, policy, *, defect_local_of
         return None
     bounds = (str(policy.get("assembly_stop_min") or "A5100").upper(),
               str(policy.get("assembly_stop_max") or "A5162").upper())
-    min_n, max_n = [int(x[1:]) for x in bounds if re.fullmatch(r"A\\d{4}", x)]
+    min_n, max_n = [int(x[1:]) for x in bounds if re.fullmatch(r"A\d{4}", x)]
     tolerance = max(0, min(int(policy.get("assembly_detection_tolerance_seconds") or 0), 120))
     detected = []
     for ev in _normalize_for_order(eventos):
@@ -518,7 +518,7 @@ def _assembly_station_at_defect(eventos, defect_time, policy, *, defect_local_of
         # Current Oper is the station the phone is in when the defect was
         # registered; Working Oper can describe the preceding completed step.
         station = str(ev.get("operation_code") or "").strip().upper()
-        if not re.fullmatch(r"A\\d{4}", station) or not min_n <= int(station[1:]) <= max_n:
+        if not re.fullmatch(r"A\d{4}", station) or not min_n <= int(station[1:]) <= max_n:
             continue
         detected.append((dt,ev.get("hist_seq") if ev.get("hist_seq") is not None else -1,station,ev))
     if not detected:
