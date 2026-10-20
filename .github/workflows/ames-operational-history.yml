@@ -1,7 +1,7 @@
 name: A-MES Operational History
 on:
   push:
-    branches: [main, work/ames-operational-history-kpis-20261019, work/ames-pr35-pr36-integration-20261019, fix/ames-official-single-workstation-pairing-20261020]
+    branches: [main, work/ames-operational-history-kpis-20261019, work/ames-pr35-pr36-integration-20261019, fix/ames-official-single-workstation-pairing-20261020, fix/ames-pair-origin-403-github-only-20261020]
   workflow_dispatch:
 permissions:
   contents: read
