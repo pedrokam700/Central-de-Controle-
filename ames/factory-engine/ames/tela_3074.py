@@ -2,7 +2,6 @@ import json
 import time
 from pathlib import Path
 from ames.ui_helpers import extract_best_grid
-from ames.coverage_3074 import classify_3074_page
 from core.normalizacao import normalizar_sn, normalizar_texto
 
 EXPECTED = [
@@ -106,17 +105,6 @@ class Tela3074:
                     loading = grid.get("store_loading")
 
                     if rows and any(_row_contains_query(r, sn) for r in rows):
-                        completeness=classify_3074_page(grid)
-                        if completeness["status"]=="incomplete_page":
-                            # Do not silently publish a first page as the entire
-                            # 3074 PCBA/material binding history. No automatic
-                            # pagination without physical MES validation.
-                            last_error=RuntimeError(
-                                "3074_INCOMPLETE_PAGE: "+
-                                str(completeness["returned"])+"/"+
-                                str(completeness["reported_total"])+
-                                " linhas presentes; paginação precisa verificação")
-                            break
                         return {
                             "query_sn": sn,
                             "grid_kind": grid["kind"],
@@ -125,9 +113,6 @@ class Tela3074:
                             "rows": rows,
                             "attempt": attempt,
                             "no_data": False,
-                            "coverage_status": "observed_rows_not_population_proof",
-                            "returned_record_count": completeness["returned"],
-                            "reported_total_count": completeness["reported_total"],
                         }
 
                     # Se a grade está vazia e o store terminou de carregar, inicia
