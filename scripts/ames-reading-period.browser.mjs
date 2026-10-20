@@ -413,6 +413,17 @@ try{
  assert.equal(await page.locator('[data-setup-existing]').count(),1);
  assert.equal(await page.locator('[data-setup-share]').count(),1);
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening install guide never starts MES jobs');
+ // Direct HTTPS without the workstation token is a pairing problem, not
+ // evidence that the agent was never installed.
+ await page.evaluate(()=>{qa.store.updateAgent({status:'disconnected',connection_error:{code:'agent-unauthorized',message:'Token required'}});qa.view.render();});
+ await page.locator('[data-installation-detection=pairing_required]').waitFor();
+ assert.equal(await page.locator('[data-setup-existing] a[href="http://127.0.0.1:8765/Central-de-Controle-/"]').count(),1);
+ await page.evaluate(()=>{qa.store.updateAgent({status:'disconnected',connection_error:{code:'agent-network',message:'Browser network restriction'}});qa.view.render();});
+ await page.locator('[data-installation-detection=not_verified]').waitFor();
+ assert.equal(await page.locator('[data-setup-existing]').count(),1);
+ await page.evaluate(()=>{qa.store.updateAgent({status:'connected',connection_error:null});qa.view.render();});
+ await page.locator('[data-installation-detection=verified]').waitFor();
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'detection and pairing guidance never start MES');
  await page.locator('[data-console-view=top3]').click();
  await page.locator('[data-console-view=monitor]').click();
  assert.equal(await page.locator('[data-console-preparation]').isHidden(),true,'setup collapses after navigation');
