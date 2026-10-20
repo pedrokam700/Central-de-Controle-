@@ -168,7 +168,10 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(!canPairFromOfficial())throw Error('Pareamento iniciado apenas pelo endereço HTTPS oficial.');
       // Top-level navigation to loopback, then explicit confirmation locally.
       // No token is read or returned from any unauthenticated fetch API.
-      globalThis.window.open('http://127.0.0.1:8765/workstation/parear','_blank','noopener,noreferrer');
+      // Keep the SAME browser tab. A second tab has different sessionStorage,
+      // leaving the user's original Central disconnected even after approval.
+      // No token leaves the browser in this navigation.
+      globalThis.window.location.assign('http://127.0.0.1:8765/workstation/parear');
     },
     openOfficial(){
       if(!canOpenOfficial())throw Error('Pareamento disponível somente no posto local autorizado.');
