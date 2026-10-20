@@ -88,7 +88,12 @@ try{
   await page.locator('[data-console-view=base]').click();await page.locator('[data-history-mode=advanced]').click();
   await page.getByRole('button',{name:'Query another period',exact:true}).click();await page.getByRole('button',{name:'Open without replacing current',exact:true}).click();
   await page.waitForSelector('[data-period-snapshot] table');assert.match(await page.locator('[data-period-snapshot]').innerText(),/SYNTHETIC-PCBA/);
-  await page.locator('[data-console-view=knowledge]').click();await page.locator('[data-knowledge-q]').fill('SYNTHETIC-PCBA');await page.locator('[data-knowledge-run]').click();assert.match(await page.locator('[data-knowledge-result]').innerText(),/SYNTHETIC-PCBA/);
+  await page.locator('[data-console-view=knowledge]').click();await page.locator('[data-knowledge-q]').fill('SYNTHETIC-PCBA');await page.locator('[data-knowledge-run]').click();
+  // Shared-only viewer must not invent a local knowledge result or silently
+  // query another workstation's SQLite. Local search requires a local source.
+  const knowledge=await page.locator('[data-knowledge-result]').innerText();
+  assert.match(knowledge,/Local search failed|No shared data for this line/);
+  assert.doesNotMatch(knowledge,/Confirmed cause|Root cause confirmed/);
   await page.evaluate(()=>qa.agent(true));await page.waitForFunction(()=>qa.store.agent().status==='connected');
   assert.equal(await page.evaluate(()=>qa.requests.filter(r=>r.method==='POST').length),0);
   await page.locator('[data-console-setup]').click();assert.match(await page.locator('[data-preparation]').innerText(),/Not verified|Não verificado/);
