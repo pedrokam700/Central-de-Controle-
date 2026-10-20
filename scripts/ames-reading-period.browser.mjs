@@ -405,6 +405,7 @@ try{
  assert.equal(await page.locator('[data-console-preparation]').isVisible(),true,'on-demand workstation setup stays accessible');
  assert.equal(await page.locator('[data-pair-official]').count(),1);
  assert.equal(await page.locator('[data-sync-guide]').count(),1,'sync overview integrated in setup');
+ assert.equal(await page.locator('[data-share-line]').count(),3,'all lines have explicit synchronized/cached/unknown status');
  await page.locator('[data-onboarding-guide]').waitFor();
  await page.locator('[data-official-clean-download]').waitFor();
  assert.equal((await page.locator('[data-official-clean-download]').getAttribute('href')).includes('https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.25-factory-20261020/AMES_Central_CLEAN_e60cef8d.zip'),true);
