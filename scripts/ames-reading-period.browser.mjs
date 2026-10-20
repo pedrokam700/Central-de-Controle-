@@ -39,7 +39,7 @@ const store=createAmesStore({now:()=>Date.parse('2026-10-19T15:00:00Z')}),old=${
 store.replaceSyncedSnapshots([${JSON.stringify(today)}]);
 let mutations=0,savedReads=0,savedOpens=0,captureReads=0;
 const savedEntry={job_id:'J123',query_sn:'PCBA-TEST',query_created_at:'2026-10-16T14:00:00Z',query_status:'done',entry_hash:'b'.repeat(64),line_id:null,production_date:null,clock_kind:'query_created_at',local_only:true};
-const client={collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
+const client={canOpenOfficial:()=>true,openOfficial:()=>{},collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
  sourceCaptures:async params=>{
   captureReads++;
   if(params.snapshot_id!==17||params.snapshot_revision!==1||params.content_hash!==local.content_hash)throw Error('wrong capture target');
@@ -303,6 +303,13 @@ try{
  assert.equal(await page.locator('[data-monitor-main] [data-agent-action=previous_day]').isVisible(),true);
  assert.equal(await page.locator('[data-monitor-main] [data-agent-action=today]').isVisible(),true);
  assert.equal(await page.locator('[data-monitor-technical]').evaluate(el=>el.open),false);
+ assert.equal(await page.locator('[data-console-preparation]').isHidden(),true,'a connected paired agent must not leave the setup panel expanded');
+ await page.locator('[data-console-setup]').click();
+ assert.equal(await page.locator('[data-console-preparation]').isVisible(),true,'on-demand workstation setup stays accessible');
+ assert.equal(await page.locator('[data-pair-official]').count(),1);
+ await page.locator('[data-console-view=top3]').click();
+ await page.locator('[data-console-view=monitor]').click();
+ assert.equal(await page.locator('[data-console-preparation]').isHidden(),true,'setup collapses after navigation');
  const beforeJob=await page.evaluate(()=>qa.historyReads());
  await page.evaluate(()=>{qa.store.updateAgent({job:{id:'FACTORY-PREVIOUS-DONE',kind:'run',status:'done'}});qa.view.render();});
  await page.waitForFunction(before=>qa.historyReads()>before,beforeJob);

@@ -129,7 +129,10 @@ export function createPreparationView(root, store, client) {
     const maintenance = workstationMaintenance(agent);
     // Pairing must remain reachable even when the local agent is already ready.
     // Previously the entire preparation panel was hidden once connected.
-    const visible = expanded || pairing || (!connected && mode !== 'viewer');
+    // A verified local agent should not bury the operation dashboard beneath
+    // onboarding every time it rerenders. Pairing remains one click away via
+    // the persistent "Configurar posto" button.
+    const visible = expanded || (!connected && mode !== 'viewer');
     const backup = maintenance.latest_backup;
     const backupSummary = backup
       ? `${esc(backup.created_at || t('data não informada', 'date not reported'))} · ${esc(formatBytes(backup.bytes))}${backup.reason ? ` · ${esc(backup.reason)}` : ''}`
