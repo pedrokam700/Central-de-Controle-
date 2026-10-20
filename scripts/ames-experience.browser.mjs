@@ -100,7 +100,7 @@ try{
   await page.getByText('First installation on this PC',{exact:true}).waitFor();
   const official=page.locator('[data-official-clean-download]');
   await official.waitFor();
-  assert.match(await official.getAttribute('href'),/^https:\/\/github\.com\/pedrokam700\/Central-de-Controle-\/releases\/download\//);
+  assert.match(await official.getAttribute('href'),/^https:\/\/github\.com\/pedrokam700\/Central-de-Controle-\/releases\/(?:download\/ames-v0\.5\.\d+-(?:multipc|factory)-\d{8}\/AMES_Central_CLEAN_[a-f0-9]{8}\.zip|latest)$/);
   assert.equal(await page.evaluate(()=>qa.requests.filter(r=>r.method==='POST').length),0,'setup must never trigger MES');
   const preparationText=await page.locator('[data-preparation]').innerText();
   fs.writeFileSync(path.join(out,'preparation-text.txt'),preparationText);
