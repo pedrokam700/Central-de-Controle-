@@ -16,7 +16,9 @@ test('main PCBA own use and physical component association are independent, audi
  assert.equal(m.components.counts.failed,0);assert.equal(m.components.counts.unknown_outcome,1);
  assert.equal(m.components.rows[0].prior_events.length,1);assert.equal(m.components.rows[0].evidence[0].source_id,'A');
  assert.equal(m.components.rows[0].evidence[0].snapshot_revision,2);
- assert.equal(m.pcbas.failure_rate,null);assert.equal(m.components.failure_rate,null);assert.deepEqual(s,copy);
+ assert.equal(m.pcbas.failure_rate,null);assert.equal(m.components.failure_rate,null);
+ assert.equal(m.pcbas.counts.verified_no_failure,null);assert.equal(m.components.counts.verified_no_failure,null);
+ assert.deepEqual(s,copy);
 });
 test('kit duplicates deduplicate by physical SN and type, never by part number',()=>{
  const s=fixture();s.material_trace.records.push({...s.material_trace.records[0],record_id:'duplicate'},
@@ -47,10 +49,12 @@ test('rates require complete population identities AND all independently evidenc
  {id:'B',reused:true,use_index:2,outcome:'verified_no_failure',outcome_evidence_id:'q2',prior_events:[]}];
  const proof={population_complete:true,evidence_id:'whole-cohort',item_ids:['A','B']};
  assert.equal(summarizeReusePopulation(rows).failure_rate,null);
+ assert.equal(summarizeReusePopulation(rows).counts.verified_no_failure,null);
  assert.equal(summarizeReusePopulation(rows,{...proof,item_ids:['A']}).failure_rate,null);
  assert.equal(summarizeReusePopulation(rows,{...proof,item_ids:['A','A']}).failure_rate,null);
  assert.equal(summarizeReusePopulation(rows,proof).failure_rate,.5);
  assert.equal(summarizeReusePopulation(rows,proof).counts.verified_no_failure,1);
+ assert.equal(summarizeReusePopulation([{...rows[0],outcome:'failed'}, {...rows[1],outcome:'failed'}],proof).counts.verified_no_failure,0,'zero is valid only for a proven full cohort');
  assert.equal(summarizeReusePopulation([{...rows[0],outcome_evidence_id:null},rows[1]],proof).failure_rate,null);
  assert.equal(summarizeReusePopulation([], {...proof,item_ids:[]}).failure_rate,null);
 });

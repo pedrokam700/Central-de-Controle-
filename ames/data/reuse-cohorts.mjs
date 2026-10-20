@@ -62,7 +62,7 @@ export function summarizeReusePopulation(rows,proof=null){
   same_failure:reused.filter(r=>r.same_failure),same_family:reused.filter(r=>r.same_family),
   verified_no_failure:proven?reused.filter(r=>r.outcome==='verified_no_failure'):[],
   unknown_outcome:reused.filter(r=>r.outcome!=='failed'&&!(proven&&r.outcome==='verified_no_failure'))};
- return {metrics,counts:Object.fromEntries(Object.entries(metrics).map(([k,v])=>[k,v.length])),
+ return {metrics,counts:Object.fromEntries(Object.entries(metrics).map(([k,v])=>[k,k==='verified_no_failure'&&!proven?null:v.length])),
   cohort_size_proven:proven?ids.length:null,population_coverage:proven?'proven':'unproven',
   failure_rate:proven?metrics.failed.length/ids.length:null};
 }

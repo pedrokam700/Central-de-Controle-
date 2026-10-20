@@ -95,6 +95,10 @@ try{
  assert.equal(await cohorts.locator('[data-cohort-kind=pcbas][data-cohort-metric=second_use] strong').innerText(),'1');
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=third_plus_use] strong').innerText(),'1');
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=failed] strong').innerText(),'0');
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure] strong').innerText(),'—');
+ await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure]').click();
+ assert.match(await cohorts.locator('[data-cohort-detail]').innerText(),/Indisponível/);
+ assert.doesNotMatch(await cohorts.locator('[data-cohort-detail]').innerText(),/0 itens observados/);
  await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=associated]').click();
  assert.equal(await cohorts.locator('[data-cohort-row]').count(),1);
  assert.equal(await cohorts.locator('img').count(),0);

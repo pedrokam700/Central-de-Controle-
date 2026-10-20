@@ -145,7 +145,7 @@ try{
   assert.equal(sixteen.cohorts.pcbas.counts.reused,1);
   assert.equal(sixteen.cohorts.components.counts.reused,1);
   assert.equal(sixteen.cohorts.components.failure_rate,null);
-  assert.equal(sixteen.cohorts.components.counts.verified_no_failure,0);
+  assert.equal(sixteen.cohorts.components.counts.verified_no_failure,null,'unknown full population is not zero');
   assert.equal(result.points.find(p=>p.date==='2026-10-18').status,'not_collected');
   assert.equal(result.points.find(p=>p.date==='2026-10-19').quantity,150);
   assert.equal(store.read(LINE).snapshot.snapshot_id,'11','historical reads cannot replace current head');
