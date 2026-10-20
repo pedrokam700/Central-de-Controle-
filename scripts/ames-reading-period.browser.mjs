@@ -425,7 +425,7 @@ try{
  assert.equal(await page.locator('[data-installation-detection=pairing_required] a[href="http://127.0.0.1:8765/Central-de-Controle-/"]').count(),1,'local recovery link exists before GitHub metadata finishes');
  await page.evaluate(()=>{qa.store.updateAgent({status:'disconnected',connection_error:{code:'agent-network',message:'Browser network restriction'}});qa.view.render();});
  await page.locator('[data-installation-detection=not_verified]').waitFor();
- assert.equal(await page.locator('[data-setup-existing]').count(),1);
+ assert.equal(await page.locator('[data-installation-detection=not_verified] a[href^="http://127.0.0.1:8765/"]').count(),1,'unverified install always retains the local fallback');
  await page.evaluate(()=>{qa.store.updateAgent({status:'connected',connection_error:null});qa.view.render();});
  await page.locator('[data-installation-detection=verified]').waitFor();
  await page.locator('[data-onboarding-guide] [data-integration-mode=viewer]').click();
