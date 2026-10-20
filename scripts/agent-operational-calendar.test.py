@@ -245,6 +245,7 @@ if __name__ == "__main__":
         test_legacy_day_start_is_migrated_without_shift_reinterpretation,
         test_production_windows_keep_0700_boundary,
         test_previous_production_day_skips_weekend_and_supports_exceptions,
+        test_exact_legacy_schedule_is_corrected_without_changing_custom_shifts,
         test_calendar_exceptions_fail_closed,
         test_shift_classification_crosses_midnight,
         test_invalid_calendar_fails_closed,
