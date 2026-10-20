@@ -75,6 +75,23 @@ class OriginTests(unittest.TestCase):
         with patch.object(tela_3022,'correlacionar_falha_3022',side_effect=fake_correlation):
             production_shift.correlate_sn(r,BASE/"ames"/"factory-engine")
         self.assertEqual(r['local_snapshot']['process_contexts'][0]['defect_time_source'],'3028')
+    def test_production_day_starts_0700_even_when_first_shift_begins_0730(self):
+        # Production day and shift are intentionally different dimensions.
+        shift=production_shift.classify
+        self.assertEqual(shift('2026-10-21T06:59:00-03:00')['production_operational_date'],'2026-10-20')
+        self.assertEqual(shift('2026-10-21T07:00:00-03:00')['production_operational_date'],'2026-10-21')
+        self.assertEqual(shift('2026-10-21T07:15:00-03:00')['production_shift'],'2nd Shift')
+        self.assertEqual(shift('2026-10-21T07:30:00-03:00')['production_shift'],'1st Shift')
+        self.assertEqual(shift('2026-10-21T17:30:00-03:00')['production_shift'],'2nd Shift')
+    def test_midpoint_reference_shift_from_observed_3022_only(self):
+        context={'source':'3022','reference_station_code':'A5150',
+            'reference_confidence':'OPERATIONAL_ESTIMATE_NOT_CAUSE',
+            'reference_event_time':'2026-10-20T11:30:00+00:00',
+            'defect_time_utc':'2026-10-20T14:59:16+00:00'}
+        self.assertEqual(production_shift.from_context(context)['production_shift'],'1st Shift')
+        self.assertEqual(production_shift.from_context(context)['production_operational_date'],'2026-10-20')
+        context['reference_event_time']='2026-10-20T15:30:00+00:00'
+        self.assertIsNone(production_shift.from_context(context)['production_shift'])
     def test_safeguard_shift_calendar(self):
         self.assertEqual(production_shift.classify('2026-10-20T23:10:00-03:00')['production_shift'],'2nd Shift')
         self.assertEqual(production_shift.classify('2026-10-21T03:10:00-03:00')['production_operational_date'],'2026-10-20')
