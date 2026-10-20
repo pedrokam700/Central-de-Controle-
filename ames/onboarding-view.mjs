@@ -41,9 +41,13 @@ export function createOnboardingView(root,{
     if(!release)return status+'<p role="status">'+esc(error||t('Validando pacote oficial do GitHub…','Checking official GitHub package…'))+'</p>'+
       (error?'<button type="button" class="button secondary" data-release-retry>'+t('Tentar novamente','Retry')+'</button>':'');
     const safe=release.package_available;
+    const confirmedLatest=safe&&release.candidate_status==='github_latest_release_verified';
     const download=safe
-      ?'<a class="button secondary" data-official-clean-download href="'+esc(release.download_url)+'" target="_blank" rel="noopener noreferrer">'+t('Baixar CLEAN oficial','Download official CLEAN')+'</a>'+
-       '<small>GitHub Release · '+esc(release.version)+' · SHA '+esc(release.validated_sha?.slice(0,8)||'—')+' · SHA-256 <code>'+esc(release.sha256)+'</code></small>'
+      ?'<a class="button secondary" data-official-clean-download href="'+esc(confirmedLatest?release.download_url:'https://github.com/pedrokam700/Central-de-Controle-/releases/latest')+'" target="_blank" rel="noopener noreferrer">'+
+        (confirmedLatest?t('Baixar CLEAN oficial','Download official CLEAN'):t('Abrir última release oficial no GitHub','Open latest official GitHub release'))+'</a>'+
+        (confirmedLatest
+          ?'<small>GitHub Release · '+esc(release.version)+' · SHA '+esc(release.validated_sha?.slice(0,8)||'—')+' · SHA-256 <code>'+esc(release.sha256)+'</code></small>'
+          :'<small>'+t('Não foi possível confirmar a última release automaticamente. O link abre a página permanente da versão mais recente no GitHub, sem apresentar um ZIP antigo como atual.','Latest release could not be verified automatically. This permanent GitHub link opens the latest release instead of presenting an older ZIP as current.')+'</small>')
       :'<p role="status" class="notice warn">'+t('O pacote ainda não foi publicado com SHA e hash confirmados. O download fica bloqueado.','The package has no verified SHA and hash yet. Download is blocked.')+'</p>';
     return '<div class="ames-setup-grid">'+
       '<section class="ames-setup-step" data-setup-existing><div class="ames-step-number">01</div><h3>'+t('Já existe um agente neste PC?','Already installed on this PC?')+'</h3>'+
