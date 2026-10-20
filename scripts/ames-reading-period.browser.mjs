@@ -149,10 +149,9 @@ try{
  // D: stored trends use history transport only, and retain gaps/revision evidence.
  await page.locator('[data-console-view=top3]').click();
  const trends=page.locator('[data-console-pane=top3] [data-history-trends]');
- assert.equal(await trends.locator('[data-history-day]').count(),0,'navigation alone does not read history payloads');
- await trends.locator('form button[type=submit]').click();
  await trends.locator('[data-history-day]').first().waitFor();
- assert.equal(await trends.locator('[data-history-day]').count(),7);
+ assert.equal(await trends.locator('[data-history-day]').count(),30,'stored trends automatically load 30 days in Top 3 without running MES');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'automatic archived reads must not start collection');
  assert.equal(await trends.locator('[data-history-day-open]').count(),1);
  assert.match(await trends.locator('[data-week-scope-warning]').innerText(),/CPH ou origem/,'mixed stored 3028 CPHs require a visible weekly comparability warning');
  assert.match(await trends.locator('[data-history-day="2026-10-15"]').innerText(),/Não coletado/,'custom window is not daily production');
