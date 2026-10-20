@@ -83,15 +83,17 @@ def build(destination, development=False):
   if doc.is_file():payload['evidence/'+doc.name]=doc.read_bytes()
  analytics_doc=ROOT/'docs/ames/falhas-do-dia-analytics.md'
  if analytics_doc.exists():payload['evidence/'+analytics_doc.name]=analytics_doc.read_bytes()
- payload['LEIA_PRIMEIRO.txt']=(f'''CENTRAL + A-MES — CANDIDATO CLEAN INTEGRADO
+ payload['LEIA_PRIMEIRO.txt']=(f'''CENTRAL + A-MES — PACOTE CLEAN INTEGRADO (GITHUB / CANDIDATO DE TESTE)
 HEAD: {sha}
 Gate fisico pendente. Nao e uma promocao de producao.
 
 INSTALACAO / TESTE:
-1. NAO altere, mova ou apague a CLEAN V3 funcional. Ela continua sendo o rollback fisico.
+1. PC EXISTENTE: NAO altere nem apague a pasta/SQLite funcional. Ela continua sendo o rollback.
+   PC NOVO: nenhuma base anterior precisa ser copiada.
 2. Extraia ESTE ZIP em uma pasta NOVA e independente.
 3. Execute apenas 00_INICIAR_AQUI.bat.
-4. O primeiro uso cria .venv, config.json e SQLite somente dentro desta nova pasta.
+4. Primeiro uso cria .venv, config.json e SQLite somente nesta pasta.
+   Se Python 3.12, Google Chrome ou dependencias nao existirem, o primeiro uso requer internet.
 5. Central e Console MES usam o MESMO frontend local: http://127.0.0.1:8765/Central-de-Controle-/
 6. Console MES e uma view interna da Central: entrar/sair nao abre outra aplicacao nem exige um segundo login.
 7. O primeiro login da Central pode exigir internet. Depois, Auth/Firestore usam persistencia/cache do navegador quando disponiveis.
@@ -110,7 +112,11 @@ ESTE PACOTE NAO E UM UPDATER:
 
 VALIDACAO FISICA AINDA NECESSARIA:
 - Navegacao Central -> Console MES -> Central sem reload, troca de origem ou novo login.
-- Shift 2114 1st 07:30-17:30 / 2nd 17:30-07:30 sem confirmar manualmente.
+- PC A -> Firestore -> PC B: testar snapshots e revisoes identicos, cache/online, conflito de origem e fila.
+- PC com agente: pareamento autenticado HTTPS via launcher local; sem reinstalar SQLite.
+- PC novo so leitor: nao instalar agente. Login Central e leitura da equipe via Firestore.
+- Turnos reais 1st 07:30-17:30 / 2nd 17:30-03:30; 03:30-07:30 fora de turno.
+- Janela da 3028: 07:00-07:00 (nao e um turno).
 - 3012 real: Defect/Repair User/Time/Code/Comment e consulta historica por SN.
 - Consulta SN: falha atual/antigas/material/PCBA anterior e 3022.
 - 3028 hoje/anterior, TAN10101/2/3 separadas, reuso e processo com retrabalho.
