@@ -128,7 +128,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     // date even without reload. A stale Today selection must not pin yesterday.
     const selected=store.readingPeriod?.();
     if(selected?.mode==='today'){
-      const fresh=computeReadingPeriod('today');
+      const fresh=computeReadingPeriod('today',{now:store.currentTime?.()||new Date()});
       if(selected.start!==fresh.start||selected.end!==fresh.end){
         void periodController.select('today').catch(error=>{
           store.updateAgent({period_read:{status:'partial',errors:[{line_id:'—',error:error.message}]}});
