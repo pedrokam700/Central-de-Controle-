@@ -83,6 +83,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   }
   const periodController=createReadingPeriodController(store,history,{changed(){if(!disposed){renderActive();onChange();}}});
   let renderedPeriod=store.periodGeneration?.();
+  let renderedSession=store.sessionGeneration?.();
   let lastCompletedJobRead='';
   // Completion of a MES job makes the stored index worth re-reading, but
   // must not alter today's head or launch another MES collection.
@@ -103,7 +104,10 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   function ensure(id){
     if(views.has(id))return views.get(id);const pane=root.querySelector(`[data-console-pane="${id}"]`);let view;
     const historical=store.readingPeriod?.()?.mode!=='today';
-    if(historical&&['sn','base','knowledge'].includes(id))view=createStoredPeriodRecords(pane,store,{kind:id,client});
+    // SN is an independent, PCBA-centered investigation (MES or local SQLite).
+    // Selecting an operational-day read scope must never replace that workflow
+    // with an incomplete daily-snapshot search.
+    if(historical&&['base','knowledge'].includes(id))view=createStoredPeriodRecords(pane,store,{kind:id,client});
     else if(id==='monitor'){pane.innerHTML='<section data-monitor-main></section><section data-monitor-lines></section><section data-monitor-tools></section><details class="mes-context-panel" data-monitor-technical><summary>Diagnósticos e informações técnicas</summary><p data-history-publication-state role="status"></p><section data-monitor-health></section><section data-monitor-runtime></section><section data-monitor-network></section><section data-history-shortcut><button type="button" class="button secondary" data-open-production-history>Abrir histórico detalhado</button><p data-local-console-access><a href="${LOCAL_CENTRAL_HREF}" target="_blank" rel="noopener noreferrer">Abrir a Central local deste computador</a></p></section></details>';pane.querySelector('[data-open-production-history]')?.addEventListener('click',()=>switchView('base'));const monitorRoot=pane.querySelector('[data-monitor-main]'),primary=createAutomationView(monitorRoot,store,client),lineBoard=createLineOverview(pane.querySelector('[data-monitor-lines]'),store,client,periodController),health=createDataHealthView(pane.querySelector('[data-monitor-health]'),store,{onEvidence:value=>evidenceDrawer?.open(value)}),runtime=createMonitorRuntimeView(pane.querySelector('[data-monitor-runtime]'),store),network=createNetworkHealthView(pane.querySelector('[data-monitor-network]'),store),tools=createAdvancedView(pane.querySelector('[data-monitor-tools]'),store,client);view={render(){const output=pane.querySelector('[data-history-publication-state]'),agent=store.agent(),sync=agent.sync||{};const localHelp=pane.querySelector('[data-local-console-access]');if(localHelp)localHelp.hidden=agent.status==='connected';if(output)output.textContent=agent.status==='connected'&&sync.status!=='synchronized'&&sync.status!=='shared_history_legacy_conflict'?'Coleta local disponível; envio para a equipe ainda não confirmado. Confira a sincronização abaixo.':sync.status==='shared_history_legacy_conflict'?'Há revisão imutável, mas o cabeçalho legado continua em conflito; confira a leitura no outro posto.':sync.status==='synchronized'?'Última publicação confirmada pela fila; confira a leitura no outro posto.':'O histórico pode estar somente no SQLite deste computador ou na base compartilhada.';primary.render();applyMonitorProcessCapability(monitorRoot,store);lineBoard.render();health.render();runtime.render();network.render();tools.render();},clear(){primary.clear?.();lineBoard.clear?.();health.clear?.();runtime.clear?.();network.clear?.();tools.clear?.();pane.replaceChildren();}};}
     else if(id==='top3'){pane.innerHTML='<section data-top3-main></section><section data-top3-shift></section><section data-top3-analytics data-no-i18n></section><section data-top3-trend></section>';const primary=createDailyFailureSummary(pane.querySelector('[data-top3-main]'),store),shiftSummary=createShiftSummaryView(pane.querySelector('[data-top3-shift]'),store,{onEvidence:value=>evidenceDrawer?.open(value)}),analytics=createDailyFailureAnalytics(pane.querySelector('[data-top3-analytics]'),store),trend=createTrendAddon(pane.querySelector('[data-top3-trend]'),store,client),base={render(){primary.render();shiftSummary.render();analytics.render();trend.render();},clear(){primary.clear?.();shiftSummary.clear?.();analytics.clear?.();trend.clear?.();pane.replaceChildren();}};view=withAgentRefresh(withHistoricalTrends(base,pane,store,history),pane,store,client,{label:'Atualizar'});}
     else if(id==='failures'){pane.innerHTML='<section data-failures-main></section><section data-failures-process></section>';const failureRoot=pane.querySelector('[data-failures-main]'),primary=withFailureOccurrenceEvidence(createFailuresParityView(failureRoot,store,client),failureRoot,store),process=createFailureProcessAddon(pane.querySelector('[data-failures-process]'),store,failureRoot);view={render(){primary.render();process.render();},clear(){primary.clear?.();process.clear?.();pane.replaceChildren();}};}
@@ -116,11 +120,25 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   }
   function paintHeader(){if(!mounted)return;const a=store.agent(),m=meta(),title=root.querySelector('[data-console-title]'),sub=root.querySelector('[data-console-sub]'),status=root.querySelector('[data-console-status]'),foot=root.querySelector('[data-console-build-foot]'),dot=root.querySelector('[data-console-dot]'),top3Nav=root.querySelector('[data-console-nav-label="top3"]'),en=document.documentElement.lang.startsWith('en');if(top3Nav)top3Nav.textContent=en?'Daily failures & FPY':'Falhas do dia & FPY';for(const group of VIEW_GROUPS){const el=root.querySelector(`[data-console-group-label="${group.id}"]`);if(el)el.textContent=en?group.en:group.pt;}if(title)title.textContent=en&&active==='top3'?'Daily failures & FPY':m[3];if(sub)sub.textContent=en&&active==='top3'?'Top 3 summary, full ranking, occurrences, shift and reuse context in one scope.':m[4];const connected=a.status==='connected';if(status)status.textContent=connected?`Agente local conectado${a.agent_build?' · '+a.agent_build:''}`:'MES local não disponível neste computador';dot?.classList.toggle('ok',connected);const shared=root.querySelector('[data-console-sync-status]'),sync=a.sync||{};if(shared)shared.textContent=sync.read_status==='error'?(en?'Shared data: error':'Dados da equipe: erro'):sync.read_status==='cached'?(en?'Shared data: cache':'Dados da equipe: cache'):sync.read_status==='ready'&&sync.remote_line_count?(en?'Team data synchronized':'Dados da equipe sincronizados'):(en?'Team data not confirmed':'Dados da equipe não confirmados');if(foot)foot.textContent=`${a.agent_build||a.capabilities?.agent_build||'MES local'} · 9 views`;}
   function switchView(id){if(!VIEWS.some(([key])=>key===id))return;active=id;setMenu(false);if(id!=='monitor')preparation?.collapse();for(const button of root.querySelectorAll('[data-console-view]'))button.classList.toggle('active',button.dataset.consoleView===id);for(const pane of root.querySelectorAll('[data-console-pane]'))pane.hidden=pane.dataset.consolePane!==id;renderActive();}
-  function renderActive(){if(!mounted)mount();if(renderedPeriod!==store.periodGeneration?.()){for(const view of views.values())view.clear?.();views.clear();renderedPeriod=store.periodGeneration?.();}ensure(active)?.render();
+  function renderActive(){if(!mounted)mount();if(renderedPeriod!==store.periodGeneration?.()||renderedSession!==store.sessionGeneration?.()){
+      // Preserve the independent SN query/input and its saved-investigation panel
+      // across period changes, but NEVER across a logout/account/session reset.
+      const sameSession=renderedSession===store.sessionGeneration?.();
+      const sn=sameSession?views.get('sn'):null;
+      for(const [id,view] of views)if(id!=='sn'||!sameSession)view.clear?.();
+      views.clear();
+      if(sn)views.set('sn',sn);
+      renderedPeriod=store.periodGeneration?.();
+      renderedSession=store.sessionGeneration?.();
+    }ensure(active)?.render();
     const pane=root.querySelector(`[data-console-pane="${active}"]`),period=store.readingPeriod?.();
     let note=pane?.querySelector('[data-shared-period]');
     if(pane&&!note){note=document.createElement('p');note.dataset.sharedPeriod='';note.setAttribute('data-no-i18n','');note.className='mes-context';pane.prepend(note);}
-    if(note){const en=document.documentElement.lang.startsWith('en');note.textContent=(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+(period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):'');}
+    if(note){const en=document.documentElement.lang.startsWith('en');
+      note.textContent=active==='sn'
+        ?(en?'SN investigation is independent of the monitoring period.':'Consulta por SN independente do período de monitoramento.')
+        :(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+(period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):'');
+    }
     if(period?.mode!=='today'){
       // Live execution controls and last-job results describe another scope. Keep
       // historical evidence visible; mutation awaits the exact-snapshot contract.
