@@ -300,7 +300,11 @@ class HardenedHandler(entry.Handler):
             if not workstation_pairing.confirm(
                 self.headers, self.client_address[0], self._active_port(), submitted
             ):
-                self._pair_response(403)
+                # Do not disclose whether it was a nonce, origin or Host failure;
+                # show a same-origin retry page, never a capability or credentials.
+                self._pair_response(403, workstation_pairing.retry_page(), {
+                    "Content-Type": "text/html; charset=utf-8"
+                })
                 return
             # Fixed official HTTPS destination; never available as JSON.
             self._pair_response(303, headers={
