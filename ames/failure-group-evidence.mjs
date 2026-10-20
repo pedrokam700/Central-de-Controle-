@@ -22,6 +22,18 @@ export function formatFailureLastOccurrence(value){const s=formatFactoryDateTime
 export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailureName){
  const reuseBoards=new Set(keysOf(snapshot,['pcba_second_use','pcba_3plus_use','pcba_reused_with_prior_failure']).map(pcba).filter(Boolean));
  const itemBoards=new Set(reuseLinks(snapshot||{}).map(x=>nonempty(x.pcba)).filter(Boolean));
+ // The newer canonical insight may expose a numeric or a human-readable ordinal
+ // instead of the old categorical drilldowns. Count these only when they
+ // explicitly prove 2nd+ use; do not infer use from past defects alone.
+ const reuseOrdinal=(row,keys)=>{
+   const raw=first(row,keys),match=/^(\d+)\s*(?:[º°.]?\s*(?:uso|use))?$/i.exec(raw);
+   return match?Number(match[1]):null;
+ };
+ for(const row of named(snapshot,'pcba_analysis'))
+   if(reuseOrdinal(row,['pcba_use_index','use_index','Uso da PCBA na falha','Uso PCBA'])>=2&&pcba(row))reuseBoards.add(pcba(row));
+ for(const row of named(snapshot,'material_analysis'))
+   if(reuseOrdinal(row,['material_use_index','use_index','known_use_count','Uso material na falha','Usos conhecidos material'])>=2
+      &&first(row,['material_sn','item_sn','Material SN'])&&pcba(row))itemBoards.add(pcba(row));
  // Association rows without a concrete defect code/time are not sufficient.
  const relatedIds=new Set(keysOf(snapshot,[
    'pcba_same_failure','pcba_same_family','pcba_second_use_same_failure','pcba_second_use_same_family',
