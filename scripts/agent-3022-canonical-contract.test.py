@@ -17,7 +17,7 @@ sys.path.insert(0,str(ENGINE))
 if __name__=="__main__":
     loader=unittest.TestLoader()
     suite=unittest.TestSuite()
-    for basename in ("test_v017_3022_focus.py","test_v018_3022_origin_rules.py"):
+    for basename in ("test_v017_3022_focus.py","test_v018_3022_origin_rules.py","test_v019_3022_midpoint_reference.py"):
         loaded=loader.discover(start_dir=str(ENGINE/"tests"),pattern=basename)
         if loaded.countTestCases()==0:
             raise AssertionError("Historical 3022 suite missing: "+basename)
