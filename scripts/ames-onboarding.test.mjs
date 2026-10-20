@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { integrationMode, readRelease,installationDetection,sharingState } from '../ames/data/onboarding.mjs';
+import {verifiedLatestRelease,discoverOfficialRelease} from '../ames/release-discovery.mjs';
 const release=JSON.parse(fs.readFileSync(new URL('../ames/releases/latest/release.json',import.meta.url),'utf8'));
 
 test('approved public GitHub CLEAN is SHA-bound and safe for new Windows computers',()=>{
@@ -68,4 +69,44 @@ test('first-login screen exposes the same public approved CLEAN without requirin
  assert(html.includes('href="'+approved.download_url+'"'));
  assert.match(html,/n[aã]o precisa instalar o agente A-MES/);
  assert.match(html,/00_INICIAR_AQUI\.bat/);
+});
+
+const latest={draft:false,prerelease:false,tag_name:'ames-v0.5.26-multipc-20261020',
+ target_commitish:'c'.repeat(40),
+ assets:[{name:'AMES_Central_CLEAN_cccccccc.zip',size:1200000,
+ state:'uploaded',digest:'sha256:'+'d'.repeat(64),
+ browser_download_url:'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.26-multipc-20261020/AMES_Central_CLEAN_cccccccc.zip'}]};
+test('only GitHub latest with exact asset, digest, tag and commit can become the download',()=>{
+ const m=verifiedLatestRelease(latest,release);
+ assert.equal(m.version,'0.5.26');
+ assert.equal(m.validated_sha,'c'.repeat(40));
+ assert.equal(m.sha256,'d'.repeat(64));
+ assert.match(m.download_url,/releases\/download\/ames-v0\.5\.26-multipc/);
+ for(const bad of [
+   {...latest,draft:true},
+   {...latest,prerelease:true},
+   {...latest,target_commitish:'SHORT'},
+   {...latest,tag_name:'ames-v0.6.00-multipc-20261020'},
+   {...latest,assets:[{...latest.assets[0],digest:null}]},
+   {...latest,assets:[{...latest.assets[0],browser_download_url:'https://evil.example/z.zip'}]},
+   {...latest,assets:[{...latest.assets[0],size:7}]}
+ ]){
+   const old=verifiedLatestRelease(bad,release);
+   assert.equal(old.download_url,release.download_url);
+ }
+});
+test('release discovery is read-only and falls back offline to exact factory-approved CLEAN',async()=>{
+ const fetcher=async(url,options)=>{
+   assert.equal(url,'https://api.github.com/repos/pedrokam700/Central-de-Controle-/releases/latest');
+   assert.equal(options.credentials,'omit');
+   return {ok:true,json:async()=>latest};
+ };
+ const m=await discoverOfficialRelease(undefined,fetcher,async()=>release);
+ assert.equal(m.version,'0.5.26');
+ const fallback=await discoverOfficialRelease(undefined,async()=>{throw Error('offline');},async()=>release);
+ assert.equal(fallback.sha256,release.sha256);
+});
+test('auto agent probe with known response does not declare unknown HTTP server installed',()=>{
+ assert.equal(installationDetection({status:'disconnected',workstation_probe:{state:'detected'}},false),'pairing_required');
+ assert.equal(installationDetection({status:'disconnected',workstation_probe:{state:'unknown'}},false),'not_verified');
 });
