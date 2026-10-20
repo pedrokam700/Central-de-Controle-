@@ -213,5 +213,6 @@ Não coletado.|Not collected.
 Esta linha não possui snapshot carregado; ausência de dados não é zero.|No snapshot is loaded for this line; missing data is not zero.
 snapshot não carregado|snapshot not loaded
 coverage indisponível|coverage unavailable
+cobertura indisponível|coverage unavailable
 Consultas anteriores, armazenadas no SQLite. O horário da busca não determina o dia de produção e não altera Hoje.|Previous queries stored in SQLite. Query time does not establish the production day or change Today.
 `.trim().split('\n').map(line=>{const i=line.indexOf('|');return [line.slice(0,i),line.slice(i+1)];}));
