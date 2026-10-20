@@ -256,6 +256,10 @@ class HardenedHandler(entry.Handler):
                     "ok": True,
                     "ready": True,
                     "agent_build": "CANONICAL-R11-BATCH",
+                    # A minimal public version indicator (no token, SQLite or MES).
+                    # The web UI can distinguish an older local engine whose
+                    # form handler still rejects valid Edge submissions.
+                    "workstation_pairing_flow": 2,
                     "agent_version": entry.a.AGENT_VERSION,
                     "candidate_version": entry.a.CANDIDATE_VERSION,
                     "pid": os.getpid(),
