@@ -108,6 +108,7 @@ test('release discovery is read-only and falls back offline to exact factory-app
 });
 test('auto agent probe with known response does not declare unknown HTTP server installed',()=>{
  assert.equal(installationDetection({status:'disconnected',workstation_probe:{state:'detected'}},false),'pairing_required');
+ assert.equal(installationDetection({status:'disconnected',workstation_probe:{state:'outdated'}},false),'agent_outdated');
  assert.equal(installationDetection({status:'disconnected',workstation_probe:{state:'unknown'}},false),'not_verified');
 });
 
