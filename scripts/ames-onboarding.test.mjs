@@ -60,3 +60,12 @@ test('cross-PC UX differentiates local sent queue, cache, server confirmation an
  assert.equal(sharingState({...base,sync:{...base.sync,status:'pending',pending:2}}).publishing,'pending');
  assert.equal(sharingState({}).publishing,'not_confirmed');
 });
+
+test('first-login screen exposes the same public approved CLEAN without requiring MES access',()=>{
+ const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const approved=readRelease(release);
+ assert.match(html,/Primeiro acesso neste computador\?/);
+ assert(html.includes('href="'+approved.download_url+'"'));
+ assert.match(html,/n[aã]o precisa instalar o agente A-MES/);
+ assert.match(html,/00_INICIAR_AQUI\.bat/);
+});
