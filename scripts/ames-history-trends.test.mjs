@@ -51,3 +51,18 @@ test('missing, pending and cross-line index rows cannot enter the daily series',
  const p=planHistoryDays([{...e,snapshot_revision:null},{...e,line_id:'TAN10102'},{...e,period_start:'2026-10-19T07:30-03:00'}],options);
  assert(p.every(d=>d.status==='not_collected'));
 });
+
+test('historic comparisons reject different, mixed or missing CPH without hiding observed weekly totals',async()=>{
+ const read=await createHistoryTrendReader(source([fixture('2026-10-16'),fixture('2026-10-19')])).read(options);
+ const a=read.points.at(-1),b=read.points.find(p=>p.date==='2026-10-16');
+ const altered=(products)=>({...b,snapshot:{...b.snapshot,occurrences:products.map((product_key,i)=>({...b.snapshot.occurrences[0],product_key,occurrence_id:'O'+i}))}});
+ assert.equal(compareHistoryDays(a,b).comparable,true);
+ assert.equal(compareHistoryDays(a,altered(['CPH9999'])).comparable,false);
+ assert.equal(compareHistoryDays(a,altered([])).comparable,false);
+ assert.equal(compareHistoryDays(a,altered(['CPH2859','CPH9999'])).comparable,false);
+ const mixed=historyWeekSummary(read.points.map(p=>p.date==='2026-10-16'?altered(['CPH2859','CPH9999']):p),options.endDate);
+ assert.equal(mixed.previous.scope_mixed,true);
+ assert.equal(mixed.previous.observed_failures,2,'observed evidence is retained, not converted to zero');
+ const other=historyWeekSummary(read.points.map(p=>p.date==='2026-10-16'?altered(['CPH9999']):p),options.endDate);
+ assert.notEqual(other.current.scope_key,other.previous.scope_key);
+});

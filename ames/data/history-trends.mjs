@@ -4,6 +4,12 @@ import {buildReuseCohorts} from './reuse-cohorts.mjs';
 const DAY=86400000;
 export const shiftDay=(day,n)=>new Date(Date.parse(day+'T12:00:00Z')+n*DAY).toISOString().slice(0,10);
 const dayOf=e=>factoryWallMinute(e.period_start)?.slice(0,10);
+// A single CPH observed among defects is the minimum evidence for
+// comparable historical slices. Mixed or missing CPH must fail closed.
+const observedCph=point=>{
+ const keys=[...new Set((point?.snapshot?.occurrences||[]).map(r=>String(r.product_key||'').trim()).filter(Boolean))];
+ return keys.length===1?keys[0]:null;
+};
 const identity=e=>JSON.stringify([e.line_id,e.source_id,String(e.snapshot_id),e.snapshot_revision,e.content_hash||e.hash]);
 const dailyModes=new Set(['today','live','monitor_today','previous_day','historical_refresh']);
 function dailyWindow(entry){
@@ -70,7 +76,8 @@ export function createHistoryTrendReader(history){
 }
 export function compareHistoryDays(a,b){
  const comparable=Boolean(a?.snapshot&&b?.snapshot&&a.entry.source_id===b.entry.source_id&&a.entry.line_id===b.entry.line_id&&
-  a.status===b.status&&factoryWallMinute(a.entry.period_end)?.slice(10)===factoryWallMinute(b.entry.period_end)?.slice(10));
+  a.status===b.status&&observedCph(a)!==null&&observedCph(a)===observedCph(b)&&
+  factoryWallMinute(a.entry.period_end)?.slice(10)===factoryWallMinute(b.entry.period_end)?.slice(10));
  return {comparable,fpy_delta:comparable&&a.fpy!==null&&b.fpy!==null?a.fpy-b.fpy:null,
   observed_failure_delta:comparable?a.observed_failures-b.observed_failures:null};
 }
@@ -78,7 +85,10 @@ export function historyWeekSummary(points,endDate){
  const monday=shiftDay(endDate,-((new Date(endDate+'T12:00Z').getUTCDay()+6)%7));
  const summarize=(start,end)=>{
   const days=points.filter(p=>p.date>=start&&p.date<=end),loaded=days.filter(p=>p.snapshot);
+  const scopes=[...new Set(loaded.map(p=>JSON.stringify([p.entry.source_id,p.entry.line_id,observedCph(p)])))];
+  const scopeKnown=loaded.length>0&&scopes.length===1&&observedCph(loaded[0])!==null;
   return {start,end,observed_days:loaded.length,expected_days:Math.round((Date.parse(end)-Date.parse(start))/DAY)+1,
+   scope_key:scopeKnown?scopes[0]:null,scope_mixed:loaded.length>0&&!scopeKnown,
    observed_failures:loaded.length?loaded.reduce((n,p)=>n+p.observed_failures,0):null,
    quantity:loaded.length&&loaded.every(p=>p.quantity!==null)?loaded.reduce((n,p)=>n+p.quantity,0):null,
    complete:loaded.length===7&&loaded.every(p=>p.status==='complete'),fpy:null};
