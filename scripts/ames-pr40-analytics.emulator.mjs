@@ -60,6 +60,9 @@ function day({date,id,revision=1,mode='previous_day',quantity=100}){
   for(const rows of Object.values(p.datasets))for(const row of rows){
     row.snapshot_id=p.snapshot_id;row.snapshot_revision=revision;
   }
+  // The actual defect event belongs to this historical day, not the source
+  // fixture's original 09 October event. Association MUST match its time.
+  p.datasets.defects[0].defect_time=p.collected_at;
   // Explicit reuse for the existing C model; no fabricated no-failure outcome.
   p.datasets.defects[0]._pcba_use_index=2;
   p.datasets.material_reuse[0].item_type='LCM';
