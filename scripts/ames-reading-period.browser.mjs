@@ -406,6 +406,21 @@ try{
  assert.equal(await page.locator('[data-pair-official]').count(),1);
  assert.equal(await page.locator('[data-sync-guide]').count(),1,'sync overview integrated in setup');
  assert.equal(await page.locator('[data-share-line]').count(),3,'all lines have explicit synchronized/cached/unknown status');
+ // A factory can have several publishers for one day. The UI must report the
+ // conflict on each affected line, never quietly claim that no data exists.
+ await page.evaluate(()=>{
+   const old=qa.store.agent().sync||{};
+   qa.store.updateAgent({sync:{...old,read_status:'origin_conflict',origin_conflict_lines:['TAN10102','TAN10103']}});
+   qa.view.render();
+ });
+ assert.equal(await page.locator('[data-share-conflict=true]').count(),2);
+ assert.match(await page.locator('[data-source-conflict-warning]').innerText(),/múltiplos publicadores/i);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'conflict diagnostics never modify MES');
+ await page.evaluate(()=>{
+   const old=qa.store.agent().sync||{};
+   qa.store.updateAgent({sync:{...old,read_status:'ready',origin_conflict_lines:[]}});
+   qa.view.render();
+ });
  await page.locator('[data-onboarding-guide]').waitFor();
  try{await page.locator('[data-official-clean-download]').waitFor({timeout:9000});}
  catch(e){console.error('ONBOARD_DEBUG',await page.locator('[data-onboarding-guide]').innerText(),await page.evaluate(()=>({url:location.href,language:document.documentElement.lang})));throw e;}
