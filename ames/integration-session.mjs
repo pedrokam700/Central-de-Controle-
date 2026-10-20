@@ -4,7 +4,7 @@ import {createMesSync} from './sync.mjs';
 // Lifecycle of the existing client and publisher, owned by the authenticated
 // Central session, not a view. This only reads SQLite snapshots; it never starts MES jobs.
 export function createMesIntegration(store, remote, {changed=()=>{}, transport={}, syncOptions={}, schedule=setTimeout, unschedule=clearTimeout, interval=15000}={}) {
-  let active=false, uid=null, generation=0, timer,historyBusy=false,historyCursor=null,lastHistoryScan=0;
+  let active=false, uid=null, generation=0, timer,historyBusy=false,historyCursor=null,lastHistoryScan=0,lastLocalProbe=0;
   const notify=()=>{if(active)changed();};
   const sync=createMesSync(store,remote,{...syncOptions,changed:notify});
   const capture=()=>sync.capture().catch(error=>{
@@ -41,6 +41,7 @@ export function createMesIntegration(store, remote, {changed=()=>{}, transport={
     try{
       if(store.agent().status==='connected')await client.refresh();
       else if(client.paired())await client.connect({quiet:true});
+      else if(Date.now()-lastLocalProbe>=60000){lastLocalProbe=Date.now();await client.detectInstalled();}
       if(active&&g===generation){
         sync.ensureOperationalDay();await capture();
         // SQLite-only index, capped to 8 snapshots per pass. Does not launch MES.
@@ -55,13 +56,13 @@ export function createMesIntegration(store, remote, {changed=()=>{}, transport={
     client,sync,
     start(user){
       if(active&&uid===user)return;
-      this.stop();active=true;uid=user;historyCursor=null;lastHistoryScan=0;sync.start(user);void tick(generation);
+      this.stop();active=true;uid=user;historyCursor=null;lastHistoryScan=0;lastLocalProbe=0;sync.start(user);void tick(generation);
     },
     async verify(){
       if(!active)return;
       // A missing local agent must not suppress the independent Firebase retry.
-      return Promise.allSettled([sync.retry(),store.agent().status==='connected'?client.refresh():client.connect({quiet:true})]);
+      return Promise.allSettled([sync.retry(),store.agent().status==='connected'?client.refresh():client.paired()?client.connect({quiet:true}):client.detectInstalled()]);
     },
-    stop(){active=false;uid=null;generation++;historyCursor=null;lastHistoryScan=0;unschedule(timer);client.clear();sync.stop();}
+    stop(){active=false;uid=null;generation++;historyCursor=null;lastHistoryScan=0;lastLocalProbe=0;unschedule(timer);client.clear();sync.stop();}
   };
 }
