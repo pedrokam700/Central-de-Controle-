@@ -118,6 +118,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
     localCanonical(){return [...local.values()].map(s=>s.canonical).filter(Boolean);},
     agent() { return agent; },
     updateAgent(patch) { agent = immutable({...agent,...patch}); },
+    currentTime(){return new Date(now());},
     readingPeriod(){return selectedPeriod;},
     periodGeneration(){return periodGeneration;},
     sessionGeneration(){return sessionGeneration;},
