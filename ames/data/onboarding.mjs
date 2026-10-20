@@ -41,9 +41,10 @@ export function readRelease(value) {
   if(available){
     if(typeof value.package_name!=='string'||!value.package_name.endsWith('.zip')||typeof value.sha256!=='string'||!/^[a-f0-9]{64}$/i.test(value.sha256)) throw new TypeError('Pacote publicado inválido');
     const url=new URL(value.download_url);
+    const releasePath=/^\/pedrokam700\/Central-de-Controle-\/releases\/download\/(ames-v0\.5\.\d+-(?:factory|multipc)-\d{8})\/AMES_Central_CLEAN_([a-f0-9]{8})\.zip$/;
+    const match=url.pathname.match(releasePath);
     if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||
-      url.hostname!=='github.com'||url.pathname!==
-        '/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.25-factory-20261020/'+value.package_name)
+      url.hostname!=='github.com'||!match||value.package_name!=='AMES_Central_CLEAN_'+match[2]+'.zip')
       throw new TypeError('Pacote oficial deve ser GitHub Release verificado');
     download_url=url.href;package_name=value.package_name;sha256=value.sha256;
   }else{
