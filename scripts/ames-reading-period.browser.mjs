@@ -89,6 +89,23 @@ try{
    assert.equal(await pane.isVisible(),true);assert.match(await pane.locator('[data-shared-period]').innerText(),/16/);
    assert(!((await pane.innerText()).includes('TODAY-SNAPSHOT')),id+' leaked Today');
  }
+ // Real browser checks for selective PR33→PR42 integration, no MES mutations.
+ await page.locator('[data-console-view=failures]').click();
+ const groupTable=page.locator('[data-console-pane=failures] [data-failure-groups] table');
+ assert.equal(await groupTable.locator('thead th').count(),7,'three reuse-evidence columns remain in grouped Failures');
+ assert.match(await groupTable.locator('tbody').innerText(),/1\\+/,'2nd+ use is a minimum observed, never an invented exact denominator');
+ assert.equal(await page.locator('[data-failure-sort]').inputValue(),'count_desc');
+ await page.locator('[data-failure-sort]').selectOption('failure_asc');
+ assert.equal(await page.locator('[data-failure-sort]').inputValue(),'failure_asc');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'group sorting cannot run MES');
+ await page.locator('[data-console-view=top3]').click();
+ const top3Defect=page.locator('[data-console-pane=top3] [data-daily-top3-defect]').first();
+ assert.equal(await top3Defect.count(),1,'Top 3 must retain its clickable quick summary');
+ const beforeDefect=await page.evaluate(()=>qa.store.context()?.defect??null);
+ await top3Defect.click();
+ await page.waitForFunction(()=>!!document.querySelector('[data-console-pane=top3] [data-top3-analytics] .ames-dfa-rank-item[open]'));
+ assert.equal(await page.evaluate(()=>qa.store.context()?.defect??null),beforeDefect,'Top 3 drilldown may not overwrite shared defect scope');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
  await page.locator('[data-console-view=reuse]').click();
  const cohorts=page.locator('[data-reuse-cohorts]');
  assert.match(await cohorts.innerText(),/Denominador não comprovado/);

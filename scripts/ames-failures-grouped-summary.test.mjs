@@ -43,3 +43,16 @@ test('missing and partial evidence never claims zero, totals or material causali
  assert.match(source,/número com \+/);
  assert.doesNotMatch(source,/root_cause_confirmed\s*=\s*true/);
 });
+
+test('canonical numeric and ordinal reuses work without old categorical drilldown names',()=>{
+ const snap={insights:{drilldowns:{
+  pcba_analysis:[{'PCBA':'P1','Uso da PCBA na falha':'2º uso'},
+                 {'PCBA':'P2','Uso da PCBA na falha':'1º uso'}],
+  material_analysis:[{'PCBA atual':'P2','Material SN':'M2','Uso material na falha':'3º uso'},
+                     {'PCBA atual':'P3','Material SN':'M3','Uso material na falha':'1º uso'}]
+ }}};
+ const tally=failureGroupReuseSummaries(snap,rows)['Falha teste'];
+ assert.equal(evidenceCountLabel(tally.pcbaReuse),'1+');
+ assert.equal(evidenceCountLabel(tally.itemReuse),'1+');
+ assert.equal(evidenceCountLabel(tally.sameFailureOrFamily),'—');
+});
