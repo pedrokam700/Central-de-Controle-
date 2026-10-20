@@ -28,3 +28,9 @@
 .ames-sync-guide-grid span {overflow-wrap:anywhere;}
 .ames-installation-guide .button,.ames-sync-guide .button{align-self:start;white-space:normal;text-align:center;}
 @media(max-width:600px){.ames-installation-heading h2{font-size:1.02rem}.ames-setup-grid{grid-template-columns:minmax(0,1fr)}.ames-setup-step,.ames-setup-viewer,.ames-sync-guide{padding:12px}.ames-setup-choice .button{flex:1 1 145px;}}
+
+.ames-sync-line-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:8px;list-style:none;margin:0;padding:0;}
+.ames-sync-line-list li{display:grid;gap:3px;background:var(--surface-secondary,#f1f5f9);border:1px solid var(--border,#e0e5eb);border-radius:9px;padding:10px;min-width:0;}
+.ames-sync-line-list strong{font-size:.83rem;}
+.ames-sync-line-list span{font-size:.8rem;overflow-wrap:anywhere;}
+.ames-sync-line-list small{color:var(--text-muted,#64748b);font-size:.76rem;}
