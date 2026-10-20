@@ -6,7 +6,7 @@
   "download_url": "https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.29-multipc-20261020/AMES_Central_CLEAN_39e0956b.zip",
   "validated_baseline": "0.5.29",
   "candidate_status": "verified_git_release_offline_fallback",
-  "published_at": "2026-10-20T19:52:03Z",
+  "published_at": "2026-10-20T20:14:42Z",
   "minimum_central_version": "2.0.0",
   "existing_r12_migration": true,
   "new_pc_status": "github_release_public_verified_exact_sha",
