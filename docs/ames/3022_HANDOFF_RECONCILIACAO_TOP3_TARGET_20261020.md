@@ -39,6 +39,8 @@ Production operator clarifies the **Top 3 is a Pareto of failures affecting the 
 
 **Business rule = display-only** in `ames/data/target-impact.mjs` (`target-impact-top3-v1`). The Top 3 summary, target-impact full Pareto and their leading defect use only eligible occurrences; ranking percentages use eligible occurrences as denominator. A small excluded count is shown for audit. **Do not remove** the four categories from the raw observations, Falhas general view, detailed occurrences, 3012/2114/3022 correlation, export, all-failure count, FPY, Check FPY or Quantity. These MES-provided indicators are displayed unchanged; changing their calculation would require separate documented authority and an end-to-end target measurement contract. Unsupported near-match labels remain eligible; do not build an unrestricted substring filter such as `error` or `process`.
 
+Preservation gate `scripts/agent-3022-canonical-contract.test.py` runs the existing R17/R18 Python regression fixtures (A5700 boundary and R5 camera/AT/rework mapping) on Linux and Windows CI; it is a contract test, not a current factory claim.
+
 Validate with `scripts/ames-target-impact-ranking.test.mjs`, existing top3 drill-down + daily analytics contracts, full CI and a physical print on TAN10103 showing excluded alert count alongside untouched overall failure total/FPY. Distinguish `pass 5/5 CI` from physical acceptance.
 
 ## 4. Persistent checkpoints
