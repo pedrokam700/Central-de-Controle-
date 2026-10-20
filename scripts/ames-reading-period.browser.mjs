@@ -37,9 +37,9 @@ import {createAmesStore} from './ames/data/store.mjs';
 import {createConsoleView} from './ames/console-view.mjs';
 const store=createAmesStore({now:()=>Date.parse('2026-10-19T15:00:00Z')}),old=${JSON.stringify(old)},local=${JSON.stringify(local)};
 store.replaceSyncedSnapshots([${JSON.stringify(today)}]);
-let mutations=0,savedReads=0,savedOpens=0,captureReads=0;
+let mutations=0,savedReads=0,savedOpens=0,captureReads=0,localPairCount=0;
 const savedEntry={job_id:'J123',query_sn:'PCBA-TEST',query_created_at:'2026-10-16T14:00:00Z',query_status:'done',entry_hash:'b'.repeat(64),line_id:null,production_date:null,clock_kind:'query_created_at',local_only:true};
-const client={canOpenOfficial:()=>true,openOfficial:()=>{},collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
+const client={canOpenOfficial:()=>true,openOfficial:()=>{},canPairFromOfficial:()=>true,openLocalPairing:()=>{localPairCount++;},collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
  sourceCaptures:async params=>{
   captureReads++;
   if(params.snapshot_id!==17||params.snapshot_revision!==1||params.content_hash!==local.content_hash)throw Error('wrong capture target');
@@ -64,7 +64,7 @@ const history={list:async line=>{historyReads++;return line===old.line_id?[
 const view=createConsoleView(document.querySelector('#mesConsole'),store,{agentClient:client,history});
 document.querySelectorAll('.page').forEach(el=>el.classList.add('hidden'));
 document.querySelector('#mesConsoleView')?.classList.remove('hidden');document.querySelector('#accountScreen')?.classList.add('hidden');
-window.qa={store,view,mutations:()=>mutations,historyReads:()=>historyReads,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads,setAmbiguous:value=>{ambiguousHistory=value;}};view.render();
+window.qa={store,view,mutations:()=>mutations,localPairCount:()=>localPairCount,historyReads:()=>historyReads,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads,setAmbiguous:value=>{ambiguousHistory=value;}};view.render();
 `;
 const html=fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<script type="module" src="/Central-de-Controle-/qa-context.mjs"></script>';
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -418,6 +418,9 @@ try{
  // evidence that the agent was never installed.
  await page.evaluate(()=>{qa.store.updateAgent({status:'disconnected',connection_error:{code:'agent-unauthorized',message:'Token required'}});qa.view.render();});
  await page.locator('[data-installation-detection=pairing_required]').waitFor();
+ await page.locator('[data-connect-local-pairing]').click();
+ assert.equal(await page.evaluate(()=>qa.localPairCount()),1,'HTTPS button must explicitly start local confirmation');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'pairing must not run a MES job');
  assert.equal(await page.locator('[data-setup-existing] a[href="http://127.0.0.1:8765/Central-de-Controle-/"]').count(),1);
  await page.evaluate(()=>{qa.store.updateAgent({status:'disconnected',connection_error:{code:'agent-network',message:'Browser network restriction'}});qa.view.render();});
  await page.locator('[data-installation-detection=not_verified]').waitFor();
