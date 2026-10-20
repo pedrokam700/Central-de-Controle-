@@ -1,5 +1,5 @@
 import { createOnboardingView, savedIntegrationMode } from './onboarding-view.mjs';
-import { INTEGRATION_MODE_KEY } from './data/onboarding.mjs';
+import { INTEGRATION_MODE_KEY,sharingState,installationDetection } from './data/onboarding.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 
 const t = (pt, en) => typeof document !== 'undefined' && document.documentElement?.lang?.startsWith('en') ? en : pt;
@@ -67,7 +67,7 @@ const maintenanceCheckLabel = key => ({
   dependencies: t('Dependências', 'Dependencies'), playwright: 'Playwright', sqlite: 'SQLite'
 }[key] || key);
 
-export function createPreparationView(root, store, client) {
+export function createPreparationView(root, store, client, { verify=async()=>client.connect({quiet:true}) }={}) {
   let checking = false, checked = false, expanded = false, disposed = false, onboarding;
   let backupBusy = false, maintenanceMessage = '';
   let map3012Busy = false, map3012Message = '';
@@ -132,24 +132,44 @@ export function createPreparationView(root, store, client) {
     // A verified local agent should not bury the operation dashboard beneath
     // onboarding every time it rerenders. Pairing remains one click away via
     // the persistent "Configurar posto" button.
-    const visible = expanded || (!connected && mode !== 'viewer');
+    const visible = expanded || !connected;
+
+    const detector=installationDetection(agent,!!client.paired?.());
+    const shared=sharingState(agent);
+    const receiving=shared.receiving==='server_confirmed'
+      ?t('Leitura no servidor confirmada','Server read confirmed')
+      :shared.receiving==='cached'?t('Somente cache','Cache only')
+      :shared.receiving==='conflict'?t('Conflito entre origens','Competing sources')
+      :shared.receiving==='error'?t('Falha na leitura','Read failed')
+      :t('Sem confirmação do servidor','No server confirmation');
+    const publishing=shared.publishing==='sent'?t('Envio concluído nesta sessão','Sent in this session')
+      :shared.publishing==='legacy_conflict'?t('Histórico publicado; ponte legada em conflito','History published; legacy pointer conflict')
+      :shared.publishing==='pending'?t('Aguardando envio','Awaiting upload')
+      :t('Envio ainda não comprovado','Upload not yet proven');
+    const summary='<section class="ames-sync-guide" data-sync-guide><div class="ames-sync-guide-head"><b>'+t('Compartilhamento entre computadores','Cross-PC sharing')+'</b><small>'+t('Somente snapshots sanitizados e revisões','Sanitized snapshots and revisions only')+'</small></div><div class="ames-sync-guide-grid">'+
+      '<div><small>'+t('Este PC → equipe','This PC → team')+'</small><strong>'+esc(publishing)+'</strong><span>'+t('Fila','Queue')+': '+(shared.pending??'—')+' · '+t('Último envio','Last upload')+': '+esc(shared.lastSentAt||'—')+'</span></div>'+
+      '<div><small>'+t('Equipe → este PC','Team → this PC')+'</small><strong>'+esc(receiving)+'</strong><span>'+t('Linhas identificadas','Lines identified')+': '+shared.receivedLines.length+'/3 · '+t('Último evento','Last event')+': '+esc(shared.lastReceivedAt||'—')+'</span></div></div>'+
+      '<p class="mes-context">'+t('Envio no PC A não prova recebimento no PC B. Compare linha, snapshot e revisão em ambos; o navegador precisa ficar autenticado e aberto para publicar.','Sending from PC A does not prove receipt on PC B. Compare line, snapshot and revision on both; the browser must remain signed in and open to publish.')+'</p>'+
+      '<button class="button secondary" type="button" data-sync-guide-verify>'+t('Verificar conexões agora','Check connections now')+'</button></section>';
     const backup = maintenance.latest_backup;
     const backupSummary = backup
       ? `${esc(backup.created_at || t('data não informada', 'date not reported'))} · ${esc(formatBytes(backup.bytes))}${backup.reason ? ` · ${esc(backup.reason)}` : ''}`
       : t('Nenhum ponto criado nesta sessão foi reportado à Central.', 'No recovery point created in this session has been reported to Work Center.');
     root.hidden=!visible;
-    const key=JSON.stringify([checking,checked,expanded,mode,connected,pairing,connectionError,checks,maintenance,backupBusy,maintenanceMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
+    const key=JSON.stringify([checking,checked,expanded,mode,connected,pairing,connectionError,detector,shared,checks,maintenance,backupBusy,maintenanceMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
     if(key===last)return;last=key;
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
-      ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}
+      ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}${summary}
       ${pairing?`<button type="button" class="button secondary" data-pair-official>${t('Abrir HTTPS oficial pareado neste computador','Open paired official HTTPS on this computer')}</button><p>${t('Autoriza somente o agente deste computador na nova aba oficial. Não compartilhe a URL de pareamento. O computador sem MES precisa apenas dos dados da equipe.','Authorizes only this computer’s agent in the new official tab. Do not share the pairing URL. A computer without MES only needs team data.')}</p>`:''}
       ${visible ? `<p>Consulte os dados compartilhados ou prepare este computador para coleta. O login A-MES permanece manual.</p>
       <div class="mes-pagination"><button type="button" class="button secondary" data-use-shared>Usar somente dados compartilhados</button><button type="button" class="button secondary" data-prepare-pc>Preparar este computador</button></div>` : ''}
       ${expanded ? `<details open><summary>Pré-teste do posto</summary><ul>${checks.map(c => `<li data-check-state="${c.state}">${esc(c.label)} — <span>${c.state === 'ok' ? 'Verificado' : c.state === 'missing' ? 'Pendente' : 'Não verificado'}</span></li>`).join('')}</ul><p>${ready ? 'Pronto para teste' : 'Conclua os itens pendentes e confirme o login manual A-MES antes da coleta.'}</p><button type="button" class="button secondary" data-preflight ${checking ? 'disabled' : ''}>Verificar novamente</button>
       <section class="notice ${maintenance.tone === 'partial' ? 'warn' : ''}" data-workstation-maintenance><b>${t('Manutenção do posto', 'Workstation maintenance')} · ${esc(maintenanceStateLabel(maintenance.tone))}</b><br><small>${t('Build instalada', 'Installed build')}: ${esc(maintenance.build || '—')} · ${t('Candidato reportado', 'Reported candidate')}: ${esc(maintenance.candidate || '—')} · Setup: ${maintenance.setup_complete ? t('concluído', 'complete') : t('não confirmado', 'not confirmed')}</small><p>${t('Verificação local', 'Local verification')}: ${maintenance.localChecks.map(item => `${esc(maintenanceCheckLabel(item.key))} ${item.state === 'ok' ? '✓' : item.state === 'missing' ? '!' : '?'}`).join(' · ')}</p><p><b>${t('Ponto de recuperação', 'Recovery point')}:</b> ${backupSummary}</p><div class="mes-pagination"><button type="button" class="button secondary" data-workstation-backup ${!connected || backupBusy ? 'disabled' : ''}>${backupBusy ? t('Criando ponto de recuperação…', 'Creating recovery point…') : t('Criar ponto de recuperação agora', 'Create recovery point now')}</button></div>${maintenanceMessage ? `<p role="status">${esc(maintenanceMessage)}</p>` : ''}<details data-3012-map-tools><summary>${t('Diagnóstico 3012 Home', '3012 Home diagnostics')}</summary><p>${t('Mapeia somente a estrutura técnica da 3012 correta na Home. Não executa consulta, não lê valores dos campos e não coleta cookie, sessão ou cabeçalhos.', 'Maps only the technical structure of the canonical 3012 Home view. It does not run a query, read field values, or collect cookies, session data or headers.')}</p><div class="mes-pagination"><button type="button" class="button secondary" data-map-3012 ${!connected || map3012Busy ? 'disabled' : ''}>${map3012Busy ? t('Mapeando 3012 Home…', 'Mapping 3012 Home…') : t('Mapear 3012 Home (somente leitura)', 'Map 3012 Home (read-only)')}</button></div>${map3012Message ? `<p role="status">${esc(map3012Message)}</p>` : ''}<small>${t('O agente reserva a sessão MES, abre a view Home correta e baixa um JSON sanitizado. Envie esse JSON no chat; a consulta controlada por SN será a etapa seguinte.', 'The agent reserves the MES session, opens the correct Home view and downloads a sanitized JSON. Send that JSON in chat; the controlled SN query is the next step.')}</small></details><small>${t('A atualização e o rollback dos arquivos continuam fora do navegador. Crie um ponto de recuperação, encerre o agente antes de substituir arquivos e use somente o pacote/candidato validado para este build.', 'File update and rollback remain outside the browser. Create a recovery point, stop the agent before replacing files, and use only the package/candidate validated for this build.')}</small></section>
       <section data-installation></section></details>` : ''}
+      ${!expanded&&mode==='viewer'?'<section data-installation></section>':''}
     </div>`;
+    root.querySelector('[data-sync-guide-verify]')?.addEventListener('click',async()=>{if(checking)return;checking=true;last='';render();try{await verify();}catch{}finally{checking=false;if(!disposed){last='';render();}}});
     root.querySelector('[data-use-shared]')?.addEventListener('click', () => choose('viewer'));
     root.querySelector('[data-prepare-pc]')?.addEventListener('click', () => choose('collector'));
     root.querySelector('[data-preflight]')?.addEventListener('click', check);
@@ -157,8 +177,8 @@ export function createPreparationView(root, store, client) {
     root.querySelector('[data-workstation-backup]')?.addEventListener('click', backupNow);
     root.querySelector('[data-map-3012]')?.addEventListener('click', map3012Now);
     onboarding?.clear(); onboarding = null;
-    if (expanded) {
-      onboarding = createOnboardingView(root.querySelector('[data-installation]'), { onChoice: choose });
+    if (expanded || mode==='viewer') {
+      onboarding = createOnboardingView(root.querySelector('[data-installation]'), { onChoice: choose, getAgent:()=>store.agent(),isPaired:()=>!!client.paired?.() });
       void onboarding.render();
     }
     if (!checked && !checking) queueMicrotask(check);
