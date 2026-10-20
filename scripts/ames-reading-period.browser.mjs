@@ -273,6 +273,40 @@ try{
  assert.match(await simNote.innerText(),/NÃO à geração da falha/);
  assert.equal(await snLive.locator('.ames-process-evidence tbody tr').first().locator('td').nth(5).innerText(),'—','no 3022 generation time invented');
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'unmapped 3022 diagnostic cannot trigger collection');
+ // New physical rule: A5150 is an explicitly approximate assembly reference
+ // for functional defects detected later at test, never proven origin.
+ await page.evaluate(()=>{
+   qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
+     sn:'PCBA-SIM-MIDPOINT',detected_type:'PCBA',product_model:'CPH2819BR',
+     trace_2114:{status:'complete',current_failure:{
+       'Defect Code':'J606-KZ03','Defect Description':'SIM card anomaly',
+       'Defect Time':'2026-10-20 11:59:16','Manual/Automatic':'Manual'
+     },previous_failures:[]},
+     trace_3074:{status:'partial',reused_components:[]},
+     trace_3022:{status:'partial',process_passages:[]},
+     trace_3012:{status:'unavailable'},
+     local_snapshot:{process_contexts:[{
+       source:'3022',pcba_sn:'PCBA-SIM-MIDPOINT',product_model:'CPH2819BR',
+       defect_code:'J606-KZ03',defect_time:'2026-10-20 11:59:16',
+       defect_time_utc:'2026-10-20T14:59:16Z',registration_mode:'MANUAL',
+       failure_family:'SIM',reference_station_code:'A5150',
+       reference_event_time:'2026-10-20T11:30:00+00:00',
+       production_event_time:'2026-10-20T11:30:00+00:00',
+       production_shift:'1st Shift',production_operational_date:'2026-10-20',
+       production_shift_source:'3022',production_shift_basis:'reference_process',
+       reference_confidence:'OPERATIONAL_ESTIMATE_NOT_CAUSE',
+       reference_reason:'Referência operacional estimada no A5150, não causa.'
+     }]}
+   }}});
+   qa.view.render();
+ });
+ const midpoint=snLive.locator('[data-sn-operational-reference]');
+ assert.equal(await midpoint.count(),1);
+ assert.match(await midpoint.innerText(),/Referência aproximada de montagem: A5150/);
+ assert.match(await midpoint.innerText(),/08:30/);
+ assert.match(await midpoint.innerText(),/1st Shift/);
+ assert.match(await midpoint.innerText(),/NÃO é prova do posto exato/);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'period or midpoint presentation must not initiate MES');
  await page.evaluate(()=>{document.documentElement.lang='en-US';qa.view.render();});
  await page.waitForFunction(()=>document.querySelector('[data-sn-live-provenance] summary')?.textContent?.includes('Source provenance'));
  assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1,'changing language must not stack source panels');
