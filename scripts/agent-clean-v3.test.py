@@ -38,11 +38,19 @@ class Tests(unittest.TestCase):
    def ensure_current_shift_2114(self,*a):return '1st Shift'
   class Materials:
    def __init__(self,*a):pass
-   def consultar(self,sn):return {'rows':[{'pcbas':['P1','OLD1'] if sn=='M1' else ['P1']}]}
+   def consultar(self,sn):
+    if sn=='P1':
+     return {'rows':[{'Barcode':'M1','Sn Type':'Front Camera',
+       'Bind Time':'2026-10-12 10:00:00','Unbind Time':'','Iss Status':'Y'}]}
+    if sn=='M1':
+     return {'rows':[
+       {'Barcode':'OLD1','Sn Type':'PCBA','Bind Time':'2026-10-11 09:00:00','Unbind Time':'2026-10-12 07:00:00','Iss Status':'N'},
+       {'Barcode':'P1','Sn Type':'PCBA','Bind Time':'2026-10-12 10:00:00','Unbind Time':'','Iss Status':'Y'}]}
+    return {'rows':[]}
   class Hist:
    def __init__(self,*a):pass
    def consultar(self,sn):return {'rows':history if sn=='P1' else [history[1]],'model':'CPH2819'}
-  modules={'ames.browser':types.SimpleNamespace(AmesBrowser=Browser),'ames.navigation':types.SimpleNamespace(AmesNavigation=Nav),'ames.tela_3074':types.SimpleNamespace(Tela3074=Materials,componentes_serializados=lambda *a,**k:[{'item_sn':'M1','item_type':'Front Camera'}],pcbas_historicas=lambda rows:rows[0]['pcbas']),'ames.tela_2114':types.SimpleNamespace(Tela2114=Hist),'ames.tela_3022':types.SimpleNamespace(),'core.correlacao_falhas':correlation}
+  modules={'ames.browser':types.SimpleNamespace(AmesBrowser=Browser),'ames.navigation':types.SimpleNamespace(AmesNavigation=Nav),'ames.tela_3074':types.SimpleNamespace(Tela3074=Materials,componentes_serializados=lambda *a,**k:[{'item_sn':'M1','item_type':'Front Camera'}],pcbas_historicas=lambda rows:[r.get('Barcode') for r in rows if r.get('Sn Type')=='PCBA']),'ames.tela_2114':types.SimpleNamespace(Tela2114=Hist),'ames.tela_3022':types.SimpleNamespace(),'core.correlacao_falhas':correlation}
   original=engine_bridge.importlib.import_module
   with patch.object(engine_bridge.importlib,'import_module',side_effect=lambda n:modules[n] if n in modules else original(n)):
    result=engine_bridge.run_individual_lookup(ROOT/'ames/factory-engine','P1',include_3022=False)
