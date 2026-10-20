@@ -2,7 +2,7 @@ const text=value=>String(value??'').trim();
 const value=(row,...keys)=>keys.map(key=>row?.[key]).find(item=>item!==undefined&&item!==null&&text(item)!=='')??null;
 const pcbaOf=row=>text(value(row,'pcba_sn','PCBA','Lot Id','current_pcba_sn'));
 const operatorId=row=>text(value(row,'operator_id','Operator ID','Tran User Id','Transaction User Id','Employee ID','User Id'));
-const operatorName=row=>text(value(row,'operator_name','Operator Name','Tran User Name','Transaction User Name','Employee Name','User Name'));
+const operatorName=row=>text(value(row,'operator_name','tran_user_name','Operator Name','Tran User Name','Transaction User Name','Employee Name','User Name','Tran User Desc','User Full Name'));
 
 function processRows(result={}){
   const trace=result.trace_3022||{};
