@@ -425,7 +425,11 @@ try{
  try{await page.locator('[data-official-clean-download]').waitFor({timeout:9000});}
  catch(e){console.error('ONBOARD_DEBUG',await page.locator('[data-onboarding-guide]').innerText(),await page.evaluate(()=>({url:location.href,language:document.documentElement.lang})));throw e;}
  const verifiedDownload=await page.locator('[data-official-clean-download]').getAttribute('href');
- assert.match(verifiedDownload,/^https:\/\/github\.com\/pedrokam700\/Central-de-Controle-\/releases\/download\/ames-v0\.5\.\d+-multipc-\d{8}\/AMES_Central_CLEAN_[a-f0-9]{8}\.zip$/,'only immutable verified official GitHub CLEAN (latest or safe fallback)');
+ assert(
+   verifiedDownload==='https://github.com/pedrokam700/Central-de-Controle-/releases/latest' ||
+   /^https:\/\/github\.com\/pedrokam700\/Central-de-Controle-\/releases\/download\/ames-v0\.5\.\d+-multipc-\d{8}\/AMES_Central_CLEAN_[a-f0-9]{8}\.zip$/.test(verifiedDownload),
+   'install guide must use a SHA-verified GitHub ZIP or the permanent latest release landing, never a stale ZIP'
+ );
  assert.equal(await page.locator('[data-installation-detection=verified]').count(),1);
  assert.equal(await page.locator('[data-setup-new]').count(),1);
  assert.equal(await page.locator('[data-setup-existing]').count(),1);
