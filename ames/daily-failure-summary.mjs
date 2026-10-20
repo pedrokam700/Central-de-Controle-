@@ -94,8 +94,37 @@ export function createDailyFailureSummary(root,store){
     for(const [field,value] of Object.entries(targets)){let el=host?.querySelector?.(`[data-top3-analytics] [data-dfa="${field}"]`);if(!el)continue;if(field==='shift'&&shiftUnclassifiedCurrent&&value){dispatchAnalytics(el,'');el=host?.querySelector?.('[data-top3-analytics] [data-dfa="shift"]');if(el)el.value=String(value);continue;}if(String(el.value)!==String(value))dispatchAnalytics(el,value);}
     queueMicrotask(polishAnalyticsShift);
   }
-  function openAnalyticsFailure(code){store.updateContext?.({defect:code||null});last='';syncContextToAnalytics();queueMicrotask(()=>{const host=pane(),select=host?.querySelector?.('[data-top3-analytics] [data-dfa="defect"]');if(select&&select.value!==String(code||''))dispatchAnalytics(select,String(code||''));queueMicrotask(()=>{host?.querySelector?.('[data-top3-analytics] [data-dfa-mode="occurrences"]')?.click();host?.querySelector?.('[data-top3-analytics]')?.scrollIntoView?.({block:'start',behavior:'smooth'});});});}
-  function openFullRanking(){store.updateContext?.({defect:null});last='';syncContextToAnalytics();queueMicrotask(()=>{const host=pane(),defect=host?.querySelector?.('[data-top3-analytics] [data-dfa="defect"]');if(defect&&defect.value)dispatchAnalytics(defect,'');host?.querySelector?.('[data-top3-analytics] [data-dfa-mode="ranking"]')?.click();host?.querySelector?.('[data-top3-analytics]')?.scrollIntoView?.({block:'start',behavior:'smooth'});});}
+  function openAnalyticsFailure(code){
+    // Top 3 is a stable overview. Drill-down must stay local to the analytics
+    // panel; publishing the selected defect to shared context collapses the Top 3
+    // itself to one item and makes it look as if the ranking disappeared.
+    syncContextToAnalytics();
+    queueMicrotask(()=>{
+      const host=pane(),select=host?.querySelector?.('[data-top3-analytics] [data-dfa="defect"]');
+      if(select&&select.value!==String(code||''))dispatchAnalytics(select,String(code||''));
+      queueMicrotask(()=>{
+        host?.querySelector?.('[data-top3-analytics] [data-dfa-mode="ranking"]')?.click();
+        queueMicrotask(()=>{
+          const detail=host?.querySelector?.('[data-top3-analytics] .ames-dfa-rank-item');
+          if(detail)detail.open=true;
+          detail?.scrollIntoView?.({block:'center',behavior:'smooth'});
+        });
+      });
+    });
+  }
+  function openFullRanking(){
+    // Clear only the analytics drill-down. The shared operational context (and
+    // therefore the original Top 3) must remain unchanged.
+    syncContextToAnalytics();
+    queueMicrotask(()=>{
+      const host=pane(),defect=host?.querySelector?.('[data-top3-analytics] [data-dfa="defect"]');
+      if(defect&&defect.value)dispatchAnalytics(defect,'');
+      queueMicrotask(()=>{
+        host?.querySelector?.('[data-top3-analytics] [data-dfa-mode="ranking"]')?.click();
+        host?.querySelector?.('[data-top3-analytics]')?.scrollIntoView?.({block:'start',behavior:'smooth'});
+      });
+    });
+  }
   function render(){
     bindContextBridge();
     const context=store.context?.()||{},shared=context.line_id||store.preferredLine?.();if(shared&&shared!==line)line=shared;
