@@ -63,3 +63,32 @@ test('official HTTPS can open explicit local confirmation, but untrusted domains
     if(beforeWindow===undefined)delete globalThis.window;else globalThis.window=beforeWindow;
   }
 });
+
+test('public local agent identification sends no token and never probes MES or leaks identity',async()=>{
+ const requests=[],store=fakeStore();
+ const fetcher=async(uri,opt)=>{
+   requests.push({uri,opt});return {ok:true,json:async()=>({
+     ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:123,
+     workstation_token:'MUST_NOT_LEAK',source_id:'MUST_NOT_LEAK'
+   })};
+ };
+ const client=createAgentClient(store,{fetcher});
+ const status=await client.detectInstalled();
+ assert.deepEqual(status,{state:'detected'});
+ assert.deepEqual(store.agent().workstation_probe,{state:'detected'});
+ assert.equal(requests.length,1);
+ assert.equal(requests[0].uri,'http://127.0.0.1:8765/api/v1/ready');
+ assert.equal(requests[0].opt.method,'GET');
+ assert.equal(requests[0].opt.credentials,'omit');
+ assert.equal(requests[0].opt.headers,undefined);
+ assert(!JSON.stringify(store.agent()).includes('MUST_NOT_LEAK'));
+});
+test('unknown /ready or browser loopback denial is not falsely classified as missing installation',async()=>{
+ for(const fetcher of [
+   async()=>({ok:true,json:async()=>({ready:true,pid:456})}),
+   async()=>{throw Error('Private Network Access blocked');}
+ ]){
+   const client=createAgentClient(fakeStore(),{fetcher});
+   assert.deepEqual(await client.detectInstalled(),{state:'unknown'});
+ }
+});
