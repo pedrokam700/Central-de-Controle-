@@ -21,7 +21,7 @@ export function processPassageDiagnostic(context={}){
   let shift=null,operationalDate=null;
   if(valid){
     const p=factoryParts(previous),minute=Number(p.hour)*60+Number(p.minute);
-    shift=minute>=450&&minute<1050?'1st Shift':'2nd Shift';
+    shift=minute>=450&&minute<1050?'1st Shift':(minute>=1050||minute<210?'2nd Shift':'Fora dos turnos');
     const day=Date.UTC(Number(p.year),Number(p.month)-1,Number(p.day))-(minute<420?86400000:0);
     operationalDate=new Date(day).toISOString().slice(0,10);
   }
