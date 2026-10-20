@@ -113,6 +113,12 @@ def normalizar_evento_3022(row):
         "tran_user_id": str(_row_value(row, (
             "Tran User Id", "Tran User", "Transaction User", "User Id"
         )) or "").strip(),
+        # Name is only reported when MES exposes a separate explicit user
+        # description/name column. Never derive a person from the BRM code.
+        "tran_user_name": str(_row_value(row, (
+            "Tran User Name", "Transaction User Name", "Operator Name",
+            "Employee Name", "User Name", "Tran User Desc", "User Full Name"
+        )) or "").strip(),
         "tran_desc": str(_row_value(row, ("Tran Desc", "Transaction Desc", "Transaction")) or "").strip(),
         "tran_desc_english": str(_row_value(row, ("Tran Desc English", "Transaction Desc English")) or "").strip(),
         "tran_cmf3": str(_row_value(row, ("TRAN CMF3", "Tran Cmf3", "CMF3")) or "").strip(),
