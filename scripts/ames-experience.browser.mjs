@@ -92,7 +92,11 @@ try{
   await page.evaluate(()=>qa.agent(true));await page.waitForFunction(()=>qa.store.agent().status==='connected');
   assert.equal(await page.evaluate(()=>qa.requests.filter(r=>r.method==='POST').length),0);
   await page.locator('[data-console-setup]').click();assert.match(await page.locator('[data-preparation]').innerText(),/Not verified|Não verificado/);
-  await page.getByText('Installation on a new computer is still blocked',{exact:true}).waitFor();
+  await page.getByText('First installation on this PC',{exact:true}).waitFor();
+  const official=page.locator('[data-official-clean-download]');
+  await official.waitFor();
+  assert.match(await official.getAttribute('href'),/^https:\/\/github\.com\/pedrokam700\/Central-de-Controle-\/releases\/download\//);
+  assert.equal(await page.evaluate(()=>qa.requests.filter(r=>r.method==='POST').length),0,'setup must never trigger MES');
   const preparationText=await page.locator('[data-preparation]').innerText();
   fs.writeFileSync(path.join(out,'preparation-text.txt'),preparationText);
   assert.doesNotMatch(preparationText,/[áàãâéêíóôõúç]|\b(?:dedicado|Verificando|Pendente)\b/);
