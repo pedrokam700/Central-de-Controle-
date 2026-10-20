@@ -72,11 +72,11 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
   let checking = false, checked = false, expanded = false, disposed = false, onboarding;
   let backupBusy = false, maintenanceMessage = '';
   let map3012Busy = false, map3012Message = '';
-  let mode = savedIntegrationMode(), last = '';
+  let mode = savedIntegrationMode(), last = '', viewerGuideOpen=false;
   function choose(value) {
     mode = value;
     try { localStorage.setItem(INTEGRATION_MODE_KEY, value); } catch { /* browser-only preference */ }
-    expanded = value === 'collector';
+    expanded = value === 'collector';viewerGuideOpen = value === 'viewer';
     render();
   }
   async function check() {
@@ -133,7 +133,7 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     // A verified local agent should not bury the operation dashboard beneath
     // onboarding every time it rerenders. Pairing remains one click away via
     // the persistent "Configurar posto" button.
-    const visible = expanded || !connected || mode === 'viewer';
+    const visible = expanded || viewerGuideOpen || (!connected && mode !== 'viewer');
 
     const detector=installationDetection(agent,!!client.paired?.());
     const shared=sharingState(agent);
@@ -167,7 +167,7 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
       ? `${esc(backup.created_at || t('data não informada', 'date not reported'))} · ${esc(formatBytes(backup.bytes))}${backup.reason ? ` · ${esc(backup.reason)}` : ''}`
       : t('Nenhum ponto criado nesta sessão foi reportado à Central.', 'No recovery point created in this session has been reported to Work Center.');
     root.hidden=!visible;
-    const key=JSON.stringify([checking,checked,expanded,mode,connected,pairing,connectionError,detector,shared,checks,maintenance,backupBusy,maintenanceMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
+    const key=JSON.stringify([checking,checked,expanded,viewerGuideOpen,mode,connected,pairing,connectionError,detector,shared,checks,maintenance,backupBusy,maintenanceMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
     if(key===last)return;last=key;
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
@@ -178,7 +178,7 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
       ${expanded ? `<details open><summary>Pré-teste do posto</summary><ul>${checks.map(c => `<li data-check-state="${c.state}">${esc(c.label)} — <span>${c.state === 'ok' ? 'Verificado' : c.state === 'missing' ? 'Pendente' : 'Não verificado'}</span></li>`).join('')}</ul><p>${ready ? 'Pronto para teste' : 'Conclua os itens pendentes e confirme o login manual A-MES antes da coleta.'}</p><button type="button" class="button secondary" data-preflight ${checking ? 'disabled' : ''}>Verificar novamente</button>
       <section class="notice ${maintenance.tone === 'partial' ? 'warn' : ''}" data-workstation-maintenance><b>${t('Manutenção do posto', 'Workstation maintenance')} · ${esc(maintenanceStateLabel(maintenance.tone))}</b><br><small>${t('Build instalada', 'Installed build')}: ${esc(maintenance.build || '—')} · ${t('Candidato reportado', 'Reported candidate')}: ${esc(maintenance.candidate || '—')} · Setup: ${maintenance.setup_complete ? t('concluído', 'complete') : t('não confirmado', 'not confirmed')}</small><p>${t('Verificação local', 'Local verification')}: ${maintenance.localChecks.map(item => `${esc(maintenanceCheckLabel(item.key))} ${item.state === 'ok' ? '✓' : item.state === 'missing' ? '!' : '?'}`).join(' · ')}</p><p><b>${t('Ponto de recuperação', 'Recovery point')}:</b> ${backupSummary}</p><div class="mes-pagination"><button type="button" class="button secondary" data-workstation-backup ${!connected || backupBusy ? 'disabled' : ''}>${backupBusy ? t('Criando ponto de recuperação…', 'Creating recovery point…') : t('Criar ponto de recuperação agora', 'Create recovery point now')}</button></div>${maintenanceMessage ? `<p role="status">${esc(maintenanceMessage)}</p>` : ''}<details data-3012-map-tools><summary>${t('Diagnóstico 3012 Home', '3012 Home diagnostics')}</summary><p>${t('Mapeia somente a estrutura técnica da 3012 correta na Home. Não executa consulta, não lê valores dos campos e não coleta cookie, sessão ou cabeçalhos.', 'Maps only the technical structure of the canonical 3012 Home view. It does not run a query, read field values, or collect cookies, session data or headers.')}</p><div class="mes-pagination"><button type="button" class="button secondary" data-map-3012 ${!connected || map3012Busy ? 'disabled' : ''}>${map3012Busy ? t('Mapeando 3012 Home…', 'Mapping 3012 Home…') : t('Mapear 3012 Home (somente leitura)', 'Map 3012 Home (read-only)')}</button></div>${map3012Message ? `<p role="status">${esc(map3012Message)}</p>` : ''}<small>${t('O agente reserva a sessão MES, abre a view Home correta e baixa um JSON sanitizado. Envie esse JSON no chat; a consulta controlada por SN será a etapa seguinte.', 'The agent reserves the MES session, opens the correct Home view and downloads a sanitized JSON. Send that JSON in chat; the controlled SN query is the next step.')}</small></details><small>${t('A atualização e o rollback dos arquivos continuam fora do navegador. Crie um ponto de recuperação, encerre o agente antes de substituir arquivos e use somente o pacote/candidato validado para este build.', 'File update and rollback remain outside the browser. Create a recovery point, stop the agent before replacing files, and use only the package/candidate validated for this build.')}</small></section>
       <section data-installation></section></details>` : ''}
-      ${!expanded&&mode==='viewer'?'<section data-installation></section>':''}
+      ${!expanded&&viewerGuideOpen?'<section data-installation></section>':''}
     </div>`;
     root.querySelector('[data-sync-guide-verify]')?.addEventListener('click',async()=>{if(checking)return;checking=true;last='';render();try{await verify();}catch{}finally{checking=false;if(!disposed){last='';render();}}});
     root.querySelector('[data-use-shared]')?.addEventListener('click', () => choose('viewer'));
@@ -188,11 +188,11 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     root.querySelector('[data-workstation-backup]')?.addEventListener('click', backupNow);
     root.querySelector('[data-map-3012]')?.addEventListener('click', map3012Now);
     onboarding?.clear(); onboarding = null;
-    if (expanded || mode==='viewer') {
+    if (expanded || viewerGuideOpen) {
       onboarding = createOnboardingView(root.querySelector('[data-installation]'), { onChoice: choose, getAgent:()=>store.agent(),isPaired:()=>!!client.paired?.() });
       void onboarding.render();
     }
     if (!checked && !checking) queueMicrotask(check);
   }
-  return { render, open() { expanded = true; choose('collector'); }, collapse(){expanded=false;render();}, clear() { disposed = true; onboarding?.clear(); root.replaceChildren(); } };
+  return { render, open() { expanded = true; choose('collector'); }, collapse(){expanded=false;viewerGuideOpen=false;render();}, clear() { disposed = true; onboarding?.clear(); root.replaceChildren(); } };
 }
