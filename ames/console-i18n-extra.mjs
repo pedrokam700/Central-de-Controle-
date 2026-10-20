@@ -202,4 +202,16 @@ Todas as falhas|All failures
 Top 3 falhas|Top 3 failures
 Descrição humana em destaque; o código fica apenas como referência técnica.|Human-readable description is emphasized; the code remains only a technical reference.
 Buscar nome da falha|Search failure name
+MES local não confirmado neste computador|Local MES not confirmed on this computer
+Agente local detectado · conectar|Local agent detected · connect
+Diagnósticos e informações técnicas|Diagnostics and technical information
+Abrir histórico detalhado|Open detailed history
+Ocorrências: maior → menor|Occurrences: most to least
+Ocorrências: menor → maior|Occurrences: least to most
+não coletado|not collected
+Não coletado.|Not collected.
+Esta linha não possui snapshot carregado; ausência de dados não é zero.|No snapshot is loaded for this line; missing data is not zero.
+snapshot não carregado|snapshot not loaded
+coverage indisponível|coverage unavailable
+Consultas anteriores, armazenadas no SQLite. O horário da busca não determina o dia de produção e não altera Hoje.|Previous queries stored in SQLite. Query time does not establish the production day or change Today.
 `.trim().split('\n').map(line=>{const i=line.indexOf('|');return [line.slice(0,i),line.slice(i+1)];}));
