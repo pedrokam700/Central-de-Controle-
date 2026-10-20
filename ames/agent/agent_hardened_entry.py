@@ -20,9 +20,13 @@ import operational_calendar
 import origin_policy
 import performance_indexes
 import source_capture
+import sn_lookup_context
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
 PERFORMANCE_INDEX_STATE = performance_indexes.install(entry.a.STORE)
+# Derive conservative 3022 SN context from already collected results only.
+# This does not navigate A-MES and never replaces the validated collectors.
+sn_lookup_context.install(entry.a)
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)

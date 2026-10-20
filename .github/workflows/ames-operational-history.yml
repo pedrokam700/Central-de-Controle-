@@ -65,6 +65,7 @@ jobs:
             'scripts/agent-trace-target.test.py',
             'scripts/agent-canonical.test.py',
             'scripts/agent-repair-association.test.py',
+            'scripts/agent-sn-lookup-context.test.py',
             'scripts/agent-3012-capture.test.py',
             'scripts/agent-raw-history.test.py'
           )) {
