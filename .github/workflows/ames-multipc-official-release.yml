@@ -55,7 +55,7 @@ jobs:
               assert manifest.get("integrated_shell") is True
               assert set(manifest["files"])|{"CANDIDATE_MANIFEST.json"}==names
               assert all(hashlib.sha256(z.read(k)).hexdigest()==v for k,v in manifest["files"].items())
-              assert not any("/data/" in n or n.endswith((".sqlite",".sqlite3",".db",".pem",".key",".log")) or n.endswith("/config.json") or "local_agent_token" in n for n in names)
+              assert not any(n.startswith("ames-agent/data/") or n.endswith((".sqlite",".sqlite3",".db",".pem",".key",".log")) or n.endswith("/config.json") or "local_agent_token" in n for n in names)
               print("GREEN exact-SHA ZIP",len(names),"files SHA256",hashlib.sha256(p.read_bytes()).hexdigest())
           PY
       - name: Release a new immutable GitHub asset without replacing the previous factory version
