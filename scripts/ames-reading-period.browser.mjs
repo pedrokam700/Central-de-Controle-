@@ -198,6 +198,8 @@ try{
  const snLive=page.locator('[data-console-pane=sn] [data-sn-live]');
  await snLive.locator('[data-sn-live-provenance]').waitFor();
  assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1);
+ assert.equal(await snLive.locator('[data-sn-live-provenance]').evaluate(el=>el.open),false,'source details start collapsed');
+ await snLive.locator('[data-sn-live-provenance] summary').click();
  assert.match(await snLive.locator('[data-sn-live-provenance]').innerText(),/3012|2114/);
  assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1);
  assert.equal(await snLive.locator('[data-sn-temporal-detail]').count(),1);
