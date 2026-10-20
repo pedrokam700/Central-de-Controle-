@@ -470,10 +470,9 @@ try{
  await page.locator('[data-reading-reload]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.source_choices?.length===1);
  assert.equal(await page.locator('[data-history-source-picker]').count(),1);
- assert.equal(await page.locator('[data-history-source-select] option').count(),2);
+ assert.equal(await page.locator('[data-history-source-select] option').count(),3,'explicit placeholder plus two source identities');
  assert.equal(await page.evaluate(()=>qa.store.agent().period_read.status),'partial');
  await page.locator('[data-history-source-select]').selectOption('preserved-workstation');
- await page.locator('[data-history-source-apply]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.source_id),'preserved-workstation');
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');
