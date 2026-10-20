@@ -26,7 +26,7 @@ def test_legacy_day_start_is_migrated_without_shift_reinterpretation():
     check(cfg["work_shifts"]["1"]["start"] == "07:30", "1º turno deve começar 07:30")
     check(cfg["work_shifts"]["1"]["end"] == "17:30", "1º turno deve terminar 17:30")
     check(cfg["work_shifts"]["2"]["start"] == "17:30", "2º turno deve começar 17:30")
-    check(cfg["work_shifts"]["2"]["end"] == "07:30", "2º turno deve terminar 07:30")
+    check(cfg["work_shifts"]["2"]["end"] == "03:30", "2º turno deve terminar 03:30")
     check(cfg["timezone"] == "America/Sao_Paulo", "timezone da fábrica deve ser explícito")
 
 
@@ -53,8 +53,21 @@ def test_previous_production_day_skips_weekend_and_supports_exceptions():
     start, end = cal.previous_day_window(cfg, monday)
     check(start.startswith("2026-10-18T07:00"), "domingo excepcional deve ser considerado")
     check(end.startswith("2026-10-19T07:00"), "janela excepcional mantém a virada 07:00")
-    check(cal.shift_for(cfg, datetime(2026, 10, 19, 7, 15))["id"] == "2", "07:15 ainda pertence ao 2º turno")
+    check(cal.shift_for(cfg, datetime(2026, 10, 19, 7, 15))["id"] is None, "07:15 fora dos turnos apesar de novo dia produtivo")
 
+
+def test_exact_legacy_schedule_is_corrected_without_changing_custom_shifts():
+    legacy={"day_start":"07:00","work_shifts":{
+        "1":{"label":"1º Turno","start":"07:30","end":"17:30"},
+        "2":{"label":"2º Turno","start":"17:30","end":"07:30"}}}
+    check(cal.normalized(legacy)["work_shifts"]["2"]["end"]=="03:30","legacy defaults read as corrected")
+    changed=cal.migrate_config(legacy)
+    check(changed,"old incorrect schedule must persist correction")
+    check(legacy["work_shifts"]["2"]["end"]=="03:30","migration must update legacy hours")
+    custom={"work_shifts":{
+        "1":{"label":"Especial 1","start":"08:00","end":"16:00"},
+        "2":{"label":"Especial 2","start":"16:00","end":"22:00"}}}
+    check(cal.normalized(custom)["work_shifts"]["2"]["end"]=="22:00","custom schedules must be preserved")
 
 def test_calendar_exceptions_fail_closed():
     for bad in [
@@ -76,7 +89,10 @@ def test_shift_classification_crosses_midnight():
     check(cal.shift_for(cfg, datetime(2026, 10, 10, 17, 29))["id"] == "1", "17:29 deve ser 1º turno")
     check(cal.shift_for(cfg, datetime(2026, 10, 10, 17, 30))["id"] == "2", "17:30 deve ser 2º turno")
     check(cal.shift_for(cfg, datetime(2026, 10, 11, 0, 15))["id"] == "2", "madrugada deve permanecer 2º turno")
-    check(cal.shift_for(cfg, datetime(2026, 10, 11, 7, 29))["id"] == "2", "07:29 deve ser 2º turno")
+    check(cal.shift_for(cfg, datetime(2026, 10, 11, 7, 29))["id"] is None, "07:29 fora dos turnos")
+    check(cal.shift_for(cfg, datetime(2026, 10, 11, 3, 29))["id"] == "2", "03:29 ainda é 2º turno")
+    check(cal.shift_for(cfg, datetime(2026, 10, 11, 3, 30))["id"] is None, "03:30 fora dos turnos")
+    check(cal.shift_for(cfg, datetime(2026, 10, 11, 4, 0))["id"] is None, "04:00 fora dos turnos")
     check(cal.shift_for(cfg, datetime(2026, 10, 11, 7, 30))["id"] == "1", "07:30 deve virar 1º turno")
 
 
