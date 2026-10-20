@@ -29,10 +29,11 @@ export function createReadingPeriodController(store,history,{changed=()=>{}}={})
         const selectedSource=sourceOverrides.get(scope);
         const agentSource=agent.status==='connected'?agent.capabilities?.source_id:null;
         const isLocal=id=>entries.some(e=>e.source_id===id&&e.history_source==='local');
-        const localSources=sources.filter(isLocal);
-        const provenLocal=agentSource
-          ? (sources.includes(agentSource)&&isLocal(agentSource)?agentSource:null)
-          : (agent.status==='connected'&&localSources.length===1?localSources[0]:null);
+        // "Local" does not guarantee identity after a CLEAN install.
+        const headSources=agent.status==='connected'
+          ? [...new Set(store.localCanonical().map(p=>p.source_id).filter(Boolean))]:[];
+        const provenSource=agentSource||(headSources.length===1?headSources[0]:null);
+        const provenLocal=provenSource&&sources.includes(provenSource)&&isLocal(provenSource)?provenSource:null;
         const resolved=selectedSource&&sources.includes(selectedSource)?selectedSource:provenLocal;
         if(!resolved){
           source_choices.push({line_id:line,options:sources.filter(Boolean).map(source_id=>{
