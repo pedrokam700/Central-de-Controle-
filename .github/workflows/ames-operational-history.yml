@@ -39,6 +39,7 @@ jobs:
           python3 scripts/agent-individual-assembly.test.py
           python3 scripts/agent-3022-origin-fallback.test.py
           python3 scripts/agent-3022-canonical-contract.test.py
+          python3 scripts/agent-3074-pagination.test.py
   reading-browser:
     runs-on: ubuntu-latest
     timeout-minutes: 10
