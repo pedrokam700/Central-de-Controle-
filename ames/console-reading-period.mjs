@@ -10,14 +10,29 @@ export function paintReadingPeriod(root,store,controller){
   const loaded=LINE_IDS.filter(line=>!!store.read(line).snapshot);
   const line=store.context?.()?.line_id||store.preferredLine?.();
   const missing=p?.mode!=='today'&&status?.status!=='loading'&&!!line&&!store.read(line).snapshot;
+  const selectionNeeded=status?.source_choices?.find(choice=>choice.line_id===line&&choice.options?.length);
+  const sourcePicker=selectionNeeded&&status?.status!=='loading'?'<div class="mes-context" data-history-source-picker>'+
+    '<label>'+t('Histórico encontrado em mais de um posto. Escolha a origem da Linha','History found on multiple workstations. Choose the source for line')+' '+esc(line)+
+    '<select data-history-source-select>'+selectionNeeded.options.map(o=>'<option value="'+esc(o.source_id)+'">'+
+      esc((o.history_source==='local'?t('Local neste computador','Local on this computer'):t('Compartilhado','Shared'))+' · '+o.source_id+' · '+formatFactoryDateTime(o.collected_at))+
+      '</option>').join('')+'</select></label>'+
+    '<button type="button" class="button secondary" data-history-source-apply>'+t('Abrir esta origem','Open this source')+'</button></div>':'';
   const note=status?.status==='loading'?t('Consultando revisões salvas…','Reading saved revisions…'):
-    missing?t('Nenhuma revisão salva disponível nesta linha e período. Não significa zero falhas. Após a coleta, use Atualizar leitura se necessário.','No saved revision for this line and period. This is not zero failures. After collection, use Refresh reading if needed.'):
+    selectionNeeded?t('Existem revisões salvas de origens diferentes. Nenhuma foi descartada; escolha a origem para visualizar.','Saved revisions come from different workstations. None was discarded; choose one to view.') :
+    missing?t('Nenhuma revisão salva disponível nesta linha e período. Não significa zero falhas. Após a coleta, use Atualizar leitura se necessário.','No saved revision for this line and period. This is not zero failures. After collection, use Refresh reading if needed.') :
     p?.mode!=='today'&&status?.status==='ready'?loaded.length+' '+t('linha(s) com revisão disponível','line(s) with saved revisions'):'';
   root.setAttribute('data-no-i18n','');
-  root.innerHTML=`<nav class="ames-history-tabs" aria-label="${t('Período de leitura','Reading period')}">${[['today',t('Hoje','Today')],['previous',t('Último dia produtivo','Last production day')],['custom',t('Período…','Period…')]].map(([id,label])=>`<button type="button" class="button secondary" data-read-period="${id}" aria-pressed="${p?.mode===id}">${label}</button>`).join('')}</nav><p class="mes-context" data-reading-label>${p?esc(formatFactoryDateTime(p.start)+' → '+formatFactoryDateTime(p.end)):''} · America/Sao_Paulo · ${t('07:00 → 07:00; turnos são outra dimensão','07:00 → 07:00; shifts are a separate dimension')}${p?.mode!=='today'?' · '+t('Somente leitura do passado','Read-only history'):''}</p><form data-reading-range hidden><div class="mes-filters"><label>${t('Início','Start')}<input type="datetime-local" name="start" required value="${esc(p?.start||'')}"></label><label>${t('Fim','End')}<input type="datetime-local" name="end" required value="${esc(p?.end||'')}"></label></div><button class="button secondary" type="submit">${t('Ver dados armazenados','View stored data')}</button></form><p role="status" data-reading-status>${esc(status?.errors?.length?status.errors.map(e=>e.line_id+': '+e.error).join(' · '):note)}</p>${p?.mode!=='today'?'<button type="button" class="button secondary" data-reading-reload>'+t('Atualizar leitura','Refresh reading')+'</button>':''}`;
+  root.innerHTML=`<nav class="ames-history-tabs" aria-label="${t('Período de leitura','Reading period')}">${[['today',t('Hoje','Today')],['previous',t('Último dia produtivo','Last production day')],['custom',t('Período…','Period…')]].map(([id,label])=>`<button type="button" class="button secondary" data-read-period="${id}" aria-pressed="${p?.mode===id}">${label}</button>`).join('')}</nav><p class="mes-context" data-reading-label>${p?esc(formatFactoryDateTime(p.start)+' → '+formatFactoryDateTime(p.end)):''} · America/Sao_Paulo · ${t('07:00 → 07:00; turnos são outra dimensão','07:00 → 07:00; shifts are a separate dimension')}${p?.mode!=='today'?' · '+t('Somente leitura do passado','Read-only history'):''}</p><form data-reading-range hidden><div class="mes-filters"><label>${t('Início','Start')}<input type="datetime-local" name="start" required value="${esc(p?.start||'')}"></label><label>${t('Fim','End')}<input type="datetime-local" name="end" required value="${esc(p?.end||'')}"></label></div><button class="button secondary" type="submit">${t('Ver dados armazenados','View stored data')}</button></form><p role="status" data-reading-status>${esc(status?.errors?.length?status.errors.map(e=>e.line_id+': '+e.error).join(' · '):note)}</p>${sourcePicker}${p?.mode!=='today'?'<button type="button" class="button secondary" data-reading-reload>'+t('Atualizar leitura','Refresh reading')+'</button>':''}`;
   for(const b of root.querySelectorAll('[data-read-period]'))b.addEventListener('click',()=>{
     if(b.dataset.readPeriod==='custom'){root.querySelector('form').hidden=false;return;}
     void controller.select(b.dataset.readPeriod);
+  });
+  root.querySelector('[data-history-source-apply]')?.addEventListener('click',()=>{
+    const source_id=root.querySelector('[data-history-source-select]')?.value;
+    if(!source_id||!line)return;
+    void controller.chooseSource(line,source_id).catch(error=>{
+      const el=root.querySelector('[data-reading-status]');if(el)el.textContent=error.message;
+    });
   });
   root.querySelector('[data-reading-reload]')?.addEventListener('click',()=>{
     const period=store.readingPeriod();
