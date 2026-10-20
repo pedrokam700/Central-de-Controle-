@@ -13,6 +13,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ames'/'agent'))
 from store import Store,stable_json
 import canonical
+import workstation_pairing
 
 
 class SavedSnHistoryTests(unittest.TestCase):
@@ -33,7 +34,7 @@ class SavedSnHistoryTests(unittest.TestCase):
         cls=next(n for n in syntax.body if isinstance(n,ast.ClassDef) and n.name=='HardenedHandler')
         method=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='do_GET')
         context={'entry':types.SimpleNamespace(a=types.SimpleNamespace(STORE=self.db,BASE_DIR=pathlib.Path(self.tmp.name))),
-                 'urlparse':urlparse,'parse_qs':parse_qs}
+                 'urlparse':urlparse,'parse_qs':parse_qs,'workstation_pairing':workstation_pairing}
         exec(compile(ast.Module(body=[method],type_ignores=[]),'<real hardened GET>','exec'),context)
         self.handler=types.SimpleNamespace(_authorized=lambda path:True,
             _send=lambda value,status=200:setattr(self,'response',(status,value)),
