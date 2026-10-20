@@ -17,7 +17,10 @@ export function readRelease(value) {
   if(available){
     if(typeof value.package_name!=='string'||!value.package_name.endsWith('.zip')||typeof value.sha256!=='string'||!/^[a-f0-9]{64}$/i.test(value.sha256)) throw new TypeError('Pacote publicado inválido');
     const url=new URL(value.download_url);
-    if(url.protocol!=='https:'||url.username||url.password)throw new TypeError('Link de pacote inválido');
+    if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||
+      url.hostname!=='github.com'||url.pathname!==
+        '/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.25-factory-20261020/'+value.package_name)
+      throw new TypeError('Pacote oficial deve ser GitHub Release verificado');
     download_url=url.href;package_name=value.package_name;sha256=value.sha256;
   }else{
     // Pacote ausente é um estado explícito e fail-closed. Não reutilize o ZIP
@@ -25,7 +28,11 @@ export function readRelease(value) {
     if(value.download_url||value.package_name||value.sha256)throw new TypeError('Manifesto pendente não pode anunciar pacote antigo');
   }
   const existingR12=value.existing_r12_migration===true;
-  return immutable({version:value.version,package_available:available,package_name,sha256,download_url,
+  const validatedSha=typeof value.validated_candidate_sha==='string'&&/^[a-f0-9]{40}$/.test(value.validated_candidate_sha)
+    ?value.validated_candidate_sha:null;
+  if(available&&(!validatedSha||!package_name.endsWith(validatedSha.slice(0,8)+'.zip')))
+    throw new TypeError('Pacote sem commit GitHub confirmado');
+  return immutable({version:value.version,package_available:available,package_name,sha256,download_url,validated_sha:validatedSha,
     local_runtime:readRuntime(value.local_runtime),existing_r12_migration:existingR12,
     new_pc_status:typeof value.new_pc_status==='string'?value.new_pc_status:'unknown',
     validated_baseline:typeof value.validated_baseline==='string'?value.validated_baseline:'',
