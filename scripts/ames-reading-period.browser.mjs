@@ -422,7 +422,7 @@ try{
  await page.locator('[data-connect-local-pairing]').click();
  assert.equal(await page.evaluate(()=>qa.localPairCount()),1,'HTTPS button must explicitly start local confirmation');
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'pairing must not run a MES job');
- assert.equal(await page.locator('[data-setup-existing] a[href="http://127.0.0.1:8765/Central-de-Controle-/"]').count(),1);
+ assert.equal(await page.locator('[data-installation-detection=pairing_required] a[href="http://127.0.0.1:8765/Central-de-Controle-/"]').count(),1,'local recovery link exists before GitHub metadata finishes');
  await page.evaluate(()=>{qa.store.updateAgent({status:'disconnected',connection_error:{code:'agent-network',message:'Browser network restriction'}});qa.view.render();});
  await page.locator('[data-installation-detection=not_verified]').waitFor();
  assert.equal(await page.locator('[data-setup-existing]').count(),1);
