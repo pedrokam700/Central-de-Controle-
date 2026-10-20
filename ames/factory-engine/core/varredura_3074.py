@@ -81,6 +81,8 @@ def executar_varredura(
     if not componentes:
         if not base.get("rows"):
             status = "SEM_REGISTROS_3074_NA_CONSULTA"
+        elif temporal["summary"].get("time_unknown") or temporal["summary"].get("boundary_ambiguous"):
+            status = "COMPONENTES_NAO_DETERMINADOS_POR_INTERVALO_INCOMPLETO"
         elif temporal["summary"]["bound_after_defect"] > 0:
             status = "SEM_COMPONENTES_NO_MOMENTO_DA_FALHA_VINCULOS_POSTERIORES"
         else:
@@ -90,6 +92,10 @@ def executar_varredura(
             "defect_time": defect_time,
             "scanned_at": datetime.now().isoformat(timespec="seconds"),
             "status": status,
+            "assembly_scope": {"basis": "3028_exact_pcba_defect_time", "status": "incomplete" if temporal["summary"].get("time_unknown") or temporal["summary"].get("boundary_ambiguous") else "bounded",
+                              "selected_items": len(componentes), "uncertain_items": temporal["summary"].get("time_unknown",0)+temporal["summary"].get("boundary_ambiguous",0),
+                              "future_links_excluded": temporal["summary"].get("bound_after_defect",0),
+                              "past_links_excluded": temporal["summary"].get("ended_before_defect",0)},
             "temporal_filter": temporal,
             "summary": resumir_resultados([], temporal["summary"]),
             "results": [],
@@ -135,7 +141,7 @@ def executar_varredura(
                 grid_naive_offset_hours=grid_naive_offset_hours,
             )
             previous_count = hist_temporal["previous_pcba_count"]
-            status = classificar_reuso_anterior(previous_count)
+            status = classificar_reuso_anterior(previous_count) if hist_temporal["current_pcba_confirmed"] else "VINCULO_PCBA_ITEM_NAO_CONFIRMADO"
             full_history = historico_completo_pcbas_do_item(
                 hist.get("rows", []),
                 grid_naive_offset_hours=grid_naive_offset_hours,
@@ -143,12 +149,17 @@ def executar_varredura(
             r = {
                 "item_sn": item_sn,
                 "item_type": item.get("item_type", ""),
+                "binding_operation": item.get("binding_operation"),
+                "binding_line": item.get("binding_line"),
+                "source_view": "3074",
+                "selection_reason": item.get("temporal_reason"),
                 "status": status,
                 "bind_time_utc": item.get("bind_time_utc"),
                 "unbind_time_utc": item.get("unbind_time_utc"),
                 "iss_status_now": item.get("iss_status_now"),
-                "previous_pcba_count": previous_count,
-                "previous_pcbas": [x["pcba_sn"] for x in hist_temporal["previous_pcbas"]],
+                "previous_pcba_count": previous_count if hist_temporal["current_pcba_confirmed"] else None,
+                "previous_pcbas": [x["pcba_sn"] for x in hist_temporal["previous_pcbas"]] if hist_temporal["current_pcba_confirmed"] else [],
+                "unverified_previous_pcbas": [x["pcba_sn"] for x in hist_temporal["previous_pcbas"]] if not hist_temporal["current_pcba_confirmed"] else [],
                 "pcbas_until_defect": [x["pcba_sn"] for x in hist_temporal["associations_until_defect"]],
                 "current_pcba_confirmed": hist_temporal["current_pcba_confirmed"],
                 "future_association_count_ignored": len(hist_temporal["future_associations_ignored"]),
@@ -175,6 +186,10 @@ def executar_varredura(
             r = {
                 "item_sn": item_sn,
                 "item_type": item.get("item_type", ""),
+                "binding_operation": item.get("binding_operation"),
+                "binding_line": item.get("binding_line"),
+                "source_view": "3074",
+                "selection_reason": item.get("temporal_reason"),
                 "status": "ERRO_CONSULTA",
                 "bind_time_utc": item.get("bind_time_utc"),
                 "unbind_time_utc": item.get("unbind_time_utc"),
@@ -208,6 +223,10 @@ def executar_varredura(
         "defect_time": defect_time,
         "scanned_at": datetime.now().isoformat(timespec="seconds"),
         "status": "COMPONENTES_DO_MOMENTO_DA_FALHA_PROCESSADOS",
+        "assembly_scope": {"basis": "3028_exact_pcba_defect_time", "status": "incomplete" if temporal["summary"].get("time_unknown") or temporal["summary"].get("boundary_ambiguous") or any(r.get("current_pcba_confirmed") is False for r in resultados) else "bounded",
+                           "selected_items": len(componentes), "uncertain_items": temporal["summary"].get("time_unknown",0)+temporal["summary"].get("boundary_ambiguous",0),
+                           "future_links_excluded": temporal["summary"].get("bound_after_defect",0),
+                           "past_links_excluded": temporal["summary"].get("ended_before_defect",0)},
         "temporal_filter": temporal,
         "summary": resumir_resultados(resultados, temporal["summary"]),
         "results": resultados,

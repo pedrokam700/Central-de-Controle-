@@ -77,6 +77,7 @@ def componentes_no_momento_da_falha(
         "ended_before_defect": [],
         "bound_after_defect": [],
         "time_unknown": [],
+        "boundary_ambiguous": [],
     }
 
     for row in rows or []:
@@ -90,24 +91,53 @@ def componentes_no_momento_da_falha(
             "bind_time_utc": _iso(bind),
             "unbind_time_utc": _iso(unbind),
             "iss_status_now": str(row.get("Iss Status") or "").strip(),
+            "binding_operation": str(row.get("Operation") or "").strip(),
+            "binding_line": str(row.get("Line Id") or "").strip(),
+            "binding_product": str(row.get("Product Model") or "").strip(),
+            "source_view": "3074",
             "row": row,
         }
-        if bind is None:
+        if bind is None or (unbind is not None and unbind < bind):
+            item["temporal_reason"] = "invalid_or_missing_binding_interval"
             buckets["time_unknown"].append(item)
         elif bind > defect_utc:
             buckets["bound_after_defect"].append(item)
         elif unbind is not None and unbind < defect_utc:
             buckets["ended_before_defect"].append(item)
+        elif unbind is not None and unbind == defect_utc:
+            item["temporal_reason"] = "unbind_equals_defect_time"
+            buckets["boundary_ambiguous"].append(item)
+        elif unbind is None and item["iss_status_now"].strip().upper() == "N":
+            # Currently unlinked without an end instant cannot establish
+            # whether it was present when the defect occurred.
+            item["temporal_reason"] = "unlinked_now_missing_unbind_time"
+            buckets["time_unknown"].append(item)
         else:
+            item["temporal_reason"] = "bind_interval_contains_defect"
             buckets["active"].append(item)
 
     # O mesmo SN pode aparecer em mais de um posto/registro. Se houver duplicata
     # ativa, mantemos a vinculacao mais recente iniciada antes da falha.
     active_by_sn = {}
+    conflicted = set()
     for item in buckets["active"]:
-        old = active_by_sn.get(item["item_sn"])
-        if old is None or (item.get("bind_time_utc") or "") > (old.get("bind_time_utc") or ""):
-            active_by_sn[item["item_sn"]] = item
+        sn = item["item_sn"]
+        old = active_by_sn.get(sn)
+        if old is None:
+            active_by_sn[sn] = item
+            continue
+        if (old["bind_time_utc"], old["unbind_time_utc"]) != (item["bind_time_utc"], item["unbind_time_utc"]):
+            # Two incompatible overlapping mounting intervals cannot be
+            # resolved by Iss Status or by picking the most recent row.
+            conflicted.add(sn)
+        elif old.get("binding_operation") != item.get("binding_operation"):
+            old.setdefault("binding_operations", [old.get("binding_operation")])
+            if item.get("binding_operation") not in old["binding_operations"]:
+                old["binding_operations"].append(item.get("binding_operation"))
+    for sn in conflicted:
+        item = active_by_sn.pop(sn)
+        item["temporal_reason"] = "overlapping_or_conflicting_binding_cycles"
+        buckets["time_unknown"].append(item)
     buckets["active"] = list(active_by_sn.values())
 
     y = sum(1 for x in buckets["active"] if x.get("iss_status_now", "").upper() == "Y")
@@ -126,6 +156,7 @@ def componentes_no_momento_da_falha(
             "ended_before_defect": len(buckets["ended_before_defect"]),
             "bound_after_defect": len(buckets["bound_after_defect"]),
             "time_unknown": len(buckets["time_unknown"]),
+            "boundary_ambiguous": len(buckets["boundary_ambiguous"]),
             "iss_status_y_now_among_active_then": y,
             "iss_status_n_now_among_active_then": n,
             "iss_status_other_now_among_active_then": other,
@@ -266,3 +297,39 @@ def historico_completo_pcbas_do_item(rows, grid_naive_offset_hours=0):
         "inactive_now_pcbas": [x["pcba_sn"] for x in inactive_now],
         "other_status_pcbas": [x["pcba_sn"] for x in other_now],
     }
+
+
+def corroborar_posto_3022(component, rows3022, pcba_sn, defect_time, defect_local_offset_hours=-3, grid_naive_offset_hours=0):
+    """Optional, time-bounded cross-source support. Never invent a 3022 pass.
+
+    3074 Operation is the binding station, not a promise that a 3022 event
+    exists; lack of a passage cannot make material history a proven zero.
+    The MES 3022 Working Oper is the completed operation; Current Oper often
+    points to the *next* station and must not be used as a completion proof.
+    """
+    station = str(component.get("binding_operation") or "").strip().upper()
+    cutoff = defect_time_to_utc(defect_time, defect_local_offset_hours)
+    bind = grid_time_to_utc(component.get("bind_time_utc"), grid_naive_offset_hours)
+    if not station or cutoff is None or bind is None:
+        return {"status": "unavailable", "station_3074": station or None,
+                "reason": "missing_station_or_time"}
+    matches = []
+    for row in rows3022 or []:
+        if normalizar_sn(row.get("pcba_sn")) != normalizar_sn(pcba_sn):
+            continue
+        working = str(row.get("working_oper_code") or row.get("working_oper") or "").strip().upper()
+        transaction = str(row.get("tran_desc") or "").strip().upper()
+        # Actual completed station, not a next-operation or a generic repair.
+        if working != station or transaction != "END LOT":
+            continue
+        when = grid_time_to_utc(row.get("event_time"), grid_naive_offset_hours)
+        if when is not None and bind <= when <= cutoff:
+            matches.append(when)
+    if not matches:
+        return {"status": "not_confirmed", "station_3074": station,
+                "reason": "no_completed_3022_passage_in_mounting_interval"}
+    return {"status": "corroborated", "station_3074": station,
+            "event_time_utc": _iso(max(matches)),
+            "source_view": "3022", "reason": "same_pcba_completed_station_between_bind_and_defect"}
+
+
