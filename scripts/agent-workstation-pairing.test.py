@@ -23,6 +23,26 @@ def test_user_confirmed_session_only():
     check(not p.confirm(headers(site="cross-site"),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"cross-site denied")
     check(not p.confirm(headers(origin="https://central-cora-v2.vercel.app"),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"HTTPS caller can't post directly")
     check(not p.confirm(headers(mode="cors"),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"XHR denied")
+    # Real Edge/Chromium can omit Origin on top-level local POSTs.
+    # Fetch Metadata must prove SAME ORIGIN when Origin is missing.
+    no_origin=headers();no_origin.pop("Origin")
+    check(p.confirm(no_origin,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
+          "same-origin local form with omitted Origin must succeed")
+    nonce=gate.issue()
+    for forged in (
+       {**headers(),"Origin":"null"},
+       {**headers(),"Origin":"https://attacker.example"},
+       {**headers(),"Sec-Fetch-Site":"cross-site"},
+       {**no_origin,"Sec-Fetch-Site":"cross-site"},
+       {**no_origin,"Sec-Fetch-Site":"none"},
+       {k:v for k,v in no_origin.items() if k!="Sec-Fetch-Site"},
+       {**no_origin,"Sec-Fetch-Mode":"cors"}
+    ):
+        check(not p.confirm(forged,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
+              "cross-site or ambiguous browser request must be rejected")
+    check(p.confirm(headers(),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
+          "invalid probes must not consume the one-time nonce")
+    nonce=gate.issue()
     check(not p.confirm(headers(),"192.168.1.9",8765,("nonce="+nonce).encode(),gate),"nonloopback denied")
     check(not p.confirm({**headers(),"Host":"malicious.example"},"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"DNS rebinding denied")
     check(p.confirm(headers(),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"invalid probes must not consume nonce")
