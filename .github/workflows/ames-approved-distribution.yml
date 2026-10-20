@@ -1,0 +1,60 @@
+# Only an already factory-approved SHA is distributed. Never publishes this branch's new code.
+name: Distribute Factory-Approved A-MES CLEAN
+on:
+  push:
+    branches: [work/ames-pr35-pr36-integration-20261019]
+    paths: ['.github/workflows/ames-approved-distribution.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  approved-clean-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    timeout-minutes: 10
+    steps:
+      - name: Retrieve approved and tested CLEAN artifact, not source from this push
+        uses: actions/download-artifact@v6
+        with:
+          name: AMES-PR42-e60cef8d4f033c4654b3fb730573e1ecfdd174bd
+          run-id: 39459840466
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/approved
+      - name: Verify exact factory-approved ZIP SHA-256 and contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/approved"
+          test "$(sha256sum AMES_PR42_CLEAN.zip | cut -d' ' -f1)" = "f73f12f2894e666700231b1fc9c7e16252e03ddebdf307ae807c2b52451bc152"
+          python3 - <<'PY'
+          import json, zipfile, hashlib
+          with zipfile.ZipFile("AMES_PR42_CLEAN.zip") as f:
+              names=set(f.namelist()); m=json.loads(f.read("CANDIDATE_MANIFEST.json"))
+              assert m["sha"]=="e60cef8d4f033c4654b3fb730573e1ecfdd174bd"
+              assert m["standalone_clean"] is True and m["development"] is False
+              assert set(m["files"])|{"CANDIDATE_MANIFEST.json"}==names
+              assert all(hashlib.sha256(f.read(k)).hexdigest()==v for k,v in m["files"].items())
+              assert not any(n.endswith((".sqlite",".sqlite3",".db",".pem",".key")) or "config.json"==n.split("/")[-1] for n in names)
+              print("Approved CLEAN: exact SHA, hash, manifest and local data exclusion verified")
+          PY
+      - name: Publish immutable public GitHub Release asset for fresh PCs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="ames-v0.5.25-factory-20261020"
+          asset="$RUNNER_TEMP/approved/AMES_PR42_CLEAN.zip"
+          cp "$asset" "$RUNNER_TEMP/approved/AMES_Central_CLEAN_e60cef8d.zip"
+          asset="$RUNNER_TEMP/approved/AMES_Central_CLEAN_e60cef8d.zip"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists. Refusing to overwrite an existing release."
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'AMES_Central_CLEAN_e60cef8d.zip'
+          else
+            gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" \
+              --target e60cef8d4f033c4654b3fb730573e1ecfdd174bd \
+              --title 'Central + A-MES — GREEN fábrica 20/10 (e60cef8d)' \
+              --notes 'Pacote CLEAN para instalação nova em PC Windows. SHA e60cef8d4f033c4654b3fb730573e1ecfdd174bd. SHA-256 f73f12f2894e666700231b1fc9c7e16252e03ddebdf307ae807c2b52451bc152. Preserve instalações anteriores/SQLite/outbox; extraia em pasta nova e execute 00_INICIAR_AQUI.bat. Não é updater in-place. A sincronização física PC A→B ainda precisa de homologação.'
+          fi
