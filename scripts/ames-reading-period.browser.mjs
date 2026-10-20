@@ -81,7 +81,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.PL
 const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 try{
- await page.goto('http://127.0.0.1:'+server.address().port+'/Central-de-Controle-/');await page.waitForFunction(()=>!!window.qa);
+ await page.goto('http://127.0.0.1:'+server.address().port+'/Central-de-Controle-/',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>!!window.qa);
  await page.locator('[data-read-period=previous]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.snapshot_id),'FRIDAY-SNAPSHOT');
