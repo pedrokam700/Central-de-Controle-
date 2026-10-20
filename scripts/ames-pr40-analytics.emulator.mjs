@@ -67,6 +67,16 @@ function day({date,id,revision=1,mode='previous_day',quantity=100}){
   p.datasets.material_reuse[0].defect_code='D';
   p.datasets.material_reuse[0].defect_time=p.datasets.defects[0].defect_time;
   p.datasets.material_reuse[0].part_number='PN-LCM';
+  // The C analyzer intentionally reads usage evidence from normalized insight
+  // drilldowns, rather than trusting unprojected arbitrary 3028/3074 columns.
+  p.insights={schema:'ames-insights-v1',ready:true,line:LINE,snapshot_id:String(id),
+    drilldowns:{
+      pcba_analysis:[{pcba_sn:'P',defect_code:'D',defect_time:p.collected_at,
+        pcba_use_index:2,product_model:'CPH2859V'}],
+      material_analysis:[{pcba_sn:'P',item_sn:'M',item_type:'LCM',
+        defect_code:'D',defect_time:p.collected_at,
+        material_use_index:2,part_number:'PN-LCM',product_model:'CPH2859V'}]
+    }};
   // These private attributes MUST be stripped by the publication sanitizer.
   p.cookie='PRIVATE-COOKIE-E';p.datasets.defects[0].raw_json='PRIVATE-RAW-E';
   return p;
