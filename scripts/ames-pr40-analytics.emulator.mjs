@@ -8,7 +8,29 @@ import {publication,createMesSync} from '../ames/sync.mjs';
 import {createMesHistorySource} from '../ames/history-source.mjs';
 import {createHistoryTrendReader} from '../ames/data/history-trends.mjs';
 import {createAmesStore} from '../ames/data/store.mjs';
-import {canonicalFixture} from './ames-sync.test.mjs';
+import {DATASETS} from '../ames/data/canonical.mjs';
+function canonicalFixture(line,product='CPH2859V'){
+  const p={schema:'central-ames-v2',schema_version:2,source_id:'source',
+    snapshot_id:'1',snapshot_revision:1,content_hash:'hash',line_id:line,
+    collected_at:'2026-10-09T10:00:00Z',source_view:'3028',
+    summary:{line,snapshot_id:'1',collected_at:'2026-10-09T10:00:00Z',
+      defect_rows:1,period:{mode:'today',start_at:'2026-10-09T07:00',
+        end_at:'2026-10-09T10:00'}},
+    datasets:Object.fromEntries(DATASETS.map(name=>[name,[]])),coverage:{},
+    capabilities:{process_timeline:false}};
+  const common={line,line_id:line,snapshot_id:'1',snapshot_revision:1,
+    pcba_sn:'P',product,raw_ref:'sqlite:record',
+    provenance:{contexts:[{line_id:line,pcba_sn:'P',product}],line_candidates:[line]}};
+  p.datasets.defects=[{...common,record_id:'D1',occurrence_id:'O1',product_model:product,
+    defect_code:'D',defect_time:p.collected_at}];
+  p.datasets.pcba_history=[{...common,record_id:'H1',source_view:'2114',hist_seq:'1'}];
+  p.datasets.material_reuse=[{...common,record_id:'M1',source_view:'3074',
+    item_sn:'M',material_sn:'M'}];
+  for(const name of DATASETS)p.coverage[name]={stored_total:p.datasets[name].length,
+    transport_complete:true,source_complete:false,
+    status:name==='process_timeline'?'not_collected':'partial'};
+  return p;
+}
 
 const modules=process.env.FIREBASE_TEST_MODULES;
 if(!modules)throw Error('FIREBASE_TEST_MODULES is required');
