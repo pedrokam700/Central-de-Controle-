@@ -110,3 +110,13 @@ test('auto agent probe with known response does not declare unknown HTTP server 
  assert.equal(installationDetection({status:'disconnected',workstation_probe:{state:'detected'}},false),'pairing_required');
  assert.equal(installationDetection({status:'disconnected',workstation_probe:{state:'unknown'}},false),'not_verified');
 });
+
+test('validated GitHub manifest remains valid through view-level validation',()=>{
+ const once=readRelease(release),twice=readRelease(once);
+ assert.equal(twice.validated_sha,once.validated_sha);
+ assert.equal(twice.download_url,once.download_url);
+ const latestOnce=verifiedLatestRelease(latest,release);
+ const latestTwice=readRelease(latestOnce);
+ assert.equal(latestTwice.validated_sha,'c'.repeat(40));
+ assert.equal(latestTwice.version,'0.5.26');
+});
