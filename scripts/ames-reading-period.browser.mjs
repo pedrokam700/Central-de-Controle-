@@ -404,6 +404,15 @@ try{
  await page.locator('[data-console-setup]').click();
  assert.equal(await page.locator('[data-console-preparation]').isVisible(),true,'on-demand workstation setup stays accessible');
  assert.equal(await page.locator('[data-pair-official]').count(),1);
+ assert.equal(await page.locator('[data-sync-guide]').count(),1,'sync overview integrated in setup');
+ await page.locator('[data-onboarding-guide]').waitFor();
+ await page.locator('[data-official-clean-download]').waitFor();
+ assert.match(await page.locator('[data-official-clean-download]').getAttribute('href'),/github\\.com\\/pedrokam700\\/Central-de-Controle-\\/releases\\/download\\/ames-v0\\.5\\.25-factory-20261020/);
+ assert.equal(await page.locator('[data-installation-detection=verified]').count(),1);
+ assert.equal(await page.locator('[data-setup-new]').count(),1);
+ assert.equal(await page.locator('[data-setup-existing]').count(),1);
+ assert.equal(await page.locator('[data-setup-share]').count(),1);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening install guide never starts MES jobs');
  await page.locator('[data-console-view=top3]').click();
  await page.locator('[data-console-view=monitor]').click();
  assert.equal(await page.locator('[data-console-preparation]').isHidden(),true,'setup collapses after navigation');
