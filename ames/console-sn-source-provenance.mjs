@@ -15,6 +15,10 @@ const cleanMeta=(src={},state=SOURCE_STATE.NOT_COLLECTED)=>Object.freeze({
   snapshot_revision:exactRevision(src.snapshot_revision),
   collected_at:known(src.collected_at),
   workstation_id:known(src.workstation_id),
+  observed_count:Array.isArray(src.rows)?src.rows.length:Array.isArray(src.query?.rows)?src.query.rows.length:null,
+  error:known(src.error||src.reason),
+  complete:src.source_complete===true,
+  persisted_at:known(src.persisted_at||src.stored_at),
   // Do not reinterpret dates from defects, repairs, process events, or job
   // submission as dates for the source collection.
   period_start:known(src.period?.start_at),
@@ -41,6 +45,9 @@ export function renderSnLiveSourceProvenance(result={},model={},locale='pt-BR'){
     return `<article data-sn-provenance-view="${item.view}" data-sn-provenance-state="${esc(item.state)}" class="ames-sn-repair-story"><div><small>${item.view}</small><b><span class="status ${css}">${esc(sourceStateLabel(item.state,locale))}</span></b></div>
       <div><small>${esc(t(locale,'Snapshot / revisão','Snapshot / revision'))}</small><b>${esc(fmt(item.snapshot_id))} / ${esc(fmt(item.snapshot_revision))}</b></div>
       <div><small>${esc(t(locale,'Coletado em','Collected at'))}</small><b>${esc(fmt(item.collected_at))}</b></div>
+      <div><small>${esc(t(locale,'Registros observados / extração integral','Observed rows / complete extraction'))}</small><b>${esc(fmt(item.observed_count))} / ${item.complete?t(locale,'confirmada','confirmed'):t(locale,'não comprovada','unproven')}</b></div>
+      <div><small>${esc(t(locale,'Persistência confirmada em','Persistence confirmed at'))}</small><b>${esc(fmt(item.persisted_at))}</b></div>
+      <div><small>${esc(t(locale,'Motivo / erro da fonte','Source reason / error'))}</small><b>${esc(fmt(item.error))}</b></div>
       <div><small>${esc(t(locale,'Origem / computador informado','Source / reported computer'))}</small><b>${esc(fmt(item.source_id))} / ${esc(fmt(item.workstation_id))}</b></div>
       <div><small>${esc(t(locale,'Período MES comprovado','Proven MES period'))}</small><b>${esc(range)}</b></div></article>`;
   }).join('');

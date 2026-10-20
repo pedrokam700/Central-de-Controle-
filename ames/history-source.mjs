@@ -23,6 +23,7 @@ export function createMesHistorySource(sync,client,store){
         for(const h of local.value){
           const key=[h.line_id,h.source_id,h.snapshot_id,h.snapshot_revision].join(':');
           if(!rows.has(key))rows.set(key,{...h,history_source:'local',revision_pending:h.snapshot_revision==null});
+          else rows.set(key,{...rows.get(key),local_available:true});
         }
       }
       if(cloud.status==='rejected'&&local.status==='rejected')throw Error('Histórico remoto e local indisponíveis');

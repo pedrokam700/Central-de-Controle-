@@ -83,7 +83,7 @@ function repairTimeline(failure,result,currentPcba,locale){
     return `<div class="ames-sn-forensic-empty">${esc(note)}</div>`;
   }
   return `<div class="ames-sn-repair-cycles">${exact.map((repair,index)=>{
-    const name=provenRepairUserName(repair,result,currentPcba),id=text(repair.repair_user),person=name?`${name} (${id})`:(id||'—');
+    const name=provenRepairUserName(repair,result,currentPcba),id=text(repair.repair_user),person=name?`${name} (${id})`:(id?id+' · '+t(locale,'nome não identificado','name not identified'):'—');
     return `<article class="ames-sn-repair-story" data-sn-repair-cycle="${index+1}"><div><small>${esc(t(locale,`Reparo ${index+1}`,`Repair ${index+1}`))}</small><b>${esc(time(repair.repair_time))}</b></div><div><small>Repair User</small><b>${esc(person)}</b></div><div><small>Repair Code</small><b>${esc(fmt(repair.repair_code))}</b></div><div><small>${esc(t(locale,'Local reparado','Repaired location'))}</small><b>${esc(fmt(repair.repaired_location))}</b></div><div class="wide"><small>Repair Comment</small><b data-repair-comment-full style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(fmt(repair.repair_comment))}</b></div><div class="wide"><small>${esc(t(locale,'Motivo / descrição','Reason / description'))}</small><b>${esc(fmt(repair.reason_desc||repair.repair_desc))}</b></div></article>`;
   }).join('')}</div>`;
 }
@@ -142,5 +142,6 @@ export function decorateSnHistoryDetail(root,model={},result={}){
   const section=host.ownerDocument.createElement('section');
   section.dataset.snHistoryDetail='1';section.className='mes-context-panel ames-sn-history-detail';section.setAttribute('data-no-i18n','');
   section.innerHTML=renderSnHistoryDetail(model,result,host.ownerDocument.documentElement?.lang||'pt-BR');
+  if(model.unassociated_history?.length){const note=document.createElement('details');note.dataset.snUnassociated='';const summary=document.createElement('summary');summary.textContent=t(host.ownerDocument.documentElement?.lang,'Eventos sem vínculo anterior comprovado','Events without proven prior association')+' · '+model.unassociated_history.length;const pre=document.createElement('pre');pre.textContent=JSON.stringify(model.unassociated_history,null,2);pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';note.append(summary,pre);section.append(note);}
   host.append(section);
 }

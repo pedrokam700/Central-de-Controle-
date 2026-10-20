@@ -9,7 +9,7 @@ const defectCode=row=>value(row,'defect_code','Defect Code','Defect Code antigo'
 const defectDesc=row=>value(row,'defect_desc','Defect Description','Defect Description antigo');
 const defectTime=row=>value(row,'defect_time','Defect Time','Defect Time antigo');
 const histSeq=row=>{const n=Number(value(row,'hist_seq','Defect Hist Seq'));return Number.isFinite(n)?n:-1;};
-const latestHistory=rows=>[...(rows||[])].sort((a,b)=>histSeq(b)-histSeq(a)||(instant(defectTime(b))??-Infinity)-(instant(defectTime(a))??-Infinity))[0]||null;
+const latestHistory=rows=>[...(rows||[])].filter(r=>instant(defectTime(r))!==null).sort((a,b)=>(instant(defectTime(b))??-Infinity)-(instant(defectTime(a))??-Infinity)||histSeq(b)-histSeq(a))[0]||null;
 const sameHistory=(a,b)=>Boolean(a&&b&&histSeq(a)===histSeq(b)&&same(defectCode(a),defectCode(b))&&same(defectTime(a),defectTime(b)));
 function raw2114ByPcba(trace2114,queryPcba=''){
   const map=new Map(),add=(pcba,row)=>{const key=text(pcba||pcbaOf(row)||queryPcba);if(!key||!row)return;const rows=map.get(key)||[];rows.push(row);map.set(key,rows);};
@@ -26,7 +26,7 @@ function normalizeRepair(row){
   if(!row)return null;
   return {
     source:row.source_view||row.source||'3012',row_key:row.row_key||null,association:row.association||null,pcba_sn:pcbaOf(row),defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),
-    repair_user:value(row,'repair_user','Repair User'),repair_time:value(row,'repair_time','Repair Time'),
+    repair_user:value(row,'repair_user','Repair User'),repair_user_name:value(row,'repair_user_name','Repair User Name')||value(row.raw,'repairUserName','Repair User Name','repair_user_name'),repair_time:value(row,'repair_time','Repair Time'),
     repair_code:value(row,'repair_code','Repair Code'),repair_desc:value(row,'repair_desc','Repair Description'),
     repair_comment:value(row,'repair_comment','Repair Comment'),repaired_location:value(row,'repaired_location','Repaired Location'),
     reason_desc:value(row,'reason_desc','Repair Reason Description','Reason Description'),raw:row,
@@ -79,7 +79,7 @@ export function preferredAnalysisEvent(rows,pcba){
 }
 
 function failureEntry(row,{pcba,repairs=[],process=[],source='2114'}={}){
-  if(!row)return null;const actualPcba=pcba||pcbaOf(row);
+  if(!row)return null;const actualPcba=pcbaOf(row)||pcba;
   return {pcba_sn:actualPcba,defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),defect_time_source:value(row,'Defect Time Source','defect_time_source')||source,manual_or_auto:value(row,'manual_or_auto','Manual/Automatic','TestTools Auto Defect Or Defect By Hand'),repair_status:value(row,'repair_status','Repair Status'),relation:value(row,'relation'),failure_family:value(row,'failure_family','Failure Family'),repairs:repairsFor(repairs,{pcba:actualPcba,code:defectCode(row),time:defectTime(row)},row.repair_evidence_3012||[]),analysis_event:preferredAnalysisEvent(process,actualPcba),source,raw:row};
 }
 function parseList(value){if(Array.isArray(value))return value.map(text).filter(Boolean);try{const out=JSON.parse(value||'[]');return Array.isArray(out)?out.map(text).filter(Boolean):[];}catch{return text(value).split(/[,;|\n]/).map(x=>x.trim()).filter(Boolean);}}
@@ -216,6 +216,28 @@ export function buildCorrelationAlerts(model={}){
   return alerts;
 }
 
+function enrichRepairNames(model,process){
+  const events=process.map(normalizeProcess).filter(Boolean);
+  const repairs=[...model.repairs,...[model.current,...model.own_history,...model.materials.flatMap(m=>m.history.map(h=>h.failure))].filter(Boolean).flatMap(f=>f.repairs||[])];
+  for(const repair of repairs){
+    if(!repair.repair_user||!repair.pcba_sn)continue;
+    const names=new Set(events.filter(e=>same(e.pcba_sn,repair.pcba_sn)&&same(e.operator_id,repair.repair_user)&&text(e.operator_name)&&e.operator_name!==e.operator_id).map(e=>e.operator_name));
+    if(!repair.repair_user_name)repair.repair_user_name=names.size===1?[...names][0]:null;
+  }
+}
+
+export function classifyOwnFailures(current,rows=[]){
+  const previous=[],unassociated=[],seen=new Set(),anchor=instant(current?.defect_time);
+  for(const row of rows){
+    const at=instant(row?.defect_time),key=JSON.stringify([row.pcba_sn,row.defect_code,at??row.defect_time]);
+    if(seen.has(key))continue;seen.add(key);
+    if(current&&same(row.pcba_sn,current.pcba_sn)&&same(row.defect_code,current.defect_code)&&at!==null&&at===anchor)continue;
+    if(current&&same(row.pcba_sn,current.pcba_sn)&&anchor!==null&&at!==null&&at<anchor)previous.push(row);
+    else unassociated.push(row);
+  }
+  return {previous,unassociated};
+}
+
 export function buildLiveSnForensics(result={}){
   const trace2114=result.trace_2114||null,trace3074=result.trace_3074||null,trace3022=result.trace_3022||null,trace3012=result.trace_3012||null;
   const repairs=trace3012?.rows||result.local_snapshot?.repair_3012||[];
@@ -225,7 +247,7 @@ export function buildLiveSnForensics(result={}){
   // Rows that already carry a PCBA keep that exact identity.
   const process=[...(trace3022?.operator_evidence||[]),...(trace3022?.process_passages||[]),...(trace3022?.rows||[])].map(row=>pcbaOf(row)?row:{...row,pcba_sn:queryPcba});
   const rawByPcba=raw2114ByPcba(trace2114,queryPcba),queryRows=rawByPcba.get(text(queryPcba))||[];
-  const explicitCurrent=trace2114?.current_failure||null,rawCurrent=latestHistory(queryRows),current=failureEntry(explicitCurrent||rawCurrent,{pcba:queryPcba,repairs,process,source:explicitCurrent?'2114':'2114-raw'});
+  const explicitCurrent=trace2114?.current_failure||null,rawCurrent=latestHistory([...queryRows,...(trace2114?.previous_failures||[])].filter(r=>!pcbaOf(r)||same(pcbaOf(r),queryPcba))),current=failureEntry(explicitCurrent||rawCurrent,{pcba:queryPcba,repairs,process,source:explicitCurrent?'2114':'2114-raw'});
   let ownRows=Array.isArray(trace2114?.previous_failures)?trace2114.previous_failures:[];
   if(!ownRows.length&&queryRows.length>1)ownRows=queryRows.filter(row=>!sameHistory(row,rawCurrent));
   const ownHistory=ownRows.map(row=>failureEntry(row,{pcba:queryPcba,repairs,process,source:Array.isArray(trace2114?.previous_failures)&&trace2114.previous_failures.includes(row)?'2114':'2114-raw'})).filter(Boolean);
@@ -263,7 +285,8 @@ export function buildLiveSnForensics(result={}){
     '3028':result.local_snapshot?SOURCE_STATE.CACHED:SOURCE_STATE.NOT_COLLECTED,
   };
   const model={material_selection:trace3074?.material_selection||null,process_contexts:result.local_snapshot?.process_contexts||[],query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
-  enrichFamilies(model);model.alerts=buildCorrelationAlerts(model);return model;
+  const classified=classifyOwnFailures(model.current,model.own_history);model.own_history=classified.previous;model.unassociated_history=classified.unassociated;
+  enrichRepairNames(model,process);enrichFamilies(model);model.alerts=buildCorrelationAlerts(model);return model;
 }
 
 export function buildLocalSnForensics(result={}){
@@ -275,5 +298,6 @@ export function buildLocalSnForensics(result={}){
   const coverage=result.coverage||{};
   const sourceStates=Object.fromEntries(['3028','3074','2114','3022','3012'].map(source=>[source,coverage[source]?SOURCE_STATE.CACHED:SOURCE_STATE.NOT_COLLECTED]));
   const model={process_contexts:result.process_contexts||[],query_sn:query,detected_type:result.detected_type||null,current_pcba:query,current,own_history:ownHistory,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,query),process:processFor(process,query),source_states:sourceStates,coverage};
-  enrichFamilies(model);model.alerts=buildCorrelationAlerts(model);return model;
+  const classified=classifyOwnFailures(model.current,model.own_history);model.own_history=classified.previous;model.unassociated_history=classified.unassociated;
+  enrichRepairNames(model,process);enrichFamilies(model);model.alerts=buildCorrelationAlerts(model);return model;
 }

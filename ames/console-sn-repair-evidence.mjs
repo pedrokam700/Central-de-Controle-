@@ -6,7 +6,7 @@ const operatorName=row=>text(value(row,'operator_name','Operator Name','Tran Use
 
 function processRows(result={}){
   const trace=result.trace_3022||{};
-  return [...(trace.operator_evidence||[]),...(trace.process_passages||[]),...(trace.rows||[])];
+  return [...(trace.operator_evidence||[]),...(trace.process_passages||[]),...(trace.rows||[]),...(result.process_events||[])].map(row=>({...row.raw,...row}));
 }
 
 export function provenRepairUserName(repair={},result={},currentPcba=''){
@@ -35,7 +35,7 @@ function field(block,label){return [...(block?.querySelectorAll('div')||[])].fin
 function patchRepairBlock(block,repair,result,currentPcba){
   if(!block||!repair)return;
   const user=field(block,'Repair User')?.querySelector('b'),id=text(repair.repair_user),name=provenRepairUserName(repair,result,currentPcba);
-  if(user){user.textContent=name?`${name} (${id})`:(id||'—');user.title=name?`Nome registrado no MES · ${name} · ${id}`:'Nome não fornecido nesta evidência MES · '+(id||'sem código');}
+  if(user){user.textContent=name?`${name} (${id})`:(id?id+' · '+(document.documentElement.lang.startsWith('en')?'name not identified':'nome não identificado'):'—');user.title=name?`Nome registrado no MES · ${name} · ${id}`:'Nome não fornecido nesta evidência MES · '+(id||'sem código');}
   const comment=field(block,'Repair Comment')?.querySelector('b'),raw=repair.repair_comment;
   if(comment&&raw!==undefined&&raw!==null){
     comment.textContent=String(raw);comment.title=String(raw);comment.dataset.repairCommentFull='1';

@@ -101,7 +101,20 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
         .catch(error=>{store.updateAgent({period_read:{status:'partial',errors:[{line_id:'—',error:error.message}]}});renderActive();});
     });
   }
-  if(!store.readingPeriod?.())store.selectReadingPeriod?.('today');
+  if(!store.readingPeriod?.())store.selectReadingPeriod?.('latest');
+  let initialRead=false,rolloverTimer=null;
+  function refreshReading(){
+    const p=store.readingPeriod?.();if(disposed||!p)return;
+    void periodController.select(p.mode,p.mode==='custom'?{start:p.start,end:p.end}:{}).catch(error=>store.updateAgent({period_read:{status:'partial',errors:[{line_id:'—',error:error.message}]}}));
+  }
+  function startReading(){
+    if(initialRead)return;initialRead=true;queueMicrotask(refreshReading);
+    rolloverTimer=setInterval(()=>{
+      const p=store.readingPeriod?.();if(!p||p.mode==='custom')return;
+      // Refresh immutable history and recompute the operational window; no MES job.
+      refreshReading();
+    },60000);
+  }
   function ensure(id){
     if(views.has(id))return views.get(id);const pane=root.querySelector(`[data-console-pane="${id}"]`);let view;
     const historical=store.readingPeriod?.()?.mode!=='today';
@@ -114,7 +127,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     else if(id==='failures'){pane.innerHTML='<section data-failures-main></section><section data-failures-process></section>';const failureRoot=pane.querySelector('[data-failures-main]'),primary=withFailureOccurrenceEvidence(createFailuresParityView(failureRoot,store,client),failureRoot,store),process=createFailureProcessAddon(pane.querySelector('[data-failures-process]'),store,failureRoot);view={render(){primary.render();process.render();},clear(){primary.clear?.();process.clear?.();pane.replaceChildren();}};}
     else if(id==='sn'){pane.innerHTML='<section data-sn-live></section><section data-sn-saved></section>';const snRoot=pane.querySelector('[data-sn-live]');const current=withOfflineSnNavigation(withOfflineSnLookup(withProcessCapability(withSnLiveContext(withFastlaneSnEnhancements(createSnConsoleView(snRoot,store,client),snRoot,store),snRoot,store),snRoot,store,'sn'),snRoot,store),snRoot);const saved=createSavedSnHistoryView(pane.querySelector('[data-sn-saved]'),client,store);view={render(){current.render();saved.render();},clear(){current.clear?.();saved.clear();pane.replaceChildren();}};}
     else if(id==='trace'){const base=withTraceSelectionHelper(withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace'),pane,store);view=withAgentRefresh(base,pane,store,client,{label:'Atualizar tela'});}
-    else if(id==='reuse')view=withAgentRefresh(withHistoricalTrends(withReuseProvenance(createReuseConsoleView(pane,store),pane,store),pane,store,history),pane,store,client,{label:'Atualizar'});
+    else if(id==='reuse')view=withAgentRefresh(withHistoricalTrends(withReuseProvenance(createReuseConsoleView(pane,store),pane,store),pane,store,history,{automatic:true,defaultDays:92}),pane,store,client,{label:'Atualizar'});
     else if(id==='process'){pane.innerHTML='<section data-process-main></section><section data-process-3012></section>';const processRoot=pane.querySelector('[data-process-main]'),processBase=withProcessOperatorLayout(withProcessCapability(createProcessConsoleView(processRoot,store),processRoot,store,'process'),processRoot),base=withAgentRefresh(processBase,processRoot,store,client,{label:'Atualizar'}),repair3012=historical?createStoredPeriodRecords(pane.querySelector('[data-process-3012]'),store,{kind:'repairs'}):create3012FastlaneView(pane.querySelector('[data-process-3012]'),store);view={render(){base.render();repair3012.render();},clear(){base.clear?.();repair3012.clear?.();pane.replaceChildren();}};}
     else if(id==='base'){pane.innerHTML='<section data-base-history></section><section data-base-local></section>';const local=pane.querySelector('[data-base-local]'),base=withBaseCatalog(createBaseConsoleView(local,store,client),local,store,client),periods=createHistoryView(pane.querySelector('[data-base-history]'),store,client,history);view={render(){periods.render();base.render();},clear(){periods.clear();base.clear();}};}
     else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);views.set(id,view);return view;
@@ -138,7 +151,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     if(note){const en=document.documentElement.lang.startsWith('en');
       note.textContent=active==='sn'
         ?(en?'SN investigation is independent of the monitoring period.':'Consulta por SN independente do período de monitoramento.')
-        :(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+(period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):'');
+        :(period?.mode==='latest'?(en?'Latest available capture · original period in line overview':'Última coleta disponível · período de origem na Central das Linhas'):(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+(period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):''));
     }
     if(period?.mode!=='today'){
       // Live execution controls and last-job results describe another scope. Keep
@@ -147,6 +160,6 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       for(const button of pane?.querySelectorAll('[data-failure-repair],[data-repair-update]')||[])button.disabled=true;
     }
     refreshHistoricalOnCompletedJob();paintHeader();preparation?.render();translator?.render();}
-  return Object.freeze({render(){if(!root||disposed)return;if(!mounted)mount();renderActive();},clear(){disposed=true;periodController.clear();preparation?.clear();translator?.clear();evidenceDrawer?.clear();for(const view of views.values())view?.clear?.();views.clear();if(!agentClient)client.clear();root?.replaceChildren();mounted=false;}});
+  return Object.freeze({render(){if(!root||disposed)return;if(!mounted)mount();startReading();renderActive();},clear(){disposed=true;clearInterval(rolloverTimer);periodController.clear();preparation?.clear();translator?.clear();evidenceDrawer?.clear();for(const view of views.values())view?.clear?.();views.clear();if(!agentClient)client.clear();root?.replaceChildren();mounted=false;}});
 }
 export { VIEWS as CANONICAL_VIEWS };

@@ -32,7 +32,7 @@ export function planHistoryDays(entries,{line,source='',endDate,days=7}){
 }
 export function trendPoint(snapshot,entry,filters={}){
  const filtered=Object.values(filters).some(Boolean),cohorts=buildReuseCohorts(snapshot,filters);
- const occurrences=snapshot.occurrences.filter(r=>!filters.product||r.product_key===filters.product);
+ const occurrences=snapshot.occurrences.filter(r=>(!filters.product||r.product_key===filters.product)&&(!filters.defect||r.defect_code===filters.defect));
  const componentFilter=filters.item_type||filters.part_number||filters.sn;
  const ids=new Set(cohorts.components.rows.flatMap(r=>r.events.map(e=>e.occurrence_id||e.evidence_ref)));
  const rows=componentFilter?occurrences.filter(e=>ids.has(e.occurrence_id||e.evidence_ref)):occurrences;
@@ -44,7 +44,12 @@ export function trendPoint(snapshot,entry,filters={}){
   // Occurrence rows can contain multiple failures of one unit. Never call this a defective-unit rate.
   occurrences_per_1000:!filtered&&sourceComplete&&snapshot.summary.quantity>0?rows.length/snapshot.summary.quantity*1000:null,
   pcba_reused:componentFilter?null:cohorts.pcbas.counts.reused,component_reused:cohorts.components.counts.reused,
-  component_associated:cohorts.components.counts.associated,population_coverage:'unproven'};
+  component_associated:cohorts.components.rows.some(r=>r.use_index!==null)?cohorts.components.counts.associated:null,
+  component_verified_no_failure:cohorts.components.counts.verified_no_failure,
+  component_failure_rate:cohorts.components.failure_rate,
+  component_denominator:cohorts.components.cohort_size_proven,
+  pcba_prior_failure:cohorts.pcbas.rows.some(r=>r.use_index!==null)?cohorts.pcbas.counts.prior_failure:null,
+  population_coverage:'unproven'};
 }
 /** Session-local memo of immutable reads, not a second store or publication path. */
 export function createHistoryTrendReader(history){
@@ -55,7 +60,7 @@ export function createHistoryTrendReader(history){
   if(snapshot.line_id!==entry.line_id||snapshot.source_id!==entry.source_id||String(snapshot.snapshot_id)!==String(entry.snapshot_id)||snapshot.snapshot_revision!==entry.snapshot_revision||
    factoryWallMinute(payload.summary.period?.start_at)!==factoryWallMinute(entry.period_start)||factoryWallMinute(payload.summary.period?.end_at)!==factoryWallMinute(entry.period_end))throw Error('History revision/scope mismatch');
   if(entry.content_hash&&payload.content_hash!==entry.content_hash)throw Error('History content mismatch');
-  cache.set(key,snapshot);if(cache.size>64)cache.delete(cache.keys().next().value);return snapshot;
+  cache.set(key,snapshot);if(cache.size>366)cache.delete(cache.keys().next().value);return snapshot;
  }
  return {clear(){cache.clear();},async read(options){
   const entries=await history.list(options.line),plan=planHistoryDays(entries,options),points=[];

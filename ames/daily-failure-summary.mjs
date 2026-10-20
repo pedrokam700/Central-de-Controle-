@@ -77,7 +77,7 @@ export function createDailyFailureSummary(root,store){
     };
     host.addEventListener('change',onContextInput,true);host.addEventListener('input',onContextInput,true);host.addEventListener('click',blockUnknownShiftDrilldown,true);
   }
-  function dispatchAnalytics(el,value){if(!el)return;el.value=String(value??'');if(String(el.value)!==String(value??'')&&value)return;internalAnalyticsSync=true;try{el.dispatchEvent(new Event('change',{bubbles:true}));}finally{internalAnalyticsSync=false;}}
+  function dispatchAnalytics(el,value){if(!el)return;el.value=String(value??'');if(String(el.value)!==String(value??'')&&value)return;internalAnalyticsSync=true;try{el.dispatchEvent(new Event(el.tagName==='SELECT'?'change':'input',{bubbles:true}));}finally{internalAnalyticsSync=false;}}
   function polishAnalyticsShift(){
     const analytics=pane()?.querySelector?.('[data-top3-analytics]');if(!analytics)return;
     analytics.querySelector('[data-dfa-shift-unclassified]')?.remove();
@@ -108,6 +108,12 @@ export function createDailyFailureSummary(root,store){
         queueMicrotask(()=>{
           const detail=host?.querySelector?.('[data-top3-analytics] .ames-dfa-rank-item');
           if(detail)detail.open=true;
+          if(!detail){
+            let note=host?.querySelector('[data-top3-missing-detail]');
+            if(!note&&host){note=document.createElement('p');note.dataset.top3MissingDetail='';note.setAttribute('role','status');host.querySelector('[data-top3-analytics]')?.prepend(note);}
+            if(note)note.textContent=t('Ocorrências indisponíveis neste recorte. Confira linha, período, fonte e filtros do detalhe.','Occurrences unavailable in this scope. Check line, period, source and detail filters.');
+            note?.scrollIntoView?.({block:'center'});
+          }else host?.querySelector('[data-top3-missing-detail]')?.remove();
           detail?.scrollIntoView?.({block:'center',behavior:'smooth'});
         });
       });

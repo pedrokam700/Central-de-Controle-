@@ -95,7 +95,7 @@ function materialLinks(snapshot,occurrence){
   return {available:rows.length>0,rows};
 }
 function repairEvidence(occurrence){
-  const fields={user:occurrence.repair_user||null,time:occurrence.repair_time||null,code:occurrence.repair_code||null,comment:occurrence.repair_comment||null,reason:occurrence.defect_reason_desc||occurrence.repair_desc||null};
+  const fields={user:occurrence.repair_user_name?occurrence.repair_user_name+' ('+occurrence.repair_user+')':occurrence.repair_user?occurrence.repair_user+' · nome não identificado':null,time:occurrence.repair_time||null,code:occurrence.repair_code||null,comment:occurrence.repair_comment||null,reason:occurrence.defect_reason_desc||occurrence.repair_desc||null};
   const sourceRows=Array.isArray(occurrence.repair_evidence_3012)?occurrence.repair_evidence_3012:[];
   const exactRows=sourceRows.filter(row=>row&&typeof row==='object'&&(!row.pcba_sn||same(row.pcba_sn,occurrence.pcba_sn))&&(!row.defect_code||same(row.defect_code,occurrence.defect_code)));
   // Repair User/Comment can also arrive through 3028; never label these as

@@ -28,6 +28,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
   let contextLineExplicit=false;
   let selectedPeriod=null, periodGeneration=0, sessionGeneration=0;
   let historical=new Map();
+  const historyKey=(period,line)=>JSON.stringify([period?.mode==='latest'?{mode:'latest'}:period,line]);
 
   function normalizeBatch(payloads, localRead = false) {
     const next = new Map();
@@ -52,10 +53,14 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
 
   function readLine(line){
     requireLine(line);
-    const saved=selectedPeriod&&selectedPeriod.mode!=='today'?historical.get(JSON.stringify([selectedPeriod,line])):null;
+    const saved=selectedPeriod?historical.get(historyKey(selectedPeriod,line)):null;
     const eligible=s=>s&&matchesReadingPeriod(s.canonical||s,selectedPeriod)?s:null;
-    const snapshot = saved?.snapshot || (localConnected && eligible(local.get(line))) || eligible(synced.get(line)) || eligible(remote.get(line)) || eligible(local.get(line)) || null;
-    const source = !snapshot ? 'none' : saved? (saved.source==='local'&&!localConnected?'local_cache':saved.source) : snapshot === local.get(line) ? (localConnected ? 'local' : 'local_cache') : 'remote';
+    const live=(localConnected && eligible(local.get(line))) || eligible(synced.get(line)) || eligible(remote.get(line)) || eligible(local.get(line)) || null;
+    // Saved Today is a read fallback. A newer live revision of that SAME source
+    // may advance it; a competing workstation may never replace the choice.
+    const advance=saved&&['today','latest'].includes(selectedPeriod?.mode)&&live?.source_id===saved.snapshot.source_id&&instant(live.collected_at)>=instant(saved.snapshot.collected_at);
+    const snapshot = advance?live:saved?.snapshot||live;
+    const source = !snapshot ? 'none' : saved&&!advance? (saved.source==='local'&&!localConnected?'local_cache':saved.source) : snapshot === local.get(line) ? (localConnected ? 'local' : 'local_cache') : 'remote';
     const source_state=!snapshot?SOURCE_STATE.NOT_COLLECTED:source==='local_cache'?SOURCE_STATE.CACHED:SOURCE_STATE.OK;
     const collected = instant(snapshot?.collected_at);
     const age = collected === null ? null : now() - collected;
@@ -135,7 +140,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
       const snapshot=normalizeCanonical(payload);
       if(!matchesReadingPeriod(payload,selectedPeriod))throw Error('historical_period_mismatch');
       if(!['local','local_cache','remote'].includes(source))throw Error('invalid_history_source');
-      historical.set(JSON.stringify([selectedPeriod,snapshot.line_id]),{snapshot,source});
+      historical.set(historyKey(selectedPeriod,snapshot.line_id),{snapshot,source});
       contextRevision++;
       return true;
     },

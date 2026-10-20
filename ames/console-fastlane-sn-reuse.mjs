@@ -13,7 +13,7 @@ const value=(row,...keys)=>keys.map(key=>row?.[key]).find(item=>item!==undefined
 const sourceTags=sources=>`<div class="ames-sn-sources">${sources.filter(Boolean).map(src=>`<span>${esc(src)}</span>`).join('')}</div>`;
 function emptyCard(title,text){return `<section class="ames-sn-digest-card"><h3>${esc(title)}</h3><p>${esc(text)}</p></section>`;}
 function person(event){if(!event)return '—';const name=event.operator_name,id=event.operator_id;if(name&&id)return `${name} (${id})`;return name||id||'—';}
-function repairPerson(row){return row?.repair_user||'—';}
+function repairPerson(row){return row?.repair_user_name?row.repair_user_name+' ('+row.repair_user+')':row?.repair_user?row.repair_user+' · '+(document.documentElement.lang.startsWith('en')?'name not identified':'nome não identificado'):'—';}
 function failureTitle(failure){if(!failure)return t('Sem falha histórica confirmada','No confirmed historical failure');return [failure.defect_code,failure.defect_desc].filter(Boolean).join(' — ')||t('Falha sem descrição','Failure without description');}
 function repairBlock(repairs=[]){
   const candidates=repairs.filter(r=>r.association!=='exact_occurrence');repairs=repairs.filter(r=>r.association==='exact_occurrence');
