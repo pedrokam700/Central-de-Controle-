@@ -43,15 +43,15 @@ test('HTTPS pairing is an explicit local action to fixed official origin; token 
 
 test('official HTTPS can open explicit local confirmation, but untrusted domains cannot',()=>{
   const beforeLocation=globalThis.location,beforeWindow=globalThis.window;
-  let opened;
+  let navigated='';
   try{
     globalThis.location=new URL('https://central-cora-v2.vercel.app/Central-de-Controle-/');
-    globalThis.window={open:(...args)=>opened=args};
+    globalThis.window={location:{assign:url=>{navigated=url;}}};
     const client=createAgentClient(fakeStore());
     assert.equal(client.canPairFromOfficial(),true);
     client.openLocalPairing();
-    assert.deepEqual(opened,['http://127.0.0.1:8765/workstation/parear','_blank','noopener,noreferrer']);
-    assert.equal(opened[0].includes('ames_agent_token'),false);
+    assert.equal(navigated,'http://127.0.0.1:8765/workstation/parear');
+    assert.equal(navigated.includes('ames_agent_token'),false);
     globalThis.location=new URL('https://evil.example/');
     assert.equal(client.canPairFromOfficial(),false);
     assert.throws(()=>client.openLocalPairing(),/oficial/);
