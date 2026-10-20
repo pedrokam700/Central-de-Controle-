@@ -204,6 +204,7 @@ Descrição humana em destaque; o código fica apenas como referência técnica.
 Buscar nome da falha|Search failure name
 MES local não confirmado neste computador|Local MES not confirmed on this computer
 Agente local detectado · conectar|Local agent detected · connect
+Agente local desatualizado · instalar CLEAN oficial|Local agent outdated · install official CLEAN
 Diagnósticos e informações técnicas|Diagnostics and technical information
 Abrir histórico detalhado|Open detailed history
 Ocorrências: maior → menor|Occurrences: most to least
