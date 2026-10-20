@@ -7,7 +7,7 @@ export async function refreshPublicInstallLink(doc=document,fetcher=fetch){
   if(!anchor)return;
   try{
     const rel=await discoverOfficialRelease(undefined,fetcher);
-    if(rel.package_available&&rel.download_url){
+    if(rel.package_available&&rel.download_url&&rel.candidate_status==='github_latest_release_verified'){
       anchor.href=rel.download_url;
       anchor.dataset.releaseSha=rel.validated_sha||'';
       anchor.textContent='Baixar CLEAN oficial · GitHub · '+rel.version;
