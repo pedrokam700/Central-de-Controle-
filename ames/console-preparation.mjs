@@ -189,7 +189,13 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     root.querySelector('[data-map-3012]')?.addEventListener('click', map3012Now);
     onboarding?.clear(); onboarding = null;
     if (expanded || viewerGuideOpen) {
-      onboarding = createOnboardingView(root.querySelector('[data-installation]'), { onChoice: choose, getAgent:()=>store.agent(),isPaired:()=>!!client.paired?.() });
+      onboarding = createOnboardingView(root.querySelector('[data-installation]'), {
+        onChoice:choose,
+        getAgent:()=>store.agent(),
+        isPaired:()=>!!client.paired?.(),
+        canPair:()=>!!client.canPairFromOfficial?.(),
+        onPair:()=>client.openLocalPairing()
+      });
       void onboarding.render();
     }
     if (!checked && !checking) queueMicrotask(check);
