@@ -1,16 +1,16 @@
 {
-  "version": "0.5.27",
+  "version": "0.5.28",
   "package_available": true,
-  "package_name": "AMES_Central_CLEAN_a509596f.zip",
-  "sha256": "8095fca0c091936c35387ba2a90dea6c7793f859b2352ab211cd589903a291f1",
-  "download_url": "https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.27-multipc-20261020/AMES_Central_CLEAN_a509596f.zip",
-  "validated_baseline": "0.5.27",
+  "package_name": "AMES_Central_CLEAN_56a6d09a.zip",
+  "sha256": "516047011f74b309ec3a0e2701c0fbe6d7ea508f80e55c6dcfac5ddf01e49a31",
+  "download_url": "https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.28-multipc-20261020/AMES_Central_CLEAN_56a6d09a.zip",
+  "validated_baseline": "0.5.28",
   "candidate_status": "verified_git_release_offline_fallback",
-  "published_at": "2026-10-20T19:31:01Z",
+  "published_at": "2026-10-20T19:52:03Z",
   "minimum_central_version": "2.0.0",
   "existing_r12_migration": true,
   "new_pc_status": "github_release_public_verified_exact_sha",
-  "validated_candidate_sha": "a509596ff15b5ae996faf66a7c064a7308d6b776",
+  "validated_candidate_sha": "56a6d09ac00d928bf3ba714ede8bd1c6291e8646",
   "local_runtime": {
     "agent_health_url": "http://127.0.0.1:8765/api/v1/health",
     "start_file": "INICIAR_POSTO_CENTRAL_V2.bat"
