@@ -55,15 +55,16 @@ const client={canOpenOfficial:()=>true,openOfficial:()=>{},collect:async()=>{mut
     }],next_cursor:null};
  },
  savedSnHistory:async()=>{savedReads++;return {items:[savedEntry],next_cursor:null,clock_kind:'query_created_at',local_only:true};},openSavedSnHistory:async()=>{savedOpens++;return {job_id:savedEntry.job_id,entry_hash:savedEntry.entry_hash,query_created_at:savedEntry.query_created_at,line_id:null,production_date:null,result:{trace_3074:{rows:[{sn:'PART',note:'<script>unsafe</script>'}]},trace_3012:{rows:[{association:'same_pcba_candidate'}]}}};}};
-let historyReads=0;
+let historyReads=0,ambiguousHistory=false;
 const history={list:async line=>{historyReads++;return line===old.line_id?[
  {line_id:line,source_id:old.source_id,snapshot_id:old.snapshot_id,snapshot_revision:1,collected_at:old.collected_at,period_start:old.summary.period.start_at,period_end:old.summary.period.end_at,history_source:'shared'},
- {line_id:line,source_id:local.source_id,snapshot_id:local.snapshot_id,snapshot_revision:local.snapshot_revision,collected_at:local.collected_at,period_start:local.summary.period.start_at,period_end:local.summary.period.end_at,history_source:'local'}
+ {line_id:line,source_id:local.source_id,snapshot_id:local.snapshot_id,snapshot_revision:local.snapshot_revision,collected_at:local.collected_at,period_start:local.summary.period.start_at,period_end:local.summary.period.end_at,history_source:'local'},
+ ...(ambiguousHistory?[{line_id:line,source_id:'another-workstation',snapshot_id:'FOREIGN-OLD',snapshot_revision:1,collected_at:'2026-10-21T15:00:00Z',period_start:old.summary.period.start_at,period_end:old.summary.period.end_at,history_source:'shared'}]:[])
  ]:[];},open:async entry=>String(entry.snapshot_id)===String(local.snapshot_id)?local:old};
 const view=createConsoleView(document.querySelector('#mesConsole'),store,{agentClient:client,history});
 document.querySelectorAll('.page').forEach(el=>el.classList.add('hidden'));
 document.querySelector('#mesConsoleView')?.classList.remove('hidden');document.querySelector('#accountScreen')?.classList.add('hidden');
-window.qa={store,view,mutations:()=>mutations,historyReads:()=>historyReads,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads};view.render();
+window.qa={store,view,mutations:()=>mutations,historyReads:()=>historyReads,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads,setAmbiguous:value=>{ambiguousHistory=value;}};view.render();
 `;
 const html=fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<script type="module" src="/Central-de-Controle-/qa-context.mjs"></script>';
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -320,6 +321,18 @@ try{
  await page.locator('[data-reading-reload]').click();
  await page.waitForFunction(before=>qa.historyReads()>before,afterJob);
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ // A foreign, newer history entry must not silently replace the chosen origin.
+ await page.evaluate(()=>qa.setAmbiguous(true));
+ await page.locator('[data-reading-reload]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.source_choices?.length===1);
+ assert.equal(await page.locator('[data-history-source-picker]').count(),1);
+ assert.equal(await page.locator('[data-history-source-select] option').count(),2);
+ assert.equal(await page.evaluate(()=>qa.store.agent().period_read.status),'partial');
+ await page.locator('[data-history-source-select]').selectOption('preserved-workstation');
+ await page.locator('[data-history-source-apply]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
+ assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.source_id),'preserved-workstation');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');
  await page.locator('[data-read-period=today]').click();
  assert.equal(await page.locator('[data-monitor-main] [data-agent-action=today]').isVisible(),true);
  assert.deepEqual(errors,[]);
