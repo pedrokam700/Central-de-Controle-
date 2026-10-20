@@ -1,6 +1,7 @@
 import { createOnboardingView, savedIntegrationMode } from './onboarding-view.mjs';
 import { INTEGRATION_MODE_KEY,sharingState,installationDetection } from './data/onboarding.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
+import { LINE_IDS } from './data/contract.mjs';
 
 const t = (pt, en) => typeof document !== 'undefined' && document.documentElement?.lang?.startsWith('en') ? en : pt;
 
@@ -146,9 +147,19 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
       :shared.publishing==='legacy_conflict'?t('Histórico publicado; ponte legada em conflito','History published; legacy pointer conflict')
       :shared.publishing==='pending'?t('Aguardando envio','Awaiting upload')
       :t('Envio ainda não comprovado','Upload not yet proven');
+    const remoteHeads=new Map((Array.isArray(agent.sync?.remote_heads)?agent.sync.remote_heads:[]).filter(h=>LINE_IDS.includes(h?.line_id)).map(h=>[h.line_id,h]));
+    const lineStatus=LINE_IDS.map((line,index)=>{
+      const head=remoteHeads.get(line);
+      const verified=shared.receiving==='server_confirmed';
+      const state=!head?t('Não recebida','Not received'):verified?t('Servidor confirmado','Server confirmed'):
+        shared.receiving==='cached'?t('Cache local','Local cache'):t('Não confirmada','Unconfirmed');
+      const detail=head?('Snapshot '+esc(head.snapshot_id||'—')+' · r'+esc(head.snapshot_revision??'—')):'—';
+      return '<li data-share-line="'+esc(line)+'"><strong>'+t('Linha','Line')+' '+(index+1)+'</strong><span>'+detail+'</span><small>'+esc(state)+'</small></li>';
+    }).join('');
     const summary='<section class="ames-sync-guide" data-sync-guide><div class="ames-sync-guide-head"><b>'+t('Compartilhamento entre computadores','Cross-PC sharing')+'</b><small>'+t('Somente snapshots sanitizados e revisões','Sanitized snapshots and revisions only')+'</small></div><div class="ames-sync-guide-grid">'+
       '<div><small>'+t('Este PC → equipe','This PC → team')+'</small><strong>'+esc(publishing)+'</strong><span>'+t('Fila','Queue')+': '+(shared.pending??'—')+' · '+t('Último envio','Last upload')+': '+esc(shared.lastSentAt||'—')+'</span></div>'+
       '<div><small>'+t('Equipe → este PC','Team → this PC')+'</small><strong>'+esc(receiving)+'</strong><span>'+t('Linhas identificadas','Lines identified')+': '+shared.receivedLines.length+'/3 · '+t('Último evento','Last event')+': '+esc(shared.lastReceivedAt||'—')+'</span></div></div>'+
+      '<ul class="ames-sync-line-list" aria-label="'+t('Linhas e revisões recebidas','Received lines and revisions')+'">'+lineStatus+'</ul>'+
       '<p class="mes-context">'+t('Envio no PC A não prova recebimento no PC B. Compare linha, snapshot e revisão em ambos; o navegador precisa ficar autenticado e aberto para publicar.','Sending from PC A does not prove receipt on PC B. Compare line, snapshot and revision on both; the browser must remain signed in and open to publish.')+'</p>'+
       '<button class="button secondary" type="button" data-sync-guide-verify>'+t('Verificar conexões agora','Check connections now')+'</button></section>';
     const backup = maintenance.latest_backup;
