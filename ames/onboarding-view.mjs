@@ -11,6 +11,8 @@ export function createOnboardingView(root,{
   onChoice=()=>{},
   getAgent=()=>({}),
   isPaired=()=>false,
+  canPair=()=>false,
+  onPair=()=>{},
   loadRelease=async signal=>{
     const response=await fetch(new URL('./releases/latest/release.json',import.meta.url),{signal,cache:'no-cache'});
     if(!response.ok)throw new Error('Release indisponível');
@@ -21,6 +23,7 @@ export function createOnboardingView(root,{
   const choiceLabel=()=>mode==='collector'?t('Coletar neste PC','Collect on this PC'):mode==='viewer'?t('Consultar dados da equipe','View shared data'):t('Escolha como usar','Choose how to use');
   function collectionPanel(){
     const agent=getAgent(),state=installationDetection(agent,isPaired());
+    const connectButton=state!=='verified'&&canPair()?'<button type="button" class="button primary" data-connect-local-pairing>'+t('Conectar agente deste PC','Connect agent on this PC')+'</button>':'';
     const titles={
       verified:t('Agente local conectado e autorizado','Local agent connected and authorized'),
       pairing_required:t('Agente encontrado · falta pareamento','Agent found · pairing required'),
@@ -29,11 +32,11 @@ export function createOnboardingView(root,{
     };
     const instructions={
       verified:t('A Central reconhece este posto. Não reinstale para conectar: use os dados locais e verifique a sincronização abaixo.','Work Center recognizes this workstation. Do not reinstall to connect; use local data and verify sync below.'),
-      pairing_required:t('A porta local respondeu, mas a aba HTTPS não está autorizada. Abra a Central local pelo launcher e use “Abrir HTTPS oficial pareado” a partir dela.','The local port responded, but this HTTPS tab is not authorized. Open the local Work Center with the launcher and use the paired official HTTPS action there.'),
+      pairing_required:t('Agente local detectado. Use Conectar agente deste PC, confirme na janela local e volte à Central oficial já autorizada.','Local agent detected. Choose Connect agent on this PC, confirm in the local window, then return to the authorized official Work Center.'),
       paired_unreachable:t('O token desta aba já existe, mas o agente não respondeu. Verifique se o launcher está rodando neste mesmo computador.','This tab has a pairing token, but the agent did not answer. Check the launcher on this computer.'),
       not_verified:t('O navegador não comprovou se há instalação. Bloqueios HTTPS/loopback podem impedir a detecção. Um resultado negativo NÃO significa que o agente não existe.','The browser cannot verify an installation. HTTPS/loopback restrictions can block detection; this does NOT prove the agent is absent.')
     };
-    const status='<section class="ames-setup-status" data-installation-detection="'+state+'"><strong>'+esc(titles[state])+'</strong><p>'+esc(instructions[state])+'</p>'+
+    const status='<section class="ames-setup-status" data-installation-detection="'+state+'"><strong>'+esc(titles[state])+'</strong><p>'+esc(instructions[state])+'</p>'+connectButton+
       '<a class="button secondary" href="'+localUrl+'" target="_blank" rel="noopener noreferrer">'+t('Abrir Central local deste PC','Open this PC’s local Work Center')+'</a>'+
       '<small>'+t('O endereço 127.0.0.1 aponta somente para este computador, nunca para outro posto. Não cole ou envie URL contendo token de pareamento.','127.0.0.1 points only to this computer, never another workstation. Never share pairing-token URLs.')+'</small></section>';
     if(!release)return status+'<p role="status">'+esc(error||t('Validando pacote oficial do GitHub…','Checking official GitHub package…'))+'</p>'+
@@ -87,9 +90,10 @@ export function createOnboardingView(root,{
     if(token===generation)paint();
   }
   root?.addEventListener('click',event=>{
-    const button=event.target.closest('[data-integration-mode],[data-release-retry]');
+    const button=event.target.closest('[data-integration-mode],[data-release-retry],[data-connect-local-pairing]');
     if(!button)return;
     if(button.hasAttribute('data-release-retry')){started=false;error='';void render();return;}
+    if(button.hasAttribute('data-connect-local-pairing')){onPair();return;}
     mode=integrationMode(button.dataset.integrationMode);
     try{localStorage.setItem(INTEGRATION_MODE_KEY,mode);volatile=false;}catch{volatile=true;}
     paint();onChoice(mode);
