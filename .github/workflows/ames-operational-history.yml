@@ -98,3 +98,33 @@ jobs:
           for suite in scripts/ames-rules.emulator.mjs scripts/ames-pr38-day.emulator.mjs scripts/ames-pr40-analytics.emulator.mjs; do
             "$RUNNER_TEMP/history-firestore/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes "node $suite"
           done
+
+  # Standalone artifact ONLY for a gated, operator-authorized physical preview.
+  # Never deploys or modifies the currently installed agent/Firebase/main.
+  package-pr42:
+    if: github.ref == 'refs/heads/work/ames-pr35-pr36-integration-20261019'
+    needs: [reading-contract, reading-browser, reading-windows, reading-firestore]
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build clean exact-SHA integrated PR42 preview (no installation)
+        shell: bash
+        run: |
+          python3 scripts/build-integrated-candidate.py "$RUNNER_TEMP/AMES_PR42_CLEAN.zip"
+          sha256sum "$RUNNER_TEMP/AMES_PR42_CLEAN.zip"
+      - name: Store the isolated physical-gate candidate for operator review
+        uses: actions/upload-artifact@v6
+        with:
+          name: AMES-PR42-${{ github.sha }}
+          path: ${{ runner.temp }}/AMES_PR42_CLEAN.zip
+          if-no-files-found: error
+          retention-days: 7
