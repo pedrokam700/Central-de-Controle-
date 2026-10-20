@@ -26,7 +26,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
   let context = immutable({...EMPTY_CONTEXT});
   let contextRevision=0;
   let contextLineExplicit=false;
-  let selectedPeriod=null, periodGeneration=0;
+  let selectedPeriod=null, periodGeneration=0, sessionGeneration=0;
   let historical=new Map();
 
   function normalizeBatch(payloads, localRead = false) {
@@ -120,6 +120,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
     updateAgent(patch) { agent = immutable({...agent,...patch}); },
     readingPeriod(){return selectedPeriod;},
     periodGeneration(){return periodGeneration;},
+    sessionGeneration(){return sessionGeneration;},
     selectReadingPeriod(mode,options={}){
       const next=immutable(readingPeriod(mode,{...options,now:options.now||new Date(now()),config:agent.config||{}}));
       if(JSON.stringify(next)!==JSON.stringify(selectedPeriod)){
@@ -180,7 +181,7 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
       local = new Map(); remote = new Map(); synced = new Map(); localConnected = false; issues = [];
       agent = immutable({status:'disconnected',config:null,job:null,error:''});
       context = immutable({...EMPTY_CONTEXT});contextLineExplicit=false;contextRevision+=1;
-      selectedPeriod=null;historical=new Map();periodGeneration++;
+      selectedPeriod=null;historical=new Map();periodGeneration++;sessionGeneration++;
     }
   });
 }
