@@ -272,7 +272,7 @@ try{
  assert.equal(await page.locator('[data-sn-live] [data-sn-smart-alerts]').count(),1);
  assert.equal(await page.locator('[data-sn-saved-toggle]').count(),1);
  assert.equal(await page.locator('[data-stored-search]').count(),0);
- assert.match(await page.locator('[data-shared-period]').innerText(),/independente/);
+ assert.match(await page.locator('[data-console-pane="sn"] [data-shared-period]').innerText(),/independente/);
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'period switching and SN display must not execute MES');
  await page.locator('[data-console-view=monitor]').click();
  await page.locator('[data-read-period=today]').click();
