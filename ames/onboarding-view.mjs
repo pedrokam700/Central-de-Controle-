@@ -1,5 +1,6 @@
 import { readRelease, integrationMode, INTEGRATION_MODE_KEY, installationDetection, sharingState } from './data/onboarding.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
+import {discoverOfficialRelease} from './release-discovery.mjs';
 
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 const localUrl='http://127.0.0.1:8765/Central-de-Controle-/';
@@ -13,11 +14,7 @@ export function createOnboardingView(root,{
   isPaired=()=>false,
   canPair=()=>false,
   onPair=()=>{},
-  loadRelease=async signal=>{
-    const response=await fetch(new URL('./releases/latest/release.json',import.meta.url),{signal,cache:'no-cache'});
-    if(!response.ok)throw new Error('Release indisponível');
-    return response.json();
-  }
+  loadRelease=signal=>discoverOfficialRelease(signal)
 }={}){
   let mode=savedIntegrationMode(),release,error='',started=false,generation=0,controller,volatile=false;
   const choiceLabel=()=>mode==='collector'?t('Coletar neste PC','Collect on this PC'):mode==='viewer'?t('Consultar dados da equipe','View shared data'):t('Escolha como usar','Choose how to use');
