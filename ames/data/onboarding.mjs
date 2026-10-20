@@ -53,8 +53,9 @@ export function readRelease(value) {
     if(value.download_url||value.package_name||value.sha256)throw new TypeError('Manifesto pendente não pode anunciar pacote antigo');
   }
   const existingR12=value.existing_r12_migration===true;
-  const validatedSha=typeof value.validated_candidate_sha==='string'&&/^[a-f0-9]{40}$/.test(value.validated_candidate_sha)
-    ?value.validated_candidate_sha:null;
+  const rawSha=value.validated_candidate_sha??value.validated_sha;
+  const validatedSha=typeof rawSha==='string'&&/^[a-f0-9]{40}$/.test(rawSha)
+    ?rawSha:null;
   if(available&&(!validatedSha||!package_name.endsWith(validatedSha.slice(0,8)+'.zip')))
     throw new TypeError('Pacote sem commit GitHub confirmado');
   return immutable({version:value.version,package_available:available,package_name,sha256,download_url,validated_sha:validatedSha,
