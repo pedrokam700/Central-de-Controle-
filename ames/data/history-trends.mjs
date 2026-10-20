@@ -59,17 +59,22 @@ export function createHistoryTrendReader(history){
  }
  return {clear(){cache.clear();},async read(options){
   const entries=await history.list(options.line),plan=planHistoryDays(entries,options),points=[];
-  for(const day of plan){
-   if(day.status!=='indexed'){points.push({...day,candidates:undefined});continue;}
-   let point=null;
-   for(const entry of day.candidates){
-    try{const snapshot=await open(entry);
-     // Custom queries are distinct identities, even when their bounds look like a day.
-     if(!dailyModes.has(snapshot.canonical.summary.period?.mode))continue;
-     point={...trendPoint(snapshot,entry,options.filters),stored_revisions:day.candidates.length};break;
-    }catch(error){point={date:day.date,status:'unavailable',error:error.message,entry};break;}
-   }
-   points.push(point||{date:day.date,status:'not_collected'});
+  // Read in small bounded groups rather than 93 sequential network round-trips
+  // (or a 93-request flood). Preserve the original day order and source guards.
+  for(let i=0;i<plan.length;i+=6){
+   const batch=await Promise.all(plan.slice(i,i+6).map(async day=>{
+    if(day.status!=='indexed')return {...day,candidates:undefined};
+    let point=null;
+    for(const entry of day.candidates){
+     try{const snapshot=await open(entry);
+      // Custom queries are distinct identities, even when their bounds look like a day.
+      if(!dailyModes.has(snapshot.canonical.summary.period?.mode))continue;
+      point={...trendPoint(snapshot,entry,options.filters),stored_revisions:day.candidates.length};break;
+     }catch(error){point={date:day.date,status:'unavailable',error:error.message,entry};break;}
+    }
+    return point||{date:day.date,status:'not_collected'};
+   }));
+   points.push(...batch);
   }
   return {points,sources:[...new Set(entries.filter(e=>e.line_id===options.line).map(e=>e.source_id))].sort()};
  }};
