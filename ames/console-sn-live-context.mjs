@@ -47,6 +47,32 @@ function patchProcessCards(root,production){
 }
 function decorate(root,result){
   const evidence=snLiveSummaryEvidence(result);
+  // Show the reference of the investigated mounting. A 2114 latest-failure
+  // fallback must never silently look like an exact 3028 occurrence.
+  root.querySelector('[data-sn-assembly-scope]')?.remove();
+  const scope=evidence.model.material_selection;
+  if(scope){
+    const selected=Number(scope.scanned_components||0);
+    const excluded=Number(scope.historical_components_ignored||0);
+    const unknown=Number(scope.temporal_unknown||0);
+    const message=scope.status==='selected_at_latest_2114_candidate'
+      ?t('Materiais selecionados pela falha mais recente da 2114 (referência provisória, não equivalência comprovada à 3028).',
+         'Materials selected using the latest 2114 failure (provisional reference, not proven equivalent to 3028).')
+      :t('Montagem da falha não determinada: é necessário um Defect Time comprovado. Nenhum histórico de materiais foi consultado automaticamente.',
+         'Defect assembly not determined: a proven Defect Time is required. No material history was queried automatically.');
+    const section=root.ownerDocument.createElement('section');
+    section.dataset.snAssemblyScope='1';
+    section.className='mes-context-panel';
+    section.setAttribute('role','status');
+    const header=root.ownerDocument.createElement('strong');
+    header.textContent=t('Escopo temporal da montagem','Assembly time scope');
+    const details=root.ownerDocument.createElement('p');
+    details.textContent=message+' '+t('Selecionados','Selected')+': '+selected+
+      ' · '+t('Históricos fora do recorte','Historical outside scope')+': '+excluded+
+      ' · '+t('Indeterminados','Uncertain')+': '+unknown;
+    section.append(header,details);
+    root.prepend(section);
+  }
   if(evidence.has2114){
     setKpi(root,/^(Falha atual|Current failure)$/i,evidence.current?1:0,'2114');
     setKpi(root,/^(Falhas antigas PCBA|Previous PCBA failures)$/i,evidence.previous.length,'2114');

@@ -229,7 +229,15 @@ export function buildLiveSnForensics(result={}){
   let ownRows=Array.isArray(trace2114?.previous_failures)?trace2114.previous_failures:[];
   if(!ownRows.length&&queryRows.length>1)ownRows=queryRows.filter(row=>!sameHistory(row,rawCurrent));
   const ownHistory=ownRows.map(row=>failureEntry(row,{pcba:queryPcba,repairs,process,source:Array.isArray(trace2114?.previous_failures)&&trace2114.previous_failures.includes(row)?'2114':'2114-raw'})).filter(Boolean);
-  const materials=(trace3074?.reused_components||[]).map(item=>{
+  // A mounting scope includes every selected physical component, not just
+  // those already identified as reused. Older offline fixtures may provide
+  // reused_components only; do not accidentally restore historical broad lists
+  // when the new occurrence-bound selection is present.
+  const chosen=trace3074?.material_selection?.status==='selected_at_latest_2114_candidate';
+  const reused=new Map((trace3074?.reused_components||[]).map(item=>[text(item.item_sn),item]));
+  const scopedItems=chosen?(trace3074?.component_usage||[]):(trace3074?.reused_components||[]);
+  const materials=scopedItems.map(sourceItem=>{
+    const item=chosen?{...(reused.get(text(sourceItem.item_sn))||{}),...sourceItem}:sourceItem;
     const previous=uniq([...(item.previous_pcbas||[]),...(item.previous_pcba_evidence||[]).map(ev=>ev.pcba_sn)].map(text).filter(Boolean));
     const grouped=new Map();
     for(const ev of item.previous_pcba_evidence||[]){const p=text(ev.pcba_sn);if(!p)continue;if(!grouped.has(p))grouped.set(p,[]);grouped.get(p).push(ev);}
@@ -247,12 +255,14 @@ export function buildLiveSnForensics(result={}){
   const rawHistoryCount=[...rawByPcba.values()].reduce((sum,rows)=>sum+rows.length,0);
   const sourceStates={
     '2114':sourceStateFromTrace(trace2114,{recordCount:Math.max(rawHistoryCount,(current?1:0)+ownHistory.length),countProven:Array.isArray(trace2114?.previous_failures)||Array.isArray(trace2114?.pcbas)||Array.isArray(trace2114?.rows)}),
-    '3074':sourceStateFromTrace(trace3074,{recordCount:materials.length,countProven:Array.isArray(trace3074?.reused_components)}),
+    '3074':sourceStateFromTrace(trace3074,{recordCount:materials.length,countProven:chosen?
+      Number(trace3074?.material_selection?.temporal_unknown||0)===0:
+      Array.isArray(trace3074?.reused_components)}),
     '3022':sourceStateFromTrace(trace3022,{recordCount:process.length,countProven:Boolean(trace3022&&(Array.isArray(trace3022.operator_evidence)||Array.isArray(trace3022.process_passages)||Array.isArray(trace3022.rows)))}),
     '3012':live3012State(result,trace3012),
     '3028':result.local_snapshot?SOURCE_STATE.CACHED:SOURCE_STATE.NOT_COLLECTED,
   };
-  const model={process_contexts:result.local_snapshot?.process_contexts||[],query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
+  const model={material_selection:trace3074?.material_selection||null,process_contexts:result.local_snapshot?.process_contexts||[],query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
   enrichFamilies(model);model.alerts=buildCorrelationAlerts(model);return model;
 }
 
