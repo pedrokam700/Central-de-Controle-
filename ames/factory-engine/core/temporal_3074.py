@@ -151,6 +151,7 @@ def componentes_no_momento_da_falha(
         "ended_before_defect": buckets["ended_before_defect"],
         "bound_after_defect": buckets["bound_after_defect"],
         "time_unknown": buckets["time_unknown"],
+        "boundary_ambiguous": buckets["boundary_ambiguous"],
         "summary": {
             "active_at_defect": len(buckets["active"]),
             "ended_before_defect": len(buckets["ended_before_defect"]),
