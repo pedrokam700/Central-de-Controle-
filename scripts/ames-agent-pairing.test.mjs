@@ -40,3 +40,26 @@ test('HTTPS pairing is an explicit local action to fixed official origin; token 
     globalThis.location=new URL('https://evil.example/');assert(!client.canOpenOfficial());assert.throws(()=>client.openOfficial());
   }finally{if(beforeLocation===undefined)delete globalThis.location;else globalThis.location=beforeLocation;if(beforeWindow===undefined)delete globalThis.window;else globalThis.window=beforeWindow;}
 });
+
+test('official HTTPS can open explicit local confirmation, but untrusted domains cannot',()=>{
+  const beforeLocation=globalThis.location,beforeWindow=globalThis.window;
+  let opened;
+  try{
+    globalThis.location=new URL('https://central-cora-v2.vercel.app/Central-de-Controle-/');
+    globalThis.window={open:(...args)=>opened=args};
+    const client=createAgentClient(fakeStore());
+    assert.equal(client.canPairFromOfficial(),true);
+    client.openLocalPairing();
+    assert.deepEqual(opened,['http://127.0.0.1:8765/workstation/parear','_blank','noopener,noreferrer']);
+    assert.equal(opened[0].includes('ames_agent_token'),false);
+    globalThis.location=new URL('https://evil.example/');
+    assert.equal(client.canPairFromOfficial(),false);
+    assert.throws(()=>client.openLocalPairing(),/oficial/);
+    globalThis.location=new URL('http://127.0.0.1:8765/');
+    assert.equal(client.canPairFromOfficial(),false);
+    assert.throws(()=>client.openLocalPairing(),/oficial/);
+  }finally{
+    if(beforeLocation===undefined)delete globalThis.location;else globalThis.location=beforeLocation;
+    if(beforeWindow===undefined)delete globalThis.window;else globalThis.window=beforeWindow;
+  }
+});
