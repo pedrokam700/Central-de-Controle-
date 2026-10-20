@@ -34,7 +34,8 @@ class Screen3074:
         if sn=="CUR":return {"rows":[
           r("M1","2026-10-19T12:00:00Z","2026-10-19T14:00:00Z","N"),
           r("M2","2026-10-19T16:00:00Z","","Y"),
-          r("M3","2026-10-19T12:00:00Z","","N")]}
+          r("M3","2026-10-19T12:00:00Z","","N"),
+          r("UNRELATED","2026-10-01T12:00:00Z","2026-10-02T12:00:00Z","N",typ="PCBA")]}
         if sn=="M1":return {"rows":[r("OLD","2026-10-10T12:00:00Z",typ="PCBA"),
                                      r("CUR","2026-10-19T12:00:00Z",typ="PCBA")]}
         raise AssertionError("unexpected 3074 query "+sn)
@@ -68,6 +69,7 @@ class IndividualAssemblyTests(unittest.TestCase):
     def test_restricts_live_item_queries_to_latest_2114_fault_instant(self):
         output=self.lookup()
         self.assertEqual(Screen3074.calls,["CUR","M1"])
+        self.assertEqual(Screen2114.calls,["CUR","OLD"],"unrelated PCBA history must not be queried")
         self.assertEqual(output["trace_3074"]["material_selection"]["status"],"selected_at_latest_2114_candidate")
         self.assertEqual([c["item_sn"] for c in output["trace_3074"]["components"]],["M1"])
         self.assertEqual(output["trace_3074"]["component_usage"][0]["previous_pcbas"],["OLD"])

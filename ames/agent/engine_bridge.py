@@ -345,7 +345,9 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         pcba_candidates = []
         seen = set()
         # Always try the scanned SN in 2114; material SN simply returns no-data.
-        for x in [query, *historical_pcbas]:
+        # Determine whether the SN is a PCBA *before* looking up any other
+        # PCBA. Old 3074 rows must not trigger broad 2114 collection.
+        for x in [query]:
             x = str(x or "").strip()
             if x and x not in seen:
                 seen.add(x); pcba_candidates.append(x)
@@ -369,6 +371,11 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         # 2114 history and 3074 returned PCBA rows, treat it as a material query.
         query_hist = next((h for h in histories if h["pcba_sn"] == query and h.get("result") and not h["result"].get("no_data")), None)
         detected_type = "PCBA" if query_hist else ("MATERIAL_SN" if historical_pcbas else "SN_INDETERMINADO")
+        if detected_type == "PCBA":
+            # Old PCBA-type rows on this PCBA's own 3074 page may belong to
+            # unrelated mounting cycles. Only prior PCBAs found by querying
+            # the selected materials can extend the investigation.
+            historical_pcbas = []
 
         process = []
         if include_3022:
