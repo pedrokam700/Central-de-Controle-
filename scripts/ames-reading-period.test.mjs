@@ -21,6 +21,17 @@ test('custom query on identical dates is never a daily population; UTC dates nor
  p.summary.period.end_at='2026-10-20T07:00:01-03:00';assert.equal(matchesReadingPeriod(p,scope),false);
  assert.throws(()=>readingPeriod('custom',{start:'2026-10-20T07:00',end:'2026-10-19T07:00'}));
 });
+test('reading-period changes preserve session; logout/reset invalidates retained independent SN state',()=>{
+ const s=createAmesStore({now:()=>now.getTime()});
+ const session=s.sessionGeneration();
+ s.selectReadingPeriod('today');
+ s.selectReadingPeriod('previous');
+ s.selectReadingPeriod('today');
+ assert.equal(s.sessionGeneration(),session,'period navigation cannot reset independent query state');
+ s.clear();
+ assert.equal(s.sessionGeneration(),session+1,'logout invalidates retained SN view');
+ assert.equal(s.readingPeriod(),null);
+});
 test('Today → previous → Today keeps publication head and all datasets unchanged',()=>{
  const s=createAmesStore({now:()=>now.getTime()}),today=snapshot('new','2026-10-19'),previous=snapshot('old','2026-10-16','previous_day');
  s.replaceLocalSnapshots([today]);s.setLocalConnected(true);s.selectReadingPeriod('today');
