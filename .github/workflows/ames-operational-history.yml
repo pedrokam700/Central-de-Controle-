@@ -34,6 +34,7 @@ jobs:
           python3 scripts/agent-performance-indexes.test.py
           python3 scripts/agent-assembly-scope.test.py
           python3 scripts/agent-individual-assembly.test.py
+          python3 scripts/agent-3022-origin-fallback.test.py
   reading-browser:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -76,7 +77,8 @@ jobs:
             'scripts/agent-3012-capture.test.py',
             'scripts/agent-raw-history.test.py',
             'scripts/agent-assembly-scope.test.py',
-            'scripts/agent-individual-assembly.test.py'
+            'scripts/agent-individual-assembly.test.py',
+            'scripts/agent-3022-origin-fallback.test.py'
           )) {
             python $script
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

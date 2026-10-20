@@ -11,6 +11,15 @@ function processRows(result={}){
 
 export function provenRepairUserName(repair={},result={},currentPcba=''){
   const id=text(repair.repair_user),pcba=text(repair.pcba_sn);if(!id||!pcba)return null;
+  // A name is trustworthy only if it is an explicit field belonging to this
+  // same 3012 repair row, or comes from a 3022 row with the identical user ID
+  // and PCBA. A bare BRM code is never reverse-guessed into a human name.
+  const raw=repair.raw?.raw&&typeof repair.raw.raw==='object'?repair.raw.raw:repair.raw||{};
+  const candidates=['repairUserName','Repair User Name','repair_user_name','RepairUserName'];
+  const rawName=candidates.map(key=>text(raw[key])).find(name=>name&&name!==id);
+  if(rawName)return rawName;
+  const direct=text(repair.repair_user_name);
+  if(direct&&direct!==id)return direct;
   const current=text(currentPcba||result.sn),names=new Set();
   for(const row of processRows(result)){
     const explicit=pcbaOf(row),rowPcba=explicit||current;
@@ -26,7 +35,7 @@ function field(block,label){return [...(block?.querySelectorAll('div')||[])].fin
 function patchRepairBlock(block,repair,result,currentPcba){
   if(!block||!repair)return;
   const user=field(block,'Repair User')?.querySelector('b'),id=text(repair.repair_user),name=provenRepairUserName(repair,result,currentPcba);
-  if(user){user.textContent=name?`${name} (${id})`:(id||'—');user.title=name?`3022 · ${name} · ${id}`:id;}
+  if(user){user.textContent=name?`${name} (${id})`:(id||'—');user.title=name?`Nome registrado no MES · ${name} · ${id}`:'Nome não fornecido nesta evidência MES · '+(id||'sem código');}
   const comment=field(block,'Repair Comment')?.querySelector('b'),raw=repair.repair_comment;
   if(comment&&raw!==undefined&&raw!==null){
     comment.textContent=String(raw);comment.title=String(raw);comment.dataset.repairCommentFull='1';

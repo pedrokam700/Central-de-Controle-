@@ -109,6 +109,24 @@ def install(a, BaseHandler, canonical):
                 job = a._job_update(job_id, stage=stage, progress=min(82, float(progress)), message=message)
                 a._persist_job(job)
             result = dict(a.run_individual_lookup(engine, sn, include_3022=include_3022, line_callback=cb) or {})
+            # Already-collected 3028 is local, read-only evidence. In particular,
+            # the 2114 history grid does not always carry Defect Time and cannot
+            # by itself be used to calculate generation/shift for a fault.
+            try:
+                with a.STORE.connect() as con:
+                    rows = con.execute(
+                        "SELECT pcba_sn, defect_code, defect_time, product_model "
+                        "FROM defect_observations WHERE pcba_sn=? AND defect_time IS NOT NULL "
+                        "ORDER BY snapshot_id DESC LIMIT 3001", (sn,)
+                    ).fetchall()
+                if len(rows) <= 3000:
+                    result.setdefault("local_snapshot", {})["defects_3028"] = [dict(r) for r in rows]
+                else:
+                    result.setdefault("warnings", []).append(
+                        "3028: mais de 3000 registros nesta PCBA; referência temporal local não aplicada.")
+            except Exception as exc:
+                result.setdefault("warnings", []).append(
+                    f"3028 histórico local indisponível: {type(exc).__name__}")
             try:
                 import json
                 settings = json.loads((engine / "config" / "settings.json").read_text(encoding="utf-8"))
@@ -159,6 +177,14 @@ def install(a, BaseHandler, canonical):
                     result["summary"] = summary
                 except Exception as exc:
                     warnings.append(f"3012 ainda não validada neste posto: {type(exc).__name__}: {exc}")
+            if include_3022:
+                # Recalculate after 3012 has yielded its actual Defect Time
+                # (not Repair Time) and uniquely match PCBA + defect code.
+                # Existing 3022 passages are reused; no second MES query.
+                try:
+                    production_shift.correlate_sn(result, engine, grid_offset=offset)
+                except Exception as exc:
+                    warnings.append(f"3022: correlação após 3012 indisponível: {type(exc).__name__}: {exc}")
             result["warnings"] = warnings
             a._persist_job(a._job_update(job_id, status="done", stage="done", progress=100, finished_at=a.utc_now(), message=f"Consulta individual concluída · {sn}", result=result))
             a.STORE.record_audit(

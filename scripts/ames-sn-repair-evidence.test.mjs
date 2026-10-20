@@ -40,3 +40,14 @@ test('operator ID match is exact rather than fuzzy',()=>{
   result.trace_3022.operator_evidence=[{pcba_sn:'PCB-A',operator_id:'BRM000680',operator_name:'Wrong'}];
   assert.equal(provenRepairUserName(repair(),result,'PCB-A'),null);
 });
+
+test('explicit repairer name on same original 3012 row is accepted without guessing code',()=>{
+ const result=base();
+ const repairRow=repair({raw:{raw:{repairUser:'BRM00068',repairUserName:'Technician A'}}});
+ assert.equal(provenRepairUserName(repairRow,result,'PCB-A'),'Technician A');
+});
+test('missing repairer name in both 3012 and 3022 must remain unknown',()=>{
+ const result=base();
+ result.trace_3022.process_passages=[{pcba_sn:'PCB-A',operator_id:'BRM00068'}];
+ assert.equal(provenRepairUserName(repair(),result,'PCB-A'),null);
+});
