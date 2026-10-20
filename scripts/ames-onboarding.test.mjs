@@ -9,9 +9,9 @@ test('approved public GitHub CLEAN is SHA-bound and safe for new Windows compute
   const m=readRelease({...release,password:'secret',cookies:'secret',endpoint:'invented'});
   assert.equal(m.version,'0.5.25');
   assert.equal(m.package_available,true);
-  assert.equal(m.validated_sha,'e60cef8d4f033c4654b3fb730573e1ecfdd174bd');
+  assert.equal(m.validated_sha,'ef43b72ef9778314b5fb9c7d2a842ac3baa4cad7');
   assert.equal(m.sha256,'f73f12f2894e666700231b1fc9c7e16252e03ddebdf307ae807c2b52451bc152');
-  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.25-factory-20261020/AMES_Central_CLEAN_e60cef8d.zip');
+  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.26-multipc-20261020/AMES_Central_CLEAN_ef43b72e.zip');
   assert.equal(m.local_runtime.agent_health_url,'http://127.0.0.1:8765/api/v1/health');
   assert(!JSON.stringify(m).includes('secret'));assert.equal(m.endpoint,undefined);
   assert.equal(integrationMode('collector'),'collector');assert.equal(integrationMode('viewer'),'viewer');
@@ -25,7 +25,7 @@ test('never recommend arbitrary CDN, preview, stale ZIP or unverified candidate'
     {...other,sha256:'bad'},
     {...other,download_url:'javascript:alert(1)'},
     {...other,download_url:'https://example.com/AMES.zip'},
-    {...other,download_url:'https://github.com.evil.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.25-factory-20261020/AMES_Central_CLEAN_e60cef8d.zip'},
+    {...other,download_url:'https://github.com.evil.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.26-multipc-20261020/AMES_Central_CLEAN_ef43b72e.zip'},
     {...other,download_url:'https://user:password@github.com'+new URL(release.download_url).pathname},
     {...other,download_url:release.download_url+'?token=fake'},
     {...other,validated_candidate_sha:'1'.repeat(40)},
