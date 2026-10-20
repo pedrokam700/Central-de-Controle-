@@ -88,7 +88,13 @@ try{
  for(const id of ['monitor','top3','failures','sn','trace','reuse','process','base','knowledge']){
    await page.locator('[data-console-view="'+id+'"]').click();
    const pane=page.locator('[data-console-pane="'+id+'"]');
-   assert.equal(await pane.isVisible(),true);assert.match(await pane.locator('[data-shared-period]').innerText(),/16/);
+   assert.equal(await pane.isVisible(),true);
+   if(id==='sn'){
+     assert.match(await pane.locator('[data-shared-period]').innerText(),/independente/);
+     assert.equal(await pane.locator('[data-sn-form] [data-sn-run]').count(),1,'independent SN live investigation must remain accessible in historical mode');
+     assert.equal(await pane.locator('[data-sn-saved-toggle]').count(),1,'saved SN investigations remain accessible across periods');
+     assert.equal(await pane.locator('[data-stored-search]').count(),0,'daily snapshot search cannot replace the SN workflow');
+   }else assert.match(await pane.locator('[data-shared-period]').innerText(),/16/);
    assert(!((await pane.innerText()).includes('TODAY-SNAPSHOT')),id+' leaked Today');
  }
  // Real browser checks for selective PR33→PR42 integration, no MES mutations.
@@ -253,6 +259,28 @@ try{
  assert.match(await page.locator('[data-sn-saved-detail]').innerText(),/same_pcba_candidate|unsafe/);
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.snapshot_id),'TODAY-SNAPSHOT');
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ // SN input, live evidence and saved job stay on one stable independent view
+ // even while the global production period changes (without MES collection).
+ await page.locator('[data-sn-form] input[name=sn]').fill('PCBA-PERSIST-PERIOD');
+ await page.evaluate(()=>{qa.snFormIdentity=document.querySelector('[data-console-pane=sn] [data-sn-form]');});
+ await page.locator('[data-console-view=monitor]').click();
+ await page.locator('[data-read-period=previous]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
+ await page.locator('[data-console-view=sn]').click();
+ assert.equal(await page.locator('[data-sn-form] input[name=sn]').inputValue(),'PCBA-PERSIST-PERIOD');
+ assert.equal(await page.evaluate(()=>qa.snFormIdentity===document.querySelector('[data-console-pane=sn] [data-sn-form]')),true,'period selection must not discard active SN investigation');
+ assert.equal(await page.locator('[data-sn-live] [data-sn-smart-alerts]').count(),1);
+ assert.equal(await page.locator('[data-sn-saved-toggle]').count(),1);
+ assert.equal(await page.locator('[data-stored-search]').count(),0);
+ assert.match(await page.locator('[data-shared-period]').innerText(),/independente/);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'period switching and SN display must not execute MES');
+ await page.locator('[data-console-view=monitor]').click();
+ await page.locator('[data-read-period=today]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
+ await page.locator('[data-console-view=sn]').click();
+ assert.equal(await page.locator('[data-sn-form] input[name=sn]').inputValue(),'PCBA-PERSIST-PERIOD');
+ assert.equal(await page.evaluate(()=>qa.snFormIdentity===document.querySelector('[data-console-pane=sn] [data-sn-form]')),true);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
  // B3.4b6: local snapshot metadata is lazy, source-locked, read-only and escaped.
  await page.locator('[data-console-view=base]').click();
  await page.locator('[data-history-mode=history]').click();
@@ -335,6 +363,12 @@ try{
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');
  await page.locator('[data-read-period=today]').click();
  assert.equal(await page.locator('[data-monitor-main] [data-agent-action=today]').isVisible(),true);
+ // An actual logout/reset must destroy the retained SN form and previous
+ // forensic content rather than exposing another account's SN investigation.
+ await page.evaluate(()=>{qa.store.clear();qa.store.selectReadingPeriod('today');qa.view.render();});
+ await page.locator('[data-console-view=sn]').click();
+ assert.equal(await page.locator('[data-sn-form] input[name=sn]').inputValue(),'');
+ assert.equal(await page.locator('[data-sn-live] [data-sn-smart-alerts]').count(),0);
  assert.deepEqual(errors,[]);
  console.log('PASS: nine views share exact historical scope; no MES mutations; Today restored; PT/EN and mobile selector');
 }finally{await browser.close();await new Promise(r=>server.close(r));}
