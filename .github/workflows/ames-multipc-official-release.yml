@@ -1,7 +1,7 @@
 name: Publish Official A-MES Multi-PC Field Release
 on:
   push:
-    branches: [fix/ames-official-single-workstation-pairing-20261020]
+    branches: [main]
     paths: ['.github/workflows/ames-multipc-official-release.yml']
 permissions:
   contents: read
