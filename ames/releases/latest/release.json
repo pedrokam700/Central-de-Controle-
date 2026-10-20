@@ -6,7 +6,7 @@
   "download_url": "https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.25-factory-20261020/AMES_Central_CLEAN_e60cef8d.zip",
   "validated_baseline": "0.5.25",
   "candidate_status": "factory_green_verified_git_release",
-  "published_at": "2026-10-20T13:54:00-03:00",
+  "published_at": "2026-10-20T17:10:51Z",
   "minimum_central_version": "2.0.0",
   "existing_r12_migration": true,
   "new_pc_status": "github_release_public_verified_exact_sha",
