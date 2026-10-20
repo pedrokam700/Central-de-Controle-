@@ -1,0 +1,74 @@
+name: Publish Official A-MES Multi-PC Field Release
+on:
+  push:
+    branches: [work/ames-pr35-pr36-integration-20261019]
+    paths: ['.github/workflows/ames-multipc-official-release.yml']
+permissions:
+  contents: read
+jobs:
+  gated-official-field-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require same-SHA five-gate Windows/browser/Firestore/CLEAN result
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 55); do
+            candidate="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" --jq '.workflow_runs[] | select(.name == "A-MES Operational History") | [.id,.status,.conclusion] | @tsv' | head -1)"
+            if [ -n "$candidate" ]; then
+              read -r run state verdict <<< "$candidate"
+              if [ "$state" = "completed" ]; then
+                if [ "$verdict" != "success" ]; then echo "FAIL: exact SHA operational CI is $verdict"; exit 1; fi
+                echo "APPROVED_WORKFLOW_RUN=$run" >> "$GITHUB_ENV"
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo "FAIL: no complete GREEN Actions run at the exact SHA"; exit 1
+      - name: Download only exact workflow artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$APPROVED_WORKFLOW_RUN" --repo "$GITHUB_REPOSITORY" --name "AMES-PR42-$GITHUB_SHA" --dir "$RUNNER_TEMP/verified"
+      - name: Verify embedded SHA, clean ZIP, individual hashes, excluded secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,zipfile
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"verified"/"AMES_PR42_CLEAN.zip"
+          assert p.is_file(), "CLEAN missing"
+          with zipfile.ZipFile(p) as z:
+              names=set(z.namelist())
+              manifest=json.loads(z.read("CANDIDATE_MANIFEST.json"))
+              assert manifest["sha"]==os.environ["GITHUB_SHA"], "CLEAN SHA mismatch"
+              assert manifest.get("standalone_clean") is True and manifest.get("development") is False
+              assert manifest.get("integrated_shell") is True
+              assert set(manifest["files"])|{"CANDIDATE_MANIFEST.json"}==names
+              assert all(hashlib.sha256(z.read(k)).hexdigest()==v for k,v in manifest["files"].items())
+              assert not any(n.startswith("ames-agent/data/") or n.endswith((".sqlite",".sqlite3",".db",".pem",".key",".log")) or n.endswith("/config.json") or "local_agent_token" in n for n in names)
+              print("GREEN exact-SHA ZIP",len(names),"files SHA256",hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+      - name: Release a new immutable GitHub asset without replacing the previous factory version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="ames-v0.5.26-multipc-20261020"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Refusing to overwrite an existing official release";exit 1
+          fi
+          short="$(echo "$GITHUB_SHA" | cut -c1-8)"
+          cp "$RUNNER_TEMP/verified/AMES_PR42_CLEAN.zip" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip"
+          gh release create "$tag" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Central + A-MES 0.5.26 — Multi-PC / pareamento HTTPS" \
+            --notes "Versão oficial do GitHub autorizada para TESTES DE CAMPO com a equipe. SHA $GITHUB_SHA. Pacote CLEAN completo, sem SQLite, sessão, cookies ou segredos. Download oficial para novos PCs e atualização em pasta separada. Pareamento do agente existente pelo link HTTPS exige confirmação física local no 127.0.0.1. Não substitua instalações/SQLite existentes. Dados compartilhados: snapshots sanitizados; gate físico de sincronização Linha 3 PC A → PC B ainda precisa ser executado. Versão anterior e60cef8d permanece para rollback."

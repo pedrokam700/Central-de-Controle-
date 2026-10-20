@@ -12,6 +12,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ames'/'agent'))
 from store import Store
 import canonical
+import workstation_pairing
 import source_capture
 
 LINE='TAN10103'
@@ -48,7 +49,7 @@ class CaptureManifestTests(unittest.TestCase):
         getter=next(x for x in cls.body if isinstance(x,ast.FunctionDef) and x.name=='do_GET')
         env={'entry':types.SimpleNamespace(a=types.SimpleNamespace(STORE=self.store,
             BASE_DIR=pathlib.Path(self.tmp.name))),
-            'urlparse':urlparse,'parse_qs':parse_qs,'source_capture':source_capture}
+            'urlparse':urlparse,'parse_qs':parse_qs,'source_capture':source_capture,'workstation_pairing':workstation_pairing}
         exec(compile(ast.Module(body=[getter],type_ignores=[]),'<actual hardened GET>','exec'),env)
         self.handler=types.SimpleNamespace(
             _authorized=lambda path:True,

@@ -14,7 +14,7 @@ DEFAULT_TIMEZONE = "America/Sao_Paulo"
 DEFAULT_PRODUCTION_DAY_START = "07:00"
 DEFAULT_SHIFTS = {
     "1": {"label": "1º Turno", "start": "07:30", "end": "17:30"},
-    "2": {"label": "2º Turno", "start": "17:30", "end": "07:30"},
+    "2": {"label": "2º Turno", "start": "17:30", "end": "03:30"},
 }
 
 
@@ -43,6 +43,15 @@ def normalized(config: Dict[str, Any]) -> Dict[str, Any]:
     _clock(production_day_start, "production_day_start")
 
     raw_shifts = config.get("work_shifts")
+    # A pre-20/10/2026 template shipped 17:30–07:30 incorrectly. Upgrade
+    # that exact old template without replacing independently customized shifts.
+    if isinstance(raw_shifts, dict):
+        old_1 = raw_shifts.get("1") or {}
+        old_2 = raw_shifts.get("2") or {}
+        if (isinstance(old_1, dict) and isinstance(old_2, dict) and
+            old_1.get("label") == "1º Turno" and old_1.get("start") == "07:30" and old_1.get("end") == "17:30" and
+            old_2.get("label") == "2º Turno" and old_2.get("start") == "17:30" and old_2.get("end") == "07:30"):
+            raw_shifts = {**raw_shifts, "2": {**old_2, "end": "03:30"}}
     shifts = {}
     for key, fallback in DEFAULT_SHIFTS.items():
         raw = raw_shifts.get(key, {}) if isinstance(raw_shifts, dict) else {}
@@ -97,7 +106,8 @@ def migrate_config(config: Dict[str, Any]) -> bool:
     if not config.get("production_day_start"):
         config["production_day_start"] = current["production_day_start"]
         changed = True
-    if not isinstance(config.get("work_shifts"), dict):
+    if config.get("work_shifts") != current["work_shifts"]:
+        # Persist only missing schedules or the exact recognized legacy template.
         config["work_shifts"] = current["work_shifts"]
         changed = True
     return changed

@@ -30,6 +30,8 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
   let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false, lastPartial=-1,lastRefresh=0,pendingSubmission=null;
   const workstationToken=bootstrapAgentToken(agentToken);
   const canOpenOfficial=()=>!!workstationToken&&globalThis.location?.protocol==='http:'&&['127.0.0.1','localhost'].includes(globalThis.location?.hostname)&&globalThis.location?.port==='8765';
+  const canPairFromOfficial=()=>globalThis.location?.origin==='https://central-cora-v2.vercel.app';
+
   const publish=patch=>{store.updateAgent(patch);changed();};
   async function request(path,body,blob=false) {
     const token=generation;
@@ -140,6 +142,34 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
   return Object.freeze({
     paired:()=>!!workstationToken,
     canOpenOfficial,
+    canPairFromOfficial,
+    async detectInstalled(){
+      // Public minimal /ready probe: no MES jobs, no cookies, no token, no
+      // assumption that browser CORS failure means "not installed".
+      const lease=generation;
+      let probe={state:'unknown'};
+      try{
+        const response=await fetcher(AGENT_URL+'/ready',{
+          method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
+          signal:AbortSignal.any([controller.signal,AbortSignal.timeout(2500)])
+        });
+        if(response.ok){
+          const ready=await response.json();
+          if(ready?.ready===true&&ready?.ok===true&&ready?.agent_version==='0.5.23'&&
+             Number.isInteger(ready.pid)&&ready.pid>0&&typeof ready.agent_build==='string'){
+            probe={state:'detected'};
+          }
+        }
+      }catch{ /* CORS/PNA or agent not running: unknown, never absent */ }
+      if(generation===lease)publish({workstation_probe:probe});
+      return probe;
+    },
+    openLocalPairing(){
+      if(!canPairFromOfficial())throw Error('Pareamento iniciado apenas pelo endereço HTTPS oficial.');
+      // Top-level navigation to loopback, then explicit confirmation locally.
+      // No token is read or returned from any unauthenticated fetch API.
+      globalThis.window.open('http://127.0.0.1:8765/workstation/parear','_blank','noopener,noreferrer');
+    },
     openOfficial(){
       if(!canOpenOfficial())throw Error('Pareamento disponível somente no posto local autorizado.');
       // Fixed trusted destination, fragment only, never a configurable redirect or cloud field.

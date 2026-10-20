@@ -1,4 +1,5 @@
-import {displayValue} from './data/time-display.mjs';
+import {displayValue,formatFactoryDateTime as factoryTime,formatFactoryDate as factoryDate} from './data/time-display.mjs';
+import {processPassageDiagnostic} from './data/sn-process-diagnostic.mjs';
 import {trustedProductionEvidence,genericReturnEvidence} from './data/production-evidence.mjs';
 import {collectionStatus} from './collection-status.mjs';
 import {componentFamily} from "./data/reuse-analysis.mjs";
@@ -14,12 +15,52 @@ const modeLabel=value=>({full:'Completo · 3074 + 2114 + 3022',process_only:'Som
 
 function safeProcessContext(row={}){
   const production=trustedProductionEvidence(row),ret=genericReturnEvidence(row);
+  const passage=processPassageDiagnostic(row);
   return {...row,
+    previous_passage_shift:passage.passage_shift,
+    previous_passage_operational_date:passage.passage_operational_date,
+    reference_pass_count_before_defect:passage.status==='unmapped'?null:row.reference_pass_count_before_defect,
     reference_station_code:production.station,reference_event_time:production.event_time,
     production_event_time:production.event_time,production_shift:production.shift,
     production_operational_date:production.operational_date,production_evidence_proven:production.trusted,
     return_station_code:ret.label,return_event_time:ret.event_time,return_evidence_proven:ret.proven,
   };
+}
+
+// Last proven passage is process context, never a substitute for defect generation.
+function processReferenceNotes(contexts){
+  return contexts.filter(c=>!c.production_evidence_proven||['OPERATIONAL_ESTIMATE_NOT_CAUSE','OBSERVED_DEFECT_STATION_NOT_ROOT_CAUSE'].includes(c.reference_confidence)).map(ctx=>{
+    const estimated=ctx.reference_confidence==='OPERATIONAL_ESTIMATE_NOT_CAUSE';
+    const atAssembly=ctx.reference_confidence==='OBSERVED_DEFECT_STATION_NOT_ROOT_CAUSE';
+    if(estimated||atAssembly){
+      const station=ctx.reference_station_code||'—',title=estimated
+        ?'Referência aproximada de montagem: '+station
+        :'Falha registrada na montagem: '+station;
+      const timing=ctx.production_evidence_proven
+        ?'<div class="ames-inline-facts"><span>Horário da referência: <b>'+esc(factoryTime(ctx.reference_event_time))+
+         '</b></span><span>Turno da referência: <b>'+esc(ctx.production_shift||'—')+
+         '</b></span><span>Dia produtivo: <b>'+esc(factoryDate(ctx.production_operational_date))+'</b></span></div>'
+        :'<p>Sem passagem/registro temporal 3022 comprovado para esta referência.</p>';
+      const caveat=estimated
+        ?'A5150 é um marco intermediário da montagem usado para estimar o turno da ocorrência funcional detectada no teste; NÃO é prova do posto exato nem da causa.'
+        :'Posto onde a falha foi registrada dentro de A5100–A5162; NÃO comprova o instante em que o defeito começou ou sua causa.';
+      return '<article class="ames-evidence-card" data-sn-operational-reference>'+
+        '<strong>'+esc(title)+'</strong><p>Falha '+esc(ctx.defect_code||'—')+' · Família '+esc(ctx.failure_family||'—')+
+        ' · Modelo '+esc(ctx.product_model||'—')+'</p>'+timing+
+        '<p>'+esc(ctx.reference_reason||'')+'</p><p class="mes-context">'+esc(caveat)+'</p></article>';
+    }
+    const d=processPassageDiagnostic(ctx),unmapped=d.status==='unmapped';
+    const observed=d.evidence==='3022_COMPLETED_PRE_DEFECT';
+    const title=unmapped?'Posto de geração ainda não mapeado para esta falha':'Passagem de referência ainda não comprovada';
+    const facts=observed
+      ?'<div class="ames-inline-facts"><span>Última passagem concluída: <b>'+esc(d.code)+'</b></span><span>Horário da passagem: <b>'+esc(factoryTime(d.passage_time))+'</b></span><span>Turno da passagem: <b>'+esc(d.passage_shift)+'</b></span><span>Dia operacional da passagem: <b>'+esc(factoryDate(d.passage_operational_date))+'</b></span></div>'
+      :'<p>Não há horário anterior comprovado neste contexto.</p>';
+    return '<article class="ames-evidence-card" data-sn-unmapped-origin><strong>'+esc(title)+'</strong>'+
+      '<p>Falha '+esc(ctx.defect_code||'—')+' · Família '+esc(d.family||'não classificada')+
+      ' · Modelo '+esc(d.model||'não informado')+' · Registro '+esc(ctx.registration_mode||'não informado')+'</p>'+
+      (d.reason?'<p>'+esc(d.reason)+'</p>':'')+facts+
+      '<p class="mes-context">Os horários acima pertencem à passagem observada, NÃO à geração da falha. A causa não foi confirmada.</p></article>';
+  }).join('');
 }
 
 function rowsTable(rows,columns,{empty='Nenhum registro disponível.',highlight}={}){
@@ -61,7 +102,7 @@ export function createSnConsoleView(root,store,client){
       <div class="ames-investigation-grid"><section class="mes-context-panel ames-priority-panel">${sectionHead('Falha atual da PCBA','Registro 2114 associado à ocorrência atual.')}${!has2114?'<div class="ames-empty"><span>—</span><p>2114 indisponível nesta resposta; ausência não equivale a zero ou a inexistência de histórico.</p></div>':current?rowsTable([current],[['Defect Code','Defect Code'],['Defect Description','Descrição'],['Defect Time','Registro da falha (MES)'],['Manual/Automatic','Manual/Automatic'],['Repair Status','Repair Status'],['Defect Type','Defect Type']]):'<div class="ames-empty"><span>—</span><p>A 2114 foi consultada, mas não confirmou falha atual para esta SN.</p></div>'}</section>
       <section class="mes-context-panel">${sectionHead('Falhas antigas da PCBA','Histórico da própria PCBA, separado da falha atual.')}${has2114?rowsTable(previous,[['Defect Code','Defect Code'],['Defect Description','Descrição'],['Defect Time','Registro da falha (MES)'],['Manual/Automatic','Manual/Automatic'],['Repair Status','Repair Status'],['relation','Relação histórica']],{empty:'A 2114 foi consultada e não retornou falhas anteriores para esta SN.'}):'<div class="ames-empty"><span>—</span><p>Histórico 2114 indisponível nesta resposta.</p></div>'}</section></div>
       <section class="mes-context-panel">${sectionHead('Materiais em 2º uso ou mais','Segundo uso de Material SN é separado de segundo uso da própria PCBA.')}${!has3074?'<div class="ames-empty"><span>—</span><p>3074 indisponível nesta resposta; não converter ausência de fonte em zero de reuso.</p></div>':reused.length?`<div class="ames-reuse-list">${reused.map(item=>`<article class="ames-evidence-card"><div class="ames-evidence-card-head"><div><b>${esc(componentFamily(item.item_type)||item.item_type||'Material')}</b><span>${esc(item.item_sn||'')}</span></div><span class="status">${esc(relationLabel(item.relation_to_current_failure))}</span></div><div class="ames-inline-facts"><span>Usos conhecidos <b>${esc(fmt(item.known_use_count))}</b></span><span>Reusos <b>${esc(fmt(item.reuse_count))}</b></span></div><p>PCBAs anteriores/desvinculadas: ${esc((item.previous_pcbas||[]).join(', ')||'nenhuma confirmada')}</p>${(item.previous_pcba_evidence||[]).map(ev=>`<div class="ames-prior-pcba"><b>${esc(ev.pcba_sn||'')}</b> · ${esc(relationLabel(ev.relation))}<br><small>${esc(ev.reason||'')}</small>${ev.history?rowsTable([ev.history],[['Defect Code','Defect Code antigo'],['Defect Description','Defect Description antigo'],['Defect Time','Registro antigo (MES)'],['Manual/Automatic','Manual/Automatic'],['Repair Status','Repair Status']]):''}${ev.repair_evidence_3012?.length?'<p>3012 · candidatos da mesma PCBA</p>'+rowsTable(ev.repair_evidence_3012,[['defect_code','Defect Code'],['defect_time','Registro da falha (MES)'],['repair_user','Repair User'],['repair_time','Repair Time'],['repair_code','Repair Code'],['repair_comment','Repair Comment']]):''}</div>`).join('')}</article>`).join('')}</div>`:'<div class="ames-empty"><span>—</span><p>A 3074 foi consultada e nenhum Material SN em 2º+ uso foi confirmado nesta resposta.</p></div>'}</section>
-      <section class="mes-context-panel ames-process-evidence">${sectionHead('3022 · evidência temporal de processo','Registro da falha (MES) não define geração. Geração, turno e dia só aparecem quando a passagem no posto de referência é comprovada pela 3022.')}<div class="ames-rule-strip"><b>Regra temporal:</b><span>ocorrência → posto de referência 3022 → última passagem concluída válida ≤ registro da falha</span></div>${contexts.length?rowsTable(contexts,[['defect_code','Falha'],['defect_time','Registro da falha (MES)'],['registration_mode','Modo de registro'],['failure_family','Família'],['reference_station_code','Posto de referência (3022)'],['reference_event_time','Horário de geração (3022)'],['production_shift','Turno comprovado (3022)'],['production_operational_date','Dia de produção (3022)'],['reference_pass_count_before_defect','Passagens antes'],['previous_operation_code','Última passagem antes do registro'],['previous_event_time','Horário da passagem anterior'],['repair_action','AT / ação'],['return_station_code','Posto de retorno'],['return_event_time','Horário do retorno'],['status','Status']]):has3022?rowsTable(passages,[['operation_code','Posto'],['operation_name','Processo'],['event_time','Horário da passagem 3022'],['production_shift','Turno da passagem 3022'],['production_operational_date','Dia operacional da passagem'],['hist_seq','Hist Seq']],{empty:'A 3022 foi consultada, mas nenhuma evidência temporal foi retornada para esta SN.'}):'<div class="ames-empty"><span>—</span><p>3022 indisponível nesta resposta; não mostrar zero como se a tela tivesse sido consultada com sucesso.</p></div>'}</section>
+      <section class="mes-context-panel ames-process-evidence">${sectionHead('3022 · evidência temporal de processo','Registro da falha (MES) não define geração. Geração, turno e dia só aparecem quando a passagem no posto de referência é comprovada pela 3022.')}<div class="ames-rule-strip"><b>Regra temporal:</b><span>ocorrência → posto de referência 3022 → última passagem concluída válida ≤ registro da falha</span></div>${contexts.length?processReferenceNotes(contexts)+rowsTable(contexts,[['defect_code','Falha'],['defect_time','Registro da falha (MES)'],['registration_mode','Modo de registro'],['failure_family','Família'],['reference_station_code','Posto de referência (3022)'],['reference_event_time','Horário da referência (3022)'],['production_shift','Turno da referência (3022)'],['production_operational_date','Dia da referência (3022)'],['reference_pass_count_before_defect','Passagens no posto de referência'],['previous_operation_code','Última passagem antes do registro'],['previous_event_time','Horário da passagem anterior'],['previous_passage_shift','Turno da passagem anterior'],['previous_passage_operational_date','Dia operacional da passagem anterior'],['reference_confidence','Classificação da referência'],['reference_reason','Critério da referência'],['repair_action','AT / ação'],['return_station_code','Posto de retorno'],['return_event_time','Horário do retorno'],['status','Status']]):has3022?rowsTable(passages,[['operation_code','Posto'],['operation_name','Processo'],['event_time','Horário da passagem 3022'],['production_shift','Turno da passagem 3022'],['production_operational_date','Dia operacional da passagem'],['hist_seq','Hist Seq']],{empty:'A 3022 foi consultada, mas nenhuma evidência temporal foi retornada para esta SN.'}):'<div class="ames-empty"><span>—</span><p>3022 indisponível nesta resposta; não mostrar zero como se a tela tivesse sido consultada com sucesso.</p></div>'}</section>
       ${process.operator_evidence?.length?`<section class="mes-context-panel">${sectionHead('Operador / 3022','Campos retornados pela fonte; não confirma causa raiz.')}${rowsTable(process.operator_evidence,[['pcba_sn','PCBA'],['operator_id','Operator ID'],['operator_name','Operador'],['station','Posto'],['operation_name','Processo'],['event_time','Horário'],['source','Fonte']])}</section>`:''}
       ${(result.warnings||[]).length?`<div class="notice warn"><b>Atenção</b><br>${result.warnings.map(esc).join('<br>')}</div>`:''}`;
   }

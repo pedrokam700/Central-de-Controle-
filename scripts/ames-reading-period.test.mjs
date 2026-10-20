@@ -21,6 +21,17 @@ test('custom query on identical dates is never a daily population; UTC dates nor
  p.summary.period.end_at='2026-10-20T07:00:01-03:00';assert.equal(matchesReadingPeriod(p,scope),false);
  assert.throws(()=>readingPeriod('custom',{start:'2026-10-20T07:00',end:'2026-10-19T07:00'}));
 });
+test('reading-period changes preserve session; logout/reset invalidates retained independent SN state',()=>{
+ const s=createAmesStore({now:()=>now.getTime()});
+ const session=s.sessionGeneration();
+ s.selectReadingPeriod('today');
+ s.selectReadingPeriod('previous');
+ s.selectReadingPeriod('today');
+ assert.equal(s.sessionGeneration(),session,'period navigation cannot reset independent query state');
+ s.clear();
+ assert.equal(s.sessionGeneration(),session+1,'logout invalidates retained SN view');
+ assert.equal(s.readingPeriod(),null);
+});
 test('Today → previous → Today keeps publication head and all datasets unchanged',()=>{
  const s=createAmesStore({now:()=>now.getTime()}),today=snapshot('new','2026-10-19'),previous=snapshot('old','2026-10-16','previous_day');
  s.replaceLocalSnapshots([today]);s.setLocalConnected(true);s.selectReadingPeriod('today');
@@ -54,10 +65,45 @@ test('loader uses immutable history, excludes custom and preserves selected line
  const c=createReadingPeriodController(s,{list:async l=>l===line?[entry(p)]:[],open:async()=>p});
  await c.select('previous');assert.equal(s.read(line).snapshot.snapshot_id,'old');assert.equal(s.context().line_id,'TAN10102');assert.equal(s.localCanonical().length,0);c.clear();
 });
-test('loader rejects conflicting workstations rather than selecting latest timestamp',async()=>{
+test('loader exposes ambiguous sources without silently choosing the newest remote workstation',async()=>{
  const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day');let opened=0;
  const c=createReadingPeriodController(s,{list:async l=>l===line?[entry(p),{...entry(p),source_id:'other'}]:[],open:async()=>{opened++;return p;}});
- await c.select('previous');assert.equal(opened,0);assert.equal(s.read(line).snapshot,null);assert.match(s.agent().period_read.errors[0].error,/ambiguous/);
+ await c.select('previous');
+ assert.equal(opened,0);assert.equal(s.read(line).snapshot,null);
+ assert.equal(s.agent().period_read.status,'partial');
+ assert.deepEqual(s.agent().period_read.source_choices[0].options.map(o=>o.source_id),['original-source','other']);
+ await assert.rejects(()=>c.chooseSource('TAN10102','other'),/invalid_history_source_choice/);
+ c.clear();
+});
+test('connected agent chooses only its own proven local origin for both lines, not a newer shared source',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day');
+ s.updateAgent({status:'connected',capabilities:{source_id:p.source_id}});
+ const local={...entry(p),history_source:'local'};
+ const remote={...entry(p),source_id:'different-workstation',collected_at:'2026-10-21T20:00:00Z'};
+ const opened=[],c=createReadingPeriodController(s,{list:async l=>l===line?[remote,local]:[],open:async e=>{opened.push(e.source_id);return p;}});
+ await c.select('previous');
+ assert.equal(s.read(line).snapshot?.source_id,p.source_id);
+ assert.deepEqual(opened,[p.source_id]);
+ assert.equal(s.agent().period_read.status,'ready');
+ c.clear();
+});
+test('when local identity cannot be proven operator chooses a single source without triggering MES',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day'),q={...snapshot('other','2026-10-16','previous_day'),source_id:'other-workstation'};
+ const openings=[],c=createReadingPeriodController(s,{list:async l=>l===line?[entry(p),entry(q)]:[],open:async e=>{openings.push(e.source_id);return e.source_id===q.source_id?q:p;}});
+ await c.select('previous');assert.equal(openings.length,0);
+ await c.chooseSource(line,q.source_id);
+ assert.deepEqual(openings,[q.source_id]);
+ assert.equal(s.read(line).snapshot?.snapshot_id,'other');
+ assert.equal(s.agent().period_read.source_choices.length,0);
+ c.clear();
+});
+test('chosen source cannot admit another source payload even with a matching line and period',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day'),q={...snapshot('other','2026-10-16','previous_day'),source_id:'other-workstation'};
+ const c=createReadingPeriodController(s,{list:async l=>l===line?[entry(p),entry(q)]:[],open:async()=>q});
+ await c.select('previous');await c.chooseSource(line,p.source_id);
+ assert.equal(s.read(line).snapshot,null);
+ assert.match(s.agent().period_read.errors[0].error,/historical_identity_mismatch/);
+ c.clear();
 });
 test('loader does not mix late historical reads after switching back Today',async()=>{
  const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day');let release;

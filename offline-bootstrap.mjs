@@ -45,6 +45,7 @@ try{
   // When Central was opened from the local MES Console, keep Central on its
   // canonical auth origin and add only a simple explicit route back to localhost.
   await import('./core/central-roundtrip.mjs');
+  void import('./ames/release-login-link.mjs');
 }catch(error){
   window.__centralAppImportError=String(error?.message||error);
   console.error('[Central] app.js não carregou:',error);

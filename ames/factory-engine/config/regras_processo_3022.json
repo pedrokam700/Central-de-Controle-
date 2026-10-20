@@ -1,5 +1,5 @@
 {
-  "version": "3022-origin-r5",
+  "version": "3022-origin-r6-assembly-reference",
   "description": "Matriz configuravel CPH/modelo + familia/modo de falha -> posto de referencia temporal. Evidencia temporal, nunca causa raiz automatica.",
   "station_semantics": {
     "A5100": {
@@ -8,7 +8,7 @@
     },
     "A5150": {
       "label": "Vinculacao por scanner",
-      "note": "Grande ponto de vinculo fisico/logico durante montagem."
+      "note": "Marco intermediario da montagem e ponto de vinculacao; para falha funcional detectada no teste, usar ultima passagem A5150 do ciclo anterior ao Defect Time como REFERENCIA ESTIMADA, nao posto de origem comprovado."
     },
     "A5162": {
       "label": "Camera/tampa - limpeza e montagem",
@@ -117,5 +117,33 @@
       "confidence": "PROVISIONAL_MODEL_DEPENDENT",
       "reason": "Referencia inicial informada para P-sensor/receiver pre-montados no LCD. Deve ser sobrescrita por regra CPH especifica quando a arquitetura do modelo for conhecida."
     }
-  ]
+  ],
+  "functional_reference_policy": {
+    "description": "Se a falha funcional foi registrada no proprio A5100..A5162 (evento 3022 CHANGE CMF atrelado ao Defect Time), usar esse posto; nas etapas de teste A5265+ usar a ultima passagem A5150 antes da falha como referencia aproximada. Regras especificas prevalecem quando nao existe deteccao na montagem.",
+    "assembly_stop_min": "A5100",
+    "assembly_stop_max": "A5162",
+    "first_test_station": "A5265",
+    "fallback_station": "A5150",
+    "assembly_detection_tolerance_seconds": 120,
+    "functional_families": [
+      "CONNECTIVITY_RF",
+      "CAMERA",
+      "AUDIO",
+      "DISPLAY_LCD",
+      "SENSOR",
+      "NFC",
+      "BUTTON",
+      "FINGERPRINT",
+      "USB_CHARGING",
+      "BATTERY_POWER",
+      "VIBRATION",
+      "SIM"
+    ],
+    "excluded_families": [
+      "PROCESS_SOFTWARE",
+      "MECHANICAL_STRUCTURE",
+      "UNKNOWN"
+    ],
+    "evidence_label": "OPERATIONAL_REFERENCE_ESTIMATE_NOT_ROOT_CAUSE"
+  }
 }

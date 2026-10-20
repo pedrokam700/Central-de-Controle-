@@ -1,0 +1,36 @@
+/* One setup entry within the existing nine-view Console. No duplicate app. */
+.ames-installation-guide,.ames-sync-guide { --ames-setup-radius: 14px; max-width:100%; }
+.ames-installation-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 14px;}
+.ames-installation-heading h2 {font-size:1.13rem;line-height:1.3;margin:0 0 4px;font-weight:700;}
+.ames-installation-heading p {margin:0;color:var(--text-muted,#64748b);font-size:.86rem;}
+.ames-setup-choice{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;}
+.ames-setup-choice [aria-pressed=true] {font-weight:700;outline:2px solid var(--accent,#335fa2);outline-offset:-1px;}
+.ames-setup-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:12px;margin:12px 0;}
+.ames-setup-step,.ames-setup-viewer,.ames-sync-guide {border:1px solid var(--border,#cdd6e1);border-radius:var(--ames-setup-radius);padding:16px;background:var(--surface,#fff);min-width:0;}
+.ames-setup-step {display:flex;flex-direction:column;gap:8px;}
+.ames-step-number {display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;background:var(--surface-secondary,#edf3fa);border-radius:8px;font-size:.77rem;font-weight:800;}
+.ames-setup-step h3,.ames-setup-viewer h3 {font-size:1rem;margin:0;line-height:1.35;}
+.ames-setup-step p,.ames-setup-viewer p,.ames-setup-status p {margin:0;font-size:.89rem;line-height:1.48;}
+.ames-setup-step small,.ames-setup-status small {display:block;color:var(--text-muted,#64748b);line-height:1.5;overflow-wrap:anywhere;}
+.ames-setup-step code {font-size:.78rem;overflow-wrap:anywhere;}
+.ames-setup-status {padding:10px;border-radius:10px;background:var(--surface-secondary,#f2f6fa);display:grid;gap:8px;}
+.ames-setup-status strong {font-size:.89rem;}
+.ames-setup-status[data-installation-detection=verified] {border-left:3px solid #308463;}
+.ames-setup-status[data-installation-detection=pairing_required] {border-left:3px solid #cf912f;}
+.ames-setup-viewer {margin-top:12px;display:grid;gap:10px;}
+.ames-sync-guide {display:grid;gap:10px;margin:14px 0;}
+.ames-sync-guide-head {display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px;}
+.ames-sync-guide-head b{font-size:.94rem;}
+.ames-sync-guide-head small,.ames-sync-guide-grid small,.ames-sync-guide-grid span {color:var(--text-muted,#64748b);font-size:.79rem;}
+.ames-sync-guide-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:10px;}
+.ames-sync-guide-grid>div {display:flex;flex-direction:column;gap:4px;border-radius:9px;background:var(--surface-secondary,#f1f5f9);padding:12px;min-width:0;}
+.ames-sync-guide-grid strong {font-size:.91rem;line-height:1.4;}
+.ames-sync-guide-grid span {overflow-wrap:anywhere;}
+.ames-installation-guide .button,.ames-sync-guide .button{align-self:start;white-space:normal;text-align:center;}
+@media(max-width:600px){.ames-installation-heading h2{font-size:1.02rem}.ames-setup-grid{grid-template-columns:minmax(0,1fr)}.ames-setup-step,.ames-setup-viewer,.ames-sync-guide{padding:12px}.ames-setup-choice .button{flex:1 1 145px;}}
+
+.ames-sync-line-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:8px;list-style:none;margin:0;padding:0;}
+.ames-sync-line-list li{display:grid;gap:3px;background:var(--surface-secondary,#f1f5f9);border:1px solid var(--border,#e0e5eb);border-radius:9px;padding:10px;min-width:0;}
+.ames-sync-line-list strong{font-size:.83rem;}
+.ames-sync-line-list span{font-size:.8rem;overflow-wrap:anywhere;}
+.ames-sync-line-list small{color:var(--text-muted,#64748b);font-size:.76rem;}

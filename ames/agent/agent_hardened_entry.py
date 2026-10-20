@@ -20,9 +20,14 @@ import operational_calendar
 import origin_policy
 import performance_indexes
 import source_capture
+import sn_lookup_context
+import workstation_pairing
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
 PERFORMANCE_INDEX_STATE = performance_indexes.install(entry.a.STORE)
+# Derive conservative 3022 SN context from already collected results only.
+# This does not navigate A-MES and never replaces the validated collectors.
+sn_lookup_context.install(entry.a)
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)
@@ -99,8 +104,26 @@ class HardenedHandler(entry.Handler):
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         self.send_header("Cache-Control", "no-store")
 
+    def _pair_response(self, status, payload=b"", headers=None):
+        self.send_response(status)
+        for key, value in workstation_pairing.secure_headers().items():
+            self.send_header(key, value)
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        if payload:
+            self.wfile.write(payload)
+
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == workstation_pairing.PAIR_PATH:
+            if not workstation_pairing.local_address(self.headers, self.client_address[0], self._active_port()):
+                self._pair_response(403)
+                return
+            body = workstation_pairing.page(workstation_pairing.GATE.issue())
+            self._pair_response(200, body, {"Content-Type": "text/html; charset=utf-8"})
+            return
         static_root = (entry.a.BASE_DIR.parent / "frontend").resolve()
         if path == "/" and static_root.is_dir():
             path = "/Central-de-Controle-/index.html"
@@ -261,6 +284,29 @@ class HardenedHandler(entry.Handler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if path == workstation_pairing.PAIR_PATH:
+            if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/x-www-form-urlencoded":
+                self._pair_response(415)
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                self._pair_response(400)
+                return
+            if not 0 < length <= 512:
+                self._pair_response(413)
+                return
+            submitted = self.rfile.read(length)
+            if not workstation_pairing.confirm(
+                self.headers, self.client_address[0], self._active_port(), submitted
+            ):
+                self._pair_response(403)
+                return
+            # Fixed official HTTPS destination; never available as JSON.
+            self._pair_response(303, headers={
+                "Location": workstation_pairing.destination(AGENT_TOKEN)
+            })
+            return
         if not self._authorized(path):
             self._reject_unauthorized()
             return

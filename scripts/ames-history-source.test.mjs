@@ -74,6 +74,17 @@ test('Central wiring, discoverable shortcut and secure HTTPS pairing stay explic
  assert.match(app,/createMesHistorySource\(mesSync,mesIntegration\.client,state\.ames\)/);
  assert.match(ui,/data-open-production-history/);
  assert.match(ui,/switchView\('base'\)/);
- assert.match(preparation,/expanded \|\| pairing \|\|/);
+ assert.match(preparation,/const visible = expanded/,'operator may explicitly open setup');
+ assert.match(preparation,/!connected && mode/,'connected agent does not force setup into normal operation');
+ assert.match(preparation,/data-pair-official/,'on-demand setup still offers explicit secure pairing');
+ assert.match(ui,/data-console-setup/,'configuration remains available from top toolbar');
  assert.match(preparation,/client\.openOfficial\(\)/);
+});
+
+test('connected local SQLite failure is surfaced rather than misreported as no collected history',async()=>{
+ const source=createMesHistorySource(
+  {listHistory:async()=>[]},
+  {localHistoryList:async()=>{throw Error('sqlite local unavailable');}},
+  {agent:()=>({status:'connected'})});
+ await assert.rejects(source.list('TAN10103'),/Histórico SQLite local indisponível/);
 });

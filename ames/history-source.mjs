@@ -26,6 +26,11 @@ export function createMesHistorySource(sync,client,store){
         }
       }
       if(cloud.status==='rejected'&&local.status==='rejected')throw Error('Histórico remoto e local indisponíveis');
+      // Do not silently render 'not collected' if the on-machine SQLite
+      // history API failed but Firebase returned an empty list. This was
+      // indistinguishable from a truly empty production day on the factory UI.
+      if(localReady&&local.status==='rejected'&&(!Array.isArray(cloud.value)||cloud.value.length===0))
+        throw Error('Histórico SQLite local indisponível para '+line+'; verifique /api/v1/local-history');
       if(!localReady&&cloud.status==='rejected')throw Error('Histórico compartilhado indisponível');
       // No local-only version is evidence that Firebase actually synchronized.
       return [...rows.values()].sort((a,b)=>Date.parse(b.collected_at||'')-Date.parse(a.collected_at||'')||

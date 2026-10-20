@@ -7,6 +7,8 @@ function instant(value){
   const prepared=/[Zz]$|[+-]\d{2}:?\d{2}$/.test(raw)?raw:/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw)?raw.replace(' ','T')+'-03:00':'';
   if(!prepared)return null;const n=Date.parse(prepared);return Number.isFinite(n)?n:null;
 }
+// Shared proof parser for factory-local MES Defect Time and offset-aware data.
+export {instant as parseFailureInstant};
 function sameInstant(a,b){const x=instant(a),y=instant(b);return x!==null&&x===y;}
 
 export function trustedProductionEvidence(row={}){
@@ -27,14 +29,39 @@ export function trustedProductionEvidence(row={}){
 }
 
 export function sameFailureOccurrence(a={},b={}){
-  if(a.defect_key&&b.defect_key)return text(a.defect_key)===text(b.defect_key);
-  return Boolean(pcba(a)&&pcba(a)===pcba(b)&&code(a)&&code(a)===code(b)&&sameInstant(defectTime(a),defectTime(b)));
+  // A defect_key can be local to a collector, line, or snapshot. Matching keys
+  // alone must never borrow 3022 evidence from a different (or unknown) PCBA.
+  const board=pcba(a);
+  if(!board||board!==pcba(b))return false;
+  if(a.defect_key&&b.defect_key){
+    if(text(a.defect_key)!==text(b.defect_key))return false;
+    // Even if the keys match, reject conflicting explicit occurrence fields.
+    if(code(a)&&code(b)&&code(a)!==code(b))return false;
+    if(defectTime(a)&&defectTime(b)&&!sameInstant(defectTime(a),defectTime(b)))return false;
+    return true;
+  }
+  return Boolean(code(a)&&code(a)===code(b)&&sameInstant(defectTime(a),defectTime(b)));
+}
+
+// A source-labelled reference is usable as production timing evidence only
+// when it has its own valid timestamp no later than this exact MES defect.
+function provenReference(occurrence,reference){
+  const candidate=trustedProductionEvidence(reference);
+  if(!candidate.trusted)return null;
+  const defectAt=instant(defectTime(occurrence)),processAt=instant(candidate.event_time);
+  return defectAt!==null&&processAt!==null&&processAt<=defectAt?candidate:null;
 }
 
 export function productionEvidenceForOccurrence(occurrence={},contexts=[]){
-  const own=trustedProductionEvidence(occurrence);if(own.trusted)return own;
-  const context=(contexts||[]).find(row=>sameFailureOccurrence(occurrence,row));
-  return context?trustedProductionEvidence({...occurrence,...context}):trustedProductionEvidence({});
+  const own=provenReference(occurrence,occurrence);
+  if(own)return own;
+  const matched=Array.isArray(contexts)?contexts.filter(row=>row&&sameFailureOccurrence(occurrence,row)):[];
+  const proven=matched.map(row=>provenReference(occurrence,row)).filter(Boolean);
+  if(!proven.length)return trustedProductionEvidence({});
+  // Distinct trusted 3022 contexts for the same occurrence must not be
+  // resolved by array order. Identical repeated evidence is harmless.
+  const identity=row=>JSON.stringify([row.station,instant(row.event_time),row.shift,row.operational_date]);
+  return proven.every(row=>identity(row)===identity(proven[0]))?proven[0]:trustedProductionEvidence({});
 }
 
 export function genericReturnEvidence(row={}){

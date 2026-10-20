@@ -312,6 +312,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
     tela2114_mod = importlib.import_module("ames.tela_2114")
     tela3022_mod = importlib.import_module("ames.tela_3022")
     correlacao_mod = importlib.import_module("core.correlacao_falhas")
+    temporal3074 = importlib.import_module("core.temporal_3074")
 
     query = str(sn or "").strip()
     if not query:
@@ -328,50 +329,25 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         rows3074 = r3074.get("rows") or []
 
         # A 3074 pode ser consultada tanto por PCBA quanto por Material SN.
-        components = tela3074_mod.componentes_serializados(rows3074, pcba_consultada=query)
+        # The raw grid is an audit trail across multiple mounting cycles, not
+        # the bill of materials of any one defect occurrence.
+        raw_components = tela3074_mod.componentes_serializados(rows3074, pcba_consultada=query)
+        components = []
+        material_scope = {"status": "no_defect_anchor", "basis": None,
+                          "scanned_components": 0,
+                          "historical_components_ignored": len(raw_components)}
         historical_pcbas = tela3074_mod.pcbas_historicas(rows3074)
 
-        # Consulta individual deve responder também quais componentes estão em 2º+
-        # uso e por quais PCBAs passaram. Para isso, quando a SN consultada é uma
-        # PCBA, consultamos cada Material SN serializado na própria 3074. É a mesma
-        # evidência usada pela análise profunda, apenas sob demanda.
+        # Material SN queries are deferred until a failure instant is known.
+        # Never traverse every historical item of a previously assembled PCBA.
         component_usage = []
-        for idx, comp in enumerate(components, start=1):
-            item_sn = str((comp or {}).get("item_sn") or "").strip()
-            if not item_sn:
-                continue
-            try:
-                if line_callback:
-                    line_callback("3074", min(32, 12 + int(20 * idx / max(1, len(components)))), f"Material {idx}/{len(components)} · {item_sn}")
-                item_query = tela3074.consultar(item_sn)
-                item_pcbas = tela3074_mod.pcbas_historicas(item_query.get("rows") or [])
-                previous = [x for x in item_pcbas if x and x != query]
-                component_usage.append({
-                    "item_sn": item_sn,
-                    "item_type": (comp or {}).get("item_type") or "",
-                    "known_pcbas": item_pcbas,
-                    "known_use_count": len(item_pcbas),
-                    "reuse_count": max(0, len(item_pcbas) - 1),
-                    "is_reused": len(previous) > 0,
-                    "previous_pcbas": previous,
-                    "query": item_query,
-                })
-                for pc in previous:
-                    if pc not in historical_pcbas:
-                        historical_pcbas.append(pc)
-            except Exception as exc:
-                component_usage.append({
-                    "item_sn": item_sn, "item_type": (comp or {}).get("item_type") or "",
-                    "known_pcbas": [], "known_use_count": None, "reuse_count": None,
-                    "is_reused": None, "previous_pcbas": [],
-                    "error": f"{type(exc).__name__}: {exc}",
-                })
-                warnings.append(f"3074 material {item_sn}: {type(exc).__name__}: {exc}")
 
         pcba_candidates = []
         seen = set()
         # Always try the scanned SN in 2114; material SN simply returns no-data.
-        for x in [query, *historical_pcbas]:
+        # Determine whether the SN is a PCBA *before* looking up any other
+        # PCBA. Old 3074 rows must not trigger broad 2114 collection.
+        for x in [query]:
             x = str(x or "").strip()
             if x and x not in seen:
                 seen.add(x); pcba_candidates.append(x)
@@ -395,6 +371,11 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         # 2114 history and 3074 returned PCBA rows, treat it as a material query.
         query_hist = next((h for h in histories if h["pcba_sn"] == query and h.get("result") and not h["result"].get("no_data")), None)
         detected_type = "PCBA" if query_hist else ("MATERIAL_SN" if historical_pcbas else "SN_INDETERMINADO")
+        if detected_type == "PCBA":
+            # Old PCBA-type rows on this PCBA's own 3074 page may belong to
+            # unrelated mounting cycles. Only prior PCBAs found by querying
+            # the selected materials can extend the investigation.
+            historical_pcbas = []
 
         process = []
         if include_3022:
@@ -415,6 +396,94 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 except Exception as exc:
                     warnings.append(f"3022 indisponível nesta execução: {type(exc).__name__}: {exc}")
 
+        current_pcba_rows = []
+        for h in histories:
+            if h.get("pcba_sn") == query and h.get("status") == "COMPLETE":
+                current_pcba_rows = list(((h.get("result") or {}).get("rows") or []))
+                break
+        sel = correlacao_mod.selecionar_ocorrencia_atual("", "", current_pcba_rows)
+        current_failure_2114 = sel.get("current_history")
+        # Latest 2114 is an investigation anchor, NOT proof that it is the
+        # same 3028 occurrence requested by an operator. Deep-trace has the
+        # exact 3028 timestamp and remains authoritative for failure KPIs.
+        anchor_time = (current_failure_2114 or {}).get("Defect Time")
+        if detected_type == "PCBA" and anchor_time and temporal3074.defect_time_to_utc(anchor_time):
+            selection = temporal3074.componentes_no_momento_da_falha(
+                rows3074, query, anchor_time,
+            )
+            components = [
+                {"item_sn": c["item_sn"], "item_type": c["item_type"],
+                 "row": c.get("row"), "bind_time_utc": c.get("bind_time_utc"),
+                 "unbind_time_utc": c.get("unbind_time_utc"),
+                 "iss_status_now": c.get("iss_status_now"),
+                 "binding_operation": c.get("binding_operation")}
+                for c in selection["active"]
+            ]
+            material_scope = {
+                "status": "selected_at_latest_2114_candidate",
+                "basis": "2114_latest_defect_time_not_3028_proof",
+                "defect_time": anchor_time,
+                "defect_code": (current_failure_2114 or {}).get("Defect Code"),
+                "defect_time_utc": selection["defect_time_utc"],
+                "scanned_components": len(components),
+                "historical_components_ignored": len(raw_components)-len(components),
+                "selection_summary": selection["summary"],
+                "temporal_unknown": len(selection["time_unknown"])+len(selection["boundary_ambiguous"]),
+            }
+        else:
+            warnings.append("3074: não há Defect Time 2114 comprovado para restringir os materiais; nenhuma consulta individual de material executada.")
+        for idx, comp in enumerate(components, start=1):
+            item_sn = str(comp.get("item_sn") or "").strip()
+            if not item_sn:
+                continue
+            try:
+                if line_callback:
+                    line_callback("3074", min(72, 35 + int(25 * idx / max(1, len(components)))),
+                                  f"Material da montagem {idx}/{len(components)} · {item_sn}")
+                item_query = tela3074.consultar(item_sn)
+                # Only associations begun before this selected occurrence
+                # belong to its reuse investigation. Later PCBAs stay audit-only.
+                scoped = temporal3074.pcbas_do_item_ate_a_falha(
+                    item_query.get("rows") or [], anchor_time, current_pcba_sn=query,
+                )
+                previous = [r["pcba_sn"] for r in scoped["previous_pcbas"]]
+                component_usage.append({
+                    "item_sn": item_sn, "item_type": comp.get("item_type") or "",
+                    "known_pcbas": [r["pcba_sn"] for r in scoped["associations_until_defect"]],
+                    "known_use_count": len(scoped["associations_until_defect"]) if scoped["current_pcba_confirmed"] else None,
+                    "reuse_count": len(previous) if scoped["current_pcba_confirmed"] else None,
+                    "is_reused": bool(previous) if scoped["current_pcba_confirmed"] else None,
+                    "previous_pcbas": previous if scoped["current_pcba_confirmed"] else [],
+                    "current_pcba_confirmed": scoped["current_pcba_confirmed"],
+                    "binding_operation": comp.get("binding_operation"),
+                    "bind_time_utc": comp.get("bind_time_utc"),
+                    "unbind_time_utc": comp.get("unbind_time_utc"),
+                    "query": item_query,
+                })
+                if scoped["current_pcba_confirmed"]:
+                    for pc in previous:
+                        if pc not in historical_pcbas:
+                            historical_pcbas.append(pc)
+            except Exception as exc:
+                component_usage.append({
+                    "item_sn": item_sn, "item_type": comp.get("item_type") or "",
+                    "known_pcbas": [], "known_use_count": None,
+                    "reuse_count": None, "is_reused": None, "previous_pcbas": [],
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+                warnings.append(f"3074 material {item_sn}: {type(exc).__name__}: {exc}")
+        # First query 2114 once per PCBA: current board and historical boards
+        # reached through ONLY the selected material subset.
+        for pc in historical_pcbas:
+            if pc in seen or not pc:
+                continue
+            seen.add(pc)
+            try:
+                rr = tela2114.consultar(pc)
+                histories.append({"pcba_sn": pc, "status": "COMPLETE", "result": rr, "error": None})
+            except Exception as exc:
+                histories.append({"pcba_sn": pc, "status": "ERROR", "result": None,
+                                  "error": f"{type(exc).__name__}: {exc}"})
         all_hist_rows = []
         for h in histories:
             rr = h.get("result") or {}
@@ -427,13 +496,6 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         # Structure current vs previous PCBA failures and relate historical PCBAs
         # from reused components to the current failure. The relation is evidence
         # only (same code/family/different), never an automatic root cause.
-        current_pcba_rows = []
-        for h in histories:
-            if h.get("pcba_sn") == query and h.get("status") == "COMPLETE":
-                current_pcba_rows = list(((h.get("result") or {}).get("rows") or []))
-                break
-        sel = correlacao_mod.selecionar_ocorrencia_atual("", "", current_pcba_rows)
-        current_failure_2114 = sel.get("current_history")
         previous_failures_2114 = list(sel.get("prior_histories") or [])
         for hist in previous_failures_2114:
             hist["relation"] = correlacao_mod.comparar_falhas((current_failure_2114 or {}).get("Defect Code", ""), (current_failure_2114 or {}).get("Defect Description", ""), hist.get("Defect Code", ""), hist.get("Defect Description", "")).get("relation") if current_failure_2114 else "SEM_FALHA_ATUAL"
@@ -496,6 +558,16 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             if rr.get("process_focus"):
                 process_focus_meta.append({"pcba_sn": p.get("pcba_sn"), **dict(rr.get("process_focus") or {})})
 
+        # Corroborate the 3074 binding operation with a completed 3022
+        # Working Oper between the mounting and the anchored failure.
+        # Never assume Current Oper is a completed station.
+        for comp in component_usage:
+            comp["station_3022_evidence"] = temporal3074.corroborar_posto_3022(
+                comp, process_passages, query, anchor_time,
+            ) if material_scope["status"] == "selected_at_latest_2114_candidate" else {
+                "status": "unavailable", "reason": "no_verified_failure_anchor"
+            }
+
         model = ""
         line = ""
         for h in histories:
@@ -516,6 +588,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             "summary": {
                 "3074_rows": len(rows3074),
                 "serialized_components": len(components),
+                "raw_historical_component_candidates": len(raw_components),
                 "related_pcbas": len(historical_pcbas),
                 "reused_components": len(reused_components),
                 "pcba_previous_failures": len(previous_failures_2114),
@@ -530,6 +603,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             "trace_3074": {
                 "query": r3074,
                 "components": components,
+                "material_selection": material_scope,
                 "component_usage": component_usage,
                 "reused_components": reused_components,
                 "related_pcbas": historical_pcbas,

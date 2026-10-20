@@ -37,9 +37,9 @@ import {createAmesStore} from './ames/data/store.mjs';
 import {createConsoleView} from './ames/console-view.mjs';
 const store=createAmesStore({now:()=>Date.parse('2026-10-19T15:00:00Z')}),old=${JSON.stringify(old)},local=${JSON.stringify(local)};
 store.replaceSyncedSnapshots([${JSON.stringify(today)}]);
-let mutations=0,savedReads=0,savedOpens=0,captureReads=0;
+let mutations=0,savedReads=0,savedOpens=0,captureReads=0,localPairCount=0;
 const savedEntry={job_id:'J123',query_sn:'PCBA-TEST',query_created_at:'2026-10-16T14:00:00Z',query_status:'done',entry_hash:'b'.repeat(64),line_id:null,production_date:null,clock_kind:'query_created_at',local_only:true};
-const client={collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
+const client={canOpenOfficial:()=>true,openOfficial:()=>{},canPairFromOfficial:()=>true,openLocalPairing:()=>{localPairCount++;},collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
  sourceCaptures:async params=>{
   captureReads++;
   if(params.snapshot_id!==17||params.snapshot_revision!==1||params.content_hash!==local.content_hash)throw Error('wrong capture target');
@@ -55,14 +55,16 @@ const client={collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},
     }],next_cursor:null};
  },
  savedSnHistory:async()=>{savedReads++;return {items:[savedEntry],next_cursor:null,clock_kind:'query_created_at',local_only:true};},openSavedSnHistory:async()=>{savedOpens++;return {job_id:savedEntry.job_id,entry_hash:savedEntry.entry_hash,query_created_at:savedEntry.query_created_at,line_id:null,production_date:null,result:{trace_3074:{rows:[{sn:'PART',note:'<script>unsafe</script>'}]},trace_3012:{rows:[{association:'same_pcba_candidate'}]}}};}};
-const history={list:async line=>line===old.line_id?[
+let historyReads=0,ambiguousHistory=false;
+const history={list:async line=>{historyReads++;return line===old.line_id?[
  {line_id:line,source_id:old.source_id,snapshot_id:old.snapshot_id,snapshot_revision:1,collected_at:old.collected_at,period_start:old.summary.period.start_at,period_end:old.summary.period.end_at,history_source:'shared'},
- {line_id:line,source_id:local.source_id,snapshot_id:local.snapshot_id,snapshot_revision:local.snapshot_revision,collected_at:local.collected_at,period_start:local.summary.period.start_at,period_end:local.summary.period.end_at,history_source:'local'}
- ]:[],open:async entry=>String(entry.snapshot_id)===String(local.snapshot_id)?local:old};
+ {line_id:line,source_id:local.source_id,snapshot_id:local.snapshot_id,snapshot_revision:local.snapshot_revision,collected_at:local.collected_at,period_start:local.summary.period.start_at,period_end:local.summary.period.end_at,history_source:'local'},
+ ...(ambiguousHistory?[{line_id:line,source_id:'another-workstation',snapshot_id:'FOREIGN-OLD',snapshot_revision:1,collected_at:'2026-10-21T15:00:00Z',period_start:old.summary.period.start_at,period_end:old.summary.period.end_at,history_source:'shared'}]:[])
+ ]:[];},open:async entry=>String(entry.snapshot_id)===String(local.snapshot_id)?local:old};
 const view=createConsoleView(document.querySelector('#mesConsole'),store,{agentClient:client,history});
 document.querySelectorAll('.page').forEach(el=>el.classList.add('hidden'));
 document.querySelector('#mesConsoleView')?.classList.remove('hidden');document.querySelector('#accountScreen')?.classList.add('hidden');
-window.qa={store,view,mutations:()=>mutations,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads};view.render();
+window.qa={store,view,mutations:()=>mutations,localPairCount:()=>localPairCount,historyReads:()=>historyReads,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads,setAmbiguous:value=>{ambiguousHistory=value;}};view.render();
 `;
 const html=fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<script type="module" src="/Central-de-Controle-/qa-context.mjs"></script>';
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -86,9 +88,45 @@ try{
  for(const id of ['monitor','top3','failures','sn','trace','reuse','process','base','knowledge']){
    await page.locator('[data-console-view="'+id+'"]').click();
    const pane=page.locator('[data-console-pane="'+id+'"]');
-   assert.equal(await pane.isVisible(),true);assert.match(await pane.locator('[data-shared-period]').innerText(),/16/);
+   assert.equal(await pane.isVisible(),true);
+   if(id==='sn'){
+     assert.match(await pane.locator('[data-shared-period]').innerText(),/independente/);
+     assert.equal(await pane.locator('[data-sn-form] [data-sn-run]').count(),1,'independent SN live investigation must remain accessible in historical mode');
+     assert.equal(await pane.locator('[data-sn-saved-toggle]').count(),1,'saved SN investigations remain accessible across periods');
+     assert.equal(await pane.locator('[data-stored-search]').count(),0,'daily snapshot search cannot replace the SN workflow');
+   }else assert.match(await pane.locator('[data-shared-period]').innerText(),/16/);
    assert(!((await pane.innerText()).includes('TODAY-SNAPSHOT')),id+' leaked Today');
  }
+ // Real browser checks for selective PR33→PR42 integration, no MES mutations.
+ await page.locator('[data-console-view=failures]').click();
+ // PR35 blocks 13/14 + PR36 exact occurrence gate: actual DOM wiring.
+ const failureRows=page.locator('[data-console-pane=failures] .ames-failures-table tbody tr');
+ const evidenceCells=page.locator('[data-console-pane=failures] [data-failure-evidence-cell]');
+ await page.waitForFunction(()=>document.querySelectorAll('[data-console-pane=failures] [data-failure-evidence-cell]').length>=3);
+ assert.equal(await evidenceCells.count(),await failureRows.count(),'each 3028 row has one evidence cell');
+ assert.equal(await page.locator('[data-failure-evidence-head]').count(),1);
+ assert.match(await evidenceCells.first().innerText(),/3028/);
+ await evidenceCells.first().locator('.ames-failure-evidence-detail summary').click();
+ assert.match(await evidenceCells.first().innerText(),/cadeia de evidências/i);
+ assert.equal(await evidenceCells.first().locator('[data-ames-source-view]').count(),5,'five sources remain separately auditable');
+ assert.equal(await evidenceCells.first().locator('[data-ames-snapshot-provenance]').count(),1);
+ assert.equal(await evidenceCells.locator('img, script').count(),0,'untrusted SN cannot create markup');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening evidence cannot query MES');
+ const groupTable=page.locator('[data-console-pane=failures] [data-failure-groups] table');
+ assert.equal(await groupTable.locator('thead th').count(),7,'three reuse-evidence columns remain in grouped Failures');
+ assert.match(await groupTable.locator('tbody').innerText(),/1\+/,'2nd+ use is a minimum observed, never an invented exact denominator');
+ assert.equal(await page.locator('[data-failure-sort]').inputValue(),'count_desc');
+ await page.locator('[data-failure-sort]').selectOption('failure_asc');
+ assert.equal(await page.locator('[data-failure-sort]').inputValue(),'failure_asc');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'group sorting cannot run MES');
+ await page.locator('[data-console-view=top3]').click();
+ const top3Defect=page.locator('[data-console-pane=top3] [data-daily-top3-defect]').first();
+ assert.equal(await top3Defect.count(),1,'Top 3 must retain its clickable quick summary');
+ const beforeDefect=await page.evaluate(()=>qa.store.context()?.defect??null);
+ await top3Defect.click();
+ await page.waitForFunction(()=>!!document.querySelector('[data-console-pane=top3] [data-top3-analytics] .ames-dfa-rank-item[open]'));
+ assert.equal(await page.evaluate(()=>qa.store.context()?.defect??null),beforeDefect,'Top 3 drilldown may not overwrite shared defect scope');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
  await page.locator('[data-console-view=reuse]').click();
  const cohorts=page.locator('[data-reuse-cohorts]');
  assert.match(await cohorts.innerText(),/Denominador não comprovado/);
@@ -158,6 +196,122 @@ try{
  await page.setViewportSize({width:1440,height:1000});
  await page.evaluate(()=>{document.documentElement.lang='pt-BR';qa.store.updateAgent({status:'connected'});qa.view.render();});
  await page.locator('[data-console-view=sn]').click();
+ // Integration gate: live SN decorators from PR33/35/36 must actually mount
+ // together, remain read-only and preserve per-source unknown/partial status.
+ await page.evaluate(()=>{
+   qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
+     sn:'PCBA-TEST-LIVE',detected_type:'PCBA',
+     trace_2114:{status:'complete',current_failure:{
+       pcba_sn:'PCBA-TEST-LIVE',defect_code:'D1',defect_desc:'Camera',
+       defect_time:'2026-10-19 10:30:00',manual_or_auto:'Manual'}},
+     trace_3074:{status:'partial',reused_components:[]},
+     trace_3022:{status:'partial',process_passages:[]},
+     trace_3012:{status:'unavailable'},
+     local_snapshot:{process_contexts:[{
+       pcba_sn:'PCBA-TEST-LIVE',defect_code:'D1',defect_time:'2026-10-19 10:30:00',
+       production_shift_source:'3022',production_shift_basis:'reference_process',
+       reference_station_code:'A5162',production_event_time:'2026-10-19T10:00:00-03:00',
+       production_shift:'1st Shift'
+     }]}
+   }}});
+   qa.view.render();
+ });
+ const snLive=page.locator('[data-console-pane=sn] [data-sn-live]');
+ await snLive.locator('[data-sn-live-provenance]').waitFor();
+ assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1);
+ assert.equal(await snLive.locator('[data-sn-live-provenance]').evaluate(el=>el.open),false,'source details start collapsed');
+ await snLive.locator('[data-sn-live-provenance] summary').click();
+ assert.match(await snLive.locator('[data-sn-live-provenance]').innerText(),/3012|2114/);
+ assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1);
+ assert.equal(await snLive.locator('[data-sn-temporal-detail]').count(),1);
+ assert.equal(await snLive.locator('[data-sn-history-detail]').count(),1);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'SN live decoration cannot collect MES');
+ // PR35 block 15 lifecycle: a new query replaces, rather than stacks on,
+ // the previous query's provenance and all read-only forensic decorators.
+ await page.evaluate(()=>{
+   qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
+     sn:'PCBA-SECOND',detected_type:'PCBA',
+     trace_2114:{status:'unavailable'},trace_3074:{status:'not_collected'},
+     trace_3022:{status:'not_collected'},trace_3012:{status:'not_collected'}
+   }}});
+   qa.view.render();
+ });
+ assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1,'source panel must not duplicate across SN queries');
+ assert.equal(await snLive.locator('[data-sn-source-state]').count(),5,'new SN retains all five distinct source statuses');
+ assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1,'smart alerts panel must not duplicate');
+ // Factory SIM case: A5162 is a prior completed process, NOT a mapped origin.
+ await page.evaluate(()=>{
+   qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
+     sn:'PCBA-SIM-NO-ORIGIN',detected_type:'PCBA',product_model:'CPH2819BR',
+     trace_2114:{status:'complete',current_failure:{
+       'Defect Code':'J606-KZ03','Defect Description':'SIM card',
+       'Defect Time':'2026-10-20 11:59:16','Manual/Automatic':'Manual'
+     },previous_failures:[]},
+     trace_3074:{status:'partial',reused_components:[]},
+     trace_3022:{status:'partial',process_passages:[]},
+     trace_3012:{status:'unavailable'},
+     local_snapshot:{process_contexts:[{
+       source:'3022',pcba_sn:'PCBA-SIM-NO-ORIGIN',product_model:'CPH2819BR',
+       defect_code:'J606-KZ03',defect_time:'2026-10-20 11:59:16',
+       defect_time_utc:'2026-10-20T14:59:16Z',
+       registration_mode:'MANUAL',failure_family:'SIM',
+       reference_confidence:'UNMAPPED',reference_reason:'Sem regra CPH/familia',
+       status:'GENERIC_ONLY_RULE_NOT_MAPPED',
+       reference_pass_count_before_defect:0,
+       previous_operation_code:'A5162',previous_event_time:'2026-10-20T14:10:00Z'
+     }]}
+   }}});
+   qa.view.render();
+ });
+ const simNote=snLive.locator('[data-sn-unmapped-origin]');
+ assert.equal(await simNote.count(),1);
+ assert.match(await simNote.innerText(),/Posto de geração ainda não mapeado/);
+ assert.match(await simNote.innerText(),/A5162/);
+ assert.match(await simNote.innerText(),/11:10/);
+ assert.match(await simNote.innerText(),/1st Shift/);
+ assert.match(await simNote.innerText(),/20\/10\/2026/);
+ assert.match(await simNote.innerText(),/NÃO à geração da falha/);
+ assert.equal(await snLive.locator('.ames-process-evidence tbody tr').first().locator('td').nth(5).innerText(),'—','no 3022 generation time invented');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'unmapped 3022 diagnostic cannot trigger collection');
+ // New physical rule: A5150 is an explicitly approximate assembly reference
+ // for functional defects detected later at test, never proven origin.
+ await page.evaluate(()=>{
+   qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
+     sn:'PCBA-SIM-MIDPOINT',detected_type:'PCBA',product_model:'CPH2819BR',
+     trace_2114:{status:'complete',current_failure:{
+       'Defect Code':'J606-KZ03','Defect Description':'SIM card anomaly',
+       'Defect Time':'2026-10-20 11:59:16','Manual/Automatic':'Manual'
+     },previous_failures:[]},
+     trace_3074:{status:'partial',reused_components:[]},
+     trace_3022:{status:'partial',process_passages:[]},
+     trace_3012:{status:'unavailable'},
+     local_snapshot:{process_contexts:[{
+       source:'3022',pcba_sn:'PCBA-SIM-MIDPOINT',product_model:'CPH2819BR',
+       defect_code:'J606-KZ03',defect_time:'2026-10-20 11:59:16',
+       defect_time_utc:'2026-10-20T14:59:16Z',registration_mode:'MANUAL',
+       failure_family:'SIM',reference_station_code:'A5150',
+       reference_event_time:'2026-10-20T11:30:00+00:00',
+       production_event_time:'2026-10-20T11:30:00+00:00',
+       production_shift:'1st Shift',production_operational_date:'2026-10-20',
+       production_shift_source:'3022',production_shift_basis:'reference_process',
+       reference_confidence:'OPERATIONAL_ESTIMATE_NOT_CAUSE',
+       reference_reason:'Referência operacional estimada no A5150, não causa.'
+     }]}
+   }}});
+   qa.view.render();
+ });
+ const midpoint=snLive.locator('[data-sn-operational-reference]');
+ assert.equal(await midpoint.count(),1);
+ assert.match(await midpoint.innerText(),/Referência aproximada de montagem: A5150/);
+ assert.match(await midpoint.innerText(),/08:30/);
+ assert.match(await midpoint.innerText(),/1st Shift/);
+ assert.match(await midpoint.innerText(),/NÃO é prova do posto exato/);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'period or midpoint presentation must not initiate MES');
+ await page.evaluate(()=>{document.documentElement.lang='en-US';qa.view.render();});
+ await page.waitForFunction(()=>document.querySelector('[data-sn-live-provenance] summary')?.textContent?.includes('Source provenance'));
+ assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1,'changing language must not stack source panels');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'query switching and translation must be read-only');
+ await page.evaluate(()=>{document.documentElement.lang='pt-BR';qa.view.render();});
  assert.equal(await page.locator('[data-sn-saved-toggle]').count(),1);
  assert.equal(await page.evaluate(()=>qa.savedReads()),0);
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
@@ -172,6 +326,28 @@ try{
  assert.equal(await page.locator('[data-sn-saved-detail] script').count(),0);
  assert.match(await page.locator('[data-sn-saved-detail]').innerText(),/same_pcba_candidate|unsafe/);
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.snapshot_id),'TODAY-SNAPSHOT');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ // SN input, live evidence and saved job stay on one stable independent view
+ // even while the global production period changes (without MES collection).
+ await page.locator('[data-sn-form] input[name=sn]').fill('PCBA-PERSIST-PERIOD');
+ await page.evaluate(()=>{qa.snFormIdentity=document.querySelector('[data-console-pane=sn] [data-sn-form]');});
+ await page.locator('[data-console-view=monitor]').click();
+ await page.locator('[data-read-period=previous]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
+ await page.locator('[data-console-view=sn]').click();
+ assert.equal(await page.locator('[data-sn-form] input[name=sn]').inputValue(),'PCBA-PERSIST-PERIOD');
+ assert.equal(await page.evaluate(()=>qa.snFormIdentity===document.querySelector('[data-console-pane=sn] [data-sn-form]')),true,'period selection must not discard active SN investigation');
+ assert.equal(await page.locator('[data-sn-live] [data-sn-smart-alerts]').count(),1);
+ assert.equal(await page.locator('[data-sn-saved-toggle]').count(),1);
+ assert.equal(await page.locator('[data-stored-search]').count(),0);
+ assert.match(await page.locator('[data-console-pane="sn"] [data-shared-period]').innerText(),/independente/);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'period switching and SN display must not execute MES');
+ await page.locator('[data-console-view=monitor]').click();
+ await page.locator('[data-read-period=today]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
+ await page.locator('[data-console-view=sn]').click();
+ assert.equal(await page.locator('[data-sn-form] input[name=sn]').inputValue(),'PCBA-PERSIST-PERIOD');
+ assert.equal(await page.evaluate(()=>qa.snFormIdentity===document.querySelector('[data-console-pane=sn] [data-sn-form]')),true);
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
  // B3.4b6: local snapshot metadata is lazy, source-locked, read-only and escaped.
  await page.locator('[data-console-view=base]').click();
@@ -217,6 +393,79 @@ try{
  await page.locator('[data-stored-captures] [data-capture-source="3022"]').waitFor();
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
 
+ // A completed collection must re-read historical SQLite without running MES.
+ await page.locator('[data-console-view=monitor]').click();
+ await page.locator('[data-read-period=previous]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
+ assert.equal(await page.locator('[data-monitor-main] [data-agent-action=previous_day]').isVisible(),true);
+ assert.equal(await page.locator('[data-monitor-main] [data-agent-action=today]').isVisible(),true);
+ assert.equal(await page.locator('[data-monitor-technical]').evaluate(el=>el.open),false);
+ assert.equal(await page.locator('[data-console-preparation]').isHidden(),true,'a connected paired agent must not leave the setup panel expanded');
+ await page.locator('[data-console-setup]').click();
+ assert.equal(await page.locator('[data-console-preparation]').isVisible(),true,'on-demand workstation setup stays accessible');
+ assert.equal(await page.locator('[data-pair-official]').count(),1);
+ assert.equal(await page.locator('[data-sync-guide]').count(),1,'sync overview integrated in setup');
+ assert.equal(await page.locator('[data-share-line]').count(),3,'all lines have explicit synchronized/cached/unknown status');
+ await page.locator('[data-onboarding-guide]').waitFor();
+ try{await page.locator('[data-official-clean-download]').waitFor({timeout:9000});}
+ catch(e){console.error('ONBOARD_DEBUG',await page.locator('[data-onboarding-guide]').innerText(),await page.evaluate(()=>({url:location.href,language:document.documentElement.lang})));throw e;}
+ assert.equal((await page.locator('[data-official-clean-download]').getAttribute('href')).includes('https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.25-factory-20261020/AMES_Central_CLEAN_e60cef8d.zip'),true);
+ assert.equal(await page.locator('[data-installation-detection=verified]').count(),1);
+ assert.equal(await page.locator('[data-setup-new]').count(),1);
+ assert.equal(await page.locator('[data-setup-existing]').count(),1);
+ assert.equal(await page.locator('[data-setup-share]').count(),1);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening install guide never starts MES jobs');
+ // Direct HTTPS without the workstation token is a pairing problem, not
+ // evidence that the agent was never installed.
+ await page.evaluate(()=>{qa.store.updateAgent({status:'disconnected',connection_error:{code:'agent-unauthorized',message:'Token required'}});qa.view.render();});
+ await page.locator('[data-installation-detection=pairing_required]').waitFor();
+ await page.locator('[data-connect-local-pairing]').click();
+ assert.equal(await page.evaluate(()=>qa.localPairCount()),1,'HTTPS button must explicitly start local confirmation');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'pairing must not run a MES job');
+ assert.equal(await page.locator('[data-installation-detection=pairing_required] a[href="http://127.0.0.1:8765/Central-de-Controle-/"]').count(),1,'local recovery link exists before GitHub metadata finishes');
+ await page.evaluate(()=>{qa.store.updateAgent({status:'disconnected',connection_error:{code:'agent-network',message:'Browser network restriction'}});qa.view.render();});
+ await page.locator('[data-installation-detection=not_verified]').waitFor();
+ assert.equal(await page.locator('[data-installation-detection=not_verified] a[href^="http://127.0.0.1:8765/"]').count(),1,'unverified install always retains the local fallback');
+ await page.evaluate(()=>{qa.store.updateAgent({status:'connected',connection_error:null});qa.view.render();});
+ await page.locator('[data-installation-detection=verified]').waitFor();
+ await page.locator('[data-onboarding-guide] [data-integration-mode=viewer]').click();
+ await page.locator('[data-setup-viewer]').waitFor();
+ assert.equal(await page.locator('[data-official-clean-download]').count(),0,'viewer does not need CLEAN');
+ assert.match(await page.locator('[data-setup-viewer]').innerText(),/não precisa de A-MES/);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'viewer and pairing guidance never start MES');
+ await page.locator('[data-console-view=top3]').click();
+ await page.locator('[data-console-view=monitor]').click();
+ assert.equal(await page.locator('[data-console-preparation]').isHidden(),true,'setup collapses after navigation');
+ const beforeJob=await page.evaluate(()=>qa.historyReads());
+ await page.evaluate(()=>{qa.store.updateAgent({job:{id:'FACTORY-PREVIOUS-DONE',kind:'run',status:'done'}});qa.view.render();});
+ await page.waitForFunction(before=>qa.historyReads()>before,beforeJob);
+ await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
+ assert.equal(await page.locator('[data-reading-reload]').count(),1);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ const afterJob=await page.evaluate(()=>qa.historyReads());
+ await page.locator('[data-reading-reload]').click();
+ await page.waitForFunction(before=>qa.historyReads()>before,afterJob);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ // A foreign, newer history entry must not silently replace the chosen origin.
+ await page.evaluate(()=>qa.setAmbiguous(true));
+ await page.locator('[data-reading-reload]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.source_choices?.length===1);
+ assert.equal(await page.locator('[data-history-source-picker]').count(),1);
+ assert.equal(await page.locator('[data-history-source-select] option').count(),2);
+ assert.equal(await page.evaluate(()=>qa.store.agent().period_read.status),'partial');
+ await page.locator('[data-history-source-select]').selectOption('preserved-workstation');
+ await page.locator('[data-history-source-apply]').click();
+ await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
+ assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.source_id),'preserved-workstation');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');
+ await page.locator('[data-read-period=today]').click();
+ assert.equal(await page.locator('[data-monitor-main] [data-agent-action=today]').isVisible(),true);
+ // An actual logout/reset must destroy the retained SN form and previous
+ // forensic content rather than exposing another account's SN investigation.
+ await page.evaluate(()=>{qa.store.clear();qa.store.selectReadingPeriod('today');qa.view.render();});
+ await page.locator('[data-console-view=sn]').click();
+ assert.equal(await page.locator('[data-sn-form] input[name=sn]').inputValue(),'');
+ assert.equal(await page.locator('[data-sn-live] [data-sn-smart-alerts]').count(),0);
  assert.deepEqual(errors,[]);
  console.log('PASS: nine views share exact historical scope; no MES mutations; Today restored; PT/EN and mobile selector');
 }finally{await browser.close();await new Promise(r=>server.close(r));}

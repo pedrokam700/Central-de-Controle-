@@ -38,8 +38,9 @@ class Test3022OriginRules(unittest.TestCase):
 
     def test_camera_automatic_does_not_force_appearance_rule(self):
         r = resolver_regra_referencia(BASE, product_model="CPH2817", defect_code="CAM", defect_desc="Rear camera failed", manual_or_auto="Automatic")
-        self.assertIsNone(r["rule_id"])
-        self.assertEqual(r["analysis_kind"], "FUNCTIONAL_AUTOMATIC_UNMAPPED")
+        self.assertEqual(r["rule_id"], "FUNCTIONAL_ASSEMBLY_A5150_MIDPOINT")
+        self.assertEqual(r["reference_stations"], ["A5150"])
+        self.assertEqual(r["reference_confidence"], "OPERATIONAL_ESTIMATE_NOT_CAUSE")
 
     def test_psensor_receiver_has_provisional_a5100_reference(self):
         r = resolver_regra_referencia(BASE, product_model="CPH2817", defect_code="PS", defect_desc="P-sensor proximity failed", manual_or_auto="Automatic")

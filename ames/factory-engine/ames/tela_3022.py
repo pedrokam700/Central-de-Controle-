@@ -454,6 +454,27 @@ def resolver_regra_referencia(base_dir, *, product_model="", defect_code="", def
             "reason": chosen.get("reason") or "Regra configurada.",
             "station_semantics": rules_cfg.get("station_semantics") or {},
         }
+    policy = rules_cfg.get("functional_reference_policy") or {}
+    functional = {str(x).upper() for x in policy.get("functional_families") or []}
+    excluded = {str(x).upper() for x in policy.get("excluded_families") or []}
+    if str(family).upper() in functional and str(family).upper() not in excluded:
+        station = str(policy.get("fallback_station") or "").strip().upper()
+        if station:
+            return {
+                "registration_mode": registration_mode,
+                "failure_family": family,
+                "analysis_kind": "FUNCTIONAL_ASSEMBLY_MIDPOINT_REFERENCE",
+                "rule_id": "FUNCTIONAL_ASSEMBLY_A5150_MIDPOINT",
+                "reference_stations": [station],
+                "reference_confidence": "OPERATIONAL_ESTIMATE_NOT_CAUSE",
+                "reason": (
+                    f"Falha funcional {family}: referencia operacional estimada no posto {station} "
+                    "da montagem, sempre na ultima passagem do ciclo anterior ao Defect Time. "
+                    "Nao identifica o posto fisico exato nem comprova causa. "
+                    "Se a falha for comprovadamente registrada na montagem A5100-A5162, usar esse posto."
+                ),
+                "station_semantics": rules_cfg.get("station_semantics") or {},
+            }
     return {
         "registration_mode": registration_mode,
         "failure_family": family,
@@ -468,6 +489,52 @@ def resolver_regra_referencia(base_dir, *, product_model="", defect_code="", def
             "Nao existe regra CPH/familia/posto configurada para esta ocorrencia; ultimo processo anterior e apenas contexto."
         ),
         "station_semantics": rules_cfg.get("station_semantics") or {},
+    }
+
+
+
+def _assembly_station_at_defect(eventos, defect_time, policy, *, defect_local_offset_hours=-3, event_naive_offset_hours=0):
+    """A defect registration in 3022 can identify a real stop in assembly.
+
+    Only the explicit CHANGE CMF failure event is used. A prior END LOT at an
+    assembly station or a Current Oper value on an unrelated row is NOT proof of
+    where a later defect was recorded. Match the occurrence's Defect Time, not
+    any subsequent AT/return cycle. Time is always compared as UTC.
+    """
+    defect_utc = defect_time_to_utc(defect_time, defect_local_offset_hours)
+    if defect_utc is None:
+        return None
+    bounds = (str(policy.get("assembly_stop_min") or "A5100").upper(),
+              str(policy.get("assembly_stop_max") or "A5162").upper())
+    min_n, max_n = [int(x[1:]) for x in bounds if re.fullmatch(r"A\d{4}", x)]
+    tolerance = max(0, min(int(policy.get("assembly_detection_tolerance_seconds") or 0), 120))
+    detected = []
+    for ev in _normalize_for_order(eventos):
+        if not _is_defect_registration_event(ev):
+            continue
+        dt = grid_time_to_utc(ev.get("event_time"), event_naive_offset_hours)
+        if dt is None or not (0 <= (defect_utc - dt).total_seconds() <= tolerance):
+            continue
+        # Current Oper is the station the phone is in when the defect was
+        # registered; Working Oper can describe the preceding completed step.
+        station = str(ev.get("operation_code") or "").strip().upper()
+        if not re.fullmatch(r"A\d{4}", station) or not min_n <= int(station[1:]) <= max_n:
+            continue
+        detected.append((dt,ev.get("hist_seq") if ev.get("hist_seq") is not None else -1,station,ev))
+    if not detected:
+        return None
+    # Ambiguous competing station markers near the same occurrence are not
+    # silently resolved by whichever MES row happened to be last.
+    if len({x[2] for x in detected}) != 1:
+        return None
+    dt,_,station,ev=max(detected,key=lambda x:(x[0],x[1]))
+    return {
+        "operation_code":station,"station":station,
+        "operation_name":ev.get("operation_name") or ev.get("working_oper") or "",
+        "event_time":ev.get("event_time"),"event_time_utc":dt.isoformat(),
+        "hist_seq":ev.get("hist_seq"),"source":"3022",
+        "evidence_kind":"defect_registration_at_assembly","completion_confirmed":False,
+        "raw":ev.get("raw") or {},
     }
 
 
@@ -616,16 +683,35 @@ def correlacionar_falha_3022(base_dir, eventos, defect_record, *, registration_v
         eventos, rec.get("defect_time"), defect_local_offset_hours=defect_local_offset_hours,
         event_naive_offset_hours=event_naive_offset_hours, limit_to_test=True,
     )
+    matrix, _ = carregar_regras_processo_3022(base_dir)
+    stop = _assembly_station_at_defect(
+        eventos, rec.get("defect_time"), matrix.get("functional_reference_policy") or {},
+        defect_local_offset_hours=defect_local_offset_hours,
+        event_naive_offset_hours=event_naive_offset_hours,
+    )
+    if stop is not None:
+        rule = {**rule,
+            "reference_stations":[stop["operation_code"]],
+            "rule_id":"DIRECT_DEFECT_AT_ASSEMBLY_STATION",
+            "analysis_kind":"DEFECT_RECORDED_IN_ASSEMBLY",
+            "reference_confidence":"OBSERVED_DEFECT_STATION_NOT_ROOT_CAUSE",
+            "reason":"A 3022 registrou a falha no proprio posto da montagem A5100-A5162. "
+                     "Referencia temporal do registro comprovado, nao prova de causa ou inicio do defeito.",
+        }
     refsel = selecionar_passagem_referencia(
         eventos, rec.get("defect_time"), rule.get("reference_stations") or [],
         defect_local_offset_hours=defect_local_offset_hours, event_naive_offset_hours=event_naive_offset_hours,
     ) if rule.get("reference_stations") else {"status":"RULE_NOT_MAPPED","process":None,"next_process":None,"prior_count":0,"future_count":0,"defect_time_utc":generic.get("defect_time_utc")}
+    if stop is not None:
+        # This marker is NOT an END LOT. Keep its kind separate from a
+        # confirmed completed station passage.
+        refsel = {**refsel,"process":stop,"status":"DEFECT_RECORDED_AT_ASSEMBLY"}
     cycle = analisar_ciclo_reparo_apos_falha(
         eventos, rec.get("defect_time"), reference_stations=rule.get("reference_stations") or [],
         defect_local_offset_hours=defect_local_offset_hours, event_naive_offset_hours=event_naive_offset_hours,
     )
     if rule.get("reference_stations"):
-        status = "COMPLETE_REFERENCE" if refsel.get("process") else refsel.get("status")
+        status = ("DIRECT_DEFECT_RECORDED_IN_ASSEMBLY" if stop is not None else "COMPLETE_REFERENCE") if refsel.get("process") else refsel.get("status")
     else:
         status = "GENERIC_ONLY_RULE_NOT_MAPPED" if generic.get("process") else generic.get("status")
     return {
