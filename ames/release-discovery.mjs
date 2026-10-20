@@ -30,7 +30,8 @@ export async function discoverOfficialRelease(signal,fetcher=fetch,loadLocal=asy
   const local=await loadLocal();
   const safe=readRelease(local);
   try{
-    const response=await fetcher(API,{signal,cache:'no-store',credentials:'omit'});
+    const boundedSignal=signal?AbortSignal.any([signal,AbortSignal.timeout(3500)]):AbortSignal.timeout(3500);
+    const response=await fetcher(API,{signal:boundedSignal,cache:'no-store',credentials:'omit'});
     if(!response.ok)return safe;
     return verifiedLatestRelease(await response.json(),local);
   }catch{return safe;}
