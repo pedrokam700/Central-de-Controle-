@@ -71,17 +71,17 @@ test('first-login screen exposes the same public approved CLEAN without requirin
  assert.match(html,/00_INICIAR_AQUI\.bat/);
 });
 
-const latest={draft:false,prerelease:false,tag_name:'ames-v0.5.26-multipc-20261020',
+const latest={draft:false,prerelease:false,tag_name:'ames-v0.5.28-multipc-20261020',
  target_commitish:'c'.repeat(40),
  assets:[{name:'AMES_Central_CLEAN_cccccccc.zip',size:1200000,
  state:'uploaded',digest:'sha256:'+'d'.repeat(64),
- browser_download_url:'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.26-multipc-20261020/AMES_Central_CLEAN_cccccccc.zip'}]};
+ browser_download_url:'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.28-multipc-20261020/AMES_Central_CLEAN_cccccccc.zip'}]};
 test('only GitHub latest with exact asset, digest, tag and commit can become the download',()=>{
  const m=verifiedLatestRelease(latest,release);
- assert.equal(m.version,'0.5.27');
+ assert.equal(m.version,'0.5.28');
  assert.equal(m.validated_sha,'c'.repeat(40));
  assert.equal(m.sha256,'d'.repeat(64));
- assert.match(m.download_url,/releases\/download\/ames-v0\.5\.26-multipc/);
+ assert.match(m.download_url,/releases\/download\/ames-v0\.5\.28-multipc/);
  for(const bad of [
    {...latest,draft:true},
    {...latest,prerelease:true},
@@ -102,7 +102,7 @@ test('release discovery is read-only and falls back offline to exact factory-app
    return {ok:true,json:async()=>latest};
  };
  const m=await discoverOfficialRelease(undefined,fetcher,async()=>release);
- assert.equal(m.version,'0.5.27');
+ assert.equal(m.version,'0.5.28');
  const fallback=await discoverOfficialRelease(undefined,async()=>{throw Error('offline');},async()=>release);
  assert.equal(fallback.sha256,release.sha256);
 });
@@ -119,5 +119,5 @@ test('validated GitHub manifest remains valid through view-level validation',()=
  const latestOnce=verifiedLatestRelease(latest,release);
  const latestTwice=readRelease(latestOnce);
  assert.equal(latestTwice.validated_sha,'c'.repeat(40));
- assert.equal(latestTwice.version,'0.5.26');
+ assert.equal(latestTwice.version,'0.5.28');
 });
