@@ -23,7 +23,8 @@ def classify(reference_event_time, previous_event_time=None, *, naive_offset=-3)
         except (TypeError, ValueError):
             continue
         minute = local.hour * 60 + local.minute
-        day = local.date() - (timedelta(days=1) if minute < 450 else timedelta())
+        # Production day is 07:00→07:00, independently of the 07:30 shift boundary.
+        day = local.date() - (timedelta(days=1) if minute < 420 else timedelta())
         return dict(zip(FIELDS, ('1st Shift' if 450 <= minute < 1050 else '2nd Shift', day.isoformat(), local.isoformat(), '3022', basis)))
     return result
 
