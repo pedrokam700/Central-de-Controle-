@@ -41,7 +41,10 @@ test('filters remove aggregate FPY/quantity; zero Check FPY remains valid and ra
 });
 test('day comparison refuses different origins or clock cutoffs; weekly rates are not invented',async()=>{
  const r=await createHistoryTrendReader(source([fixture('2026-10-16'),fixture('2026-10-19',{fpy:96})])).read(options);
- const [a,b]=[r.points.at(-1),r.points.find(p=>p.date==='2026-10-16')];assert.equal(compareHistoryDays(a,b).fpy_delta,-2);
+ const [a,b]=[r.points.at(-1),r.points.find(p=>p.date==='2026-10-16')];
+ assert.equal(compareHistoryDays(a,b).fpy_delta,null,'CPH2859V and CPH2859 mixed in the same day cannot be compared');
+ const single=point=>({...point,snapshot:{...point.snapshot,occurrences:point.snapshot.occurrences.filter(o=>o.product_key==='CPH2859')}});
+ assert.equal(compareHistoryDays(single(a),single(b)).fpy_delta,-2,'matching explicit single-CPH windows remain comparable');
  assert.equal(compareHistoryDays(a,{...b,entry:{...b.entry,source_id:'B'}}).comparable,false);
  assert.equal(compareHistoryDays(a,{...b,entry:{...b.entry,period_end:'2026-10-16T15:00-03:00'}}).comparable,false);
  const weeks=historyWeekSummary(r.points,options.endDate);assert.equal(weeks.current.observed_failures,2);assert.equal(weeks.previous.observed_failures,2);assert.equal(weeks.previous.observed_days,1);assert.equal(weeks.previous.fpy,null);
@@ -54,15 +57,16 @@ test('missing, pending and cross-line index rows cannot enter the daily series',
 
 test('historic comparisons reject different, mixed or missing CPH without hiding observed weekly totals',async()=>{
  const read=await createHistoryTrendReader(source([fixture('2026-10-16'),fixture('2026-10-19')])).read(options);
- const a=read.points.at(-1),b=read.points.find(p=>p.date==='2026-10-16');
+ const oneProduct=point=>!point.snapshot?point:{...point,snapshot:{...point.snapshot,occurrences:point.snapshot.occurrences.filter(o=>o.product_key==='CPH2859')}};
+ const points=read.points.map(oneProduct),a=points.at(-1),b=points.find(p=>p.date==='2026-10-16');
  const altered=(products)=>({...b,snapshot:{...b.snapshot,occurrences:products.map((product_key,i)=>({...b.snapshot.occurrences[0],product_key,occurrence_id:'O'+i}))}});
  assert.equal(compareHistoryDays(a,b).comparable,true);
  assert.equal(compareHistoryDays(a,altered(['CPH9999'])).comparable,false);
  assert.equal(compareHistoryDays(a,altered([])).comparable,false);
  assert.equal(compareHistoryDays(a,altered(['CPH2859','CPH9999'])).comparable,false);
- const mixed=historyWeekSummary(read.points.map(p=>p.date==='2026-10-16'?altered(['CPH2859','CPH9999']):p),options.endDate);
+ const mixed=historyWeekSummary(points.map(p=>p.date==='2026-10-16'?altered(['CPH2859','CPH9999']):p),options.endDate);
  assert.equal(mixed.previous.scope_mixed,true);
  assert.equal(mixed.previous.observed_failures,2,'observed evidence is retained, not converted to zero');
- const other=historyWeekSummary(read.points.map(p=>p.date==='2026-10-16'?altered(['CPH9999']):p),options.endDate);
+ const other=historyWeekSummary(points.map(p=>p.date==='2026-10-16'?altered(['CPH9999']):p),options.endDate);
  assert.notEqual(other.current.scope_key,other.previous.scope_key);
 });
