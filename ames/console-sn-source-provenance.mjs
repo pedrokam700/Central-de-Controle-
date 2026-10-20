@@ -8,6 +8,16 @@ const own=(row,key)=>Boolean(row&&Object.prototype.hasOwnProperty.call(row,key))
 const known=value=>value===null||value===undefined||String(value).trim()===''?null:String(value).trim();
 const exactRevision=value=>Number.isSafeInteger(value)&&value>0?value:null;
 const traces=Object.freeze({'3074':'trace_3074','2114':'trace_2114','3022':'trace_3022','3012':'trace_3012'});
+const observedCount=(view,src)=>{
+ if(!src||typeof src!=='object')return null;
+ const count=rows=>Array.isArray(rows)?rows.length:null;
+ if(view==='3028')return count(src.defects)??count(src.datasets?.defects);
+ if(view==='3074')return count(src.component_usage)??count(src.reused_components)??count(src.query?.rows);
+ if(view==='2114')return count(src.rows)??(Array.isArray(src.pcbas)?src.pcbas.reduce((n,item)=>n+(item?.result?.rows?.length||0),0):null);
+ if(view==='3022')return count(src.process_passages)??count(src.rows);
+ if(view==='3012')return count(src.rows);
+ return null;
+};
 const cleanMeta=(src={},state=SOURCE_STATE.NOT_COLLECTED)=>Object.freeze({
   state:normalizeSourceState(state),
   source_id:known(src.source_id),
@@ -26,7 +36,9 @@ export function snLiveSourceProvenance(result={},model={}){
   return SN_SOURCE_ORDER.map(view=>{
     const raw=view==='3028'?result.local_snapshot:result[traces[view]];
     const state=normalizeSourceState(statuses[view]??(raw?SOURCE_STATE.PARTIAL:SOURCE_STATE.NOT_COLLECTED));
-    return Object.freeze({view,...cleanMeta(raw&&typeof raw==='object'?raw:{},state)});
+    return Object.freeze({view,...cleanMeta(raw&&typeof raw==='object'?raw:{},state),
+      observed_count:observedCount(view,raw),
+      has_error:!!(raw?.error||raw?.reason||String(raw?.status||'').toLowerCase()==='error')});
   });
 }
 
@@ -42,7 +54,7 @@ export function renderSnLiveSourceProvenance(result={},model={},locale='pt-BR'){
       <div><small>${esc(t(locale,'Snapshot / revisão','Snapshot / revision'))}</small><b>${esc(fmt(item.snapshot_id))} / ${esc(fmt(item.snapshot_revision))}</b></div>
       <div><small>${esc(t(locale,'Coletado em','Collected at'))}</small><b>${esc(fmt(item.collected_at))}</b></div>
       <div><small>${esc(t(locale,'Origem / computador informado','Source / reported computer'))}</small><b>${esc(fmt(item.source_id))} / ${esc(fmt(item.workstation_id))}</b></div>
-      <div><small>${esc(t(locale,'Período MES comprovado','Proven MES period'))}</small><b>${esc(range)}</b></div></article>`;
+      <div><small>${esc(t(locale,'Período MES comprovado','Proven MES period'))}</small><b>${esc(range)}</b></div><div><small>${esc(t(locale,'Registros observados nesta fonte','Observed records in this source'))}</small><b>${item.observed_count===null?'—':esc(item.observed_count)}</b>${item.has_error?'<span>'+esc(t(locale,'Consulta falhou; dados parciais podem permanecer salvos','Query failed; partial records may still be saved'))+'</span>':''}</div></article>`;
   }).join('');
   return `<details data-sn-live-provenance class="ames-sn-local-raw ames-sn-local-coverage-detail" data-no-i18n>
     <summary>${esc(t(locale,'Proveniência das fontes · consulta ao vivo','Source provenance · live lookup'))}</summary>
