@@ -143,6 +143,27 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     paired:()=>!!workstationToken,
     canOpenOfficial,
     canPairFromOfficial,
+    async detectInstalled(){
+      // Public minimal /ready probe: no MES jobs, no cookies, no token, no
+      // assumption that browser CORS failure means "not installed".
+      const lease=generation;
+      let probe={state:'unknown'};
+      try{
+        const response=await fetcher(AGENT_URL+'/ready',{
+          method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
+          signal:AbortSignal.any([controller.signal,AbortSignal.timeout(2500)])
+        });
+        if(response.ok){
+          const ready=await response.json();
+          if(ready?.ready===true&&ready?.ok===true&&ready?.agent_version==='0.5.23'&&
+             Number.isInteger(ready.pid)&&ready.pid>0&&typeof ready.agent_build==='string'){
+            probe={state:'detected'};
+          }
+        }
+      }catch{ /* CORS/PNA or agent not running: unknown, never absent */ }
+      if(generation===lease)publish({workstation_probe:probe});
+      return probe;
+    },
     openLocalPairing(){
       if(!canPairFromOfficial())throw Error('Pareamento iniciado apenas pelo endereço HTTPS oficial.');
       // Top-level navigation to loopback, then explicit confirmation locally.
