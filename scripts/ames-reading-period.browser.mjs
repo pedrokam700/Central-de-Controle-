@@ -175,6 +175,34 @@ try{
  await page.setViewportSize({width:1440,height:1000});
  await page.evaluate(()=>{document.documentElement.lang='pt-BR';qa.store.updateAgent({status:'connected'});qa.view.render();});
  await page.locator('[data-console-view=sn]').click();
+ // Integration gate: live SN decorators from PR33/35/36 must actually mount
+ // together, remain read-only and preserve per-source unknown/partial status.
+ await page.evaluate(()=>{
+   qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
+     sn:'PCBA-TEST-LIVE',detected_type:'PCBA',
+     trace_2114:{status:'complete',current_failure:{
+       pcba_sn:'PCBA-TEST-LIVE',defect_code:'D1',defect_desc:'Camera',
+       defect_time:'2026-10-19 10:30:00',manual_or_auto:'Manual'}},
+     trace_3074:{status:'partial',reused_components:[]},
+     trace_3022:{status:'partial',process_passages:[]},
+     trace_3012:{status:'unavailable'},
+     local_snapshot:{process_contexts:[{
+       pcba_sn:'PCBA-TEST-LIVE',defect_code:'D1',defect_time:'2026-10-19 10:30:00',
+       production_shift_source:'3022',production_shift_basis:'reference_process',
+       reference_station_code:'A5162',production_event_time:'2026-10-19T10:00:00-03:00',
+       production_shift:'1st Shift'
+     }]}
+   }}});
+   qa.view.render();
+ });
+ const snLive=page.locator('[data-console-pane=sn] [data-sn-live]');
+ await snLive.locator('[data-sn-live-provenance]').waitFor();
+ assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1);
+ assert.match(await snLive.locator('[data-sn-live-provenance]').innerText(),/3012|2114/);
+ assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1);
+ assert.equal(await snLive.locator('[data-sn-temporal-detail]').count(),1);
+ assert.equal(await snLive.locator('[data-sn-history-detail]').count(),1);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'SN live decoration cannot collect MES');
  assert.equal(await page.locator('[data-sn-saved-toggle]').count(),1);
  assert.equal(await page.evaluate(()=>qa.savedReads()),0);
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
