@@ -93,7 +93,7 @@ try{
  await page.locator('[data-console-view=failures]').click();
  const groupTable=page.locator('[data-console-pane=failures] [data-failure-groups] table');
  assert.equal(await groupTable.locator('thead th').count(),7,'three reuse-evidence columns remain in grouped Failures');
- assert.match(await groupTable.locator('tbody').innerText(),/1\\+/,'2nd+ use is a minimum observed, never an invented exact denominator');
+ assert.match(await groupTable.locator('tbody').innerText(),/1\+/,'2nd+ use is a minimum observed, never an invented exact denominator');
  assert.equal(await page.locator('[data-failure-sort]').inputValue(),'count_desc');
  await page.locator('[data-failure-sort]').selectOption('failure_asc');
  assert.equal(await page.locator('[data-failure-sort]').inputValue(),'failure_asc');
