@@ -77,7 +77,10 @@
   ],
   "SIM": [
     "sim card",
-    "sim tray"
+    "sim tray",
+    "j606-kz03",
+    "sim failure",
+    "sim slot"
   ],
   "PROCESS_SOFTWARE": [
     "process",
