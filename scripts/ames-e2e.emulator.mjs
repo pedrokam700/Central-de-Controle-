@@ -57,7 +57,15 @@ try{
  await client.collect('today',scope);assert.equal((await finish()).status,'done');
  for(const line of scope.lines){assert.equal(state.ames.occurrences({line_id:line,product:'CPH2859'}).rows.length,1);assert.equal(state.ames.occurrences({line_id:line,product:'CPH2859V'}).rows.length,1);}
  const before=state.ames.read(scope.lines[0]).snapshot;
- await client.collect('deep',scope);assert.equal((await finish()).status,'done');
+ // The synthetic old agent does NOT implement exact_trace_targets and must
+ // remain blocked at the UI transport boundary: never send an unscoped trace.
+ await assert.rejects(client.collect('deep',scope),/snapshot exato/);
+ // Exercise legacy scheduler ingestion via a direct local HTTP invocation only.
+ // The real client happy path is separately guarded by exact target tests.
+ const deepRun=await api('/deep-trace',scope);
+ await eventually(async()=>['done','error'].includes((await api('/jobs/'+deepRun.id)).status),'legacy deep fixture');
+ assert.equal((await api('/jobs/'+deepRun.id)).status,'done');
+ await client.refresh();
  const after=state.ames.read(scope.lines[0]).snapshot;assert(after.revision>before.revision);assert.equal(after.occurrences[0].occurrence_id,before.occurrences[0].occurrence_id);
  assert(after.pcba_history.records.length);assert.equal(after.material_trace.records[0].material_sn,'M');
  const context=selectCoraContext(state.ames,{line_id:scope.lines[0],product:'CPH2859V',pcba_sn:'P',material_sn:'M'});assert(context.material_3074.length);assert.equal(context.human_confirmed_causes.length,0);
