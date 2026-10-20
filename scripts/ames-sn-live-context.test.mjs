@@ -67,3 +67,41 @@ test('hardened agent installs the live SN production-context bridge and its focu
   const result=spawnSync(python,['scripts/agent-sn-lookup-context.test.py'],{encoding:'utf8'});
   assert.equal(result.status,0,(result.stdout||'')+(result.stderr||''));
 });
+
+test('live material view shows only defect-time selection, including not-reused items',()=>{
+ const result=baseResult();
+ result.trace_3074={
+   status:'complete',
+   material_selection:{status:'selected_at_latest_2114_candidate',scanned_components:2,
+     historical_components_ignored:3,temporal_unknown:1},
+   component_usage:[
+     {item_sn:'MAT-AT-FAILURE',item_type:'Camera',previous_pcbas:['OLD-PCBA'],
+       known_use_count:2,reuse_count:1,is_reused:true,current_pcba_confirmed:true},
+     {item_sn:'MAT-FIRST-USE',item_type:'Screen',previous_pcbas:[],
+       known_use_count:1,reuse_count:0,is_reused:false,current_pcba_confirmed:true}
+   ],
+   reused_components:[
+     {item_sn:'MAT-AT-FAILURE',item_type:'Camera',previous_pcbas:['OLD-PCBA'],
+       relation_to_current_failure:'FALHA_DIFERENTE'},
+     {item_sn:'UNRELATED-HISTORICAL',item_type:'Other',previous_pcbas:['OLDER']}
+   ]
+ };
+ const model=snLiveSummaryEvidence(result).model;
+ assert.deepEqual(model.materials.map(x=>x.item_sn),['MAT-AT-FAILURE','MAT-FIRST-USE']);
+ assert.equal(model.materials[0].previous_pcbas[0],'OLD-PCBA');
+ assert.equal(model.materials[1].reuse_count,0);
+ assert.equal(model.material_selection.temporal_unknown,1);
+});
+test('no valid failure anchor must not reintroduce all previously linked components',()=>{
+ const result=baseResult();
+ result.trace_3074={
+   status:'partial',
+   material_selection:{status:'no_defect_anchor',scanned_components:0,
+      historical_components_ignored:3,temporal_unknown:3},
+   component_usage:[],
+   reused_components:[]
+ };
+ const model=snLiveSummaryEvidence(result).model;
+ assert.deepEqual(model.materials,[]);
+ assert.equal(model.material_selection.status,'no_defect_anchor');
+});
