@@ -389,6 +389,11 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 except Exception as exc:
                     warnings.append(f"3022 indisponível nesta execução: {type(exc).__name__}: {exc}")
 
+        current_pcba_rows = []
+        for h in histories:
+            if h.get("pcba_sn") == query and h.get("status") == "COMPLETE":
+                current_pcba_rows = list(((h.get("result") or {}).get("rows") or []))
+                break
         sel = correlacao_mod.selecionar_ocorrencia_atual("", "", current_pcba_rows)
         current_failure_2114 = sel.get("current_history")
         # Latest 2114 is an investigation anchor, NOT proof that it is the
@@ -484,11 +489,6 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         # Structure current vs previous PCBA failures and relate historical PCBAs
         # from reused components to the current failure. The relation is evidence
         # only (same code/family/different), never an automatic root cause.
-        current_pcba_rows = []
-        for h in histories:
-            if h.get("pcba_sn") == query and h.get("status") == "COMPLETE":
-                current_pcba_rows = list(((h.get("result") or {}).get("rows") or []))
-                break
         previous_failures_2114 = list(sel.get("prior_histories") or [])
         for hist in previous_failures_2114:
             hist["relation"] = correlacao_mod.comparar_falhas((current_failure_2114 or {}).get("Defect Code", ""), (current_failure_2114 or {}).get("Defect Description", ""), hist.get("Defect Code", ""), hist.get("Defect Description", "")).get("relation") if current_failure_2114 else "SEM_FALHA_ATUAL"
