@@ -7,10 +7,10 @@ const release=JSON.parse(fs.readFileSync(new URL('../ames/releases/latest/releas
 
 test('approved public GitHub CLEAN is SHA-bound and safe for new Windows computers',()=>{
   const m=readRelease({...release,password:'secret',cookies:'secret',endpoint:'invented'});
-  assert.equal(m.version,'0.5.25');
+  assert.equal(m.version,'0.5.26');
   assert.equal(m.package_available,true);
   assert.equal(m.validated_sha,'ef43b72ef9778314b5fb9c7d2a842ac3baa4cad7');
-  assert.equal(m.sha256,'f73f12f2894e666700231b1fc9c7e16252e03ddebdf307ae807c2b52451bc152');
+  assert.equal(m.sha256,'ee5d3d0cf8d5e6fce553157c97ce85b489e421aa4bd249e42541c5de4c66cec3');
   assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.26-multipc-20261020/AMES_Central_CLEAN_ef43b72e.zip');
   assert.equal(m.local_runtime.agent_health_url,'http://127.0.0.1:8765/api/v1/health');
   assert(!JSON.stringify(m).includes('secret'));assert.equal(m.endpoint,undefined);
