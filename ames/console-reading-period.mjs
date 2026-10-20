@@ -1,4 +1,5 @@
 import {escapeHtml as esc} from './evidence-view.mjs';
+import {LINE_IDS} from './data/contract.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
 import {fiveSourceEvidence} from './data/source-coverage.mjs';
 import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
@@ -6,11 +7,23 @@ const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 
 export function paintReadingPeriod(root,store,controller){
   const p=store.readingPeriod(),status=store.agent().period_read;
+  const loaded=LINE_IDS.filter(line=>!!store.read(line).snapshot);
+  const line=store.context?.()?.line_id||store.preferredLine?.();
+  const missing=p?.mode!=='today'&&status?.status!=='loading'&&!!line&&!store.read(line).snapshot;
+  const note=status?.status==='loading'?t('Consultando revisões salvas…','Reading saved revisions…'):
+    missing?t('Nenhuma revisão salva disponível nesta linha e período. Não significa zero falhas. Após a coleta, use Atualizar leitura se necessário.','No saved revision for this line and period. This is not zero failures. After collection, use Refresh reading if needed.'):
+    p?.mode!=='today'&&status?.status==='ready'?loaded.length+' '+t('linha(s) com revisão disponível','line(s) with saved revisions'):'';
   root.setAttribute('data-no-i18n','');
-  root.innerHTML=`<nav class="ames-history-tabs" aria-label="${t('Período de leitura','Reading period')}">${[['today',t('Hoje','Today')],['previous',t('Último dia produtivo','Last production day')],['custom',t('Período…','Period…')]].map(([id,label])=>`<button type="button" class="button secondary" data-read-period="${id}" aria-pressed="${p?.mode===id}">${label}</button>`).join('')}</nav><p class="mes-context" data-reading-label>${p?esc(formatFactoryDateTime(p.start)+' → '+formatFactoryDateTime(p.end)):''} · America/Sao_Paulo · ${t('07:00 → 07:00; turnos são outra dimensão','07:00 → 07:00; shifts are a separate dimension')}${p?.mode!=='today'?' · '+t('Somente leitura do passado','Read-only history'):''}</p><form data-reading-range hidden><div class="mes-filters"><label>${t('Início','Start')}<input type="datetime-local" name="start" required value="${esc(p?.start||'')}"></label><label>${t('Fim','End')}<input type="datetime-local" name="end" required value="${esc(p?.end||'')}"></label></div><button class="button secondary" type="submit">${t('Ver dados armazenados','View stored data')}</button></form><p role="status" data-reading-status>${status?.status==='loading'?t('Lendo revisões armazenadas…','Reading stored revisions…'):status?.errors?.length?esc(status.errors.map(e=>e.line_id+': '+e.error).join(' · ')):''}</p>`;
+  root.innerHTML=`<nav class="ames-history-tabs" aria-label="${t('Período de leitura','Reading period')}">${[['today',t('Hoje','Today')],['previous',t('Último dia produtivo','Last production day')],['custom',t('Período…','Period…')]].map(([id,label])=>`<button type="button" class="button secondary" data-read-period="${id}" aria-pressed="${p?.mode===id}">${label}</button>`).join('')}</nav><p class="mes-context" data-reading-label>${p?esc(formatFactoryDateTime(p.start)+' → '+formatFactoryDateTime(p.end)):''} · America/Sao_Paulo · ${t('07:00 → 07:00; turnos são outra dimensão','07:00 → 07:00; shifts are a separate dimension')}${p?.mode!=='today'?' · '+t('Somente leitura do passado','Read-only history'):''}</p><form data-reading-range hidden><div class="mes-filters"><label>${t('Início','Start')}<input type="datetime-local" name="start" required value="${esc(p?.start||'')}"></label><label>${t('Fim','End')}<input type="datetime-local" name="end" required value="${esc(p?.end||'')}"></label></div><button class="button secondary" type="submit">${t('Ver dados armazenados','View stored data')}</button></form><p role="status" data-reading-status>${esc(status?.errors?.length?status.errors.map(e=>e.line_id+': '+e.error).join(' · '):note)}</p>${p?.mode!=='today'?'<button type="button" class="button secondary" data-reading-reload>'+t('Atualizar leitura','Refresh reading')+'</button>':''}`;
   for(const b of root.querySelectorAll('[data-read-period]'))b.addEventListener('click',()=>{
     if(b.dataset.readPeriod==='custom'){root.querySelector('form').hidden=false;return;}
     void controller.select(b.dataset.readPeriod);
+  });
+  root.querySelector('[data-reading-reload]')?.addEventListener('click',()=>{
+    const period=store.readingPeriod();
+    void controller.select(period.mode,period.mode==='custom'?{start:period.start,end:period.end}:{}).catch(error=>{
+      const el=root.querySelector('[data-reading-status]');if(el)el.textContent=error.message;
+    });
   });
   root.querySelector('form').addEventListener('submit',event=>{
     event.preventDefault();const fields=event.currentTarget.elements;

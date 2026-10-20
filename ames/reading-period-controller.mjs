@@ -33,7 +33,8 @@ export function createReadingPeriodController(store,history,{changed=()=>{}}={})
     }));
     if(!alive())return;
     results.forEach((r,i)=>{if(r.status==='rejected')errors.push({line_id:LINE_IDS[i],error:r.reason?.message||'history_unavailable'});});
-    store.updateAgent({period_read:{status:errors.length?'partial':'ready',errors}});changed();
+    const loaded_lines=LINE_IDS.filter(line=>!!store.read(line).snapshot);
+    store.updateAgent({period_read:{status:errors.length?'partial':'ready',errors,loaded_lines}});changed();
   }
   return {select,clear(){disposed=true;request++;}};
 }
