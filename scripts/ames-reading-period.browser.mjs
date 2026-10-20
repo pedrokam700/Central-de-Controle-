@@ -116,6 +116,7 @@ try{
  await trends.locator('[data-history-day]').first().waitFor();
  assert.equal(await trends.locator('[data-history-day]').count(),7);
  assert.equal(await trends.locator('[data-history-day-open]').count(),1);
+ assert.match(await trends.locator('[data-week-scope-warning]').innerText(),/CPH ou origem/,'mixed stored 3028 CPHs require a visible weekly comparability warning');
  assert.match(await trends.locator('[data-history-day="2026-10-15"]').innerText(),/Não coletado/,'custom window is not daily production');
  await trends.locator('[data-history-day-open]').click();
  assert.match(await trends.locator('[data-history-day-detail]').innerText(),/FRIDAY-SNAPSHOT/);
