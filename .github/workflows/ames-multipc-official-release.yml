@@ -1,7 +1,7 @@
 name: Publish Official A-MES Multi-PC Field Release
 on:
   push:
-    branches: [work/ames-pr35-pr36-integration-20261019]
+    branches: [fix/ames-official-single-workstation-pairing-20261020]
     paths: ['.github/workflows/ames-multipc-official-release.yml']
 permissions:
   contents: read
@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="ames-v0.5.26-multipc-20261020"
+          tag="ames-v0.5.27-multipc-20261020"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Refusing to overwrite an existing official release";exit 1
           fi
@@ -70,5 +70,5 @@ jobs:
           cp "$RUNNER_TEMP/verified/AMES_PR42_CLEAN.zip" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip"
           gh release create "$tag" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Central + A-MES 0.5.26 — Multi-PC / pareamento HTTPS" \
-            --notes "Versão oficial do GitHub autorizada para TESTES DE CAMPO com a equipe. SHA $GITHUB_SHA. Pacote CLEAN completo, sem SQLite, sessão, cookies ou segredos. Download oficial para novos PCs e atualização em pasta separada. Pareamento do agente existente pelo link HTTPS exige confirmação física local no 127.0.0.1. Não substitua instalações/SQLite existentes. Dados compartilhados: snapshots sanitizados; gate físico de sincronização Linha 3 PC A → PC B ainda precisa ser executado. Versão anterior e60cef8d permanece para rollback."
+            --title "Central + A-MES 0.5.27 — Pareamento HTTPS na mesma aba" \
+            --notes "Versão oficial do GitHub autorizada para TESTES DE CAMPO com a equipe. SHA $GITHUB_SHA. Pacote CLEAN completo, sem SQLite, sessão, cookies ou segredos. Download oficial para novos PCs e atualização em pasta separada. Pareamento do agente existente pelo link HTTPS usa a mesma aba, exige confirmação física local no 127.0.0.1 e retorna ao site oficial; confirmações inválidas oferecem recuperação segura. Conflitos de origem são explicitados por linha, sem descarte de histórico. Não substitua instalações/SQLite existentes. Dados compartilhados: snapshots sanitizados; gate físico de sincronização Linha 3 PC A → PC B ainda precisa ser executado. Versão anterior e60cef8d permanece para rollback."
