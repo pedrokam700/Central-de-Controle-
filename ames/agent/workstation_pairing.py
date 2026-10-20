@@ -96,6 +96,19 @@ small{display:block;margin-top:16px;color:#657184;line-height:1.5}</style></head
 <small>Nenhuma senha do A-MES, banco SQLite ou credencial de rede é enviada para a Central.</small>
 </main></body></html>""" % safe).encode("utf-8")
 
+def retry_page():
+    """Clear actionable recovery on stale/invalid confirmation; no token exposure."""
+    return b"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Repetir conexao local</title>
+<style>body{font:15px system-ui,sans-serif;background:#f6f7fa;color:#172030;margin:0;padding:28px}
+main{max-width:460px;margin:10vh auto;background:#fff;padding:28px;border:1px solid #d9e0e8;border-radius:14px}
+h1{font-size:22px}p{line-height:1.55}a{display:inline-block;padding:12px 16px;background:#172030;color:white;border-radius:8px;text-decoration:none}</style>
+</head><body><main><h1>Confirmacao nao concluida</h1>
+<p>A autorizacao expirou ou foi recusada. Abra novamente a confirmacao local sem trocar de computador.</p>
+<a href="/workstation/parear">Reiniciar conexao segura</a>
+<p>Se voltar a aparecer HTTP 403, verifique se o agente oficial esta ativo na porta 8765.</p>
+</main></body></html>"""
+
 def secure_headers():
     return {
         "Cache-Control":"no-store, max-age=0",
