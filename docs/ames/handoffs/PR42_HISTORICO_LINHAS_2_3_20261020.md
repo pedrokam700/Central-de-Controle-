@@ -30,3 +30,19 @@ A PR42 continua **OPEN/DRAFT** sobre PR40. A última mudança funcional foi `3cb
 5. Não mudar Firebase para corrigir leitura do SQLite local. Não refazer a lógica 3022 R2–R12, o filtro de Top3 de target ou as regras 3074 de montagem temporal já implementadas. Manter os projetos PR38/40 independentes.
 
 **Referências:** PR42 https://github.com/pedrokam700/Central-de-Controle-/pull/42 ; documento canônico 3022 `docs/ames/handoffs/HANDOFF_CANONICO_3022_R12_20261020.md`; handoff principal PR42 `docs/ames/handoffs/ISSUE41_PR42_INTEGRACAO_20261019.md`.
+
+## Nova regressão física: Consulta por SN não deve herdar o período do monitoramento
+
+**Evidência de 20/10:** a captura da AWIP2114 (consulta PCBA) foi colocada lado a lado com a Central no modo `Último dia produtivo`: em vez de sua interface própria de investigação SN, a Central mostrou `Consultar SN nos dados armazenados`, dataset `3012` e `Não coletado para este período/linha`. Trata-se de uma regressão da UX, **não de prova de que a PCBA não possui histórico 2114/3074/3022/3012**.
+
+**Causa no código:** `ames/console-view.mjs` encaminhava `id==='sn'` ao genérico `createStoredPeriodRecords` quando o modo era histórico. Esse componente pesquisa **somente a revisão do dia da linha**, enquanto a Consulta por SN deve iniciar uma investigação transversal (PCBA + montagem da falha + materiais físicos selecionados + PCBAs anteriores, com as guardas temporais já implementadas) e pode abrir jobs SN anteriores do SQLite.
+
+**Correção localizada na PR #42:**
+- A view `sn` monta sempre `createSnConsoleView`, decoradores forenses e `createSavedSnHistoryView`, independentemente de `Hoje/Último dia produtivo/Período…`. O filtro diário continua valendo para os indicadores das linhas, Top3, falhas e dashboards; não se aplica como filtro de coleta SN.
+- `ames/agent-client.mjs` foi lido para confirmar que a coleta `sn` usa `/sn-lookup` com SN e `include_3022=true`, sem herdar `collectionScope` de período/linha. Nenhuma alteração foi necessária no coletor MES.
+- `ames/data/store.mjs` expõe `sessionGeneration`, incrementado por `clear()`; `console-view.mjs` mantém a view SN ativa e o campo de entrada entre mudanças de período **da mesma sessão**, mas a destrói e apaga ao mudar/limpar a sessão, prevenindo exposição do último SN entre contas.
+- O aviso de período no topo da view SN foi trocado por uma frase discreta `Consulta por SN independente do período de monitoramento`; os snapshots históricos do monitoramento continuam disponíveis em suas views próprias.
+- `scripts/ames-reading-period.browser.mjs` testa SN sempre presente no modo histórico, input/DOM/investigação preservados em anterior→hoje, nenhuma mutação MES ao alternar, e descarte efetivo do SN após `store.clear()`. `scripts/ames-reading-period.test.mjs` verifica invariância da sessão no período e invalidação após logout.
+- Verificações locais nesta conversa: sintaxe JS das fontes modificadas PASS; execução isolada da função **real** `createAmesStore` confirmou que troca de período não altera `sessionGeneration`, e `clear()` incrementa. **Browser Playwright completo e 5 jobs Actions ainda NÃO comprovados neste checkpoint**.
+
+**Validação operacional deve ser separada:** o operador está testando a CLEAN que existia **antes** deste patch SN, portanto NÃO esperar que o comportamento SN já esteja corrigido nela. Sua prova principal agora é se `Último dia produtivo` mostra as duas linhas com os snapshots do SQLite original; não transferir bancos nem perder o resultado do posto. Após CI 5/5 no HEAD do patch SN e candidato SHA correspondente, testar a Consulta por SN com uma PCBA de 2114, alternando o período do monitoramento, garantindo que a investigação e suas fontes continuem acessíveis. Não confundir `Manual/Automatic` com reparo e não inventar turno/geração sem passagem 3022 provada.
