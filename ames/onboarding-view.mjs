@@ -20,16 +20,18 @@ export function createOnboardingView(root,{
   const choiceLabel=()=>mode==='collector'?t('Coletar neste PC','Collect on this PC'):mode==='viewer'?t('Consultar dados da equipe','View shared data'):t('Escolha como usar','Choose how to use');
   function collectionPanel(){
     const agent=getAgent(),state=installationDetection(agent,isPaired());
-    const connectButton=state!=='verified'&&canPair()?'<button type="button" class="button primary" data-connect-local-pairing>'+t('Conectar agente deste PC','Connect agent on this PC')+'</button>':'';
+    const connectButton=state!=='verified'&&state!=='agent_outdated'&&canPair()?'<button type="button" class="button primary" data-connect-local-pairing>'+t('Conectar agente deste PC','Connect agent on this PC')+'</button>':'';
     const titles={
       verified:t('Agente local conectado e autorizado','Local agent connected and authorized'),
       pairing_required:t('Agente encontrado · falta pareamento','Agent found · pairing required'),
+      agent_outdated:t('Agente instalado · pareamento precisa da atualização oficial','Agent installed · official pairing update required'),
       paired_unreachable:t('Pareamento salvo · agente não confirmado','Pairing saved · agent not verified'),
       not_verified:t('Ainda não foi possível confirmar o agente','Agent not yet verified')
     };
     const instructions={
       verified:t('A Central reconhece este posto. Não reinstale para conectar: use os dados locais e verifique a sincronização abaixo.','Work Center recognizes this workstation. Do not reinstall to connect; use local data and verify sync below.'),
       pairing_required:t('Agente local detectado. Use Conectar agente deste PC, confirme na janela local e volte à Central oficial já autorizada.','Local agent detected. Choose Connect agent on this PC, confirm in the local window, then return to the authorized official Work Center.'),
+      agent_outdated:t('O agente respondeu, mas ainda usa um protocolo de pareamento anterior. Baixe o CLEAN oficial mais recente no GitHub e atualize o posto com backup; abrir novamente o link não atualiza o programa em execução.','The agent responded, but it uses an older pairing protocol. Get the latest official GitHub CLEAN and update this workstation with a backup; refreshing the website cannot update the running Windows agent.'),
       paired_unreachable:t('O token desta aba já existe, mas o agente não respondeu. Verifique se o launcher está rodando neste mesmo computador.','This tab has a pairing token, but the agent did not answer. Check the launcher on this computer.'),
       not_verified:t('O navegador não comprovou se há instalação. Bloqueios HTTPS/loopback podem impedir a detecção. Um resultado negativo NÃO significa que o agente não existe.','The browser cannot verify an installation. HTTPS/loopback restrictions can block detection; this does NOT prove the agent is absent.')
     };
