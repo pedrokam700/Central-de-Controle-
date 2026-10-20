@@ -239,6 +239,40 @@ try{
  assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1,'source panel must not duplicate across SN queries');
  assert.equal(await snLive.locator('[data-sn-source-state]').count(),5,'new SN retains all five distinct source statuses');
  assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1,'smart alerts panel must not duplicate');
+ // Factory SIM case: A5162 is a prior completed process, NOT a mapped origin.
+ await page.evaluate(()=>{
+   qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
+     sn:'PCBA-SIM-NO-ORIGIN',detected_type:'PCBA',product_model:'CPH2819BR',
+     trace_2114:{status:'complete',current_failure:{
+       'Defect Code':'J606-KZ03','Defect Description':'SIM card',
+       'Defect Time':'2026-10-20 11:59:16','Manual/Automatic':'Manual'
+     },previous_failures:[]},
+     trace_3074:{status:'partial',reused_components:[]},
+     trace_3022:{status:'partial',process_passages:[]},
+     trace_3012:{status:'unavailable'},
+     local_snapshot:{process_contexts:[{
+       source:'3022',pcba_sn:'PCBA-SIM-NO-ORIGIN',product_model:'CPH2819BR',
+       defect_code:'J606-KZ03',defect_time:'2026-10-20 11:59:16',
+       defect_time_utc:'2026-10-20T14:59:16Z',
+       registration_mode:'MANUAL',failure_family:'SIM',
+       reference_confidence:'UNMAPPED',reference_reason:'Sem regra CPH/familia',
+       status:'GENERIC_ONLY_RULE_NOT_MAPPED',
+       reference_pass_count_before_defect:0,
+       previous_operation_code:'A5162',previous_event_time:'2026-10-20T14:10:00Z'
+     }]}
+   }}});
+   qa.view.render();
+ });
+ const simNote=snLive.locator('[data-sn-unmapped-origin]');
+ assert.equal(await simNote.count(),1);
+ assert.match(await simNote.innerText(),/Posto de geração ainda não mapeado/);
+ assert.match(await simNote.innerText(),/A5162/);
+ assert.match(await simNote.innerText(),/11:10/);
+ assert.match(await simNote.innerText(),/1st Shift/);
+ assert.match(await simNote.innerText(),/20\/10\/2026/);
+ assert.match(await simNote.innerText(),/NÃO à geração da falha/);
+ assert.equal(await snLive.locator('.ames-process-evidence tbody tr').first().locator('td').nth(5).innerText(),'—','no 3022 generation time invented');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'unmapped 3022 diagnostic cannot trigger collection');
  await page.evaluate(()=>{document.documentElement.lang='en-US';qa.view.render();});
  await page.waitForFunction(()=>document.querySelector('[data-sn-live-provenance] summary')?.textContent?.includes('Source provenance'));
  assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1,'changing language must not stack source panels');
