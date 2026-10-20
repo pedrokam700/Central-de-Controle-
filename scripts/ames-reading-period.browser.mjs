@@ -91,6 +91,19 @@ try{
  }
  // Real browser checks for selective PR33→PR42 integration, no MES mutations.
  await page.locator('[data-console-view=failures]').click();
+ // PR35 blocks 13/14 + PR36 exact occurrence gate: actual DOM wiring.
+ const failureRows=page.locator('[data-console-pane=failures] .ames-failures-table tbody tr');
+ const evidenceCells=page.locator('[data-console-pane=failures] [data-failure-evidence-cell]');
+ await page.waitForFunction(()=>document.querySelectorAll('[data-console-pane=failures] [data-failure-evidence-cell]').length>=3);
+ assert.equal(await evidenceCells.count(),await failureRows.count(),'each 3028 row has one evidence cell');
+ assert.equal(await page.locator('[data-failure-evidence-head]').count(),1);
+ assert.match(await evidenceCells.first().innerText(),/3028/);
+ await evidenceCells.first().locator('.ames-failure-evidence-detail summary').click();
+ assert.match(await evidenceCells.first().innerText(),/cadeia de evidências/i);
+ assert.equal(await evidenceCells.first().locator('[data-ames-source-view]').count(),5,'five sources remain separately auditable');
+ assert.equal(await evidenceCells.first().locator('[data-ames-snapshot-provenance]').count(),1);
+ assert.equal(await evidenceCells.locator('img, script').count(),0,'untrusted SN cannot create markup');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening evidence cannot query MES');
  const groupTable=page.locator('[data-console-pane=failures] [data-failure-groups] table');
  assert.equal(await groupTable.locator('thead th').count(),7,'three reuse-evidence columns remain in grouped Failures');
  assert.match(await groupTable.locator('tbody').innerText(),/1\+/,'2nd+ use is a minimum observed, never an invented exact denominator');
