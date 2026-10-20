@@ -56,12 +56,23 @@ def local_address(headers, address, port):
 def confirm(headers, address, port, form_body, gate=GATE):
     if not local_address(headers,address,port):
         return False
-    if str(headers.get("Origin") or "") not in {f"http://127.0.0.1:{port}",f"http://localhost:{port}"}:
+    origin = str(headers.get("Origin") or "").strip().rstrip("/").lower()
+    site = str(headers.get("Sec-Fetch-Site") or "").lower()
+    mode = str(headers.get("Sec-Fetch-Mode") or "").lower()
+    # On a real local form submission some Chromium/Edge configurations do not
+    # send Origin at all. Require the browser's unforgeable same-origin
+    # Fetch Metadata in that case. Never accept "null", cross-site, or
+    # requests lacking BOTH Origin and Fetch Metadata.
+    local_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
+    if origin:
+        if origin not in local_origins:
+            return False
+        if site not in {"same-origin", "none", ""}:
+            return False
+    elif site != "same-origin":
         return False
-    # A cross-site form or subresource must never authorize another website.
-    if str(headers.get("Sec-Fetch-Site") or "").lower() not in {"same-origin", "none", ""}:
-        return False
-    if str(headers.get("Sec-Fetch-Mode") or "").lower() not in {"navigate",""}:
+    # The authorization page is a top-level local navigation, not an XHR API.
+    if mode not in {"navigate", ""}:
         return False
     try:
         data = parse_qs(form_body.decode("ascii"),strict_parsing=True)
