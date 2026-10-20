@@ -89,6 +89,6 @@ jobs:
         shell: bash
         run: |
           export FIREBASE_TEST_MODULES="$RUNNER_TEMP/history-firestore/node_modules"
-          for suite in scripts/ames-rules.emulator.mjs scripts/ames-pr38-day.emulator.mjs; do
+          for suite in scripts/ames-rules.emulator.mjs scripts/ames-pr38-day.emulator.mjs scripts/ames-pr40-analytics.emulator.mjs; do
             "$RUNNER_TEMP/history-firestore/node_modules/.bin/firebase" emulators:exec --only firestore --project demo-central-mes "node $suite"
           done
