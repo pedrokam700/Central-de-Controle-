@@ -1,7 +1,7 @@
 name: A-MES Operational History
 on:
   push:
-    branches: [work/ames-operational-history-kpis-20261019]
+    branches: [work/ames-operational-history-kpis-20261019, work/ames-pr35-pr36-integration-20261019]
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: '24'
       - name: Temporal scope and preserved history contracts
-        run: node --test scripts/ames-cache.test.mjs scripts/ames-history-trends.test.mjs scripts/ames-reuse-cohorts.test.mjs scripts/ames-reading-period.test.mjs scripts/ames-source-capture-history.test.mjs scripts/ames-source-coverage.test.mjs scripts/ames-operational-context.test.mjs scripts/ames-history-source.test.mjs scripts/ames-offline-shell.test.mjs scripts/ames-history-revisions.test.mjs scripts/ames-period-history-matching.test.mjs scripts/ames-agent.test.mjs
+        run: node --test scripts/ames-failure-occurrence-evidence.test.mjs scripts/ames-observation-provenance.test.mjs scripts/ames-sn-source-provenance.test.mjs scripts/ames-production-evidence-analytics.test.mjs scripts/ames-cache.test.mjs scripts/ames-history-trends.test.mjs scripts/ames-reuse-cohorts.test.mjs scripts/ames-reading-period.test.mjs scripts/ames-source-capture-history.test.mjs scripts/ames-source-coverage.test.mjs scripts/ames-operational-context.test.mjs scripts/ames-history-source.test.mjs scripts/ames-offline-shell.test.mjs scripts/ames-history-revisions.test.mjs scripts/ames-period-history-matching.test.mjs scripts/ames-agent.test.mjs
       - name: Immutable SQLite revisions and historical endpoint
         run: |
           python3 scripts/agent-history-restore.test.py
