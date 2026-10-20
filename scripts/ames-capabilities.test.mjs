@@ -12,8 +12,8 @@ test('runtime documentado identifica somente o agente e nunca concede capacidade
   // GitHub Release was published with the SHA/ZIP verified; it does not grant
   // agent capabilities or MES network access to a viewing workstation.
   assert.equal(m.package_available,true);
-  assert.equal(m.validated_sha,'e60cef8d4f033c4654b3fb730573e1ecfdd174bd');
-  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.25-factory-20261020/AMES_Central_CLEAN_e60cef8d.zip');
+  assert.equal(m.validated_sha,'ef43b72ef9778314b5fb9c7d2a842ac3baa4cad7');
+  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.26-multipc-20261020/AMES_Central_CLEAN_ef43b72e.zip');
   assert.match(m.sha256,/^[a-f0-9]{64}$/);
   assert.equal(m.local_runtime.agent_health_url,'http://127.0.0.1:8765/api/v1/health');
   assert.equal(m.local_runtime.start_file,'INICIAR_POSTO_CENTRAL_V2.bat');
