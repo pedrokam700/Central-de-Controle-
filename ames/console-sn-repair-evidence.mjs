@@ -31,6 +31,28 @@ export function provenRepairUserName(repair={},result={},currentPcba=''){
   return names.size===1?[...names][0]:null;
 }
 
+// Read-only operator directory per explicitly identified PCBA + MES employee ID.
+// No global BRM-to-person guess, no storing names remotely, no change to the
+// original 3012 rows. Conflicting 3022 names intentionally stay unknown.
+export function projectRepairTechnicianNames(repairs=[],events=[]){
+ const identities=new Map();
+ for(const row of events||[]){
+   const raw=row?.raw||row,pcba=pcbaOf(row)||pcbaOf(raw);
+   const id=operatorId(row)||operatorId(raw),name=operatorName(row)||operatorName(raw);
+   if(!pcba||!id||!name||name===id)continue;
+   const key=pcba+'|'+id;
+   if(!identities.has(key))identities.set(key,new Set());
+   identities.get(key).add(name);
+ }
+ return (repairs||[]).map(repair=>{
+   const id=text(value(repair,'repair_user','Repair User')),pcba=pcbaOf(repair);
+   const direct=text(value(repair,'repair_user_name','Repair User Name','RepairUserName'));
+   const possible=identities.get(pcba+'|'+id);
+   const name=direct&&direct!==id?direct:possible?.size===1?[...possible][0]:null;
+   return {...repair,repair_technician_name:name||null};
+ });
+}
+
 const exactRepair=repairs=>(repairs||[]).find(repair=>repair?.association==='exact_occurrence')||null;
 function field(block,label){return [...(block?.querySelectorAll('div')||[])].find(div=>div.querySelector('small')?.textContent?.trim()===label)||null;}
 function patchRepairBlock(block,repair,result,currentPcba){
