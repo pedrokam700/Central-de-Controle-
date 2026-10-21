@@ -1,6 +1,6 @@
 import {normalizeCanonical} from './data/canonical.mjs';
 import {factoryWallMinute} from './data/history.mjs';
-import {matchesReadingPeriod} from './data/reading-period.mjs';
+import {readingPeriod as computeReadingPeriod} from './data/reading-period.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 
@@ -19,18 +19,26 @@ export function planLatestCapture(entries=[],line,scope=null){
    factoryWallMinute(e.period_start)&&(!scope?.end||factoryWallMinute(e.period_start)<scope.end)).sort(ordered);
  if(!rows.length)return {status:'none',candidates:[],latest:null};
  const latestPeriod=factoryWallMinute(rows[0].period_start);
- const candidates=rows.filter(e=>factoryWallMinute(e.period_start)===latestPeriod);
- const origins=[...new Set(candidates.map(e=>e.source_id))];
+ const seen=new Set();
+ const candidates=rows.filter(e=>factoryWallMinute(e.period_start)===latestPeriod).filter(e=>{
+   if(seen.has(e.source_id))return false;seen.add(e.source_id);return true;
+ });
+ const origins=[...seen];
  return {status:origins.length>1?'conflict':'available',candidates,latest:candidates[0]};
 }
 export function createLatestCapturePreview(root,store,history,controller){
  let line='',periodKey='',plan=null,selected='',payload=null,loading=false,error='',request=0,disposed=false;
- const context=()=>({line:store.context().line_id||store.preferredLine(),period:store.readingPeriod()});
+ const context=()=>({line:store.context().line_id||store.preferredLine(),
+   // Last historical evidence always stays separate from Today's live KPIs.
+   previousCutoff:computeReadingPeriod('today',{now:store.currentTime()}).start});
  async function load(nextLine,scope){
   const id=++request;loading=true;plan=null;selected='';payload=null;error='';render();
   try{const entries=await history.list(nextLine);if(disposed||request!==id)return;
    plan=planLatestCapture(entries,nextLine,scope);
-   if(plan.status==='available')await open(plan.latest,id);
+   const preferred=controller.preferredSource?.(nextLine);
+   const selectedEntry=plan.candidates.find(e=>e.source_id===preferred)||
+     (plan.status==='available'?plan.latest:null);
+   if(selectedEntry)await open(selectedEntry,id);
   }catch(e){if(!disposed&&request===id)error=e.message||'Erro ao carregar histórico';}
   finally{if(!disposed&&request===id){loading=false;render();}}
  }
@@ -50,9 +58,9 @@ export function createLatestCapturePreview(root,store,history,controller){
  function render(){
   if(!root||disposed)return;
   const c=context();
-  if(c.period?.mode!=='today'||store.read(c.line).snapshot){root.hidden=true;return;}root.hidden=false;
-  const key=JSON.stringify([c.line,c.period?.start,c.period?.end]);
-  if(key!==periodKey){periodKey=key;line=c.line;void load(c.line,c.period);return;}
+  root.hidden=false;
+  const key=JSON.stringify([c.line,c.previousCutoff]);
+  if(key!==periodKey){periodKey=key;line=c.line;void load(c.line,{end:c.previousCutoff});return;}
   const latest=payload,choices=plan?.candidates||[];
   const text=loading?t('Consultando última coleta comprovada…','Looking up last proven capture…'):
    error?t('Falha na leitura histórica: ','History read failed: ')+error:
@@ -63,7 +71,11 @@ export function createLatestCapturePreview(root,store,history,controller){
    '<h3>'+t('Última coleta disponível · histórico preservado','Latest available capture · saved history')+'</h3>'+
    '<p>'+t('Não é a coleta de Hoje. A virada das 07:00 não altera nem mistura o período da origem com o período atual.','This is not Today’s capture. The 07:00 rollover never mixes the source period with the current one.')+'</p>'+
    (text?'<p role="status">'+esc(text)+'</p>':'')+
-   (plan?.status==='conflict'?'<label>'+t('Origem comprovada','Proven source')+'<select data-last-capture-source><option value="">'+t('Escolher origem','Choose source')+'</option>'+choices.map(e=>'<option value="'+esc(identity(e))+'"'+(selected===identity(e)?' selected':'')+'>'+esc(e.source_id+' · '+formatFactoryDateTime(e.collected_at))+'</option>').join('')+'</select></label>':'')+
+   (plan?.status==='conflict'?'<label>'+t('Origem do histórico · trocar coleta','Historical source · switch capture')+
+      '<select data-last-capture-source aria-label="'+t('Trocar última coleta','Switch latest capture')+'"><option value="">'+
+      t('Escolha uma origem','Choose a source')+'</option>'+choices.map(e=>'<option value="'+esc(identity(e))+
+      '"'+(selected===identity(e)?' selected':'')+'>'+esc(e.source_id+' · '+formatFactoryDateTime(e.collected_at)+
+      ' · r'+(e.snapshot_revision??'—'))+'</option>').join('')+'</select></label>':'')+
    (latest?'<div data-last-capture-evidence><p><strong>'+t('Período original','Original period')+':</strong> '+esc(formatFactoryDateTime(entry.period_start))+' → '+esc(formatFactoryDateTime(entry.period_end))+
      ' · <strong>'+t('Coleta','Collected')+':</strong> '+esc(formatFactoryDateTime(entry.collected_at))+'</p>'+
      '<p>'+esc(entry.line_id)+' · '+t('Origem','Source')+' '+esc(entry.source_id)+' · Snapshot '+esc(entry.snapshot_id)+' / r'+esc(entry.snapshot_revision??latest.canonical.snapshot_revision)+'</p>'+
@@ -74,7 +86,10 @@ export function createLatestCapturePreview(root,store,history,controller){
    const target=choices.find(x=>identity(x)===e.target.value),id=++request;
    selected='';payload=null;loading=Boolean(target);render();
    if(!target)return;
-   try{await open(target,id);}catch(err){error=err.message;}
+   try{
+     controller.rememberSource?.(target.line_id,target.source_id,choices.map(e=>e.source_id));
+     await open(target,id);error='';
+   }catch(err){error=err.message;}
    finally{if(!disposed&&id===request){loading=false;render();}}
   });
   root.querySelector('[data-last-capture-open]')?.addEventListener('click',async()=>{
@@ -85,5 +100,5 @@ export function createLatestCapturePreview(root,store,history,controller){
    if(choices.some(x=>x.line_id===entry.line_id&&x.options.some(o=>o.source_id===entry.source_id)))await controller.chooseSource(entry.line_id,entry.source_id);
   });
  }
- return {render,clear(){disposed=true;request++;root?.replaceChildren();}};
+ return {render,reload(){if(disposed)return;const c=context();void load(c.line,{end:c.previousCutoff});},clear(){disposed=true;request++;root?.replaceChildren();}};
 }
