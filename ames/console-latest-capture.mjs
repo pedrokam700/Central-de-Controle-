@@ -2,6 +2,7 @@ import {normalizeCanonical} from './data/canonical.mjs';
 import {factoryWallMinute} from './data/history.mjs';
 import {readingPeriod as computeReadingPeriod} from './data/reading-period.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
+import {resolveHistorySource} from './data/history-source-choice.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
@@ -40,8 +41,14 @@ export function createLatestCapturePreview(root,store,history,controller){
   try{const entries=await history.list(nextLine);if(disposed||request!==id)return;
    plan=planLatestCapture(entries,nextLine,scope);
    const preferred=controller.preferredSource?.(nextLine);
-   const selectedEntry=plan.candidates.find(e=>e.source_id===preferred)||
-     (plan.status==='available'?plan.latest:null);
+   const agent=store.agent();
+   const localAgentSource=agent.status==='connected'
+     ?agent.capabilities?.source_id||[...new Set(store.localCanonical().map(p=>p.source_id).filter(Boolean))].at(0)
+     :null;
+   const resolved=resolveHistorySource(plan.candidates,{
+     preferredSource:preferred,agentSource:localAgentSource
+   });
+   const selectedEntry=plan.candidates.find(e=>e.source_id===resolved.source_id)||null;
    if(selectedEntry)await open(selectedEntry,id);
   }catch(e){if(!disposed&&request===id)error=e.message||'Erro ao carregar histórico';}
   finally{if(!disposed&&request===id){loading=false;render();}}
