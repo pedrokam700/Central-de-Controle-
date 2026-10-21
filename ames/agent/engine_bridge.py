@@ -745,6 +745,19 @@ def build_trace_insights(engine_dir: Path, integrated_payload: Dict[str, Any], l
             "Relação desta ocorrência","Motivo da relação"
         ]}
 
+    # Read-only evidence behind TIPOS_COMPONENTE, including non-reused items.
+    # Keep physical rows; the UI deduplicates SN + type, never kit/part number.
+    component_items = []
+    for r in views.get("materiais", []):
+        component_items.append({
+            "Linha": r.get("Linha"), "Modelo": r.get("Modelo"),
+            "PCBA atual": r.get("PCBA da falha"), "Material SN": r.get("Material SN"),
+            "Tipo material": rel16._material_name(r.get("Tipo material")),
+            "Defect Code atual": r.get("Defect Code"), "Defect Time atual": r.get("Defect Time"),
+            "Reusos anteriores material": r.get("Reusos anteriores a falha"),
+            "PCBAs desvinculadas": r.get("PCBAs antigas"),
+        })
+
     # De-duplicate material summary rows by current context + Material SN.
     material_unique=[]; seen=set()
     for r in material_rows:
@@ -824,6 +837,7 @@ def build_trace_insights(engine_dir: Path, integrated_payload: Dict[str, Any], l
             "correlation_same_family":[corr_row(r) for r in corr_family],
             "pcba_analysis":[pcba_row(r) for r in pcba_rows],
             "material_analysis":[mat_row(r) for r in material_unique],
+            "component_type_items":component_items,
             "material_history":[corr_row(r) for r in hist_material_rows],
             "pcba_history":hist_pcba_rows,
         }
