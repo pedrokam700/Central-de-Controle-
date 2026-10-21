@@ -16,7 +16,7 @@ export function createOnboardingView(root,{
   onPair=()=>{},
   loadRelease=signal=>discoverOfficialRelease(signal)
 }={}){
-  let mode=savedIntegrationMode(),release,error='',started=false,generation=0,controller,volatile=false;
+  let mode=savedIntegrationMode(),release,error='',started=false,generation=0,controller,volatile=false,pageBuildStatus='unverified';
   const choiceLabel=()=>mode==='collector'?t('Coletar neste PC','Collect on this PC'):mode==='viewer'?t('Consultar dados da equipe','View shared data'):t('Escolha como usar','Choose how to use');
   function collectionPanel(){
     const agent=getAgent(),state=installationDetection(agent,isPaired());
@@ -81,6 +81,10 @@ export function createOnboardingView(root,{
       '<button type="button" class="button secondary" data-integration-mode="viewer" aria-pressed="'+String(mode==='viewer')+'">'+t('Este PC só consulta dados','This PC only views data')+'</button></div>'+
       '<p class="mes-context" role="status">'+t('Modo escolhido','Selected mode')+': '+esc(choiceLabel())+
       (volatile?' · '+t('Preferência não salva neste navegador','Preference not saved in this browser'):'')+'</p>'+
+      '<p class="mes-context" role="status" data-official-build-status>'+(
+        pageBuildStatus==='matching'?t('Página oficial e GitHub Release no mesmo SHA','Official site and GitHub Release match'):
+        pageBuildStatus==='mismatch'?t('Atenção: esta página NÃO corresponde à última release oficial do GitHub. Não presuma que os dados e o agente foram atualizados.','Warning: this site does NOT match the latest official GitHub release. Do not assume the app or agent is updated.'):
+        t('Versão online ainda não comprovada contra a última release','Online version not yet verified against latest release'))+'</p>'+
       (mode==='viewer'?viewerPanel():collectionPanel())+
       '<p class="mes-context">'+t('O MES permanece offline/local. Login e autorizações nunca são sincronizados entre PCs.','MES stays local/offline. Login credentials and authorizations are never synchronized across PCs.')+'</p></section>';
   }
@@ -90,6 +94,17 @@ export function createOnboardingView(root,{
     started=true;const token=generation;controller=new AbortController();
     try{release=readRelease(await loadRelease(controller.signal));error='';}
     catch{error=t('Manifesto oficial indisponível ou inválido. Nenhum ZIP será sugerido sem verificação.','Official manifest unavailable or invalid. No unverified ZIP will be offered.');}
+    if(token!==generation)return;
+    pageBuildStatus='unverified';
+    if(globalThis.location?.origin==='https://central-cora-v2.vercel.app' && release?.candidate_status==='github_latest_release_verified'){
+      try{
+        const response=await fetch('/release-build.json',{signal:controller.signal,cache:'no-store',credentials:'omit'});
+        const published=response.ok?await response.json():null;
+        if(typeof published?.sha==='string' && /^[a-f0-9]{40}$/.test(published.sha)){
+          pageBuildStatus=published.sha===release.validated_sha?'matching':'mismatch';
+        }
+      }catch{pageBuildStatus='unverified';}
+    }
     if(token===generation)paint();
   }
   root?.addEventListener('click',event=>{
@@ -101,5 +116,5 @@ export function createOnboardingView(root,{
     try{localStorage.setItem(INTEGRATION_MODE_KEY,mode);volatile=false;}catch{volatile=true;}
     paint();onChoice(mode);
   });
-  return Object.freeze({render,clear(){generation++;controller?.abort();started=false;release=null;error='';root?.replaceChildren();}});
+  return Object.freeze({render,clear(){generation++;controller?.abort();started=false;release=null;error='';pageBuildStatus='unverified';root?.replaceChildren();}});
 }
