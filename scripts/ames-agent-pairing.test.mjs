@@ -72,7 +72,7 @@ test('public local agent identification sends no token and never probes MES or l
  const requests=[],store=fakeStore();
  const fetcher=async(uri,opt)=>{
    requests.push({uri,opt});return {ok:true,json:async()=>({
-     ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:123,workstation_pairing_flow:2,
+     ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:123,workstation_pairing_flow:3,
      workstation_token:'MUST_NOT_LEAK',source_id:'MUST_NOT_LEAK'
    })};
  };
@@ -97,7 +97,8 @@ test('unknown /ready or browser loopback denial is not falsely classified as mis
  }
 });
 
-test('old local agent must be identified as outdated, not incorrectly promised a working HTTPS pair',async()=>{
+test('old flow-2 Vercel agent must be identified as outdated, not incorrectly promised a working HTTPS pair',async()=>{
+ // Flow 2 still targets old Vercel origin; GitHub Pages requires flow 3.
  const store=fakeStore();
  const client=createAgentClient(store,{fetcher:async()=>({ok:true,json:async()=>({
   ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:345
