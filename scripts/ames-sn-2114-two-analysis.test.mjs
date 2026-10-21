@@ -87,3 +87,16 @@ test('explicit current without Hist Seq may inherit only the exactly matching la
  assert.equal(unsafe.current.hist_seq,null,'do not guess sequence from a mismatched raw row');
  assert.equal(alertOf(unsafe),undefined);
 });
+
+test('2114 raw rows without PCBA inherit the verified container, not a different board',()=>{
+ const old={...history(0,clock)},current={...history(1,clock)};
+ delete old.pcba_sn;delete current.pcba_sn;
+ const data=mk(current,old);
+ const model=buildLiveSnForensics(data);
+ assert.equal(model.current.pcba_sn,pcba);
+ assert.equal(model.own_history.length,1);
+ assert(alertOf(model),'both scoped rows are from same proven PCBA container');
+ data.trace_2114.pcbas[0].result.rows[0].pcba_sn='OTHER-BOARD';
+ const safe=buildLiveSnForensics(data);
+ assert.equal(safe.own_history.length,0,'explicit cross-board row must be ignored');
+});
