@@ -52,6 +52,12 @@ function compactEvidence(alert,locale){
       // duplicated current card for each physical component history.
       if(alert.kind?.startsWith('PCBA_'))rows.push(proof2114(t(locale,'Falha atual','Current failure'),proof.current_failure,locale));
     }
+    if(alert.kind==='PCBA_SAME_FAILURE'&&failure.defect_type&&proof.current_failure?.defect_type&&
+       String(failure.defect_type).trim().toLowerCase()!==String(proof.current_failure.defect_type).trim().toLowerCase()){
+      rows.push(`<p class="notice warn">${esc(t(locale,
+      'Tipos de análise diferentes na 2114: comparar os comentários e resultados dos ATs; isso não demonstra erro no diagnóstico anterior.',
+      'Different 2114 analysis types: compare technician comments/results; this does not prove the earlier diagnosis was wrong.'))}</p>`);
+    }
     if(proof.order_basis==='hist_seq_same_clock'||proof.order_basis==='hist_seq_only'){
       rows.push(`<p class="notice warn">${esc(t(locale,
        'A sequência Defect Hist Seq distingue os dois registros 2114; os horários não individualizam a intervenção do AT.',
