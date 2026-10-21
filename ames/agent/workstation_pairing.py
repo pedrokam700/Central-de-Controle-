@@ -15,7 +15,7 @@ import time
 from urllib.parse import quote, parse_qs
 
 PAIR_PATH = "/workstation/parear"
-OFFICIAL_CENTRAL = "https://central-cora-v2.vercel.app/Central-de-Controle-/"
+OFFICIAL_CENTRAL = "https://pedrokam700.github.io/Central-de-Controle/"
 TTL_SECONDS = 300
 MAX_NONCES = 24
 
