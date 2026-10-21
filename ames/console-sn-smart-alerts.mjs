@@ -12,7 +12,7 @@ const itemIdentity=alert=>`${text(alert?.item_type)}|${text(alert?.item_sn)}`;
 function distinctAlerts(alerts=[]){
   const seen=new Set();
   return alerts.filter(alert=>{
-    const key=[alert.kind,itemIdentity(alert),text(alert.pcba_sn),text(alert.prior_defect_code),text(alert.prior_defect_time)].join('|');
+    const key=[alert.kind,itemIdentity(alert),text(alert.pcba_sn),text(alert.prior_defect_code),text(alert.prior_defect_time),text(alert.prior_hist_seq)].join('|');
     if(seen.has(key))return false;seen.add(key);return true;
   });
 }
