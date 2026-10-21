@@ -71,6 +71,7 @@ const maintenanceCheckLabel = key => ({
 export function createPreparationView(root, store, client, { verify=async()=>client.connect({quiet:true}) }={}) {
   let checking = false, checked = false, expanded = false, disposed = false, onboarding;
   let backupBusy = false, maintenanceMessage = '';
+  let autoState = null, autoBusy = false, autoChecked = false, autoMessage = '';
   let map3012Busy = false, map3012Message = '';
   let mode = savedIntegrationMode(), last = '', viewerGuideOpen=false;
   function choose(value) {
@@ -84,6 +85,27 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     checking = true; render();
     try { await client.connect({quiet:true}); } catch { /* unavailability is a normal viewer state */ }
     finally { checked = true; checking = false; if (!disposed) { last = ''; render(); } }
+  }
+  async function readAutostart() {
+    if(autoBusy || disposed || store.agent().status !== 'connected')return;
+    autoBusy=true;autoChecked=true;
+    try{autoState=await client.auxiliary('autostartStatus');autoMessage='';}
+    catch{autoState=null;autoMessage=t('Agente ainda não suporta o controle de início automático.', 'Agent does not yet support automatic startup control.');}
+    finally{autoBusy=false;if(!disposed){last='';render();}}
+  }
+  async function toggleAutostart() {
+    if(autoBusy || disposed || store.agent().status !== 'connected' || autoState?.supported!==true || autoState?.conflict)return;
+    const enable=!autoState.enabled;
+    const question=enable?t('Ativar o agente ao entrar no Windows? Não inicia MES ou coleta.','Start agent after Windows login? Does not run or collect MES.'):t('Desativar o início automático deste PC?','Disable auto-start on this PC?');
+    if(!globalThis.confirm?.(question))return;
+    autoBusy=true;autoMessage='';last='';render();
+    try{
+      const result=await client.auxiliary('autostartSet',{enabled:enable});
+      if(result?.ok!==true || result.enabled!==enable)throw Error('Not confirmed');
+      autoState=result;
+      autoMessage=enable?t('Registrado para este usuário Windows. Confirme após reiniciar.','Registered for this Windows user. Verify after restart.'):t('Desativado. O agente atual continua rodando.','Disabled. The current agent continues running.');
+    }catch{autoMessage=t('Não foi possível confirmar a alteração.','Could not confirm the change.');}
+    finally{autoBusy=false;autoChecked=true;if(!disposed){last='';render();}}
   }
   async function backupNow() {
     if (backupBusy || disposed || store.agent().status !== 'connected') return;
@@ -171,11 +193,24 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     const backupSummary = backup
       ? `${esc(backup.created_at || t('data não informada', 'date not reported'))} · ${esc(formatBytes(backup.bytes))}${backup.reason ? ` · ${esc(backup.reason)}` : ''}`
       : t('Nenhum ponto criado nesta sessão foi reportado à Central.', 'No recovery point created in this session has been reported to Work Center.');
+    const autostartPanel=connected
+      ? '<section class="ames-setup-status" data-agent-autostart><b>'+t('Início automático do agente','Agent automatic startup')+'</b><p>'+
+        (autoState?.supported===true?(autoState.enabled?t('Configurado neste Windows','Configured in this Windows user'):t('Desativado','Disabled')):
+          autoBusy?t('Verificando...','Checking...'):t('Não verificado neste agente','Unverified on this agent'))+'</p>'+
+        '<div class="mes-pagination"><button type="button" class="button secondary" data-autostart-toggle '+
+        (autoBusy||autoState?.supported!==true||autoState?.conflict||(!autoState.enabled&&!autoState.installed)?'disabled':'')+'>'+
+        (autoState?.enabled?t('Desativar início automático','Disable auto-start'):t('Ativar início automático','Enable auto-start'))+'</button>'+
+        '<button type="button" class="button secondary" data-autostart-check '+(autoBusy?'disabled':'')+'>'+t('Verificar','Check')+'</button></div>'+
+        '<small>'+t('Não abre A-MES, não faz login e não inicia coleta. Um agente antigo deve ser atualizado com backup.','Does not open MES, log in or collect. An old agent requires a backup-safe update.')+'</small>'+
+        (autoState?.conflict?'<p role="alert">'+t('Conflito com outro registro de inicialização','Conflicting startup registration')+'</p>':'')+
+        (autoMessage?'<p role="status">'+esc(autoMessage)+'</p>':'')+'</section>'
+      : '';
     root.hidden=!visible;
-    const key=JSON.stringify([checking,checked,expanded,viewerGuideOpen,mode,connected,pairing,connectionError,detector,shared,checks,maintenance,backupBusy,maintenanceMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
+    const key=JSON.stringify([checking,checked,expanded,viewerGuideOpen,mode,connected,pairing,connectionError,detector,shared,checks,maintenance,backupBusy,maintenanceMessage,autoState,autoBusy,autoChecked,autoMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
     if(key===last)return;last=key;
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
+      ${autostartPanel}
       ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}${summary}
       ${pairing?`<button type="button" class="button secondary" data-pair-official>${t('Abrir HTTPS oficial pareado neste computador','Open paired official HTTPS on this computer')}</button><p>${t('Autoriza somente o agente deste computador na nova aba oficial. Não compartilhe a URL de pareamento. O computador sem MES precisa apenas dos dados da equipe.','Authorizes only this computer’s agent in the new official tab. Do not share the pairing URL. A computer without MES only needs team data.')}</p>`:''}
       ${visible ? `<p>Consulte os dados compartilhados ou prepare este computador para coleta. O login A-MES permanece manual.</p>
@@ -191,6 +226,10 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     root.querySelector('[data-preflight]')?.addEventListener('click', check);
     root.querySelector('[data-pair-official]')?.addEventListener('click',()=>client.openOfficial());
     root.querySelector('[data-workstation-backup]')?.addEventListener('click', backupNow);
+    root.querySelector('[data-autostart-check]')?.addEventListener('click', readAutostart);
+    root.querySelector('[data-autostart-toggle]')?.addEventListener('click', toggleAutostart);
+    if(connected && !autoChecked && !autoBusy)queueMicrotask(readAutostart);
+    if(!connected){autoChecked=false;autoState=null;}
     root.querySelector('[data-map-3012]')?.addEventListener('click', map3012Now);
     onboarding?.clear(); onboarding = null;
     if (expanded || viewerGuideOpen) {
