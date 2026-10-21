@@ -1,4 +1,6 @@
 name: Publish Official A-MES Multi-PC Field Release
+# v0.5.30: a reviewed workflow-file push triggers one immutable exact-SHA release.
+# The GitHub Release and its 5/5 CI evidence, never the hosting provider, are authoritative.
 on:
   push:
     branches: [main]
