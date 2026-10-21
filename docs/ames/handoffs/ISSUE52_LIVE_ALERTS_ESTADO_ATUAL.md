@@ -1,0 +1,26 @@
+# ISSUE #52 — CONTINUIDADE E CHECKPOINT B1 (21/10/2026)
+
+GitHub: pedrokam700/Central-de-Controle-. Baseline main bd59e9fd0dbecfe8ff81d333556462ee0bfe7c55; release oficial ames-v0.5.31-multipc-20261021. Branch work/ames-live-alerts-component-matrix-20261021. Issue https://github.com/pedrokam700/Central-de-Controle-/issues/52.
+
+## Fonte real e cuidado com o ZIP antigo
+Prints 21/10 da fábrica: a antiga tela de rastreabilidade mostrava 3074 25%, Linha 2 2/8, evento de PCBA por componente 11/11 e histórico de eventos. A consulta SN mostrava duas ocorrências 2114 da mesma falha de câmera frontal, primeira Y e atual N, com Phone Disassembly e MainBoard. ISSO NÃO PROVA ERRO DO PRIMEIRO AT OU DOIS REPAROS. Y/N é vínculo da ocorrência; Manual/Automatic descreve registro de falha. Usar 3012 e 3022 para associação de reparos, técnico e comentários reais.
+ZIP legado enviado CENTRAL_AMES_FACTORY_CLEAN_V3_20261013(4).zip contém ames-offline-v2.js, core/correlacao_falhas.py e um SQLite local + backup. NÃO subir ZIP ou banco ao GitHub. Comparar apenas código/contratos para migrar comportamento para a Central integrada, não criar app paralela.
+
+## B1: checkpoint de código já salvo (ainda não homologado)
+Novo ames/data/job-live-events.mjs limita a 40 e filtra eventos dos jobs, preservando PCBA, item_type, item_sn, linha, status e progresso. ames/agent-client.mjs repassa job.live_events após polling. ames/collection-status.mjs exibe últimos 12 eventos 3074/2114/3022 com linha, PCBA, componente e contagem do próprio job, mantendo barras já existentes. ames/console-theme.css dá layout mobile. sw.js inclui import no cache offline e muda revisão. scripts/ames-live-trace-feed.test.mjs adiciona contratos. Workflow Operational History preparado para branch e novo teste.
+Primeiro CI acusou 'not precached: ames/data/job-live-events.mjs'; corrigido no commit 9820210275b058fc55c444dca09f4e03cb6d76a8. Precisamos ver o CI mais recente. Não declarar B1 GREEN nem fazer merge sem revisão completa.
+
+## B2: matriz por tipo físico (PENDENTE)
+Motor ames/agent/agent.py já calcula trace_insights(...).component_types e gera Excel TIPOS_COMPONENTE com reutilizados, 2º/3º uso, mesma falha e mesma família. A UI legacy ames-offline-v2.js tinha a matriz por ABoard, BOX, BatteryCover, CBoard, câmeras, Screen, TopCover e UBoard. Trazer à view atual Dashboards de reuso, com origem/snapshot/cobertura e drilldowns. Contar Material SN físico único, evitando duplicação causada por kits/múltiplos vínculos. Cobertura indeterminada não é zero.
+
+## B3: taxonomia controlada (PENDENTE)
+Classificar EXATA, SIMILAR por subtipo ou família e OUTRA/INDETERMINADA. Exemplos câmera/cameras; câmera frontal/front camera; P-sensor e light sensor relacionados mas não idênticos; frontal não igual traseira. Preservar descrição MES e código originais, expor justificativa e versão do dicionário. Reaproveitar factory-engine/core/correlacao_falhas.py e data/sn-forensics.mjs, sem duplicar regras contraditórias. Testar plural, sinônimos, descrição ambígua e PT/EN.
+
+## B4: alertas técnicos com prova (PENDENTE)
+Diagnosticar por que duas falhas 2114 do mesmo código ficaram sem alerta na Consulta por SN, sem afrouxar validações temporais. ALTO quando duas ocorrências distintas mesmas falha/mesma PCBA e sequência comprovada, mesmo se reparo ainda sem prova — rotular como recorrência 2114 e não reparo executado. Antes do segundo AT: mostrar última análise anterior + comentário/usuário quando comprovados; atual pendente. Depois: dois registros técnicos se ambos vinculados, com comentários completos, possível divergência a investigar; nunca culpar AT sem evidência. Não inferir nomes de IDs BRM. Separar associação candidata 3012 de reparo provado por ocorrência exata. Para peças 3074/2114: alertas agregados por Material SN físico único e PCBA antiga, N com mesma falha, N similar e N outras, comentários/AT antigos. ALTO=mesma falha; MÉDIO=mesma família ou vários históricos diferentes (limiar proposto >=3 históricos anteriores únicos, revisar). A severidade é prioridade de investigação, separada da confiança da evidência.
+
+## B5: validar/homologar (PENDENTE)
+Fixtures 2114 Y→N da mesma falha, Defect Hist Seq/Time, antes/depois segundo AT, 3012 candidato, comentário técnico integral e operador comprovado, material físico em kit, tempo ambíguo, origem divergente, sem 3022, 07:00, offline, PT/EN, mobile. Gates exatos 5/5, sem mexer em banco do posto. Homologação física posterior e explícita.
+
+## Regras de continuidade
+Uma PR draft para Issue #52; não retomar PR23 nem refazer PRs 47–51. Salvar commit/CI/comentário na issue e atualizar este arquivo APÓS CADA bloco para não perder progresso no Work. Nunca anunciar publicação sem SHA e Release GitHub. Main e Releases do GitHub são únicos oficiais, hospedagem entrega UI.
