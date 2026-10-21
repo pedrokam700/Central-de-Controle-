@@ -28,9 +28,13 @@ export function planLatestCapture(entries=[],line,scope=null){
 }
 export function createLatestCapturePreview(root,store,history,controller){
  let line='',periodKey='',plan=null,selected='',payload=null,loading=false,error='',request=0,disposed=false;
- const context=()=>({line:store.context().line_id||store.preferredLine(),
-   // Last historical evidence always stays separate from Today's live KPIs.
-   previousCutoff:computeReadingPeriod('today',{now:store.currentTime()}).start});
+ const context=()=>{
+   const line=store.context().line_id||store.preferredLine();
+   const live=store.readingPeriod()?.mode==='today'&&!!store.read(line).snapshot;
+   return {line, // If today is empty/conflicted, still expose today's SAVED capture
+     // separately from the empty live KPI, with its original period and origin.
+     previousCutoff:live?computeReadingPeriod('today',{now:store.currentTime()}).start:null};
+ };
  async function load(nextLine,scope){
   const id=++request;loading=true;plan=null;selected='';payload=null;error='';render();
   try{const entries=await history.list(nextLine);if(disposed||request!==id)return;
@@ -69,7 +73,7 @@ export function createLatestCapturePreview(root,store,history,controller){
   const entry=latest?.entry,summary=latest?.canonical.summary||{};
   root.innerHTML='<section class="mes-context-panel" data-last-capture-panel>'+
    '<h3>'+t('Última coleta disponível · histórico preservado','Latest available capture · saved history')+'</h3>'+
-   '<p>'+t('Não é a coleta de Hoje. A virada das 07:00 não altera nem mistura o período da origem com o período atual.','This is not Today’s capture. The 07:00 rollover never mixes the source period with the current one.')+'</p>'+
+   '<p>'+t('Revisão salva identificada pelo período e origem originais. Pode ser de hoje ou de um dia anterior; nunca substitui o FPY atual automaticamente.','Saved revision identified by its original period and origin. It may be today or a previous day; never silently replaces live FPY.')+'</p>'+
    (text?'<p role="status">'+esc(text)+'</p>':'')+
    (plan?.status==='conflict'?'<label>'+t('Origem do histórico · trocar coleta','Historical source · switch capture')+
       '<select data-last-capture-source aria-label="'+t('Trocar última coleta','Switch latest capture')+'"><option value="">'+
