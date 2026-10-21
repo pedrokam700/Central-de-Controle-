@@ -9,7 +9,7 @@ test('approved public GitHub CLEAN is SHA-bound and safe for new Windows compute
   const m=readRelease({...release,password:'secret',cookies:'secret',endpoint:'invented'});
   assert.equal(m.version,'0.5.30');
   assert.equal(m.package_available,true);
-  assert.equal(m.validated_sha,'44d0b326e7cfc1979c2a67f825c563e4bc891976');
+  assert.equal(m.validated_sha,'44d0b326a18b8ee0cc52768db15f547ea0e3cd96');
   assert.equal(m.sha256,'65e856c8fc14e178abca4bbdcdf3d92e7448bbd4fc779894d97d501e73b4113a');
   assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.30-multipc-20261021/AMES_Central_CLEAN_44d0b326.zip');
   assert.equal(m.local_runtime.agent_health_url,'http://127.0.0.1:8765/api/v1/health');
