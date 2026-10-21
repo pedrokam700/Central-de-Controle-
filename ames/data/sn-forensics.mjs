@@ -11,6 +11,22 @@ const defectTime=row=>value(row,'defect_time','Defect Time','Defect Time antigo'
 const histSeq=row=>{const n=Number(value(row,'hist_seq','Defect Hist Seq'));return Number.isFinite(n)?n:-1;};
 const latestHistory=rows=>[...(rows||[])].sort((a,b)=>histSeq(b)-histSeq(a)||(instant(defectTime(b))??-Infinity)-(instant(defectTime(a))??-Infinity))[0]||null;
 const sameHistory=(a,b)=>Boolean(a&&b&&histSeq(a)===histSeq(b)&&same(defectCode(a),defectCode(b))&&same(defectTime(a),defectTime(b)));
+export function provenPreviousFailures(rows=[],current=null){
+ if(!current)return {previous:[],uncertain:(rows||[]).length};
+ const currTime=instant(defectTime(current)),currSeq=histSeq(current),seen=new Set();
+ const previous=[];let uncertain=0;
+ for(const row of rows||[]){
+  const key=JSON.stringify([text(pcbaOf(row)),text(defectCode(row)),text(defectTime(row)),histSeq(row)]);
+  if(seen.has(key))continue;seen.add(key);
+  if(sameHistory(row,current)||
+     (same(pcbaOf(row),pcbaOf(current))&&same(defectCode(row),defectCode(current))&&sameInstant(defectTime(row),defectTime(current))))continue;
+  const when=instant(defectTime(row)),sequence=histSeq(row);
+  const older=currTime!==null&&when!==null&&when<currTime||
+    currSeq>=0&&sequence>=0&&sequence<currSeq&&(currTime===null||when===null||when<currTime);
+  if(older)previous.push(row);else uncertain++;
+ }
+ return {previous,uncertain};
+}
 function raw2114ByPcba(trace2114,queryPcba=''){
   const map=new Map(),add=(pcba,row)=>{const key=text(pcba||pcbaOf(row)||queryPcba);if(!key||!row)return;const rows=map.get(key)||[];rows.push(row);map.set(key,rows);};
   for(const entry of trace2114?.pcbas||[]){if(entry?.status&&text(entry.status).toUpperCase()!=='COMPLETE')continue;for(const row of entry?.result?.rows||[])add(entry?.pcba_sn,row);}
@@ -228,7 +244,8 @@ export function buildLiveSnForensics(result={}){
   const explicitCurrent=trace2114?.current_failure||null,rawCurrent=latestHistory(queryRows),current=failureEntry(explicitCurrent||rawCurrent,{pcba:queryPcba,repairs,process,source:explicitCurrent?'2114':'2114-raw'});
   let ownRows=Array.isArray(trace2114?.previous_failures)?trace2114.previous_failures:[];
   if(!ownRows.length&&queryRows.length>1)ownRows=queryRows.filter(row=>!sameHistory(row,rawCurrent));
-  const ownHistory=ownRows.map(row=>failureEntry(row,{pcba:queryPcba,repairs,process,source:Array.isArray(trace2114?.previous_failures)&&trace2114.previous_failures.includes(row)?'2114':'2114-raw'})).filter(Boolean);
+  const classified=provenPreviousFailures(ownRows,explicitCurrent||rawCurrent);
+  const ownHistory=classified.previous.map(row=>failureEntry(row,{pcba:queryPcba,repairs,process,source:Array.isArray(trace2114?.previous_failures)&&trace2114.previous_failures.includes(row)?'2114':'2114-raw'})).filter(Boolean);
   // A mounting scope includes every selected physical component, not just
   // those already identified as reused. Older offline fixtures may provide
   // reused_components only; do not accidentally restore historical broad lists
@@ -262,7 +279,7 @@ export function buildLiveSnForensics(result={}){
     '3012':live3012State(result,trace3012),
     '3028':result.local_snapshot?SOURCE_STATE.CACHED:SOURCE_STATE.NOT_COLLECTED,
   };
-  const model={material_selection:trace3074?.material_selection||null,process_contexts:result.local_snapshot?.process_contexts||[],query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
+  const model={material_selection:trace3074?.material_selection||null,process_contexts:result.local_snapshot?.process_contexts||[],query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,uncertain_previous_count:classified.uncertain,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
   enrichFamilies(model);model.alerts=buildCorrelationAlerts(model);return model;
 }
 

@@ -81,7 +81,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.PL
 const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 try{
- await page.goto('http://127.0.0.1:'+server.address().port+'/Central-de-Controle-/');await page.waitForFunction(()=>!!window.qa);
+ await page.goto('http://127.0.0.1:'+server.address().port+'/Central-de-Controle-/',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>!!window.qa);
  await page.locator('[data-read-period=previous]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.snapshot_id),'FRIDAY-SNAPSHOT');
@@ -149,10 +149,9 @@ try{
  // D: stored trends use history transport only, and retain gaps/revision evidence.
  await page.locator('[data-console-view=top3]').click();
  const trends=page.locator('[data-console-pane=top3] [data-history-trends]');
- assert.equal(await trends.locator('[data-history-day]').count(),0,'navigation alone does not read history payloads');
- await trends.locator('form button[type=submit]').click();
  await trends.locator('[data-history-day]').first().waitFor();
- assert.equal(await trends.locator('[data-history-day]').count(),7);
+ assert.equal(await trends.locator('[data-history-day]').count(),30,'stored trends automatically load 30 days in Top 3 without running MES');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'automatic archived reads must not start collection');
  assert.equal(await trends.locator('[data-history-day-open]').count(),1);
  assert.match(await trends.locator('[data-week-scope-warning]').innerText(),/CPH ou origem/,'mixed stored 3028 CPHs require a visible weekly comparability warning');
  assert.match(await trends.locator('[data-history-day="2026-10-15"]').innerText(),/Não coletado/,'custom window is not daily production');
@@ -471,10 +470,9 @@ try{
  await page.locator('[data-reading-reload]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.source_choices?.length===1);
  assert.equal(await page.locator('[data-history-source-picker]').count(),1);
- assert.equal(await page.locator('[data-history-source-select] option').count(),2);
+ assert.equal(await page.locator('[data-history-source-select] option').count(),3,'explicit placeholder plus two source identities');
  assert.equal(await page.evaluate(()=>qa.store.agent().period_read.status),'partial');
  await page.locator('[data-history-source-select]').selectOption('preserved-workstation');
- await page.locator('[data-history-source-apply]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.source_id),'preserved-workstation');
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');

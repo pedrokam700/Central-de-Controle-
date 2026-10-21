@@ -22,6 +22,7 @@ import performance_indexes
 import source_capture
 import sn_lookup_context
 import workstation_pairing
+import workstation_autostart
 
 HARDENING_STATE = hardening.install(entry.a, entry.canonical)
 PERFORMANCE_INDEX_STATE = performance_indexes.install(entry.a.STORE)
@@ -266,6 +267,12 @@ class HardenedHandler(entry.Handler):
                 }
             )
             return
+        if path == "/api/v1/workstation/autostart":
+            try:
+                self._send(workstation_autostart.status())
+            except Exception as exc:
+                self._send({"ok": False, "error": type(exc).__name__}, 503)
+            return
         if path == "/api/v1/hardening/health":
             try:
                 self._send(
@@ -317,6 +324,17 @@ class HardenedHandler(entry.Handler):
             return
         if not self._authorized(path):
             self._reject_unauthorized()
+            return
+        if path == "/api/v1/workstation/autostart":
+            try:
+                body = self._body()
+                if not isinstance(body, dict) or set(body) != {"enabled"} or type(body["enabled"]) is not bool:
+                    raise ValueError("Only enabled=true/false is allowed")
+                self._send(workstation_autostart.configure(body["enabled"]))
+            except (ValueError, OSError) as exc:
+                self._send({"ok": False, "error": type(exc).__name__, "message": str(exc)}, 400)
+            except Exception as exc:
+                self._send({"ok": False, "error": type(exc).__name__}, 500)
             return
         if path == "/api/v1/config":
             try:

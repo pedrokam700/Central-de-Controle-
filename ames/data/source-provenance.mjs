@@ -69,7 +69,9 @@ export function sourceStateFromTrace(trace,{recordCount=null,countProven=false,c
   if(!trace)return SOURCE_STATE.NOT_COLLECTED;
   const raw=String(trace.status??trace.state??'').trim().toLowerCase();
   const hasError=Boolean(trace.error||trace.reason);
-  if(hasError||ERROR_RAW.has(raw))return SOURCE_STATE.ERROR;
+  // A failed session may still have real persisted rows. Those are partial
+  // evidence, not a successful extraction and not zero.
+  if(hasError||ERROR_RAW.has(raw))return countProven&&Number(recordCount)>0?SOURCE_STATE.PARTIAL:SOURCE_STATE.ERROR;
   if(raw==='partial')return SOURCE_STATE.PARTIAL;
   if(UNAVAILABLE_RAW.has(raw))return SOURCE_STATE.UNAVAILABLE;
   if(raw==='cached'||raw==='cache'||raw==='local_cache')return SOURCE_STATE.CACHED;

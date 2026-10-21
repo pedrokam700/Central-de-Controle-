@@ -2,7 +2,7 @@
 import re
 
 ID_FIELDS = ('Tran User Id', 'Transaction User Id', 'Operator ID', 'Employee ID', 'User Id')
-NAME_FIELDS = ('Tran User Name', 'Transaction User Name', 'Operator Name', 'Employee Name', 'User Name')
+NAME_FIELDS = ('Tran User Name', 'Transaction User Name', 'Operator Name', 'Employee Name', 'User Name', 'Tran User Desc', 'User Full Name', 'tran_user_name')
 
 def _field(raw, aliases):
     normalize = lambda s: re.sub(r'[^a-z0-9]', '', str(s).lower())

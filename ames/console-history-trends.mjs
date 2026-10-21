@@ -7,31 +7,37 @@ const number=x=>x===null||x===undefined?'—':Number.isInteger(x)?String(x):x.to
 const statuses=()=>({complete:t('Completo','Complete'),partial:t('Parcial','Partial'),not_collected:t('Não coletado','Not collected'),source_conflict:t('Conflito de origem','Source conflict'),unavailable:t('Indisponível','Unavailable')});
 export function withHistoricalTrends(view,root,store,history){
  if(!history)return view;
- const reader=createHistoryTrendReader(history);let host,scope='',result=null,error='',busy=false,generation=0,days=7,source='',filters={},metric='fpy',paintKey='';
+ const reader=createHistoryTrendReader(history);let host,scope='',result=null,error='',busy=false,generation=0,days=root?.dataset?.consolePane==='reuse'?93:30,source='',filters={},metric='fpy',paintKey='',autoStarted=false;
  const context=()=>{const line=store.context?.().line_id||store.preferredLine(),snapshot=store.read(line).snapshot;
   const end=factoryWallMinute(store.readingPeriod?.().end),start=factoryWallMinute(store.readingPeriod?.().start);
   return {line,endDate:end?(end.endsWith('T07:00')?shiftDay(end.slice(0,10),-1):end.slice(0,10)):start?.slice(0,10),snapshot};};
  function renderPanel(){
   const c=context(),key=JSON.stringify([c.line,c.endDate,c.snapshot?.source_id]);
-  if(key!==scope){scope=key;generation++;result=null;error='';busy=false;source=c.snapshot?.source_id||'';filters={};}
+  if(key!==scope){scope=key;generation++;result=null;error='';busy=false;autoStarted=false;source=c.snapshot?.source_id||'';filters={};}
   const nextPaint=JSON.stringify([scope,generation,busy,error,days,source,filters,document.documentElement.lang]);
   if(host&&root.contains(host)&&nextPaint===paintKey)return;paintKey=nextPaint;
   if(!host||!root.contains(host)){host=document.createElement('section');host.className='mes-context-panel';host.dataset.historyTrends='';host.setAttribute('data-no-i18n','');root.append(host);}
   const sources=[...new Set([source,...(result?.sources||[])].filter(Boolean))];
   host.innerHTML=`<h3>${t('Tendências do histórico salvo','Stored history trends')}</h3><p>${t('Leitura sem MES. Uma revisão por dia e origem; dias ausentes ficam como lacunas. Associação de reuso não prova impacto causal no FPY.','Read without MES. One revision per day and source; missing days remain gaps. Reuse association does not prove causal impact on FPY.')}</p>
-  <form data-history-trend-form class="ames-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:end"><label>${t('Janela','Window')} <select name="days">${[7,30].map(n=>`<option value="${n}"${days===n?' selected':''}>${n} ${t('dias','days')}</option>`).join('')}</select></label>
+  <form data-history-trend-form class="ames-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:end"><label>${t('Janela','Window')} <select name="days">${[7,30,93].map(n=>`<option value="${n}"${days===n?' selected':''}>${n} ${t('dias','days')}</option>`).join('')}</select></label>
   <label>${t('Origem','Source')} <select name="source"><option value="">${t('Detectar conflitos','Detect conflicts')}</option>${sources.map(s=>`<option value="${esc(s)}"${source===s?' selected':''}>${esc(s)}</option>`).join('')}</select></label>
   ${[['product','CPH'],['sn','Material SN'],['part_number','Part number'],['item_type',t('Tipo','Type')]].map(([name,label])=>`<label>${label}<input name="${name}" value="${esc(filters[name]||'')}"></label>`).join('')}
   <button class="button secondary" type="submit"${busy?' disabled':''}>${busy?t('Lendo…','Reading…'):t('Ver histórico salvo','Read stored history')}</button></form>
   ${error?`<p role="alert">${esc(error)}</p>`:''}<div data-history-trend-result></div>`;
-  host.querySelector('form').addEventListener('submit',async e=>{
-   e.preventDefault();const form=new FormData(e.currentTarget);days=Number(form.get('days'));source=form.get('source');filters=Object.fromEntries(['product','sn','part_number','item_type'].map(k=>[k,String(form.get(k)||'').trim()]));
+  async function readHistory(){
    const token=++generation;busy=true;error='';renderPanel();
    try{const read=await reader.read({...c,source,days,filters});if(token===generation)result=read;}
    catch(err){if(token===generation){result=null;error=err.message;}}
    finally{if(token===generation){busy=false;renderPanel();}}
+  }
+  host.querySelector('form').addEventListener('submit',e=>{
+   e.preventDefault();const form=new FormData(e.currentTarget);days=Number(form.get('days'));source=form.get('source');filters=Object.fromEntries(['product','sn','part_number','item_type'].map(k=>[k,String(form.get(k)||'').trim()]));
+   autoStarted=true;void readHistory();
   });
   if(result)paintResult();
+  // Historical trends load on first entry, including 93 days (3+ months) for
+  // reuse. Missing days remain gaps and no MES collection is triggered.
+  if(!autoStarted){autoStarted=true;const activeScope=scope;queueMicrotask(()=>{if(activeScope===scope&&!busy&&!result&&!error)void readHistory();});}
  }
  function paintResult(){
   const {points}=result,c=context(),target=host.querySelector('[data-history-trend-result]'),loaded=points.filter(p=>p.snapshot),current=points.at(-1),previous=loaded.filter(p=>p.date<current.date&&p.quantity>0).at(-1),comparison=compareHistoryDays(current,previous),weeks=historyWeekSummary(points,c.endDate);
