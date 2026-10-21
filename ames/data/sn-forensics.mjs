@@ -48,7 +48,16 @@ export function provenPreviousFailures(rows=[],current=null){
  return {previous,uncertain};
 }
 function raw2114ByPcba(trace2114,queryPcba=''){
-  const map=new Map(),add=(pcba,row)=>{const key=text(pcba||pcbaOf(row)||queryPcba);if(!key||!row)return;const rows=map.get(key)||[];rows.push(row);map.set(key,rows);};
+  const map=new Map(),add=(pcba,row)=>{
+    if(!row)return;
+    const stated=text(pcbaOf(row)),context=text(pcba);
+    // An explicitly different board is not part of this 2114 container.
+    if(stated&&context&&stated!==context)return;
+    const key=stated||context||text(queryPcba);if(!key)return;
+    const rows=map.get(key)||[];
+    rows.push(stated?row:{...row,pcba_sn:key});
+    map.set(key,rows);
+  };
   for(const entry of trace2114?.pcbas||[]){if(entry?.status&&text(entry.status).toUpperCase()!=='COMPLETE')continue;for(const row of entry?.result?.rows||[])add(entry?.pcba_sn,row);}
   for(const row of trace2114?.rows||[])add(pcbaOf(row),row);
   return map;
@@ -286,7 +295,10 @@ export function buildLiveSnForensics(result={}){
   // Rows that already carry a PCBA keep that exact identity.
   const process=[...(trace3022?.operator_evidence||[]),...(trace3022?.process_passages||[]),...(trace3022?.rows||[])].map(row=>pcbaOf(row)?row:{...row,pcba_sn:queryPcba});
   const rawByPcba=raw2114ByPcba(trace2114,queryPcba),queryRows=rawByPcba.get(text(queryPcba))||[];
-  const explicitCurrent=trace2114?.current_failure||null,rawCurrent=latestHistory(queryRows);
+  const statedCurrent=trace2114?.current_failure||null;
+  const explicitCurrent=statedCurrent&&!pcbaOf(statedCurrent)&&queryPcba?
+    {...statedCurrent,pcba_sn:queryPcba}:statedCurrent;
+  const rawCurrent=latestHistory(queryRows);
   // Some 2114 APIs expose a projected "current_failure" without Hist Seq while
   // their own raw rows retain it. Recover ONLY the sequence from the latest
   // raw row when PCBA, code and timestamp match the explicit current exactly.
@@ -296,10 +308,13 @@ export function buildLiveSnForensics(result={}){
     sameInstant(defectTime(explicitCurrent),defectTime(rawCurrent));
   const currentRow=scopedRaw?{...rawCurrent,...explicitCurrent,hist_seq:histSeq(rawCurrent)}:(explicitCurrent||rawCurrent);
   const current=failureEntry(currentRow,{pcba:queryPcba,repairs,process,source:explicitCurrent?'2114':'2114-raw'});
-  let ownRows=Array.isArray(trace2114?.previous_failures)?trace2114.previous_failures:[];
+  let ownRows=Array.isArray(trace2114?.previous_failures)?
+    trace2114.previous_failures.filter(row=>!pcbaOf(row)||same(pcbaOf(row),queryPcba))
+      .map(row=>pcbaOf(row)?row:{...row,pcba_sn:queryPcba}):[];
   if(!ownRows.length&&queryRows.length>1)ownRows=queryRows.filter(row=>!sameHistory(row,rawCurrent));
   const classified=provenPreviousFailures(ownRows,currentRow);
-  const ownHistory=classified.previous.map(row=>failureEntry(row,{pcba:queryPcba,repairs,process,source:Array.isArray(trace2114?.previous_failures)&&trace2114.previous_failures.includes(row)?'2114':'2114-raw'})).filter(Boolean);
+  const ownHistory=classified.previous.map(row=>failureEntry(row,{pcba:queryPcba,repairs,process,
+    source:Array.isArray(trace2114?.previous_failures)?'2114':'2114-raw'})).filter(Boolean);
   // A mounting scope includes every selected physical component, not just
   // those already identified as reused. Older offline fixtures may provide
   // reused_components only; do not accidentally restore historical broad lists
