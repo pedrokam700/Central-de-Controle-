@@ -19,8 +19,9 @@ test('correlation alerts keep the decision summary visible and collapse technica
   assert.equal((html.match(/data-correlation-evidence/g)||[]).length,2);
   assert.doesNotMatch(html,/data-correlation-evidence[^>]*\sopen(?:\s|>|=)/);
   assert.match(html,/Ver evidências completas/);
-  assert.match(html,/Repair User: BRM00068/);
-  assert.match(html,/Repair Comment: Comentário completo/);
+  assert.match(html,/Nome do AT não comprovado/);
+  assert.doesNotMatch(html,/Repair User: BRM00068/);
+  assert.match(html,/Comentário.*Comentário completo/);
   assert.match(html,/LCM-1/);
   assert.match(html,/data-correlation-limits/);
 });

@@ -1,5 +1,7 @@
 import {createAdvancedTable} from './advanced-table.mjs';
 import {REPAIR_COLUMNS} from './console-fastlane-sn-reuse.mjs';
+import {projectRepairTechnicianNames} from './console-sn-repair-evidence.mjs';
+import {LINE_IDS} from './data/contract.mjs';
 import { AGENT_URL } from './data/agent-contract.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 
@@ -20,7 +22,10 @@ export function create3012FastlaneView(root,store){
   async function poll(id){clearTimeout(pollTimer);try{const job=await request('/jobs/'+encodeURIComponent(id));statusText=`${job.status} · ${job.stage||''} · ${job.message||''}`;renderBody();if(['done','error','cancelled','skipped'].includes(job.status)){if(job.status==='done')await loadLocal();return;}pollTimer=setTimeout(()=>poll(id),900);}catch(error){statusText=t('Falha ao acompanhar 3012: ','Failed to track 3012: ')+error.message;renderBody();}}
   async function collect(){const button=root.querySelector('[data-3012-run]');button.disabled=true;statusText=t('Enviando consulta 3012…','Submitting 3012 query…');renderBody();try{const job=await request('/3012/query',formValues());poll(job.id);}catch(error){statusText=t('Consulta 3012 indisponível: ','3012 query unavailable: ')+error.message;renderBody();}finally{button.disabled=false;}}
   async function saveStartDate(){const input=root.querySelector('[data-ames-start-date]'),value=String(input?.value||'').trim();try{const out=await request('/config',{ames_start_date:value});amesStartDate=String(out.config?.ames_start_date||value);statusText=t(`Data inicial histórica salva: ${amesStartDate||'não definida'}`,`Historical start date saved: ${amesStartDate||'not set'}`);startDateDirty=false;syncHistoryMode();renderBody();}catch(error){statusText=t('Não foi possível salvar a data inicial histórica: ','Could not save the historical start date: ')+error.message;renderBody();}}
-  function renderBody(){const body=root.querySelector('[data-3012-body]');if(!body)return;body.innerHTML=`<div class="ames-job-strip"><b>${esc(statusText)}</b><span>${capability?.factory_validated?t('3012 validada fisicamente','3012 physically validated'):t('implementada · gate físico ainda pendente','implemented · physical gate still pending')}</span></div><div data-repair-configurable></div>`;createAdvancedTable(body.querySelector('[data-repair-configurable]'),{rows,columns:REPAIR_COLUMNS,key:'process-repair-3012',presets:[{id:'repair',label:'Reparo 3012',en:'3012 repair'}]});}
+  function renderBody(){const body=root.querySelector('[data-3012-body]');if(!body)return;body.innerHTML=`<div class="ames-job-strip"><b>${esc(statusText)}</b><span>${capability?.factory_validated?t('3012 validada fisicamente','3012 physically validated'):t('implementada · gate físico ainda pendente','implemented · physical gate still pending')}</span></div><div data-repair-configurable></div>`;const snapshots=LINE_IDS.map(id=>store.read?.(id)?.snapshot?.canonical).filter(Boolean),
+      evidence=snapshots.flatMap(p=>p.datasets?.process_timeline||[]);
+    const named=projectRepairTechnicianNames(rows,evidence);
+    createAdvancedTable(body.querySelector('[data-repair-configurable]'),{rows:named,columns:REPAIR_COLUMNS,key:'process-repair-3012',presets:[{id:'repair',label:'Reparo 3012',en:'3012 repair'}]});}
   async function readCapability(){try{capability=await request('/3012/capability');amesStartDate=String(capability.ames_start_date||'');const input=root.querySelector('[data-ames-start-date]');if(input&&!input.value)input.value=amesStartDate;syncHistoryMode();renderBody();}catch(error){capability={implemented:false,factory_validated:false,error:error.message};renderBody();}}
   function render(){
     if(disposed)return;

@@ -2,6 +2,7 @@ import {escapeHtml as esc} from './evidence-view.mjs';
 import {LINE_IDS} from './data/contract.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
 import {fiveSourceEvidence} from './data/source-coverage.mjs';
+import {projectRepairTechnicianNames} from './console-sn-repair-evidence.mjs';
 import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 
@@ -63,7 +64,9 @@ export function createStoredPeriodRecords(root,store,{kind='base',client=null}={
     const signature=JSON.stringify([store.contextRevision(),line,p?.source_id,p?.snapshot_id,p?.snapshot_revision,document.documentElement.lang]);
     if(signature!==key){page=0;key=signature;}
     const sets={...(p?.datasets||{}),repairs:(p?.datasets?.defects||[]).flatMap(r=>(r.repair_evidence_3012||[]).map(e=>({...e,pcba_sn:r.pcba_sn,occurrence_id:r.occurrence_id,association:t('Candidata; não confirma reparo desta falha','Candidate; does not confirm repair of this failure')})))};
-    const all=sets[dataset]||[],needle=query.trim().toLowerCase();
+    const sourceRows=sets[dataset]||[];
+    const all=dataset==='repairs'?projectRepairTechnicianNames(sourceRows,p?.datasets?.process_timeline||[]):sourceRows,
+      needle=query.trim().toLowerCase();
     const rows=all.filter(r=>!needle|| (kind==='sn'?[r.pcba_sn,r.item_sn,r.material_sn].some(x=>String(x||'').toLowerCase()===needle):JSON.stringify(r).toLowerCase().includes(needle)));
     page=Math.min(page,Math.max(0,Math.ceil(rows.length/size)-1));
     const completeness=fiveSourceEvidence(p);

@@ -200,7 +200,7 @@ export function decorateSmartSnAlerts(root,model={},result={}){
     if(details?.open)state.open.add(key);
   });
   root.querySelector('[data-sn-smart-alerts]')?.remove();
-  const host=root.querySelector('[data-sn-tab-panel="story"]')||root.querySelector('.ames-sn-forensic-panel')||root.querySelector('[data-sn-result]');
+  const host=root.querySelector('[data-sn-tab-panel="technical"]')||root.querySelector('[data-sn-tab-panel="story"]')||root.querySelector('.ames-sn-forensic-panel')||root.querySelector('[data-sn-result]');
   if(!host)return;
   const wrapper=host.ownerDocument.createElement('div');wrapper.setAttribute('data-no-i18n','');
   wrapper.innerHTML=renderSmartSnAlerts(model,result,host.ownerDocument.documentElement?.lang||'pt-BR');

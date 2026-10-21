@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {spawnSync} from 'node:child_process';
-import {snLiveSummaryEvidence} from '../ames/console-sn-live-context.mjs';
+import {snLiveSummaryEvidence,renderSnCompactContext} from '../ames/console-sn-live-context.mjs';
+import {renderSnCorrelationAlerts} from '../ames/evidence-view.mjs';
 
 function baseResult(){
   return {
@@ -118,4 +119,23 @@ test('raw 2114 Manual/Automatic alias and 3012 Defect Time provenance survive th
  assert.equal(model.current.manual_or_auto,'Manual');
  assert.equal(model.current.defect_time,'2026-10-19 10:30:00');
  assert.equal(model.current.defect_time_source,'3012');
+});
+
+test('SN compact summary has prior exact antenna fault, analysis type and observed 3022 without inventing production time',()=>{
+ const result={sn:'PCB-X',trace_3022:{process_passages:[{pcba_sn:'PCB-X',station:'A6900',operation_name:'Export Repair',event_time:'2026-10-20 12:00',operator_id:'BRM00061',operator_name:'Técnico Teste'}]}};
+ const model={current_pcba:'PCB-X',current:{defect_time:'2026-10-21 10:00'},own_history:[{pcba_sn:'PCB-X',hist_seq:0,defect_code:'GN01-TX01',defect_desc:'Antenna test failed',defect_time:'2026-10-20 10:00',defect_type:'Phone Disassembly',repairs:[{pcba_sn:'PCB-X',defect_code:'GN01-TX01',repair_user:'BRM00061',association:'exact_occurrence',repair_time:'2026-10-20 11:00',repair_comment:'Validated antenna connector'}]}],process:[{pcba_sn:'PCB-X',station:'A6900',operation_name:'Export Repair',event_time:'2026-10-20 12:00'}]};
+ const html=renderSnCompactContext(model,result,'pt-BR');
+ assert.match(html,/Antenna test failed/);assert.match(html,/Phone Disassembly/);
+ assert.match(html,/Técnico Teste/);assert.match(html,/Validated antenna connector/);
+ assert.match(html,/A6900/);assert.match(html,/Passagens não provam/);
+});
+test('single alert includes name from 3022 Tran User without presenting uncertain 3012 as a proven intervention',()=>{
+ const failure={pcba_sn:'PCB-X',defect_code:'ANT-1',defect_desc:'Antenna',defect_type:'Phone Disassembly',repair_status:'Y',hist_seq:0};
+ const current={...failure,hist_seq:1,defect_type:'MainBoard'};
+ const candidate={pcba_sn:'PCB-X',defect_code:'ANT-1',repair_user:'BRM00061',repair_comment:'Check connector and antenna <no repair>',repair_time:'2026-10-21 09:15',association:'same_pcba_candidate'};
+ const model={query_sn:'PCB-X',current_pcba:'PCB-X',operator_source_3022:{rows:[{'PCBA':'PCB-X','Tran User ID':'BRM00061','Tran User':'Técnico Teste'}]},alerts:[{kind:'PCBA_SAME_FAILURE',severity:'high',pcba_sn:'PCB-X',evidence:{failure,current_failure:current,candidates_3012:[candidate],order_basis:'hist_seq_only'}}]};
+ const html=renderSnCorrelationAlerts(model,'pt-BR');
+ assert.match(html,/Técnico Teste/);assert.match(html,/Check connector and antenna &lt;no repair&gt;/);
+ assert.match(html,/Phone Disassembly/);assert.match(html,/MainBoard/);
+ assert.match(html,/ocorrência não atribuída/);assert.doesNotMatch(html,/Check connector and antenna <no repair>/);
 });

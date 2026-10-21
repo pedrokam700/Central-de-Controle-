@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {provenRepairUserName} from '../ames/console-sn-repair-evidence.mjs';
+import {provenRepairUserName,projectRepairTechnicianNames} from '../ames/console-sn-repair-evidence.mjs';
 
 const repair=(overrides={})=>({pcba_sn:'PCB-A',repair_user:'BRM00068',repair_comment:'linha 1\nlinha 2',...overrides});
 const base=()=>({sn:'PCB-A',detected_type:'PCBA',trace_3022:{operator_evidence:[]}});
@@ -58,4 +58,23 @@ test('3022 Tran User ID + Tran User name resolves 3012 Repair User in the querie
  assert.equal(provenRepairUserName(repair(),result,'PCB-A'),'Real Operator');
  result.trace_3022.rows=[{pcba_sn:'PCB-B','Tran User ID':'BRM00068','Tran User':'Wrong Board Operator'}];
  assert.equal(provenRepairUserName(repair(),result,'PCB-A'),null);
+});
+
+test('same 3012 Repair User resolves 3022 Tran User ID and Tran User name in any supported table',()=>{
+ const rows=[{pcba_sn:'PCB-A',repair_user:'BRM00061',repair_comment:'Comentario 1'},
+   {pcba_sn:'PCB-B',repair_user:'BRM00061',repair_comment:'Comentario 2'}];
+ const events=[{pcba_sn:'PCB-A','Tran User ID':'BRM00061','Tran User':'Maria Teste'},
+   {pcba_sn:'PCB-B','Tran User ID':'BRM00061','Tran User':'João Teste'}];
+ const out=projectRepairTechnicianNames(rows,events);
+ assert.equal(out[0].repair_technician_name,'Maria Teste');
+ assert.equal(out[1].repair_technician_name,'João Teste');
+ assert.equal(rows[0].repair_technician_name,undefined,'source stays immutable');
+});
+test('unconfirmed or conflicting 3022 identities never fabricate an AT name',()=>{
+ const row={pcba_sn:'PCB-A',repair_user:'BRM00061'};
+ assert.equal(projectRepairTechnicianNames([row],[{pcba_sn:'PCB-B','Tran User ID':'BRM00061','Tran User':'Outro'}])[0].repair_technician_name,null);
+ assert.equal(projectRepairTechnicianNames([row],[
+   {pcba_sn:'PCB-A','Tran User ID':'BRM00061','Tran User':'Nome A'},
+   {pcba_sn:'PCB-A','Tran User ID':'BRM00061','Tran User':'Nome B'}
+ ])[0].repair_technician_name,null);
 });
