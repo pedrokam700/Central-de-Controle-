@@ -29,6 +29,12 @@ function renderLiveSources(root,store){root.querySelector('[data-sn-source-healt
     const model=buildLiveSnForensics(result),panel=document.createElement('div');
     panel.innerHTML=renderSnLiveSourceProvenance(result,model,locale());
     section.after(panel.firstElementChild);
+    if(!result.trace_3074){
+      const note=document.createElement('p');
+      note.dataset.sn3074Scope='1';note.className='mes-context';
+      note.textContent=t('3074 não retornou uma rastreabilidade nesta consulta por SN. Uma extração anterior do posto não equivale à prova do vínculo nesta PCBA; confira a Rastreabilidade e a cobertura da base local.','3074 did not return a trace in this SN lookup. A prior workstation extraction is not proof of a linkage for this PCBA; check Traceability and local coverage.');
+      section.after(note);
+    }
   }
   normalize3012Kpi(root,store);if(agent.error&&!result){const text=friendlyError(agent.error);status.innerHTML=`<b>${t('Consulta parcial / fonte indisponível','Partial query / source unavailable')}</b><span>${esc(text)}</span>`;}}
 function analyst(event){if(!event)return '—';return event.operator_name&&event.operator_id?`${event.operator_name} (${event.operator_id})`:event.operator_name||event.operator_id||'—';}
