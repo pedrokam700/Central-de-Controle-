@@ -138,3 +138,54 @@ test('one live SN alert surface is rendered, not legacy duplicated correlation c
  const source=fs.readFileSync('ames/console-fastlane-sn-reuse.mjs','utf8');
  assert(!source.includes('${renderSnCorrelationAlerts(model,'));
 });
+
+test('three 2114 records with repeated same failure remain visible in the high-priority organized alert',()=>{
+  const dates=['2026-10-20T09:00:00-03:00','2026-10-20T10:00:00-03:00','2026-10-20T11:00:00-03:00'];
+  const rows=dates.map((at,index)=>history(index,at,'GN01-TX01',{
+    'Defect Description':'Antenna: ANT0 test failed',
+    'Repair Status':'Y','Defect Type':index===0?'Phone Disassembly':'MainBoard',
+  }));
+  const input={sn:pcba,detected_type:'PCBA',trace_2114:{
+    status:'COMPLETE',pcbas:[{pcba_sn:pcba,status:'COMPLETE',result:{rows}}],
+    current_failure:rows[2],previous_failures:rows.slice(0,2)
+  }};
+  const model=buildLiveSnForensics(input),alerts=buildSmartSnAlerts(model,input),html=renderSmartSnAlerts(model,input);
+  assert.equal(model.current.hist_seq,2);assert.equal(model.own_history.length,2);
+  assert.equal(model.alerts.filter(a=>a.kind==='PCBA_SAME_FAILURE').length,2);
+  assert.equal(alerts[0].id,'pcba-same-failure');
+  assert.match(html,/ALTA PRIORIDADE/);assert.match(html,/Antenna: ANT0 test failed/);
+  assert.match(html,/Phone Disassembly/);assert.match(html,/MainBoard/);
+  assert.match(html,/Hist Seq 0/);assert.match(html,/Hist Seq 1/);assert.match(html,/Hist Seq 2/);
+  assert.doesNotMatch(html,/reparo comprovado pela coluna Repair Status/i);
+});
+
+test('alert shows actual 3012 technician comments in collapsed card with names only from exact 3022 user cross-check',()=>{
+  const at=['2026-10-20T09:00:00-03:00','2026-10-20T11:00:00-03:00'];
+  const rows=at.map((clock,index)=>history(index,clock,'GN01-TX01',{'Defect Description':'Antenna: ANT0 test failed'}));
+  const repairs=at.map((clock,index)=>({
+    pcba_sn:pcba,defect_code:'GN01-TX01',defect_time:clock,
+    repair_time:clock,repair_user:'BRM00061',repair_comment:index?'SECOND AT CONFIRMED':'FIRST AT INSPECTION',
+    repair_code:'INSPECT',row_key:'AT-'+index
+  }));
+  const data={sn:pcba,detected_type:'PCBA',trace_2114:{status:'COMPLETE',pcbas:[{pcba_sn:pcba,status:'COMPLETE',result:{rows}}]},
+    trace_3012:{status:'COMPLETE',rows:repairs},trace_3022:{operator_evidence:[
+      {pcba_sn:pcba,'Tran User ID':'BRM00061','Tran User':'Analista da fábrica'}
+    ]}};
+  const model=buildLiveSnForensics(data),html=renderSmartSnAlerts(model,data);
+  const visible=html.split('<details style="margin-top:8px">')[0];
+  assert.match(visible,/FIRST AT INSPECTION/);assert.match(visible,/SECOND AT CONFIRMED/);
+  assert.match(visible,/Analista da fábrica \(BRM00061\)/);
+  assert.match(visible,/3012 · análise anterior associada/);
+  assert.doesNotMatch(visible,/dois reparos comprovados/i);
+});
+
+test('if second AT has not reported, only prior 3012 comment appears and current analysis is not invented',()=>{
+  const before=history(0,'2026-10-20T09:00:00-03:00','GN01-TX01');
+  const current=history(1,'2026-10-20T11:00:00-03:00','GN01-TX01');
+  const data=mk(current,before,[{
+    pcba_sn:pcba,defect_code:'GN01-TX01',defect_time:before['Defect Time'],
+    repair_time:'2026-10-20T09:30:00-03:00',repair_user:'BRM00061',repair_comment:'FIRST AT ONLY'
+  }]);
+  const model=buildLiveSnForensics(data),html=renderSmartSnAlerts(model,data).split('<details style="margin-top:8px">')[0];
+  assert.match(html,/FIRST AT ONLY/);assert.doesNotMatch(html,/SECOND AT/);
+});

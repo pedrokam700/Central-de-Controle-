@@ -7,11 +7,11 @@ const release=JSON.parse(fs.readFileSync(new URL('../ames/releases/latest/releas
 
 test('approved public GitHub CLEAN is SHA-bound and safe for new Windows computers',()=>{
   const m=readRelease({...release,password:'secret',cookies:'secret',endpoint:'invented'});
-  assert.equal(m.version,'0.5.34');
+  assert.equal(m.version,'0.5.35');
   assert.equal(m.package_available,true);
-  assert.equal(m.validated_sha,'05da735a21b68e2853a2cb251da8e79c3b0f7576');
-  assert.equal(m.sha256,'99a97e6f4d6744552968ab6ed497e938599b811c6f98c8b149f2ede7782ecef0');
-  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.34-multipc-20261021/AMES_Central_CLEAN_05da735a.zip');
+  assert.equal(m.validated_sha,'e6799420bfd356eca89d4c3515de275e7500707a');
+  assert.equal(m.sha256,'9b7b854b93444e398e23a65c787c94bf6b4b00a72203f36ca9131c5303d1d775');
+  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.35-multipc-20261021/AMES_Central_CLEAN_e6799420.zip');
   assert.equal(m.local_runtime.agent_health_url,'http://127.0.0.1:8765/api/v1/health');
   assert(!JSON.stringify(m).includes('secret'));assert.equal(m.endpoint,undefined);
   assert.equal(integrationMode('collector'),'collector');assert.equal(integrationMode('viewer'),'viewer');
@@ -66,7 +66,7 @@ test('first-login screen exposes the same public approved CLEAN without requirin
  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
  const approved=readRelease(release);
  assert.match(html,/Primeiro acesso neste computador\?/);
- assert.equal(approved.version,'0.5.34');
+ assert.equal(approved.version,'0.5.35');
  assert(html.includes('id="approvedCleanLoginDownload" href="https://github.com/pedrokam700/Central-de-Controle-/releases/latest"'));
  assert(!html.includes('href="'+approved.download_url+'"'),'login fallback must use GitHub latest landing instead of a version-pinned file');
  assert.match(html,/n[aã]o precisa instalar o agente A-MES/);
