@@ -1,5 +1,5 @@
 name: Publish Official A-MES Multi-PC Field Release
-# v0.5.33: a reviewed workflow-file push triggers one immutable exact-SHA release.
+# v0.5.34: a reviewed workflow-file push triggers one immutable exact-SHA release.
 # The GitHub Release and its 5/5 CI evidence, never the hosting provider, are authoritative.
 on:
   push:
@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="ames-v0.5.33-multipc-20261021"
+          tag="ames-v0.5.34-multipc-20261021"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Refusing to overwrite an existing official release";exit 1
           fi
@@ -75,5 +75,5 @@ jobs:
           cp "$RUNNER_TEMP/verified/AMES_PR42_CLEAN.zip" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip"
           gh release create "$tag" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Central + A-MES 0.5.33 — GitHub Pages pareado e rolagem corrigida" \
-            --notes "GitHub main e Releases são a única referência oficial. 0.5.33 corrige acesso da página GitHub Pages ao agente local pela autorização explícita do operador, usando origin HTTPS exata e token do posto em URL fragment, sem transferir SQLite, token a servidor remoto ou credenciais MES. Corrige a segunda barra de rolagem no console. Mantém matriz, rastreabilidade e alertas da 0.5.32. Instalar CLEAN em pasta separada com backup e configuração operacional; o agente 0.5.32 já instalado não ganha autorização GitHub Pages sem atualização, e Chrome/Edge pode solicitar permissão de rede local. Não interromper coleta atual, não duplicar processos 8765 nem sobrescrever banco. Homologação física pendente; rollback pela 0.5.32."
+            --title "Central + A-MES 0.5.34 — reuso por período e históricos AT auditáveis" \
+            --notes "GitHub main e GitHub Releases são oficiais. A 0.5.34 melhora o dashboard de reuso por dia produtivo e linha, e o resumo da Consulta por SN com falhas históricas, tipos de análise 2114, passagens 3022, nomes de técnicos comprovados por 3012+3022 e comentários com atribuição conservadora. Não converte ausência da 3074 em zero ou coleta concluída, e não assume que Y/N ou Manual/Automatic provam reparo. Publicação com gates exatos, CLEAN sem SQLite/credenciais e GitHub Pages da release imutável. Validar na fábrica preservando backup, agente único 8765 e histórico local; 0.5.33 disponível para rollback."
