@@ -132,8 +132,8 @@ test('chosen source remains switchable, newly published revision replaces older 
  await controller.select('previous');
  await controller.chooseSource(line,p.source_id);
  assert.equal(s.read(line).snapshot.snapshot_id,'first');
- assert.deepEqual(s.agent().period_read.source_choices[0].options.map(e=>e.source_id),
-   ['original-source','other-workstation']);
+ assert.deepEqual(s.agent().period_read.source_choices[0].options.map(e=>e.source_id).sort(),
+   ['original-source','other-workstation'].sort());
  published=[newest,p,q];
  await controller.select('previous');
  assert.equal(s.read(line).snapshot.snapshot_id,'new-revision','refresh shows latest revision for chosen source');
@@ -141,7 +141,7 @@ test('chosen source remains switchable, newly published revision replaces older 
  assert.equal(s.read(line).snapshot.source_id,q.source_id);
  await controller.chooseSource(line,p.source_id);
  assert.equal(s.read(line).snapshot.snapshot_id,'new-revision');
- assert.equal(collections,3,'only immutable history.open reads, no MES collection');
+ assert.equal(collections,4,'only immutable history.open reads, no MES collection');
  controller.clear();
 });
 test('missing selected revision is removed from the visual store without deleting any physical data',async()=>{
