@@ -30,7 +30,7 @@ export function componentMatrix(snapshot={}){
    const value=mismatch?null:observed>0?observed:enumerated&&['reused','second','third'].includes(key)?0:null;
    return [key,{value,observed,declared,mismatch,rows}];
   }));
-  return {type,metrics,coverage:complete?'observed_items':'partial',source_id:snapshot.source_id||null,snapshot_id:snapshot.snapshot_id,
+  return {type,metrics,classifier_version:insights.classifier_version||null,coverage:complete?'observed_items':'partial',source_id:snapshot.source_id||null,snapshot_id:snapshot.snapshot_id,
    revision:snapshot.snapshot_revision||snapshot.revision||null,line_id:snapshot.line_id,
    period:snapshot.canonical?.summary?.period||snapshot.period||null,component_failure:null,verified_no_failure:null,failure_rate:null};
  });

@@ -11,7 +11,7 @@ class Matrix(unittest.TestCase):
         rows=[{'Linha':'TAN10101','PCBA da falha':'P','Tipo material':'Screen','Material SN':s,
                'Reusos anteriores a falha':1,'PCBAs antigas':'OLD','password':'secret'} for s in ['M1','M2','M1']]
         views={'materiais':rows,'reusos':[],'analise_rows':[],'material_summary_rows':[], 'hist_material_rows':[],'hist_pcba_rows':[]}
-        reports={'reports.relatorio_v015':SimpleNamespace(_build_views=lambda *args:views),
+        reports={'core.failure_taxonomy':SimpleNamespace(configuration=lambda: {'version':'test'}),'reports.relatorio_v015':SimpleNamespace(_build_views=lambda *args:views),
                  'reports.relatorio_v016':SimpleNamespace(_build_indicators_v016=lambda _: {},_material_name=lambda v:v)}
         with patch.object(engine_bridge.importlib,'import_module',side_effect=reports.__getitem__):
             r=engine_bridge.build_trace_insights(ROOT/'ames/factory-engine',{},'TAN10101')

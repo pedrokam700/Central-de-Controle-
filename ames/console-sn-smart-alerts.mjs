@@ -1,3 +1,4 @@
+import {explainFailureComparison} from './data/failure-taxonomy.mjs';
 import {formatFactoryDateTime as time} from './data/time-display.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {pcbaUsageEvidence} from './console-sn-history-detail.mjs';
@@ -28,6 +29,7 @@ function compactEvidence(alert,locale){
     const binding=proof.binding||null;
     const ret=proof.return||null;
     if(failure.pcba_sn||failure.defect_code||failure.defect_time)rows.push(`<div class="ames-sn-smart-proof"><small>${esc(t(locale,'Falha histórica','Historical failure'))}</small><b>${esc([failure.pcba_sn,failure.defect_code,failure.defect_desc].filter(Boolean).join(' · ')||'—')}</b><span>${esc(failure.defect_time?time(failure.defect_time):'—')}</span></div>`);
+    if(proof.comparison)rows.push(`<p>${esc(explainFailureComparison(proof.comparison,locale))} · ${esc(t(locale,'Regra','Rule'))} ${esc(proof.comparison.version)}</p>`);
     if(binding)rows.push(`<div class="ames-sn-smart-proof"><small>3074 · ${esc(t(locale,'Vínculo comprovado','Proven binding'))}</small><b>${esc(fmt(binding.item_sn))}</b><span>${esc(fmt(binding.previous_pcba))} → ${esc(fmt(binding.current_pcba))}</span></div>`);
     for(const repair of proof.repairs||[])rows.push(`<div class="ames-sn-smart-proof"><small>3012 · ${esc(t(locale,'Reparo','Repair'))}</small><b>${esc([repair.repair_code,repair.repair_user].filter(Boolean).join(' · ')||'—')}</b><span>${esc(repair.repair_time?time(repair.repair_time):'—')}${repair.repair_comment?` · ${esc(repair.repair_comment)}`:''}</span></div>`);
     if(ret)rows.push(`<div class="ames-sn-smart-proof"><small>3022 · ${esc(t(locale,'Retorno comprovado','Proven return'))}</small><b>${esc([ret.station,ret.operation].filter(Boolean).join(' · ')||'—')}</b><span>${esc(ret.time?time(ret.time):'—')}</span></div>`);

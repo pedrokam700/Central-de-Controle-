@@ -1,3 +1,4 @@
+import {compareFailures} from './failure-taxonomy.mjs';
 import {SOURCE_STATE,sourceStateFromTrace,sourceStateHasEvidence} from './source-provenance.mjs';
 
 const value=(row,...keys)=>keys.map(k=>row?.[k]).find(v=>v!==undefined&&v!==null&&String(v).trim()!=='')??null;
@@ -119,12 +120,11 @@ function instant(value,offset='-03:00'){
 }
 const sameInstant=(a,b)=>instant(a)!==null&&instant(a)===instant(b);
 const knownFamily=f=>text(f)&&!['OUTRO','OTHER','UNKNOWN','UNCLASSIFIED'].includes(text(f).toUpperCase());
-function related(current,old,explicitRelation=''){
-  if(text(current?.defect_code)&&same(current.defect_code,old?.defect_code))return 'MESMA_FALHA';
-  if(knownFamily(current?.failure_family)&&same(current.failure_family,old?.failure_family))return 'FALHA_SIMILAR';
-  // Only the relation of this occurrence, never an aggregate material label.
-  return text(explicitRelation).toUpperCase()==='FALHA_SIMILAR'?'FALHA_SIMILAR':null;
+function related(current,old){
+  const match=compareFailures(current?.defect_code,current?.defect_desc,old?.defect_code,old?.defect_desc,{currentFamily:current?.failure_family??undefined,oldFamily:old?.failure_family??undefined});
+  return match.classification==='EXACT'?'MESMA_FALHA':match.classification==='SIMILAR'?'FALHA_SIMILAR':null;
 }
+
 function repairIdentity(r){
   // row_key includes comments/observation metadata in 3012: not an intervention ID.
   // A single board intervention may also appear against several defect rows.
@@ -191,7 +191,7 @@ export function buildCorrelationAlerts(model={}){
   const emit=a=>{const key=JSON.stringify([a.kind,a.pcba_sn,a.item_sn,a.prior_defect_code,instant(a.prior_defect_time)]);if(!seen.has(key)){seen.add(key);alerts.push({...a,classification:'correlation',root_cause_confirmed:false});}};
   const prior=f=>{const time=instant(f?.defect_time);return currentTime!==null&&time!==null&&time<currentTime;};
   const failureEvidence=f=>({pcba_sn:f.pcba_sn,defect_code:f.defect_code,defect_desc:f.defect_desc,defect_time:f.defect_time,failure_family:f.failure_family,source:f.source});
-  const evidence=(f,repairs)=>({current_failure:failureEvidence(current),failure:failureEvidence(f),repairs:repairs.map(({raw,...r})=>r)});
+  const evidence=(f,repairs)=>({comparison:compareFailures(current?.defect_code,current?.defect_desc,f?.defect_code,f?.defect_desc,{currentFamily:current?.failure_family??undefined,oldFamily:f?.failure_family??undefined}),current_failure:failureEvidence(current),failure:failureEvidence(f),repairs:repairs.map(({raw,...r})=>r)});
   const allFailures=[current,...model.own_history||[],...(model.materials||[]).flatMap(m=>(m.history||[]).map(h=>h.failure))].filter(Boolean);
   const cycleEnd=f=>Math.min(currentTime,...allFailures.filter(x=>same(x.pcba_sn,f.pcba_sn)&&instant(x.defect_time)>instant(f.defect_time)).map(x=>instant(x.defect_time)));
   const boardRepairs=new Map();

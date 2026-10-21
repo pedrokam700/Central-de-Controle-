@@ -807,6 +807,7 @@ def build_trace_insights(engine_dir: Path, integrated_payload: Dict[str, Any], l
 
     return _insight_json_safe({
         "schema":"ames-insights-v1",
+        "classifier_version":importlib.import_module("core.failure_taxonomy").configuration()["version"],
         "line":target or None,
         "overview_kpis":ind.get("overview_kpis") or [],
         "pcba_kpis":list(ind.get("pcba_kpis") or []) + [
