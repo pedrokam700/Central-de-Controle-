@@ -110,8 +110,14 @@ export function createSnConsoleView(root,store,client){
 }
 
 export function createTraceConsoleView(root,store,client){
-  let mounted=false,line=LINE_IDS[0],evidence;
+  let mounted=false,line=store.context?.()?.line_id||store.preferredLine?.()||LINE_IDS[0],evidence;
   function render(){
+    const contextLine=store.context?.()?.line_id||store.preferredLine?.();
+    if(contextLine&&LINE_IDS.includes(contextLine)&&contextLine!==line){
+      line=contextLine;
+      const picker=root.querySelector('[data-trace-line]');
+      if(picker)picker.value=line;
+    }
     if(!mounted){
       root.innerHTML=`<div class="ames-trace-layout"><form class="ames-console-form ames-trace-config" data-trace-form>
         ${sectionHead('Escopo desta coleta','A coleta selecionada nunca mistura linhas e um modo não apaga evidência já existente dos outros modos.')}
