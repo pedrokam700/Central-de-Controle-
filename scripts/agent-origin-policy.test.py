@@ -16,7 +16,7 @@ def test_loopback_is_always_allowed_and_remote_https_is_explicit():
         8765,
     )
     assert "http://127.0.0.1:8765" in state["allowed"]
-    assert "http://localhost:8765" in state["allowed"]
+    assert "http://localhost:8765" in state["allowed"]\n    assert "https://pedrokam700.github.io" in state["allowed"]\n    assert state["summary"]["official_github_pages_origin"] == "https://pedrokam700.github.io"
     assert "https://central-cora-v2.vercel.app" in state["allowed"]
     assert state["summary"]["remote_origins"] == 1
     assert state["summary"]["rejected_entries"] == 0
@@ -53,7 +53,7 @@ def test_duplicate_and_non_list_legacy_values_fail_closed():
     scalar = origin_policy.evaluate({"allowed_origins": "http://remote.example"}, 8765)
     assert scalar["summary"]["rejected_entries"] == 1
     assert scalar["summary"]["remote_origins"] == 0
-    assert scalar["allowed"] == {"http://127.0.0.1:8765", "http://localhost:8765"}
+    assert scalar["allowed"] == {"http://127.0.0.1:8765", "http://localhost:8765", "https://pedrokam700.github.io"}
 
 
 def main():
