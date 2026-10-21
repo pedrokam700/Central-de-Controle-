@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {buildLiveSnForensics,provenPreviousFailures,failureOrder} from '../ames/data/sn-forensics.mjs';
 import {renderSmartSnAlerts,buildSmartSnAlerts} from '../ames/console-sn-smart-alerts.mjs';
 const pcba='TEST-PCBA-1',clock='2026-10-20T09:30:00-03:00';
@@ -44,7 +45,7 @@ test('equal clock 3012 comments are visible only as unassigned candidates, never
  const model=buildLiveSnForensics(input),a=alertOf(model),html=renderSmartSnAlerts(model,input);
  assert(a);assert.equal(a.evidence.repairs.length,0);assert.equal(a.evidence.current_3012.length,0);
  assert.equal(a.evidence.ambiguous_3012.length,1);
- assert.match(html,/autoria por ocorrência indeterminada/);assert.match(html,/BRM008/);
+ assert.match(html,/não atribuído à sequência 2114/);assert.match(html,/BRM008/);
  assert.match(html,/&lt;replace&gt;/);assert(!html.includes('<replace>'));
  assert(!model.alerts.some(x=>x.kind==='PCBA_MAINBOARD_REPAIR_RECURRENCE'));
 });
@@ -61,7 +62,7 @@ test('separate timestamps allow prior and current 3012 comments to appear with t
  const html=renderSmartSnAlerts(model,input);
  assert.match(html,/Check flat cable/);assert.match(html,/New analysis/);
  assert.match(html,/Operador anterior/);assert.match(html,/Operador atual/);
- assert.match(html,/análise atual candidata/);assert.doesNotMatch(html,/dois reparos comprovados/i);
+ assert.match(html,/registro atual candidato/);assert.doesNotMatch(html,/dois reparos comprovados/i);
 });
 
 test('three distinct unrelated historical failure records form medium alert, not a root-cause verdict',()=>{
@@ -113,4 +114,27 @@ test('three distinct 2114 sequences at one minute keep two separate prior alerts
  const html=renderSmartSnAlerts(model,input);
  assert.match(html,/Ver evidências \(2\)/);
  assert(!model.alerts.some(x=>x.kind==='PCBA_MAINBOARD_REPAIR_RECURRENCE'));
+});
+
+test('two distinct 3012 comments on one PCBA appear in the ONE organized alert with 3022 Tran User human name',()=>{
+ const repairs=[
+   {pcba_sn:pcba,defect_code:'CAM-01',defect_time:clock,repair_time:'2026-10-20T10:00:00-03:00',
+    repair_user:'BRM00061',repair_comment:'First AT checked antenna connector',row_key:'ROW-1'},
+   {pcba_sn:pcba,defect_code:'CAM-01',defect_time:clock,repair_time:'2026-10-20T11:00:00-03:00',
+    repair_user:'BRM00061',repair_comment:'Second AT replaced antenna assembly',row_key:'ROW-2'},
+ ];
+ const input=mk(history(1,clock),history(0,clock),repairs);
+ input.trace_3022={rows:[{pcba_sn:pcba,'Tran User ID':'BRM00061','Tran User':'Technician From MES'}]};
+ const model=buildLiveSnForensics(input),html=renderSmartSnAlerts(model,input);
+ assert.match(html,/Hist Seq 0/);assert.match(html,/Hist Seq 1/);
+ assert.match(html,/Phone Disassembly/);assert.match(html,/MainBoard/);
+ assert.match(html,/First AT checked antenna connector/);
+ assert.match(html,/Second AT replaced antenna assembly/);
+ assert.match(html,/Technician From MES/);
+ assert.equal((html.match(/3012 · não atribuído à sequência 2114/g)||[]).length,2);
+ assert.doesNotMatch(html,/dois reparos comprovados/i);
+});
+test('one live SN alert surface is rendered, not legacy duplicated correlation card',()=>{
+ const source=fs.readFileSync('ames/console-fastlane-sn-reuse.mjs','utf8');
+ assert(!source.includes('${renderSnCorrelationAlerts(model,'));
 });
