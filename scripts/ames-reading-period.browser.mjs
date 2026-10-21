@@ -283,9 +283,9 @@ try{
  assert.equal(await alertPanel.isVisible(),true,'technical tab must not hide priority alert');
  assert.match(await alertPanel.innerText(),/ALTA PRIORIDADE/);
  assert.match(await alertPanel.innerText(),/Mesma falha já ocorreu nesta PCBA/);
- const proof=alertPanel.locator('[data-smart-alert="pcba-same-failure"] details');
- await proof.locator('summary').click();
- assert.equal(await proof.evaluate(el=>el.open),true);
+ const smartProof=alertPanel.locator('[data-smart-alert="pcba-same-failure"] details');
+ await smartProof.locator('summary').click();
+ assert.equal(await smartProof.evaluate(el=>el.open),true);
  await page.evaluate(()=>qa.view.render());
  assert.equal(await snLive.locator('[data-sn-tab-panel="story"] [data-smart-alert="pcba-same-failure"] details').evaluate(el=>el.open),true,
    'open evidence must survive a background redraw');
