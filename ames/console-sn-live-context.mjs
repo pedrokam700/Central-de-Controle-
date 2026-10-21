@@ -54,7 +54,6 @@ export function renderSnCompactContext(model={},result={},locale='pt-BR'){
  const picked=process.filter(p=>p.pcba_sn===model.current_pcba);
  const repairsFor=f=>(f?.repairs||[]).filter(r=>r.association==='exact_occurrence');
  const oldCards=previous.map((f,index)=>{
-   const later=previous.some(other=>other!==f&&other.hist_seq!=null&&f.hist_seq!=null&&other.hist_seq>f.hist_seq);
    const sameClock=(f.defect_time&&model.current?.defect_time&&f.defect_time===model.current.defect_time);
    const repairs=repairsFor(f);
    const cards=repairs.map(r=>{
@@ -63,7 +62,15 @@ export function renderSnCompactContext(model={},result={},locale='pt-BR'){
      return '<small>'+esc(identity)+' · 3012 · '+esc(fmt(r.repair_time))+
        (r.repair_comment?' · '+esc(r.repair_comment):'')+'</small>';
    }).join('');
-   const remark=sameClock?'<small>'+label('Horário 2114 empatado: comentários 3012 não atribuídos individualmente','Equal 2114 times: 3012 comments cannot be attributed individually')+'</small>':'';
+   const possible=(model.repairs||[]).filter(r=>r.pcba_sn===model.current_pcba&&r.defect_code===f.defect_code);
+   const unique=new Map(possible.map(r=>[JSON.stringify([r.row_key,r.repair_user,r.repair_time,r.repair_comment]),r]));
+   const remarks=[...unique.values()].slice(0,5).map(r=>{
+     const name=provenRepairUserName(r,result,model.current_pcba);
+     return '<small>3012 · '+esc(name||label('Nome não comprovado','Name unproven'))+
+       ' · '+label('ocorrência não atribuída','unassigned occurrence')+
+       (r.repair_comment?' · '+esc(r.repair_comment):'')+'</small>';
+   }).join('');
+   const remark=sameClock?'<small>'+label('Horário 2114 empatado: comentários 3012 não atribuídos individualmente','Equal 2114 times: 3012 comments cannot be attributed individually')+'</small>'+remarks:'';
    return '<div><small>'+label('Falha anterior','Previous fault')+' '+(index+1)+(f.hist_seq!=null?' · Hist Seq '+esc(f.hist_seq):'')+
      '</small><b>'+esc([f.defect_code,f.defect_desc].filter(Boolean).join(' · ')||'—')+'</b>'+
      '<small>2114 · '+esc(fmt(f.defect_type))+' · '+esc(time(f.defect_time))+'</small>'+remark+
