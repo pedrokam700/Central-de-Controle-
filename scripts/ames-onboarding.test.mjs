@@ -7,7 +7,7 @@ const release=JSON.parse(fs.readFileSync(new URL('../ames/releases/latest/releas
 
 test('approved public GitHub CLEAN is SHA-bound and safe for new Windows computers',()=>{
   const m=readRelease({...release,password:'secret',cookies:'secret',endpoint:'invented'});
-  assert.equal(m.version,'0.5.32');
+  assert.equal(m.version,'0.5.33');
   assert.equal(m.package_available,true);
   assert.equal(m.validated_sha,'4837aec803611ee231f3c7243ec2f990a23d3286');
   assert.equal(m.sha256,'e48c4f05d72a7ae841f477cb3cba605ff778c96822acfe9a55c11db914add401');
