@@ -4,6 +4,8 @@
 name: Publish Official Central on GitHub Pages
 
 on:
+  release:
+    types: [published]
   push:
     branches: [main]
     paths:
