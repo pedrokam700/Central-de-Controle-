@@ -54,7 +54,13 @@ export function createReadingPeriodController(store,history,{changed=()=>{}}={})
         const provenSource=agentSource||(localHeads.length===1?localHeads[0]:null);
         const provenLocal=provenSource&&sources.includes(provenSource)&&
           entries.some(e=>e.source_id===provenSource&&e.history_source==='local')?provenSource:null;
-        const resolved=remembered&&sources.includes(remembered)?remembered:provenLocal;
+        const previouslyOpened=store.read(line).snapshot?.canonical;
+        // Same immutable period + line: keep an already validated source during
+        // a read refresh even if browser preference storage is disabled. Never
+        // infer a source from a different period or workstation.
+        const retained=previouslyOpened&&matchesReadingPeriod(previouslyOpened,selected)&&
+          sources.includes(previouslyOpened.source_id)?previouslyOpened.source_id:null;
+        const resolved=remembered&&sources.includes(remembered)?remembered:(provenLocal||retained);
         // Keep the picker available AFTER resolving. Never trap an operator in a source.
         const options=sources.map(source_id=>{
           const rows=entries.filter(e=>e.source_id===source_id);
