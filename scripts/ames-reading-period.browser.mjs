@@ -204,13 +204,13 @@ try{
  assert(!/3074[^\n]*0 (?:registro|row)/i.test(await proof.innerText()),'Missing 3074 is not zero');
  await page.locator('[data-console-view=monitor]').click();await page.locator('[data-line-tab="TAN10102"]').click();
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10102').snapshot),null);
- await page.locator('[data-line-tab="TAN10101"]').click();await page.locator('[data-read-period=today]').click();
+ await page.locator('[data-line-tab="TAN10101"]').click();await page.locator('[data-global-reading-period] [data-read-period=today]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.snapshot_id),'TODAY-SNAPSHOT');
  for(const width of [390,1440]){
    await page.setViewportSize({width,height:900});
    await page.evaluate(()=>{document.documentElement.lang='en-US';qa.view.render();});
-   assert.equal(await page.locator('[data-read-period=previous]').innerText(),'Last production day');
+   assert.equal(await page.locator('[data-global-reading-period] [data-read-period=previous]').innerText(),'Last production day');
    assert(await page.locator('[data-global-reading-period]').evaluate(e=>e.scrollWidth<=e.clientWidth+2));
  }
 
