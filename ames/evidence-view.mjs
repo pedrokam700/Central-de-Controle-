@@ -1,5 +1,6 @@
 import {formatFactoryDateTime} from './data/time-display.mjs';
 import {defectDescription,defectLabel} from './defect-label.mjs';
+import {provenRepairUserName} from './console-sn-repair-evidence.mjs';
 export const EVIDENCE_PAGE_SIZE = 25;
 export const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -22,8 +23,35 @@ export function renderSnCorrelationAlerts(model,locale='pt-BR'){
     COMPONENT_SAME_FAILURE:t('Componente reutilizado: mesma falha anterior','Reused component: same previous failure'),
     COMPONENT_SAME_FAMILY:t('Componente reutilizado: mesma família anterior','Reused component: same previous family'),
   };
-  const failure=f=>`<p>${esc(f?.pcba_sn||'—')} · ${esc(f?.defect_code||'—')} · ${esc(f?.defect_desc||t('Descrição não informada','Description not provided'))} · ${esc(time(f?.defect_time))} · ${esc(f?.source||'—')}</p>`;
-  const proof=e=>`${failure(e.failure)}${(e.repairs||[]).map(r=>`<div class="ames-sn-repair-story"><p>Repair User: ${esc(r.repair_user||'—')} · Repair Time: ${esc(time(r.repair_time))}</p><p>${esc(r.source)} · ${esc(r.repair_code||'—')} · ${esc(r.repair_desc||'—')}</p>${r.repair_comment?`<blockquote>Repair Comment: ${esc(r.repair_comment)}</blockquote>`:''}</div>`).join('')}${e.binding?`<p>3074 · ${esc(e.binding.item_sn)} · ${esc(e.binding.previous_pcba)} → ${esc(e.binding.current_pcba)}</p>${[e.binding.previous,e.binding.current].map(b=>`<p>${esc(b.pcba_sn)} · ${t('Vínculo','Bound')}: ${esc(time(b.bind_time,b.offset))} · ${t('Desvínculo','Unbound')}: ${esc(time(b.unbind_time,b.offset))}</p>`).join('')}`:''}${e.return?`<p>3022 · ${t('Retorno comprovado','Proven return')}: ${esc(e.return.station)} · ${esc(e.return.operation||'—')} · ${esc(time(e.return.time))}</p>`:''}`;
+  const context={sn:model.query_sn||model.current_pcba,trace_3022:model.operator_source_3022||{}};
+  const failure=(f,label)=>!f?'':`<div class="ames-sn-repair-story" style="display:grid;gap:3px">
+    <small>${esc(label)}</small><b>${esc([f.defect_code,f.defect_desc].filter(Boolean).join(' · ')||'—')}</b>
+    <small>2114 · ${esc(f.pcba_sn||'—')} · Hist Seq ${esc(f.hist_seq??'—')} · ${esc(time(f.defect_time))}</small>
+    <small>Defect Type: ${esc(f.defect_type||'—')} · ${t('Vínculo Y/N','Y/N link')}: ${esc(f.repair_status??'—')}</small></div>`;
+  const showRepair=(r,label)=>{
+    const name=provenRepairUserName(r,context,model.current_pcba);
+    return `<div class="ames-sn-repair-story" style="display:grid;gap:3px;overflow-wrap:anywhere"><small>${esc(label)} · 3012</small>
+      <b title="${esc(r.repair_user||'')}">${esc(name||t('Nome do AT não comprovado','Technician name unproven'))}</b>
+      <small>${esc(time(r.repair_time))} · ${esc(r.repair_code||'—')}</small>
+      ${r.repair_comment?`<p style="white-space:pre-wrap;overflow-wrap:anywhere;margin:0"><b>${t('Comentário','Comment')}:</b> ${esc(r.repair_comment)}</p>`:''}</div>`;
+  };
+  const proof=e=>{
+    const sameClock=['hist_seq_same_clock','hist_seq_only'].includes(e.order_basis);
+    const assigned=(e.repairs||[]).map(r=>showRepair(r,t('Análise anterior associada','Associated prior analysis')))
+      .concat((e.current_3012||[]).map(r=>showRepair(r,t('Análise atual candidata','Current candidate analysis'))));
+    const uncertain=[...(e.ambiguous_3012||[]),...(e.candidates_3012||[])];
+    const dedup=new Map();for(const r of uncertain)dedup.set(JSON.stringify([r.row_key,r.repair_user,r.repair_time,r.repair_comment]),r);
+    return `<div style="display:grid;gap:8px">
+      ${failure(e.failure,t('Falha anterior','Previous fault'))}
+      ${failure(e.current_failure,t('Falha atual','Current fault'))}
+      ${e.failure?.defect_type&&e.current_failure?.defect_type&&e.failure.defect_type!==e.current_failure.defect_type?
+        `<p class="notice warn">${t('Tipos de análise diferentes na 2114; revisar comentários, sem concluir erro de diagnóstico.','Different 2114 analysis types: review comments without presuming wrong diagnosis.')}</p>`:''}
+      ${assigned.join('')}
+      ${[...dedup.values()].map(r=>showRepair(r,t('Comentário 3012 · ocorrência não atribuída','3012 comment · occurrence unassigned'))).join('')}
+      ${sameClock||dedup.size?`<small>${t('A identidade da PCBA/código não prova qual AT analisou cada passagem. Confira o vínculo temporal antes de atribuir análise.','PCBA/code does not prove which technician analyzed each occurrence. Verify temporal evidence before assigning an analysis.')}</small>`:''}
+      ${e.binding?`<p>3074 · ${esc(e.binding.item_sn)} · ${esc(e.binding.previous_pcba)} → ${esc(e.binding.current_pcba)}</p>`:''}
+      ${e.return?`<p>3022 · ${t('Retorno comprovado','Proven return')}: ${esc(e.return.station)} · ${esc(e.return.operation||'—')} · ${esc(time(e.return.time))}</p>`:''}</div>`;
+  };
   const alerts=model.alerts||[],limits=model.correlation_limits||[];
   const hasAlerts=alerts.length>0,highCount=alerts.filter(alert=>alert.severity==='high').length;
   const componentCount=alerts.filter(alert=>String(alert.kind||'').startsWith('COMPONENT_')).length,pcbaCount=alerts.length-componentCount;
