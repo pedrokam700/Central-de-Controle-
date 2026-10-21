@@ -21,7 +21,8 @@ test('two 2114 histories with same clock, code and PCBA but distinct Hist Seq pr
  const html=renderSmartSnAlerts(model,data);
  assert.match(html,/ALTA PRIORIDADE/);assert.match(html,/Hist Seq 0/);assert.match(html,/Hist Seq 1/);
  assert.match(html,/Phone Disassembly/);assert.match(html,/MainBoard/);
- assert.match(html,/Vínculo 2114/);assert.match(html,/não identifica reparo executado/);
+ assert.match(html,/Vínculo 2114/);
+ assert.match(html,/Tipos de análise diferentes na 2114/);assert.match(html,/não identifica reparo executado/);
  assert.doesNotMatch(html,/Falha reapareceu após MainBoard repair/);
 });
 
@@ -73,4 +74,16 @@ test('three distinct unrelated historical failure records form medium alert, not
  const diverse=alerts.find(a=>a.id==='pcba-diverse-history');
  assert(diverse);assert.equal(diverse.severity,'medium');assert.equal(diverse.alerts[0].evidence.length,3);
  assert.match(renderSmartSnAlerts(model,data),/REVISAR/);
+});
+test('explicit current without Hist Seq may inherit only the exactly matching latest raw 2114 sequence',()=>{
+ const older=history(0,clock),recent=history(1,clock);
+ const data=mk(recent,older);
+ data.trace_2114.current_failure={...recent,'Defect Hist Seq':null};
+ const m=buildLiveSnForensics(data);
+ assert.equal(m.current.hist_seq,1);assert.equal(m.own_history.length,1);
+ assert.equal(alertOf(m).order_basis,'hist_seq_same_clock');
+ data.trace_2114.current_failure['Defect Code']='DIFFERENT-CODE';
+ const unsafe=buildLiveSnForensics(data);
+ assert.equal(unsafe.current.hist_seq,null,'do not guess sequence from a mismatched raw row');
+ assert.equal(alertOf(unsafe),undefined);
 });
