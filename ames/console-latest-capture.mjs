@@ -76,7 +76,12 @@ export function createLatestCapturePreview(root,store,history,controller){
   // Pairing a browser session changes the available evidence. Re-read the
   // index once when the connection/source changes, even if the line and
   // selected operational period did not change.
-  const key=JSON.stringify([c.line,c.previousCutoff,agent.status==='connected',agentSource,store.sessionGeneration?.()]);
+  const localRevision=store.localCanonical().filter(p=>p.line_id===c.line)
+    .map(p=>[p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]);
+  const sync=agent.sync||{};
+  const key=JSON.stringify([c.line,c.previousCutoff,agent.status==='connected',
+    agentSource,localRevision,sync.last_received_at||null,sync.last_sent?.sent_at||null,
+    store.sessionGeneration?.()]);
   if(key!==periodKey){periodKey=key;line=c.line;void load(c.line,{end:c.previousCutoff});return;}
   const latest=payload,choices=plan?.candidates||[];
   const text=loading?t('Consultando última coleta comprovada…','Looking up last proven capture…'):
