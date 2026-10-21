@@ -96,9 +96,9 @@ export function createOnboardingView(root,{
     catch{error=t('Manifesto oficial indisponível ou inválido. Nenhum ZIP será sugerido sem verificação.','Official manifest unavailable or invalid. No unverified ZIP will be offered.');}
     if(token!==generation)return;
     pageBuildStatus='unverified';
-    if(globalThis.location?.origin==='https://central-cora-v2.vercel.app' && release?.candidate_status==='github_latest_release_verified'){
+    if(['https://pedrokam700.github.io','https://central-cora-v2.vercel.app'].includes(globalThis.location?.origin) && release?.candidate_status==='github_latest_release_verified'){
       try{
-        const response=await fetch('/release-build.json',{signal:controller.signal,cache:'no-store',credentials:'omit'});
+        const response=await fetch(globalThis.location?.origin==='https://pedrokam700.github.io' ? '/Central-de-Controle-/release-build.json' : '/release-build.json',{signal:controller.signal,cache:'no-store',credentials:'omit'});
         const published=response.ok?await response.json():null;
         if(typeof published?.sha==='string' && /^[a-f0-9]{40}$/.test(published.sha)){
           pageBuildStatus=published.sha===release.validated_sha?'matching':'mismatch';

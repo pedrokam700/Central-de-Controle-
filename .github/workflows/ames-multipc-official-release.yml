@@ -1,5 +1,5 @@
 name: Publish Official A-MES Multi-PC Field Release
-# v0.5.32: a reviewed workflow-file push triggers one immutable exact-SHA release.
+# v0.5.33: a reviewed workflow-file push triggers one immutable exact-SHA release.
 # The GitHub Release and its 5/5 CI evidence, never the hosting provider, are authoritative.
 on:
   push:
@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="ames-v0.5.32-multipc-20261021"
+          tag="ames-v0.5.33-multipc-20261021"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Refusing to overwrite an existing official release";exit 1
           fi
@@ -75,5 +75,5 @@ jobs:
           cp "$RUNNER_TEMP/verified/AMES_PR42_CLEAN.zip" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip"
           gh release create "$tag" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Central + A-MES 0.5.32 — rastreabilidade ao vivo, matriz física e alertas auditáveis" \
-            --notes "GitHub é a fonte de verdade. Versão 0.5.32 autorizada para teste de campo controlado, com execução dos 5 gates operacionais no SHA exato $GITHUB_SHA e verificação do CLEAN. Integra B1 rastreabilidade ao vivo de 3074/2114/3022; B2 matriz por componente físico com drilldowns e cobertura; B3 taxonomia de falhas versionada; B4 alertas técnicos com 2114 Defect Hist Seq, níveis alto/médio e comentários 3012 com atribuição conservadora. Não declara reparo ou culpa do AT a partir de Y/N, Manual/Automatic ou registro não comprovado. Homologação da PCBA real na fábrica ainda requerida; instalar em pasta separada sem substituir SQLite ou interromper agentes/jobs existentes. Não contém banco local ou credenciais. Versão anterior 0.5.31 permanece para rollback. A Central na página deve disponibilizar exatamente a última GitHub Release confirmada. Autostart continua opt-in, após instalação e pareamento local."
+            --title "Central + A-MES 0.5.33 — GitHub Pages pareado e rolagem corrigida" \
+            --notes "GitHub main e Releases são a única referência oficial. 0.5.33 corrige acesso da página GitHub Pages ao agente local pela autorização explícita do operador, usando origin HTTPS exata e token do posto em URL fragment, sem transferir SQLite, token a servidor remoto ou credenciais MES. Corrige a segunda barra de rolagem no console. Mantém matriz, rastreabilidade e alertas da 0.5.32. Instalar CLEAN em pasta separada com backup e configuração operacional; o agente 0.5.32 já instalado não ganha autorização GitHub Pages sem atualização, e Chrome/Edge pode solicitar permissão de rede local. Não interromper coleta atual, não duplicar processos 8765 nem sobrescrever banco. Homologação física pendente; rollback pela 0.5.32."

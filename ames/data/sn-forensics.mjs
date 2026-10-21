@@ -98,8 +98,8 @@ function normalizeProcess(row){
     operation_code:value(row,'operation_code','Working Oper Code','Current Oper Code'),
     operation_name:value(row,'operation_name','process','Working Oper','Current Oper')||value(raw,'Working Oper','Operation Name','Current Oper'),
     event_time:value(row,'event_time','Tran Time','Transaction Time','Event Time')||value(raw,'Tran Time','Transaction Time','Event Time'),
-    operator_id:value(row,'operator_id','Operator ID','Tran User Id','Transaction User Id','Employee ID','User Id')||value(raw,'Tran User Id','Transaction User Id','Operator ID','Employee ID','User Id'),
-    operator_name:value(row,'operator_name','Operator Name','Tran User Name','Transaction User Name','Employee Name','User Name')||value(raw,'Tran User Name','Transaction User Name','Operator Name','Employee Name','User Name'),
+    operator_id:value(row,'operator_id','Operator ID','Tran User Id','Tran User ID','Transaction User Id','Employee ID','User Id')||value(raw,'Tran User Id','Tran User ID','Transaction User Id','Operator ID','Employee ID','User Id'),
+    operator_name:value(row,'operator_name','Operator Name','Tran User Name','Tran User','Transaction User Name','Employee Name','User Name')||value(raw,'Tran User Name','Tran User','Transaction User Name','Operator Name','Employee Name','User Name'),
     production_shift:value(row,'production_shift'),production_operational_date:value(row,'production_operational_date'),raw:row,
   };
 }

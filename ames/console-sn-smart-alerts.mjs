@@ -2,6 +2,7 @@ import {explainFailureComparison} from './data/failure-taxonomy.mjs';
 import {formatFactoryDateTime as time} from './data/time-display.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {pcbaUsageEvidence} from './console-sn-history-detail.mjs';
+import {provenRepairUserName} from './console-sn-repair-evidence.mjs';
 
 const text=value=>String(value??'').trim();
 const t=(locale,pt,en)=>String(locale||'pt-BR').startsWith('en')?en:pt;
@@ -32,14 +33,17 @@ function proof2114(label,f,locale){
    ${states?`<small>${esc(states)} · ${esc(t(locale,'não identifica reparo executado','does not establish a performed repair'))}</small>`:''}
  </div>`;
 }
-function proof3012(repair,locale,label){
- const author=[repair.repair_user_name,repair.repair_user].filter(Boolean).join(' · ');
- return `<div class="ames-sn-smart-proof"><small>${esc(label)}</small>
- <b>${esc([author,repair.repair_code].filter(Boolean).join(' · ')||t(locale,'AT não identificado','Technician not identified'))}</b>
- <span>${esc(repair.repair_time?time(repair.repair_time):'—')}${repair.repair_comment?` · ${esc(repair.repair_comment)}`:''}</span>
- </div>`;
+function proof3012(repair,locale,label,result={},currentPcba=''){
+  const id=text(repair.repair_user),name=provenRepairUserName(repair,result,currentPcba);
+  const actor=name?name+' ('+id+')':t(locale,'Nome não comprovado · código','Name unproven · ID')+' '+fmt(id);
+  return `<div class="ames-sn-smart-proof"><small>${esc(label)}</small>
+    <b>${esc(actor)}</b>
+    <span>${esc(t(locale,'Horário da análise','Analysis time'))}: ${esc(repair.repair_time?time(repair.repair_time):'—')}</span>
+    <small>${esc(t(locale,'Comentário do AT (3012)','Technician comment (3012)'))}</small>
+    <span style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(fmt(repair.repair_comment))}</span>
+  </div>`;
 }
-function compactEvidence(alert,locale){
+function compactEvidence(alert,locale,result={},currentPcba=''){
   const proofs=evidenceList(alert);
   const rows=[];
   for(const proof of proofs){
@@ -65,9 +69,9 @@ function compactEvidence(alert,locale){
     }
     if(proof.comparison)rows.push(`<p>${esc(explainFailureComparison(proof.comparison,locale))} · ${esc(t(locale,'Regra','Rule'))} ${esc(proof.comparison.version)}</p>`);
     if(binding)rows.push(`<div class="ames-sn-smart-proof"><small>3074 · ${esc(t(locale,'Vínculo comprovado','Proven binding'))}</small><b>${esc(fmt(binding.item_sn))}</b><span>${esc(fmt(binding.previous_pcba))} → ${esc(fmt(binding.current_pcba))}</span></div>`);
-    for(const repair of proof.repairs||[])rows.push(proof3012(repair,locale,t(locale,'3012 · análise anterior associada; execução não certificada','3012 · associated prior analysis; execution unverified')));
-    for(const repair of proof.current_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · análise atual candidata','3012 · candidate current analysis')));
-    for(const repair of proof.ambiguous_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · autoria por ocorrência indeterminada','3012 · assignment to occurrence unproven')));
+    for(const repair of proof.repairs||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro anterior associado','3012 · associated prior record'),result,currentPcba));
+    for(const repair of proof.current_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro atual candidato','3012 · candidate current record'),result,currentPcba));
+    for(const repair of proof.ambiguous_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · não atribuído à sequência 2114','3012 · unassigned to 2114 sequence'),result,currentPcba));
     if(alert.kind?.startsWith('PCBA_')&&!(proof.current_3012||[]).length&&!(proof.ambiguous_3012||[]).length)
       rows.push(`<p class="mes-context">${esc(t(locale,'Análise atual do AT não comprovada nesta consulta 3012; isso não indica que não foi realizada.','Current technician analysis not proven by this 3012 query; this does not mean it never occurred.'))}</p>`);
     if(ret)rows.push(`<div class="ames-sn-smart-proof"><small>3022 · ${esc(t(locale,'Retorno comprovado','Proven return'))}</small><b>${esc([ret.station,ret.operation].filter(Boolean).join(' · ')||'—')}</b><span>${esc(ret.time?time(ret.time):'—')}</span></div>`);
@@ -78,17 +82,33 @@ function compactEvidence(alert,locale){
   return rows.join('')||`<div class="ames-sn-forensic-empty">${esc(t(locale,'A correlação existe, mas a evidência detalhada não foi projetada nesta resposta.','The correlation exists, but detailed evidence was not projected in this response.'))}</div>`;
 }
 
-function card({id,title,summary,severity='medium',alerts=[],usage=null},locale){
+function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,result={},currentPcba=''){
   const high=severity==='high';
   const tone=high?'var(--danger,#d92d20)':'var(--warning,#b54708)';
   const background=high?'var(--danger-soft,#fef3f2)':'var(--warning-soft,#fffaeb)';
   const badge=high?t(locale,'ALTA PRIORIDADE','HIGH PRIORITY'):t(locale,'PRIORIDADE MÉDIA','MEDIUM PRIORITY');
   const usageLine=usage?.proven?`<span>${esc(t(locale,'Uso da PCBA','PCBA use'))}: <b>${esc(usage.use_index?`${usage.use_index}º`:fmt(usage.known_uses))}</b>${usage.previous_uses!==null?` · ${esc(t(locale,'reusos anteriores','previous reuses'))}: ${esc(fmt(usage.previous_uses))}`:''}</span>`:'';
-  return `<article class="ames-sn-smart-alert" data-smart-alert="${esc(id)}" style="border:1px solid color-mix(in srgb,${tone} 35%,transparent);border-left:6px solid ${tone};background:${background};border-radius:10px;padding:11px 12px"><div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap"><span aria-hidden="true" style="font-size:18px">⚠</span><div style="min-width:0;flex:1"><b style="display:block">${esc(title)}</b><p style="margin:4px 0 0">${esc(summary)}</p>${usageLine}</div><span style="font-size:10px;font-weight:800;color:${tone}">${esc(badge)}</span></div><details style="margin-top:8px"><summary style="cursor:pointer;font-weight:750">${esc(t(locale,`Ver evidências (${alerts.length})`,`View evidence (${alerts.length})`))}</summary><div style="display:grid;gap:7px;margin-top:8px">${alerts.map(alert=>compactEvidence(alert,locale)).join('')}</div><small style="display:block;margin-top:8px;font-weight:700">${esc(t(locale,'Correlação técnica — não confirma causa raiz.','Technical correlation — does not confirm root cause.'))}</small></details></article>`;
+  return `<article class="ames-sn-smart-alert" data-smart-alert="${esc(id)}" style="border:1px solid color-mix(in srgb,${tone} 35%,transparent);border-left:6px solid ${tone};background:${background};border-radius:10px;padding:11px 12px"><div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap"><span aria-hidden="true" style="font-size:18px">⚠</span><div style="min-width:0;flex:1"><b style="display:block">${esc(title)}</b><p style="margin:4px 0 0">${esc(summary)}</p>${usageLine}</div><span style="font-size:10px;font-weight:800;color:${tone}">${esc(badge)}</span></div><details style="margin-top:8px"><summary style="cursor:pointer;font-weight:750">${esc(t(locale,`Ver evidências (${alerts.length})`,`View evidence (${alerts.length})`))}</summary><div style="display:grid;gap:7px;margin-top:8px">${alerts.map(alert=>compactEvidence(alert,locale,result,currentPcba)).join('')}</div><small style="display:block;margin-top:8px;font-weight:700">${esc(t(locale,'Correlação técnica — não confirma causa raiz.','Technical correlation — does not confirm root cause.'))}</small></details></article>`;
 }
 
 export function buildSmartSnAlerts(model={},result={}){
   const alerts=distinctAlerts(model.alerts||[]),usage=pcbaUsageEvidence(model,result),out=[];
+  // 2114 Hist Seq can distinguish records with the same timestamp but cannot
+  // prove which 3012 repair row belongs to which AT cycle. Display every
+  // PCBA+Defect Code row (including its full comment), without inventing links.
+  const board=text(model.current_pcba),code=text(model.current?.defect_code);
+  const candidateRows=(model.repairs||[]).filter(r=>text(r.pcba_sn)===board&&text(r.defect_code)===code);
+  const distinctCandidates=[...new Map(candidateRows.map(r=>[
+    JSON.stringify([r.row_key,r.repair_time,r.repair_user,r.repair_comment]),r])).values()]
+    .sort((a,b)=>String(a.repair_time||'').localeCompare(String(b.repair_time||'')));
+  for(const alert of alerts.filter(a=>a.kind==='PCBA_SAME_FAILURE')){
+    for(const proof of evidenceList(alert)){
+      if(['hist_seq_same_clock','hist_seq_only'].includes(proof.order_basis)){
+        proof.repairs=[];proof.current_3012=[];proof.ambiguous_3012=distinctCandidates;
+      }
+    }
+  }
+
   const byKind=kind=>alerts.filter(alert=>alert.kind===kind);
   const sameFailure=byKind('PCBA_SAME_FAILURE'),sameFamily=byKind('PCBA_SAME_FAMILY');
   if(sameFailure.length){
@@ -166,14 +186,29 @@ export function renderSmartSnAlerts(model={},result={},locale='pt-BR'){
   const alerts=buildSmartSnAlerts(model,result).map(alert=>translateAlert(alert,locale));
   if(!alerts.length)return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="false"><h3>${esc(t(locale,'Alertas inteligentes da consulta','Smart lookup alerts'))}</h3><p>${esc(t(locale,'Nenhum alerta técnico comprovado com as evidências atuais. Isso não prova ausência de histórico.','No technical alert is proven from current evidence. This does not prove absence of history.'))}</p></section>`;
   const high=alerts.filter(alert=>alert.severity==='high').length;
-  return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${high?` · ${high} ${t(locale,'alta','high')}`:''}`)}</span></div>${alerts.map(alert=>card(alert,locale)).join('')}</section>`;
+  return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${high?` · ${high} ${t(locale,'alta','high')}`:''}`)}</span></div>${alerts.map(alert=>card(alert,locale,result,model.current_pcba)).join('')}</section>`;
 }
 
+const expansionState=new WeakMap();
 export function decorateSmartSnAlerts(root,model={},result={}){
+  const scope=text(model.current_pcba)+'|'+text(result.sn);
+  let state=expansionState.get(root);
+  if(!state||state.scope!==scope){state={scope,open:new Set()};expansionState.set(root,state);}
+  // Preserve operator-expanded evidence across background polling and DOM redraw.
+  root.querySelectorAll('[data-smart-alert]').forEach(card=>{
+    const details=card.querySelector('details'),key=card.dataset.smartAlert;
+    if(details?.open)state.open.add(key);
+  });
   root.querySelector('[data-sn-smart-alerts]')?.remove();
   const host=root.querySelector('[data-sn-tab-panel="story"]')||root.querySelector('.ames-sn-forensic-panel')||root.querySelector('[data-sn-result]');
   if(!host)return;
-  const section=host.ownerDocument.createElement('div');section.setAttribute('data-no-i18n','');
-  section.innerHTML=renderSmartSnAlerts(model,result,host.ownerDocument.documentElement?.lang||'pt-BR');
-  const rendered=section.firstElementChild;if(rendered)host.prepend(rendered);
+  const wrapper=host.ownerDocument.createElement('div');wrapper.setAttribute('data-no-i18n','');
+  wrapper.innerHTML=renderSmartSnAlerts(model,result,host.ownerDocument.documentElement?.lang||'pt-BR');
+  const panel=wrapper.firstElementChild;if(!panel)return;
+  for(const card of panel.querySelectorAll('[data-smart-alert]')){
+    const details=card.querySelector('details'),key=card.dataset.smartAlert;if(!details)continue;
+    if(state.open.has(key))details.open=true;
+    details.addEventListener('toggle',()=>{if(details.open)state.open.add(key);else state.open.delete(key);});
+  }
+  host.prepend(panel);
 }

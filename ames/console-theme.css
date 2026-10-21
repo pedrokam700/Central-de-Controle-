@@ -39,7 +39,11 @@ body.dark .ames-legacy-shell .ames-legacy-nav button.active { background:var(--a
    Console MES is a full-screen internal view, like CORA: it overlays the Central
    shell but remains in the same document/origin/session. The existing
    [data-console-back] button returns through Central's own data-page=home action. */
-body:has(#mesConsoleView:not(.hidden)) { overflow:hidden!important; }
+/* One document scrollbar is not allowed while the full-screen MES console is open.
+   The only vertical page scrollbar must be .ames-legacy-main; tables/logs
+   can retain scoped scrollbars. CSS :has is supported by current Edge/Chrome. */
+html:has(#mesConsoleView:not(.hidden)) {height:100%;overflow:hidden!important;overscroll-behavior:none;}
+body:has(#mesConsoleView:not(.hidden)) {height:100dvh!important;max-height:100dvh!important;overflow:hidden!important;overscroll-behavior:none;}
 body:has(#mesConsoleView:not(.hidden)) #mesConsoleView {
   position:fixed!important;
   inset:0!important;

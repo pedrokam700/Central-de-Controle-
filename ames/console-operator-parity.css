@@ -43,3 +43,15 @@ body.dark .ames-reuse-line-tabs button{background:var(--ames-surface);border-col
 
 @media(max-width:1180px){.ames-process-toolbar .mes-filters{grid-template-columns:1fr 1fr!important}.ames-process-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}.ames-sn-process-story{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){.ames-reuse-line-tabs{grid-template-columns:1fr}.ames-reuse-line-tabs button{min-height:50px}.ames-process-toolbar .mes-filters{grid-template-columns:1fr!important}.ames-process-kpis{grid-template-columns:1fr 1fr!important}.ames-rule-strip-strong{grid-template-columns:1fr!important}.ames-rule-strip-strong small,.ames-process-rule-detail{grid-column:1}.ames-process-contexts>.section-head{display:grid!important;grid-template-columns:1fr}.ames-process-column-toggle{margin:7px 0 0;width:100%}.ames-reuse-granularity>summary{grid-template-columns:1fr}.ames-selected-evidence .table-wrap{max-height:520px}.ames-sn-forensic-intro,.ames-sn-material-head,.ames-sn-history-story>header{display:grid}.ames-sn-story-columns{grid-template-columns:1fr}.ames-sn-repair-story,.ames-sn-process-story{grid-template-columns:1fr}.ames-sn-repair-story>div,.ames-sn-process-story>div{border-right:0;border-bottom:1px solid var(--ames-line2)}.ames-sn-repair-story>div:last-child,.ames-sn-process-story>div:last-child{border-bottom:0}.ames-sn-repair-story .wide{grid-column:1}.ames-sn-material-head>div:last-child{text-align:left;justify-items:start}}
+
+/* One operator-grade SN alert instead of the legacy duplicate. Keep 3012
+   comments and 2114 analysis type readable at 100% and zoomed displays. */
+.ames-sn-smart-alerts{min-width:0}
+.ames-sn-smart-alert{min-width:0;overflow-wrap:anywhere}
+.ames-sn-smart-alert details>summary{min-height:28px;align-content:center}
+.ames-sn-smart-alert details[open]>summary{margin-bottom:8px}
+.ames-sn-smart-proof{display:grid;gap:5px;min-width:0;padding:10px 12px;border:1px solid var(--ames-line2,#e5e7eb);border-radius:8px;background:var(--ames-surface,#fff);overflow-wrap:anywhere;line-height:1.55}
+.ames-sn-smart-proof>small{display:block;font-size:11px;color:var(--ames-muted,#64748b)}
+.ames-sn-smart-proof>b{display:block;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.ames-sn-smart-proof>span{display:block;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ames-sn-smart-alert .notice.warn{line-height:1.45;margin:0}

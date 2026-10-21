@@ -51,3 +51,11 @@ test('missing repairer name in both 3012 and 3022 must remain unknown',()=>{
  result.trace_3022.process_passages=[{pcba_sn:'PCB-A',operator_id:'BRM00068'}];
  assert.equal(provenRepairUserName(repair(),result,'PCB-A'),null);
 });
+
+test('3022 Tran User ID + Tran User name resolves 3012 Repair User in the queried PCBA only',()=>{
+ const result=base();
+ result.trace_3022.rows=[{pcba_sn:'PCB-A','Tran User ID':'BRM00068','Tran User':'Real Operator'}];
+ assert.equal(provenRepairUserName(repair(),result,'PCB-A'),'Real Operator');
+ result.trace_3022.rows=[{pcba_sn:'PCB-B','Tran User ID':'BRM00068','Tran User':'Wrong Board Operator'}];
+ assert.equal(provenRepairUserName(repair(),result,'PCB-A'),null);
+});

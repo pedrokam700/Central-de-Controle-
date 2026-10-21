@@ -1,12 +1,13 @@
 const text=value=>String(value??'').trim();
 const value=(row,...keys)=>keys.map(key=>row?.[key]).find(item=>item!==undefined&&item!==null&&text(item)!=='')??null;
 const pcbaOf=row=>text(value(row,'pcba_sn','PCBA','Lot Id','current_pcba_sn'));
-const operatorId=row=>text(value(row,'operator_id','Operator ID','Tran User Id','Transaction User Id','Employee ID','User Id'));
-const operatorName=row=>text(value(row,'operator_name','tran_user_name','Operator Name','Tran User Name','Transaction User Name','Employee Name','User Name','Tran User Desc','User Full Name'));
+const operatorId=row=>text(value(row,'operator_id','Operator ID','Tran User Id','Tran User ID','Transaction User Id','Employee ID','User Id'));
+const operatorName=row=>text(value(row,'operator_name','tran_user_name','Operator Name','Tran User Name','Tran User','Transaction User Name','Employee Name','User Name','Tran User Desc','User Full Name'));
 
 function processRows(result={}){
   const trace=result.trace_3022||{};
-  return [...(trace.operator_evidence||[]),...(trace.process_passages||[]),...(trace.rows||[])];
+  return [...(trace.operator_evidence||[]),...(trace.process_passages||[]),...(trace.rows||[]),
+    ...(trace.pcbas||[]).flatMap(entry=>(entry?.result?.rows||[]).map(row=>({...row,pcba_sn:row.pcba_sn||entry.pcba_sn})))];
 }
 
 export function provenRepairUserName(repair={},result={},currentPcba=''){
@@ -25,7 +26,7 @@ export function provenRepairUserName(repair={},result={},currentPcba=''){
     const explicit=pcbaOf(row),rowPcba=explicit||current;
     // Rows without a board identity may only belong to the currently queried PCBA.
     if(rowPcba!==pcba||operatorId(row)!==id)continue;
-    const name=operatorName(row);if(name)names.add(name);
+    const name=operatorName(row)||operatorName(row?.raw);if(name&&name!==id)names.add(name);
   }
   return names.size===1?[...names][0]:null;
 }

@@ -260,7 +260,7 @@ class HardenedHandler(entry.Handler):
                     # A minimal public version indicator (no token, SQLite or MES).
                     # The web UI can distinguish an older local engine whose
                     # form handler still rejects valid Edge submissions.
-                    "workstation_pairing_flow": 2,
+                    "workstation_pairing_flow": 3,  # GitHub Pages official origin + one-time local confirmation
                     "agent_version": entry.a.AGENT_VERSION,
                     "candidate_version": entry.a.CANDIDATE_VERSION,
                     "pid": os.getpid(),

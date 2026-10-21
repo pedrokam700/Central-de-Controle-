@@ -86,6 +86,22 @@ try{
  await page.goto('http://127.0.0.1:'+server.address().port+'/Central-de-Controle-/',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>!!window.qa);
  await page.locator('[data-read-period=previous]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
+ // Real Chromium layout regression: the document must not own an extra scroll
+ // while the MES console owns the one page scroll. Screenshot user showed two.
+ const panes=await page.evaluate(()=>{
+   const scroll=document.querySelector('.ames-legacy-main'),view=document.querySelector('#mesConsoleView');
+   return {visible:!!view&&!view.classList.contains('hidden'),
+     rootX:getComputedStyle(document.documentElement).overflowX,
+     rootY:getComputedStyle(document.documentElement).overflowY,
+     bodyY:getComputedStyle(document.body).overflowY,
+     paneY:scroll?getComputedStyle(scroll).overflowY:null,
+     scrollRange:scroll?scroll.scrollHeight-scroll.clientHeight:null};
+ });
+ assert.equal(panes.visible,true);
+ assert.equal(panes.rootY,'hidden','outer HTML scrollbar must be disabled in fullscreen MES');
+ assert.equal(panes.bodyY,'hidden','document body scrollbar must be disabled in fullscreen MES');
+ assert.equal(panes.paneY,'auto','only MES pane owns vertical page scrollbar');
+
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.snapshot_id),'FRIDAY-SNAPSHOT');
  for(const id of ['monitor','top3','failures','sn','trace','reuse','process','base','knowledge']){
    await page.locator('[data-console-view="'+id+'"]').click();
@@ -479,7 +495,8 @@ try{
  await page.waitForFunction(()=>qa.store.agent().period_read?.source_choices?.length===1);
  assert.equal(await page.locator('[data-history-source-picker]').count(),1);
  assert.equal(await page.locator('[data-history-source-select] option').count(),3,'explicit placeholder plus two source identities');
- assert.equal(await page.evaluate(()=>qa.store.agent().period_read.status),'partial');
+ assert.equal(await page.evaluate(()=>qa.store.agent().period_read.status),'ready','previously validated same-period source remains loaded');
+ assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.source_id),'preserved-workstation');
  await page.locator('[data-history-source-select]').selectOption('preserved-workstation');
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.source_id),'preserved-workstation');
