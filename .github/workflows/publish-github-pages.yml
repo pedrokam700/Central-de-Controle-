@@ -6,6 +6,12 @@ name: Publish Official Central on GitHub Pages
 on:
   release:
     types: [published]
+  # Releases created by GITHUB_TOKEN do not emit ordinary 'release' workflow triggers.
+  # 'workflow_run' updates Pages after the official release pipeline succeeds.
+  workflow_run:
+    workflows: [Publish Official A-MES Multi-PC Field Release]
+    types: [completed]
+    branches: [main]
   push:
     branches: [main]
     paths:
@@ -24,6 +30,7 @@ concurrency:
 jobs:
   publish:
     name: Build official release and deploy GitHub Pages
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 18
     environment:
