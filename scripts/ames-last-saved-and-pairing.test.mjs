@@ -65,3 +65,10 @@ test('the offline agent detected on official HTTPS has an obvious one-click loca
  assert.match(code,/não reinstale o CLEAN/);
  assert.doesNotMatch(code,/data-pair-local[^\n]*ames_agent_token/);
 });
+
+test('latest historical reader reindexes when same-browser agent pairing becomes connected',()=>{
+ const code=fs.readFileSync(new URL('../ames/console-latest-capture.mjs',import.meta.url),'utf8');
+ assert.match(code,/agent\.status==='connected'/);
+ assert.match(code,/agent\.capabilities\?\.source_id/);
+ assert.match(code,/const key=JSON\.stringify\(\[c\.line,c\.previousCutoff,agent\.status==='connected',agentSource/);
+});
