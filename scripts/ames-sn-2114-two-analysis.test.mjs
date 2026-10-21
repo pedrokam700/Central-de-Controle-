@@ -73,7 +73,7 @@ test('three distinct unrelated historical failure records form medium alert, not
  const model=buildLiveSnForensics(data);const alerts=buildSmartSnAlerts(model,data);
  const diverse=alerts.find(a=>a.id==='pcba-diverse-history');
  assert(diverse);assert.equal(diverse.severity,'medium');assert.equal(diverse.alerts[0].evidence.length,3);
- assert.match(renderSmartSnAlerts(model,data),/REVISAR/);
+ assert.match(renderSmartSnAlerts(model,data),/PRIORIDADE MÉDIA/);
 });
 test('explicit current without Hist Seq may inherit only the exactly matching latest raw 2114 sequence',()=>{
  const older=history(0,clock),recent=history(1,clock);
