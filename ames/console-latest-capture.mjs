@@ -71,22 +71,24 @@ export function createLatestCapturePreview(root,store,history,controller){
    !plan||plan.status==='none'?t('Ainda não há coleta anterior comprovada para esta linha. Isso não representa zero falhas.','No proven previous capture for this line; this is not zero failures.'):
    plan.status==='conflict'&&!latest?t('Existem registros de origens diferentes. Escolha um posto para visualizar, sem substituir o histórico.','Multiple workstation origins exist. Choose one to view without replacing history.'): '';
   const entry=latest?.entry,summary=latest?.canonical.summary||{};
+   const advancedOpen=Boolean(root.querySelector('[data-last-capture-advanced]')?.open);
   root.innerHTML='<section class="mes-context-panel" data-last-capture-panel>'+
    '<h3>'+t('Última coleta disponível · histórico preservado','Latest available capture · saved history')+'</h3>'+
    '<p>'+t('Revisão salva identificada pelo período e origem originais. Pode ser de hoje ou de um dia anterior; nunca substitui o FPY atual automaticamente.','Saved revision identified by its original period and origin. It may be today or a previous day; never silently replaces live FPY.')+'</p>'+
    (text?'<p role="status">'+esc(text)+'</p>':'')+
-   (plan?.status==='conflict'?'<label>'+t('Origem do histórico · trocar coleta','Historical source · switch capture')+
+   (plan?.status==='conflict'?'<details data-last-capture-advanced><summary>'+t('Opções avançadas · escolher origem','Advanced options · choose source')+'</summary><label>'+t('Origem do histórico · trocar coleta','Historical source · switch capture')+
       '<select data-last-capture-source aria-label="'+t('Trocar última coleta','Switch latest capture')+'"><option value="">'+
       t('Escolha uma origem','Choose a source')+'</option>'+choices.map(e=>'<option value="'+esc(identity(e))+
       '"'+(selected===identity(e)?' selected':'')+'>'+esc(e.source_id+' · '+formatFactoryDateTime(e.collected_at)+
-      ' · r'+(e.snapshot_revision??'—'))+'</option>').join('')+'</select></label>':'')+
+      ' · r'+(e.snapshot_revision??'—'))+'</option>').join('')+'</select></label></details>':'')+
    (latest?'<div data-last-capture-evidence><p><strong>'+t('Período original','Original period')+':</strong> '+esc(formatFactoryDateTime(entry.period_start))+' → '+esc(formatFactoryDateTime(entry.period_end))+
      ' · <strong>'+t('Coleta','Collected')+':</strong> '+esc(formatFactoryDateTime(entry.collected_at))+'</p>'+
      '<p>'+esc(entry.line_id)+' · '+t('Origem','Source')+' '+esc(entry.source_id)+' · Snapshot '+esc(entry.snapshot_id)+' / r'+esc(entry.snapshot_revision??latest.canonical.snapshot_revision)+'</p>'+
      '<div class="ames-inline-facts"><span>FPY <b>'+esc(metric(summary.fpy))+'</b></span><span>Check FPY <b>'+esc(metric(summary.check_fpy))+'</b></span><span>Quantity <b>'+esc(metric(summary.quantity))+'</b></span><span>'+t('Falhas observadas','Observed failures')+' <b>'+esc(latest.canonical.occurrences.length)+'</b></span></div>'+
      '<button type="button" class="button secondary" data-last-capture-open>'+t('Abrir período original nesta Central','Open original period in this Work Center')+'</button></div>':'')+
    '</section>';
-  root.querySelector('[data-last-capture-source]')?.addEventListener('change',async e=>{
+  if(root.querySelector('[data-last-capture-advanced]'))root.querySelector('[data-last-capture-advanced]').open=advancedOpen;
+   root.querySelector('[data-last-capture-source]')?.addEventListener('change',async e=>{
    const target=choices.find(x=>identity(x)===e.target.value),id=++request;
    selected='';payload=null;loading=Boolean(target);render();
    if(!target)return;
