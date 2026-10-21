@@ -127,12 +127,25 @@ function decorate(root,result){
 }
 
 export function withSnLiveContext(base,root,store){
+  // Polling a running job should never close the operator's expanded evidence.
+  // Capture before base rerenders, restore only for the same SN; no manual
+  // navigation/collection should be triggered from a UI refresh.
+  let openBySn=new Map(),lastSn='';
   return {
     render(){
+      const incoming=store.agent().resultSource==='sn'?store.agent().job?.result:null;
+      const nextSn=String(incoming?.sn||'');
+      if(nextSn!==lastSn){openBySn.clear();lastSn=nextSn;}
+      for(const [index,node] of [...root.querySelectorAll('[data-sn-correlation-alerts] [data-correlation-evidence]')].entries()){
+        openBySn.set(index,node.open);
+      }
       base.render();
       const agent=store.agent(),result=agent.resultSource==='sn'?agent.job?.result:null;
       if(result)decorate(root,result);
+      for(const [index,node] of [...root.querySelectorAll('[data-sn-correlation-alerts] [data-correlation-evidence]')].entries()){
+        if(openBySn.has(index))node.open=openBySn.get(index);
+      }
     },
-    clear(){base.clear?.();}
+    clear(){openBySn.clear();lastSn='';base.clear?.();}
   };
 }
