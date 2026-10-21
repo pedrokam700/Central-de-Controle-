@@ -216,7 +216,7 @@ export function buildCorrelationAlerts(model={}){
   model.correlation_limits=[];
   const limit=(code,detail={})=>model.correlation_limits.push({code,...detail});
   if(currentTime===null&&histSeq(current)<0)limit('CURRENT_TIME_UNPROVEN');
-  const emit=a=>{const key=JSON.stringify([a.kind,a.pcba_sn,a.item_sn,a.prior_defect_code,instant(a.prior_defect_time)]);if(!seen.has(key)){seen.add(key);alerts.push({...a,classification:'correlation',root_cause_confirmed:false});}};
+  const emit=a=>{const key=JSON.stringify([a.kind,a.pcba_sn,a.item_sn,a.prior_defect_code,instant(a.prior_defect_time),a.prior_hist_seq??null]);if(!seen.has(key)){seen.add(key);alerts.push({...a,classification:'correlation',root_cause_confirmed:false});}};
   const prior=f=>{
     if(same(f?.pcba_sn,model.current_pcba))return failureOrder(f,current).prior;
     // Components belong to a DIFFERENT old PCBA. Defect Hist Seq is local
@@ -252,7 +252,7 @@ export function buildCorrelationAlerts(model={}){
     const relation=related(current,old,old.relation);
     const order=failureOrder(old,current);
     const repairs=order.basis==='hist_seq_same_clock'||order.basis==='hist_seq_only'?[]:linkedRepairs(old,cycleEnd(old));
-    if(relation)emit({kind:relation==='MESMA_FALHA'?'PCBA_SAME_FAILURE':'PCBA_SAME_FAMILY',severity:relation==='MESMA_FALHA'?'high':'medium',pcba_sn:model.current_pcba,relation,order_basis:order.basis,prior_defect_code:old.defect_code,prior_defect_desc:old.defect_desc,prior_defect_time:old.defect_time,technician_comment:repairs[0]?.repair_comment||null,sources:[old.source,...new Set(repairs.map(r=>r.source))].filter(Boolean),evidence:evidence(old,repairs)});
+    if(relation)emit({kind:relation==='MESMA_FALHA'?'PCBA_SAME_FAILURE':'PCBA_SAME_FAMILY',severity:relation==='MESMA_FALHA'?'high':'medium',pcba_sn:model.current_pcba,relation,order_basis:order.basis,prior_defect_code:old.defect_code,prior_defect_desc:old.defect_desc,prior_defect_time:old.defect_time,prior_hist_seq:old.hist_seq??null,technician_comment:repairs[0]?.repair_comment||null,sources:[old.source,...new Set(repairs.map(r=>r.source))].filter(Boolean),evidence:evidence(old,repairs)});
     for(const r of repairs.filter(explicitMainboardRepair)){
       const key=repairIdentity(r),existing=boardRepairs.get(key);
       if(existing)existing.occurrences.push({failure:old,relation});
