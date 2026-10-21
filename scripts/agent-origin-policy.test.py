@@ -16,7 +16,9 @@ def test_loopback_is_always_allowed_and_remote_https_is_explicit():
         8765,
     )
     assert "http://127.0.0.1:8765" in state["allowed"]
-    assert "http://localhost:8765" in state["allowed"]\n    assert "https://pedrokam700.github.io" in state["allowed"]\n    assert state["summary"]["official_github_pages_origin"] == "https://pedrokam700.github.io"
+    assert "http://localhost:8765" in state["allowed"]
+    assert "https://pedrokam700.github.io" in state["allowed"]
+    assert state["summary"]["official_github_pages_origin"] == "https://pedrokam700.github.io"
     assert "https://central-cora-v2.vercel.app" in state["allowed"]
     assert state["summary"]["remote_origins"] == 1
     assert state["summary"]["rejected_entries"] == 0
