@@ -100,3 +100,17 @@ test('2114 raw rows without PCBA inherit the verified container, not a different
  const safe=buildLiveSnForensics(data);
  assert.equal(safe.own_history.length,0,'explicit cross-board row must be ignored');
 });
+
+test('three distinct 2114 sequences at one minute keep two separate prior alerts without duplicated repair',()=>{
+ const a=history(0,clock),b=history(1,clock),current=history(2,clock);
+ const input=mk(current,a);
+ input.trace_2114.pcbas[0].result.rows=[a,b,current];
+ const model=buildLiveSnForensics(input);
+ const alerts=model.alerts.filter(x=>x.kind==='PCBA_SAME_FAILURE');
+ assert.equal(model.own_history.length,2);
+ assert.equal(alerts.length,2,'each proven Defect Hist Seq is a distinct recurrence');
+ assert.deepEqual(alerts.map(x=>x.prior_hist_seq).sort(),[0,1]);
+ const html=renderSmartSnAlerts(model,input);
+ assert.match(html,/Ver evidências \(2\)/);
+ assert(!model.alerts.some(x=>x.kind==='PCBA_MAINBOARD_REPAIR_RECURRENCE'));
+});
