@@ -211,7 +211,8 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
       ${autostartPanel}
-      ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}${summary}
+      ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}
+      ${!connected && client.canPairFromOfficial?.()?`<section class="notice warn" data-workstation-pair-hint><strong>${t('Conectar agente deste computador','Connect this computer’s agent')}</strong><p>${t('Se o agente já está conectado na Central local, não reinstale o CLEAN. Autorize uma única vez a Central HTTPS neste mesmo navegador.','If the agent is already connected locally, do not reinstall CLEAN. Authorize the HTTPS Work Center once in this browser.')}</p><button type="button" class="button primary" data-pair-local>${t('Autorizar agente local','Authorize local agent')}</button></section>`:''}${summary}
       ${pairing?`<button type="button" class="button secondary" data-pair-official>${t('Abrir HTTPS oficial pareado neste computador','Open paired official HTTPS on this computer')}</button><p>${t('Autoriza somente o agente deste computador na nova aba oficial. Não compartilhe a URL de pareamento. O computador sem MES precisa apenas dos dados da equipe.','Authorizes only this computer’s agent in the new official tab. Do not share the pairing URL. A computer without MES only needs team data.')}</p>`:''}
       ${visible ? `<p>Consulte os dados compartilhados ou prepare este computador para coleta. O login A-MES permanece manual.</p>
       <div class="mes-pagination"><button type="button" class="button secondary" data-use-shared>Usar somente dados compartilhados</button><button type="button" class="button secondary" data-prepare-pc>Preparar este computador</button></div>` : ''}
@@ -224,6 +225,7 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     root.querySelector('[data-use-shared]')?.addEventListener('click', () => choose('viewer'));
     root.querySelector('[data-prepare-pc]')?.addEventListener('click', () => choose('collector'));
     root.querySelector('[data-preflight]')?.addEventListener('click', check);
+    root.querySelector('[data-pair-local]')?.addEventListener('click',()=>client.openLocalPairing());
     root.querySelector('[data-pair-official]')?.addEventListener('click',()=>client.openOfficial());
     root.querySelector('[data-workstation-backup]')?.addEventListener('click', backupNow);
     root.querySelector('[data-autostart-check]')?.addEventListener('click', readAutostart);
