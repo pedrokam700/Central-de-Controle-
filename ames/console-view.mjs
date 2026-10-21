@@ -89,6 +89,27 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   let renderedPeriod=store.periodGeneration?.();
   let renderedSession=store.sessionGeneration?.();
   let lastCompletedJobRead='';
+  let lastTodaySavedIndex='';
+  function refreshTodaySavedIndex(){
+    const period=store.readingPeriod?.(),agent=store.agent();
+    if(!history||period?.mode!=='today')return;
+    const liveRevision=store.localCanonical?.().map(p=>[p.line_id,p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash])||[];
+    const done=agent.job?.status==='done'?[agent.job.id,agent.job.status]:null;
+    const signature=JSON.stringify([store.sessionGeneration?.(),period.start,period.end,
+      agent.status,agent.sync?.last_received_at||null,agent.sync?.last_sent?.sent_at||null,
+      liveRevision,done]);
+    if(signature===lastTodaySavedIndex)return;
+    lastTodaySavedIndex=signature;
+    queueMicrotask(()=>{
+      const now=store.readingPeriod?.();
+      if(disposed||now?.mode!=='today'||now.start!==period.start||now.end!==period.end)return;
+      void periodController.select('today').catch(error=>{
+        store.updateAgent({period_read:{status:'partial',
+          errors:[{line_id:'—',error:error.message||'saved_today_index_failed'}]}});
+        if(!disposed)renderActive();
+      });
+    });
+  }
   // Completion of a MES job makes the stored index worth re-reading, but
   // must not alter today's head or launch another MES collection.
   function refreshHistoricalOnCompletedJob(){
@@ -174,7 +195,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       for(const el of pane?.querySelectorAll('[data-trace-form],.ames-trace-progress,[data-top3-trend]')||[])el.hidden=true;
       for(const button of pane?.querySelectorAll('[data-failure-repair],[data-repair-update]')||[])button.disabled=true;
     }
-    refreshHistoricalOnCompletedJob();paintHeader();preparation?.render();translator?.render();}
+    refreshHistoricalOnCompletedJob();refreshTodaySavedIndex();paintHeader();preparation?.render();translator?.render();}
   return Object.freeze({render(){if(!root||disposed)return;if(!mounted)mount();renderActive();},clear(){disposed=true;periodController.clear();preparation?.clear();translator?.clear();evidenceDrawer?.clear();for(const view of views.values())view?.clear?.();views.clear();if(!agentClient)client.clear();root?.replaceChildren();mounted=false;}});
 }
 export { VIEWS as CANONICAL_VIEWS };
