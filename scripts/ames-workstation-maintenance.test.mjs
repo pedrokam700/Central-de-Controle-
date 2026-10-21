@@ -46,3 +46,19 @@ test('disconnected or incomplete local core never claims readiness',()=>{
   assert.equal(partial.tone,'partial');
   assert.notEqual(partial.label,'Núcleo local pronto');
 });
+test('new auto-start controls require the authenticated local agent; build freshness is SHA-based',()=>{
+  const client=fs.readFileSync('ames/agent-client.mjs','utf8');
+  const backend=fs.readFileSync('ames/agent/agent_hardened_entry.py','utf8');
+  const view=fs.readFileSync('ames/console-preparation.mjs','utf8');
+  const onboarding=fs.readFileSync('ames/onboarding-view.mjs','utf8');
+  assert.match(client,/autostartStatus/);
+  assert.match(client,/autostartSet/);
+  assert.match(client,/\/workstation\/autostart/);
+  assert.match(backend,/workstation_autostart\.configure/);
+  assert.match(backend,/if not self\._authorized\(path\):/);
+  assert.match(view,/data-autostart-toggle/);
+  assert.match(view,/globalThis\.confirm/);
+  assert.match(onboarding,/fetch\('\/release-build\.json'/);
+  assert.match(onboarding,/published\.sha===release\.validated_sha/);
+  assert.match(onboarding,/pageBuildStatus='unverified'/);
+});
