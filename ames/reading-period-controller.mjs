@@ -1,6 +1,7 @@
 import {LINE_IDS} from './data/contract.mjs';
 import {factoryWallMinute} from './data/history.mjs';
 import {matchesReadingPeriod} from './data/reading-period.mjs';
+import {resolveHistorySource} from './data/history-source-choice.mjs';
 
 // History is read-only. Selection is per line and source, never a global MES job.
 const PREF_PREFIX='ames-history-source-preference-v1:';
@@ -52,15 +53,16 @@ export function createReadingPeriodController(store,history,{changed=()=>{}}={})
         const localHeads=agent.status==='connected'
           ? [...new Set(store.localCanonical().map(p=>p.source_id).filter(Boolean))]:[];
         const provenSource=agentSource||(localHeads.length===1?localHeads[0]:null);
-        const provenLocal=provenSource&&sources.includes(provenSource)&&
-          entries.some(e=>e.source_id===provenSource&&e.history_source==='local')?provenSource:null;
-        const previouslyOpened=store.read(line).snapshot?.canonical;
+         const previouslyOpened=store.read(line).snapshot?.canonical;
         // Same immutable period + line: keep an already validated source during
         // a read refresh even if browser preference storage is disabled. Never
         // infer a source from a different period or workstation.
         const retained=previouslyOpened&&matchesReadingPeriod(previouslyOpened,selected)&&
           sources.includes(previouslyOpened.source_id)?previouslyOpened.source_id:null;
-        const resolved=remembered&&sources.includes(remembered)?remembered:(provenLocal||retained);
+        const resolution=resolveHistorySource(entries,{
+          preferredSource:remembered,agentSource:provenSource,retainedSource:retained
+        });
+        const resolved=resolution.source_id;
         // Keep the picker available AFTER resolving. Never trap an operator in a source.
         const options=sources.map(source_id=>{
           const rows=entries.filter(e=>e.source_id===source_id);
