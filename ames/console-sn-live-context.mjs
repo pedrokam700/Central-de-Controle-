@@ -3,7 +3,7 @@ import {buildLiveSnForensics} from './data/sn-forensics.mjs';
 import {productionEvidenceForOccurrence,trustedProductionEvidence} from './data/production-evidence.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {decorateSnMaterialBindings} from './console-sn-material-bindings.mjs';
-import {decorateSnRepairEvidence} from './console-sn-repair-evidence.mjs';
+import {decorateSnRepairEvidence,provenRepairUserName} from './console-sn-repair-evidence.mjs';
 import {decorateSnHistoryDetail} from './console-sn-history-detail.mjs';
 import {decorateSnTemporalProof} from './console-sn-temporal-proof.mjs';
 import {decorateSmartSnAlerts} from './console-sn-smart-alerts.mjs';
@@ -45,6 +45,42 @@ function patchProcessCards(root,production){
     card.innerHTML=`<h3>${t('Processo 3022','3022 process')}</h3><dl><dt>${t('Posto de referência (3022)','Reference station (3022)')}</dt><dd>${esc(fmt(station))}</dd><dt>${t('Horário de geração (3022)','Generation time (3022)')}</dt><dd>${esc(fmt(eventTime))}</dd><dt>${t('Turno comprovado (3022)','Proven shift (3022)')}</dt><dd>${esc(fmt(shift))}</dd></dl>${production.trusted?'':`<small>${t('Sem referência 3022 comprovada para classificar geração/turno.','No proven 3022 reference to classify generation/shift.')}</small>`}`;
   }
 }
+// Only the compact Summary tab receives these facts; detailed source views stay
+// untouched. Unknown association/clock never becomes a proven AT intervention.
+export function renderSnCompactContext(model={},result={},locale='pt-BR'){
+ const isEn=String(locale).startsWith('en');
+ const label=(pt,en)=>isEn?en:pt;
+ const previous=model.own_history||[],process=model.process||[];
+ const picked=process.filter(p=>p.pcba_sn===model.current_pcba);
+ const repairsFor=f=>(f?.repairs||[]).filter(r=>r.association==='exact_occurrence');
+ const oldCards=previous.map((f,index)=>{
+   const later=previous.some(other=>other!==f&&other.hist_seq!=null&&f.hist_seq!=null&&other.hist_seq>f.hist_seq);
+   const sameClock=(f.defect_time&&model.current?.defect_time&&f.defect_time===model.current.defect_time);
+   const repairs=repairsFor(f);
+   const cards=repairs.map(r=>{
+     const name=provenRepairUserName(r,result,model.current_pcba);
+     const identity=name||label('Nome do AT não comprovado','Technician name unproven');
+     return '<small>'+esc(identity)+' · 3012 · '+esc(fmt(r.repair_time))+
+       (r.repair_comment?' · '+esc(r.repair_comment):'')+'</small>';
+   }).join('');
+   const remark=sameClock?'<small>'+label('Horário 2114 empatado: comentários 3012 não atribuídos individualmente','Equal 2114 times: 3012 comments cannot be attributed individually')+'</small>':'';
+   return '<div><small>'+label('Falha anterior','Previous fault')+' '+(index+1)+(f.hist_seq!=null?' · Hist Seq '+esc(f.hist_seq):'')+
+     '</small><b>'+esc([f.defect_code,f.defect_desc].filter(Boolean).join(' · ')||'—')+'</b>'+
+     '<small>2114 · '+esc(fmt(f.defect_type))+' · '+esc(time(f.defect_time))+'</small>'+remark+
+     (sameClock?'':cards)+'</div>';
+ });
+ const processLatest=picked.find(p=>p.event_time&&p.operation_name)||picked.find(p=>p.event_time)||picked[0];
+ return '<section class="ames-sn-digest-card" data-sn-compact-context style="grid-column:1/-1"><h3>'+label('Histórico e análise · visão rápida','History and analysis · quick view')+'</h3>'+
+   '<div class="ames-sn-digest-grid" style="margin-top:8px">'+
+   '<div><small>'+label('Falhas anteriores da própria PCBA','Previous failures on this PCBA')+'</small><b>'+
+      previous.length+'</b>'+ (oldCards.length?'<div class="ames-sn-repair-story" style="display:grid;gap:8px;margin-top:7px">'+oldCards.join('')+'</div>':'<small>'+label('Nenhuma falha anterior comprovada','No proven prior fault')+'</small>')+'</div>'+
+   '<div><small>'+label('3022 · passagens observadas nesta consulta','3022 · observed process passages')+'</small><b>'+
+     (picked.length||'—')+'</b>'+
+     (processLatest?'<small>'+esc([processLatest.station,processLatest.operation_name,time(processLatest.event_time)].filter(Boolean).join(' · '))+'</small>':'')+
+     '<small>'+label('Passagens não provam geração ou análise específica sem vínculo temporal','Passages do not prove production or a specific analysis without temporal evidence')+'</small></div>'+
+   '</div></section>';
+}
+
 function decorate(root,result){
   const evidence=snLiveSummaryEvidence(result);
   // Show the reference of the investigated mounting. A 2114 latest-failure
@@ -85,6 +121,9 @@ function decorate(root,result){
   decorateSnHistoryDetail(root,evidence.model,result);
   decorateSnTemporalProof(root,evidence.model,result);
   decorateSmartSnAlerts(root,evidence.model,result);
+  const summary=root.querySelector('[data-sn-tab-panel="summary"]');
+  summary?.querySelector('[data-sn-compact-context]')?.remove();
+  if(summary)summary.insertAdjacentHTML('beforeend',renderSnCompactContext(evidence.model,result,lang()));
 }
 
 export function withSnLiveContext(base,root,store){
