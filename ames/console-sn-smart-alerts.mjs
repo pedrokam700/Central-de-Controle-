@@ -21,6 +21,24 @@ function pcbaSecondUse(usage={}){
   return Number(usage.use_index)>=2||Number(usage.known_uses)>=2||Number(usage.previous_uses)>=1;
 }
 
+function proof2114(label,f,locale){
+ if(!f||!f.pcba_sn)return '';
+ const parts=[f.defect_code,f.defect_desc].filter(Boolean).join(' · ');
+ const meta=[f.hist_seq==null?'':`Hist Seq ${f.hist_seq}`,f.defect_time?time(f.defect_time):t(locale,'Horário não comprovado','Time unproven')].filter(Boolean).join(' · ');
+ const states=[f.repair_status==null?'':t(locale,'Vínculo 2114','2114 link')+': '+f.repair_status,
+   f.defect_type==null?'':'Defect Type: '+f.defect_type].filter(Boolean).join(' · ');
+ return `<div class="ames-sn-smart-proof"><small>${esc(label)} · 2114</small>
+   <b>${esc(parts||'—')}</b><span>${esc(f.pcba_sn)} · ${esc(meta)}</span>
+   ${states?`<small>${esc(states)} · ${esc(t(locale,'não identifica reparo executado','does not establish a performed repair'))}</small>`:''}
+ </div>`;
+}
+function proof3012(repair,locale,label){
+ const author=[repair.repair_user_name,repair.repair_user].filter(Boolean).join(' · ');
+ return `<div class="ames-sn-smart-proof"><small>${esc(label)}</small>
+ <b>${esc([author,repair.repair_code].filter(Boolean).join(' · ')||t(locale,'AT não identificado','Technician not identified'))}</b>
+ <span>${esc(repair.repair_time?time(repair.repair_time):'—')}${repair.repair_comment?` · ${esc(repair.repair_comment)}`:''}</span>
+ </div>`;
+}
 function compactEvidence(alert,locale){
   const proofs=evidenceList(alert);
   const rows=[];
@@ -28,10 +46,24 @@ function compactEvidence(alert,locale){
     const failure=proof.failure||{};
     const binding=proof.binding||null;
     const ret=proof.return||null;
-    if(failure.pcba_sn||failure.defect_code||failure.defect_time)rows.push(`<div class="ames-sn-smart-proof"><small>${esc(t(locale,'Falha histórica','Historical failure'))}</small><b>${esc([failure.pcba_sn,failure.defect_code,failure.defect_desc].filter(Boolean).join(' · ')||'—')}</b><span>${esc(failure.defect_time?time(failure.defect_time):'—')}</span></div>`);
+    if(failure.pcba_sn||failure.defect_code||failure.defect_time){
+      rows.push(proof2114(t(locale,'Falha anterior','Previous failure'),failure,locale));
+      // Only display the current occurrence on PCBA recurrence alerts, avoiding
+      // duplicated current card for each physical component history.
+      if(alert.kind?.startsWith('PCBA_'))rows.push(proof2114(t(locale,'Falha atual','Current failure'),proof.current_failure,locale));
+    }
+    if(proof.order_basis==='hist_seq_same_clock'||proof.order_basis==='hist_seq_only'){
+      rows.push(`<p class="notice warn">${esc(t(locale,
+       'A sequência Defect Hist Seq distingue os dois registros 2114; os horários não individualizam a intervenção do AT.',
+       'Defect Hist Seq distinguishes the 2114 records; timestamps do not identify which technician performed an intervention.'))}</p>`);
+    }
     if(proof.comparison)rows.push(`<p>${esc(explainFailureComparison(proof.comparison,locale))} · ${esc(t(locale,'Regra','Rule'))} ${esc(proof.comparison.version)}</p>`);
     if(binding)rows.push(`<div class="ames-sn-smart-proof"><small>3074 · ${esc(t(locale,'Vínculo comprovado','Proven binding'))}</small><b>${esc(fmt(binding.item_sn))}</b><span>${esc(fmt(binding.previous_pcba))} → ${esc(fmt(binding.current_pcba))}</span></div>`);
-    for(const repair of proof.repairs||[])rows.push(`<div class="ames-sn-smart-proof"><small>3012 · ${esc(t(locale,'Reparo','Repair'))}</small><b>${esc([repair.repair_code,repair.repair_user].filter(Boolean).join(' · ')||'—')}</b><span>${esc(repair.repair_time?time(repair.repair_time):'—')}${repair.repair_comment?` · ${esc(repair.repair_comment)}`:''}</span></div>`);
+    for(const repair of proof.repairs||[])rows.push(proof3012(repair,locale,t(locale,'3012 · análise anterior associada; execução não certificada','3012 · associated prior analysis; execution unverified')));
+    for(const repair of proof.current_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · análise atual candidata','3012 · candidate current analysis')));
+    for(const repair of proof.ambiguous_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · autoria por ocorrência indeterminada','3012 · assignment to occurrence unproven')));
+    if(alert.kind?.startsWith('PCBA_')&&!(proof.current_3012||[]).length&&!(proof.ambiguous_3012||[]).length)
+      rows.push(`<p class="mes-context">${esc(t(locale,'Análise atual do AT não comprovada nesta consulta 3012; isso não indica que não foi realizada.','Current technician analysis not proven by this 3012 query; this does not mean it never occurred.'))}</p>`);
     if(ret)rows.push(`<div class="ames-sn-smart-proof"><small>3022 · ${esc(t(locale,'Retorno comprovado','Proven return'))}</small><b>${esc([ret.station,ret.operation].filter(Boolean).join(' · ')||'—')}</b><span>${esc(ret.time?time(ret.time):'—')}</span></div>`);
   }
   if(alert.technician_comment&&!rows.some(row=>row.includes(esc(alert.technician_comment))))rows.push(`<div class="ames-sn-smart-proof"><small>Repair Comment</small><b>${esc(alert.technician_comment)}</b></div>`);
@@ -73,6 +105,23 @@ export function buildSmartSnAlerts(model={},result={}){
   if(recurrence.length)out.push({id:'mainboard-recurrence',severity:'high',title:'Falha reapareceu após MainBoard repair',summary:'Há reparo MainBoard comprovado em ciclo anterior e uma nova falha posterior relacionada; retorno 3022 só entra quando comprovado.',alerts:recurrence});
   const repeated=byKind('PCBA_REPEATED_MAINBOARD_REPAIR');
   if(repeated.length)out.push({id:'mainboard-repeated',severity:'high',title:'Múltiplos reparos MainBoard nesta PCBA',summary:'Foram identificadas intervenções MainBoard distintas e temporalmente válidas nesta placa.',alerts:repeated});
+  const unrelated=(model.own_history||[]).filter(f=>{
+    const current=model.current||{},cmp=f&&current&&f.pcba_sn===model.current_pcba?
+      // This card is a visibility marker for distinct prior faults, not
+      // evidence of an actual repair or material root cause.
+      (f.defect_code&&current.defect_code&&f.defect_code!==current.defect_code):false;
+    return Boolean(cmp);
+  });
+  const distinct=new Map();
+  for(const f of unrelated){
+    const key=[f.hist_seq??'',f.defect_code||'',f.defect_time||''].join('|');
+    if(!distinct.has(key))distinct.set(key,f);
+  }
+  if(distinct.size>=3&&!sameFailure.length&&!sameFamily.length)
+    out.push({id:'pcba-diverse-history',severity:'medium',title:`${distinct.size} falhas anteriores diferentes nesta PCBA`,
+      summary:'Histórico múltiplo na 2114: requer revisão, mesmo sem recorrência igual ou similar. Não prova defeito da placa.',
+      alerts:[{kind:'PCBA_DIVERSE_FAILURE_HISTORY',pcba_sn:model.current_pcba,
+        evidence:[...distinct.values()].map(f=>({failure:f,order_basis:'history_only'}))}]});
   const boardHistory=byKind('PCBA_MAINBOARD_REPAIR_HISTORY');
   if(boardHistory.length)out.push({id:'mainboard-history',severity:'medium',title:'Histórico de MainBoard repair',summary:'Existe reparo MainBoard anterior comprovado na própria PCBA.',alerts:boardHistory});
   return out;
@@ -90,6 +139,7 @@ function translateAlert(alert,locale){
     'Histórico de MainBoard repair':'MainBoard repair history',
   };
   let title=map[alert.title]||alert.title;
+  title=title.replace(/^(\d+) falhas anteriores diferentes nesta PCBA$/,(_,n)=>`${n} different previous failures on this PCBA`);
   title=title.replace(/^(\d+) componentes? reutilizados? com mesma falha$/,(_,n)=>`${n} reused component${n==='1'?'':'s'} with the same failure`)
     .replace(/^(\d+) componentes? reutilizados? com mesma família$/,(_,n)=>`${n} reused component${n==='1'?'':'s'} with the same family`);
   const summaries={
@@ -102,7 +152,8 @@ function translateAlert(alert,locale){
     'Foram identificadas intervenções MainBoard distintas e temporalmente válidas nesta placa.':'Distinct, temporally valid MainBoard interventions were identified on this board.',
     'Existe reparo MainBoard anterior comprovado na própria PCBA.':'A prior MainBoard repair is proven on this PCBA.',
   };
-  return {...alert,title,summary:summaries[alert.summary]||alert.summary};
+  return {...alert,title,summary:summaries[alert.summary]||(
+    alert.id==='pcba-diverse-history'?'Multiple previous 2114 faults merit review even without exact recurrence. This does not prove a board defect.':alert.summary)};
 }
 
 export function renderSmartSnAlerts(model={},result={},locale='pt-BR'){
