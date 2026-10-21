@@ -62,7 +62,7 @@ def load_config():
         "setup_complete": False,
         "backup_retention": 10,
         "auto_backup_on_start": True,
-        "allowed_origins": ["https://central-cora-v15-1-13-21.vercel.app", "https://central-cora-v15-1-13-21-pedrokam700-6477.vercel.app", "https://central-cora-v2-pedrokam700-6477.vercel.app", "https://central-cora-v2.vercel.app", "https://central-ames-bridge.vercel.app"],
+        "allowed_origins": ["https://pedrokam700.github.io", "https://central-cora-v15-1-13-21.vercel.app", "https://central-cora-v15-1-13-21-pedrokam700-6477.vercel.app", "https://central-cora-v2-pedrokam700-6477.vercel.app", "https://central-cora-v2.vercel.app", "https://central-ames-bridge.vercel.app"],
     }
     if CONFIG_PATH.exists():
         try:
