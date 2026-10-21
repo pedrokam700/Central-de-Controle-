@@ -208,7 +208,14 @@ export function buildCorrelationAlerts(model={}){
   const limit=(code,detail={})=>model.correlation_limits.push({code,...detail});
   if(currentTime===null&&histSeq(current)<0)limit('CURRENT_TIME_UNPROVEN');
   const emit=a=>{const key=JSON.stringify([a.kind,a.pcba_sn,a.item_sn,a.prior_defect_code,instant(a.prior_defect_time)]);if(!seen.has(key)){seen.add(key);alerts.push({...a,classification:'correlation',root_cause_confirmed:false});}};
-  const prior=f=>failureOrder(f,current).prior;
+  const prior=f=>{
+    if(same(f?.pcba_sn,model.current_pcba))return failureOrder(f,current).prior;
+    // Components belong to a DIFFERENT old PCBA. Defect Hist Seq is local
+    // to each PCBA and cannot order two different boards. Use proven instants
+    // and the existing 3074 binding proof for cross-board chronology.
+    const when=instant(f?.defect_time);
+    return currentTime!==null&&when!==null&&when<currentTime;
+  };
   const failureEvidence=f=>({pcba_sn:f.pcba_sn,defect_code:f.defect_code,defect_desc:f.defect_desc,defect_time:f.defect_time,
     hist_seq:f.hist_seq??null,repair_status:f.repair_status??null,defect_type:f.defect_type??null,failure_family:f.failure_family,source:f.source});
   const evidence=(f,repairs)=>{
