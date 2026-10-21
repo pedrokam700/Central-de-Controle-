@@ -59,6 +59,9 @@ jobs:
       - name: Run updater Python contract
         run: python3 scripts/agent-update.test.py
 
+      - name: Agent auto-start registry contract (mocked, no real Windows changes)
+        run: python3 scripts/agent-workstation-autostart.test.py
+
       - name: CLEAN V3 integration and Shift contract
         run: python3 scripts/agent-clean-v3.test.py
 
