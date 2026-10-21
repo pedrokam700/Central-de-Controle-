@@ -1,3 +1,4 @@
+import {compareFailures} from './failure-taxonomy.mjs';
 // Read-only populations. A defect investigation is never a production denominator.
 import {factoryWallMinute} from './history.mjs';
 const value=(r,...keys)=>keys.map(k=>r?.[k]).find(v=>v!==undefined&&v!==null&&v!=='')??null;
@@ -38,8 +39,8 @@ function finish(map){
   row.outcome=row.kind==='pcba'&&row.events.length?'failed':'unknown';
   // Component association alone is never a diagnosed component failure.
   row.associated_current_failure=row.kind==='component'&&row.events.length>0;
-  row.same_failure=row.prior_events.some(p=>code(p)&&row.events.some(e=>code(e)===code(p)));
-  row.same_family=row.prior_events.some(p=>family(p)&&row.events.some(e=>family(e)===family(p)));
+  row.same_failure=row.prior_events.some(p=>row.events.some(e=>compareFailures(code(e),e.defect_desc,code(p),p.defect_desc).classification==='EXACT'));
+  row.same_family=row.prior_events.some(p=>row.events.some(e=>compareFailures(code(e),e.defect_desc,code(p),p.defect_desc,{currentFamily:family(e)??undefined,oldFamily:family(p)??undefined}).classification==='SIMILAR'));
   row.reused=row.use_index>=2;
   return row;
  }).sort((a,b)=>a.id.localeCompare(b.id));

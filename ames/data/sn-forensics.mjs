@@ -1,3 +1,4 @@
+import {compareFailures} from './failure-taxonomy.mjs';
 import {SOURCE_STATE,sourceStateFromTrace,sourceStateHasEvidence} from './source-provenance.mjs';
 
 const value=(row,...keys)=>keys.map(k=>row?.[k]).find(v=>v!==undefined&&v!==null&&String(v).trim()!=='')??null;
@@ -8,9 +9,26 @@ const pcbaOf=row=>value(row,'pcba_sn','PCBA Consultada','PCBA','Lot Id','current
 const defectCode=row=>value(row,'defect_code','Defect Code','Defect Code antigo');
 const defectDesc=row=>value(row,'defect_desc','Defect Description','Defect Description antigo');
 const defectTime=row=>value(row,'defect_time','Defect Time','Defect Time antigo');
-const histSeq=row=>{const n=Number(value(row,'hist_seq','Defect Hist Seq'));return Number.isFinite(n)?n:-1;};
+const histSeq=row=>{
+ const raw=value(row,'hist_seq','Defect Hist Seq');
+ if(raw===null||!/^(0|[1-9][0-9]*)$/.test(text(raw)))return -1;
+ const n=Number(raw);return Number.isSafeInteger(n)?n:-1;
+};
 const latestHistory=rows=>[...(rows||[])].sort((a,b)=>histSeq(b)-histSeq(a)||(instant(defectTime(b))??-Infinity)-(instant(defectTime(a))??-Infinity))[0]||null;
 const sameHistory=(a,b)=>Boolean(a&&b&&histSeq(a)===histSeq(b)&&same(defectCode(a),defectCode(b))&&same(defectTime(a),defectTime(b)));
+// A-MES can record two distinct Defect Hist Seq values at the same displayed
+// factory minute. Equal PCBA/code/time is NOT a duplicate when both sequences
+// are different. Sequence proves order of 2114 records, NOT a completed repair.
+export function failureOrder(prior,current){
+ if(!prior||!current||!same(pcbaOf(prior),pcbaOf(current)))return {prior:false,basis:'unproven'};
+ const oldSeq=histSeq(prior),newSeq=histSeq(current),oldTime=instant(defectTime(prior)),newTime=instant(defectTime(current));
+ if(oldSeq>=0&&newSeq>=0){
+   if(oldSeq>=newSeq||oldTime!==null&&newTime!==null&&oldTime>newTime)return {prior:false,basis:'contradicted'};
+   return {prior:true,basis:oldTime===null||newTime===null?'hist_seq_only':oldTime===newTime?'hist_seq_same_clock':'hist_seq_and_time'};
+ }
+ if(oldTime!==null&&newTime!==null&&oldTime<newTime)return {prior:true,basis:'defect_time'};
+ return {prior:false,basis:'unproven'};
+}
 export function provenPreviousFailures(rows=[],current=null){
  if(!current)return {previous:[],uncertain:(rows||[]).length};
  const currTime=instant(defectTime(current)),currSeq=histSeq(current),seen=new Set();
@@ -18,17 +36,28 @@ export function provenPreviousFailures(rows=[],current=null){
  for(const row of rows||[]){
   const key=JSON.stringify([text(pcbaOf(row)),text(defectCode(row)),text(defectTime(row)),histSeq(row)]);
   if(seen.has(key))continue;seen.add(key);
-  if(sameHistory(row,current)||
-     (same(pcbaOf(row),pcbaOf(current))&&same(defectCode(row),defectCode(current))&&sameInstant(defectTime(row),defectTime(current))))continue;
-  const when=instant(defectTime(row)),sequence=histSeq(row);
-  const older=currTime!==null&&when!==null&&when<currTime||
-    currSeq>=0&&sequence>=0&&sequence<currSeq&&(currTime===null||when===null||when<currTime);
-  if(older)previous.push(row);else uncertain++;
+  if(sameHistory(row,current))continue;
+  // If seq differs, it must be judged by source sequence even when code and
+  // low-precision Defect Time match. With no distinct sequence, identical
+  // code and instant cannot prove two occurrences.
+  const oldSeq=histSeq(row);
+  if((oldSeq<0||currSeq<0)&&same(pcbaOf(row),pcbaOf(current))&&
+     same(defectCode(row),defectCode(current))&&sameInstant(defectTime(row),defectTime(current)))continue;
+  if(failureOrder(row,current).prior)previous.push(row);else uncertain++;
  }
  return {previous,uncertain};
 }
 function raw2114ByPcba(trace2114,queryPcba=''){
-  const map=new Map(),add=(pcba,row)=>{const key=text(pcba||pcbaOf(row)||queryPcba);if(!key||!row)return;const rows=map.get(key)||[];rows.push(row);map.set(key,rows);};
+  const map=new Map(),add=(pcba,row)=>{
+    if(!row)return;
+    const stated=text(pcbaOf(row)),context=text(pcba);
+    // An explicitly different board is not part of this 2114 container.
+    if(stated&&context&&stated!==context)return;
+    const key=stated||context||text(queryPcba);if(!key)return;
+    const rows=map.get(key)||[];
+    rows.push(stated?row:{...row,pcba_sn:key});
+    map.set(key,rows);
+  };
   for(const entry of trace2114?.pcbas||[]){if(entry?.status&&text(entry.status).toUpperCase()!=='COMPLETE')continue;for(const row of entry?.result?.rows||[])add(entry?.pcba_sn,row);}
   for(const row of trace2114?.rows||[])add(pcbaOf(row),row);
   return map;
@@ -42,7 +71,7 @@ function normalizeRepair(row){
   if(!row)return null;
   return {
     source:row.source_view||row.source||'3012',row_key:row.row_key||null,association:row.association||null,pcba_sn:pcbaOf(row),defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),
-    repair_user:value(row,'repair_user','Repair User'),repair_time:value(row,'repair_time','Repair Time'),
+    repair_user:value(row,'repair_user','Repair User'),repair_user_name:value(row,'repair_user_name','Repair User Name','RepairUserName'),repair_time:value(row,'repair_time','Repair Time'),
     repair_code:value(row,'repair_code','Repair Code'),repair_desc:value(row,'repair_desc','Repair Description'),
     repair_comment:value(row,'repair_comment','Repair Comment'),repaired_location:value(row,'repaired_location','Repaired Location'),
     reason_desc:value(row,'reason_desc','Repair Reason Description','Reason Description'),raw:row,
@@ -96,7 +125,7 @@ export function preferredAnalysisEvent(rows,pcba){
 
 function failureEntry(row,{pcba,repairs=[],process=[],source='2114'}={}){
   if(!row)return null;const actualPcba=pcba||pcbaOf(row);
-  return {pcba_sn:actualPcba,defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),defect_time_source:value(row,'Defect Time Source','defect_time_source')||source,manual_or_auto:value(row,'manual_or_auto','Manual/Automatic','TestTools Auto Defect Or Defect By Hand'),repair_status:value(row,'repair_status','Repair Status'),relation:value(row,'relation'),failure_family:value(row,'failure_family','Failure Family'),repairs:repairsFor(repairs,{pcba:actualPcba,code:defectCode(row),time:defectTime(row)},row.repair_evidence_3012||[]),analysis_event:preferredAnalysisEvent(process,actualPcba),source,raw:row};
+  return {pcba_sn:actualPcba,defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),defect_time_source:value(row,'Defect Time Source','defect_time_source')||source,manual_or_auto:value(row,'manual_or_auto','Manual/Automatic','TestTools Auto Defect Or Defect By Hand'),repair_status:value(row,'repair_status','Repair Status'),defect_type:value(row,'defect_type','Defect Type','Defect Type Desc'),hist_seq:histSeq(row)>=0?histSeq(row):null,relation:value(row,'relation'),failure_family:value(row,'failure_family','Failure Family'),repairs:repairsFor(repairs,{pcba:actualPcba,code:defectCode(row),time:defectTime(row)},row.repair_evidence_3012||[]),analysis_event:preferredAnalysisEvent(process,actualPcba),source,raw:row};
 }
 function parseList(value){if(Array.isArray(value))return value.map(text).filter(Boolean);try{const out=JSON.parse(value||'[]');return Array.isArray(out)?out.map(text).filter(Boolean):[];}catch{return text(value).split(/[,;|\n]/).map(x=>x.trim()).filter(Boolean);}}
 
@@ -119,12 +148,11 @@ function instant(value,offset='-03:00'){
 }
 const sameInstant=(a,b)=>instant(a)!==null&&instant(a)===instant(b);
 const knownFamily=f=>text(f)&&!['OUTRO','OTHER','UNKNOWN','UNCLASSIFIED'].includes(text(f).toUpperCase());
-function related(current,old,explicitRelation=''){
-  if(text(current?.defect_code)&&same(current.defect_code,old?.defect_code))return 'MESMA_FALHA';
-  if(knownFamily(current?.failure_family)&&same(current.failure_family,old?.failure_family))return 'FALHA_SIMILAR';
-  // Only the relation of this occurrence, never an aggregate material label.
-  return text(explicitRelation).toUpperCase()==='FALHA_SIMILAR'?'FALHA_SIMILAR':null;
+function related(current,old){
+  const match=compareFailures(current?.defect_code,current?.defect_desc,old?.defect_code,old?.defect_desc,{currentFamily:current?.failure_family??undefined,oldFamily:old?.failure_family??undefined});
+  return match.classification==='EXACT'?'MESMA_FALHA':match.classification==='SIMILAR'?'FALHA_SIMILAR':null;
 }
+
 function repairIdentity(r){
   // row_key includes comments/observation metadata in 3012: not an intervention ID.
   // A single board intervention may also appear against several defect rows.
@@ -187,18 +215,44 @@ export function buildCorrelationAlerts(model={}){
   const alerts=[],seen=new Set(),current=model.current,currentTime=instant(current?.defect_time);
   model.correlation_limits=[];
   const limit=(code,detail={})=>model.correlation_limits.push({code,...detail});
-  if(currentTime===null)limit('CURRENT_TIME_UNPROVEN');
-  const emit=a=>{const key=JSON.stringify([a.kind,a.pcba_sn,a.item_sn,a.prior_defect_code,instant(a.prior_defect_time)]);if(!seen.has(key)){seen.add(key);alerts.push({...a,classification:'correlation',root_cause_confirmed:false});}};
-  const prior=f=>{const time=instant(f?.defect_time);return currentTime!==null&&time!==null&&time<currentTime;};
-  const failureEvidence=f=>({pcba_sn:f.pcba_sn,defect_code:f.defect_code,defect_desc:f.defect_desc,defect_time:f.defect_time,failure_family:f.failure_family,source:f.source});
-  const evidence=(f,repairs)=>({current_failure:failureEvidence(current),failure:failureEvidence(f),repairs:repairs.map(({raw,...r})=>r)});
+  if(currentTime===null&&histSeq(current)<0)limit('CURRENT_TIME_UNPROVEN');
+  const emit=a=>{const key=JSON.stringify([a.kind,a.pcba_sn,a.item_sn,a.prior_defect_code,instant(a.prior_defect_time),a.prior_hist_seq??null]);if(!seen.has(key)){seen.add(key);alerts.push({...a,classification:'correlation',root_cause_confirmed:false});}};
+  const prior=f=>{
+    if(same(f?.pcba_sn,model.current_pcba))return failureOrder(f,current).prior;
+    // Components belong to a DIFFERENT old PCBA. Defect Hist Seq is local
+    // to each PCBA and cannot order two different boards. Use proven instants
+    // and the existing 3074 binding proof for cross-board chronology.
+    const when=instant(f?.defect_time);
+    return currentTime!==null&&when!==null&&when<currentTime;
+  };
+  const failureEvidence=f=>({pcba_sn:f.pcba_sn,defect_code:f.defect_code,defect_desc:f.defect_desc,defect_time:f.defect_time,
+    hist_seq:f.hist_seq??null,repair_status:f.repair_status??null,defect_type:f.defect_type??null,failure_family:f.failure_family,source:f.source});
+  const evidence=(f,repairs)=>{
+    const clockAmbiguous=['hist_seq_same_clock','hist_seq_only'].includes(failureOrder(f,current).basis);
+    const currentCandidates=(current?.repairs||[]).filter(r=>r.association==='exact_occurrence'&&
+      instant(r.repair_time)!==null&&(currentTime===null||instant(r.repair_time)>=currentTime));
+    const candidateOf=rows=>rows.map(({raw,...r})=>r);
+    return {comparison:compareFailures(current?.defect_code,current?.defect_desc,f?.defect_code,f?.defect_desc,{currentFamily:current?.failure_family??undefined,oldFamily:f?.failure_family??undefined}),
+      order_basis:failureOrder(f,current).basis,current_failure:failureEvidence(current),failure:failureEvidence(f),
+      repairs:candidateOf(repairs),current_3012:clockAmbiguous?[]:candidateOf(currentCandidates),
+      // With equal timestamps the 3012 failure identity may match BOTH 2114
+      // histories. Preserve the comments, but do not assign either AT.
+      ambiguous_3012:clockAmbiguous?candidateOf([...new Map(
+        [...(f.repairs||[]),...currentCandidates].filter(r=>r.association==='exact_occurrence')
+          .map(r=>[JSON.stringify([r.row_key,r.repair_user,r.repair_time,r.repair_comment]),r])).values()]):[]};
+  };
   const allFailures=[current,...model.own_history||[],...(model.materials||[]).flatMap(m=>(m.history||[]).map(h=>h.failure))].filter(Boolean);
   const cycleEnd=f=>Math.min(currentTime,...allFailures.filter(x=>same(x.pcba_sn,f.pcba_sn)&&instant(x.defect_time)>instant(f.defect_time)).map(x=>instant(x.defect_time)));
   const boardRepairs=new Map();
   for(const old of model.own_history||[]){
-    if(!prior(old)||!same(old.pcba_sn,model.current_pcba)){if(instant(old.defect_time)===null)limit('HISTORY_TIME_UNPROVEN',{pcba_sn:old.pcba_sn});continue;}
-    const relation=related(current,old,old.relation),repairs=linkedRepairs(old,cycleEnd(old));
-    if(relation)emit({kind:relation==='MESMA_FALHA'?'PCBA_SAME_FAILURE':'PCBA_SAME_FAMILY',severity:relation==='MESMA_FALHA'?'high':'medium',pcba_sn:model.current_pcba,relation,prior_defect_code:old.defect_code,prior_defect_desc:old.defect_desc,prior_defect_time:old.defect_time,technician_comment:repairs[0]?.repair_comment||null,sources:[old.source,...new Set(repairs.map(r=>r.source))].filter(Boolean),evidence:evidence(old,repairs)});
+    if(!prior(old)||!same(old.pcba_sn,model.current_pcba)){
+      if(instant(old.defect_time)===null&&failureOrder(old,current).basis!=='contradicted')limit('HISTORY_TIME_UNPROVEN',{pcba_sn:old.pcba_sn});
+      continue;
+    }
+    const relation=related(current,old,old.relation);
+    const order=failureOrder(old,current);
+    const repairs=order.basis==='hist_seq_same_clock'||order.basis==='hist_seq_only'?[]:linkedRepairs(old,cycleEnd(old));
+    if(relation)emit({kind:relation==='MESMA_FALHA'?'PCBA_SAME_FAILURE':'PCBA_SAME_FAMILY',severity:relation==='MESMA_FALHA'?'high':'medium',pcba_sn:model.current_pcba,relation,order_basis:order.basis,prior_defect_code:old.defect_code,prior_defect_desc:old.defect_desc,prior_defect_time:old.defect_time,prior_hist_seq:old.hist_seq??null,technician_comment:repairs[0]?.repair_comment||null,sources:[old.source,...new Set(repairs.map(r=>r.source))].filter(Boolean),evidence:evidence(old,repairs)});
     for(const r of repairs.filter(explicitMainboardRepair)){
       const key=repairIdentity(r),existing=boardRepairs.get(key);
       if(existing)existing.occurrences.push({failure:old,relation});
@@ -241,11 +295,26 @@ export function buildLiveSnForensics(result={}){
   // Rows that already carry a PCBA keep that exact identity.
   const process=[...(trace3022?.operator_evidence||[]),...(trace3022?.process_passages||[]),...(trace3022?.rows||[])].map(row=>pcbaOf(row)?row:{...row,pcba_sn:queryPcba});
   const rawByPcba=raw2114ByPcba(trace2114,queryPcba),queryRows=rawByPcba.get(text(queryPcba))||[];
-  const explicitCurrent=trace2114?.current_failure||null,rawCurrent=latestHistory(queryRows),current=failureEntry(explicitCurrent||rawCurrent,{pcba:queryPcba,repairs,process,source:explicitCurrent?'2114':'2114-raw'});
-  let ownRows=Array.isArray(trace2114?.previous_failures)?trace2114.previous_failures:[];
+  const statedCurrent=trace2114?.current_failure||null;
+  const explicitCurrent=statedCurrent&&!pcbaOf(statedCurrent)&&queryPcba?
+    {...statedCurrent,pcba_sn:queryPcba}:statedCurrent;
+  const rawCurrent=latestHistory(queryRows);
+  // Some 2114 APIs expose a projected "current_failure" without Hist Seq while
+  // their own raw rows retain it. Recover ONLY the sequence from the latest
+  // raw row when PCBA, code and timestamp match the explicit current exactly.
+  // A disagreement in those fields is never reconciled automatically.
+  const scopedRaw=explicitCurrent&&rawCurrent&&histSeq(explicitCurrent)<0&&histSeq(rawCurrent)>=0&&
+    same(pcbaOf(explicitCurrent),pcbaOf(rawCurrent))&&same(defectCode(explicitCurrent),defectCode(rawCurrent))&&
+    sameInstant(defectTime(explicitCurrent),defectTime(rawCurrent));
+  const currentRow=scopedRaw?{...rawCurrent,...explicitCurrent,hist_seq:histSeq(rawCurrent)}:(explicitCurrent||rawCurrent);
+  const current=failureEntry(currentRow,{pcba:queryPcba,repairs,process,source:explicitCurrent?'2114':'2114-raw'});
+  let ownRows=Array.isArray(trace2114?.previous_failures)?
+    trace2114.previous_failures.filter(row=>!pcbaOf(row)||same(pcbaOf(row),queryPcba))
+      .map(row=>pcbaOf(row)?row:{...row,pcba_sn:queryPcba}):[];
   if(!ownRows.length&&queryRows.length>1)ownRows=queryRows.filter(row=>!sameHistory(row,rawCurrent));
-  const classified=provenPreviousFailures(ownRows,explicitCurrent||rawCurrent);
-  const ownHistory=classified.previous.map(row=>failureEntry(row,{pcba:queryPcba,repairs,process,source:Array.isArray(trace2114?.previous_failures)&&trace2114.previous_failures.includes(row)?'2114':'2114-raw'})).filter(Boolean);
+  const classified=provenPreviousFailures(ownRows,currentRow);
+  const ownHistory=classified.previous.map(row=>failureEntry(row,{pcba:queryPcba,repairs,process,
+    source:Array.isArray(trace2114?.previous_failures)?'2114':'2114-raw'})).filter(Boolean);
   // A mounting scope includes every selected physical component, not just
   // those already identified as reused. Older offline fixtures may provide
   // reused_components only; do not accidentally restore historical broad lists

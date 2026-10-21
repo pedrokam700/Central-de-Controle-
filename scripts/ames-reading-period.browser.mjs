@@ -24,6 +24,8 @@ old.insights={schema:'ames-insights-v1',ready:true,line:old.line_id,snapshot_id:
  material_analysis:[0,1].map(()=>({'PCBA atual':oldDefect.pcba_sn,'Material SN':'PART-<img src=x>',
  'Tipo material':'GENERIC','Defect Code atual':oldDefect.defect_code,'Defect Time atual':oldDefect.defect_time,
  'Uso material na falha':'3º uso','Part Number':'PN-X'}))}};
+old.insights.component_types=[{'Tipo material':'GENERIC','Materiais únicos no lote':1,'Reutilizados únicos':1,'3º+ uso':1}];
+old.insights.drilldowns.component_type_items=[0,1].map(()=>({'Material SN':'PART-<img src=x>','Tipo material':'GENERIC','Reusos anteriores material':2,'PCBAs desvinculadas':'OLD-A | OLD-B'}));
 old.source_coverage={
  '3028':{status:'observed_partial',stored_rows:3,source_complete:false,transport_complete:true},
  '3074':{status:'unknown',stored_rows:0,source_complete:false,transport_complete:true},
@@ -128,6 +130,12 @@ try{
  assert.equal(await page.evaluate(()=>qa.store.context()?.defect??null),beforeDefect,'Top 3 drilldown may not overwrite shared defect scope');
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
  await page.locator('[data-console-view=reuse]').click();
+ const matrix=page.locator('[data-component-matrix]');
+ assert.equal(await matrix.locator('[data-component-cell=total] > summary').innerText(),'1');
+ await matrix.locator('[data-component-cell=total] > summary').click();
+ assert.equal(await matrix.locator('[data-component-cell=total] [data-component-item]').count(),1);
+ assert.match(await matrix.locator('[data-component-cell=total]').innerText(),/OLD-A, OLD-B/);
+ assert.equal(await matrix.locator('img').count(),0);
  const cohorts=page.locator('[data-reuse-cohorts]');
  assert.match(await cohorts.innerText(),/Denominador não comprovado/);
  assert.equal(await cohorts.locator('[data-cohort-kind=pcbas][data-cohort-metric=second_use] strong').innerText(),'1');

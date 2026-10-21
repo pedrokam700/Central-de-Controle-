@@ -8,7 +8,7 @@ class CorrelacaoV011Tests(unittest.TestCase):
 
     def test_similar_camera(self):
         r = comparar_falhas('A','Camera: Offset','B','Camera: Rear camera failed')
-        self.assertEqual(r['relation'], 'FALHA_SIMILAR')
+        self.assertEqual(r['relation'], 'INDETERMINADA')  # Generic camera does not prove rear subtype (Issue52).
         self.assertEqual(r['current_family'], 'CAMERA')
 
     def test_diferente_camera_audio(self):

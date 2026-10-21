@@ -1,6 +1,7 @@
 import { AGENT_URL, SCHEDULER_POLICY, collectionScope, r12CompatibleBuild } from './data/agent-contract.mjs';
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
 import {CANONICAL_SCHEMA,DATASETS,normalizeCanonical} from './data/canonical.mjs';
+import {projectLiveJobEvents} from './data/job-live-events.mjs';
 
 const AGENT_TOKEN_KEY='central.ames.agentToken.v1';
 function bootstrapAgentToken(explicit=''){
@@ -124,7 +125,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     if(token!==generation)return;
     try {
       const raw=await request('/jobs/'+encodeURIComponent(id));
-      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
+      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
       if(done||(partial!==lastPartial&&now()-lastRefresh>2200)){
         try{await refresh();lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}

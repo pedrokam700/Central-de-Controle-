@@ -1,6 +1,31 @@
 import {escapeHtml as esc} from './evidence-view.mjs';
 
 const sourceState=value=>String(value||'').trim().toUpperCase();
+
+const stageLabel=x=>({'3074':'3074 · Vínculos físicos','2114':'2114 · Histórico PCBA','3022':'3022 · Processo'})[x]||x;
+const friendlyLine=id=>({'TAN10101':'Linha 1','TAN10102':'Linha 2','TAN10103':'Linha 3'})[id]||id||'Linha não informada';
+const pair=(a,b)=>a!=null&&b!=null&&b>0?`${a}/${b}`:'';
+export function liveTraceFeed(job={}){
+  if(!['deep_trace','trace','deep'].includes(String(job.kind||'')))return '';
+  const rows=Array.isArray(job.live_events)?job.live_events.slice(-12).reverse():[];
+  const status=String(job.status||'').toLowerCase();
+  const busy=['queued','running','starting','in_progress'].includes(status);
+  const heading=busy?'Rastreando ao vivo':status==='done'?'Últimas etapas da execução':status==='error'?'Execução interrompida':'Últimas evidências da execução';
+  return `<section class="ames-live-feed" data-trace-live-feed aria-label="Evolução da rastreabilidade">
+    <div class="section-head"><div><h4>${heading}</h4><p>As leituras aparecem conforme o próprio job informa. Dados parciais não comprovam conclusão.</p></div><span class="status ${status==='error'?'bad':busy?'warn':status==='done'?'ok':'unknown'}">${esc(status||'aguardando')}</span></div>
+    ${rows.length?`<div class="ames-live-feed-list" role="log" aria-label="Últimos eventos da coleta">${rows.map(e=>{
+      const ref=e.stage==='3074'?e.sn||e.pcba:e.pcba||e.sn;
+      const item=e.kind==='component'?[e.item_type,e.item_sn].filter(Boolean).join(' · '):'';
+      const failure=pair(e.defect_index,e.defect_total),component=pair(e.component_index,e.component_total),progress=pair(e.current,e.total);
+      return `<div class="ames-live-feed-row"><b>${esc(stageLabel(e.stage))}</b><span>${esc(friendlyLine(e.line))}</span>
+        <span class="ames-live-feed-target">${esc(ref||'PCBA não informada')}${item?` · ${esc(item)}`:''}</span>
+        <small>${failure?`Falha ${esc(failure)}`:''}${component?` · Componente ${esc(component)}`:''}${progress?` · ${esc(progress)}`:''}${e.status?` · ${esc(e.status)}`:''}</small>
+      </div>`;
+    }).join('')}</div>`:`<p class="mes-context" role="status">${busy?'Aguardando eventos detalhados do agente local.':'Nenhum evento detalhado disponível neste job.'}</p>`}
+    <small>Exibição local limitada aos 12 eventos mais recentes. Não adiciona coleta nem envia SNs ao Firebase.</small>
+  </section>`;
+}
+
 function stageDetail(stage,p){
   if(!p)return '';
   const bits=[`${p.current??'—'}/${p.total??'—'}`];
@@ -48,5 +73,6 @@ export function collectionStatus(state){
   return `${error}<div class="ames-job-head"><b>Job ${esc(job.id)}</b><span>${esc(job.status)}</span></div><p>${esc(job.message||job.error||'Aguardando execução.')}</p>
     ${job.kind==='deep_trace'?`<p>${stages.join(' → ')}</p>`:''}
     <div class="ames-progress-list">${stages.map(stage=>{const p=progress[stage];return `<article><b>${stage}</b> · <span>${esc(p?.line||'Linha aguardando informação')}</span>${p?`<progress max="100" value="${Math.max(0,Math.min(100,Number(p.line_percent)||0))}"></progress><small>${esc(stageDetail(stage,p))}</small>`:` · ${esc(job.stage===stage?'Em execução':job.result?.stages?.[stage]||'Aguardando')}`}</article>`;}).join('')}</div>
+    ${liveTraceFeed(job)}
     ${job.status==='done'&&result?`<section data-trace-result><h4>Resultado da coleta</h4><p>Valores informados pelo job; erro/indisponibilidade de uma fonte nunca é convertido em zero.</p>${Object.entries(result).map(([line,r])=>`<article><b>${esc(line)}</b>${r.skipped?`<p>${esc(r.reason||'Linha sem ocorrências no escopo.')}</p>`:`<p>Escopo consultado: ${esc(r.scope?.records??'—')} ocorrências · ${esc(r.scope?.unique_pcbas??'—')} PCBAs</p><p>3074 · materiais no snapshot: ${esc(r.enrichment?.material_rows??'—')}<br>${trace2114Summary(r)}<br>${trace3022Summary(r)}</p>${(r['3022']?.warnings||[]).map(w=>`<p class="notice warn">${esc(w)}</p>`).join('')}`}</article>`).join('')}</section>`:''}`;
 }

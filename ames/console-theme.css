@@ -70,3 +70,16 @@ body:has(#mesConsoleView:not(.hidden)) #mesConsole > .ames-legacy-shell {
 body:has(#mesConsoleView:not(.hidden)) #mesConsole > .ames-legacy-shell {
   overflow:hidden!important;
 }
+
+/* Incremental, local-only job evidence. Never let long SNs expand the console. */
+.ames-live-feed{margin-top:12px;padding:12px;border:1px solid var(--line,#dededb);border-radius:12px;background:var(--surface,#fff)}
+.ames-live-feed .section-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}
+.ames-live-feed h4{margin:0 0 4px;font-size:13px}
+.ames-live-feed p,.ames-live-feed>small{font-size:11px;color:var(--muted,#666)}
+.ames-live-feed-list{display:grid;gap:0;max-height:360px;overflow-y:auto}
+.ames-live-feed-row{display:grid;grid-template-columns:minmax(105px,.55fr) minmax(65px,.4fr) minmax(0,1.4fr);align-items:start;gap:5px 10px;padding:9px 3px;border-bottom:1px solid var(--line,#e5e5e3);font-size:11px}
+.ames-live-feed-row:last-child{border-bottom:0}
+.ames-live-feed-row b{font-size:11px}
+.ames-live-feed-row .ames-live-feed-target{overflow-wrap:anywhere}
+.ames-live-feed-row small{grid-column:1/-1;color:var(--muted,#666);overflow-wrap:anywhere}
+@media(max-width:700px){.ames-live-feed-row{grid-template-columns:1fr 1fr}.ames-live-feed-row .ames-live-feed-target{grid-column:1/-1}}

@@ -1,94 +1,15 @@
-import re
-import unicodedata
-import json
-from pathlib import Path
-
-
-def normalizar_texto(value):
-    text = unicodedata.normalize("NFKD", str(value or ""))
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9]+", " ", text)
-    return " ".join(text.split())
-
-
-# As famílias servem SOMENTE para classificar semelhança operacional.
-# Elas não afirmam causa do defeito nem culpa do material.
-_FAMILIAS = [
-    ("CAMERA", ["camera", "rear camera", "front camera"]),
-    ("RF_ANTENA", ["antenna", "gps", "wifi", "wireless", "bluetooth", "ant0", "ant1", "ant7", "rf test"]),
-    ("AUDIO", ["speaker", "receiver", "earpiece", "microphone", "headset", "audio"]),
-    ("DISPLAY_LCD", ["display", "screen", "lcd", "black screen", "protective film"]),
-    ("SENSOR", ["sensor", "light perception", "proximity", "p sensor"]),
-    ("NFC", ["nfc"]),
-    ("MECANICA_ESTRUTURA", ["middle frame", "frame", "top cover", "bottom cover", "cover", "deformation", "crack", "scratch", "dent"]),
-    ("BUTTON", ["button", "power key", "volume key"]),
-    ("FINGERPRINT", ["fingerprint"]),
-    ("USB_CARGA", ["usb", "charging", "charger"]),
-    ("BATTERY", ["battery"]),
-    ("VIBRATION", ["vibration", "motor"]),
-    ("SIM", ["sim card", "sim tray"]),
-]
-
-
-
-def _familias_configuradas():
-    path = Path(__file__).resolve().parents[1] / "config" / "familias_falhas.json"
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, dict) and data:
-            return [(str(name), list(values or [])) for name, values in data.items()]
-    except Exception:
-        pass
-    return _FAMILIAS
-
+from core.failure_taxonomy import normalize as normalizar_texto, describe, compare
 
 
 def familia_falha(desc, code=""):
-    text = f" {normalizar_texto(desc)} "
-    for family, keywords in _familias_configuradas():
-        for keyword in keywords:
-            key = normalizar_texto(keyword)
-            if key and key in text:
-                return family
-    return "OUTRO"
+    return describe(code, desc)["family"]
 
 
 def comparar_falhas(current_code, current_desc, old_code, old_desc):
-    cc = str(current_code or "").strip().upper()
-    oc = str(old_code or "").strip().upper()
-    cd = normalizar_texto(current_desc)
-    od = normalizar_texto(old_desc)
-    current_family = familia_falha(current_desc, current_code)
-    old_family = familia_falha(old_desc, old_code)
-
-    if cc and oc and cc == oc:
-        return {
-            "relation": "MESMA_FALHA",
-            "reason": "Defect Code igual",
-            "current_family": current_family,
-            "old_family": old_family,
-        }
-    if cd and od and cd == od:
-        return {
-            "relation": "MESMA_FALHA",
-            "reason": "Descrição normalizada igual",
-            "current_family": current_family,
-            "old_family": old_family,
-        }
-    if current_family != "OUTRO" and current_family == old_family:
-        return {
-            "relation": "FALHA_SIMILAR",
-            "reason": f"Mesmo subsistema: {current_family}",
-            "current_family": current_family,
-            "old_family": old_family,
-        }
-    return {
-        "relation": "FALHA_DIFERENTE",
-        "reason": f"Subsistemas diferentes: {current_family} x {old_family}",
-        "current_family": current_family,
-        "old_family": old_family,
-    }
+    result = compare(current_code, current_desc, old_code, old_desc)
+    return {**result, "relation": {"EXACT":"MESMA_FALHA", "SIMILAR":"FALHA_SIMILAR",
+            "OTHER":"FALHA_DIFERENTE", "UNKNOWN":"INDETERMINADA"}[result["classification"]],
+            "reason": result["reason_code"]}
 
 
 def _hist_seq_value(hist, fallback=0):

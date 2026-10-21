@@ -77,7 +77,7 @@ export function normalizeAgentRead(payload) {
   let insights = null;
   if (input?.schema === 'ames-insights-v1' && input.ready === true && input.line === base.line_id && String(input.snapshot_id) === base.snapshot_id) {
     const safeRow = r => Object.fromEntries(Object.entries(r || {}).filter(([k,v]) => !k.startsWith('_') && !/password|cookie|token|credential|raw_json/i.test(k) && (typeof v==='string'||typeof v==='number'||typeof v==='boolean')).map(([k,v])=>[k.slice(0,120),typeof v==='string'?v.slice(0,12000):v]));
-    insights = { line:base.line_id,snapshot_id:base.snapshot_id, coverage:'partial',
+    insights = { classifier_version:typeof input.classifier_version==='string'?input.classifier_version.slice(0,80):null,line:base.line_id,snapshot_id:base.snapshot_id, coverage:'partial',
       groups:Object.fromEntries(['rate_kpis','pcba_kpis','material_kpis','correlation_kpis'].map(k=>[k,(input[k]||[]).filter(r=>Array.isArray(r)&&typeof r[0]==='string'&&['string','number'].includes(typeof r[1])).map(r=>[r[0].slice(0,200),r[1]])])),
       component_types:(input.component_types||[]).map(safeRow),
       drilldowns:Object.fromEntries(Object.entries(input.drilldowns||{}).filter(([,rows])=>Array.isArray(rows)).map(([k,rows])=>[k,rows.map(safeRow)])) };
