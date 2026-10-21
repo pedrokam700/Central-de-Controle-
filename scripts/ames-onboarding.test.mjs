@@ -83,7 +83,7 @@ test('only GitHub latest with exact asset, digest, tag and commit can become the
  assert.equal(m.version,'0.5.30');
  assert.equal(m.validated_sha,'c'.repeat(40));
  assert.equal(m.sha256,'d'.repeat(64));
- assert.match(m.download_url,/releases\/download\/ames-v0\.5\.29-multipc/);
+ assert.equal(m.download_url,latest.assets[0].browser_download_url);
  for(const bad of [
    {...latest,draft:true},
    {...latest,prerelease:true},
