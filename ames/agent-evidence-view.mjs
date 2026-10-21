@@ -17,7 +17,10 @@ export function createAgentEvidenceView(root,store) {
     if(snapshot!==next){snapshot=next;page=0;}
     if(!['agent-v0.5.23-read','central-ames-v2'].includes(snapshot?.source_schema)){
       renderSnapshot=undefined;renderKey='';
-      root.innerHTML='<div class="notice warn" role="status">Esta linha não possui revisão histórica comprovada no período selecionado. Abra Monitoramento, escolha a origem desta linha em Último dia produtivo e retorne aqui. A consulta não inicia coleta MES.</div>';
+      const en=root.ownerDocument?.documentElement?.lang?.startsWith('en');
+      root.innerHTML='<div class="notice warn" role="status">'+(en
+        ?'No verified historical revision is loaded for this line and period. In Monitoring, select this line’s source under Last production day, then return here. No MES job starts.'
+        :'Esta linha não possui revisão histórica comprovada no período selecionado. Abra Monitoramento, escolha a origem desta linha em Último dia produtivo e retorne aqui. A consulta não inicia coleta MES.')+'</div>';
       return;
     }
     const key=JSON.stringify([line,dataset,page]);if(renderSnapshot===snapshot&&renderKey===key)return;renderSnapshot=snapshot;renderKey=key;
