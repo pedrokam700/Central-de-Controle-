@@ -260,6 +260,36 @@ try{
  assert.equal(await snLive.locator('[data-sn-temporal-detail]').count(),1);
  assert.equal(await snLive.locator('[data-sn-history-detail]').count(),1);
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'SN live decoration cannot collect MES');
+ // Factory regression: three 2114 records must raise a visible high alert in
+ // the default Complete Story, not disappear inside the hidden Technical tab.
+ await page.evaluate(()=>{
+   const sn='PCBA-THREE-2114',time='2026-10-20 09:30:00';
+   const rows=[0,1,2].map(seq=>({
+     pcba_sn:sn,'Defect Hist Seq':seq,'Defect Code':'GN01-TX01',
+     'Defect Description':'Antenna: ANT0 test failed','Defect Time':time,
+     'Repair Status':'Y','Defect Type':seq===0?'Phone Disassembly':'MainBoard'
+   }));
+   qa.store.updateAgent({status:'connected',resultSource:'sn',job:{kind:'sn_lookup',status:'done',result:{
+     sn,detected_type:'PCBA',trace_2114:{status:'COMPLETE',pcbas:[{
+       pcba_sn:sn,status:'COMPLETE',result:{rows}
+     }],current_failure:rows[2],previous_failures:rows.slice(0,2)},
+     trace_3074:{status:'not_collected'},trace_3022:{status:'not_collected'},
+     trace_3012:{status:'not_collected'}
+   }}});
+   qa.view.render();
+ });
+ const alertPanel=snLive.locator('[data-sn-tab-panel="story"] [data-sn-smart-alerts]');
+ assert.equal(await alertPanel.count(),1,'organized alert must mount in default story');
+ assert.equal(await alertPanel.isVisible(),true,'technical tab must not hide priority alert');
+ assert.match(await alertPanel.innerText(),/ALTA PRIORIDADE/);
+ assert.match(await alertPanel.innerText(),/Mesma falha já ocorreu nesta PCBA/);
+ const proof=alertPanel.locator('[data-smart-alert="pcba-same-failure"] details');
+ await proof.locator('summary').click();
+ assert.equal(await proof.evaluate(el=>el.open),true);
+ await page.evaluate(()=>qa.view.render());
+ assert.equal(await snLive.locator('[data-sn-tab-panel="story"] [data-smart-alert="pcba-same-failure"] details').evaluate(el=>el.open),true,
+   'open evidence must survive a background redraw');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'rendering three historical failures must not collect MES');
  // PR35 block 15 lifecycle: a new query replaces, rather than stacks on,
  // the previous query's provenance and all read-only forensic decorators.
  await page.evaluate(()=>{
