@@ -22,7 +22,18 @@ export function createMesHistorySource(sync,client,store){
       if(local.status==='fulfilled'){
         for(const h of local.value){
           const key=[h.line_id,h.source_id,h.snapshot_id,h.snapshot_revision].join(':');
-          if(!rows.has(key))rows.set(key,{...h,history_source:'local',revision_pending:h.snapshot_revision==null});
+          const shared=rows.get(key);
+          if(shared){
+            // Same immutable revision may be available through both transports.
+            // Prefer the actual local read only when the content and period agree;
+            // never mistake a cloud copy for proof of an on-machine SQLite row.
+            const fields=['content_hash','period_start','period_end'];
+            if(fields.some(field=>shared[field]&&h[field]&&shared[field]!==h[field]))
+              throw Error('Conflito de integridade entre revisão local e compartilhada para '+line);
+            rows.set(key,{...h,history_source:'local',shared_available:true,
+              revision_pending:h.snapshot_revision==null});
+          }else rows.set(key,{...h,history_source:'local',
+            revision_pending:h.snapshot_revision==null});
         }
       }
       if(cloud.status==='rejected'&&local.status==='rejected')throw Error('Histórico remoto e local indisponíveis');
