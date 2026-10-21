@@ -1,5 +1,5 @@
 name: Publish Official A-MES Multi-PC Field Release
-# v0.5.35: a reviewed workflow-file push triggers one immutable exact-SHA release.
+# v0.5.36: a reviewed workflow-file push triggers one immutable exact-SHA release.
 # The GitHub Release and its 5/5 CI evidence, never the hosting provider, are authoritative.
 on:
   push:
@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="ames-v0.5.35-multipc-20261021"
+          tag="ames-v0.5.36-multipc-20261021"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Refusing to overwrite an existing official release";exit 1
           fi
@@ -75,5 +75,5 @@ jobs:
           cp "$RUNNER_TEMP/verified/AMES_PR42_CLEAN.zip" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip"
           gh release create "$tag" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Central + A-MES 0.5.35 — pareamento direto e recuperação FPY armazenada" \
-            --notes "Hotfix da página oficial 0.5.35: pareamento HTTPS explícito no cabeçalho, recuperação persistente da última coleta/FPY salvo com período/origem real, suporte a revisão do dia sem falsear Today e instruções claras de compatibilidade. Não é necessário reinstalar CLEAN em posto com agente 0.5.34 funcionando: mudanças apenas da interface/site são entregues pelo GitHub Pages. Para novos PCs, este CLEAN imutável contém o agente já existente e frontend correspondente. ZIP sem SQLite/token e gate exato Windows/browser/Firestore. Back-end auto-updater futuro na Issue #57; não implementado nesta versão. 0.5.34 preservada para rollback."
+            --title "Central + A-MES 0.5.36 — alertas técnicos restaurados e monitor limpo" \
+            --notes "Correção oficial 0.5.36: alerta de recorrência 2114 reaparece no topo da História completa, com classificação de prioridade, Defect Type, comentários 3012 e nome AT comprovado 3012+3022, sem atribuir falsamente reparos a ciclos. Corrigida expansão que fechava após redraw. Seleção de origens e opções históricas avançadas ficam recolhidas para reduzir ruído no Monitoramento; última coleta salva continua visível e sem confundir Hoje. Gate 5/5 Linux Browser/Windows/Firestore/CLEAN e Quality Gate no SHA exato; site GitHub Pages segue release imutável. CLEAN para instalação inicial ou motor incompatível; agente 0.5.35 compatível não precisa reinstalar para este frontend. 0.5.35 disponível para rollback. SQLite e MES intocados."
