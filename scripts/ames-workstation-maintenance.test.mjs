@@ -58,7 +58,8 @@ test('new auto-start controls require the authenticated local agent; build fresh
   assert.match(backend,/if not self\._authorized\(path\):/);
   assert.match(view,/data-autostart-toggle/);
   assert.match(view,/globalThis\.confirm/);
-  assert.match(onboarding,/fetch\('\/release-build\.json'/);
+  assert.match(onboarding,/\/Central-de-Controle-\/release-build\.json/);
+  assert.match(onboarding,/\/release-build\.json/);
   assert.match(onboarding,/published\.sha===release\.validated_sha/);
   assert.match(onboarding,/pageBuildStatus='unverified'/);
 });
