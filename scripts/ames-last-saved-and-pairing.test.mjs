@@ -72,3 +72,9 @@ test('latest historical reader reindexes when same-browser agent pairing becomes
  assert.match(code,/agent\.capabilities\?\.source_id/);
  assert.match(code,/const key=JSON\.stringify\(\[c\.line,c\.previousCutoff,agent\.status==='connected',agentSource/);
 });
+
+test('live cross-PC status never counts stored previous-day snapshots as absent history',()=>{
+ const code=fs.readFileSync(new URL('../ames/console-preparation.mjs',import.meta.url),'utf8');
+ assert.match(code,/Linhas atuais comprovadas/);
+ assert.doesNotMatch(code,/Linhas identificadas/);
+});
