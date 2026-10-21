@@ -158,7 +158,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
           const ready=await response.json();
           if(ready?.ready===true&&ready?.ok===true&&ready?.agent_version==='0.5.23'&&
              Number.isInteger(ready.pid)&&ready.pid>0&&typeof ready.agent_build==='string'){
-            probe={state:ready.workstation_pairing_flow===2?'detected':'outdated'};
+            probe={state:ready.workstation_pairing_flow===3?'detected':'outdated'};
           }
         }
       }catch{ /* CORS/PNA or agent not running: unknown, never absent */ }
