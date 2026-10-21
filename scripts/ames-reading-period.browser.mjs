@@ -495,7 +495,8 @@ try{
  await page.waitForFunction(()=>qa.store.agent().period_read?.source_choices?.length===1);
  assert.equal(await page.locator('[data-history-source-picker]').count(),1);
  assert.equal(await page.locator('[data-history-source-select] option').count(),3,'explicit placeholder plus two source identities');
- assert.equal(await page.evaluate(()=>qa.store.agent().period_read.status),'partial');
+ assert.equal(await page.evaluate(()=>qa.store.agent().period_read.status),'ready','previously validated same-period source remains loaded');
+ assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.source_id),'preserved-workstation');
  await page.locator('[data-history-source-select]').selectOption('preserved-workstation');
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.source_id),'preserved-workstation');
