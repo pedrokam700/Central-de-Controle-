@@ -183,7 +183,7 @@ test('shared live/offline alert renderer exposes all component evidence in PT/EN
  for(const locale of ['pt-BR','en-US']){
   const html=renderSnCorrelationAlerts(model,locale);
   assert.match(html,/FPC-1/);assert.match(html,/LCM-1/);assert.match(html,/OLD/);assert.match(html,/TECH-1/);
-  assert.match(html,/Repair Time/);assert.match(html,/Repair Comment/);assert.match(html,/&lt;script&gt;/);
+  assert.match(html,/3012/);assert.match(html,/(?:Comentário|Comment)/);assert.match(html,/&lt;script&gt;/);
   assert.doesNotMatch(html,/<script>/);assert.doesNotMatch(html,/2026-10-11T/);
   assert.match(html,locale==='pt-BR'?/Correlação não confirma causa raiz/:/Correlation does not confirm root cause/);
  }
