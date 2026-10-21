@@ -97,3 +97,10 @@ test('a divergent cloud row cannot silently replace the same local immutable rev
  },{agent:()=>({status:'connected'})});
  await assert.rejects(source.list('TAN10103'),/Conflito de integridade/);
 });
+
+test('cloud error with empty local SQLite index reports partial unavailability rather than zero history',async()=>{
+ const source=createMesHistorySource({listHistory:async()=>{throw Error('offline cloud');}},{
+  localHistoryList:async()=>[]
+ },{agent:()=>({status:'connected'})});
+ await assert.rejects(source.list('TAN10103'),/Histórico compartilhado indisponível/);
+});
