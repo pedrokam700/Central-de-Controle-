@@ -1,0 +1,125 @@
+# GitHub main + immutable GitHub Releases are the only source of truth.
+# GitHub Pages serves the files built from the latest VERIFIED GitHub Release,
+# not from a newer draft/unchecked main commit or a different hosting provider.
+name: Publish Official Central on GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-github-pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages-official-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build official release and deploy GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Resolve immutable latest GitHub Release and validate CLEAN evidence
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "/repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/official-release.json"
+          python3 - "$RUNNER_TEMP/official-release.json" >> "$GITHUB_OUTPUT" <<'PY'
+          import json,re,sys
+          r=json.load(open(sys.argv[1],encoding='utf-8'))
+          sha=r.get('target_commitish','')
+          tag=r.get('tag_name','')
+          assert re.fullmatch('[0-9a-f]{40}',sha), 'Official release lacks exact commit SHA'
+          assert re.fullmatch(r'ames-v0\.5\.\d+-multipc-\d{8}',tag), 'Unexpected release tag'
+          matches=[a for a in r.get('assets',[]) if a.get('name')==f'AMES_Central_CLEAN_{sha[:8]}.zip'
+              and re.fullmatch(r'sha256:[0-9a-f]{64}',a.get('digest') or '') and (a.get('size') or 0)>0]
+          assert len(matches)==1, 'Release must have exactly one verified matching CLEAN ZIP with digest'
+          assert not r.get('draft') and not r.get('prerelease'), 'Do not deploy draft/prerelease'
+          print(f"sha={sha}")
+          print(f"tag={tag}")
+          print(f"Clean verified: {matches[0]['name']} {matches[0]['digest']}",file=sys.stderr)
+          PY
+
+      - name: Checkout EXACT official GitHub Release commit, not newer unapproved code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Verify official source and build the Central
+        env:
+          COMMIT: ${{ steps.release.outputs.sha }}
+          BRANCH: main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$COMMIT"
+          node --test scripts/ames-deploy-routing.test.mjs scripts/ames-onboarding.test.mjs
+          node scripts/build-static.mjs
+          test -s "dist/Central-de-Controle-/index.html"
+          test -s "dist/Central-de-Controle-/offline-bootstrap.mjs"
+          test -s "dist/release-build.json"
+          cp dist/release-build.json dist/Central-de-Controle-/release-build.json
+          touch dist/Central-de-Controle-/.nojekyll
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('dist/Central-de-Controle-')
+          m=json.loads((p/'release-build.json').read_text())
+          assert m['sha']==os.environ['COMMIT'], 'Pages artifact is not release SHA'
+          assert (p/'index.html').exists() and (p/'sw.js').exists()
+          assert (p/'ames'/'release-discovery.mjs').exists()
+          assert not any(f.suffix.lower() in ('.sqlite','.sqlite3','.db','.pem','.key')
+                         for f in p.rglob('*') if f.is_file()), 'Private local database/key cannot be published'
+          print('GitHub Pages static artifact ready for official',m['sha'])
+          PY
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload only site root, without duplicate /Central-de-Controle-/ nesting
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/Central-de-Controle-
+
+      - name: Publish GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Verify public Pages returns exactly the GitHub Release SHA
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -euo pipefail
+          url="https://pedrokam700.github.io/Central-de-Controle-/release-build.json"
+          for attempt in $(seq 1 12); do
+            if curl --fail --location --silent --show-error --max-time 10 --header 'Cache-Control: no-cache' "$url?check=$GITHUB_RUN_ID-$attempt" -o "$RUNNER_TEMP/pages-release.json"; then
+              if python3 - "$RUNNER_TEMP/pages-release.json" <<'PY'
+          import json,os,sys
+          try: assert json.load(open(sys.argv[1]))['sha']==os.environ['EXPECTED_SHA']
+          except (AssertionError,ValueError,KeyError,TypeError): sys.exit(1)
+          PY
+              then echo "Public GitHub Pages verified: $EXPECTED_SHA";exit 0;fi
+            fi
+            sleep 10
+          done
+          echo "::error::GitHub Pages URL did not prove the official GitHub Release SHA"
+          exit 1
