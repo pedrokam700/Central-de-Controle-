@@ -202,7 +202,18 @@ try{
  assert.equal(await proof.locator('[data-source-view="3012"]').getAttribute('data-source-status'),'candidate_partial');
  assert.match(await proof.innerText(),/3012/);
  assert(!/3074[^\n]*0 (?:registro|row)/i.test(await proof.innerText()),'Missing 3074 is not zero');
- await page.locator('[data-console-view=monitor]').click();await page.locator('[data-line-tab="TAN10102"]').click();
+ await page.locator('[data-console-view=monitor]').click();
+ await page.evaluate(()=>{
+   const node=document.querySelector('[data-console-pane="monitor"] [data-latest-capture-preview]');
+   if(!node)throw Error('saved capture preview is absent');
+   const old=qa.store.agent().period_read;
+   qa.store.updateAgent({period_read:{...old,status:'loading'}});
+   qa.view.render();
+   if(document.querySelector('[data-console-pane="monitor"] [data-latest-capture-preview]')!==node)
+     throw Error('saved capture reader remounted on agent polling');
+   qa.store.updateAgent({period_read:old});qa.view.render();
+ });
+ await page.locator('[data-line-tab="TAN10102"]').click();
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10102').snapshot),null);
  await page.locator('[data-line-tab="TAN10101"]').click();await page.locator('[data-global-reading-period] [data-read-period=today]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
