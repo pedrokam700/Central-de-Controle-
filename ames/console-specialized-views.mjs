@@ -6,6 +6,7 @@ import {componentFamily} from "./data/reuse-analysis.mjs";
 import { LINE_IDS } from './data/contract.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 import { createAgentEvidenceView } from './agent-evidence-view.mjs';
+import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
 
 const lineOptions=(selected)=>LINE_IDS.map((line,i)=>`<option value="${line}"${selected===line?' selected':''}>Linha ${i+1} · ${line}</option>`).join('');
 const fmt=value=>value===null||value===undefined||value===''?'—':String(value);
@@ -110,7 +111,7 @@ export function createSnConsoleView(root,store,client){
 }
 
 export function createTraceConsoleView(root,store,client){
-  let mounted=false,line=store.context?.()?.line_id||store.preferredLine?.()||LINE_IDS[0],evidence;
+  let mounted=false,line=store.context?.()?.line_id||store.preferredLine?.()||LINE_IDS[0],evidence,captures;
   function render(){
     const contextLine=store.context?.()?.line_id||store.preferredLine?.();
     if(contextLine&&LINE_IDS.includes(contextLine)&&contextLine!==line){
@@ -125,8 +126,9 @@ export function createTraceConsoleView(root,store,client){
         <div class="ames-mode-grid"><label class="ames-mode-card"><input type="radio" name="trace_mode" value="full" checked><span><b>Completo</b><small>3074 + 2114 + 3022</small></span></label><label class="ames-mode-card"><input type="radio" name="trace_mode" value="process_only"><span><b>Processo</b><small>Somente horários 3022</small></span></label><label class="ames-mode-card"><input type="radio" name="trace_mode" value="reuse_only"><span><b>Reuso</b><small>3074 + 2114</small></span></label></div>
         <div class="mes-filters"><label>Perfil<select name="performance"><option value="fast">Rápido</option><option value="balanced" selected>Equilibrado</option><option value="safe">Seguro</option></select></label></div><details data-trace-limits><summary>Limites avançados</summary><p>Sem limite por padrão. Preencha somente para limitar esta execução.</p><div class="mes-filters"><label>Ocorrências máximas / linha<input type="number" name="max_failures" min="1" placeholder="Sem limite"></label><label>PCBAs máximas / linha<input type="number" name="max_pcbas" min="1" placeholder="Sem limite"></label></div></details><details><summary>Códigos manuais (avançado)</summary><label>Códigos exatos de falha<input name="codes" placeholder="Separados por vírgula"></label></details><div class="mes-pagination"><button type="button" class="button primary" data-trace-run>Iniciar coleta</button><button type="button" class="button secondary" data-trace-cancel>Cancelar</button></div>
       </form><aside class="mes-context-panel ames-trace-progress"><h3>Progresso da rastreabilidade</h3><div data-trace-status></div></aside></div>
-      <section class="mes-context-panel ames-trace-evidence-wrap">${sectionHead('Evidência carregada','Selecione uma linha para inspecionar exatamente o que sustenta a leitura.',`<label>Visualizar linha<select data-trace-line>${lineOptions(line)}</select></label>`)}<section data-trace-evidence></section></section>`;
+      <section class="mes-context-panel ames-trace-evidence-wrap">${sectionHead('Evidência carregada','Selecione uma linha para inspecionar exatamente o que sustenta a leitura.',`<label>Visualizar linha<select data-trace-line>${lineOptions(line)}</select></label>`)}<section data-trace-evidence></section><section data-trace-capture-index></section></section>`;
       mounted=true;evidence=createAgentEvidenceView(root.querySelector('[data-trace-evidence]'),store);
+      captures=createSourceCaptureHistory(root.querySelector('[data-trace-capture-index]'),client,store);
       root.querySelector('[data-trace-line]').addEventListener('change',e=>{line=e.target.value;evidence.render(line);});
       root.querySelector('[data-trace-form]').addEventListener('submit',e=>{e.preventDefault();root.querySelector('[data-trace-run]').click();});
       root.querySelector('[data-trace-run]').addEventListener('click',async()=>{
@@ -145,8 +147,17 @@ export function createTraceConsoleView(root,store,client){
     root.querySelector('[data-trace-run]').disabled=!!a.submitting;
     status.setAttribute('aria-live','polite');status.innerHTML=collectionStatus(a);
     evidence?.render(line);
+    const selected=store.readingPeriod?.(),read=store.read(line),payload=read.snapshot?.canonical;
+    const box=root.querySelector('[data-trace-capture-index]');
+    if(box)box.hidden=selected?.mode==='today';
+    if(selected?.mode!=='today'){
+      // Read-only SQLite capture index bound to selected historical revision.
+      captures?.show(payload,payload?{history_source:read.source==='local'?'local':'shared',
+        line_id:line,source_id:payload.source_id,snapshot_id:payload.snapshot_id,
+        snapshot_revision:payload.snapshot_revision}:null);
+    }
   }
-  return {render,clear(){root?.replaceChildren();mounted=false;evidence=undefined;}};
+  return {render,clear(){captures?.clear();captures=undefined;root?.replaceChildren();mounted=false;evidence=undefined;}};
 }
 
 export function filterProcessScope(allContexts=[],allEvents=[],{pcba='',defect=''}={}){
