@@ -104,7 +104,7 @@ test('release discovery is read-only and falls back offline to exact factory-app
    return {ok:true,json:async()=>latest};
  };
  const m=await discoverOfficialRelease(undefined,fetcher,async()=>release);
- assert.equal(m.version,'0.5.31');
+ assert.equal(m.version,'0.5.30');
  const fallback=await discoverOfficialRelease(undefined,async()=>{throw Error('offline');},async()=>release);
  assert.equal(fallback.sha256,release.sha256);
 });
@@ -121,7 +121,7 @@ test('validated GitHub manifest remains valid through view-level validation',()=
  const latestOnce=verifiedLatestRelease(latest,release);
  const latestTwice=readRelease(latestOnce);
  assert.equal(latestTwice.validated_sha,'c'.repeat(40));
- assert.equal(latestTwice.version,'0.5.31');
+ assert.equal(latestTwice.version,'0.5.30');
 });
 
 test('all static installation URLs use GitHub latest, and SHA-validated direct URL is retained only in approved manifest',()=>{
