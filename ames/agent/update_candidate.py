@@ -8,10 +8,11 @@ import socket
 import sqlite3
 import uuid
 from pathlib import Path
-FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','base_paging_backend.py','candidate_config.py','hardening.py','local_security.py','operational_calendar.py','origin_policy.py','workstation_pairing.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py','production_shift.py','agent_3012_patch.py','ames_3012_live.py','ames_3012_strategy.py','repair_3012.py','repair_3012_capture.py','repair_association.py','local_sn.py','network_watch.py','performance_indexes.py','source_capture.py','sn_lookup_context.py','fastlane_runtime_guard.py','factory_redfix.py','offline_catalog.py','map_3012.py')
+FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','base_paging_backend.py','candidate_config.py','hardening.py','local_security.py','operational_calendar.py','origin_policy.py','workstation_pairing.py','engine_bridge.py','store.py','mes_scheduler.py','canonical.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py','production_shift.py','workstation_autostart.py','agent_3012_patch.py','ames_3012_live.py','ames_3012_strategy.py','repair_3012.py','repair_3012_capture.py','repair_association.py','local_sn.py','network_watch.py','performance_indexes.py','source_capture.py','sn_lookup_context.py','fastlane_runtime_guard.py','factory_redfix.py','offline_catalog.py','map_3012.py')
 ROOT_FILES=('INICIAR_POSTO_CENTRAL_V2.bat','00_INICIAR_AQUI.bat','INICIAR_CENTRAL_AMES.cmd',
             'suporte/ames-workstation/ROTA_AMES_APLICAR.bat','suporte/ames-workstation/ROTA_AMES_REMOVER.bat',
             'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1',
+            'suporte/ames-workstation/KEEP_AGENT_RUNNING.ps1',
             'suporte/ames-workstation/CAPTURAR_MOTOR_R12_SEGURO.bat','suporte/ames-workstation/capture-r12-engine.py')
 OPTIONAL_ROOT_FILES=('FRONTEND_GATE.json',)
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
