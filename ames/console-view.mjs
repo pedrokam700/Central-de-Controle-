@@ -1,5 +1,5 @@
 import {withHistoricalTrends} from './console-history-trends.mjs';
-import {createStoredPeriodRecords} from './console-reading-period.mjs';
+import {createStoredPeriodRecords,paintReadingPeriod} from './console-reading-period.mjs';
 import {withFailureOccurrenceEvidence} from './console-failure-evidence.mjs';
 import {withSnLiveContext} from './console-sn-live-context.mjs';
 import {createSavedSnHistoryView} from './console-saved-sn-history.mjs';
@@ -115,7 +115,15 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     else if(id==='failures'){pane.innerHTML='<section data-failures-main></section><section data-failures-process></section>';const failureRoot=pane.querySelector('[data-failures-main]'),primary=withFailureOccurrenceEvidence(createFailuresParityView(failureRoot,store,client),failureRoot,store),process=createFailureProcessAddon(pane.querySelector('[data-failures-process]'),store,failureRoot);view={render(){primary.render();process.render();},clear(){primary.clear?.();process.clear?.();pane.replaceChildren();}};}
     else if(id==='sn'){pane.innerHTML='<section data-sn-live></section><section data-sn-saved></section>';const snRoot=pane.querySelector('[data-sn-live]');const current=withOfflineSnNavigation(withOfflineSnLookup(withProcessCapability(withSnLiveContext(withFastlaneSnEnhancements(createSnConsoleView(snRoot,store,client),snRoot,store),snRoot,store),snRoot,store,'sn'),snRoot,store),snRoot);const saved=createSavedSnHistoryView(pane.querySelector('[data-sn-saved]'),client,store);view={render(){current.render();saved.render();},clear(){current.clear?.();saved.clear();pane.replaceChildren();}};}
     else if(id==='trace'){const base=withTraceSelectionHelper(withProcessCapability(createTraceConsoleView(pane,store,client),pane,store,'trace'),pane,store);view=withAgentRefresh(base,pane,store,client,{label:'Atualizar tela'});}
-    else if(id==='reuse')view=withAgentRefresh(withHistoricalTrends(withReuseProvenance(createReuseConsoleView(pane,store),pane,store),pane,store,history),pane,store,client,{label:'Atualizar'});
+    else if(id==='reuse'){
+      // The dashboard owns visible date/source/line controls, but shares the
+      // exact operational read scope with Monitor and Top 3 (never SN lookup).
+      pane.innerHTML='<section data-reuse-period-control class="mes-context-panel"></section><section data-reuse-dashboard></section>';
+      const scope=pane.querySelector('[data-reuse-period-control]'),content=pane.querySelector('[data-reuse-dashboard]');
+      const primary=withAgentRefresh(withHistoricalTrends(withReuseProvenance(createReuseConsoleView(content,store),content,store),content,store,history),content,store,client,{label:'Atualizar'});
+      view={render(){paintReadingPeriod(scope,store,periodController);primary.render();},
+        clear(){primary.clear?.();pane.replaceChildren();}};
+    }
     else if(id==='process'){pane.innerHTML='<section data-process-main></section><section data-process-3012></section>';const processRoot=pane.querySelector('[data-process-main]'),processBase=withProcessOperatorLayout(withProcessCapability(createProcessConsoleView(processRoot,store),processRoot,store,'process'),processRoot),base=withAgentRefresh(processBase,processRoot,store,client,{label:'Atualizar'}),repair3012=historical?createStoredPeriodRecords(pane.querySelector('[data-process-3012]'),store,{kind:'repairs'}):create3012FastlaneView(pane.querySelector('[data-process-3012]'),store);view={render(){base.render();repair3012.render();},clear(){base.clear?.();repair3012.clear?.();pane.replaceChildren();}};}
     else if(id==='base'){pane.innerHTML='<section data-base-history></section><section data-base-local></section>';const local=pane.querySelector('[data-base-local]'),base=withBaseCatalog(createBaseConsoleView(local,store,client),local,store,client),periods=createHistoryView(pane.querySelector('[data-base-history]'),store,client,history);view={render(){periods.render();base.render();},clear(){periods.clear();base.clear();}};}
     else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);views.set(id,view);return view;
