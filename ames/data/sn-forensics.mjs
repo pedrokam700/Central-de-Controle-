@@ -237,6 +237,14 @@ export function buildCorrelationAlerts(model={}){
       repairs:candidateOf(repairs),current_3012:clockAmbiguous?[]:candidateOf(currentCandidates),
       // With equal timestamps the 3012 failure identity may match BOTH 2114
       // histories. Preserve the comments, but do not assign either AT.
+      // Same PCBA and defect code can surface technician comments even when
+      // 2114 has no usable timestamp. Such 3012 rows are NOT attributable to
+      // first/second AT unless an exact occurrence link is independently proven.
+      candidates_3012: candidateOf([...new Map(
+        (model.repairs||[]).filter(r=>same(r.pcba_sn,model.current_pcba)&&
+          same(r.defect_code,f.defect_code)&&
+          ![...repairs,...currentCandidates].some(ex=>ex.row_key&&ex.row_key===r.row_key))
+          .map(r=>[JSON.stringify([r.row_key,r.repair_user,r.repair_time,r.repair_comment]),r])).values()]),
       ambiguous_3012:clockAmbiguous?candidateOf([...new Map(
         [...(f.repairs||[]),...currentCandidates].filter(r=>r.association==='exact_occurrence')
           .map(r=>[JSON.stringify([r.row_key,r.repair_user,r.repair_time,r.repair_comment]),r])).values()]):[]};
@@ -348,7 +356,7 @@ export function buildLiveSnForensics(result={}){
     '3012':live3012State(result,trace3012),
     '3028':result.local_snapshot?SOURCE_STATE.CACHED:SOURCE_STATE.NOT_COLLECTED,
   };
-  const model={material_selection:trace3074?.material_selection||null,process_contexts:result.local_snapshot?.process_contexts||[],query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,uncertain_previous_count:classified.uncertain,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
+  const model={material_selection:trace3074?.material_selection||null,process_contexts:result.local_snapshot?.process_contexts||[],query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,uncertain_previous_count:classified.uncertain,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),operator_source_3022:trace3022||null,source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
   enrichFamilies(model);model.alerts=buildCorrelationAlerts(model);return model;
 }
 
