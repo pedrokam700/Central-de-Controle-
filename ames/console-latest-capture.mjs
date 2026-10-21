@@ -71,9 +71,12 @@ export function createLatestCapturePreview(root,store,history,controller){
    !plan||plan.status==='none'?t('Ainda não há coleta anterior comprovada para esta linha. Isso não representa zero falhas.','No proven previous capture for this line; this is not zero failures.'):
    plan.status==='conflict'&&!latest?t('Existem registros de origens diferentes. Escolha um posto para visualizar, sem substituir o histórico.','Multiple workstation origins exist. Choose one to view without replacing history.'): '';
   const entry=latest?.entry,summary=latest?.canonical.summary||{};
+   const panelOpen=Boolean(root.querySelector('[data-last-capture-panel]')?.open);
    const advancedOpen=Boolean(root.querySelector('[data-last-capture-advanced]')?.open);
-  root.innerHTML='<section class="mes-context-panel" data-last-capture-panel>'+
-   '<h3>'+t('Última coleta disponível · histórico preservado','Latest available capture · saved history')+'</h3>'+
+  root.innerHTML='<details class="mes-context-panel ames-last-capture-collapsible" data-last-capture-panel>'+
+   '<summary><strong>'+t('Última coleta disponível · histórico preservado','Latest available capture · saved history')+'</strong>'+
+   (plan?.status==='conflict'&&!latest?'<span>'+t('Origens diferentes · selecionar ao expandir','Multiple origins · expand to select')+'</span>':'')+
+   '</summary><div data-last-capture-body>'+
    '<p>'+t('Revisão salva identificada pelo período e origem originais. Pode ser de hoje ou de um dia anterior; nunca substitui o FPY atual automaticamente.','Saved revision identified by its original period and origin. It may be today or a previous day; never silently replaces live FPY.')+'</p>'+
    (text?'<p role="status">'+esc(text)+'</p>':'')+
    (plan?.status==='conflict'?'<details data-last-capture-advanced><summary>'+t('Opções avançadas · escolher origem','Advanced options · choose source')+'</summary><label>'+t('Origem do histórico · trocar coleta','Historical source · switch capture')+
@@ -86,7 +89,8 @@ export function createLatestCapturePreview(root,store,history,controller){
      '<p>'+esc(entry.line_id)+' · '+t('Origem','Source')+' '+esc(entry.source_id)+' · Snapshot '+esc(entry.snapshot_id)+' / r'+esc(entry.snapshot_revision??latest.canonical.snapshot_revision)+'</p>'+
      '<div class="ames-inline-facts"><span>FPY <b>'+esc(metric(summary.fpy))+'</b></span><span>Check FPY <b>'+esc(metric(summary.check_fpy))+'</b></span><span>Quantity <b>'+esc(metric(summary.quantity))+'</b></span><span>'+t('Falhas observadas','Observed failures')+' <b>'+esc(latest.canonical.occurrences.length)+'</b></span></div>'+
      '<button type="button" class="button secondary" data-last-capture-open>'+t('Abrir período original nesta Central','Open original period in this Work Center')+'</button></div>':'')+
-   '</section>';
+   '</div></details>';
+  root.querySelector('[data-last-capture-panel]').open=panelOpen;
   if(root.querySelector('[data-last-capture-advanced]'))root.querySelector('[data-last-capture-advanced]').open=advancedOpen;
    root.querySelector('[data-last-capture-source]')?.addEventListener('change',async e=>{
    const target=choices.find(x=>identity(x)===e.target.value),id=++request;
