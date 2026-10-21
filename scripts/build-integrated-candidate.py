@@ -3,7 +3,7 @@ import argparse, hashlib, json, os, subprocess, tempfile, zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
-SUPPORT_FILES=('START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1')
+SUPPORT_FILES=('START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','KEEP_AGENT_RUNNING.ps1')
 _FORBIDDEN_EXACT={'config.json','local_agent_token','network_health.jsonl','.env','cookies.json','session.json'}
 _FORBIDDEN_SUFFIXES={'.sqlite','.sqlite3','.db','.pyc','.log','.zip','.pem','.key'}
 
