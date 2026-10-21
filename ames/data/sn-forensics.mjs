@@ -286,10 +286,19 @@ export function buildLiveSnForensics(result={}){
   // Rows that already carry a PCBA keep that exact identity.
   const process=[...(trace3022?.operator_evidence||[]),...(trace3022?.process_passages||[]),...(trace3022?.rows||[])].map(row=>pcbaOf(row)?row:{...row,pcba_sn:queryPcba});
   const rawByPcba=raw2114ByPcba(trace2114,queryPcba),queryRows=rawByPcba.get(text(queryPcba))||[];
-  const explicitCurrent=trace2114?.current_failure||null,rawCurrent=latestHistory(queryRows),current=failureEntry(explicitCurrent||rawCurrent,{pcba:queryPcba,repairs,process,source:explicitCurrent?'2114':'2114-raw'});
+  const explicitCurrent=trace2114?.current_failure||null,rawCurrent=latestHistory(queryRows);
+  // Some 2114 APIs expose a projected "current_failure" without Hist Seq while
+  // their own raw rows retain it. Recover ONLY the sequence from the latest
+  // raw row when PCBA, code and timestamp match the explicit current exactly.
+  // A disagreement in those fields is never reconciled automatically.
+  const scopedRaw=explicitCurrent&&rawCurrent&&histSeq(explicitCurrent)<0&&histSeq(rawCurrent)>=0&&
+    same(pcbaOf(explicitCurrent),pcbaOf(rawCurrent))&&same(defectCode(explicitCurrent),defectCode(rawCurrent))&&
+    sameInstant(defectTime(explicitCurrent),defectTime(rawCurrent));
+  const currentRow=scopedRaw?{...rawCurrent,...explicitCurrent,hist_seq:histSeq(rawCurrent)}:(explicitCurrent||rawCurrent);
+  const current=failureEntry(currentRow,{pcba:queryPcba,repairs,process,source:explicitCurrent?'2114':'2114-raw'});
   let ownRows=Array.isArray(trace2114?.previous_failures)?trace2114.previous_failures:[];
   if(!ownRows.length&&queryRows.length>1)ownRows=queryRows.filter(row=>!sameHistory(row,rawCurrent));
-  const classified=provenPreviousFailures(ownRows,explicitCurrent||rawCurrent);
+  const classified=provenPreviousFailures(ownRows,currentRow);
   const ownHistory=classified.previous.map(row=>failureEntry(row,{pcba:queryPcba,repairs,process,source:Array.isArray(trace2114?.previous_failures)&&trace2114.previous_failures.includes(row)?'2114':'2114-raw'})).filter(Boolean);
   // A mounting scope includes every selected physical component, not just
   // those already identified as reused. Older offline fixtures may provide
