@@ -22,7 +22,10 @@ def evaluate(config: Dict[str, Any] | None, port: int) -> Dict[str, Any]:
     if not isinstance(configured, (list, tuple)):
         configured = [configured]
 
-    # One exact GitHub Pages owner origin, never arbitrary github.io or wildcard.\n    # Private APIs still require the local workstation capability token.\n    official = workstation_pairing.OFFICIAL_CENTRAL.split("/Central-de-Controle/")[0]\n    allowed: Set[str] = set(local) | {official}
+    # One exact GitHub Pages owner origin, never arbitrary github.io or wildcard.
+    # Private APIs still require the local workstation capability token.
+    official = workstation_pairing.OFFICIAL_CENTRAL.split("/Central-de-Controle/")[0]
+    allowed: Set[str] = set(local) | {official}
     rejected = 0
     remote = 0
     duplicates = 0
