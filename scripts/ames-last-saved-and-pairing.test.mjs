@@ -5,7 +5,7 @@ import {planLatestCapture} from '../ames/console-latest-capture.mjs';
 
 const head=(date,source,id,when)=>({
  line_id:'TAN10102',source_id:source,snapshot_id:id,snapshot_revision:1,
- period_start:date+'T07:00',period_end:date+'T07:00'.replace(/^\d{4}-\d{2}-\d{2}/,'2026-10-22'),
+ period_start:date+'T07:00',period_end:new Date(Date.parse(date+'T12:00:00Z')+86400000).toISOString().slice(0,10)+'T07:00',
  collected_at:when
 });
 test('latest saved data includes same-day capture when Today has no readable snapshot',()=>{
