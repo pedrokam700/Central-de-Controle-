@@ -72,7 +72,8 @@ function compactEvidence(alert,locale,result={},currentPcba=''){
     for(const repair of proof.repairs||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro anterior associado','3012 · associated prior record'),result,currentPcba));
     for(const repair of proof.current_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro atual candidato','3012 · candidate current record'),result,currentPcba));
     for(const repair of proof.ambiguous_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · não atribuído à sequência 2114','3012 · unassigned to 2114 sequence'),result,currentPcba));
-    if(alert.kind?.startsWith('PCBA_')&&!(proof.current_3012||[]).length&&!(proof.ambiguous_3012||[]).length)
+    for(const repair of proof.candidates_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro candidato, sem ciclo comprovado','3012 · candidate, cycle unproven'),result,currentPcba));
+    if(alert.kind?.startsWith('PCBA_')&&!(proof.current_3012||[]).length&&!(proof.ambiguous_3012||[]).length&&!(proof.candidates_3012||[]).length)
       rows.push(`<p class="mes-context">${esc(t(locale,'Análise atual do AT não comprovada nesta consulta 3012; isso não indica que não foi realizada.','Current technician analysis not proven by this 3012 query; this does not mean it never occurred.'))}</p>`);
     if(ret)rows.push(`<div class="ames-sn-smart-proof"><small>3022 · ${esc(t(locale,'Retorno comprovado','Proven return'))}</small><b>${esc([ret.station,ret.operation].filter(Boolean).join(' · ')||'—')}</b><span>${esc(ret.time?time(ret.time):'—')}</span></div>`);
   }
@@ -82,13 +83,42 @@ function compactEvidence(alert,locale,result={},currentPcba=''){
   return rows.join('')||`<div class="ames-sn-forensic-empty">${esc(t(locale,'A correlação existe, mas a evidência detalhada não foi projetada nesta resposta.','The correlation exists, but detailed evidence was not projected in this response.'))}</div>`;
 }
 
+function shortTechnicianEvidence(alerts,locale,result,currentPcba){
+  const entries=new Map();
+  const add=(repair,label)=>{
+    const id=text(repair?.repair_user),comment=text(repair?.repair_comment);
+    if(!id&&!comment)return;
+    const key=[text(repair?.row_key),text(repair?.repair_time),id,comment].join('|');
+    if(!entries.has(key))entries.set(key,{repair,label});
+    else if(label==='3012 · análise anterior associada')entries.set(key,{repair,label});
+  };
+  for(const alert of alerts)for(const proof of evidenceList(alert)){
+    for(const item of proof.repairs||[])add(item,'3012 · análise anterior associada');
+    for(const item of proof.current_3012||[])add(item,'3012 · análise atual candidata');
+    for(const item of proof.ambiguous_3012||[])add(item,'3012 · sequência não atribuída');
+    for(const item of proof.candidates_3012||[])add(item,'3012 · registro candidato');
+  }
+  const items=[...entries.values()].slice(0,5);
+  if(!items.length)return '';
+  const evidence=items.map(({repair,label})=>{
+    const id=text(repair.repair_user),name=provenRepairUserName(repair,result,currentPcba);
+    const person=name?name+(id?' ('+id+')':''):(id?t(locale,'Nome não comprovado · ','Name not proven · ')+id:'—');
+    return '<div class="ames-sn-alert-tech-preview" style="border-top:1px solid var(--line,#ddd);padding:6px 0;overflow-wrap:anywhere">'+
+      '<small>'+esc(label)+'</small> · <b>'+esc(person)+'</b>'+
+      '<div>'+esc(t(locale,'Comentário do AT','Technician comment'))+': '+esc(fmt(repair.repair_comment))+'</div></div>';
+  }).join('');
+  return '<div data-sn-alert-technician-preview style="margin-top:8px">'+
+    '<small>'+esc(t(locale,'Evidência técnica disponível · nomes somente quando comprovados pela 3012/3022','Available technician evidence · names only when proven by 3012/3022'))+'</small>'+
+    evidence+(entries.size>5?'<small>+'+(entries.size-5)+'</small>':'')+'</div>';
+}
+
 function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,result={},currentPcba=''){
   const high=severity==='high';
   const tone=high?'var(--danger,#d92d20)':'var(--warning,#b54708)';
   const background=high?'var(--danger-soft,#fef3f2)':'var(--warning-soft,#fffaeb)';
   const badge=high?t(locale,'ALTA PRIORIDADE','HIGH PRIORITY'):t(locale,'PRIORIDADE MÉDIA','MEDIUM PRIORITY');
   const usageLine=usage?.proven?`<span>${esc(t(locale,'Uso da PCBA','PCBA use'))}: <b>${esc(usage.use_index?`${usage.use_index}º`:fmt(usage.known_uses))}</b>${usage.previous_uses!==null?` · ${esc(t(locale,'reusos anteriores','previous reuses'))}: ${esc(fmt(usage.previous_uses))}`:''}</span>`:'';
-  return `<article class="ames-sn-smart-alert" data-smart-alert="${esc(id)}" style="border:1px solid color-mix(in srgb,${tone} 35%,transparent);border-left:6px solid ${tone};background:${background};border-radius:10px;padding:11px 12px"><div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap"><span aria-hidden="true" style="font-size:18px">⚠</span><div style="min-width:0;flex:1"><b style="display:block">${esc(title)}</b><p style="margin:4px 0 0">${esc(summary)}</p>${usageLine}</div><span style="font-size:10px;font-weight:800;color:${tone}">${esc(badge)}</span></div><details style="margin-top:8px"><summary style="cursor:pointer;font-weight:750">${esc(t(locale,`Ver evidências (${alerts.length})`,`View evidence (${alerts.length})`))}</summary><div style="display:grid;gap:7px;margin-top:8px">${alerts.map(alert=>compactEvidence(alert,locale,result,currentPcba)).join('')}</div><small style="display:block;margin-top:8px;font-weight:700">${esc(t(locale,'Correlação técnica — não confirma causa raiz.','Technical correlation — does not confirm root cause.'))}</small></details></article>`;
+  return `<article class="ames-sn-smart-alert" data-smart-alert="${esc(id)}" style="border:1px solid color-mix(in srgb,${tone} 35%,transparent);border-left:6px solid ${tone};background:${background};border-radius:10px;padding:11px 12px"><div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap"><span aria-hidden="true" style="font-size:18px">⚠</span><div style="min-width:0;flex:1"><b style="display:block">${esc(title)}</b><p style="margin:4px 0 0">${esc(summary)}</p>${usageLine}<small>${esc([...new Set(alerts.flatMap(a=>evidenceList(a).map(p=>[p.failure?.defect_type,p.current_failure?.defect_type].filter(Boolean).join(" → "))).filter(Boolean))].join(" · "))}</small></div><span style="font-size:10px;font-weight:800;color:${tone}">${esc(badge)}</span></div>${shortTechnicianEvidence(alerts,locale,result,currentPcba)}<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:750">${esc(t(locale,`Ver evidências (${alerts.length})`,`View evidence (${alerts.length})`))}</summary><div style="display:grid;gap:7px;margin-top:8px">${alerts.map(alert=>compactEvidence(alert,locale,result,currentPcba)).join('')}</div><small style="display:block;margin-top:8px;font-weight:700">${esc(t(locale,'Correlação técnica — não confirma causa raiz.','Technical correlation — does not confirm root cause.'))}</small></details></article>`;
 }
 
 export function buildSmartSnAlerts(model={},result={}){
@@ -200,7 +230,8 @@ export function decorateSmartSnAlerts(root,model={},result={}){
     if(details?.open)state.open.add(key);
   });
   root.querySelector('[data-sn-smart-alerts]')?.remove();
-  const host=root.querySelector('[data-sn-tab-panel="technical"]')||root.querySelector('[data-sn-tab-panel="story"]')||root.querySelector('.ames-sn-forensic-panel')||root.querySelector('[data-sn-result]');
+  // The operator's default tab is History / Complete story. Technical is optional.
+  const host=root.querySelector('[data-sn-tab-panel="story"]')||root.querySelector('.ames-sn-forensic-panel')||root.querySelector('[data-sn-tab-panel="technical"]')||root.querySelector('[data-sn-result]');
   if(!host)return;
   const wrapper=host.ownerDocument.createElement('div');wrapper.setAttribute('data-no-i18n','');
   wrapper.innerHTML=renderSmartSnAlerts(model,result,host.ownerDocument.documentElement?.lang||'pt-BR');
@@ -208,7 +239,7 @@ export function decorateSmartSnAlerts(root,model={},result={}){
   for(const card of panel.querySelectorAll('[data-smart-alert]')){
     const details=card.querySelector('details'),key=card.dataset.smartAlert;if(!details)continue;
     if(state.open.has(key))details.open=true;
-    details.addEventListener('toggle',()=>{if(details.open)state.open.add(key);else state.open.delete(key);});
+    details.addEventListener('toggle',()=>{if(!details.isConnected)return;if(details.open)state.open.add(key);else state.open.delete(key);});
   }
   host.prepend(panel);
 }
