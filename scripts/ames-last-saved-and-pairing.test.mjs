@@ -55,3 +55,13 @@ test('latest capture occupies only an explicit expandable row and preserves oper
  assert.match(css,/details\.ames-last-capture-collapsible/);
  assert.doesNotMatch(code,/<section class="mes-context-panel" data-last-capture-panel>/);
 });
+
+test('the offline agent detected on official HTTPS has an obvious one-click local confirmation',()=>{
+ const code=fs.readFileSync(new URL('../ames/console-preparation.mjs',import.meta.url),'utf8');
+ assert.match(code,/!connected && client\.canPairFromOfficial\?\.\(\)/);
+ assert.match(code,/data-workstation-pair-hint/);
+ assert.match(code,/data-pair-local/);
+ assert.match(code,/client\.openLocalPairing\(\)/);
+ assert.match(code,/não reinstale o CLEAN/);
+ assert.doesNotMatch(code,/data-pair-local[^\n]*ames_agent_token/);
+});
