@@ -36,7 +36,7 @@ test('HTTPS pairing is an explicit local action to fixed official origin; token 
   try{
     globalThis.location=new URL('http://127.0.0.1:8765/Central-de-Controle-/');globalThis.window={open:(...args)=>opened=args};
     const client=createAgentClient(store,{agentToken:'fixture-secret'});assert(client.canOpenOfficial());client.openOfficial();
-    const target=new URL(opened[0]);assert.equal(target.origin,'https://central-cora-v2.vercel.app');assert.equal(target.search,'');assert.match(target.hash,/ames_agent_token=/);assert.equal(opened[2],'noopener,noreferrer');assert(!JSON.stringify(store.agent()).includes('fixture-secret'));
+    const target=new URL(opened[0]);assert.equal(target.origin,'https://pedrokam700.github.io');assert.equal(target.pathname,'/Central-de-Controle/');assert.equal(target.search,'');assert.match(target.hash,/ames_agent_token=/);assert.equal(opened[2],'noopener,noreferrer');assert(!JSON.stringify(store.agent()).includes('fixture-secret'));
     globalThis.location=new URL('https://evil.example/');assert(!client.canOpenOfficial());assert.throws(()=>client.openOfficial());
   }finally{if(beforeLocation===undefined)delete globalThis.location;else globalThis.location=beforeLocation;if(beforeWindow===undefined)delete globalThis.window;else globalThis.window=beforeWindow;}
 });
@@ -45,13 +45,17 @@ test('official HTTPS can open explicit local confirmation, but untrusted domains
   const beforeLocation=globalThis.location,beforeWindow=globalThis.window;
   let navigated='';
   try{
-    globalThis.location=new URL('https://central-cora-v2.vercel.app/Central-de-Controle-/');
+    globalThis.location=new URL('https://pedrokam700.github.io/Central-de-Controle/');
     globalThis.window={location:{assign:url=>{navigated=url;}}};
     const client=createAgentClient(fakeStore());
     assert.equal(client.canPairFromOfficial(),true);
     client.openLocalPairing();
     assert.equal(navigated,'http://127.0.0.1:8765/workstation/parear');
     assert.equal(navigated.includes('ames_agent_token'),false);
+    globalThis.location=new URL('https://pedrokam700.github.io/other-repo/');
+    assert.equal(client.canPairFromOfficial(),false);
+    globalThis.location=new URL('https://central-cora-v2.vercel.app/Central-de-Controle-/');
+    assert.equal(client.canPairFromOfficial(),false);
     globalThis.location=new URL('https://evil.example/');
     assert.equal(client.canPairFromOfficial(),false);
     assert.throws(()=>client.openLocalPairing(),/oficial/);
