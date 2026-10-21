@@ -70,7 +70,13 @@ export function createLatestCapturePreview(root,store,history,controller){
   if(!root||disposed)return;
   const c=context();
   root.hidden=false;
-  const key=JSON.stringify([c.line,c.previousCutoff]);
+  const agent=store.agent();
+  const agentSource=agent.status==='connected'
+    ?agent.capabilities?.source_id||null:null;
+  // Pairing a browser session changes the available evidence. Re-read the
+  // index once when the connection/source changes, even if the line and
+  // selected operational period did not change.
+  const key=JSON.stringify([c.line,c.previousCutoff,agent.status==='connected',agentSource,store.sessionGeneration?.()]);
   if(key!==periodKey){periodKey=key;line=c.line;void load(c.line,{end:c.previousCutoff});return;}
   const latest=payload,choices=plan?.candidates||[];
   const text=loading?t('Consultando última coleta comprovada…','Looking up last proven capture…'):
