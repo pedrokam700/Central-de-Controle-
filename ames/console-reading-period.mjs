@@ -14,20 +14,22 @@ export function paintReadingPeriod(root,store,controller){
   const sourceChoice=status?.source_choices?.find(choice=>choice.line_id===line&&choice.options?.length);
   const unresolved=sourceChoice&&!sourceChoice.selected_source_id;
   // One consistent selector for the current line. It remains available AFTER opening a revision.
-  const sourcePicker=sourceChoice&&status?.status!=='loading'?'<div class="mes-context" data-history-source-picker>'+
+  const sourcePicker=sourceChoice&&status?.status!=='loading'?'<details class="mes-context" data-history-source-advanced><summary>'+t('Opções avançadas · origem do histórico','Advanced options · history source')+'</summary><div data-history-source-picker>'+
     '<label>'+t('Origem do histórico · Linha','Historical source · Line')+' '+esc(line)+
     '<select data-history-source-select aria-label="'+t('Trocar origem da coleta','Switch capture source')+'">'+
     '<option value=""'+(unresolved?' selected':' disabled')+'>'+t('Selecione a coleta comprovada','Select a verified capture')+'</option>'+
     sourceChoice.options.map(o=>'<option value="'+esc(o.source_id)+'"'+(sourceChoice.selected_source_id===o.source_id?' selected':'')+'>'+
       esc((o.history_source==='local'?t('Local','Local'):t('Compartilhado','Shared'))+' · '+o.source_id+
         ' · '+formatFactoryDateTime(o.collected_at)+' · r'+(o.snapshot_revision??'—'))+'</option>').join('')+
-    '</select></label><small>'+t('Trocar a origem só muda a leitura desta linha. Nenhuma coleta MES será iniciada; revisões anteriores permanecem disponíveis.','Switching the source changes only this line\'s read. No MES collection starts; previous revisions remain available.')+'</small></div>':'';
+    '</select></label><small>'+t('Trocar a origem só muda a leitura desta linha. Nenhuma coleta MES será iniciada; revisões anteriores permanecem disponíveis.','Switching the source changes only this line\'s read. No MES collection starts; previous revisions remain available.')+'</small></div></details>':'';
   const note=status?.status==='loading'?t('Consultando revisões salvas…','Reading saved revisions…'):
     unresolved?t('Existem coletas de postos diferentes. Escolha a origem para abrir; nada será descartado.','Multiple workstation captures exist. Choose one to open; nothing will be discarded.') :
     missing?t('Nenhuma revisão salva disponível nesta linha e período. Não significa zero falhas. Após a coleta, use Atualizar leitura se necessário.','No saved revision for this line and period. This is not zero failures. After collection, use Refresh reading if needed.') :
     p?.mode!=='today'&&status?.status==='ready'?loaded.length+' '+t('linha(s) com revisão disponível','line(s) with saved revisions'):'';
+  const advancedOpen=Boolean(root.querySelector('[data-history-source-advanced]')?.open);
   root.setAttribute('data-no-i18n','');
   root.innerHTML=`<nav class="ames-history-tabs" aria-label="${t('Período de leitura','Reading period')}">${[['today',t('Hoje','Today')],['previous',t('Último dia produtivo','Last production day')],['custom',t('Período…','Period…')]].map(([id,label])=>`<button type="button" class="button secondary" data-read-period="${id}" aria-pressed="${p?.mode===id}">${label}</button>`).join('')}</nav><p class="mes-context" data-reading-label>${p?esc(formatFactoryDateTime(p.start)+' → '+formatFactoryDateTime(p.end)):''} · America/Sao_Paulo · ${t('07:00 → 07:00; turnos são outra dimensão','07:00 → 07:00; shifts are a separate dimension')}${p?.mode!=='today'?' · '+t('Somente leitura do passado','Read-only history'):''}</p><form data-reading-range hidden><div class="mes-filters"><label>${t('Início','Start')}<input type="datetime-local" name="start" required value="${esc(p?.start||'')}"></label><label>${t('Fim','End')}<input type="datetime-local" name="end" required value="${esc(p?.end||'')}"></label></div><button class="button secondary" type="submit">${t('Ver dados armazenados','View stored data')}</button></form><p role="status" data-reading-status>${esc(status?.errors?.length?status.errors.map(e=>e.line_id+': '+e.error).join(' · '):note)}</p>${sourcePicker}${p?.mode!=='today'?'<button type="button" class="button secondary" data-reading-reload>'+t('Atualizar leitura','Refresh reading')+'</button>':''}`;
+  if(root.querySelector('[data-history-source-advanced]'))root.querySelector('[data-history-source-advanced]').open=advancedOpen;
   for(const b of root.querySelectorAll('[data-read-period]'))b.addEventListener('click',()=>{
     if(b.dataset.readPeriod==='custom'){root.querySelector('form').hidden=false;return;}
     void controller.select(b.dataset.readPeriod);
