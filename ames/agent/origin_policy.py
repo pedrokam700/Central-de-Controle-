@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, Set
 
 import candidate_config
+import workstation_pairing
 
 
 def evaluate(config: Dict[str, Any] | None, port: int) -> Dict[str, Any]:
@@ -21,7 +22,7 @@ def evaluate(config: Dict[str, Any] | None, port: int) -> Dict[str, Any]:
     if not isinstance(configured, (list, tuple)):
         configured = [configured]
 
-    allowed: Set[str] = set(local)
+    # One exact GitHub Pages owner origin, never arbitrary github.io or wildcard.\n    # Private APIs still require the local workstation capability token.\n    official = workstation_pairing.OFFICIAL_CENTRAL.split("/Central-de-Controle/")[0]\n    allowed: Set[str] = set(local) | {official}
     rejected = 0
     remote = 0
     duplicates = 0
@@ -44,7 +45,7 @@ def evaluate(config: Dict[str, Any] | None, port: int) -> Dict[str, Any]:
             "ok": rejected == 0,
             "local_origins": len(local),
             "configured_entries": min(len(configured), 64),
-            "remote_origins": remote,
+            "remote_origins": remote,\n            "official_github_pages_origin": official,
             "rejected_entries": rejected,
             "duplicate_entries": duplicates,
             "mode": "loopback-plus-explicit-https",
