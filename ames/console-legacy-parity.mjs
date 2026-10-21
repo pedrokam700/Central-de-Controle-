@@ -46,7 +46,12 @@ export function createLineOverview(root,store,client,periodController,history=nu
     const read=store.read(line), state=coverageState(read), status={fresh:'Atualizado',partial:'Parcial',stale:'Desatualizado',not_collected:'Não coletado'}[state]||'Não coletado';
     const note=document.createElement('p');note.dataset.currentCoverage=state;
     const products=[...new Set((read.snapshot?.occurrences||[]).map(r=>r.product_key).filter(Boolean))].join(', ');
-    note.innerHTML='<b>'+ (store.readingPeriod?.()?.mode==='today'?'ATUAL':'HISTÓRICO') +'</b> · <span>'+esc(status)+'</span> · <span>Última atualização</span>: <span data-no-i18n>'+esc(formatFactoryDateTime(read.snapshot?.collected_at))+'</span> · CPH: <span data-no-i18n>'+esc(products||'—')+'</span>';
+    const observation=read.saved_today;
+    const period=read.snapshot?.canonical?.summary?.period||{};
+    note.innerHTML='<b>'+ (observation?'ÚLTIMA COLETA SALVA DE HOJE':store.readingPeriod?.()?.mode==='today'?'ATUAL':'HISTÓRICO') +
+      '</b> · <span>'+esc(observation?'Janela observada · não é fechamento do dia':status)+'</span> · <span>Última atualização</span>: <span data-no-i18n>'+esc(formatFactoryDateTime(read.snapshot?.collected_at))+
+      '</span>'+(observation?' · <span>Período efetivamente consultado:</span> <span data-no-i18n>'+esc(formatFactoryDateTime(period.start_at))+' → '+esc(formatFactoryDateTime(period.end_at))+'</span>':'')+
+      ' · CPH: <span data-no-i18n>'+esc(products||'—')+'</span>';
     root.querySelector('.ames-line-center').append(note);
     if(store.readingPeriod?.()?.mode!=='today')for(const b of root.querySelectorAll('[data-line-one],[data-line-all]'))b.disabled=true;
     for(const b of root.querySelectorAll('[data-line-tab]'))b.addEventListener('click',()=>{line=b.dataset.lineTab;store.updateContext?.({line_id:line});last='';render();});
