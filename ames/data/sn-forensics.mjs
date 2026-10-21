@@ -62,7 +62,7 @@ function normalizeRepair(row){
   if(!row)return null;
   return {
     source:row.source_view||row.source||'3012',row_key:row.row_key||null,association:row.association||null,pcba_sn:pcbaOf(row),defect_code:defectCode(row),defect_desc:defectDesc(row),defect_time:defectTime(row),
-    repair_user:value(row,'repair_user','Repair User'),repair_time:value(row,'repair_time','Repair Time'),
+    repair_user:value(row,'repair_user','Repair User'),repair_user_name:value(row,'repair_user_name','Repair User Name','RepairUserName'),repair_time:value(row,'repair_time','Repair Time'),
     repair_code:value(row,'repair_code','Repair Code'),repair_desc:value(row,'repair_desc','Repair Description'),
     repair_comment:value(row,'repair_comment','Repair Comment'),repaired_location:value(row,'repaired_location','Repaired Location'),
     reason_desc:value(row,'reason_desc','Repair Reason Description','Reason Description'),raw:row,
@@ -211,12 +211,20 @@ export function buildCorrelationAlerts(model={}){
   const prior=f=>failureOrder(f,current).prior;
   const failureEvidence=f=>({pcba_sn:f.pcba_sn,defect_code:f.defect_code,defect_desc:f.defect_desc,defect_time:f.defect_time,
     hist_seq:f.hist_seq??null,repair_status:f.repair_status??null,defect_type:f.defect_type??null,failure_family:f.failure_family,source:f.source});
-  const evidence=(f,repairs)=>({comparison:compareFailures(current?.defect_code,current?.defect_desc,f?.defect_code,f?.defect_desc,{currentFamily:current?.failure_family??undefined,oldFamily:f?.failure_family??undefined}),
-    order_basis:failureOrder(f,current).basis,current_failure:failureEvidence(current),failure:failureEvidence(f),
-    repairs:repairs.map(({raw,...r})=>r),
-    // Ambiguous same-clock 3012 associations must NOT be assigned to one AT.
-    ambiguous_3012:failureOrder(f,current).basis==='hist_seq_same_clock'?
-      (f.repairs||[]).filter(r=>r.association==='exact_occurrence').map(({raw,...r})=>r):[]});
+  const evidence=(f,repairs)=>{
+    const clockAmbiguous=['hist_seq_same_clock','hist_seq_only'].includes(failureOrder(f,current).basis);
+    const currentCandidates=(current?.repairs||[]).filter(r=>r.association==='exact_occurrence'&&
+      instant(r.repair_time)!==null&&(currentTime===null||instant(r.repair_time)>=currentTime));
+    const candidateOf=rows=>rows.map(({raw,...r})=>r);
+    return {comparison:compareFailures(current?.defect_code,current?.defect_desc,f?.defect_code,f?.defect_desc,{currentFamily:current?.failure_family??undefined,oldFamily:f?.failure_family??undefined}),
+      order_basis:failureOrder(f,current).basis,current_failure:failureEvidence(current),failure:failureEvidence(f),
+      repairs:candidateOf(repairs),current_3012:clockAmbiguous?[]:candidateOf(currentCandidates),
+      // With equal timestamps the 3012 failure identity may match BOTH 2114
+      // histories. Preserve the comments, but do not assign either AT.
+      ambiguous_3012:clockAmbiguous?candidateOf([...new Map(
+        [...(f.repairs||[]),...currentCandidates].filter(r=>r.association==='exact_occurrence')
+          .map(r=>[JSON.stringify([r.row_key,r.repair_user,r.repair_time,r.repair_comment]),r])).values()]):[]};
+  };
   const allFailures=[current,...model.own_history||[],...(model.materials||[]).flatMap(m=>(m.history||[]).map(h=>h.failure))].filter(Boolean);
   const cycleEnd=f=>Math.min(currentTime,...allFailures.filter(x=>same(x.pcba_sn,f.pcba_sn)&&instant(x.defect_time)>instant(f.defect_time)).map(x=>instant(x.defect_time)));
   const boardRepairs=new Map();
