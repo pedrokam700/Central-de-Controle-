@@ -39,7 +39,7 @@ const store=createAmesStore({now:()=>Date.parse('2026-10-19T15:00:00Z')}),old=${
 store.replaceSyncedSnapshots([${JSON.stringify(today)}]);
 let mutations=0,savedReads=0,savedOpens=0,captureReads=0,localPairCount=0;
 const savedEntry={job_id:'J123',query_sn:'PCBA-TEST',query_created_at:'2026-10-16T14:00:00Z',query_status:'done',entry_hash:'b'.repeat(64),line_id:null,production_date:null,clock_kind:'query_created_at',local_only:true};
-const client={canOpenOfficial:()=>true,openOfficial:()=>{},canPairFromOfficial:()=>true,openLocalPairing:()=>{localPairCount++;},collect:async()=>{mutations++;},auxiliary:async()=>{mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
+const client={canOpenOfficial:()=>true,openOfficial:()=>{},canPairFromOfficial:()=>true,openLocalPairing:()=>{localPairCount++;},collect:async()=>{mutations++;},auxiliary:async name=>{if(name!=='autostartStatus')mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
  sourceCaptures:async params=>{
   captureReads++;
   if(params.snapshot_id!==17||params.snapshot_revision!==1||params.content_hash!==local.content_hash)throw Error('wrong capture target');
