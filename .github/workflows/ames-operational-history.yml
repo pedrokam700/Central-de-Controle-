@@ -34,6 +34,7 @@ jobs:
           python3 scripts/agent-operational-calendar.test.py
           python3 scripts/agent-origin-policy.test.py
           python3 scripts/agent-package-contract.test.py
+          python3 scripts/agent-workstation-autostart.test.py
           python3 scripts/agent-performance-indexes.test.py
           python3 scripts/agent-assembly-scope.test.py
           python3 scripts/agent-individual-assembly.test.py
@@ -78,6 +79,7 @@ jobs:
             'scripts/agent-sn-lookup-context.test.py',
             'scripts/agent-origin-policy.test.py',
             'scripts/agent-package-contract.test.py',
+            'scripts/agent-workstation-autostart.test.py',
             'scripts/agent-3012-capture.test.py',
             'scripts/agent-raw-history.test.py',
             'scripts/agent-assembly-scope.test.py',
@@ -91,6 +93,12 @@ jobs:
             python $script
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+      - name: Validate background guardian PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens=$null; $parseErrors=$null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/ames-workstation/KEEP_AGENT_RUNNING.ps1'),[ref]$tokens,[ref]$parseErrors)|Out-Null
+          if($parseErrors.Count -gt 0){$parseErrors|ForEach-Object{Write-Error $_};exit 1}
   reading-firestore:
     runs-on: ubuntu-latest
     timeout-minutes: 16
