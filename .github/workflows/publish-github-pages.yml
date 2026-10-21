@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -107,6 +108,28 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist/Central-de-Controle-
+
+      - name: Wait for GitHub artifact index before deployment
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The upload action may succeed while the GitHub Pages deployment API
+          # momentarily reports zero artifacts. A blind rerun of the same run
+          # can then create a duplicate "github-pages" artifact; fail closed.
+          for attempt in $(seq 1 18); do
+            count="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+              --jq '[.artifacts[] | select(.name == "github-pages" and .expired == false)] | length')"
+            if [ "$count" -eq 1 ]; then echo "Pages artifact indexed: one verified entry"; exit 0; fi
+            if [ "$count" -gt 1 ]; then
+              echo "::error::Multiple Pages artifacts in same run. Start a NEW workflow run instead of rerunning this one."
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "::error::Pages artifact not indexed after upload; do not deploy or rerun this same attempt."
+          exit 1
 
       - name: Publish GitHub Pages
         id: deployment
