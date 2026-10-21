@@ -353,6 +353,11 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       }
       else if(name==='map3012')result=await request('/diagnostics/3012/map',{});
       else if(name==='backup')result=await request('/backup',{reason:'native_console'});
+      else if(name==='autostartStatus')result=await request('/workstation/autostart');
+      else if(name==='autostartSet'){
+        if(typeof value.enabled!=='boolean')throw Error('Estado de inicialização inválido');
+        result=await request('/workstation/autostart',{enabled:value.enabled});
+      }
       else if(name==='repairs')result=await request('/repairs/refresh',{snapshot_id:value.snapshot_id,line,unresolved_only:!!value.unresolved_only});
       else if(name==='chrome')result=await request('/chrome/start',{});
       else if(name==='upload')result=await request('/upload/3028',{filename:value.filename,data_b64:value.data_b64});
