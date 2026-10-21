@@ -140,6 +140,13 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
       contextRevision++;
       return true;
     },
+    clearHistoricalSnapshot(line,{generation=periodGeneration}={}){
+      if(generation!==periodGeneration||!selectedPeriod||selectedPeriod.mode==='today')return false;
+      requireLine(line);
+      const removed=historical.delete(JSON.stringify([selectedPeriod,line]));
+      if(removed)contextRevision++;
+      return removed;
+    },
     context(){return context;},
     contextRevision(){return contextRevision;},
     preferredLine(){return ensureContextLine();},

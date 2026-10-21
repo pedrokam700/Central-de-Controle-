@@ -7,11 +7,11 @@ const release=JSON.parse(fs.readFileSync(new URL('../ames/releases/latest/releas
 
 test('approved public GitHub CLEAN is SHA-bound and safe for new Windows computers',()=>{
   const m=readRelease({...release,password:'secret',cookies:'secret',endpoint:'invented'});
-  assert.equal(m.version,'0.5.29');
+  assert.equal(m.version,'0.5.30');
   assert.equal(m.package_available,true);
-  assert.equal(m.validated_sha,'39e0956be7cfc1979c2a67f825c563e4bc891976');
-  assert.equal(m.sha256,'28d8409a8ad01fda95b5065ebc42710a7456e6b2f7de3aacb1547f7b00fb9c36');
-  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.29-multipc-20261020/AMES_Central_CLEAN_39e0956b.zip');
+  assert.equal(m.validated_sha,'44d0b326a18b8ee0cc52768db15f547ea0e3cd96');
+  assert.equal(m.sha256,'65e856c8fc14e178abca4bbdcdf3d92e7448bbd4fc779894d97d501e73b4113a');
+  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.30-multipc-20261021/AMES_Central_CLEAN_44d0b326.zip');
   assert.equal(m.local_runtime.agent_health_url,'http://127.0.0.1:8765/api/v1/health');
   assert(!JSON.stringify(m).includes('secret'));assert.equal(m.endpoint,undefined);
   assert.equal(integrationMode('collector'),'collector');assert.equal(integrationMode('viewer'),'viewer');
@@ -25,7 +25,7 @@ test('never recommend arbitrary CDN, preview, stale ZIP or unverified candidate'
     {...other,sha256:'bad'},
     {...other,download_url:'javascript:alert(1)'},
     {...other,download_url:'https://example.com/AMES.zip'},
-    {...other,download_url:'https://github.com.evil.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.29-multipc-20261020/AMES_Central_CLEAN_39e0956b.zip'},
+    {...other,download_url:'https://github.com.evil.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.30-multipc-20261021/AMES_Central_CLEAN_44d0b326.zip'},
     {...other,download_url:'https://user:password@github.com'+new URL(release.download_url).pathname},
     {...other,download_url:release.download_url+'?token=fake'},
     {...other,validated_candidate_sha:'1'.repeat(40)},
@@ -66,18 +66,18 @@ test('first-login screen exposes the same public approved CLEAN without requirin
  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
  const approved=readRelease(release);
  assert.match(html,/Primeiro acesso neste computador\?/);
- assert.equal(approved.version,'0.5.29');
+ assert.equal(approved.version,'0.5.30');
  assert(html.includes('id="approvedCleanLoginDownload" href="https://github.com/pedrokam700/Central-de-Controle-/releases/latest"'));
  assert(!html.includes('href="'+approved.download_url+'"'),'login fallback must use GitHub latest landing instead of a version-pinned file');
  assert.match(html,/n[aã]o precisa instalar o agente A-MES/);
  assert.match(html,/00_INICIAR_AQUI\.bat/);
 });
 
-const latest={draft:false,prerelease:false,tag_name:'ames-v0.5.30-multipc-20261020',
+const latest={draft:false,prerelease:false,tag_name:'ames-v0.5.30-multipc-20261021',
  target_commitish:'c'.repeat(40),
  assets:[{name:'AMES_Central_CLEAN_cccccccc.zip',size:1200000,
  state:'uploaded',digest:'sha256:'+'d'.repeat(64),
- browser_download_url:'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.30-multipc-20261020/AMES_Central_CLEAN_cccccccc.zip'}]};
+ browser_download_url:'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.30-multipc-20261021/AMES_Central_CLEAN_cccccccc.zip'}]};
 test('only GitHub latest with exact asset, digest, tag and commit can become the download',()=>{
  const m=verifiedLatestRelease(latest,release);
  assert.equal(m.version,'0.5.30');
@@ -88,7 +88,7 @@ test('only GitHub latest with exact asset, digest, tag and commit can become the
    {...latest,draft:true},
    {...latest,prerelease:true},
    {...latest,target_commitish:'SHORT'},
-   {...latest,tag_name:'ames-v0.6.00-multipc-20261020'},
+   {...latest,tag_name:'ames-v0.6.00-multipc-20261021'},
    {...latest,assets:[{...latest.assets[0],digest:null}]},
    {...latest,assets:[{...latest.assets[0],browser_download_url:'https://evil.example/z.zip'}]},
    {...latest,assets:[{...latest.assets[0],size:7}]}
@@ -126,8 +126,8 @@ test('validated GitHub manifest remains valid through view-level validation',()=
 
 test('all static installation URLs use GitHub latest, and SHA-validated direct URL is retained only in approved manifest',()=>{
  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
- assert(!html.includes('/releases/download/ames-v0.5.27-multipc-20261020/'));
- assert(!html.includes('/releases/download/ames-v0.5.28-multipc-20261020/'));
+ assert(!html.includes('/releases/download/ames-v0.5.27-multipc-20261021/'));
+ assert(!html.includes('/releases/download/ames-v0.5.28-multipc-20261021/'));
  assert.match(html,/id="approvedCleanLoginDownload" href="https:\/\/github\.com\/pedrokam700\/Central-de-Controle-\/releases\/latest"/);
  const guide=fs.readFileSync(new URL('../ames/onboarding-view.mjs',import.meta.url),'utf8');
  assert(guide.includes("'https://github.com/pedrokam700/Central-de-Controle-/releases/latest'"));

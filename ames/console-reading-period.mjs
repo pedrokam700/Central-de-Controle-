@@ -10,15 +10,19 @@ export function paintReadingPeriod(root,store,controller){
   const loaded=LINE_IDS.filter(line=>!!store.read(line).snapshot);
   const line=store.context?.()?.line_id||store.preferredLine?.();
   const missing=p?.mode!=='today'&&status?.status!=='loading'&&!!line&&!store.read(line).snapshot;
-  const selectionNeeded=status?.source_choices?.find(choice=>choice.line_id===line&&choice.options?.length);
-  const sourcePicker=selectionNeeded&&status?.status!=='loading'?'<div class="mes-context" data-history-source-picker>'+
-    '<label>'+t('Histórico encontrado em mais de um posto. Escolha a origem da Linha','History found on multiple workstations. Choose the source for line')+' '+esc(line)+
-    '<select data-history-source-select><option value="">'+t('Escolha um posto para abrir','Choose a workstation to open')+'</option>'+selectionNeeded.options.map(o=>'<option value="'+esc(o.source_id)+'">'+
-      esc((o.history_source==='local'?t('Local neste computador','Local on this computer'):t('Compartilhado','Shared'))+' · '+o.source_id+' · '+formatFactoryDateTime(o.collected_at))+
-      '</option>').join('')+'</select></label>'+
-    '<button type="button" class="button secondary" data-history-source-apply>'+t('Abrir esta origem','Open this source')+'</button></div>':'';
+  const sourceChoice=status?.source_choices?.find(choice=>choice.line_id===line&&choice.options?.length);
+  const unresolved=sourceChoice&&!sourceChoice.selected_source_id;
+  // One consistent selector for the current line. It remains available AFTER opening a revision.
+  const sourcePicker=sourceChoice&&status?.status!=='loading'?'<div class="mes-context" data-history-source-picker>'+
+    '<label>'+t('Origem do histórico · Linha','Historical source · Line')+' '+esc(line)+
+    '<select data-history-source-select aria-label="'+t('Trocar origem da coleta','Switch capture source')+'">'+
+    '<option value=""'+(unresolved?' selected':' disabled')+'>'+t('Selecione a coleta comprovada','Select a verified capture')+'</option>'+
+    sourceChoice.options.map(o=>'<option value="'+esc(o.source_id)+'"'+(sourceChoice.selected_source_id===o.source_id?' selected':'')+'>'+
+      esc((o.history_source==='local'?t('Local','Local'):t('Compartilhado','Shared'))+' · '+o.source_id+
+        ' · '+formatFactoryDateTime(o.collected_at)+' · r'+(o.snapshot_revision??'—'))+'</option>').join('')+
+    '</select></label><small>'+t('Trocar a origem só muda a leitura desta linha. Nenhuma coleta MES será iniciada; revisões anteriores permanecem disponíveis.','Switching the source changes only this line\'s read. No MES collection starts; previous revisions remain available.')+'</small></div>':'';
   const note=status?.status==='loading'?t('Consultando revisões salvas…','Reading saved revisions…'):
-    selectionNeeded?t('Existem revisões deste período em diferentes postos. Selecione a origem para abrir imediatamente a revisão comprovada; nenhuma será descartada.','Several workstation histories exist for this period. Select a source to open its verified revision; nothing will be discarded.') :
+    unresolved?t('Existem coletas de postos diferentes. Escolha a origem para abrir; nada será descartado.','Multiple workstation captures exist. Choose one to open; nothing will be discarded.') :
     missing?t('Nenhuma revisão salva disponível nesta linha e período. Não significa zero falhas. Após a coleta, use Atualizar leitura se necessário.','No saved revision for this line and period. This is not zero failures. After collection, use Refresh reading if needed.') :
     p?.mode!=='today'&&status?.status==='ready'?loaded.length+' '+t('linha(s) com revisão disponível','line(s) with saved revisions'):'';
   root.setAttribute('data-no-i18n','');
@@ -31,13 +35,6 @@ export function paintReadingPeriod(root,store,controller){
     // User explicitly chose a source; open it in one action without
     // automatically guessing between competing workstation publishers.
     const source_id=event.target.value;
-    if(!source_id||!line)return;
-    void controller.chooseSource(line,source_id).catch(error=>{
-      const el=root.querySelector('[data-reading-status]');if(el)el.textContent=error.message;
-    });
-  });
-  root.querySelector('[data-history-source-apply]')?.addEventListener('click',()=>{
-    const source_id=root.querySelector('[data-history-source-select]')?.value;
     if(!source_id||!line)return;
     void controller.chooseSource(line,source_id).catch(error=>{
       const el=root.querySelector('[data-reading-status]');if(el)el.textContent=error.message;

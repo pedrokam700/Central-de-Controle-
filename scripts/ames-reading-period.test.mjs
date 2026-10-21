@@ -94,7 +94,7 @@ test('when local identity cannot be proven operator chooses a single source with
  await c.chooseSource(line,q.source_id);
  assert.deepEqual(openings,[q.source_id]);
  assert.equal(s.read(line).snapshot?.snapshot_id,'other');
- assert.equal(s.agent().period_read.source_choices.length,0);
+ assert.equal(s.agent().period_read.source_choices[0].selected_source_id,q.source_id,'source switch must remain available after opening');
  c.clear();
 });
 test('chosen source cannot admit another source payload even with a matching line and period',async()=>{
@@ -119,4 +119,52 @@ test('only explicitly pending local entries may materialize a revision',async()=
   await c.select('previous');assert.equal(!!s.read(line).snapshot,accepted);
   assert.equal(s.agent().period_read.errors.length,accepted?0:1);
  }
+});
+
+test('chosen source remains switchable, newly published revision replaces older without MES collection',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('first','2026-10-16','previous_day');
+ const q={...snapshot('other','2026-10-16','previous_day'),source_id:'other-workstation'};
+ const newest={...snapshot('new-revision','2026-10-16','previous_day'),snapshot_revision:2,
+   collected_at:'2026-10-17T20:00:00Z'};
+ let published=[p,q],collections=0;
+ const controller=createReadingPeriodController(s,{list:async l=>l===line?published.map(entry):[],
+   open:async e=>{collections++;return published.find(p=>p.snapshot_id===e.snapshot_id);}});
+ await controller.select('previous');
+ await controller.chooseSource(line,p.source_id);
+ assert.equal(s.read(line).snapshot.snapshot_id,'first');
+ assert.deepEqual(s.agent().period_read.source_choices[0].options.map(e=>e.source_id).sort(),
+   ['original-source','other-workstation'].sort());
+ published=[newest,p,q];
+ await controller.select('previous');
+ assert.equal(s.read(line).snapshot.snapshot_id,'new-revision','refresh shows latest revision for chosen source');
+ await controller.chooseSource(line,q.source_id);
+ assert.equal(s.read(line).snapshot.source_id,q.source_id);
+ await controller.chooseSource(line,p.source_id);
+ assert.equal(s.read(line).snapshot.snapshot_id,'new-revision');
+ assert.equal(collections,4,'only immutable history.open reads, no MES collection');
+ controller.clear();
+});
+test('missing selected revision is removed from the visual store without deleting any physical data',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day');
+ let available=true;
+ const ctl=createReadingPeriodController(s,{list:async l=>l===line&&available?[entry(p)]:[],open:async()=>p});
+ await ctl.select('previous');assert.equal(s.read(line).snapshot.snapshot_id,'old');
+ available=false;
+ await ctl.select('previous');
+ assert.equal(s.read(line).snapshot,null,'stale historical view must not pretend its source is current');
+ assert.equal(s.read(line).source,'none');
+ ctl.clear();
+});
+test('preferred source survives the operational period change in one session, but not missing sources',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('p','2026-10-16','previous_day');
+ const q={...snapshot('q','2026-10-16','previous_day'),source_id:'another'};
+ const history={list:async l=>l===line?[entry(p),entry(q)]:[],open:async e=>e.source_id===q.source_id?q:p};
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,q.source_id);
+ assert.equal(ctl.preferredSource(line),q.source_id);
+ await ctl.select('today');
+ await ctl.select('previous');
+ assert.equal(s.read(line).snapshot.source_id,q.source_id);
+ assert.equal(s.agent().period_read.source_choices[0].selected_source_id,q.source_id);
+ ctl.clear();
 });

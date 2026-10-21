@@ -475,6 +475,11 @@ try{
  await page.locator('[data-history-source-select]').selectOption('preserved-workstation');
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').snapshot?.source_id),'preserved-workstation');
+ assert.equal(await page.locator('[data-history-source-picker]').count(),1,'historical source control persists after selection');
+ assert.equal(await page.locator('[data-history-source-select]').inputValue(),'preserved-workstation');
+ assert.equal(await page.locator('[data-history-source-select] option').count(),3,'other source remains selectable');
+ assert.equal(await page.locator('[data-last-capture-panel]').count(),1,'latest archival evidence also remains reachable outside Today');
+
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');
  await page.locator('[data-read-period=today]').click();
  assert.equal(await page.locator('[data-monitor-main] [data-agent-action=today]').isVisible(),true);
