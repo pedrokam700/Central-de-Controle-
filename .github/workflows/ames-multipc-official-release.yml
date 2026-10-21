@@ -64,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="ames-v0.5.30-multipc-20261020"
+          tag="ames-v0.5.30-multipc-20261021"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Refusing to overwrite an existing official release";exit 1
           fi
@@ -72,5 +72,5 @@ jobs:
           cp "$RUNNER_TEMP/verified/AMES_PR42_CLEAN.zip" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip"
           gh release create "$tag" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Central + A-MES 0.5.30 — Histórico preservado, 07:00, análise SN e tendências" \
-            --notes "Versão oficial do GitHub autorizada para TESTES DE CAMPO com a equipe. SHA $GITHUB_SHA. Pacote CLEAN completo, sem SQLite, sessão, cookies ou segredos. Download oficial para novos PCs e atualização em pasta separada. Pareamento do agente existente pelo link HTTPS usa a mesma aba, exige confirmação física local no 127.0.0.1 e retorna ao site oficial; confirmações inválidas oferecem recuperação segura. Conflitos de origem são explicitados por linha, sem descarte de histórico. Não substitua instalações/SQLite existentes. Dados compartilhados: snapshots sanitizados; gate físico de sincronização Linha 3 PC A → PC B ainda precisa ser executado. Versão anterior e60cef8d permanece para rollback."
+            --title "Central + A-MES 0.5.30 — Histórico e agente Windows estável" \
+            --notes "Versão oficial do GitHub autorizada para TESTES DE CAMPO com a equipe. SHA $GITHUB_SHA. Pacote CLEAN completo, sem SQLite, sessão, cookies ou segredos. Download oficial para novos PCs e atualização em pasta separada. Pareamento do agente existente pelo link HTTPS usa a mesma aba, exige confirmação física local no 127.0.0.1 e retorna ao site oficial; confirmações inválidas oferecem recuperação segura. Conflitos de origem são explicitados por linha, sem descarte de histórico. Não substitua instalações/SQLite existentes. Dados compartilhados: snapshots sanitizados; gate físico de sincronização Linha 3 PC A → PC B ainda precisa ser executado. Versão anterior 39e0956b (0.5.29) permanece disponível para rollback. Agente Windows: instalação inicial necessária; início automático por usuário Windows opcional e protegido, sem login MES automático. UI compara SHA oficial GitHub com site servido e alerta desatualização."
