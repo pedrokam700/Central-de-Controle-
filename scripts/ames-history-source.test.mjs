@@ -47,8 +47,9 @@ test('do not claim unconfirmed local version is shared; de-duplicate versions wi
  },{localHistoryList:async()=>[{...local}],historicalPayload:async()=>({from:'local'})},
  {agent:()=>({status:'connected'})});
  const rows=await source.list('TAN10103');
- assert.equal(rows.length,1);assert.equal(rows[0].history_source,'shared');
- assert.equal((await source.open(rows[0])).from,'cloud');
+ assert.equal(rows.length,1);assert.equal(rows[0].history_source,'local');
+ assert.equal(rows[0].shared_available,true);
+ assert.equal((await source.open(rows[0])).from,'local');
 });
 test('Firebase listener failure must not hide preserved local history',async()=>{
  const source=createMesHistorySource({
@@ -87,4 +88,12 @@ test('connected local SQLite failure is surfaced rather than misreported as no c
   {localHistoryList:async()=>{throw Error('sqlite local unavailable');}},
   {agent:()=>({status:'connected'})});
  await assert.rejects(source.list('TAN10103'),/Histórico SQLite local indisponível/);
+});
+
+test('a divergent cloud row cannot silently replace the same local immutable revision',async()=>{
+ const source=createMesHistorySource({listHistory:async()=>[{...local,content_hash:'cloud-different'}]},{
+  localHistoryList:async()=>[{...local,content_hash:'local-original'}],
+  historicalPayload:async()=>{throw Error('never open inconsistent revision');}
+ },{agent:()=>({status:'connected'})});
+ await assert.rejects(source.list('TAN10103'),/Conflito de integridade/);
 });
