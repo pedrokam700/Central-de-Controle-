@@ -42,6 +42,8 @@ export function createMesHistorySource(sync,client,store){
       // indistinguishable from a truly empty production day on the factory UI.
       if(localReady&&local.status==='rejected'&&(!Array.isArray(cloud.value)||cloud.value.length===0))
         throw Error('Histórico SQLite local indisponível para '+line+'; verifique /api/v1/local-history');
+      if(cloud.status==='rejected'&&local.status==='fulfilled'&&local.value.length===0)
+        throw Error('Histórico compartilhado indisponível e nenhuma revisão local identificada; não confirmar ausência de coleta');
       if(!localReady&&cloud.status==='rejected')throw Error('Histórico compartilhado indisponível');
       // No local-only version is evidence that Firebase actually synchronized.
       return [...rows.values()].sort((a,b)=>Date.parse(b.collected_at||'')-Date.parse(a.collected_at||'')||
