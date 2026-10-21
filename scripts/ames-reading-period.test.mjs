@@ -168,3 +168,22 @@ test('preferred source survives the operational period change in one session, bu
  assert.equal(s.agent().period_read.source_choices[0].selected_source_id,q.source_id);
  ctl.clear();
 });
+
+test('Line 2 keeps the exact prior-day source already proven in memory across refresh even when preferences are unavailable',async()=>{
+ const line2='TAN10102',p={...snapshot('LOCAL-L2','2026-10-16','previous_day'),line_id:line2,source_id:'source-L2'};
+ p.summary={...p.summary,line:line2};
+ const other={...snapshot('REMOTE-L2','2026-10-16','previous_day'),line_id:line2,source_id:'source-foreign'};
+ other.summary={...other.summary,line:line2};
+ const s=createAmesStore({now:()=>now.getTime()}),list=[entry(p),entry(other)];
+ s.updateContext({line_id:line2});
+ const ctl=createReadingPeriodController(s,{list:async l=>l===line2?list:[],open:async e=>e.source_id===p.source_id?p:other});
+ await ctl.select('previous');
+ assert.equal(s.read(line2).snapshot,null,'first choice must remain explicit when origins conflict');
+ const serial=s.periodGeneration();
+ s.installHistoricalSnapshot(p,{generation:serial,source:'local'});
+ await ctl.select('previous');
+ assert.equal(s.read(line2).snapshot?.snapshot_id,'LOCAL-L2');
+ assert.equal(s.agent().period_read.source_choices[0].selected_source_id,'source-L2');
+ assert.equal(s.context().line_id,line2);
+ ctl.clear();
+});
