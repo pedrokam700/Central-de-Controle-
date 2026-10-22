@@ -158,7 +158,7 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     // A verified local agent should not bury the operation dashboard beneath
     // onboarding every time it rerenders. Pairing remains one click away via
     // the persistent "Configurar posto" button.
-    const visible = expanded || viewerGuideOpen || (!connected && mode !== 'viewer') || updateNotice.required;
+    const visible = expanded || viewerGuideOpen || (!connected && mode !== 'viewer') || updateNotice.required || updateNotice.show;
 
     const detector=installationDetection(agent,!!client.paired?.());
     const shared=sharingState(agent);
@@ -213,7 +213,12 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     if(key===last)return;last=key;
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
-      ${updateNotice.required?'<section class="notice warn ames-agent-update-notice" data-agent-update-notice role="status"><b>'+t('Atualização segura necessária neste posto','Safe agent update required on this computer')+'</b><p>'+t('O site está atualizado, mas o pareamento instalado é antigo. O histórico, SQLite, token e identidade do posto devem ser preservados. Não substitua a pasta CLEAN.','The website is current, but the installed pairing is old. History, SQLite, token and workstation identity must remain unchanged. Do not overwrite CLEAN.')+'</p><a class="button secondary" href="'+OFFICIAL_UPDATE_HELP+'" target="_blank" rel="noopener noreferrer">'+t('Acompanhar atualização segura','Safe update details')+'</a><small>'+t('A instalação automática ainda não está habilitada neste posto.','Automatic installation is not enabled on this workstation.')+'</small></section>':''}
+      ${updateNotice.required||updateNotice.show?'<section class="notice warn ames-agent-update-notice" data-agent-update-notice role="status"><b>'+
+        (updateNotice.required?t('Atualização segura necessária neste posto','Safe agent update required'):t('Revisão do agente ainda não comprovada','Agent pairing revision not verified'))+
+        '</b><p>'+(updateNotice.required?t('O contrato de pareamento foi identificado como antigo. Não substitua o CLEAN, SQLite ou token sem um atualizador validado.','The installed pairing contract is outdated. Never overwrite CLEAN, SQLite or token without a validated updater.'):
+        t('O agente responde, mas ainda não anuncia a revisão do pareamento. Isso NÃO prova que esteja desatualizado; continue o diagnóstico antes de substituir arquivos.','The agent responds but does not advertise a pairing revision. This does NOT prove it is outdated; diagnose before replacing files.'))+
+        '</p><a class="button secondary" href="'+OFFICIAL_UPDATE_HELP+'" target="_blank" rel="noopener noreferrer">'+t('Acompanhar atualização segura','Safe update details')+'</a><small>'+
+        t('Atualização automática do motor ainda não habilitada neste posto.','Automatic engine update is not yet enabled here.')+'</small></section>':''}
       ${autostartPanel}
       ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}
       ${!connected && client.canPairFromOfficial?.()?`<section class="notice warn" data-workstation-pair-hint><strong>${t('Conectar agente deste computador','Connect this computer’s agent')}</strong><p>${t('Se o agente já está conectado na Central local, não reinstale o CLEAN. Autorize uma única vez a Central HTTPS neste mesmo navegador.','If the agent is already connected locally, do not reinstall CLEAN. Authorize the HTTPS Work Center once in this browser.')}</p><button type="button" class="button primary" data-pair-local>${t('Autorizar agente local','Authorize local agent')}</button></section>`:''}${summary}
