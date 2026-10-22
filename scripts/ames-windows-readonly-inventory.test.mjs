@@ -15,3 +15,25 @@ test('inventory is scoped, read-only and never emits secrets or full argv',()=>{
   assert.doesNotMatch(code,/read_text|Get-Content|ReadAllBytes|\.CommandLine\s*[;}\r\n]/);
   assert.doesNotMatch(code,/\bsource_id\s*=/);
 });
+
+test('guardian inventory checks external relaunch sources without claiming an idle lease',()=>{
+  const code=readFileSync('tools/ames-workstation/INVENTARIAR_GUARDIANS_READONLY.ps1','utf8');
+  const classifier=readFileSync('tools/ames-workstation/ISSUE57_GUARDIAN_SIGNALS.ps1','utf8');
+  assert.match(code,/Get-CimInstance Win32_Process/);
+  assert.match(code,/Get-CimInstance Win32_Service/);
+  assert.match(code,/Get-ScheduledTask/);
+  assert.match(code,/HKEY_CURRENT_USER.*CurrentVersion\\Run/);
+  assert.match(code,/HKEY_LOCAL_MACHINE.*CurrentVersion\\Run/);
+  assert.match(code,/GetFolderPath\('Startup'\)/);
+  assert.match(code,/unreadable_supervisor_processes=/);
+  for(const requirement of [/read_only=\$true/,/updater_eligible=\$false/,/installed_guardian_cooperation_attested=\$false/,/all_sessions_attested=\$false/,/exclusive_maintenance_lease_held=\$false/]){
+    assert.match(code,requirement);
+  }
+  for(const blocked of [/\bStop-Process\b/,/\bRemove-Item\b/,/\bCopy-Item\b/,/\bMove-Item\b/,/\bSet-Content\b/,/\bAdd-Content\b/,/\bStart-Process\b/,/\bNew-Item\b/,/\bSet-ItemProperty\b/,/\bNew-ScheduledTask\b/,/\bInvoke-RestMethod\b/,/\bInvoke-WebRequest\b/,/ConvertFrom-Json/,/Get-Content/]){
+    assert.doesNotMatch(code,blocked);
+  }
+  assert.doesNotMatch(code,/commandline\s*=|arguments\s*=|pathname\s*=|source_id\s*=|token\s*=/i);
+  assert.match(classifier,/KEEP_AGENT_RUNNING\\\.ps1/);
+  assert.match(classifier,/CentralAMESOperatorAgent/);
+  assert.doesNotMatch(classifier,/\b(?:Stop-Process|Start-Process|Set-ItemProperty|Get-Content)\b/);
+});
