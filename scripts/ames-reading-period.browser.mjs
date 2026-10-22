@@ -565,7 +565,7 @@ try{
  // Verify actual desktop/mobile CSS layout, not only class names.
  await page.setViewportSize({width:1440,height:950});
  const kpiCols=async()=>page.locator('[data-console-pane=monitor] .ames-line-summary').evaluate(e=>
-   getComputedStyle(e).gridTemplateColumns.split(/\\s+/).filter(Boolean).length);
+   getComputedStyle(e).gridTemplateColumns.split(/\s+/).filter(Boolean).length);
  assert.equal(await kpiCols(),4,'four primary KPIs on desktop, separate from provenance');
  assert.equal(await page.locator('[data-monitor-provenance] .stat').count(),2,'snapshot and source stay visible');
  assert.equal(await page.locator('[data-monitor-technical]').evaluate(e=>e.open),false,'technical logs collapsed on landing');
