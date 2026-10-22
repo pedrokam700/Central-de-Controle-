@@ -135,7 +135,7 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-      - name: Verify public Pages returns exactly the GitHub Release SHA
+      - name: Verify public Pages serves exact SHA and real home/entry assets
         shell: bash
         env:
           EXPECTED_SHA: ${{ steps.release.outputs.sha }}
@@ -149,7 +149,28 @@ jobs:
           try: assert json.load(open(sys.argv[1]))['sha']==os.environ['EXPECTED_SHA']
           except (AssertionError,ValueError,KeyError,TypeError): sys.exit(1)
           PY
-              then echo "Public GitHub Pages verified: $EXPECTED_SHA";exit 0;fi
+              then
+                # A valid release-build.json alone is insufficient: a user may
+                # still receive a GitHub Pages 404 at the actual entry route.
+                root="https://pedrokam700.github.io/Central-de-Controle/"
+                root_status="$(curl --location --silent --show-error --max-time 10 --header 'Cache-Control: no-cache' \
+                  --output "$RUNNER_TEMP/pages-home.html" --write-out '%{http_code}' \
+                  "${root}?check=$GITHUB_RUN_ID-$attempt" || echo 000)"
+                index_status="$(curl --location --silent --show-error --max-time 10 --header 'Cache-Control: no-cache' \
+                  --output "$RUNNER_TEMP/pages-index.html" --write-out '%{http_code}' \
+                  "${root}index.html?check=$GITHUB_RUN_ID-$attempt" || echo 000)"
+                boot_status="$(curl --location --silent --show-error --max-time 10 --header 'Cache-Control: no-cache' \
+                  --output "$RUNNER_TEMP/pages-bootstrap.mjs" --write-out '%{http_code}' \
+                  "${root}offline-bootstrap.mjs?check=$GITHUB_RUN_ID-$attempt" || echo 000)"
+                if [ "$root_status" = "200" ] && [ "$index_status" = "200" ] && [ "$boot_status" = "200" ] \
+                  && grep -qi '<!doctype html>' "$RUNNER_TEMP/pages-home.html" \
+                  && grep -qi '<!doctype html>' "$RUNNER_TEMP/pages-index.html" \
+                  && grep -q 'Central-de-Controle-' "$RUNNER_TEMP/pages-home.html"; then
+                  echo "Public GitHub Pages verified: SHA=$EXPECTED_SHA home=200 index=200 bootstrap=200"
+                  exit 0
+                fi
+                echo "Pages entry not yet valid: home=$root_status index=$index_status bootstrap=$boot_status" >&2
+              fi
             fi
             sleep 10
           done
