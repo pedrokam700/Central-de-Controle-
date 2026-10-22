@@ -172,6 +172,15 @@ try{
  await cohorts.locator('form button[type=submit]').click();
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=observed] strong').innerText(),'1');
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ // Line selection remains explicit across reuse↔monitor navigation even with a missing snapshot.
+ await page.locator('[data-reuse-line-tab="TAN10102"]').click();
+ assert.equal(await page.evaluate(()=>qa.store.context().line_id),'TAN10102');
+ await page.locator('[data-console-view="monitor"]').click();
+ assert.match(await page.locator('[data-console-pane="monitor"] [data-line-tab="TAN10102"]').getAttribute('class'),/primary/);
+ await page.locator('[data-console-view="reuse"]').click();
+ await page.locator('[data-reuse-line-tab="TAN10101"]').click();
+ assert.equal(await page.evaluate(()=>qa.store.context().line_id),'TAN10101');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'no MES mutation from line changes');
  // D: stored trends use history transport only, and retain gaps/revision evidence.
  await page.locator('[data-console-view=top3]').click();
  const trends=page.locator('[data-console-pane=top3] [data-history-trends]');
