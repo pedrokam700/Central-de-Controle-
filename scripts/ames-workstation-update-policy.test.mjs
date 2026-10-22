@@ -4,11 +4,20 @@ import fs from 'node:fs';
 import {classifyWorkstationReady,workstationUpdateNotice,PAIRING_CONTRACT_REVISION} from '../ames/data/workstation-update-policy.mjs';
 const base={ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',
   pid:15212,workstation_pairing_flow:3};
-test('real 0.5.36 flow=3 still requires a safe update; web SHA alone is not agent version',()=>{
-  assert.deepEqual(classifyWorkstationReady(base),{state:'outdated',reason:'pairing_contract'});
-  assert.equal(workstationUpdateNotice(classifyWorkstationReady(base)).required,true);
+test('flow=3 without revision remains unverified, not incorrectly declared outdated',()=>{
+  const probe=classifyWorkstationReady(base);
+  assert.deepEqual(probe,{state:'unverified_revision'});
+  assert.deepEqual(workstationUpdateNotice(probe),{
+    kind:'revision_unverified',required:false,show:true,
+    detail:'O agente responde, mas o contrato de pareamento não tem versão comprovada. Não altere nada sem diagnóstico.'
+  });
   assert.equal(PAIRING_CONTRACT_REVISION,4);
 });
+test('an explicit old revision or old pairing flow requires safe update',()=>{
+  for(const input of [{...base,workstation_pairing_revision:3},{...base,workstation_pairing_flow:2}])
+    assert.deepEqual(classifyWorkstationReady(input),{state:'outdated',reason:'pairing_contract'});
+});
+
 test('0.5.39 contract explicitly confirms corrected pairing, without requiring zip on a UI-only change',()=>{
   const probe=classifyWorkstationReady({...base,workstation_pairing_revision:4});
   assert.deepEqual(probe,{state:'detected'});
