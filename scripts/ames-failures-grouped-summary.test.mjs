@@ -40,7 +40,7 @@ test('missing and partial evidence never claims zero, totals or material causali
  const source=fs.readFileSync(new URL('../ames/console-legacy-parity.mjs',import.meta.url),'utf8');
  assert.match(source,/failureGroupReuseSummaries\(snapshot,baseFiltered\)/);
  assert.match(source,/grupo|grupos|Falhas agrupadas/);
- assert.match(source,/número com \+/);
+ assert.match(source,/≥ significa quantidade mínima comprovada/);
  assert.doesNotMatch(source,/root_cause_confirmed\s*=\s*true/);
 });
 
