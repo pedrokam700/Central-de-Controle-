@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import hashlib
 from contextlib import closing
-import csv
-import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -185,22 +183,12 @@ def private_backup_directory(target):
     target = Path(target)
     target.mkdir(mode=0o700, parents=False, exist_ok=False)
     if os.name == "nt":
-        # Restrict inheritance BEFORE writing any SQLite/token/config bytes.
-        # Failure is fatal. Future pilot must verify this on actual Windows ACLs.
-        owner = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"],
-                               capture_output=True, text=True, check=True)
-        row = next(csv.reader(io.StringIO(owner.stdout)))
-        if len(row) < 2 or not row[1].startswith("S-1-"):
-            raise ValueError("windows_user_sid_not_verified")
-        subprocess.run(["icacls", str(target), "/inheritance:r",
-                        "/grant:r", f"*{row[1]}:(OI)(CI)F"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        # /inheritance:r removes inherited ACEs only. A freshly created NTFS
-        # directory may still carry broad *explicit* ACEs from its parent or
-        # policy, so merely granting the user does not prove confidentiality.
-        # Replace the entire DACL before writing a SQLite snapshot or token.
-        # The script receives only the newly created directory via env, never
-        # any production identity value; native errors are deliberately hidden.
+        # Replace the DACL on the EMPTY, newly created root before copying
+        # secrets. Calling icacls /inheritance:r first may strip the runner's
+        # ability to read its descriptor, and it preserves explicit broad
+        # ACEs anyway. Failure is fatal; never reconfigure existing folders.
+        # The script receives only this new directory via env and suppresses
+        # native account/path details in every failure.
         acl_script = r"""
 $ErrorActionPreference='Stop'
 $stage=20
@@ -208,6 +196,7 @@ try {
 $path=$env:AMES_ISSUE57_NEW_PRIVATE_BACKUP
 $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
 if(-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'invalid_backup_root'}
+if(@(Get-ChildItem -LiteralPath $path -Force -ErrorAction Stop).Count -ne 0){throw 'backup_root_not_empty'}
 $userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User
 $stage=30
 $acl=Get-Acl -LiteralPath $path -ErrorAction Stop

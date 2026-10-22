@@ -77,5 +77,7 @@ test('fresh Windows private backup root replaces explicit broad ACEs before copy
   for(const proof of [/SetAccessRuleProtection\(\$true,\$false\)/,/RemoveAccessRuleSpecific/,/FileSystemAccessRule/,/Set-Acl -LiteralPath/,/private_acl_untrusted_allow/,/subprocess\.run\(\["powershell\.exe"/]){
     assert.match(secureStep,proof);
   }
+  assert.match(secureStep,/backup_root_not_empty/);
+  assert.doesNotMatch(secureStep,/"icacls"/);
   assert.ok(preflight.indexOf('Set-Acl -LiteralPath')<preflight.indexOf('def copy_private_identity('));
 });
