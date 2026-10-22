@@ -1,4 +1,5 @@
 import { AGENT_URL, SCHEDULER_POLICY, collectionScope, r12CompatibleBuild } from './data/agent-contract.mjs';
+import {classifyWorkstationReady} from './data/workstation-update-policy.mjs';
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
 import {CANONICAL_SCHEMA,DATASETS,normalizeCanonical} from './data/canonical.mjs';
 import {projectLiveJobEvents} from './data/job-live-events.mjs';
@@ -156,10 +157,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         });
         if(response.ok){
           const ready=await response.json();
-          if(ready?.ready===true&&ready?.ok===true&&ready?.agent_version==='0.5.23'&&
-             Number.isInteger(ready.pid)&&ready.pid>0&&typeof ready.agent_build==='string'){
-            probe={state:ready.workstation_pairing_flow===3?'detected':'outdated'};
-          }
+          probe=classifyWorkstationReady(ready);
         }
       }catch{ /* CORS/PNA or agent not running: unknown, never absent */ }
       if(generation===lease)publish({workstation_probe:probe});
