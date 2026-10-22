@@ -3,7 +3,6 @@
 Purely disposable fixtures; NEVER touches the real 8765 port or factory data.
 """
 import importlib.util
-from contextlib import closing
 from pathlib import Path
 import shutil
 import sys
@@ -100,7 +99,9 @@ class BarrierTests(unittest.TestCase):
                 with self.assertRaises(MaintenanceBlocked):
                     agent.start_job({"lines": ["TAN10101"]})
                 self.assertIsNone(agent.start_job({}, monitor=True))
-                with closing(agent.STORE.connect()) as connection:
+                # Store.connect() is itself a context manager that closes its
+                # SQLite handle. Wrapping it in closing() breaks on Windows.
+                with agent.STORE.connect() as connection:
                     self.assertEqual(connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0], 0)
                 self.assertFalse(agent.MES.snapshot()["busy"])
             finally:
