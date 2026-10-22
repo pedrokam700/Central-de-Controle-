@@ -199,7 +199,7 @@ if(-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::Rep
 if(@(Get-ChildItem -LiteralPath $path -Force -ErrorAction Stop).Count -ne 0){throw 'backup_root_not_empty'}
 $userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User
 $stage=30
-$acl=Get-Acl -LiteralPath $path -ErrorAction Stop
+$acl=[System.IO.Directory]::GetAccessControl($path)
 $stage=40
 $acl.SetAccessRuleProtection($true,$false)
 $stage=50
@@ -213,9 +213,9 @@ $rule=[Security.AccessControl.FileSystemAccessRule]::new(
   [Security.AccessControl.AccessControlType]::Allow)
 $acl.AddAccessRule($rule)
 $stage=70
-Set-Acl -LiteralPath $path -AclObject $acl -ErrorAction Stop
+[System.IO.Directory]::SetAccessControl($path,$acl)
 $stage=80
-$actual=Get-Acl -LiteralPath $path -ErrorAction Stop
+$actual=[System.IO.Directory]::GetAccessControl($path)
 if(-not $actual.AreAccessRulesProtected){throw 'private_acl_inherits'}
 $allowed=@($userSid.Value,'S-1-5-18','S-1-5-32-544')
 $ownerAllowed=$false

@@ -74,10 +74,10 @@ test('fresh Windows private backup root replaces explicit broad ACEs before copy
   const preflight=readFileSync('tools/ames-workstation/issue57_update_preflight.py','utf8');
   const secureStep=preflight.split('def private_backup_directory(target):')[1]?.split('\ndef copy_private_identity(')[0];
   assert.ok(secureStep);
-  for(const proof of [/SetAccessRuleProtection\(\$true,\$false\)/,/RemoveAccessRuleSpecific/,/FileSystemAccessRule/,/Set-Acl -LiteralPath/,/private_acl_untrusted_allow/,/subprocess\.run\(\["powershell\.exe"/]){
+  for(const proof of [/SetAccessRuleProtection\(\$true,\$false\)/,/RemoveAccessRuleSpecific/,/FileSystemAccessRule/,/Directory\]::GetAccessControl/,/Directory\]::SetAccessControl/,/private_acl_untrusted_allow/,/subprocess\.run\(\["powershell\.exe"/]){
     assert.match(secureStep,proof);
   }
   assert.match(secureStep,/backup_root_not_empty/);
   assert.doesNotMatch(secureStep,/"icacls"/);
-  assert.ok(preflight.indexOf('Set-Acl -LiteralPath')<preflight.indexOf('def copy_private_identity('));
+  assert.ok(preflight.indexOf('Directory]::SetAccessControl')<preflight.indexOf('def copy_private_identity('));
 });
