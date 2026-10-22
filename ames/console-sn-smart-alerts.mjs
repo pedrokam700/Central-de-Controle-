@@ -25,12 +25,13 @@ function pcbaSecondUse(usage={}){
 
 function proof2114(label,f,locale){
  if(!f||!f.pcba_sn)return '';
- const parts=[f.defect_code,f.defect_desc].filter(Boolean).join(' · ');
+ const description=text(f.defect_desc)||t(locale,'Descrição da falha não disponível','Failure description unavailable');
+ const code=f.defect_code?'<small>'+esc(t(locale,'Código MES (referência)','MES code (reference)'))+': '+esc(f.defect_code)+'</small>':'';
  const meta=[f.hist_seq==null?'':`Hist Seq ${f.hist_seq}`,f.defect_time?time(f.defect_time):t(locale,'Horário não comprovado','Time unproven')].filter(Boolean).join(' · ');
  const states=[f.repair_status==null?'':t(locale,'Vínculo 2114','2114 link')+': '+f.repair_status,
-   f.defect_type==null?'':'Defect Type: '+f.defect_type].filter(Boolean).join(' · ');
+   f.defect_type==null?'':t(locale,'Tipo de análise 2114','2114 analysis type')+': '+f.defect_type].filter(Boolean).join(' · ');
  return `<div class="ames-sn-smart-proof"><small>${esc(label)} · 2114</small>
-   <b>${esc(parts||'—')}</b><span>${esc(f.pcba_sn)} · ${esc(meta)}</span>
+   <b>${esc(description)}</b>${code}<span>${esc(f.pcba_sn)} · ${esc(meta)}</span>
    ${states?`<small>${esc(states)} · ${esc(t(locale,'não identifica reparo executado','does not establish a performed repair'))}</small>`:''}
  </div>`;
 }
