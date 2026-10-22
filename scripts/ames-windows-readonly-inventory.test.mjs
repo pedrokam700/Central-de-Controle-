@@ -60,13 +60,18 @@ test('independent Windows backup ACL verifier is observational and cannot author
   assert.match(fixture,/broad_allow_ace_not_rejected/);
 });
 
-test('Windows CI must reach guardian, mutex and ACL proofs without nullable LASTEXITCODE shortcuts',()=>{
+test('Windows CI must reach guardian, dual lock and ACL proofs without nullable LASTEXITCODE shortcuts',()=>{
   const workflow=readFileSync('.github/workflows/ames-operational-history.yml','utf8');
   const step=workflow.split('      - name: Validate background guardian and temporary safe pairing launcher syntax\n')[1]?.split('\n  reading-firestore:')[0];
   assert.ok(step,'Windows fixture step required');
-  for(const marker of [/guardian_fixture_not_completed/,/mutex_fixture_not_completed/,/private_acl_fixture_not_completed/,/Windows fixtures: guardian \+ mutex \+ backup ACL end-to-end GREEN/]){
+  for(const marker of [/guardian_fixture_not_completed/,/mutex_fixture_not_completed/,/dual_lock_ledger_fixture_not_completed/,/private_acl_fixture_not_completed/,/Windows fixtures: guardian \+ mutex \+ dual-lock ledger \+ backup ACL end-to-end GREEN/]){
     assert.match(step,marker);
   }
+  const fixture=readFileSync('scripts/issue57-dual-lock-ledger.windows.test.ps1','utf8');
+  for(const proof of [/GITHUB_ACTIONS/,/RUNNER_TEMP/,/Global\\CentralAMES\.Issue57DualUpdateTest/,/Global\\CentralAMES\.Issue57DualBootstrapTest/,/MUTEX_BLOCKED/,/PERSISTENT_CLAIM_BLOCKED/,/update_authorized.*false/]){
+    assert.match(fixture,proof);
+  }
+  assert.doesNotMatch(fixture,/Global\\CentralAMES\.UpdateTransaction\.8765|Global\\CentralAMES\.CanonicalBootstrap\.8765/);
   assert.doesNotMatch(step,/if\s*\(\s*\$LASTEXITCODE\s+-ne\s+0\s*\)\s*\{\s*exit\s+\$LASTEXITCODE/i);
 });
 
