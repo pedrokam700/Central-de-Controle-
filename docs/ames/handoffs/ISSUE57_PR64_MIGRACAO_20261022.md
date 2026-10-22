@@ -215,4 +215,20 @@ PR #64 segue draft até revalidação; não criar novo CLEAN, não tocar SQLite,
 
 Consequências: sessão por aba explicada por `sessionStorage`, sem perda de token durante reload/navegação de mesma origem; abrir outra aba sem capability continua RED por design atual; POST do botão de pareamento normal ainda RED e falta identificar exatamente a condição de 403. Observação técnica no agente 0.5.36: `workstation_pairing.confirm` valida Host/loopback, Origin/Sec-Fetch-Site, Sec-Fetch-Mode e nonce; sem cabeçalhos concretos do POST não atribuir causa. Não afrouxar checks e não copiar tokens entre abas sem novo projeto de segurança. Firebase permission-denied é incidente separado e não comprovadamente relacionado.
 
-Próximo gate: observar metadados não secretos da requisição 403 sob DevTools, corrigir somente a condição comprovada, validar CI/Windows e estabelecer atualização segura do agente com backup antes de homologar o botão. Ver registro https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6342988228. 
+Próximo gate: observar metadados não secretos da requisição 403 sob DevTools, corrigir somente a condição comprovada, validar CI/Windows e estabelecer atualização segura do agente com backup antes de homologar o botão. Ver registro https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6342988228.
+
+## 13. Atualização oficial 0.5.39 — PR #65 merged; Pages no SHA exato (22/10/2026)
+
+**Causa física identificada no Edge DevTools**: POST `http://127.0.0.1:8765/workstation/parear` => 403 com `Origin:null`, `Host:127.0.0.1:8765`, `Sec-Fetch-Site:same-origin`, `Sec-Fetch-Mode:navigate`, `Sec-Fetch-Dest:document`, `Sec-Fetch-User:?1`, `Content-Type:application/x-www-form-urlencoded`. O agente 0.5.36 rejeitava `Origin:null` antes da validação do nonce; não afirmar que o nonce estava válido/expirado nessa tentativa.
+
+**Correção oficial**: PR #65 foi merged à main SHA **`b283b1764432f5d90486d38a7553b30542a5c118`**. `ames/agent/workstation_pairing.py` permite `Origin:null` só em navegação de documento iniciada pelo usuário e comprovadamente mesma origem local, host/IP loopback e nonce válido de uso único/TTL300s. Casos cross-site/iframe/XHR/origem externa/replay continuam rejeitados. Testes contrato e HTTP integration registram o Edge real e controles negativos. NÃO afrouxar anti-CSRF.
+
+- Operational History no SHA PR `16320f2e`: 5/5 SUCCESS, run `39811171452`.
+- Operational History SHA `main` `b283b176`: 5/5 SUCCESS, run `39811962960`.
+- Release oficial **`ames-v0.5.39-multipc-20261022`** publicada a partir do SHA de merge, arquivo `AMES_Central_CLEAN_b283b176.zip`, SHA256 `4407332be1d7e6ed78ee11ad2cf7dca893d2ba9c72e55bf4b93d453892cc482a`, 1,076,224 bytes. URL: https://github.com/pedrokam700/Central-de-Controle-/releases/tag/ames-v0.5.39-multipc-20261022
+- GitHub Pages run `39812478879` SUCCESS, log `Public GitHub Pages verified: SHA=b283b1764432f5d90486d38a7553b30542a5c118 home=200 index=200 bootstrap=200`. URL oficial https://pedrokam700.github.io/Central-de-Controle-/
+- Central Quality Gate da PR #65 teve RED por preview privado Netlify 401, separado do Pages oficial; outros testes internos passaram. Manter evidências distintas.
+
+**Gates ainda abertos**: Python do posto permanece anterior (a publicação da release NÃO atualizou o agente Windows), botão normal não testado na 0.5.39 física, sincronização atual entre 3 linhas não homologada, Firebase 403/permission-denied incidente separado. A PR #64 continua draft para UX de update web/avisos, e updater motor completo com backup/rollback e gates G1–G6 da Issue #57 NÃO foi entregue. Não reinstalar/extrair CLEAN sobre SQLite, token, source_id ou agente ativo. O pacote temporário conectou apenas por sessão no Edge e pode continuar sendo usado no posto autorizado enquanto houver segurança operacional.
+
+**Registro detalhado e continuidade**: https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6345624447. Revalidar GitHub ao migrar, em especial `main`, `release`, PR #64, Issue #57; não reabrir PR #65. Próxima intervenção física só após solução externa segura de atualização do agente e prova de downtime/backup; sem acesso remoto ao PC físico não declarar aplicação concluída.
