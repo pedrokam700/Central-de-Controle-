@@ -562,6 +562,17 @@ try{
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');
  await page.locator('[data-read-period=today]').click();
  assert.equal(await page.locator('[data-monitor-main] [data-agent-action=today]').isVisible(),true);
+ // Verify actual desktop/mobile CSS layout, not only class names.
+ await page.setViewportSize({width:1440,height:950});
+ const kpiCols=async()=>page.locator('[data-console-pane=monitor] .ames-line-summary').evaluate(e=>
+   getComputedStyle(e).gridTemplateColumns.split(/\\s+/).filter(Boolean).length);
+ assert.equal(await kpiCols(),4,'four primary KPIs on desktop, separate from provenance');
+ assert.equal(await page.locator('[data-monitor-provenance] .stat').count(),2,'snapshot and source stay visible');
+ assert.equal(await page.locator('[data-monitor-technical]').evaluate(e=>e.open),false,'technical logs collapsed on landing');
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await kpiCols(),2,'mobile primary KPIs in two columns');
+ assert.equal(await page.locator('[data-line-tab]').count(),3);
+ await page.setViewportSize({width:1440,height:950});
  // An actual logout/reset must destroy the retained SN form and previous
  // forensic content rather than exposing another account's SN investigation.
  await page.evaluate(()=>{qa.store.clear();qa.store.selectReadingPeriod('today');qa.view.render();});
