@@ -1,5 +1,5 @@
 name: Publish Official A-MES Multi-PC Field Release
-# v0.5.38: a reviewed workflow-file push triggers one immutable exact-SHA release.
+# v0.5.38: release only after exact-SHA 5/5 incl. CORS origin policy correction.
 # The GitHub Release and its 5/5 CI evidence, never the hosting provider, are authoritative.
 on:
   push:
@@ -76,4 +76,4 @@ jobs:
           gh release create "$tag" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Central + A-MES 0.5.38 — pareamento HTTPS corrigido" \
-            --notes "Hotfix oficial 0.5.38: corrige hífen final no GitHub Pages e redirecionamento HTTPS do agente de pareamento; preserva token somente no fragment URL, confirmação local com nonce 300 segundos e proteções anti-CSRF. Inclui todas as melhorias de 0.5.37: Monitor moderno, leitura histórica automática, Base e reuso, Consulta por SN e 2114. Agente físico anterior precisa do componente de pareamento atualizado por procedimento seguro com backup, sem sobrescrever SQLite, source_id ou token; não reinstalar CLEAN sobre instalação ativa. Homologação física da conexão HTTPS, das três linhas, 3012/3022 e SN 2114 ainda pendente. Gate oficial 5/5 no SHA exato, GitHub Pages da release imutável. Versões anteriores permanecem para rollback."
+            --notes "Hotfix oficial 0.5.38: corrige hífen final no GitHub Pages e redirecionamento HTTPS do agente de pareamento; calcula a origem CORS por esquema e host, sem cortar pelo caminho do repositório; preserva token somente no fragment URL, confirmação local com nonce 300 segundos e proteções anti-CSRF. Inclui todas as melhorias de 0.5.37: Monitor moderno, leitura histórica automática, Base e reuso, Consulta por SN e 2114. Agente físico anterior precisa do componente de pareamento atualizado por procedimento seguro com backup, sem sobrescrever SQLite, source_id ou token; não reinstalar CLEAN sobre instalação ativa. Homologação física da conexão HTTPS, das três linhas, 3012/3022 e SN 2114 ainda pendente. Gate oficial 5/5 no SHA exato, GitHub Pages da release imutável. Versões anteriores permanecem para rollback."
