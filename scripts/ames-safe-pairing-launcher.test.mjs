@@ -12,4 +12,7 @@ test('pilot fallback verifies owner from ready PID and existing token, never cre
  assert.doesNotMatch(code,/(?:Stop-Process|Remove-Item|Set-Content|Copy-Item|Invoke-WebRequest|Invoke-Expression|Start-Job)/);
  assert.doesNotMatch(code,/Write-(?:Host|Output).*\$(?:token|dest)/i);
  assert.match(code,/Nenhum arquivo ou processo foi modificado/);
+ const wrapper=fs.readFileSync('tools/ames-workstation/ABRIR_HTTPS_EXISTENTE_SEM_ATUALIZAR.cmd','utf8');
+ assert.match(wrapper,/ABRIR_HTTPS_EXISTENTE_SEM_ATUALIZAR\.ps1/);
+ assert.doesNotMatch(wrapper,/Stop-Process|Remove-Item|del |rmdir |taskkill|curl|Invoke-WebRequest/i);
 });
