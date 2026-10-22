@@ -316,3 +316,16 @@ A pasta extraída `Downloads/AMES_Central_CLEAN_b283b176` também existe. **Não
 3. Fonte da verdade continua GitHub `main`, Releases, Actions, Issues e este handoff. Nenhuma atualização de produção nem merge automático é autorizado. Não confundir a cobertura de `ames-agent/data` com a prova de todos os arquivos externos, ACL real da fábrica, quiescência Firestore, troca de processo ou rollback de produção.
 
 **Próxima implementação segura:** atestação de quiescência do navegador e outbox multiaba, guardian antigo e coordenação externa durável; em seguida, backup/restauração integral incluindo arquivos externos aprovados, swap allowlisted, health e rollback Windows. Nenhum CLEAN deve ser reinstalado manualmente enquanto esses gates estiverem abertos.
+
+## 18. B3 — inventário browser da outbox sem autorização de instalação (22/10/2026)
+
+**Ponto de partida remoto:** PR #64 draft sobre a `main` 0.5.39, último checkpoint SHA `583e3e90006b4dea239387be269e2bd4a8ba7761`; [Central Quality Gate #39836598164](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/39836598164) com os 3 jobs internos SUCCESS. Evidência em [Issue #57, comentário 6348968380](https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6348968380). A CI A-MES Operational History desse SHA não foi revalidada por consulta; não declarar sua aprovação sem registro.
+
+**Novo incremento em desenvolvimento (validar SHA remoto após publicar):**
+
+1. `ames/sync.mjs`: `indexedQueue().countAll()` usa apenas `readonly`/`count()` na store `pending` de `central-ames-outbox-v2`. Examina contagem global da origem/perfil, não apenas o UID da sessão atual; mantém schema/version do IndexedDB e não extrai os payloads.
+2. `createMesSync().inspectUpdateReadiness()`: consulta informativa com contadores de uploads, capturas e leituras que permanecem visíveis durante logout até a promise realmente concluir. Trata IDB ausente/erro como **desconhecido**, mudança de sessão durante leitura como observação instável. Nunca solicita envio nem modifica a fila.
+3. A resposta **sempre** tem `update_authorized=false`, `exclusive_lease_held=false`, `multi_tab_attested=false`, `other_browser_profiles_attested=false`. Outras abas/perfis, filas em trânsito, guardian físico antigo e exclusão durável ainda não são atestados. Nenhum código executável Windows recebe permissão para instalar motor.
+4. `scripts/ames-issue57-browser-outbox.test.mjs` testa isolamento, sessão antiga, upload/captura em voo, bloqueio por erro, mudança de geração. `scripts/ames-sync-reload.browser.mjs` estende prova em IndexedDB Chromium real; CI de `A-MES Operational History` inclui o novo contrato.
+
+**Não houve novos comandos físicos:** o inventário do §14 continua válido, 0.5.39 apenas baixada/extraída, agente antigo preservado na porta 8765, source_id/token/SQLite/configuração intocados. GitHub-only; sem Netlify, sem merge/release/Pages até a política segura de transação estar comprovada.

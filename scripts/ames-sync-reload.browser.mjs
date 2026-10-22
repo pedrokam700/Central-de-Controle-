@@ -42,12 +42,21 @@ try{
   assert.equal(await page.evaluate(()=>qa.store.localCanonical().length),0,'pending evidence survives even with empty in-memory state');
   await page.evaluate(()=>qa.integration.start('B'));await page.waitForFunction(()=>qa.store.agent().sync.pending===0);
   assert.equal(await page.evaluate(async()=>(await qa.queue.list('A')).length),1,'B cannot consume A outbox');
+  const crossUser=await page.evaluate(()=>qa.integration.sync.inspectUpdateReadiness());
+  assert.equal(crossUser.pending_entries,1,'read-only audit must count evidence for signed-out A');
+  assert.equal(crossUser.advisory_no_pending,false);
+  assert.equal(crossUser.update_authorized,false);
   await page.evaluate(()=>qa.integration.start('A'));await page.waitForFunction(()=>qa.store.agent().sync.pending===1);
   await page.evaluate(()=>qa.online());await page.waitForFunction(()=>qa.store.agent().sync.pending===0);
   assert.equal(await page.evaluate(()=>qa.writes.length),1);assert.equal(await page.evaluate(async()=>(await qa.queue.list('A')).length),0);
+  await page.waitForFunction(async()=>(await qa.integration.sync.inspectUpdateReadiness()).advisory_no_pending);
+  const drained=await page.evaluate(()=>qa.integration.sync.inspectUpdateReadiness());
+  assert.equal(drained.pending_entries,0);
+  assert.equal(drained.multi_tab_attested,false,'empty current origin cannot attest all tabs/profiles');
+  assert.equal(drained.update_authorized,false,'browser observation never permits motor update');
   await page.reload();await page.waitForFunction(()=>window.qa?.store.agent().sync.pending===0);
   assert.deepEqual(errors,[]);
   const out=process.env.BROWSER_OUTPUT||'../browser-evidence';fs.mkdirSync(out,{recursive:true});
-  fs.writeFileSync(path.join(out,'sync-reload.json'),JSON.stringify({result:'PASS',browser:'chromium',checks:['real IndexedDB offline enqueue','reload restores pending count','UID isolation','reconnect drains once','second reload empty'],production:false},null,2));
+  fs.writeFileSync(path.join(out,'sync-reload.json'),JSON.stringify({result:'PASS',browser:'chromium',checks:['real IndexedDB offline enqueue','reload restores pending count','UID isolation','cross-UID read-only pending audit','reconnect drains once','empty audit never authorizes updater','second reload empty'],production:false},null,2));
   console.log('PASS: real IndexedDB offline/reload/account isolation/reconnect/second reload; no Console mounted');
 }finally{await browser?.close();await new Promise(r=>server.close(r));}

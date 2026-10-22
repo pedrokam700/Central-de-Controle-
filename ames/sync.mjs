@@ -49,6 +49,9 @@ export function indexedQueue(){
     put:x=>run('readwrite',s=>s.put(x)),
     remove:id=>run('readwrite',s=>s.delete(id)),
     list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid),
+    // Count every UID in this browser origin, including evidence left by a
+    // previous login. Never fetch payloads or mutate the offline outbox.
+    countAll:()=>run('readonly',s=>s.count()),
     hasHistory:async id=>!!(await run('readonly',s=>s.get(id),true)),
     markHistory:id=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),true)
   };
@@ -56,13 +59,16 @@ export function indexedQueue(){
 
 export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),watchDay='';
+  // Do not erase the counters on logout: an already-started remote promise may
+  // still be unsettled after its session has been invalidated.
+  let uploadsInFlight=0,capturesInFlight=0,readsInFlight=0;
   const alive=(u,g)=>u===uid&&g===generation;
   const currentConfig=()=>typeof productionConfig==='function'?productionConfig():productionConfig;
   const entryScope=e=>publicationIntent(JSON.parse(e.parts.join('')),now(),currentConfig());
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
   const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null,identity_blocked:[],last_publish_timing:null});
   async function flush(){
-    if(!uid||running)return;running=true;const u=uid,g=generation;
+    if(!uid||running)return;running=true;uploadsInFlight++;const u=uid,g=generation;
     try{
       let entries=await queue.list(u);
       if(!alive(u,g))return;
@@ -127,9 +133,10 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       retry=1000;
       if(alive(u,g))status({status:identityBlocked.size?'shared_history_legacy_conflict':store.agent().sync?.last_sent?'synchronized':'idle',pending:0,error:'',identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values()]});
     }catch(error){if(alive(u,g)){status({status:'pending',error:error.message});unschedule(timer);timer=schedule(()=>{if(alive(u,g))flush();},retry);retry=Math.min(retry*2,60000);}}
-    finally{if(alive(u,g))running=false;}
+    finally{uploadsInFlight--;if(alive(u,g))running=false;}
   }
   async function receive(heads,meta=lastReadMeta){
+    readsInFlight++;
     const u=uid,g=generation,read=++readGeneration,receivedAt=Date.now();
     try{
       const candidates=meta.day_index_available?heads.filter(h=>h.period_start):heads;
@@ -200,6 +207,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         });
       }
     }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads,lastReadMeta);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
+    finally{readsInFlight--;}
   }
   function subscribe(){
     if(!uid)return;
@@ -228,6 +236,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     if(!uid)return;
     if(capturing){await capturing;if(!uid)return;return capture();}
     const u=uid,g=generation;
+    capturesInFlight++;
     const work=(async()=>{
       const payloads=store.localCanonical();
       const signature=JSON.stringify(payloads.map(p=>[p.line_id,p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));
@@ -238,9 +247,39 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       if(alive(u,g)){status({status:pending?'pending':'idle',pending});void flush();}
     })();
     capturing=work;
-    try{await work;}finally{if(capturing===work)capturing=null;}
+    try{await work;}finally{capturesInFlight--;if(capturing===work)capturing=null;}
   }
   return {
+    async inspectUpdateReadiness(){
+      // This is only an observation of ONE browser origin/profile. Other
+      // profiles, old tabs and a concurrently changing queue cannot be fenced
+      // here; only an external coordinator can eventually authorize an update.
+      const initial={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+      let pending=null,reason='browser_outbox_unavailable';
+      if(typeof queue.countAll==='function'){
+        try{
+          const total=await queue.countAll();
+          if(Number.isSafeInteger(total)&&total>=0){pending=total;reason='';}
+        }catch{/* IndexedDB locked, denied or unavailable: fail closed. */}
+      }
+      const observed={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+      const changed=Object.keys(initial).some(key=>initial[key]!==observed[key]);
+      return {
+        schema:'ames-browser-outbox-readonly-v1',
+        pending_entries:pending,
+        uploads_inflight:observed.uploadsInFlight,
+        captures_inflight:observed.capturesInFlight,
+        reads_inflight:observed.readsInFlight,
+        observation_stable:!changed,
+        advisory_no_pending:pending===0&&!changed&&
+          !observed.uploadsInFlight&&!observed.capturesInFlight&&!observed.readsInFlight,
+        reason:reason||(changed?'session_or_activity_changed_during_observation':pending?'pending_outbox_evidence':''),
+        multi_tab_attested:false,
+        other_browser_profiles_attested:false,
+        exclusive_lease_held:false,
+        update_authorized:false,
+      };
+    },
     async listHistory(line){
       if(!uid||!remote.listHistory)throw Error('History unavailable');
       const u=uid,g=generation,rows=await remote.listHistory(line);
