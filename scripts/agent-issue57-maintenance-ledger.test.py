@@ -17,8 +17,9 @@ spec.loader.exec_module(ledger)
 # Exact marker path already checked by the proposed *new* guardian. The old
 # guardian in the real workstation has not been replaced or attested.
 guardian_source = (module_path.parent / "KEEP_AGENT_RUNNING.ps1").read_text(encoding="utf-8")
-assert "'.ames-update\\transaction.json'" in guardian_source
-assert "Local\\CentralAMES.UpdateTransaction" in guardian_source
+assert "'.ames-update'" in guardian_source
+assert "Global\\CentralAMES.UpdateTransaction.8765" in guardian_source
+assert "Get-ChildItem -LiteralPath $maintenanceDir" in guardian_source
 
 
 def fixture(base, name):

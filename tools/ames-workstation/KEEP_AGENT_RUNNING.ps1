@@ -9,7 +9,9 @@ if(-not (Test-Path -LiteralPath $starter)){exit 2}
 $mutex=$null
 $locked=$false
 try {
-  $mutex=New-Object System.Threading.Mutex($false,'Local\CentralAMES.OperatorGuardian')
+  # Global names coordinate new guardians across interactive Windows sessions.
+  # If Global namespace/ACL access is denied, this guardian must NOT relaunch.
+  $mutex=New-Object System.Threading.Mutex($false,'Global\CentralAMES.OperatorGuardian.8765')
   try{$locked=$mutex.WaitOne(0)}catch [System.Threading.AbandonedMutexException]{$locked=$true}
   if(-not $locked){exit 0} # A guardian is already active in this Windows session.
   $logs=Join-Path $root 'logs'
@@ -19,7 +21,7 @@ try {
   # persist the journal BEFORE the agent stops. The marker is intentionally
   # fail-closed: even a crash leaves guardian restart suppressed for recovery.
   # This guardian change alone does NOT make the old installed guardian safe.
-  $transactionJournal=Join-Path $root '.ames-update\transaction.json'
+  $maintenanceDir=Join-Path $root '.ames-update'
   $last=''
   function Record-State([string]$message){
     if($message -eq $script:last){return}
@@ -33,25 +35,42 @@ try {
     $transactionMutex=$null
     $transactionLocked=$false
     try{
-      $transactionMutex=New-Object System.Threading.Mutex($false,'Local\CentralAMES.UpdateTransaction')
+      # Hold this shared gate across the actual launcher call. A future updater
+      # must take the SAME Global mutex BEFORE any journal or process operation.
+      $transactionMutex=New-Object System.Threading.Mutex($false,'Global\CentralAMES.UpdateTransaction.8765')
       try{$transactionLocked=$transactionMutex.WaitOne(0)}catch [System.Threading.AbandonedMutexException]{$transactionLocked=$true}
       if(-not $transactionLocked){
         Record-State 'UPDATE_MUTEX_BUSY; guardian restart suppressed'
-      }elseif(Test-Path -LiteralPath $transactionJournal -PathType Leaf){
-        Record-State 'UPDATE_JOURNAL_PRESENT; guardian restart suppressed pending recovery'
       }else{
-        $portActive=$false
+        $maintenanceBlocked=$false
         try{
-          $ready=Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 3
-          if($ready){ Record-State 'PORT_ACTIVE; automatic takeover disabled';$portActive=$true }
-        }catch{}
-        # Startup script performs strict PID, package-root, mutex and unknown-port validation.
-        # It never kills an unrecognized process. A-MES authentication stays manual.
-        if(-not $portActive){
+          if(Test-Path -LiteralPath $maintenanceDir -ErrorAction Stop){
+            $directory=Get-Item -LiteralPath $maintenanceDir -Force -ErrorAction Stop
+            if(-not $directory.PSIsContainer -or ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)){
+              $maintenanceBlocked=$true
+            }elseif(@(Get-ChildItem -LiteralPath $maintenanceDir -Force -ErrorAction Stop).Count -gt 0){
+              # This includes claim.lock BEFORE transaction.json, unknown
+              # partial files and crash recovery markers. Never auto-clear.
+              $maintenanceBlocked=$true
+            }
+          }
+        }catch{$maintenanceBlocked=$true}
+        if($maintenanceBlocked){
+          Record-State 'UPDATE_DIR_NONEMPTY_OR_UNVERIFIED; guardian restart suppressed pending manual recovery'
+        }else{
+          $portActive=$false
           try{
-            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $starter -Root $root -StartupTimeoutSeconds 45 -MaxAttempts 2 *> $null
-            if($LASTEXITCODE -eq 0){Record-State 'STARTED'}else{Record-State 'START_NOT_CONFIRMED'}
-          }catch{Record-State 'START_EXCEPTION'}
+            $ready=Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/v1/ready' -TimeoutSec 3
+            if($ready){ Record-State 'PORT_ACTIVE; automatic takeover disabled';$portActive=$true }
+          }catch{}
+          # Bootstrap is unchanged; it must independently verify PID, package
+          # root, mutex and unknown-port owner. A-MES login remains manual.
+          if(-not $portActive){
+            try{
+              & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $starter -Root $root -StartupTimeoutSeconds 45 -MaxAttempts 2 *> $null
+              if($LASTEXITCODE -eq 0){Record-State 'STARTED'}else{Record-State 'START_NOT_CONFIRMED'}
+            }catch{Record-State 'START_EXCEPTION'}
+          }
         }
       }
     }finally{

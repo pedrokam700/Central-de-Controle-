@@ -85,12 +85,16 @@ class AutoStartContract(TestCase):
 
     def test_guardian_suppresses_relaunch_during_pending_transaction(self):
         content = (Path(__file__).resolve().parents[1] / "tools" / "ames-workstation" / "KEEP_AGENT_RUNNING.ps1").read_text(encoding="utf-8")
-        assert "Local\\CentralAMES.UpdateTransaction" in content
-        assert ".ames-update\\transaction.json" in content
-        assert "UPDATE_JOURNAL_PRESENT; guardian restart suppressed" in content
+        assert "Global\\CentralAMES.OperatorGuardian.8765" in content
+        assert "Global\\CentralAMES.UpdateTransaction.8765" in content
+        assert ".ames-update'" in content
+        assert "claim.lock BEFORE transaction.json" in content
+        assert "UPDATE_DIR_NONEMPTY_OR_UNVERIFIED; guardian restart suppressed" in content
         assert "UPDATE_MUTEX_BUSY; guardian restart suppressed" in content
-        assert content.index("$transactionMutex.WaitOne(0)") < content.index("$transactionJournal -PathType Leaf")
-        assert content.index("$transactionJournal -PathType Leaf") < content.index("& powershell.exe")
+        assert content.index("$transactionMutex.WaitOne(0)") < content.index("Get-ChildItem -LiteralPath $maintenanceDir")
+        assert content.index("Get-ChildItem -LiteralPath $maintenanceDir") < content.index("& powershell.exe")
+        assert "if($maintenanceBlocked)" in content
+        assert "($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)" in content
         assert "$transactionMutex.ReleaseMutex()" in content
         assert "if(-not $portActive)" in content
 
