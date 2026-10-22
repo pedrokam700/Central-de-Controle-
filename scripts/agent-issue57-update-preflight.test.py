@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import os
 import tempfile
 import zipfile
 
@@ -104,4 +105,60 @@ with tempfile.TemporaryDirectory() as tmp:
         raise AssertionError('existing private backup must not be reused')
     except FileExistsError:
         pass
+
+    # Runtime evidence outside SQLite: imports, exports and engine checkpoints.
+    contents = {
+        'imports/export_3028.xlsx': b'workbook only in fixture',
+        'exports/report.txt': b'keep offline report',
+        'checkpoints/2114/history.json': b'{"pcba":"synthetic"}',
+        'backups/previous.sqlite3': b'closed historical bytes',
+    }
+    for rel, value in contents.items():
+        file = live.parent / rel
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_bytes(value)
+    runtime = root / 'private-runtime-backup'
+    state = p.backup_operational_tree(root / 'live', runtime)
+    assert state['agent_data_tree_verified']
+    assert state['agent_data_files_verified'] == len(contents)
+    assert not state['browser_sync_attested']
+    assert not state['exclusive_lease_held'] and not state['update_authorized']
+    data_backup = runtime / 'ames-agent' / 'data'
+    for rel, value in contents.items():
+        assert (data_backup / rel).read_bytes() == value
+    assert not (data_backup / 'local_agent_token').exists()
+    assert not (data_backup / 'ames_local.sqlite3').exists()
+    assert (runtime / 'local_agent_token').read_bytes() == (live.parent / 'local_agent_token').read_bytes()
+    with closing(sqlite3.connect(runtime / 'ames_local.sqlite3')) as snapshot:
+        assert snapshot.execute('SELECT COUNT(*) FROM jobs').fetchone()[0] == 2
+    assert p.verify_operational_backup(runtime)['verified']
+    manifest_file = runtime / 'runtime-backup-manifest.json'
+    assert 'test-only-local-token' not in manifest_file.read_text(encoding='utf-8')
+    try:
+        p.backup_operational_tree(root / 'live', runtime)
+        raise AssertionError('runtime backup must not overwrite protected evidence')
+    except FileExistsError:
+        pass
+    try:
+        p.backup_operational_tree(root / 'live', root / 'insufficient-space', max_bytes=1)
+        raise AssertionError('limit must prevent incomplete runtime backups')
+    except ValueError:
+        pass
+    assert not (root / 'insufficient-space').exists()
+    (data_backup / 'imports/export_3028.xlsx').write_bytes(b'TAMPERED')
+    try:
+        p.verify_operational_backup(runtime)
+        raise AssertionError('restore check must catch changed backed-up file')
+    except ValueError:
+        pass
+    assert (live.parent / 'imports/export_3028.xlsx').read_bytes() == contents['imports/export_3028.xlsx']
+    if os.name != 'nt':
+        symlink = live.parent / 'linked-private-dir'
+        symlink.symlink_to(root / 'identity-backup', target_is_directory=True)
+        try:
+            p.backup_operational_tree(root / 'live', root / 'reject-link')
+            raise AssertionError('source symlink must fail closed')
+        except ValueError:
+            pass
+        assert not (root / 'reject-link').exists()
 print('PASS: official asset digest, manifest/path allowlist, isolated staging and WAL backup/restore')

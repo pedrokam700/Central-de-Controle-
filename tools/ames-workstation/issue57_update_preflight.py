@@ -10,6 +10,7 @@ rollback BEFORE it may use these primitives in a Windows production migration.
 from __future__ import annotations
 
 import hashlib
+from contextlib import closing
 import csv
 import io
 import json
@@ -31,6 +32,9 @@ OFFICIAL = {
 }
 MAX_UNCOMPRESSED = 300 * 1024 * 1024
 MAX_ENTRIES = 10000
+MAX_RUNTIME_BACKUP_BYTES = 8 * 1024 * 1024 * 1024
+SQLITE_TRANSIENT = {"ames_local.sqlite3-wal", "ames_local.sqlite3-shm",
+                    "ames_local.sqlite3-journal"}
 ROOT_FILES = {
     "CANDIDATE_MANIFEST.json", "LOCAL_BUNDLE_MANIFEST.json",
     "LEIA_PRIMEIRO.txt", "FRONTEND_GATE.json", "01_INSTALAR_UMA_VEZ.bat",
@@ -233,3 +237,130 @@ def backup_core_identity(clean_root, private_destination):
     copy_private_identity(agent / "data/local_agent_token", destination / "local_agent_token")
     return {"core_identity_verified": True, "data_tree_complete": False,
             "exclusive_lease_held": False, "update_authorized": False}
+
+
+def _regular_file(path):
+    """Reject POSIX links and Windows reparse points, including junctions."""
+    path = Path(path)
+    if path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()):
+        return False
+    state = path.stat(follow_symlinks=False)
+    return (stat.S_ISREG(state.st_mode) and
+            not (getattr(state, "st_file_attributes", 0) &
+                 getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)))
+
+
+def _runtime_inventory(directory, max_bytes):
+    """Enumerate every regular agent/data file; exclude DB online journal.
+
+    No unknown directories, links or in-progress files may be silently skipped.
+    This is a read-only observation, not proof of an exclusive maintenance lease.
+    """
+    directory = Path(directory)
+    if not directory.is_dir() or directory.is_symlink() or (
+            hasattr(directory, "is_junction") and directory.is_junction()):
+        raise ValueError("agent_data_directory_untrusted")
+    manifest = []
+    total = 0
+    def fail_walk(error):
+        raise error
+
+    for root, dirs, files in os.walk(directory, followlinks=False, onerror=fail_walk):
+        dirs.sort(key=str.casefold)
+        files.sort(key=str.casefold)
+        for name in dirs:
+            child = Path(root) / name
+            if child.is_symlink() or (hasattr(child, "is_junction") and child.is_junction()):
+                raise ValueError("runtime_directory_reparse_point")
+        for name in files:
+            src = Path(root) / name
+            if not _regular_file(src):
+                raise ValueError("runtime_file_not_regular")
+            rel = src.relative_to(directory).as_posix()
+            if rel in ("ames_local.sqlite3", "local_agent_token") or rel in SQLITE_TRANSIENT:
+                # SQLite has its own consistent API snapshot; private token
+                # has a separate copy without an exposed manifest digest.
+                continue
+            item = src.stat(follow_symlinks=False)
+            total += item.st_size
+            if total > max_bytes or len(manifest) >= MAX_ENTRIES:
+                raise ValueError("runtime_backup_capacity_exceeded")
+            manifest.append({"path": rel, "size": item.st_size,
+                             "sha256": sha256_file(src)})
+    return manifest
+
+
+def backup_operational_tree(clean_root, destination,
+                            max_bytes=MAX_RUNTIME_BACKUP_BYTES):
+    """Backup ALL agent/data files in an isolated private directory.
+
+    Only the agent's data subtree is covered. Browser IndexedDB/Firestore
+    outbox, other installations, external MES folders and guardian state are
+    NOT covered. Caller must still prove an external maintenance lease.
+
+    Never mutates the source installation; never stops processes or installs a
+    binary. Any concurrent change/link/unknown SQLite journal fails closed.
+    """
+    clean_root, destination = Path(clean_root).resolve(), Path(destination).resolve()
+    if type(max_bytes) is not int or max_bytes < 1:
+        raise ValueError("invalid_runtime_backup_limit")
+    agent_data = clean_root / "ames-agent" / "data"
+    initial = _runtime_inventory(agent_data, max_bytes)
+    # Core function creates private permissions before writing identities.
+    backup_core_identity(clean_root, destination)
+    output = destination / "ames-agent" / "data"
+    output.mkdir(parents=True, exist_ok=False)
+    for item in initial:
+        src = agent_data / item["path"]
+        target = output / item["path"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not _regular_file(src):
+            raise ValueError("runtime_file_changed_during_backup")
+        with src.open("rb") as reader, target.open("xb") as writer:
+            if os.name != "nt":
+                os.chmod(target, 0o600)
+            shutil.copyfileobj(reader, writer, length=1024 * 1024)
+            writer.flush()
+            os.fsync(writer.fileno())
+        if target.stat().st_size != item["size"] or sha256_file(target) != item["sha256"]:
+            raise ValueError("runtime_backup_integrity_mismatch")
+    if _runtime_inventory(agent_data, max_bytes) != initial:
+        raise ValueError("runtime_data_changed_during_backup")
+    manifest = {"schema": "ames-runtime-backup-v1", "files": initial,
+                "sqlite_source": "ames-agent/data/ames_local.sqlite3",
+                "sqlite_online_backup": "ames_local.sqlite3",
+                "identity_copied_separately": ["config.json", "local_agent_token"],
+                "excluded_runtime_journals": sorted(SQLITE_TRANSIENT),
+                "browser_sync_attested": False, "update_authorized": False}
+    (destination / "runtime-backup-manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2),
+        encoding="utf-8")
+    verify_operational_backup(destination)
+    return {"agent_data_files_verified": len(initial),
+            "agent_data_tree_verified": True,
+            "browser_sync_attested": False, "exclusive_lease_held": False,
+            "update_authorized": False}
+
+
+def verify_operational_backup(destination):
+    """Reopen backup files independently; no access to the live installation."""
+    destination = Path(destination)
+    report = json.loads((destination / "runtime-backup-manifest.json").read_text(encoding="utf-8"))
+    if report.get("schema") != "ames-runtime-backup-v1" or not isinstance(report.get("files"), list):
+        raise ValueError("runtime_backup_manifest_invalid")
+    data = destination / "ames-agent" / "data"
+    listed = report["files"]
+    if len(listed) > MAX_ENTRIES or any(not isinstance(i, dict) or
+                                       set(i) != {"path", "size", "sha256"} for i in listed):
+        raise ValueError("runtime_backup_manifest_invalid")
+    actual = _runtime_inventory(data, MAX_RUNTIME_BACKUP_BYTES)
+    if actual != listed:
+        raise ValueError("runtime_backup_restore_verification_failed")
+    for required in ("config.json", "local_agent_token", "ames_local.sqlite3"):
+        if not _regular_file(destination / required):
+            raise ValueError("runtime_backup_identity_incomplete")
+    with closing(sqlite3.connect((destination / "ames_local.sqlite3").as_uri() + "?mode=ro",
+                                 uri=True)) as db:
+        if db.execute("PRAGMA quick_check").fetchone() != ("ok",):
+            raise ValueError("runtime_backup_sqlite_invalid")
+    return {"verified": True, "update_authorized": False}

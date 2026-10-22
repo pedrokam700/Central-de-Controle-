@@ -304,3 +304,15 @@ A pasta extraída `Downloads/AMES_Central_CLEAN_b283b176` também existe. **Não
 4. Testes locais isolados passaram: barreira concorrente (3), readiness, pacote/dependências (7), guardian/autostart (5), scheduler HTTP/MES (12 sob permissão local), preflight WAL/manifest, simulação de rollback e testes Node para inventário/guardas (3). O runner Windows do novo HEAD e outros gates oficiais ainda precisam ser consultados após publicar o checkpoint GitHub.
 
 **Próximos gates reais**: integrar um coordenador externo confiável com journal e identificação/controle do guardian instalado; provar bloqueio simultâneo de outbox e sync Firebase (inclusive abas abertas), jobs, monitor e requisições; obter backup completo + restore ACL e dados auxiliares; health/rollback Windows; e só então piloto supervisionado. Sem essas evidências, PR #64 fica draft, sem merge/release e sem botão de atualização do motor.
+
+## 17. Continuidade C2 e alinhamento exclusivo ao GitHub (22/10/2026)
+
+**Não houve comando novo na fábrica.** O último inventário válido continua sendo §14; o agente anterior permanece a última instalação observada na porta 8765. O ZIP 0.5.39 foi baixado e extraído, nunca aplicado. PR #64 continua draft, e toda implementação nova fica isolada na branch até gates suficientes.
+
+**Mudanças deste bloco, sujeitas ao CI do novo HEAD:**
+
+1. `backup_operational_tree` amplia o backup SQLite WAL/config/token para incluir os arquivos de operação sob `ames-agent/data` (imports, exports, checkpoints, históricos), rejeitando symlinks/junctions, limites excedidos, destino existente, mudanças detectadas na origem e backup alterado. `verify_operational_backup` confere a cópia independentemente da fonte e testa `quick_check` SQLite. Testes de fixture incluem tamper, restauração e preservação de dados de origem. **A fila Firebase/IndexedDB do navegador NÃO é abrangida e pode estar em várias abas.** O resultado segue `update_authorized=false`.
+2. Confirmado que a execução antiga `Published preview smoke` do Quality Gate consultava um Netlify não oficial e recebia HTTP 401. Ela foi retirada da PR workflow, **sem remover** os três testes internos de qualidade. GitHub Pages continua como a única hospedagem oficial; `publish-github-pages.yml` já valida o commit exato de GitHub Release e home/index/bootstrap HTTP 200 depois da publicação de `main`. Novo teste de contrato impede a reintrodução desse gate Netlify na PR.
+3. Fonte da verdade continua GitHub `main`, Releases, Actions, Issues e este handoff. Nenhuma atualização de produção nem merge automático é autorizado. Não confundir a cobertura de `ames-agent/data` com a prova de todos os arquivos externos, ACL real da fábrica, quiescência Firestore, troca de processo ou rollback de produção.
+
+**Próxima implementação segura:** atestação de quiescência do navegador e outbox multiaba, guardian antigo e coordenação externa durável; em seguida, backup/restauração integral incluindo arquivos externos aprovados, swap allowlisted, health e rollback Windows. Nenhum CLEAN deve ser reinstalado manualmente enquanto esses gates estiverem abertos.
