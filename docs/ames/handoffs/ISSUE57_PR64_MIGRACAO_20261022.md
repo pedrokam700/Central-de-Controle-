@@ -208,3 +208,11 @@ Houve também mensagem `O Firebase recusou o acesso. Verifique as regras do Fire
 Próximo teste físico sem alteração: voltar à **aba HTTPS efetivamente conectada pelo piloto**, Ctrl+L na mesma aba, abrir URL oficial limpa; confirmar status após a navegação. Para isolar POST 403, inspecionar via DevTools apenas HTTP status + Host/Origin/Sec-Fetch-Site/Sec-Fetch-Mode/Content-Type, sem Request Payload (nonce), token, cookies ou URL com fragment. Evidência salva na Issue #57, comentário https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6342861196.
 
 PR #64 segue draft até revalidação; não criar novo CLEAN, não tocar SQLite, source_id, token nem atualizar o motor em uso.
+
+## 12. Homologação restrita — navegação HTTPS na MESMA aba (22/10/2026, 11:15 BRT)
+
+**Resultado físico informado pelo operador: “continuou conectado”.** Na aba HTTPS que o piloto havia autenticado, o usuário fez Ctrl+L e reabriu a URL limpa `https://pedrokam700.github.io/Central-de-Controle-/`, **sem abrir outra aba**. O indicador permaneceu conectado. Classificar **GREEN apenas para permanência da autorização em navegação da mesma aba**, após pareamento temporário.
+
+Consequências: sessão por aba explicada por `sessionStorage`, sem perda de token durante reload/navegação de mesma origem; abrir outra aba sem capability continua RED por design atual; POST do botão de pareamento normal ainda RED e falta identificar exatamente a condição de 403. Observação técnica no agente 0.5.36: `workstation_pairing.confirm` valida Host/loopback, Origin/Sec-Fetch-Site, Sec-Fetch-Mode e nonce; sem cabeçalhos concretos do POST não atribuir causa. Não afrouxar checks e não copiar tokens entre abas sem novo projeto de segurança. Firebase permission-denied é incidente separado e não comprovadamente relacionado.
+
+Próximo gate: observar metadados não secretos da requisição 403 sob DevTools, corrigir somente a condição comprovada, validar CI/Windows e estabelecer atualização segura do agente com backup antes de homologar o botão. Ver registro https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6342988228. 
