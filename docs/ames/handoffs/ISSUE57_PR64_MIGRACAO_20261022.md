@@ -232,3 +232,46 @@ Próximo gate: observar metadados não secretos da requisição 403 sob DevTools
 **Gates ainda abertos**: Python do posto permanece anterior (a publicação da release NÃO atualizou o agente Windows), botão normal não testado na 0.5.39 física, sincronização atual entre 3 linhas não homologada, Firebase 403/permission-denied incidente separado. A PR #64 continua draft para UX de update web/avisos, e updater motor completo com backup/rollback e gates G1–G6 da Issue #57 NÃO foi entregue. Não reinstalar/extrair CLEAN sobre SQLite, token, source_id ou agente ativo. O pacote temporário conectou apenas por sessão no Edge e pode continuar sendo usado no posto autorizado enquanto houver segurança operacional.
 
 **Registro detalhado e continuidade**: https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6345624447. Revalidar GitHub ao migrar, em especial `main`, `release`, PR #64, Issue #57; não reabrir PR #65. Próxima intervenção física só após solução externa segura de atualização do agente e prova de downtime/backup; sem acesso remoto ao PC físico não declarar aplicação concluída.
+
+## 14. ÚLTIMO PRINT FÍSICO + MIGRAÇÃO DA CONVERSA (22/10/2026, 14:07–14:08 BRT)
+
+**Este é o ponto de retomada prioritário para o próximo chat.** A conversa antiga atingiu o limite; o operador executou o último comando de inventário somente leitura e enviou dois prints, sem executar instalação, inicializador ou cópia. O print de 14:07 confirma:
+
+```text
+Ready          : True
+Build          : CANONICAL-R11-BATCH
+Versao         : 0.5.23
+PID            : 15212                    [apenas na hora do teste; consultar /ready novamente]
+Script         : C:\Users\producao\Downloads\AMES_Central_CLEAN_dbe424da\ames-agent\agent_hardened_entry.py
+Pasta antiga   : True
+Agente antigo  : True
+Banco SQLite   : True
+Configuracao   : True
+Token local    : True
+Pasta 0.5.39   : AMES_Central_CLEAN_b283b176
+```
+
+**Arquivos cuja mera existência foi comprovada (conteúdo NÃO lido/publicado):**
+- `AMES_Central_CLEAN_dbe424da/ames-agent/agent_hardened_entry.py`
+- `AMES_Central_CLEAN_dbe424da/ames-agent/data/ames_local.sqlite3`
+- `AMES_Central_CLEAN_dbe424da/ames-agent/config.json`
+- `AMES_Central_CLEAN_dbe424da/ames-agent/data/local_agent_token`.
+A pasta extraída `Downloads/AMES_Central_CLEAN_b283b176` também existe. **Não se comprovou a integridade do SQLite, das filas, ausência de jobs ou disponibilidade de backup; `Test-Path=True` não equivale a backup verificado.**
+
+**Integridade do download**: `Get-FileHash Downloads/AMES_Central_CLEAN_b283b176.zip -Algorithm SHA256` = `4407332be1d7e6ed78ee11ad2cf7dca893d2ba9c72e55bf4b93d453892cc482a`, correspondente ao digest oficial da release. Extraído, **NÃO INSTALADO**. Nenhum arquivo Python novo foi copiado para a raiz ativa e o motor do PID 15212 continuava na 0.5.36. Não iniciar a nova CLEAN; pode tentar reservar a porta 8765 ou divergir em dados/origens.
+
+**Estado GitHub revalidado neste checkpoint**:
+- `main`: `b283b1764432f5d90486d38a7553b30542a5c118`; release oficial `ames-v0.5.39-multipc-20261022` SHA igual; asset `AMES_Central_CLEAN_b283b176.zip`, 1.076.224 bytes, SHA-256 acima.
+- PR #65 **merged/closed**, origem da correção estrita para o POST Edge `Origin:null`; CI oficial no SHA merge: A-MES Operational History 5/5 SUCCESS, Central Quality Gate SUCCESS e GitHub Pages SUCCESS com home/index/bootstrap 200. **Não reabrir PR #65**.
+- Issue #57 **OPEN**: updater Windows in-place, prevenção de duas instâncias, inventário, backup transacional, staging, troca controlada, rollback e homologação. Issue #52 OPEN (coleta/reuso/alertas).
+- PR #64 `work/ames-update-readonly-inventory-issue57-20261022` **OPEN/DRAFT**, HEAD ANTES deste adendo `3a2fa637809a0839809198b92b30d47fa24ac748`, A-MES Operational History run `39813436053` SUCCESS. **Mergeability "dirty"** depois que `main` avançou para 0.5.39: reconciliar diferenças/conflitos; não dar merge direto, não sobrescrever fix da PR #65. A alteração deste handoff produzirá novo HEAD; revalidar SHA+checks.
+- Log da comprovação anterior: [Issue #57, comentário 6346547481](https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6346547481).
+
+**Gates físicos, sem inflar os resultados**:
+- GREEN: ZIP oficial íntegro, processo canônico existente, arquivos essenciais presentes, nova pasta segregada; conexão HTTPS por **pacote temporário** na aba autenticada e persistência nessa mesma aba.
+- RED na instalação antiga: botão padrão de pareamento via `/workstation/parear` HTTP 403 com `Origin:null` (corrigido NO GITHUB na 0.5.39, NÃO aplicado no agente físico).
+- PENDENTE: idle proof do coletor/filas, inventário de raízes concorrentes, backup SQLite consistente testado, backup config/token/source_id, staging verificável, atualização segura/rollback, restart apenas do canônico, rechecagem de /ready e POST, sincronização 3 linhas 0/3, erro intermitente Firebase `permission-denied`.
+
+**Ação exata para continuar**: NÃO repetir o inventário já enviado. Planejar/implementar o **atualizador de agente seguro** da Issue #57 com testes Windows/SQLite e procedimento de campo; não pedir ao usuário para executar simples `Copy-Item`, `Stop-Process` ou iniciar o CLEAN novo. Primeiro auditar a arquitetura e o updater legado (`ames/agent/update_candidate.py` é legado, NÃO atende gates B/C/G1–G6), obter prova de inatividade/backup, identificar todas as instalações concorrentes, projetar transação/rollback e testar fora da produção. Quando houver procedimento validado, guiar a instalação no PC autorizado, **somente com operador presente**. Guardar checkpoints no GitHub. O usuário pretende migrar imediatamente de conversa; ao retomar, leia todo este documento e priorize este §14 sobre trechos históricos §1–9 (que ainda citam 0.5.38 por serem registro histórico).
+
+**UX e processo de comunicação**: respostas em português técnico, objetivas e apoiadas em evidências. Fazer as operações possíveis no GitHub, sem obrigar o usuário a repetir informação comprovada. Distinguir implementação, CI, release, Pages, teste físico; manter 9 views, alertas 2114/3012/3022, histórico de FPY/snapshots e dados offline. Não oferecer novo download CLEAN como solução de upgrade físico até existir atualizador seguro.
