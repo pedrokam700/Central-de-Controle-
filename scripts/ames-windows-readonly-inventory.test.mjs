@@ -57,3 +57,13 @@ test('independent Windows backup ACL verifier is observational and cannot author
   assert.match(fixture,/RUNNER_TEMP/);
   assert.match(fixture,/broad_allow_ace_not_rejected/);
 });
+
+test('Windows CI must reach guardian, mutex and ACL proofs without nullable LASTEXITCODE shortcuts',()=>{
+  const workflow=readFileSync('.github/workflows/ames-operational-history.yml','utf8');
+  const step=workflow.split('      - name: Validate background guardian and temporary safe pairing launcher syntax\n')[1]?.split('\n  reading-firestore:')[0];
+  assert.ok(step,'Windows fixture step required');
+  for(const marker of [/guardian_fixture_not_completed/,/mutex_fixture_not_completed/,/private_acl_fixture_not_completed/,/Windows fixtures: guardian \+ mutex \+ backup ACL end-to-end GREEN/]){
+    assert.match(step,marker);
+  }
+  assert.doesNotMatch(step,/if\s*\(\s*\$LASTEXITCODE\s+-ne\s+0\s*\)\s*\{\s*exit\s+\$LASTEXITCODE/i);
+});
