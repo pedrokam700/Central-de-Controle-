@@ -52,6 +52,11 @@ test('official HTTPS can open explicit local confirmation, but untrusted domains
     client.openLocalPairing();
     assert.equal(navigated,'http://127.0.0.1:8765/workstation/parear');
     assert.equal(navigated.includes('ames_agent_token'),false);
+    // Regression: missing trailing hyphen is NOT the deployed project site.
+    globalThis.location=new URL('https://pedrokam700.github.io/Central-de-Controle/');
+    assert.equal(client.canPairFromOfficial(),false,'wrong Pages project path cannot start pairing');
+    globalThis.location=new URL('https://pedrokam700.github.io/Central-de-Controle-/');
+    assert.equal(client.canPairFromOfficial(),true,'exact public Pages base path allows pairing');
     globalThis.location=new URL('https://pedrokam700.github.io/other-repo/');
     assert.equal(client.canPairFromOfficial(),false);
     globalThis.location=new URL('https://central-cora-v2.vercel.app/Central-de-Controle-/');
