@@ -77,7 +77,7 @@ test('public local agent identification sends no token and never probes MES or l
  const requests=[],store=fakeStore();
  const fetcher=async(uri,opt)=>{
    requests.push({uri,opt});return {ok:true,json:async()=>({
-     ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:123,workstation_pairing_flow:3,
+     ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:123,workstation_pairing_flow:3,workstation_pairing_revision:4,
      workstation_token:'MUST_NOT_LEAK',source_id:'MUST_NOT_LEAK'
    })};
  };
