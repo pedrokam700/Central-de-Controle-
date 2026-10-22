@@ -214,11 +214,34 @@ function Start-OwnedAgent {
 }
 function Show-LogTail([string]$Path,[string]$Label){if($Path -and (Test-Path -LiteralPath $Path)){Write-Host "--- $Label ($Path) ---";Get-Content -LiteralPath $Path -Tail 40 -ErrorAction SilentlyContinue|ForEach-Object{Write-Host $_}}}
 
+function Assert-NoPendingUpdateClaim([string]$PackageRoot) {
+  # Issue #57: invoked UNDER CanonicalBootstrap mutex. An external updater
+  # must hold UpdateTransaction, then CanonicalBootstrap, before creating the
+  # persistent claim. This makes a direct launcher respect crash recovery,
+  # without changing any of its normal startup/kill/PID logic.
+  $dir=Join-Path $PackageRoot '.ames-update'
+  try {
+    if(Test-Path -LiteralPath $dir -ErrorAction Stop){
+      $entry=Get-Item -LiteralPath $dir -Force -ErrorAction Stop
+      if(-not $entry.PSIsContainer -or ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)){
+        throw 'untrusted_maintenance_directory'
+      }
+      if(@(Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop).Count -gt 0){
+        throw 'pending_maintenance_transaction'
+      }
+    }
+  } catch {
+    # Do not disclose paths, transaction IDs, tokens or user details.
+    throw 'MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED'
+  }
+}
+
 try{
   Initialize-ArgvParser
   $mutex=New-Object System.Threading.Mutex($false,'Global\CentralAMES.CanonicalBootstrap.8765')
   try{$script:mutexHeld=$mutex.WaitOne(30000)}catch [System.Threading.AbandonedMutexException]{$script:mutexHeld=$true}
   if(-not $script:mutexHeld){throw 'Outro bootstrap A-MES esta em andamento; nenhuma limpeza concorrente foi executada.'}
+  Assert-NoPendingUpdateClaim $root
   $prior=$null
   if(Test-Path -LiteralPath $statePath){try{$prior=Get-Content -LiteralPath $statePath -Raw|ConvertFrom-Json;Copy-Item -LiteralPath $statePath -Destination (Join-Path $logs ("agent_startup_before_$stamp.json"))}catch{Record-Event 'prior_state_unreadable' $_.Exception.Message}}
   Record-Event 'bootstrap_lock_acquired' @{launcher_pid=$PID;root=$expected}
@@ -266,6 +289,12 @@ try{
   }
 }catch{
   $failure=$_.Exception.Message
+  if($failure -eq 'MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED'){
+    # Not even startup diagnostics are written while a crash-persistent claim
+    # blocks this root. The guardian also remains fail-closed in this state.
+    Write-Host '[BLOCKED] Transacao de manutencao pendente ou nao verificavel; agente nao iniciado.'
+    throw 'MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED'
+  }
   Write-StartupState 'failed' $failure
   Show-LogTail $script:errLog 'stderr do agente';Show-LogTail $script:outLog 'stdout do agente'
   throw "Startup canonico falhou. $failure Estado: $statePath Evidencia: $historyPath"

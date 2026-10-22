@@ -60,11 +60,11 @@ test('independent Windows backup ACL verifier is observational and cannot author
   assert.match(fixture,/broad_allow_ace_not_rejected/);
 });
 
-test('Windows CI must reach guardian, dual lock and ACL proofs without nullable LASTEXITCODE shortcuts',()=>{
+test('Windows CI must reach guardian, dual lock, direct launcher and ACL proofs without nullable LASTEXITCODE shortcuts',()=>{
   const workflow=readFileSync('.github/workflows/ames-operational-history.yml','utf8');
   const step=workflow.split('      - name: Validate background guardian and temporary safe pairing launcher syntax\n')[1]?.split('\n  reading-firestore:')[0];
   assert.ok(step,'Windows fixture step required');
-  for(const marker of [/guardian_fixture_not_completed/,/mutex_fixture_not_completed/,/dual_lock_ledger_fixture_not_completed/,/private_acl_fixture_not_completed/,/Windows fixtures: guardian \+ mutex \+ dual-lock ledger \+ backup ACL end-to-end GREEN/]){
+  for(const marker of [/guardian_fixture_not_completed/,/mutex_fixture_not_completed/,/dual_lock_ledger_fixture_not_completed/,/direct_launcher_claim_fixture_not_completed/,/private_acl_fixture_not_completed/,/Windows fixtures: guardian \+ mutex \+ dual-lock ledger \+ direct launcher \+ backup ACL end-to-end GREEN/]){
     assert.match(step,marker);
   }
   const fixture=readFileSync('scripts/issue57-dual-lock-ledger.windows.test.ps1','utf8');
@@ -72,7 +72,24 @@ test('Windows CI must reach guardian, dual lock and ACL proofs without nullable 
     assert.match(fixture,proof);
   }
   assert.doesNotMatch(fixture,/Global\\CentralAMES\.UpdateTransaction\.8765|Global\\CentralAMES\.CanonicalBootstrap\.8765/);
+  const direct=readFileSync('scripts/issue57-direct-launcher-claim.windows.test.ps1','utf8');
+  assert.match(direct,/GITHUB_ACTIONS/);
+  assert.match(direct,/RUNNER_TEMP/);
+  assert.match(direct,/Assert-NoPendingUpdateClaim/);
+  assert.match(direct,/fixture_failed_open_/);
   assert.doesNotMatch(step,/if\s*\(\s*\$LASTEXITCODE\s+-ne\s+0\s*\)\s*\{\s*exit\s+\$LASTEXITCODE/i);
+});
+
+test('canonical launcher checks pending update claim under bootstrap mutex before stopping any agent',()=>{
+  const source=readFileSync('tools/ames-workstation/START_AGENT_CANONICAL.ps1','utf8');
+  const gate=source.indexOf('  Assert-NoPendingUpdateClaim $root\n');
+  const lock=source.indexOf("$mutex=New-Object System.Threading.Mutex($false,'Global\\CentralAMES.CanonicalBootstrap.8765')");
+  const processStop=source.indexOf('Stop-AgentOn8765 $keep');
+  assert.ok(lock>=0 && gate>lock && processStop>gate,'read-only maintenance gate must precede all process stop/start actions');
+  assert.match(source,/MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED/);
+  assert.match(source,/if\(\$failure -eq 'MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED'\)/);
+  assert.match(source,/Get-ChildItem -LiteralPath \$dir -Force -ErrorAction Stop/);
+  assert.match(source,/\[IO\.FileAttributes\]::ReparsePoint/);
 });
 
 test('fresh Windows private backup root replaces explicit broad ACEs before copying identities',()=>{

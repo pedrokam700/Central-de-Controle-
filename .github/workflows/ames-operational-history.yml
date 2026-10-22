@@ -121,6 +121,7 @@ jobs:
                              'scripts/issue57-guardian-signals.windows.test.ps1',
                              'scripts/issue57-guardian-global-mutex.windows.test.ps1',
                              'scripts/issue57-dual-lock-ledger.windows.test.ps1',
+                             'scripts/issue57-direct-launcher-claim.windows.test.ps1',
                              'scripts/issue57-private-backup-acl.windows.test.ps1')) {
             $tokens=$null; $parseErrors=$null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$parseErrors)|Out-Null
@@ -135,9 +136,11 @@ jobs:
           if(-not ($mutex -contains 'Issue57 Global mutex: blocked concurrently and released across two Windows processes')){throw 'mutex_fixture_not_completed'}
           $dual=@(& ./scripts/issue57-dual-lock-ledger.windows.test.ps1)
           if(-not ($dual -contains 'Issue57 dual-lock ledger: guardian + direct launcher fenced, persistent claim blocks after release; production forbidden')){throw 'dual_lock_ledger_fixture_not_completed'}
+          $direct=@(& ./scripts/issue57-direct-launcher-claim.windows.test.ps1)
+          if(-not ($direct -contains 'Issue57 direct launcher claim: absent/empty allowed; claim, journal, unknown, invalid directory blocked before bootstrap')){throw 'direct_launcher_claim_fixture_not_completed'}
           $acl=@(& ./scripts/issue57-private-backup-acl.windows.test.ps1)
           if(-not ($acl -contains 'Issue57 private backup ACL: verified synthetic data and rejected broad ACE; no production touch')){throw 'private_acl_fixture_not_completed'}
-          Write-Output 'Issue57 Windows fixtures: guardian + mutex + dual-lock ledger + backup ACL end-to-end GREEN'
+          Write-Output 'Issue57 Windows fixtures: guardian + mutex + dual-lock ledger + direct launcher + backup ACL end-to-end GREEN'
   reading-firestore:
     runs-on: ubuntu-latest
     timeout-minutes: 16
