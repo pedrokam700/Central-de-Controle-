@@ -82,3 +82,16 @@ test('2114 operational table omits technical code and never invents an assigned 
  assert.match(css,/ames-sn-alert-evidence-grid/);
  assert.match(css,/High-priority SN alert/);
 });
+
+test('fourth distinct 3012 row stays available in nested detail without hijacking 2114 expander',()=>{
+ const result=evidence();
+ result.trace_3012.rows.push(repair('BRM00061','Fourth unique technician note',
+   '2026-10-21T17:25:00-03:00','AT-4'));
+ const model=buildLiveSnForensics(result),html=renderSmartSnAlerts(model,result);
+ assert.match(html,/ames-sn-alert-extra-repairs/);
+ assert.equal((html.match(/data-sn-alert-repair-row/g)||[]).length,4);
+ assert.match(html,/Fourth unique technician note/);
+ const code=fs.readFileSync(new URL('../ames/console-sn-smart-alerts.mjs',import.meta.url),'utf8');
+ assert.match(code,/querySelector\(':scope > details'\)/);
+ assert.match(code,/key\+':extra'/);
+});
