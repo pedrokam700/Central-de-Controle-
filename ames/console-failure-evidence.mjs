@@ -169,7 +169,13 @@ export function withFailureOccurrenceEvidence(base,root,store){
     const head=table.querySelector('thead tr');if(head&&!head.querySelector('[data-failure-evidence-head]')){const th=table.ownerDocument.createElement('th');th.dataset.failureEvidenceHead='1';th.textContent=t(document.documentElement.lang,'Evidências','Evidence');head.append(th);}
     for(const tr of table.querySelectorAll('tbody tr')){
       tr.querySelector('[data-failure-evidence-cell]')?.remove();const cells=[...tr.children];if(cells.length<4)continue;
-      const code=text(cells[1]?.textContent),pcba=text(cells[2]?.textContent),at=text(cells[3]?.textContent);
+      // Use semantic row identity. Column position can change with operator UX
+      // (e.g. hiding the technical code) without breaking exact-occurrence proof.
+      const semantic=tr.hasAttribute('data-occurrence-code')&&
+        tr.hasAttribute('data-occurrence-pcba')&&tr.hasAttribute('data-occurrence-time');
+      const code=semantic?text(tr.dataset.occurrenceCode):text(cells[1]?.textContent);
+      const pcba=semantic?text(tr.dataset.occurrencePcba):text(cells[2]?.textContent);
+      const at=semantic?text(tr.dataset.occurrenceTime):text(cells[3]?.textContent);
       // A visible row is not proof of a particular MES occurrence unless
       // PCBA, defect code and factory-local Defect Time all match exactly.
       // Ambiguous identical triples also stay uncorrelated (no false evidence).
