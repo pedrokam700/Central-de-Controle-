@@ -95,12 +95,16 @@ foreach($startupSpec in @(
   }catch{Add-InventoryCheck $startupSpec.source $false}
 }
 
+$coordination=Get-Issue57CoordinationBlockers -Observations @($observations.ToArray()) -Checks @($checks.ToArray()) -UnreadableSupervisorProcesses $unreadableSupervisorProcesses
+
 [pscustomobject]@{
   schema='ames-windows-guardian-inventory-v1'
   read_only=$true
   checks=@($checks.ToArray())
   observations=@($observations.ToArray())
   unreadable_supervisor_processes=$unreadableSupervisorProcesses
+  coordination_blockers=$coordination.blockers
+  direct_launcher_fenced=$false
   observed_sources_complete=(@($checks|Where-Object {-not $_.checked}).Count -eq 0 -and $unreadableSupervisorProcesses -eq 0)
   # Other accounts/sessions, legacy scripts, hidden launchers and unknown
   # Windows persistence paths remain outside this scanner's proof boundary.

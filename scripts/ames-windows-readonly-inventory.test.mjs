@@ -26,6 +26,8 @@ test('guardian inventory checks external relaunch sources without claiming an id
   assert.match(code,/HKEY_LOCAL_MACHINE.*CurrentVersion\\Run/);
   assert.match(code,/GetFolderPath\('Startup'\)/);
   assert.match(code,/unreadable_supervisor_processes=/);
+  assert.match(code,/coordination_blockers=/);
+  assert.match(code,/direct_launcher_fenced=\$false/);
   for(const requirement of [/read_only=\$true/,/updater_eligible=\$false/,/installed_guardian_cooperation_attested=\$false/,/all_sessions_attested=\$false/,/exclusive_maintenance_lease_held=\$false/]){
     assert.match(code,requirement);
   }
@@ -35,5 +37,9 @@ test('guardian inventory checks external relaunch sources without claiming an id
   assert.doesNotMatch(code,/commandline\s*=|arguments\s*=|pathname\s*=|source_id\s*=|token\s*=/i);
   assert.match(classifier,/KEEP_AGENT_RUNNING\\\.ps1/);
   assert.match(classifier,/CentralAMESOperatorAgent/);
+  assert.match(classifier,/function Get-Issue57CoordinationBlockers/);
+  assert.match(classifier,/direct_launcher_not_fenced/);
+  assert.match(classifier,/other_windows_sessions_not_attested/);
+  assert.match(classifier,/update_authorized=\$false/);
   assert.doesNotMatch(classifier,/\b(?:Stop-Process|Start-Process|Set-ItemProperty|Get-Content)\b/);
 });
