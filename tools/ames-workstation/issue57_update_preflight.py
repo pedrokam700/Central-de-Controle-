@@ -195,6 +195,46 @@ def private_backup_directory(target):
         subprocess.run(["icacls", str(target), "/inheritance:r",
                         "/grant:r", f"*{row[1]}:(OI)(CI)F"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        # /inheritance:r removes inherited ACEs only. A freshly created NTFS
+        # directory may still carry broad *explicit* ACEs from its parent or
+        # policy, so merely granting the user does not prove confidentiality.
+        # Replace the entire DACL before writing a SQLite snapshot or token.
+        # The script receives only the newly created directory via env, never
+        # any production identity value; native errors are deliberately hidden.
+        acl_script = r"""
+$ErrorActionPreference='Stop'
+$path=$env:AMES_ISSUE57_NEW_PRIVATE_BACKUP
+$item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+if(-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'invalid_backup_root'}
+$userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+$acl=Get-Acl -LiteralPath $path -ErrorAction Stop
+$acl.SetAccessRuleProtection($true,$false)
+foreach($ace in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($ace)}
+$rule=[Security.AccessControl.FileSystemAccessRule]::new(
+  $userSid,
+  [Security.AccessControl.FileSystemRights]::FullControl,
+  ([Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit),
+  [Security.AccessControl.PropagationFlags]::None,
+  [Security.AccessControl.AccessControlType]::Allow)
+$acl.AddAccessRule($rule)
+Set-Acl -LiteralPath $path -AclObject $acl -ErrorAction Stop
+$actual=Get-Acl -LiteralPath $path -ErrorAction Stop
+if(-not $actual.AreAccessRulesProtected){throw 'private_acl_inherits'}
+$allowed=@($userSid.Value,'S-1-5-18','S-1-5-32-544')
+$ownerAllowed=$false
+foreach($ace in @($actual.Access)){
+  if($ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow){continue}
+  $who=$ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+  if($who -notin $allowed){throw 'private_acl_untrusted_allow'}
+  if($who -eq $userSid.Value){$ownerAllowed=$true}
+}
+if(-not $ownerAllowed){throw 'private_acl_user_missing'}
+"""
+        env = os.environ.copy()
+        env["AMES_ISSUE57_NEW_PRIVATE_BACKUP"] = str(target)
+        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", acl_script],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       env=env, check=True)
     else:
         target.chmod(0o700)
     return target

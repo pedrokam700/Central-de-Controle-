@@ -69,3 +69,13 @@ test('Windows CI must reach guardian, mutex and ACL proofs without nullable LAST
   }
   assert.doesNotMatch(step,/if\s*\(\s*\$LASTEXITCODE\s+-ne\s+0\s*\)\s*\{\s*exit\s+\$LASTEXITCODE/i);
 });
+
+test('fresh Windows private backup root replaces explicit broad ACEs before copying identities',()=>{
+  const preflight=readFileSync('tools/ames-workstation/issue57_update_preflight.py','utf8');
+  const secureStep=preflight.split('def private_backup_directory(target):')[1]?.split('\ndef copy_private_identity(')[0];
+  assert.ok(secureStep);
+  for(const proof of [/SetAccessRuleProtection\(\$true,\$false\)/,/RemoveAccessRuleSpecific/,/FileSystemAccessRule/,/Set-Acl -LiteralPath/,/private_acl_untrusted_allow/,/subprocess\.run\(\["powershell\.exe"/]){
+    assert.match(secureStep,proof);
+  }
+  assert.ok(preflight.indexOf('Set-Acl -LiteralPath')<preflight.indexOf('def copy_private_identity('));
+});
