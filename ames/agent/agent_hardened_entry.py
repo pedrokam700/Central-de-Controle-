@@ -261,6 +261,7 @@ class HardenedHandler(entry.Handler):
                     # The web UI can distinguish an older local engine whose
                     # form handler still rejects valid Edge submissions.
                     "workstation_pairing_flow": 3,  # GitHub Pages official origin + one-time local confirmation
+                     "workstation_pairing_revision": 4,  # 0.5.38 official base path + safe pinned CORS origin; never a token
                     "agent_version": entry.a.AGENT_VERSION,
                     "candidate_version": entry.a.CANDIDATE_VERSION,
                     "pid": os.getpid(),
