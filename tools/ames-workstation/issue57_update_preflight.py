@@ -230,6 +230,18 @@ if(-not $ownerAllowed){throw 'private_acl_user_missing'}
 }catch{
   # A strictly numeric stage is safe for CI. Do not print native errors:
   # they can expose account names and absolute private paths.
+  if($stage -eq 30){
+    $category=$_.CategoryInfo.Category.ToString()
+    $stage=switch($category){
+      'ObjectNotFound' {31;break}
+      'PermissionDenied' {32;break}
+      'InvalidArgument' {33;break}
+      'NotSpecified' {34;break}
+      'SecurityError' {35;break}
+      'ResourceUnavailable' {36;break}
+      default {39}
+    }
+  }
   exit $stage
 }
 """
@@ -239,7 +251,7 @@ if(-not $ownerAllowed){throw 'private_acl_user_missing'}
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 env=env, check=False)
         if result.returncode != 0:
-            safe_stages = {20, 30, 40, 50, 60, 70, 80, 90}
+            safe_stages = {20, 30, 31, 32, 33, 34, 35, 36, 39, 40, 50, 60, 70, 80, 90}
             stage = str(result.returncode) if result.returncode in safe_stages else "unknown"
             raise ValueError("windows_private_backup_acl_stage_" + stage)
     else:
