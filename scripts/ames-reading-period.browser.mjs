@@ -157,10 +157,12 @@ try{
  assert.equal(await cohorts.locator('[data-cohort-kind=pcbas][data-cohort-metric=second_use] strong').innerText(),'1');
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=third_plus_use] strong').innerText(),'1');
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=failed] strong').innerText(),'0');
- assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure] strong').innerText(),'—');
- await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure]').click();
- assert.match(await cohorts.locator('[data-cohort-detail]').innerText(),/Indisponível/);
- assert.doesNotMatch(await cohorts.locator('[data-cohort-detail]').innerText(),/0 itens observados/);
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure]').count(),0,
+  'unknown denominator cannot occupy an unproven no-failure KPI');
+ await cohorts.locator('[data-cohort-limits] > summary').click();
+ assert.match(await cohorts.locator('[data-cohort-limits]').innerText(),/Sem registro de falha não comprova ausência/);
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=unknown_outcome]').count(),1,
+  'unknown outcomes remain inspectable in the advanced coverage details');
  await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=associated]').click();
  assert.equal(await cohorts.locator('[data-cohort-row]').count(),1);
  assert.equal(await cohorts.locator('img').count(),0);
