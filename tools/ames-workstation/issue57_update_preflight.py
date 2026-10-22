@@ -203,13 +203,19 @@ def private_backup_directory(target):
         # any production identity value; native errors are deliberately hidden.
         acl_script = r"""
 $ErrorActionPreference='Stop'
+$stage=20
+try {
 $path=$env:AMES_ISSUE57_NEW_PRIVATE_BACKUP
 $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
 if(-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'invalid_backup_root'}
 $userSid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+$stage=30
 $acl=Get-Acl -LiteralPath $path -ErrorAction Stop
+$stage=40
 $acl.SetAccessRuleProtection($true,$false)
+$stage=50
 foreach($ace in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($ace)}
+$stage=60
 $rule=[Security.AccessControl.FileSystemAccessRule]::new(
   $userSid,
   [Security.AccessControl.FileSystemRights]::FullControl,
@@ -217,11 +223,14 @@ $rule=[Security.AccessControl.FileSystemAccessRule]::new(
   [Security.AccessControl.PropagationFlags]::None,
   [Security.AccessControl.AccessControlType]::Allow)
 $acl.AddAccessRule($rule)
+$stage=70
 Set-Acl -LiteralPath $path -AclObject $acl -ErrorAction Stop
+$stage=80
 $actual=Get-Acl -LiteralPath $path -ErrorAction Stop
 if(-not $actual.AreAccessRulesProtected){throw 'private_acl_inherits'}
 $allowed=@($userSid.Value,'S-1-5-18','S-1-5-32-544')
 $ownerAllowed=$false
+$stage=90
 foreach($ace in @($actual.Access)){
   if($ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow){continue}
   $who=$ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
@@ -229,12 +238,21 @@ foreach($ace in @($actual.Access)){
   if($who -eq $userSid.Value){$ownerAllowed=$true}
 }
 if(-not $ownerAllowed){throw 'private_acl_user_missing'}
+}catch{
+  # A strictly numeric stage is safe for CI. Do not print native errors:
+  # they can expose account names and absolute private paths.
+  exit $stage
+}
 """
         env = os.environ.copy()
         env["AMES_ISSUE57_NEW_PRIVATE_BACKUP"] = str(target)
-        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", acl_script],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       env=env, check=True)
+        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", acl_script],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                env=env, check=False)
+        if result.returncode != 0:
+            safe_stages = {20, 30, 40, 50, 60, 70, 80, 90}
+            stage = str(result.returncode) if result.returncode in safe_stages else "unknown"
+            raise ValueError("windows_private_backup_acl_stage_" + stage)
     else:
         target.chmod(0o700)
     return target
