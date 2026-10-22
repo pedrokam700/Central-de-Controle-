@@ -83,6 +83,17 @@ class AutoStartContract(TestCase):
         for item in ("mes_password", "local_agent_token", "/jobs", "/monitor/start", "Stop-Process -Id"):
             self.assertNotIn(item, content)
 
+    def test_guardian_suppresses_relaunch_during_pending_transaction(self):
+        content = (Path(__file__).resolve().parents[1] / "tools" / "ames-workstation" / "KEEP_AGENT_RUNNING.ps1").read_text(encoding="utf-8")
+        assert "Local\\CentralAMES.UpdateTransaction" in content
+        assert ".ames-update\\transaction.json" in content
+        assert "UPDATE_JOURNAL_PRESENT; guardian restart suppressed" in content
+        assert "UPDATE_MUTEX_BUSY; guardian restart suppressed" in content
+        assert content.index("$transactionMutex.WaitOne(0)") < content.index("$transactionJournal -PathType Leaf")
+        assert content.index("$transactionJournal -PathType Leaf") < content.index("& powershell.exe")
+        assert "$transactionMutex.ReleaseMutex()" in content
+        assert "if(-not $portActive)" in content
+
 
 if __name__ == "__main__":
     main()

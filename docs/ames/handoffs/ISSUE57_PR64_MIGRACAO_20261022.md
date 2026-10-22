@@ -291,3 +291,16 @@ A pasta extraída `Downloads/AMES_Central_CLEAN_b283b176` também existe. **Não
 5. Modelo C3 de journal e rollback, **apenas em fixture descartável**: ensaios de falha antes/depois de renomeações e health negativo recuperam versão anterior, preservando diretório de dados separado. O modelo não executa comandos Windows nem foi testado em produção.
 
 **Gates pendentes**: Windows CI do novo código, idle lease com bloqueio real de novos jobs/guardian/sync, snapshot dos arquivos auxiliares/filas, journal de transação, troca allowlisted, health pós-restart, rollback power-loss, piloto no primeiro coletor, 2 coletores + viewer, observabilidade G6. Não considerar CI verde como fábrica GREEN e não disponibilizar botão executável.
+
+## 16. Incremento de admissão — Issue #57 / PR #64 (22/10/2026; aguarda CI remoto)
+
+**Sem mudança física desde o §14.** A 0.5.39 foi apenas extraída no posto. O agente anterior e seus dados não foram tocados e nenhum novo comando de PowerShell foi solicitado. A `main`/release continua no SHA `b283b1764432f5d90486d38a7553b30542a5c118`; PR #65 mantém-se merged. Esta seção descreve código na PR draft, NÃO motor instalado.
+
+**Progresso técnico, sem conceder updater**:
+
+1. Criada `ames/agent/maintenance_admission.py`: barreira in-process com contador de operações mutantes, drenagem que impede nova admissão e token interno de liberação. Não é endpoint nem lease durável; só código preparatório.
+2. `HardenedHandler.do_POST` cerca todos os métodos POST; `_launch_new_mes_job` cerca reserva de monitor e persistência do job; o monitor automático cerca o tick e não escreve metadados durante drain. Requisições já aceitas não são interrompidas abruptamente. O endpoint autenticado de readiness informa `new_admissions_fenced`/`inflight_mutations`, mas **sempre** `update_authorized=false`.
+3. No guardian **novo** `KEEP_AGENT_RUNNING.ps1`, antes de relançar há recusa por mutex transacional ocupado ou journal persistente `.ames-update\transaction.json`. A versão antiga executada na fábrica **não** foi atualizada, portanto ainda pode disputar a porta; mutex `Local\` por si só também não protege outras sessões Windows.
+4. Testes locais isolados passaram: barreira concorrente (3), readiness, pacote/dependências (7), guardian/autostart (5), scheduler HTTP/MES (12 sob permissão local), preflight WAL/manifest, simulação de rollback e testes Node para inventário/guardas (3). O runner Windows do novo HEAD e outros gates oficiais ainda precisam ser consultados após publicar o checkpoint GitHub.
+
+**Próximos gates reais**: integrar um coordenador externo confiável com journal e identificação/controle do guardian instalado; provar bloqueio simultâneo de outbox e sync Firebase (inclusive abas abertas), jobs, monitor e requisições; obter backup completo + restore ACL e dados auxiliares; health/rollback Windows; e só então piloto supervisionado. Sem essas evidências, PR #64 fica draft, sem merge/release e sem botão de atualização do motor.
