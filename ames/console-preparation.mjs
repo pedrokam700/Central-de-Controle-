@@ -184,7 +184,7 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     }).join('');
     const summary='<section class="ames-sync-guide" data-sync-guide><div class="ames-sync-guide-head"><b>'+t('Compartilhamento entre computadores','Cross-PC sharing')+'</b><small>'+t('Somente snapshots sanitizados e revisões','Sanitized snapshots and revisions only')+'</small></div><div class="ames-sync-guide-grid">'+
       '<div><small>'+t('Este PC → equipe','This PC → team')+'</small><strong>'+esc(publishing)+'</strong><span>'+t('Fila','Queue')+': '+(shared.pending??'—')+' · '+t('Último envio','Last upload')+': '+esc(shared.lastSentAt||'—')+'</span></div>'+
-      '<div><small>'+t('Equipe → este PC','Team → this PC')+'</small><strong>'+esc(receiving)+'</strong><span>'+t('Linhas identificadas','Lines identified')+': '+shared.receivedLines.length+'/3 · '+t('Último evento','Last event')+': '+esc(shared.lastReceivedAt||'—')+'</span></div></div>'+
+      '<div><small>'+t('Equipe → este PC','Team → this PC')+'</small><strong>'+esc(receiving)+'</strong><span>'+t('Linhas atuais comprovadas','Confirmed current-day lines')+': '+shared.receivedLines.length+'/3 · '+t('Último evento','Last event')+': '+esc(shared.lastReceivedAt||'—')+'</span></div></div>'+
       '<ul class="ames-sync-line-list" aria-label="'+t('Linhas e revisões recebidas','Received lines and revisions')+'">'+lineStatus+'</ul>'+
       (conflictLines.size?'<p class="notice warn" data-source-conflict-warning>'+t('Há múltiplos publicadores para a mesma linha e dia produtivo. Os dados históricos estão preservados; a Central bloqueia a seleção automática até confirmar a origem oficial. Não apague SQLite nem Force o Firebase.','More than one publisher exists for the same line and production day. History is preserved. The Work Center blocks automatic selection until the official source is verified. Do not delete SQLite or force Firebase.')+'</p>':'')+
       '<p class="mes-context">'+t('Envio no PC A não prova recebimento no PC B. Compare linha, snapshot e revisão em ambos; o navegador precisa ficar autenticado e aberto para publicar.','Sending from PC A does not prove receipt on PC B. Compare line, snapshot and revision on both; the browser must remain signed in and open to publish.')+'</p>'+
@@ -211,7 +211,8 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
       ${autostartPanel}
-      ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}${summary}
+      ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}
+      ${!connected && client.canPairFromOfficial?.()?`<section class="notice warn" data-workstation-pair-hint><strong>${t('Conectar agente deste computador','Connect this computer’s agent')}</strong><p>${t('Se o agente já está conectado na Central local, não reinstale o CLEAN. Autorize uma única vez a Central HTTPS neste mesmo navegador.','If the agent is already connected locally, do not reinstall CLEAN. Authorize the HTTPS Work Center once in this browser.')}</p><button type="button" class="button primary" data-pair-local>${t('Autorizar agente local','Authorize local agent')}</button></section>`:''}${summary}
       ${pairing?`<button type="button" class="button secondary" data-pair-official>${t('Abrir HTTPS oficial pareado neste computador','Open paired official HTTPS on this computer')}</button><p>${t('Autoriza somente o agente deste computador na nova aba oficial. Não compartilhe a URL de pareamento. O computador sem MES precisa apenas dos dados da equipe.','Authorizes only this computer’s agent in the new official tab. Do not share the pairing URL. A computer without MES only needs team data.')}</p>`:''}
       ${visible ? `<p>Consulte os dados compartilhados ou prepare este computador para coleta. O login A-MES permanece manual.</p>
       <div class="mes-pagination"><button type="button" class="button secondary" data-use-shared>Usar somente dados compartilhados</button><button type="button" class="button secondary" data-prepare-pc>Preparar este computador</button></div>` : ''}
@@ -224,6 +225,7 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     root.querySelector('[data-use-shared]')?.addEventListener('click', () => choose('viewer'));
     root.querySelector('[data-prepare-pc]')?.addEventListener('click', () => choose('collector'));
     root.querySelector('[data-preflight]')?.addEventListener('click', check);
+    root.querySelector('[data-pair-local]')?.addEventListener('click',()=>client.openLocalPairing());
     root.querySelector('[data-pair-official]')?.addEventListener('click',()=>client.openOfficial());
     root.querySelector('[data-workstation-backup]')?.addEventListener('click', backupNow);
     root.querySelector('[data-autostart-check]')?.addEventListener('click', readAutostart);

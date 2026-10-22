@@ -55,3 +55,15 @@ body.dark .ames-reuse-line-tabs button{background:var(--ames-surface);border-col
 .ames-sn-smart-proof>b{display:block;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
 .ames-sn-smart-proof>span{display:block;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
 .ames-sn-smart-alert .notice.warn{line-height:1.45;margin:0}
+
+/* 0.5.36 physical feedback: the saved-capture reader stays available but closed by default.
+   Only the operator can expand it and choose an origin; do not collapse its evidence on redraw. */
+.ames-legacy-shell details.ames-last-capture-collapsible{padding:0!important;margin:0 0 10px!important;border:1px solid var(--ames-line)!important;overflow:hidden}
+.ames-legacy-shell details.ames-last-capture-collapsible>summary{display:flex;align-items:center;gap:10px;min-height:36px;padding:10px 12px!important;margin:0!important;border:0!important;list-style:none;cursor:pointer}
+.ames-legacy-shell details.ames-last-capture-collapsible>summary::-webkit-details-marker{display:none}
+.ames-legacy-shell details.ames-last-capture-collapsible>summary strong{font-size:10px;line-height:1.4}
+.ames-legacy-shell details.ames-last-capture-collapsible>summary span{font-size:9px;color:var(--ames-muted);overflow-wrap:anywhere}
+.ames-legacy-shell details.ames-last-capture-collapsible>summary::after{content:'▸';margin-left:auto;font-size:14px;color:var(--ames-muted)}
+.ames-legacy-shell details.ames-last-capture-collapsible[open]>summary::after{content:'▾'}
+.ames-legacy-shell details.ames-last-capture-collapsible>[data-last-capture-body]{padding:10px 12px 12px;border-top:1px solid var(--ames-line2)}
+@media(max-width:600px){.ames-legacy-shell details.ames-last-capture-collapsible>summary{flex-wrap:wrap;gap:5px}.ames-legacy-shell details.ames-last-capture-collapsible>summary span{flex-basis:100%;order:3}}

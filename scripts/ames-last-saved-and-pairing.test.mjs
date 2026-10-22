@@ -41,3 +41,43 @@ test('monitor never destroys saved reader on ordinary render and puts saved pane
  assert.match(code,/data-latest-capture-preview/);
  assert.doesNotMatch(code,/last=key;latestPreview\?\.clear\(\)/);
 });
+
+test('latest capture occupies only an explicit expandable row and preserves operator expansion on refresh',()=>{
+ const code=fs.readFileSync(new URL('../ames/console-latest-capture.mjs',import.meta.url),'utf8');
+ const css=fs.readFileSync(new URL('../ames/console-operator-parity.css',import.meta.url),'utf8');
+ assert.match(code,/root\.innerHTML='<details class="mes-context-panel ames-last-capture-collapsible" data-last-capture-panel>/);
+ assert.match(code,/'<summary><strong>'\+t\('Última coleta disponível/);
+ assert.match(code,/data-last-capture-body/);
+ assert.match(code,/const panelOpen=Boolean\(root\.querySelector\('\[data-last-capture-panel\]'\)\?\.open\)/);
+ assert.match(code,/root\.querySelector\('\[data-last-capture-panel\]'\)\.open=panelOpen/);
+ assert.match(code,/data-last-capture-advanced/);
+ assert.match(code,/plan\?\.status==='conflict'&&!latest/);
+ assert.match(css,/details\.ames-last-capture-collapsible/);
+ assert.doesNotMatch(code,/<section class="mes-context-panel" data-last-capture-panel>/);
+});
+
+test('the offline agent detected on official HTTPS has an obvious one-click local confirmation',()=>{
+ const code=fs.readFileSync(new URL('../ames/console-preparation.mjs',import.meta.url),'utf8');
+ assert.match(code,/!connected && client\.canPairFromOfficial\?\.\(\)/);
+ assert.match(code,/data-workstation-pair-hint/);
+ assert.match(code,/data-pair-local/);
+ assert.match(code,/client\.openLocalPairing\(\)/);
+ assert.match(code,/não reinstale o CLEAN/);
+ assert.doesNotMatch(code,/data-pair-local[^\n]*ames_agent_token/);
+});
+
+test('latest historical reader reindexes when same-browser agent pairing becomes connected',()=>{
+ const code=fs.readFileSync(new URL('../ames/console-latest-capture.mjs',import.meta.url),'utf8');
+ assert.match(code,/agent\.status==='connected'/);
+ assert.match(code,/agent\.capabilities\?\.source_id/);
+ assert.match(code,/const key=JSON\.stringify\(\[c\.line,c\.previousCutoff,agent\.status==='connected',\s*agentSource/);
+ assert.match(code,/sync\.last_received_at/);
+ assert.match(code,/sync\.last_sent\?\.sent_at/);
+ assert.match(code,/localRevision/);
+});
+
+test('live cross-PC status never counts stored previous-day snapshots as absent history',()=>{
+ const code=fs.readFileSync(new URL('../ames/console-preparation.mjs',import.meta.url),'utf8');
+ assert.match(code,/Linhas atuais comprovadas/);
+ assert.doesNotMatch(code,/Linhas identificadas/);
+});
