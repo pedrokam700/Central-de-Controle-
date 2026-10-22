@@ -184,17 +184,24 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     const pane=root.querySelector(`[data-console-pane="${active}"]`),period=store.readingPeriod?.();
     let note=pane?.querySelector('[data-shared-period]');
     if(pane&&!note){note=document.createElement('p');note.dataset.sharedPeriod='';note.setAttribute('data-no-i18n','');note.className='mes-context';pane.prepend(note);}
+    const currentLine=store.context?.()?.line_id||store.preferredLine?.();
+    const savedToday=period?.mode==='today'&&store.read(currentLine).saved_today;
     if(note){const en=document.documentElement.lang.startsWith('en');
       note.textContent=active==='sn'
         ?(en?'SN investigation is independent of the monitoring period.':'Consulta por SN independente do período de monitoramento.')
-        :(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+(period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):'');
+        :(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+
+          (period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):
+          savedToday?(en?' · Latest saved partial capture · read-only':' · Última coleta salva hoje · janela parcial · somente leitura'):'');
     }
     if(period?.mode!=='today'){
       // Live execution controls and last-job results describe another scope. Keep
       // historical evidence visible; mutation awaits the exact-snapshot contract.
       for(const el of pane?.querySelectorAll('[data-trace-form],.ames-trace-progress,[data-top3-trend]')||[])el.hidden=true;
-      for(const button of pane?.querySelectorAll('[data-failure-repair],[data-repair-update]')||[])button.disabled=true;
     }
+    // A recovered observation from a partial custom window is not a live
+    // head and must never unlock a repair mutation simply because tab=Hoje.
+    if(period?.mode!=='today'||savedToday)
+      for(const button of pane?.querySelectorAll('[data-failure-repair],[data-repair-update]')||[])button.disabled=true;
     refreshHistoricalOnCompletedJob();refreshTodaySavedIndex();paintHeader();preparation?.render();translator?.render();}
   return Object.freeze({render(){if(!root||disposed)return;if(!mounted)mount();renderActive();},clear(){disposed=true;periodController.clear();preparation?.clear();translator?.clear();evidenceDrawer?.clear();for(const view of views.values())view?.clear?.();views.clear();if(!agentClient)client.clear();root?.replaceChildren();mounted=false;}});
 }
