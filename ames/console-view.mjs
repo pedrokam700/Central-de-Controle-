@@ -65,6 +65,7 @@ const ANALYTICS_STYLE_HREF = new URL('./console-daily-analytics.css', import.met
 const IMPROVEMENTS_STYLE_HREF = new URL('./console-improvements.css', import.meta.url).href;
 const OPERATOR_PARITY_STYLE_HREF = new URL('./console-operator-parity.css', import.meta.url).href;
 const WORKSTATION_SETUP_STYLE_HREF = new URL('./console-workstation-setup.css', import.meta.url).href;
+const MONITOR_MODERN_STYLE_HREF = new URL('./console-monitor-modern.css', import.meta.url).href;
 
 export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {}, history, agentClient, verify } = {}) {
   let active='monitor', mounted=false, disposed=false;let preparation, translator, evidenceDrawer;const views=new Map();
@@ -79,7 +80,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   }
   function mount(){
     const en=document.documentElement.lang.startsWith('en');
-    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><link rel="stylesheet" href="${POLISH_STYLE_HREF}"><link rel="stylesheet" href="${FASTLANE_STYLE_HREF}"><link rel="stylesheet" href="${ANALYTICS_STYLE_HREF}"><link rel="stylesheet" href="${IMPROVEMENTS_STYLE_HREF}"><link rel="stylesheet" href="${OPERATOR_PARITY_STYLE_HREF}"><link rel="stylesheet" href="${WORKSTATION_SETUP_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell><aside class="ames-legacy-sidebar"><div class="ames-legacy-brand"><div class="ames-legacy-brand-row"><div class="ames-legacy-mark">Q</div><div><strong>Central de trabalho</strong><span>A-MES · motor local</span></div></div></div><nav class="ames-legacy-nav" aria-label="Views da automação A-MES">${navMarkup(en)}</nav><div class="ames-legacy-foot"><b>Offline por padrão.</b><br>MES e banco ficam no notebook. O Console usa o mesmo agente local, SQLite e estado da Central.<br><br><span data-console-build-foot>R12 · 9 views</span></div></aside><button type="button" class="ames-mobile-backdrop" data-console-menu-close aria-label="Fechar menu do Console MES"></button><main class="ames-legacy-main"><header class="ames-legacy-topbar"><div><h1 class="ames-legacy-title" data-console-title></h1><p class="ames-legacy-sub" data-console-sub></p></div><div class="ames-legacy-actions"><button class="button secondary ames-mobile-menu" type="button" data-console-menu aria-expanded="false" aria-label="Abrir menu do Console MES" style="display:none">☰</button><span class="ames-status-pill"><span class="ames-agent-dot" data-console-dot></span><span data-console-status>Agente local desconectado</span></span><span class="ames-status-pill" data-console-sync-status></span><button class="button primary" type="button" data-console-pair hidden>Conectar agente deste PC</button><button class="button secondary ames-hide-mobile" type="button" data-console-open-ames>Abrir A-MES</button><button class="button secondary" type="button" data-console-setup>Configurar posto</button><button class="button secondary ames-hide-mobile" type="button" data-console-check>Verificar</button><button class="button secondary" type="button" data-console-back>Voltar à Central</button></div></header><div class="ames-legacy-content"><section data-console-preparation></section>${VIEWS.map(([id])=>`<section class="ames-console-pane" data-console-pane="${id}"${id===active?'':' hidden'}></section>`).join('')}</div></main></div>`;
+    root.innerHTML=`<link rel="stylesheet" href="${STYLE_HREF}"><link rel="stylesheet" href="${WAVE2_STYLE_HREF}"><link rel="stylesheet" href="${WAVE3_STYLE_HREF}"><link rel="stylesheet" href="${MOBILE_STYLE_HREF}"><link rel="stylesheet" href="${POLISH_STYLE_HREF}"><link rel="stylesheet" href="${FASTLANE_STYLE_HREF}"><link rel="stylesheet" href="${ANALYTICS_STYLE_HREF}"><link rel="stylesheet" href="${IMPROVEMENTS_STYLE_HREF}"><link rel="stylesheet" href="${OPERATOR_PARITY_STYLE_HREF}"><link rel="stylesheet" href="${WORKSTATION_SETUP_STYLE_HREF}"><link rel="stylesheet" href="${MONITOR_MODERN_STYLE_HREF}"><div class="ames-legacy-shell" data-ames-shell><aside class="ames-legacy-sidebar"><div class="ames-legacy-brand"><div class="ames-legacy-brand-row"><div class="ames-legacy-mark">Q</div><div><strong>Central de trabalho</strong><span>A-MES · motor local</span></div></div></div><nav class="ames-legacy-nav" aria-label="Views da automação A-MES">${navMarkup(en)}</nav><div class="ames-legacy-foot"><b>Offline por padrão.</b><br>MES e banco ficam no notebook. O Console usa o mesmo agente local, SQLite e estado da Central.<br><br><span data-console-build-foot>R12 · 9 views</span></div></aside><button type="button" class="ames-mobile-backdrop" data-console-menu-close aria-label="Fechar menu do Console MES"></button><main class="ames-legacy-main"><header class="ames-legacy-topbar"><div><h1 class="ames-legacy-title" data-console-title></h1><p class="ames-legacy-sub" data-console-sub></p></div><div class="ames-legacy-actions"><button class="button secondary ames-mobile-menu" type="button" data-console-menu aria-expanded="false" aria-label="Abrir menu do Console MES" style="display:none">☰</button><span class="ames-status-pill"><span class="ames-agent-dot" data-console-dot></span><span data-console-status>Agente local desconectado</span></span><span class="ames-status-pill" data-console-sync-status></span><button class="button primary" type="button" data-console-pair hidden>Conectar agente deste PC</button><button class="button secondary ames-hide-mobile" type="button" data-console-open-ames>Abrir A-MES</button><button class="button secondary" type="button" data-console-setup>Configurar posto</button><button class="button secondary ames-hide-mobile" type="button" data-console-check>Verificar</button><button class="button secondary" type="button" data-console-back>Voltar à Central</button></div></header><div class="ames-legacy-content"><section data-console-preparation></section>${VIEWS.map(([id])=>`<section class="ames-console-pane" data-console-pane="${id}"${id===active?'':' hidden'}></section>`).join('')}</div></main></div>`;
     for(const button of root.querySelectorAll('[data-console-view]'))button.addEventListener('click',()=>switchView(button.dataset.consoleView));root.querySelector('[data-console-back]')?.addEventListener('click',backToCentral);root.querySelector('[data-console-menu]')?.addEventListener('click',()=>setMenu(!root.querySelector('[data-ames-shell]')?.classList.contains('menu-open')));root.querySelector('[data-console-menu-close]')?.addEventListener('click',()=>setMenu(false));root.querySelector('[data-console-pair]')?.addEventListener('click',()=>{
       try{client.openLocalPairing();}catch(error){store.updateAgent({error:error.message});renderActive();}
     });root.querySelector('[data-console-open-ames]')?.addEventListener('click',async()=>{try{if(store.agent().status!=='connected')await client.connect();await client.auxiliary('chrome');}catch(error){store.updateAgent({error:error.message});paintHeader();}});root.querySelector('[data-console-setup]')?.addEventListener('click',openWorkstationSetup);root.querySelector('[data-console-check]')?.addEventListener('click',async()=>{try{if(verify)await verify();else if(store.agent().status==='connected')await client.refresh();else await client.connect();}catch(error){store.updateAgent({error:error.message});}finally{renderActive();}});
@@ -89,6 +90,27 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   let renderedPeriod=store.periodGeneration?.();
   let renderedSession=store.sessionGeneration?.();
   let lastCompletedJobRead='';
+  let lastTodaySavedIndex='';
+  function refreshTodaySavedIndex(){
+    const period=store.readingPeriod?.(),agent=store.agent();
+    if(!history||period?.mode!=='today')return;
+    const liveRevision=store.localCanonical?.().map(p=>[p.line_id,p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash])||[];
+    const done=agent.job?.status==='done'?[agent.job.id,agent.job.status]:null;
+    const signature=JSON.stringify([store.sessionGeneration?.(),period.start,period.end,
+      agent.status,agent.sync?.last_received_at||null,agent.sync?.last_sent?.sent_at||null,
+      liveRevision,done]);
+    if(signature===lastTodaySavedIndex)return;
+    lastTodaySavedIndex=signature;
+    queueMicrotask(()=>{
+      const now=store.readingPeriod?.();
+      if(disposed||now?.mode!=='today'||now.start!==period.start||now.end!==period.end)return;
+      void periodController.select('today').catch(error=>{
+        store.updateAgent({period_read:{status:'partial',
+          errors:[{line_id:'—',error:error.message||'saved_today_index_failed'}]}});
+        if(!disposed)renderActive();
+      });
+    });
+  }
   // Completion of a MES job makes the stored index worth re-reading, but
   // must not alter today's head or launch another MES collection.
   function refreshHistoricalOnCompletedJob(){
@@ -163,18 +185,25 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     const pane=root.querySelector(`[data-console-pane="${active}"]`),period=store.readingPeriod?.();
     let note=pane?.querySelector('[data-shared-period]');
     if(pane&&!note){note=document.createElement('p');note.dataset.sharedPeriod='';note.setAttribute('data-no-i18n','');note.className='mes-context';pane.prepend(note);}
+    const currentLine=store.context?.()?.line_id||store.preferredLine?.();
+    const savedToday=period?.mode==='today'&&store.read(currentLine).saved_today;
     if(note){const en=document.documentElement.lang.startsWith('en');
       note.textContent=active==='sn'
         ?(en?'SN investigation is independent of the monitoring period.':'Consulta por SN independente do período de monitoramento.')
-        :(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+(period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):'');
+        :(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+
+          (period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):
+          savedToday?(en?' · Latest saved partial capture · read-only':' · Última coleta salva hoje · janela parcial · somente leitura'):'');
     }
     if(period?.mode!=='today'){
       // Live execution controls and last-job results describe another scope. Keep
       // historical evidence visible; mutation awaits the exact-snapshot contract.
       for(const el of pane?.querySelectorAll('[data-trace-form],.ames-trace-progress,[data-top3-trend]')||[])el.hidden=true;
-      for(const button of pane?.querySelectorAll('[data-failure-repair],[data-repair-update]')||[])button.disabled=true;
     }
-    refreshHistoricalOnCompletedJob();paintHeader();preparation?.render();translator?.render();}
+    // A recovered observation from a partial custom window is not a live
+    // head and must never unlock a repair mutation simply because tab=Hoje.
+    if(period?.mode!=='today'||savedToday)
+      for(const button of pane?.querySelectorAll('[data-failure-repair],[data-repair-update]')||[])button.disabled=true;
+    refreshHistoricalOnCompletedJob();refreshTodaySavedIndex();paintHeader();preparation?.render();translator?.render();}
   return Object.freeze({render(){if(!root||disposed)return;if(!mounted)mount();renderActive();},clear(){disposed=true;periodController.clear();preparation?.clear();translator?.clear();evidenceDrawer?.clear();for(const view of views.values())view?.clear?.();views.clear();if(!agentClient)client.clear();root?.replaceChildren();mounted=false;}});
 }
 export { VIEWS as CANONICAL_VIEWS };

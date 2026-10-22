@@ -16,7 +16,7 @@ const keysOf=(snapshot,keys)=>keys.flatMap(k=>named(snapshot,k));
 const identity=row=>{const board=pcba(row),defect=code(row),at=parseFailureInstant(when(row));return board&&defect&&at!==null?JSON.stringify([board,defect,at]):null;};
 const result=(set,allowed)=>({count:[...set].filter(x=>allowed.has(x)).length,exact:false});
 export function groupedFailureName(row={}){return knownDescription(row.defect_desc)||nonempty(row.defect_code)||'Falha não identificada';}
-export function evidenceCountLabel(value){const n=Number(value?.count||0);return value?.exact?String(n):n>0?String(n)+'+':'—';}
+export function evidenceCountLabel(value){const n=Number(value?.count||0);return value?.exact?String(n):n>0?'≥ '+n:'—';}
 export function formatFailureLastOccurrence(value){const s=formatFactoryDateTime(value,{seconds:false});return s==='—'?s:s.replace(/\s+(\d{2}:\d{2})$/,' · $1');}
 
 export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailureName){

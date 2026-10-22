@@ -1,6 +1,6 @@
 import {LINE_IDS} from './data/contract.mjs';
 import {factoryWallMinute} from './data/history.mjs';
-import {matchesReadingPeriod} from './data/reading-period.mjs';
+import {matchesReadingPeriod,matchesSavedTodayCapture} from './data/reading-period.mjs';
 import {resolveHistorySource} from './data/history-source-choice.mjs';
 
 // History is read-only. Selection is per line and source, never a global MES job.
@@ -42,7 +42,7 @@ export function createReadingPeriodController(store,history,{changed=()=>{}}={})
       }).sort(orderEntries);
       if(!alive())return;
       if(!entries.length){
-        if(mode!=='today')store.clearHistoricalSnapshot?.(line,{generation});
+        store.clearHistoricalSnapshot?.(line,{generation});
         return;
       }
       const sources=[...new Set(entries.map(e=>e.source_id).filter(Boolean))];
@@ -73,7 +73,7 @@ export function createReadingPeriodController(store,history,{changed=()=>{}}={})
         source_choices.push({line_id:line,options,selected_source_id:resolved||null});
         if(!resolved){
           unresolved.push(line);
-          if(mode!=='today')store.clearHistoricalSnapshot?.(line,{generation});
+          store.clearHistoricalSnapshot?.(line,{generation});
           return;
         }
         entries=entries.filter(e=>e.source_id===resolved);
@@ -86,12 +86,16 @@ export function createReadingPeriodController(store,history,{changed=()=>{}}={})
           String(payload.snapshot_id)!==String(entry.snapshot_id)||
           (!materialized&&payload.snapshot_revision!==entry.snapshot_revision))
           throw Error('historical_identity_mismatch:'+line);
-        if(!matchesReadingPeriod(payload,selected))continue;
-        if(mode==='today'&&store.read(line).snapshot)return;
+        const exact=matchesReadingPeriod(payload,selected);
+        const savedSameDay=mode==='today'&&matchesSavedTodayCapture(payload,selected);
+        if(!exact&&!savedSameDay)continue;
+        // A live snapshot takes precedence over any saved read. Saved same-day
+        // partial observations remain read-only with their exact scope.
+        if(mode==='today'&&store.read(line).snapshot&&!store.read(line).saved_today)return;
         store.installHistoricalSnapshot(payload,{generation,source:entry.history_source==='local'?'local':'remote'});
         return;
       }
-      if(mode!=='today')store.clearHistoricalSnapshot?.(line,{generation});
+      store.clearHistoricalSnapshot?.(line,{generation});
     }));
     if(!alive())return;
     results.forEach((r,i)=>{if(r.status==='rejected')errors.push({line_id:LINE_IDS[i],error:r.reason?.message||'history_unavailable'});});

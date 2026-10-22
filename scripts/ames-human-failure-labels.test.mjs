@@ -15,10 +15,10 @@ test('main failure operator views do not require memorizing Defect Code', async 
   const legacy = await read('ames/console-legacy-parity.mjs');
   assert.match(legacy,/Falhas agrupadas/);
   assert.match(legacy,/data-failure-sort/);
-  assert.match(legacy,/<th>Falha<\/th><th>Código técnico<\/th>/);
+  assert.match(legacy,/<th>Falha<\/th><th>PCBA<\/th>/);
   assert.doesNotMatch(legacy,/<label>Defect Code<select data-top3-defect>/);
   assert.doesNotMatch(legacy,/<th>Código<\/th><th>Falha<\/th>/);
-  assert.match(legacy,/Descrição humana em destaque; o código fica apenas como referência técnica/);
+  assert.match(legacy,/Descrição humana em destaque/);
 
   const process = await read('ames/console-failure-process.mjs');
   const pcbaHeader=process.indexOf('<th>PCBA</th>');

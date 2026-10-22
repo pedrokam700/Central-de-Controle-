@@ -67,3 +67,73 @@ body.dark .ames-reuse-line-tabs button{background:var(--ames-surface);border-col
 .ames-legacy-shell details.ames-last-capture-collapsible[open]>summary::after{content:'▾'}
 .ames-legacy-shell details.ames-last-capture-collapsible>[data-last-capture-body]{padding:10px 12px 12px;border-top:1px solid var(--ames-line2)}
 @media(max-width:600px){.ames-legacy-shell details.ames-last-capture-collapsible>summary{flex-wrap:wrap;gap:5px}.ames-legacy-shell details.ames-last-capture-collapsible>summary span{flex-basis:100%;order:3}}
+
+/* Operational reading: preserve PCBA IDs, give descriptions real width, scroll horizontally. */
+.ames-legacy-shell .ames-failure-groups .table-wrap table{min-width:1100px;table-layout:auto}
+.ames-legacy-shell .ames-failure-groups td:first-child{min-width:270px;max-width:420px;white-space:normal;word-break:normal;overflow-wrap:break-word;line-height:1.45}
+.ames-legacy-shell .ames-failure-groups td:first-child button{white-space:normal;text-align:left;line-height:1.45;min-width:245px;max-width:410px;height:auto}
+.ames-legacy-shell .ames-failures-table table{min-width:1670px;table-layout:auto}
+.ames-legacy-shell .ames-failures-table td:first-child{min-width:265px;max-width:420px;white-space:normal;word-break:normal;overflow-wrap:break-word;line-height:1.5}
+.ames-legacy-shell .ames-failures-table .ames-pcba-id{min-width:165px;white-space:nowrap;word-break:normal;overflow-wrap:normal;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.ames-legacy-shell .ames-failures-table td{min-width:95px}
+.ames-legacy-shell [data-console-pane="base"] .table-wrap table{min-width:1150px;table-layout:auto}
+.ames-legacy-shell [data-console-pane="base"] .table-wrap td{min-width:105px;line-height:1.45;white-space:normal;word-break:normal;overflow-wrap:break-word}
+.ames-legacy-shell [data-console-pane="base"] .table-wrap td:nth-child(1){min-width:155px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ames-legacy-shell [data-console-pane="base"] .table-wrap td:nth-child(3){min-width:210px;max-width:440px}
+.ames-legacy-shell .ames-line-center [data-current-coverage]{font-size:9px;line-height:1.6}
+
+/* Extra technical fields are reachable without losing the concise operational table. */
+.ames-legacy-shell .ames-base-operator-table{overflow-x:auto}
+.ames-legacy-shell .ames-base-detail-cell{min-width:120px!important;width:132px;vertical-align:top}
+.ames-legacy-shell .ames-row-detail>summary{cursor:pointer;font-size:10px;font-weight:700;color:var(--ames-text);white-space:nowrap}
+.ames-legacy-shell .ames-row-detail[open]{min-width:220px;max-width:450px}
+.ames-legacy-shell .ames-row-detail dl{display:grid;gap:0;margin:10px 0 0;max-height:350px;overflow:auto;border:1px solid var(--ames-line2);border-radius:8px;background:var(--ames-surface)}
+.ames-legacy-shell .ames-row-detail dl>div{padding:6px 8px;border-bottom:1px solid var(--ames-line2);min-width:0}
+.ames-legacy-shell .ames-row-detail dl>div:last-child{border-bottom:0}
+.ames-legacy-shell .ames-row-detail dt{font-size:9px;color:var(--ames-muted);font-weight:650}
+.ames-legacy-shell .ames-row-detail dd{margin:2px 0 0;font-size:10px;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+.ames-legacy-shell .ames-process-provenance-warning{margin:9px 0;padding:9px 12px;border-left:3px solid var(--ames-line);background:var(--ames-soft2);font-size:11px;line-height:1.55;color:var(--ames-muted)}
+
+/* High-priority SN alert: concise white evidence panels, not one gigantic red dump. */
+.ames-sn-smart-alert{min-width:0;overflow-wrap:normal!important}
+.ames-sn-alert-header{display:flex;align-items:flex-start;gap:10px;padding:2px 0 10px}
+.ames-sn-alert-symbol{font-size:18px;line-height:1.4;flex:0 0 auto}
+.ames-sn-alert-intro{min-width:0;flex:1}
+.ames-sn-alert-title{font-weight:800;line-height:1.5;display:block;font-size:14px}
+.ames-sn-alert-intro>p{font-size:12px;line-height:1.5;margin:4px 0 5px}
+.ames-sn-alert-intro>small{display:block;color:var(--ames-muted);font-size:10px;line-height:1.5}
+.ames-sn-alert-priority{white-space:nowrap;flex:0 0 auto;font-size:10px;font-weight:800}
+.ames-sn-smart-alert .ames-sn-alert-white{background:var(--ames-surface)!important;border:1px solid var(--ames-line2)!important;border-radius:10px;margin:8px 0;padding:12px 13px;box-shadow:0 1px 2px rgba(15,23,42,.025)}
+.ames-sn-smart-alert .ames-sn-alert-white h4{font-size:11.5px;font-weight:800;margin:0 0 8px;color:var(--ames-text)}
+.ames-sn-alert-production-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ames-sn-alert-production-grid>div{display:grid;gap:4px;min-width:0}
+.ames-sn-alert-production-grid small{font-size:10px;color:var(--ames-muted)}
+.ames-sn-alert-production-grid b{font-size:13px;color:var(--ames-text);font-variant-numeric:tabular-nums}
+.ames-sn-alert-production-grid span{font-size:11px;color:var(--ames-muted)}
+.ames-sn-alert-muted{display:block;font-size:10.5px!important;color:var(--ames-muted);line-height:1.55;margin:3px 0 8px!important}
+.ames-sn-alert-evidence-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;color:var(--ames-text)}
+.ames-sn-alert-evidence-head b{font-size:11.5px}
+.ames-sn-alert-evidence-head span{font-size:10px;font-weight:800;color:var(--ames-muted);white-space:nowrap}
+.ames-sn-alert-technician-list{display:grid;gap:0}
+.ames-sn-alert-tech-preview{padding:9px 0 8px;border-top:1px solid var(--ames-line2);min-width:0}
+.ames-sn-alert-tech-preview:first-child{border-top:0;padding-top:2px}
+.ames-sn-alert-tech-id{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 9px}
+.ames-sn-alert-tech-id small{font-size:10px;color:var(--ames-muted)}
+.ames-sn-alert-tech-id b{font-size:11.5px;line-height:1.5}
+.ames-sn-alert-tech-id time{font-size:10px;font-variant-numeric:tabular-nums;color:var(--ames-muted);margin-left:auto}
+.ames-sn-alert-tech-preview p{margin:3px 0 0!important;font-size:11.5px!important;line-height:1.5;color:var(--ames-text);white-space:pre-wrap;overflow-wrap:break-word;word-break:normal}
+.ames-sn-alert-extra-repairs{margin-top:7px;border-top:1px solid var(--ames-line2);padding-top:7px}
+.ames-sn-alert-extra-repairs>summary{font-size:11px;font-weight:700;cursor:pointer;color:var(--ames-text)}
+.ames-sn-smart-alert>details{border-top:1px solid color-mix(in srgb,var(--ames-line) 55%,transparent);padding-top:7px}
+.ames-sn-smart-alert>details>summary{min-height:36px;font-size:11.5px;cursor:pointer;font-weight:800;color:var(--ames-text)}
+.ames-sn-alert-proof-body{margin-top:7px;display:grid;gap:10px}
+.ames-sn-alert-evidence-content{display:grid;gap:9px}
+.ames-sn-alert-evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.ames-sn-alert-evidence-grid .ames-sn-smart-proof{background:var(--ames-surface)!important;border-color:var(--ames-line2)!important;margin:0;padding:11px 12px;word-break:normal}
+.ames-sn-alert-evidence-grid .ames-sn-smart-proof>b{font-size:11.5px;overflow-wrap:break-word;word-break:normal}
+.ames-sn-alert-evidence-grid .ames-sn-smart-proof>span{font-size:10px;overflow-wrap:break-word;word-break:normal}
+.ames-sn-alert-rule-note{margin:0!important;padding:9px 11px;font-size:11px;line-height:1.55;background:var(--ames-surface);border-left:3px solid #b8802b;border-radius:5px}
+.ames-sn-alert-final-warning{font-size:10px;display:block;color:var(--ames-muted);font-weight:700;margin:9px 0 0}
+.ames-2114-table-note{font-size:11px;line-height:1.55;color:var(--ames-muted);margin:6px 0 10px}
+@media(max-width:760px){.ames-sn-alert-header{flex-wrap:wrap}.ames-sn-alert-priority{margin-left:28px}.ames-sn-alert-production-grid,.ames-sn-alert-evidence-grid{grid-template-columns:1fr}.ames-sn-alert-tech-id time{margin-left:0}.ames-sn-smart-alert .ames-sn-alert-white{padding:10px}}
+body.dark .ames-sn-smart-alert .ames-sn-alert-white{background:var(--ames-surface)!important}

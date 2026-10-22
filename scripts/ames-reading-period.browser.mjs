@@ -131,8 +131,8 @@ try{
  assert.equal(await evidenceCells.locator('img, script').count(),0,'untrusted SN cannot create markup');
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening evidence cannot query MES');
  const groupTable=page.locator('[data-console-pane=failures] [data-failure-groups] table');
- assert.equal(await groupTable.locator('thead th').count(),7,'three reuse-evidence columns remain in grouped Failures');
- assert.match(await groupTable.locator('tbody').innerText(),/1\+/,'2nd+ use is a minimum observed, never an invented exact denominator');
+ assert.equal(await groupTable.locator('thead th').count(),6,'three reuse-evidence columns remain in grouped Failures');
+ assert.match(await groupTable.locator('tbody').innerText(),/≥\s*1/,'2nd+ use is a minimum observed, never an invented exact denominator');
  assert.equal(await page.locator('[data-failure-sort]').inputValue(),'count_desc');
  await page.locator('[data-failure-sort]').selectOption('failure_asc');
  assert.equal(await page.locator('[data-failure-sort]').inputValue(),'failure_asc');
@@ -157,10 +157,12 @@ try{
  assert.equal(await cohorts.locator('[data-cohort-kind=pcbas][data-cohort-metric=second_use] strong').innerText(),'1');
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=third_plus_use] strong').innerText(),'1');
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=failed] strong').innerText(),'0');
- assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure] strong').innerText(),'—');
- await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure]').click();
- assert.match(await cohorts.locator('[data-cohort-detail]').innerText(),/Indisponível/);
- assert.doesNotMatch(await cohorts.locator('[data-cohort-detail]').innerText(),/0 itens observados/);
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure]').count(),0,
+  'unknown denominator cannot occupy an unproven no-failure KPI');
+ await cohorts.locator('[data-cohort-limits] > summary').click();
+ assert.match(await cohorts.locator('[data-cohort-limits]').innerText(),/Sem registro de falha não comprova ausência/);
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=unknown_outcome]').count(),1,
+  'unknown outcomes remain inspectable in the advanced coverage details');
  await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=associated]').click();
  assert.equal(await cohorts.locator('[data-cohort-row]').count(),1);
  assert.equal(await cohorts.locator('img').count(),0);
@@ -170,6 +172,15 @@ try{
  await cohorts.locator('form button[type=submit]').click();
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=observed] strong').innerText(),'1');
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ // Line selection remains explicit across reuse↔monitor navigation even with a missing snapshot.
+ await page.locator('[data-reuse-line-tab="TAN10102"]').click();
+ assert.equal(await page.evaluate(()=>qa.store.context().line_id),'TAN10102');
+ await page.locator('[data-console-view="monitor"]').click();
+ assert.match(await page.locator('[data-console-pane="monitor"] [data-line-tab="TAN10102"]').getAttribute('class'),/primary/);
+ await page.locator('[data-console-view="reuse"]').click();
+ await page.locator('[data-reuse-line-tab="TAN10101"]').click();
+ assert.equal(await page.evaluate(()=>qa.store.context().line_id),'TAN10101');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'no MES mutation from line changes');
  // D: stored trends use history transport only, and retain gaps/revision evidence.
  await page.locator('[data-console-view=top3]').click();
  const trends=page.locator('[data-console-pane=top3] [data-history-trends]');
@@ -551,6 +562,17 @@ try{
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');
  await page.locator('[data-read-period=today]').click();
  assert.equal(await page.locator('[data-monitor-main] [data-agent-action=today]').isVisible(),true);
+ // Verify actual desktop/mobile CSS layout, not only class names.
+ await page.setViewportSize({width:1440,height:950});
+ const kpiCols=async()=>page.locator('[data-console-pane=monitor] .ames-line-summary').evaluate(e=>
+   getComputedStyle(e).gridTemplateColumns.split(/\s+/).filter(Boolean).length);
+ assert.equal(await kpiCols(),4,'four primary KPIs on desktop, separate from provenance');
+ assert.equal(await page.locator('[data-monitor-provenance] .stat').count(),2,'snapshot and source stay visible');
+ assert.equal(await page.locator('[data-monitor-technical]').evaluate(e=>e.open),false,'technical logs collapsed on landing');
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await kpiCols(),2,'mobile primary KPIs in two columns');
+ assert.equal(await page.locator('[data-line-tab]').count(),3);
+ await page.setViewportSize({width:1440,height:950});
  // An actual logout/reset must destroy the retained SN form and previous
  // forensic content rather than exposing another account's SN investigation.
  await page.evaluate(()=>{qa.store.clear();qa.store.selectReadingPeriod('today');qa.view.render();});

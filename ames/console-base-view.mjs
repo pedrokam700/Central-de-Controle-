@@ -9,7 +9,19 @@ const locale=()=>document.documentElement.lang||'pt-BR';
 const lineOptions=selected=>LINE_IDS.map((line,i)=>`<option value="${line}"${selected===line?' selected':''}>${t('Linha','Line')} ${i+1} · ${line}</option>`).join('');
 const fmt=value=>value===null||value===undefined||value===''?'—':String(value);
 const sectionHead=(title,subtitle='',right='')=>`<div class="section-head"><div><h3>${esc(title)}</h3>${subtitle?`<p>${esc(subtitle)}</p>`:''}</div>${right}</div>`;
-const table=(rows,columns,empty)=>!rows.length?`<div class="ames-empty"><span>—</span><p>${esc(empty||t('Nenhum registro disponível.','No records available.'))}</p></div>`:`<div class="table-wrap"><table><thead><tr>${columns.map(([key,label])=>`<th>${esc(label||key)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${columns.map(([key])=>`<td>${esc(displayValue(key,row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+const detailValue=(key,value)=>value===null||value===undefined||value===''?'—':
+  typeof value==='object'?JSON.stringify(value):displayValue(key,value);
+const rowDetails=(row,columns)=>{
+  const visible=new Set(columns.map(([key])=>key));
+  const extra=Object.entries(row||{}).filter(([key])=>!visible.has(key));
+  return extra.length?`<td class="ames-base-detail-cell"><details class="ames-row-detail"><summary>${t('Mais campos','More fields')} (${extra.length})</summary><dl>${extra.map(([key,value])=>`<div><dt>${esc(key)}</dt><dd>${esc(detailValue(key,value))}</dd></div>`).join('')}</dl></details></td>`:'';
+};
+const table=(rows,columns,empty)=>!rows.length?`<div class="ames-empty"><span>—</span><p>${esc(empty||t('Nenhum registro disponível.','No records available.'))}</p></div>`:
+  `<div class="table-wrap ames-base-operator-table"><table><thead><tr>${columns.map(([key,label])=>`<th>${esc(label||key)}</th>`).join('')}${rows.some(row=>Object.keys(row||{}).some(key=>!columns.some(([shown])=>shown===key)))?`<th>${t('Detalhes','Details')}</th>`:''}</tr></thead><tbody>${rows.map(row=>{
+    const details=rowDetails(row,columns);
+    return `<tr>${columns.map(([key])=>`<td>${esc(detailValue(key,row?.[key]))}</td>`).join('')}${details||((rows.some(r=>Object.keys(r||{}).some(k=>!columns.some(([shown])=>shown===k))))?'<td></td>':'')}</tr>`;
+  }).join('')}</tbody></table></div>`;
+export const renderOperationalTable=table;
 const normalizeRows=result=>Array.isArray(result)?result:result?.rows||result?.datasets||result?.jobs||result?.results||result?.items||[];
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 
@@ -24,13 +36,14 @@ const BASE_ACTIONS=[
 const actionLabel=name=>{const item=BASE_ACTIONS.find(x=>x[0]===name);return item?t(item[2],item[3]):name;};
 
 const OPERATIONAL_COLUMNS={
+  repairs:[[['pcba_sn','PCBA','pcba'],'PCBA','PCBA'],[['defect_time','Defect Time'],'Registro da falha (MES)','MES defect time'],[['repair_time','Repair Time'],'Horário do AT','Repair time'],[['repair_user','Repair User'],'AT responsável','Repair technician'],[['repair_comment','Repair Comment','comment'],'Comentário AT','Repair comment'],[['repair_status','Repair Status'],'Status reparo','Repair status']],
   defects:[[['line','LINE'],'Linha','Line'],[['pcba_sn','PCBA SN','pcba'],'PCBA','PCBA'],[['defect_time','Defect Time'],'Registro da falha (MES)','Failure record (MES)'],[['defect_desc','Defect Description','description'],'Falha','Failure'],[['product_model','Product Model','model'],'Modelo','Model'],[['repair_comment','Repair Comment'],'Repair Comment','Repair Comment'],[['repair_status_current','Repair Status Current','repair_status'],'Status reparo','Repair status'],[['repair_user','Repair User'],'Repair User','Repair User']],
   pcba_history:[[['pcba_sn','PCBA SN'],'PCBA','PCBA'],[['defect_time','Defect Time'],'Registro da falha (MES)','Failure record (MES)'],[['defect_desc','Defect Description'],'Falha','Failure'],[['manual_or_auto','Manual/Automatic','registration_mode'],'Manual/Automatic','Manual/Automatic'],[['repair_status','Repair Status'],'Status reparo','Repair status'],[['defect_type','Defect Type'],'Defect Type','Defect Type'],[['relation','Relação histórica'],'Relação','Relation']],
   material_reuse:[[['line','LINE'],'Linha','Line'],[['current_pcba_sn','PCBA atual','pcba_sn'],'PCBA atual','Current PCBA'],[['item_sn','Material SN','material_sn'],'Material SN','Material SN'],[['item_type','Tipo material','material_type'],'Tipo','Type'],[['known_use_count','Usos conhecidos material'],'Usos','Uses'],[['reuse_count','Reusos conhecidos material'],'Reusos','Reuses'],[['relation_to_current_failure','Classificação desta PCBA','relation'],'Relação','Relation'],[['previous_pcbas_json','PCBAs desvinculadas'],'PCBAs anteriores','Previous PCBAs']],
   process_events:[[['pcba_sn','PCBA'],'PCBA','PCBA'],[['operation_code','Posto'],'Posto','Station'],[['operation_name','Processo'],'Processo','Process'],[['event_time','Horário'],'Horário da passagem 3022','3022 passage time'],[['production_shift','Turno de produção'],'Turno da passagem 3022','3022 passage shift'],[['production_operational_date','Data operacional'],'Dia operacional da passagem','Passage operational day'],[['station','Station'],'Station','Station']],
   process_defect_contexts:[[['pcba_sn','PCBA'],'PCBA','PCBA'],[['defect_time','Defect Time'],'Registro da falha (MES)','Failure record (MES)'],[['defect_desc','Defect Description'],'Falha','Failure'],[['reference_station_code','Posto relevante'],'Posto relevante','Relevant station'],[['reference_event_time','Horário relevante'],'Horário de geração (3022)','Generation time (3022)'],[['production_shift','Turno de produção'],'Turno comprovado (3022)','Proven shift (3022)'],[['production_operational_date','Data operacional'],'Dia de produção (3022)','Production day (3022)'],[['production_shift_basis','Base turno'],'Base da classificação','Classification basis'],[['repair_action','AT / ação'],'AT / ação','AT / action'],[['return_station_code','Posto de retorno'],'Posto de retorno','Return station'],[['return_event_time','Horário do retorno'],'Horário do retorno','Return time'],[['status','Status'],'Status','Status']]
 };
-function operationalColumns(rows,dataset,technical){
+export function operationalColumns(rows,dataset,technical){
   const keys=Object.keys(rows[0]||{});if(technical)return keys.map(key=>[key,key]);
   const spec=OPERATIONAL_COLUMNS[dataset]||[];const used=new Set(),cols=[];
   for(const [aliases,pt,en] of spec){const key=aliases.find(alias=>keys.includes(alias));if(key&&!used.has(key)){used.add(key);cols.push([key,t(pt,en)]);}}

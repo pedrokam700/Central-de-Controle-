@@ -33,3 +33,17 @@ export function matchesReadingPeriod(payload,selection){
   if(!['today','live','monitor_today','previous_day'].includes(String(p.mode||'').toLowerCase()))return false;
   return end<=selection.end;
 }
+
+/**
+ * A saved same-day observation is not a full operational-day live head.
+ * It may have been read with an explicit custom end time (e.g. 07:00→17:36).
+ * Keep its provenance and partial interval, and never publish/promote it as
+ * a live production population. This predicate is for UI historical fallback.
+ */
+export function matchesSavedTodayCapture(payload,selection){
+ if(selection?.mode!=='today')return false;
+ const p=payload?.summary?.period||{};
+ const start=factoryWallMinute(p.start_at),end=factoryWallMinute(p.end_at);
+ if(start!==selection.start||!end||end<=start||end>selection.end)return false;
+ return ['today','live','monitor_today','custom','previous_day'].includes(String(p.mode||'').toLowerCase());
+}

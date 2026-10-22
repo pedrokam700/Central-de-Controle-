@@ -1,5 +1,5 @@
 name: Publish Official A-MES Multi-PC Field Release
-# v0.5.36: a reviewed workflow-file push triggers one immutable exact-SHA release.
+# v0.5.37: a reviewed workflow-file push triggers one immutable exact-SHA release.
 # The GitHub Release and its 5/5 CI evidence, never the hosting provider, are authoritative.
 on:
   push:
@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="ames-v0.5.36-multipc-20261021"
+          tag="ames-v0.5.37-multipc-20261022"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Refusing to overwrite an existing official release";exit 1
           fi
@@ -75,5 +75,5 @@ jobs:
           cp "$RUNNER_TEMP/verified/AMES_PR42_CLEAN.zip" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip"
           gh release create "$tag" "$RUNNER_TEMP/verified/AMES_Central_CLEAN_$short.zip" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Central + A-MES 0.5.36 — alertas técnicos restaurados e monitor limpo" \
-            --notes "Correção oficial 0.5.36: alerta de recorrência 2114 reaparece no topo da História completa, com classificação de prioridade, Defect Type, comentários 3012 e nome AT comprovado 3012+3022, sem atribuir falsamente reparos a ciclos. Corrigida expansão que fechava após redraw. Seleção de origens e opções históricas avançadas ficam recolhidas para reduzir ruído no Monitoramento; última coleta salva continua visível e sem confundir Hoje. Gate 5/5 Linux Browser/Windows/Firestore/CLEAN e Quality Gate no SHA exato; site GitHub Pages segue release imutável. CLEAN para instalação inicial ou motor incompatível; agente 0.5.35 compatível não precisa reinstalar para este frontend. 0.5.35 disponível para rollback. SQLite e MES intocados."
+            --title "Central + A-MES 0.5.37 — leitura diária, Monitor moderno e Consulta por SN" \
+            --notes "0.5.37 integrada em SHA exato: PR #60 histórico local/cloud e pareamento HTTPS; PR #61 leitura automática por Hoje/Último dia/Período, Base operacional, tabelas de falhas sem código técnico destacado, reuso com cobertura honesta, Monitoramento refinado, e Consulta por SN com alerta 2114 único, nomes/comentários 3012 não atribuídos a ciclos sem prova, evidência 3022 e cartões brancos. Gate 5/5 inclui contratos/browser/Windows/Firestore/CLEAN. GitHub Pages somente após release imutável. Teste físico de pareamento HTTPS, 3 linhas, 3012/3022 e SN tripla PENDENTE. Agente compatível já instalado não requer CLEAN novo. SQLite/source_id/token/MES intocados; versões anteriores disponíveis para rollback."

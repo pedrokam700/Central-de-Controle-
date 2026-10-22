@@ -187,3 +187,36 @@ test('Line 2 keeps the exact prior-day source already proven in memory across re
  assert.equal(s.context().line_id,line2);
  ctl.clear();
 });
+
+
+test('Today opens latest saved custom-window evidence from the same day without promoting it to a live head',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()});
+ const saved=snapshot('saved-custom','2026-10-19','custom');
+ saved.summary.period.end_at='2026-10-19T17:36';
+ const ctl=createReadingPeriodController(s,{list:async l=>l===line?[entry(saved)]:[],open:async()=>saved});
+ await ctl.select('today');
+ assert.equal(s.read(line).snapshot?.snapshot_id,'saved-custom');
+ assert.equal(s.read(line).saved_today,true);
+ assert.equal(s.read(line).source,'remote');
+ assert.equal(s.read(line).snapshot?.canonical?.summary?.period?.end_at,'2026-10-19T17:36');
+ assert.equal(s.localCanonical().length,0,'historical fallback must never modify the local publisher');
+ const live=snapshot('actual-live','2026-10-19','today');
+ s.replaceSyncedSnapshots([live]);
+ assert.equal(s.read(line).snapshot?.snapshot_id,'actual-live','verified live head takes precedence');
+ assert.equal(s.read(line).saved_today,false);
+ ctl.clear();
+});
+test('Today does not import a saved observation from yesterday or a shifted/custom start',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()});
+ const yesterday=snapshot('yesterday','2026-10-18','custom');
+ const shifted=snapshot('shifted','2026-10-19','custom');
+ shifted.summary.period.start_at='2026-10-19T09:00';
+ const ctl=createReadingPeriodController(s,{
+  list:async l=>l===line?[entry(yesterday),entry(shifted)]:[],
+  open:async p=>p.snapshot_id==='shifted'?shifted:yesterday
+ });
+ await ctl.select('today');
+ assert.equal(s.read(line).snapshot,null);
+ assert.equal(s.read(line).saved_today,false);
+ ctl.clear();
+});

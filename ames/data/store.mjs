@@ -1,7 +1,7 @@
 import { immutable, instant, normalizeLegacySnapshot, productKey, requireLine, LINE_IDS } from './contract.mjs';
 import { normalizeAgentRead } from './agent-contract.mjs';
 import {normalizeCanonical,CANONICAL_SCHEMA} from './canonical.mjs';
-import {readingPeriod, matchesReadingPeriod} from './reading-period.mjs';
+import {readingPeriod, matchesReadingPeriod, matchesSavedTodayCapture} from './reading-period.mjs';
 import {SOURCE_STATE} from './source-provenance.mjs';
 
 const EMPTY_CONTEXT=Object.freeze({line_id:null,lines:[],period:null,product:null,shift:null,defect:null});
@@ -52,15 +52,24 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
 
   function readLine(line){
     requireLine(line);
-    const saved=selectedPeriod&&selectedPeriod.mode!=='today'?historical.get(JSON.stringify([selectedPeriod,line])):null;
+    const saved=selectedPeriod?historical.get(JSON.stringify([selectedPeriod,line])):null;
     const eligible=s=>s&&matchesReadingPeriod(s.canonical||s,selectedPeriod)?s:null;
-    const snapshot = saved?.snapshot || (localConnected && eligible(local.get(line))) || eligible(synced.get(line)) || eligible(remote.get(line)) || eligible(local.get(line)) || null;
-    const source = !snapshot ? 'none' : saved? (saved.source==='local'&&!localConnected?'local_cache':saved.source) : snapshot === local.get(line) ? (localConnected ? 'local' : 'local_cache') : 'remote';
+    const live=(localConnected&&eligible(local.get(line)))||eligible(synced.get(line))||eligible(remote.get(line))||eligible(local.get(line))||null;
+    // Today's saved custom-window observation can fill an otherwise empty UI,
+    // but never replace a verified live head or enter the publication pipeline.
+    const savedToday=selectedPeriod?.mode==='today'&&!live&&saved?.snapshot&&
+      matchesSavedTodayCapture(saved.snapshot.canonical||saved.snapshot,selectedPeriod);
+    const snapshot=selectedPeriod?.mode!=='today'&&saved?.snapshot ||live||
+      (savedToday?saved.snapshot:null);
+    const source=!snapshot?'none':(savedToday||selectedPeriod?.mode!=='today'&&saved)?
+      (saved.source==='local'&&!localConnected?'local_cache':saved.source):
+      snapshot===local.get(line)?(localConnected?'local':'local_cache'):'remote';
     const source_state=!snapshot?SOURCE_STATE.NOT_COLLECTED:source==='local_cache'?SOURCE_STATE.CACHED:SOURCE_STATE.OK;
     const collected = instant(snapshot?.collected_at);
     const age = collected === null ? null : now() - collected;
     return immutable({
-      source, source_state, snapshot, reading_period:selectedPeriod, local_connected: localConnected,
+      source, source_state, snapshot, saved_today:!!savedToday,
+      reading_period:selectedPeriod, local_connected: localConnected,
       age_ms: age,
       freshness: age === null || age < 0 ? 'unknown' : age > maxAgeMs || source === 'local_cache' ? 'stale' : 'fresh'
     });
@@ -134,14 +143,15 @@ export function createAmesStore({ now = Date.now, maxAgeMs = 120000 } = {}) {
     installHistoricalSnapshot(payload,{source='remote',generation=periodGeneration}={}){
       if(generation!==periodGeneration||!selectedPeriod)return false;
       const snapshot=normalizeCanonical(payload);
-      if(!matchesReadingPeriod(payload,selectedPeriod))throw Error('historical_period_mismatch');
+      if(!matchesReadingPeriod(payload,selectedPeriod)&&!matchesSavedTodayCapture(payload,selectedPeriod))
+        throw Error('historical_period_mismatch');
       if(!['local','local_cache','remote'].includes(source))throw Error('invalid_history_source');
       historical.set(JSON.stringify([selectedPeriod,snapshot.line_id]),{snapshot,source});
       contextRevision++;
       return true;
     },
     clearHistoricalSnapshot(line,{generation=periodGeneration}={}){
-      if(generation!==periodGeneration||!selectedPeriod||selectedPeriod.mode==='today')return false;
+      if(generation!==periodGeneration||!selectedPeriod)return false;
       requireLine(line);
       const removed=historical.delete(JSON.stringify([selectedPeriod,line]));
       if(removed)contextRevision++;
