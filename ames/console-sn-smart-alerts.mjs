@@ -179,7 +179,8 @@ function uniqueBoardProof(alerts,model,locale,currentPcba){
     '</b><span>'+observations.length+'</span></div>'+
     '<div class="ames-sn-alert-evidence-grid">'+rows.join('')+'</div>'+
     messages.map(m=>'<p class="ames-sn-alert-rule-note">'+esc(m)+'</p>').join('')+
-    (comparisons.length?'<p class="ames-sn-alert-muted">'+comparisons.map(c=>esc(explainFailureComparison(c,locale))).join(' · ')+'</p>':'')+
+    (comparisons.length?'<p class="ames-sn-alert-muted">'+comparisons.map(c=>esc(explainFailureComparison(c,locale))+
+      (c.version?' · '+esc(t(locale,'Regra','Rule'))+' '+esc(c.version):'')).join(' · ')+'</p>':'')+
     uniqueRest.join('')+
     '<small class="ames-sn-alert-muted">'+esc(t(locale,
       'Comentários 3012 já aparecem acima, sem repetição. Uma correlação não confirma a causa raiz.',
@@ -236,13 +237,18 @@ function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,r
   const usageLine=usage?.proven?'<span>'+esc(t(locale,'Uso da PCBA','PCBA use'))+': <b>'+
     esc(usage.use_index?String(usage.use_index)+'º':fmt(usage.known_uses))+'</b>'+
     (usage.previous_uses!==null?' · '+esc(t(locale,'reusos anteriores','previous reuses'))+': '+esc(fmt(usage.previous_uses)):'')+'</span>':'';
-  const analysisKinds=[...new Set(alerts.flatMap(a=>evidenceList(a).map(p=>
-    [p.failure?.defect_type,p.current_failure?.defect_type].filter(Boolean).join(' → '))).filter(Boolean))].join(' · ');
+  const boardRows=boardAlert?sameBoardHistory(alerts,model,currentPcba):[];
+  const analysisKinds=boardAlert
+    ? [...new Set(boardRows.map(entry=>text(entry.failure.defect_type).replace(/_/g,' ')).filter(Boolean))].join(' → ')
+    : [...new Set(alerts.flatMap(a=>evidenceList(a).map(p=>
+      [p.failure?.defect_type,p.current_failure?.defect_type].filter(Boolean).join(' → '))).filter(Boolean))].join(' · ');
+  const countLine=boardRows.length?'<small class="ames-sn-alert-history-count">'+
+    esc(boardRows.length+' '+t(locale,'registros distintos na 2114','distinct 2114 records'))+'</small>':'';
   const proof=boardAlert?uniqueBoardProof(alerts,model,locale,currentPcba):
     alerts.map(alert=>compactEvidence(alert,locale,result,currentPcba)).join('');
   const header='<div class="ames-sn-alert-header"><span aria-hidden="true" class="ames-sn-alert-symbol">⚠</span>'+
     '<div class="ames-sn-alert-intro"><b class="ames-sn-alert-title">'+esc(title)+'</b><p>'+esc(summary)+'</p>'+
-    usageLine+(analysisKinds?'<small>'+esc(analysisKinds)+'</small>':'')+'</div>'+
+    usageLine+countLine+(analysisKinds?'<small>'+esc(analysisKinds)+'</small>':'')+'</div>'+
     '<span class="ames-sn-alert-priority" style="color:'+tone+'">'+esc(badge)+'</span></div>';
   return '<article class="ames-sn-smart-alert" data-smart-alert="'+esc(id)+'" style="border:1px solid color-mix(in srgb,'+
     tone+' 35%,transparent);border-left:6px solid '+tone+';background:'+background+';border-radius:10px;padding:13px 14px">'+
