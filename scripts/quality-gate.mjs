@@ -200,10 +200,15 @@ if (build) {
   );
 
   assertCheck(
-    app.includes("localStorage.getItem('cora.sw.loaded')!==(e.data.cache_revision||e.data.version)") &&
-      app.includes("localStorage.getItem('cora.sw.loaded')!==(event.data.cache_revision||event.data.version)"),
-    'app.js: guard de reload usa revisão do cache por SHA',
-    'app.js: guard de reload não usa revisão do cache por SHA'
+    app.includes("revision===localStorage.getItem('cora.sw.loaded')") &&
+      app.includes("function offerCentralWebUpdate(") &&
+      app.includes("worker.postMessage({type:'cora-activate-update'})") &&
+      app.includes("reg.addEventListener('updatefound'") &&
+      sw.includes("self.addEventListener('message'") &&
+      sw.includes("event.data?.type==='cora-activate-update'") &&
+      !sw.includes("precache().then(()=>self.skipWaiting())"),
+    'app.js: atualização atômica aguarda operador e não recarrega durante coleta',
+    'app.js: atualização do Service Worker não exige consentimento nem preserva shell ativo'
   );
 
   assertCheck(
