@@ -1,4 +1,5 @@
 """Offline ZIP/staging and SQLite restore tests. Never imports/runs the agent."""
+from contextlib import closing
 from importlib.util import module_from_spec, spec_from_file_location
 import hashlib
 import json
@@ -74,12 +75,12 @@ with tempfile.TemporaryDirectory() as tmp:
         backup = root / 'protected' / 'ames_local.sqlite3'
         report = p.consistent_sqlite_backup(live, backup)
         assert report['verified'] and report['restore_rehearsed'] and not report['update_authorized']
-        with sqlite3.connect(backup) as snapshot:
+        with closing(sqlite3.connect(backup)) as snapshot:
             assert snapshot.execute('SELECT value FROM schema_meta').fetchone() == ('test-only-secret',)
             assert snapshot.execute('SELECT COUNT(*) FROM jobs').fetchone()[0] == 1
         writer.execute('INSERT INTO jobs VALUES (?)', ('running',))
         writer.commit()
-        with sqlite3.connect(backup) as snapshot:
+        with closing(sqlite3.connect(backup)) as snapshot:
             assert snapshot.execute('SELECT COUNT(*) FROM jobs').fetchone()[0] == 1
         try:
             p.consistent_sqlite_backup(live, backup)
@@ -96,7 +97,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert not report['data_tree_complete'] and not report['update_authorized']
     assert (bundle / 'local_agent_token').read_text() == (live.parent / 'local_agent_token').read_text()
     assert (bundle / 'config.json').read_text() == (live.parent.parent / 'config.json').read_text()
-    with sqlite3.connect(bundle / 'ames_local.sqlite3') as db:
+    with closing(sqlite3.connect(bundle / 'ames_local.sqlite3')) as db:
         assert db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0] == 2
     try:
         p.backup_core_identity(root / 'live', bundle)

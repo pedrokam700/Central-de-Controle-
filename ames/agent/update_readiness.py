@@ -5,6 +5,10 @@ web-side Firestore outbox is not controlled by this Python process. Nothing in
 this module authorizes stopping an agent or modifying a file.
 """
 
+from contextlib import closing
+from pathlib import Path
+import sqlite3
+
 SCHEMA = "ames-update-readiness-v1"
 ACTIVE = frozenset(("queued", "running"))
 
@@ -22,7 +26,10 @@ def observe(scheduler, jobs, jobs_lock, store):
         with jobs_lock:
             memory_active = sum(1 for job in jobs.values()
                                 if isinstance(job, dict) and job.get("status") in ACTIVE)
-        with store.connect() as conn:
+        # Store.connect() is a read/write connection; a readiness probe must
+        # neither create an absent DB nor leave a Windows file handle open.
+        db_uri = Path(store.path).resolve().as_uri() + "?mode=ro"
+        with closing(sqlite3.connect(db_uri, uri=True, timeout=3)) as conn:
             database_active = conn.execute(
                 "SELECT COUNT(*) FROM jobs WHERE status IN ('queued','running')"
             ).fetchone()[0]
