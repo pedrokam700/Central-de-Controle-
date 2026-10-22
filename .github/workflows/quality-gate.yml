@@ -57,7 +57,9 @@ jobs:
         run: python3 scripts/agent-canonical.test.py
 
       - name: Run updater Python contract
-        run: python3 scripts/agent-update.test.py
+        run: |
+          python3 scripts/agent-update.test.py
+          python3 scripts/agent-issue57-maintenance-ledger.test.py
 
       - name: Agent auto-start registry contract (mocked, no real Windows changes)
         run: python3 scripts/agent-workstation-autostart.test.py

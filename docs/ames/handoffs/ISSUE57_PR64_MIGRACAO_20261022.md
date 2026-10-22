@@ -329,3 +329,17 @@ A pasta extraída `Downloads/AMES_Central_CLEAN_b283b176` também existe. **Não
 4. `scripts/ames-issue57-browser-outbox.test.mjs` testa isolamento, sessão antiga, upload/captura em voo, bloqueio por erro, mudança de geração. `scripts/ames-sync-reload.browser.mjs` estende prova em IndexedDB Chromium real; CI de `A-MES Operational History` inclui o novo contrato.
 
 **Não houve novos comandos físicos:** o inventário do §14 continua válido, 0.5.39 apenas baixada/extraída, agente antigo preservado na porta 8765, source_id/token/SQLite/configuração intocados. GitHub-only; sem Netlify, sem merge/release/Pages até a política segura de transação estar comprovada.
+
+## 19. C3a — diário persistente de manutenção em teste, NÃO motor físico (22/10/2026)
+
+**Base anterior confirmada:** PR #64 em draft, último HEAD `8e31de8b1f43b39460f212bbec4fdc67478c8046`. [Central Quality Gate #39839133162](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/39839133162) 3/3 SUCCESS no SHA. [Issue #57 comentário 6349300895](https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6349300895). Este adendo gerará SHA diferente; revalidar no GitHub antes de atribuir GREEN.
+
+**Novo bloco C3a experimental:**
+
+1. `tools/ames-workstation/issue57_maintenance_ledger.py`: arquivo de reserva `claim.lock` criado com `O_EXCL`, diário `transaction.json` de escrita durável e transições com trava extra + substituição atômica, estado/revisão/UUID estritos. O contrato do guardian **novo** já procura `.ames-update/transaction.json` na mesma raiz. **Somente fixtures** com marcador especial sob diretório temporário dedicado; nunca aceitar pasta CLEAN.
+2. Falha de energia simulada entre trava/diário ou em cada lado da transição deixa a reserva persistida e força revisão, sem limpeza automática. Arquivos desconhecidos, symlinks, identidade/tipo/fase divergentes, segunda tentativa, revisão incorreta e arquivo incompleto recusados. Sentinelas de dados preservados. Nenhuma função de stop/start, alteração SQLite/token/source_id, swap de binário, download, rede MES ou sincronização.
+3. `scripts/agent-issue57-maintenance-ledger.test.py`: provas isoladas e subprocesso independente, incluídas nos workflows `Central Quality Gate` e `A-MES Operational History` (Ubuntu + Windows).
+
+**Muito importante:** o código novo ainda NÃO está instalado no posto. O guardian físico antigo pode reiniciar mesmo enquanto um atualizador escreveria o diário; `Local\` mutex não equivale a bloqueio entre sessões. Também não há drenagem autenticada do agente vivo ou da fila de todas as abas/perfis. Este ledger ainda não é o coordenador externo de produção; `update_authorized=false` em todos os estados. Não oferecer instalação 0.5.39 por cópia manual, não executar script de teste no posto.
+
+**Próxima implementação**: contrato de atestação e exclusividade entre os processos reais (guardião instalado, processo PID + agente, navegador sincronização), provar espera por `inflight_mutations==0`, rollback durável real e backup/ACL. Só após CI+testes Windows completos planejar piloto supervisionado G1–G6.
