@@ -366,8 +366,10 @@ export function decorateSmartSnAlerts(root,model={},result={}){
   if(!state||state.scope!==scope){state={scope,open:new Set()};expansionState.set(root,state);}
   // Preserve operator-expanded evidence across background polling and DOM redraw.
   root.querySelectorAll('[data-smart-alert]').forEach(card=>{
-    const details=card.querySelector('details'),key=card.dataset.smartAlert;
+    const details=card.querySelector(':scope > details'),key=card.dataset.smartAlert;
     if(details?.open)state.open.add(key);
+    const extra=card.querySelector('.ames-sn-alert-extra-repairs');
+    if(extra?.open)state.open.add(key+':extra');
   });
   root.querySelector('[data-sn-smart-alerts]')?.remove();
   // The operator's default tab is History / Complete story. Technical is optional.
@@ -377,9 +379,16 @@ export function decorateSmartSnAlerts(root,model={},result={}){
   wrapper.innerHTML=renderSmartSnAlerts(model,result,host.ownerDocument.documentElement?.lang||'pt-BR');
   const panel=wrapper.firstElementChild;if(!panel)return;
   for(const card of panel.querySelectorAll('[data-smart-alert]')){
-    const details=card.querySelector('details'),key=card.dataset.smartAlert;if(!details)continue;
+    const details=card.querySelector(':scope > details'),key=card.dataset.smartAlert;if(!details)continue;
     if(state.open.has(key))details.open=true;
     details.addEventListener('toggle',()=>{if(!details.isConnected)return;if(details.open)state.open.add(key);else state.open.delete(key);});
+    const extra=card.querySelector('.ames-sn-alert-extra-repairs');
+    if(extra){
+      if(state.open.has(key+':extra'))extra.open=true;
+      extra.addEventListener('toggle',()=>{if(!extra.isConnected)return;
+        if(extra.open)state.open.add(key+':extra');else state.open.delete(key+':extra');
+      });
+    }
   }
   host.prepend(panel);
 }
