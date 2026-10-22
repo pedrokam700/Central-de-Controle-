@@ -70,6 +70,26 @@ def run():
         status,headers,body=form(nonce)
         assert status==403 and b"Reiniciar conexao segura" in body
         assert TOKEN.encode() not in body
+        # Actual Edge 127 form submission observed in factory on 22/10/2026.
+        edge={"Origin":"null","Sec-Fetch-Site":"same-origin",
+              "Sec-Fetch-Mode":"navigate","Sec-Fetch-Dest":"document",
+              "Sec-Fetch-User":"?1"}
+        nonce=new_nonce()
+        status,response_headers,body=form(nonce,edge)
+        assert status==303 and response_headers["Location"] == pairing.destination(TOKEN)
+        assert not body
+        status,response_headers,body=form(nonce,edge)
+        assert status==403 and TOKEN.encode() not in body
+        for unsafe in [
+            {"Sec-Fetch-Site":"cross-site"},
+            {"Sec-Fetch-Site":"none"},
+            {"Sec-Fetch-Mode":"cors"},
+            {"Sec-Fetch-Dest":"iframe"},
+            {"Sec-Fetch-User":""},
+        ]:
+            nonce=new_nonce()
+            status,response_headers,body=form(nonce,{**edge,**unsafe})
+            assert status==403 and TOKEN.encode() not in body
         for injected in [
             {"Origin":"https://evil.example","Sec-Fetch-Site":"cross-site"},
             {"Sec-Fetch-Site":"cross-site"},
@@ -78,7 +98,7 @@ def run():
             nonce=new_nonce()
             code,headers,body=form(nonce,injected)
             assert code==403 and b"Reiniciar conexao segura" in body
-        print("PASS: HTTP GET->POST same-origin without Origin issues 303 once")
+        print("PASS: HTTP GET->POST same-origin without Origin or Edge Origin:null issues 303 exactly once")
         print("PASS: external, ambiguous and replayed forms remain 403; no secret in responses")
     finally:
         srv.shutdown();srv.server_close()
