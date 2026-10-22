@@ -35,7 +35,7 @@ test('historical Base local reuses operational table instead of vertical key/val
 test('operator screens prioritize description and PCBA, retain technical code only in evidence',()=>{
  const failures=src('ames/console-legacy-parity.mjs'),css=src('ames/console-operator-parity.css');
  assert.doesNotMatch(failures,/<th>Código técnico<\/th>/);
- assert.match(failures,/ames-pcba-id/);
+ assert.match(failures,/ames-pcba-id/);\n assert.match(failures,/data-occurrence-code/);\n assert.match(src('ames/console-failure-evidence.mjs'),/tr.dataset.occurrenceCode/);
  assert.match(css,/\.ames-failures-table \.ames-pcba-id/);
  assert.equal(evidenceCountLabel({count:3,exact:false}),'≥ 3');
  assert.equal(evidenceCountLabel({count:3,exact:true}),'3');
