@@ -181,3 +181,20 @@ Experiência desejada: simples, sofisticada, limpa, uma única Central, nada de 
 ---
 
 *Registro inicial: 22/10/2026. Atualizações posteriores devem ser apensadas com data, SHA do commit e evidências do novo teste físico, sem apagar o contexto histórico.*
+
+## 10. Adendo físico — 22/10/2026, 10:46–10:47 BRT (não substitui o histórico anterior)
+
+**Resultado novo do usuário**: quatro prints compararam duas abas HTTPS. Abrir o endereço oficial manualmente em **nova aba** mostrou agente detectado, mas não autorizado e 0/3 linhas atuais compartilhadas; a autorização local `/workstation/parear` continuou em `Confirmação não concluída`. Abrir a Central através do pacote temporário existente **funcionou fisicamente**, status verde `Agente local conectado · CANONICAL-R11-BATCH` no próprio GitHub Pages oficial. A aba autorizada recuperou histórico local da Linha 3 no período 21/10 07:00 → 22/10 07:00, FPY 97,87%, Check FPY 97,87%, Quantity 2064, Falhas 44, Snapshot 4, Origem local, rotulado Histórico/Desatualizado.
+
+**Diagnóstico comprovável pelo código**: `ames/agent-client.mjs` recebe `#ames_agent_token`, remove o fragment da barra e o guarda em `sessionStorage`. Esse armazenamento é por aba; outra aba aberta manualmente pelo endereço, no mesmo computador, pode estar sem autorização. Não confundir esse comportamento com desconexão do agente e não concluir perda SQLite/dados a partir de 0/3 linhas atuais. Não transferir token automaticamente para todas as abas nem persisti-lo em localStorage sem avaliação de segurança. O erro POST 403 local é outro problema, ainda não atribuído conclusivamente a um header/nonce específico.
+
+**Classificação de gates**:
+- PILOTO temporário no posto, com pacote: **GREEN restrito ao caminho testado** (não validou hardening do POST).
+- HTTPS conectado e leitura local da Linha 3: **GREEN parcial**.
+- Link puro em nova aba e formulário de pareamento local: **RED**.
+- Sincronização do Hoje para três linhas entre computadores: **PENDENTE**, evidência visual 0/3.
+- Updater Windows in-place com backup/rollback: **NÃO ENTREGUE**.
+
+**Próximo teste mais barato (sem código ou dados alterados)**: na mesma aba oficial que o pacote conectou, pressionar Ctrl+L, colar `https://pedrokam700.github.io/Central-de-Controle-/`, Enter. Se mantiver conexão, confirma a hipótese de sessão por aba. Se perder, examinar SW/boot da sessão antes de qualquer modificação. Só então selecionar a correção definitiva para o POST local sem enfraquecer CSRF/nonce. Detalhes/prints registrados no comentário da Issue #57 https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6342516555.
+
+**Atenção ao SHA**: este adendo modifica apenas documentação em branch draft; revalidar novo HEAD e não herdar gates do commit anterior.
