@@ -29,3 +29,30 @@ Data: 2026-10-21. Estado: decisão arquitetural e contrato de implantação. **N
 
 ## Escopo desta correção
 Pareamento visível no cabeçalho e recuperação do preview de última captura sem remontar o componente a cada refresh; uma revisão de Hoje salva mas sem snapshot atual pode aparecer como **última coleta salva**. Ainda **não existe** autoaplicação Windows; esta exige implementação e validação separadas, rastreada na Issue própria.
+
+## Incremento executado em 22/10 — PR #64 (A), não confundir com updater completo
+
+**Evidência física:** `/api/v1/ready` no PC devolveu CANONICAL-R11-BATCH, fluxo 3, PID 15212; shell local SHA `dbe424da` (0.5.36). Inspeção local **somente leitura** confirmou `PAREAMENTO: VERSAO ANTIGA` e `CORS: VERSAO ANTERIOR`. A 0.5.38 publicada já contém os arquivos corrigidos, mas um link HTTPS não atualiza automaticamente o Python residente no PC.
+
+### Experiência final (decisão aprovada para implementação incremental)
+- **Viewer:** abre uma única URL GitHub Pages. Nova versão web é baixada em cache como um conjunto indivisível e recebe uma faixa discreta `Nova versão disponível · Atualizar página / Depois`. Aceitar recarrega; adiar não interrompe relatórios. Não instala CLEAN, SQLite ou motor.
+- **Coletor com motor compatível:** mesma experiência da web, sem ZIP novo. Um SHA novo no site **não** significa motor novo.
+- **Coletor com motor incompatível comprovado:** a Central avisa `Atualização do agente necessária` e, **apenas quando o atualizador tiver passado os gates**, oferece `Atualizar quando ocioso` e `Depois`. Nunca executa script remoto dentro da aba e nunca reinicia durante coleta.
+- **Agente sem versão do contrato comprovável:** não fingir que é antigo ou novo. Estado `Revisão não comprovada`, com diagnóstico permitido; fluxo 3 sozinho existia na 0.5.36 e na 0.5.38.
+- **Uma vez por PC coletor:** registrar um atualizador Windows confiável fora da árvore substituída e uma área de dados persistente. O operador não precisará baixar manualmente ZIP em futuras atualizações aprovadas. A primeira recuperação de instalações existentes requer migração/registro explícito e backup.
+
+### Prioridades técnicas antes de habilitar atualização executável
+B1. Inventário read-only de **todas** as raízes existentes, sem revelar token/source_id em logs; selecionar o PID/raiz efetivamente em uso. Nunca adotar automaticamente a CLEAN de maior versão ou timestamp.
+
+B2. Contrato versionado de capabilities independentes do build UI, estado de jobs, envio pendente e versão mínima compatível; detector sem alterar MES, SQLite ou Firestore.
+
+C1. Canal de distribuição somente GitHub Releases oficial e imutável, com manifesto de API, digest SHA-256 do ZIP, paths allowlisted e checagem do SHA da release. Proibir preview, branches ou URL arbitrária.
+
+C2. Atualizador fora do processo alvo: baixar para staging isolado, verificar hashes antes de executar; obter exclusividade e **recusar** se qualquer job/sync estiver ativo; fazer backup SQLite consistente (API SQLite), config, token e estado de origem/filas, mantendo-os fora do diretório versionado; verificar backup antes da troca.
+
+C3. Trocar apenas binários compatíveis; gravação com journal de transação para recuperação após queda de energia; reiniciar somente processo canônico de identidade conferida; health e capabilities pós-upgrade + comparação source_id/snapshot/SQLite; rollback automático se o gate falhar. Não alterar SQLite, token ou source_id por default.
+
+D. Piloto primeiro em um coletor, depois segundo coletor e um viewer, com prova de mesmo dia/linha em origens múltiplas, rollback e rede offline; só após gates físicos G1–G6 liberar o botão para todos.
+
+### Estado atual
+PR #64 entrega **detecção/aviso read-only** e atualização **web opt-in** protegendo trabalho em andamento. **Não oferece execução do atualizador do motor**. A reparação do agente físico que o operador mostrou ainda precisa passar pelo fluxo B/C e gate piloto; não mandar substituir arquivos da 0.5.36 enquanto PID 15212 estiver ativo.
