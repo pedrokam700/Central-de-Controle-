@@ -96,12 +96,15 @@ jobs:
             python $script
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-      - name: Validate background guardian PowerShell syntax
+      - name: Validate background guardian and temporary safe pairing launcher syntax
         shell: pwsh
         run: |
-          $tokens=$null; $parseErrors=$null
-          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools/ames-workstation/KEEP_AGENT_RUNNING.ps1'),[ref]$tokens,[ref]$parseErrors)|Out-Null
-          if($parseErrors.Count -gt 0){$parseErrors|ForEach-Object{Write-Error $_};exit 1}
+          foreach ($file in @('tools/ames-workstation/KEEP_AGENT_RUNNING.ps1',
+                             'tools/ames-workstation/ABRIR_HTTPS_EXISTENTE_SEM_ATUALIZAR.ps1')) {
+            $tokens=$null; $parseErrors=$null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$parseErrors)|Out-Null
+            if($parseErrors.Count -gt 0){$parseErrors|ForEach-Object{Write-Error $_};exit 1}
+          }
   reading-firestore:
     runs-on: ubuntu-latest
     timeout-minutes: 16
