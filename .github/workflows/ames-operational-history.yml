@@ -33,6 +33,7 @@ jobs:
           python3 scripts/agent-workstation-pairing.test.py
           python3 scripts/agent-update-readiness.test.py
           python3 scripts/agent-issue57-update-preflight.test.py
+          python3 scripts/agent-issue57-transaction-simulation.test.py
           python3 scripts/agent-pair-http-integration.test.py
           python3 scripts/agent-operational-calendar.test.py
           python3 scripts/agent-origin-policy.test.py
@@ -92,6 +93,7 @@ jobs:
             'scripts/agent-workstation-pairing.test.py',
             'scripts/agent-update-readiness.test.py',
             'scripts/agent-issue57-update-preflight.test.py',
+            'scripts/agent-issue57-transaction-simulation.test.py',
             'scripts/agent-pair-http-integration.test.py',
             'scripts/agent-operational-calendar.test.py',
             'scripts/agent-3022-origin-fallback.test.py',
