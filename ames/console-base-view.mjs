@@ -9,7 +9,18 @@ const locale=()=>document.documentElement.lang||'pt-BR';
 const lineOptions=selected=>LINE_IDS.map((line,i)=>`<option value="${line}"${selected===line?' selected':''}>${t('Linha','Line')} ${i+1} · ${line}</option>`).join('');
 const fmt=value=>value===null||value===undefined||value===''?'—':String(value);
 const sectionHead=(title,subtitle='',right='')=>`<div class="section-head"><div><h3>${esc(title)}</h3>${subtitle?`<p>${esc(subtitle)}</p>`:''}</div>${right}</div>`;
-const table=(rows,columns,empty)=>!rows.length?`<div class="ames-empty"><span>—</span><p>${esc(empty||t('Nenhum registro disponível.','No records available.'))}</p></div>`:`<div class="table-wrap"><table><thead><tr>${columns.map(([key,label])=>`<th>${esc(label||key)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${columns.map(([key])=>`<td>${esc(displayValue(key,row?.[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+const detailValue=(key,value)=>value===null||value===undefined||value===''?'—':
+  typeof value==='object'?JSON.stringify(value):displayValue(key,value);
+const rowDetails=(row,columns)=>{
+  const visible=new Set(columns.map(([key])=>key));
+  const extra=Object.entries(row||{}).filter(([key])=>!visible.has(key));
+  return extra.length?`<td class="ames-base-detail-cell"><details class="ames-row-detail"><summary>${t('Mais campos','More fields')} (${extra.length})</summary><dl>${extra.map(([key,value])=>`<div><dt>${esc(key)}</dt><dd>${esc(detailValue(key,value))}</dd></div>`).join('')}</dl></details></td>`:'';
+};
+const table=(rows,columns,empty)=>!rows.length?`<div class="ames-empty"><span>—</span><p>${esc(empty||t('Nenhum registro disponível.','No records available.'))}</p></div>`:
+  `<div class="table-wrap ames-base-operator-table"><table><thead><tr>${columns.map(([key,label])=>`<th>${esc(label||key)}</th>`).join('')}${rows.some(row=>Object.keys(row||{}).some(key=>!columns.some(([shown])=>shown===key)))?`<th>${t('Detalhes','Details')}</th>`:''}</tr></thead><tbody>${rows.map(row=>{
+    const details=rowDetails(row,columns);
+    return `<tr>${columns.map(([key])=>`<td>${esc(detailValue(key,row?.[key]))}</td>`).join('')}${details||((rows.some(r=>Object.keys(r||{}).some(k=>!columns.some(([shown])=>shown===k))))?'<td></td>':'')}</tr>`;
+  }).join('')}</tbody></table></div>`;
 export const renderOperationalTable=table;
 const normalizeRows=result=>Array.isArray(result)?result:result?.rows||result?.datasets||result?.jobs||result?.results||result?.items||[];
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
