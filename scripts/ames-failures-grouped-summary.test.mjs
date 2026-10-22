@@ -19,9 +19,9 @@ test('groups preserve PCBA and material distinct with only proven occurrence-lev
  const a=by['Falha teste'];assert.deepEqual(a.pcbaReuse,{count:1,exact:false});
  assert.deepEqual(a.itemReuse,{count:1,exact:false});
  assert.deepEqual(a.sameFailureOrFamily,{count:1,exact:false});
- assert.equal(evidenceCountLabel(a.pcbaReuse),'1+');
- assert.equal(evidenceCountLabel(a.itemReuse),'1+');
- assert.equal(evidenceCountLabel(a.sameFailureOrFamily),'1+');
+ assert.equal(evidenceCountLabel(a.pcbaReuse),'≥ 1');
+ assert.equal(evidenceCountLabel(a.itemReuse),'≥ 1');
+ assert.equal(evidenceCountLabel(a.sameFailureOrFamily),'≥ 1');
  assert.equal(evidenceCountLabel(by['Outra falha'].pcbaReuse),'—');
 });
 test('same PCBA with different defect or event instant never borrows same-family history',()=>{
@@ -52,7 +52,7 @@ test('canonical numeric and ordinal reuses work without old categorical drilldow
                      {'PCBA atual':'P3','Material SN':'M3','Uso material na falha':'1º uso'}]
  }}};
  const tally=failureGroupReuseSummaries(snap,rows)['Falha teste'];
- assert.equal(evidenceCountLabel(tally.pcbaReuse),'1+');
- assert.equal(evidenceCountLabel(tally.itemReuse),'1+');
+ assert.equal(evidenceCountLabel(tally.pcbaReuse),'≥ 1');
+ assert.equal(evidenceCountLabel(tally.itemReuse),'≥ 1');
  assert.equal(evidenceCountLabel(tally.sameFailureOrFamily),'—');
 });
