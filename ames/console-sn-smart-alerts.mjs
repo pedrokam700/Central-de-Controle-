@@ -201,7 +201,7 @@ function shortTechnicianEvidence(alerts,locale,result,currentPcba){
   };
   for(const alert of alerts)for(const proof of evidenceList(alert)){
     for(const item of proof.repairs||[])add(item,'3012 · análise anterior associada');
-    for(const item of proof.current_3012||[])add(item,'3012 · análise atual candidata');
+    for(const item of proof.current_3012||[])add(item,'3012 · registro atual candidato');
     for(const item of proof.ambiguous_3012||[])add(item,'3012 · não atribuído à sequência 2114');
     for(const item of proof.candidates_3012||[])add(item,'3012 · registro candidato');
   }
