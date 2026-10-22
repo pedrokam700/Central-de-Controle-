@@ -50,6 +50,8 @@ test('independent Windows backup ACL verifier is observational and cannot author
   for(const needed of [/Get-Acl -LiteralPath/,/AreAccessRulesProtected/,/IdentityReference\.Translate/,/backup_reparse_point/,/update_authorized=\$false/,/physical_acl_attested=\$false/]){
     assert.match(verifier,needed);
   }
+  assert.match(verifier,/\$reason -cin \$safeReasons/);
+  assert.match(verifier,/throw 'backup_acl_verification_failed'/);
   for(const mutating of [/\bStop-Process\b/,/\bRemove-Item\b/,/\bStart-Process\b/,/\bCopy-Item\b/,/\bMove-Item\b/,/\bSet-Acl\b/,/\bicacls\b/]){
     assert.doesNotMatch(verifier,mutating);
   }

@@ -53,6 +53,13 @@ if(-not $ownerAllowed){throw 'backup_acl_current_user_missing'}
 }
 }catch{
   # Cmdlet failures can otherwise echo the private filesystem location.
-  # Intentionally disclose neither the input path nor Windows account names.
+  # Only fixed, self-authored reason codes are safe to surface. Native errors
+  # may contain paths and Windows account names and must stay confidential.
+  $reason=$_.Exception.Message
+  $safeReasons=@('windows_acl_required','untrusted_backup_root',
+    'backup_reparse_point','backup_acl_entry_limit','backup_root_inherits_acl',
+    'unresolvable_backup_acl_principal','backup_acl_has_untrusted_allow_principal',
+    'backup_acl_current_user_missing')
+  if($reason -cin $safeReasons){throw "backup_acl_verification_failed:$reason"}
   throw 'backup_acl_verification_failed'
 }
