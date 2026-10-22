@@ -17,6 +17,24 @@ from maintenance_admission import MaintenanceAdmission, MaintenanceBlocked
 
 
 class BarrierTests(unittest.TestCase):
+    def test_monotonic_revision_tracks_outer_mutations_and_drain(self):
+        fence = MaintenanceAdmission()
+        r0 = fence.snapshot()['admission_revision']
+        with fence.mutation():
+            r1 = fence.snapshot()['admission_revision']
+            self.assertEqual(r1, r0 + 1)
+            with fence.mutation():
+                self.assertEqual(fence.snapshot()['admission_revision'], r1)
+        self.assertEqual(fence.snapshot()['admission_revision'], r0 + 2)
+        lease = fence.begin_drain()
+        self.assertEqual(fence.snapshot()['admission_revision'], r0 + 3)
+        with self.assertRaises(MaintenanceBlocked):
+            with fence.mutation():
+                pass
+        self.assertEqual(fence.snapshot()['admission_revision'], r0 + 3)
+        fence.release_drain(lease)
+        self.assertEqual(fence.snapshot()['admission_revision'], r0 + 4)
+
     def test_drain_fences_new_mutations_without_cancelling_old_ones(self):
         fence = MaintenanceAdmission()
         entered, finish, done = threading.Event(), threading.Event(), threading.Event()

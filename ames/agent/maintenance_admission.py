@@ -22,6 +22,10 @@ class MaintenanceAdmission:
         self._thread = local()
         self._inflight = 0
         self._lease = None
+        # Monotonic in-process epoch for read-only readiness observations.
+        # An operation starting AND finishing during a probe must not appear
+        # as a continuously idle interval just because both counts are zero.
+        self._revision = 0
 
     @contextmanager
     def mutation(self):
@@ -37,6 +41,7 @@ class MaintenanceAdmission:
                 if self._lease is not None:
                     raise MaintenanceBlocked("maintenance_draining")
                 self._inflight += 1
+                self._revision += 1
         self._thread.depth = depth + 1
         try:
             yield
@@ -45,6 +50,7 @@ class MaintenanceAdmission:
             if not depth:
                 with self._condition:
                     self._inflight -= 1
+                    self._revision += 1
                     self._condition.notify_all()
 
     def begin_drain(self):
@@ -57,6 +63,7 @@ class MaintenanceAdmission:
             if self._lease is not None:
                 raise MaintenanceBlocked("already_draining")
             self._lease = object()
+            self._revision += 1
             return self._lease
 
     def release_drain(self, lease):
@@ -64,6 +71,7 @@ class MaintenanceAdmission:
             if lease is None or lease is not self._lease:
                 raise ValueError("invalid_maintenance_lease")
             self._lease = None
+            self._revision += 1
             self._condition.notify_all()
 
     def snapshot(self):
@@ -71,6 +79,7 @@ class MaintenanceAdmission:
             return {
                 "draining": self._lease is not None,
                 "inflight_mutations": self._inflight,
+                "admission_revision": self._revision,
                 "policy": "in-process-admission-v1",
             }
 
