@@ -54,7 +54,7 @@ def test_user_confirmed_session_only():
 def test_url_and_html_never_publicly_contain_workstation_token():
     token="local-secret-not-an-ames-password-abcdefghi"
     url=p.destination(token)
-    check(url=="https://pedrokam700.github.io/Central-de-Controle/#ames_agent_token="+token,"only trusted destination")
+    check(url=="https://pedrokam700.github.io/Central-de-Controle-/#ames_agent_token="+token,"only trusted destination")
     html=p.page("safe-nonce")
     check(token.encode() not in html,"GET form must not contain secret")
     check(b'method="post"' in html and b'name="nonce"' in html,"visible explicit confirmation")

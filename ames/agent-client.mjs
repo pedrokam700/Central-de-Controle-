@@ -31,7 +31,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
   let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false, lastPartial=-1,lastRefresh=0,pendingSubmission=null;
   const workstationToken=bootstrapAgentToken(agentToken);
   const canOpenOfficial=()=>!!workstationToken&&globalThis.location?.protocol==='http:'&&['127.0.0.1','localhost'].includes(globalThis.location?.hostname)&&globalThis.location?.port==='8765';
-  const canPairFromOfficial=()=>globalThis.location?.origin==='https://pedrokam700.github.io' && globalThis.location?.pathname.startsWith('/Central-de-Controle/');
+  const canPairFromOfficial=()=>globalThis.location?.origin==='https://pedrokam700.github.io' && globalThis.location?.pathname.startsWith('/Central-de-Controle-/');
 
   const publish=patch=>{store.updateAgent(patch);changed();};
   async function request(path,body,blob=false) {
@@ -177,7 +177,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     openOfficial(){
       if(!canOpenOfficial())throw Error('Pareamento disponível somente no posto local autorizado.');
       // Fixed trusted destination, fragment only, never a configurable redirect or cloud field.
-      const target=new URL('https://pedrokam700.github.io/Central-de-Controle/');
+      const target=new URL('https://pedrokam700.github.io/Central-de-Controle-/');
       target.hash=new URLSearchParams({ames_agent_token:workstationToken}).toString();
       globalThis.window.open(target.href,'_blank','noopener,noreferrer');
     },
