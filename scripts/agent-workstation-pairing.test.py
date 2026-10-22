@@ -28,9 +28,24 @@ def test_user_confirmed_session_only():
     no_origin=headers();no_origin.pop("Origin")
     check(p.confirm(no_origin,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
           "same-origin local form with omitted Origin must succeed")
+    # Actual Edge 127 workstation form: Origin:null but local, user-activated
+    # top-level POST. Previous gate rejected this BEFORE checking the nonce.
+    edge_meta={**headers(origin="null"),"Sec-Fetch-Dest":"document",
+               "Sec-Fetch-User":"?1"}
+    nonce=gate.issue()
+    check(p.confirm(edge_meta,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
+          "Edge Origin:null + proven local top-level click should succeed once")
+    check(not p.confirm(edge_meta,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
+          "Edge form nonce replay must still fail")
     nonce=gate.issue()
     for forged in (
        {**headers(),"Origin":"null"},
+       {**edge_meta,"Sec-Fetch-Site":"cross-site"},
+       {**edge_meta,"Sec-Fetch-Site":"none"},
+       {**edge_meta,"Sec-Fetch-Mode":"cors"},
+       {**edge_meta,"Sec-Fetch-User":""},
+       {**edge_meta,"Sec-Fetch-Dest":"iframe"},
+       {**edge_meta,"Origin":"https://attacker.example"},
        {**headers(),"Origin":"https://attacker.example"},
        {**headers(),"Sec-Fetch-Site":"cross-site"},
        {**no_origin,"Sec-Fetch-Site":"cross-site"},
@@ -42,6 +57,10 @@ def test_user_confirmed_session_only():
               "cross-site or ambiguous browser request must be rejected")
     check(p.confirm(headers(),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
           "invalid probes must not consume the one-time nonce")
+    nonce=gate.issue()
+    check(not p.confirm(edge_meta,"192.168.1.9",8765,("nonce="+nonce).encode(),gate),"Edge nonloopback denied")
+    check(not p.confirm({**edge_meta,"Host":"evil.example"},"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"Edge DNS rebinding denied")
+    check(p.confirm(edge_meta,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"bad Edge probes do not consume nonce")
     nonce=gate.issue()
     check(not p.confirm(headers(),"192.168.1.9",8765,("nonce="+nonce).encode(),gate),"nonloopback denied")
     check(not p.confirm({**headers(),"Host":"malicious.example"},"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"DNS rebinding denied")
