@@ -108,6 +108,6 @@ test('old flow-2 Vercel agent must be identified as outdated, not incorrectly pr
  const client=createAgentClient(store,{fetcher:async()=>({ok:true,json:async()=>({
   ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:345
  })})});
- assert.deepEqual(await client.detectInstalled(),{state:'outdated'});
- assert.deepEqual(store.agent().workstation_probe,{state:'outdated'});
+ assert.deepEqual(await client.detectInstalled(),{state:'outdated',reason:'pairing_contract'});
+ assert.deepEqual(store.agent().workstation_probe,{state:'outdated',reason:'pairing_contract'});
 });
