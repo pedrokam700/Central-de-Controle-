@@ -32,7 +32,19 @@ while($pending.Count -gt 0){
     try{
       $sid=$rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
     }catch{throw 'unresolvable_backup_acl_principal'}
-    if($sid -notin $allowed){throw 'backup_acl_has_untrusted_allow_principal'}
+    if($sid -notin $allowed){
+      # The fixture needs to distinguish a broad root DACL from an extra ACE
+      # on a child file. Never echo the actual SID or NTAccount identity.
+      $scope=if($count -eq 1){'root'}else{'child'}
+      $class=switch($sid){
+        'S-1-5-32-545' {'users';break}
+        'S-1-5-11' {'authenticated_users';break}
+        'S-1-1-0' {'everyone';break}
+        'S-1-3-0' {'creator_owner';break}
+        default {'other'}
+      }
+      throw "backup_acl_untrusted_${scope}_${class}"
+    }
     if($count -eq 1 -and $sid -eq $principal){$ownerAllowed=$true}
   }
   if($entry.PSIsContainer){
@@ -60,6 +72,8 @@ if(-not $ownerAllowed){throw 'backup_acl_current_user_missing'}
     'backup_reparse_point','backup_acl_entry_limit','backup_root_inherits_acl',
     'unresolvable_backup_acl_principal','backup_acl_has_untrusted_allow_principal',
     'backup_acl_current_user_missing')
-  if($reason -cin $safeReasons){throw "backup_acl_verification_failed:$reason"}
+  if($reason -cin $safeReasons -or $reason -cmatch '^backup_acl_untrusted_(root|child)_(users|authenticated_users|everyone|creator_owner|other)$'){
+    throw "backup_acl_verification_failed:$reason"
+  }
   throw 'backup_acl_verification_failed'
 }
