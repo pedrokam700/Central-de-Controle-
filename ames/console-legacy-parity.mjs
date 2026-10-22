@@ -44,14 +44,16 @@ export function createLineOverview(root,store,client,periodController,history=nu
       else latestPreview=createLatestCapturePreview(nextSlot,store,history,periodController);
       latestPreview?.render();
     }
-    const read=store.read(line), state=coverageState(read), status={fresh:'Atualizado',partial:'Parcial',stale:'Desatualizado',not_collected:'Não coletado'}[state]||'Não coletado';
+    const read=store.read(line), state=coverageState(read), status=(en?{fresh:'Updated',partial:'Partial',stale:'Outdated',not_collected:'Not collected'}:{fresh:'Atualizado',partial:'Parcial',stale:'Desatualizado',not_collected:'Não coletado'})[state]||(en?'Not collected':'Não coletado');
     const note=document.createElement('p');note.dataset.currentCoverage=state;
     const products=[...new Set((read.snapshot?.occurrences||[]).map(r=>r.product_key).filter(Boolean))].join(', ');
     const observation=read.saved_today;
     const period=read.snapshot?.canonical?.summary?.period||{};
-    note.innerHTML='<b>'+ (observation?'ÚLTIMA COLETA SALVA DE HOJE':store.readingPeriod?.()?.mode==='today'?'ATUAL':'HISTÓRICO') +
-      '</b> · <span>'+esc(observation?'Janela observada · não é fechamento do dia':status)+'</span> · <span>Última atualização</span>: <span data-no-i18n>'+esc(formatFactoryDateTime(read.snapshot?.collected_at))+
-      '</span>'+(observation?' · <span>Período efetivamente consultado:</span> <span data-no-i18n>'+esc(formatFactoryDateTime(period.start_at))+' → '+esc(formatFactoryDateTime(period.end_at))+'</span>':'')+
+    note.innerHTML='<b>'+ (observation?(en?'LAST SAVED CAPTURE TODAY':'ÚLTIMA COLETA SALVA DE HOJE'):
+      store.readingPeriod?.()?.mode==='today'?(en?'TODAY':'ATUAL'):(en?'HISTORY':'HISTÓRICO'))+
+      '</b> · <span>'+esc(observation?(en?'Observed window · not end-of-day totals':'Janela observada · não é fechamento do dia'):status)+
+      '</span> · <span>'+(en?'Last updated':'Última atualização')+'</span>: <span data-no-i18n>'+esc(formatFactoryDateTime(read.snapshot?.collected_at))+
+      '</span>'+(observation?' · <span>'+(en?'Actual queried window:':'Período efetivamente consultado:')+'</span> <span data-no-i18n>'+esc(formatFactoryDateTime(period.start_at))+' → '+esc(formatFactoryDateTime(period.end_at))+'</span>':'')+
       ' · CPH: <span data-no-i18n>'+esc(products||'—')+'</span>';
     note.className='ames-monitor-evidence-note';
     root.querySelector('[data-monitor-provenance]')?.append(note);
