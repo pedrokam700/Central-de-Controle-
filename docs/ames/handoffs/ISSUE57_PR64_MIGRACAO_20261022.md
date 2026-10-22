@@ -198,3 +198,13 @@ Experiência desejada: simples, sofisticada, limpa, uma única Central, nada de 
 **Próximo teste mais barato (sem código ou dados alterados)**: na mesma aba oficial que o pacote conectou, pressionar Ctrl+L, colar `https://pedrokam700.github.io/Central-de-Controle-/`, Enter. Se mantiver conexão, confirma a hipótese de sessão por aba. Se perder, examinar SW/boot da sessão antes de qualquer modificação. Só então selecionar a correção definitiva para o POST local sem enfraquecer CSRF/nonce. Detalhes/prints registrados no comentário da Issue #57 https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6342516555.
 
 **Atenção ao SHA**: este adendo modifica apenas documentação em branch draft; revalidar novo HEAD e não herdar gates do commit anterior.
+
+## 11. Adendo — teste em OUTRA aba e erro Firebase (22/10/2026, 11:01–11:04 BRT)
+
+O usuário informou explicitamente que pressionou Ctrl+L e colou o endereço **em outra aba**. O site oficial mostrou `Agente local detectado · conectar`, sem token e sem acesso MES; a confirmação `/workstation/parear` ainda falhou duas vezes. Não foi testada a navegação **na mesma aba originalmente conectada pelo pacote**. A hipótese de `sessionStorage` por aba segue válida, não falsificada por esse print. Não dar como solucionado o acesso normal pelo link.
+
+Houve também mensagem `O Firebase recusou o acesso. Verifique as regras do Firestore.` na tela de login. Depois, o usuário autenticou-se normalmente e o problema de token da outra aba persistiu. Em `app.js`, a mensagem mapeia `permission-denied`. `finishLogin` executa `ensureUserProfile` (GET de `users/{uid}`); `onAuthStateChanged` pode mostrar alert e deslogar após falha. A transação exata causadora do erro não está comprovada, portanto **não alterar Firestore.rules ou dados por suposição**. Preservar isolamento entre Firebase Auth e authorization token do motor local.
+
+Próximo teste físico sem alteração: voltar à **aba HTTPS efetivamente conectada pelo piloto**, Ctrl+L na mesma aba, abrir URL oficial limpa; confirmar status após a navegação. Para isolar POST 403, inspecionar via DevTools apenas HTTP status + Host/Origin/Sec-Fetch-Site/Sec-Fetch-Mode/Content-Type, sem Request Payload (nonce), token, cookies ou URL com fragment. Evidência salva na Issue #57, comentário https://github.com/pedrokam700/Central-de-Controle-/issues/57#issuecomment-6342861196.
+
+PR #64 segue draft até revalidação; não criar novo CLEAN, não tocar SQLite, source_id, token nem atualizar o motor em uso.
