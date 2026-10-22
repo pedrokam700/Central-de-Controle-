@@ -59,7 +59,7 @@ function decorateContexts(root,state){
   markOperationalColumns(section,state.technical);
   let note=section.querySelector('[data-process-operator-note]');
   if(!note){note=document.createElement('p');note.dataset.processOperatorNote='1';note.className='ames-process-operator-note';section.querySelector('.section-head')?.after(note);}
-  note.textContent=t('A visão diária separa registro da falha no MES de evidência 3022. Horário de geração, turno e dia só são considerados comprovados quando ligados à passagem real no posto de referência; a passagem anterior é apenas contexto.','The daily view separates the MES failure record from 3022 evidence. Generation time, shift and production day are only treated as proven when linked to a real passage at the reference station; the previous passage is context only.');
+  note.textContent=t('A visão diária separa registro da falha no MES de evidência 3022. Horário de geração, turno e dia só são considerados comprovados quando ligados à passagem real no posto de referência; a passagem anterior é apenas contexto. AT/ação e posto/horário de retorno vazios significam que nenhum ciclo de reparo e retorno foi comprovado pela 3022 nesta ocorrência; comentários 3012/3028 exigem vínculo próprio e não podem preencher esses campos automaticamente.','The daily view separates the MES failure record from 3022 evidence. Generation time, shift and production day are only treated as proven when linked to a real passage at the reference station; the previous passage is context only. Empty repair/return fields mean no 3022 repair-and-return sequence is verified for this occurrence; 3012/3028 comments require separate linkage and cannot autofill these fields.');
   note.hidden=state.technical;
 }
 
