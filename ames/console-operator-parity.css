@@ -67,3 +67,17 @@ body.dark .ames-reuse-line-tabs button{background:var(--ames-surface);border-col
 .ames-legacy-shell details.ames-last-capture-collapsible[open]>summary::after{content:'▾'}
 .ames-legacy-shell details.ames-last-capture-collapsible>[data-last-capture-body]{padding:10px 12px 12px;border-top:1px solid var(--ames-line2)}
 @media(max-width:600px){.ames-legacy-shell details.ames-last-capture-collapsible>summary{flex-wrap:wrap;gap:5px}.ames-legacy-shell details.ames-last-capture-collapsible>summary span{flex-basis:100%;order:3}}
+
+/* Operational reading: preserve PCBA IDs, give descriptions real width, scroll horizontally. */
+.ames-legacy-shell .ames-failure-groups .table-wrap table{min-width:1100px;table-layout:auto}
+.ames-legacy-shell .ames-failure-groups td:first-child{min-width:270px;max-width:420px;white-space:normal;word-break:normal;overflow-wrap:break-word;line-height:1.45}
+.ames-legacy-shell .ames-failure-groups td:first-child button{white-space:normal;text-align:left;line-height:1.45;min-width:245px;max-width:410px;height:auto}
+.ames-legacy-shell .ames-failures-table table{min-width:1670px;table-layout:auto}
+.ames-legacy-shell .ames-failures-table td:first-child{min-width:265px;max-width:420px;white-space:normal;word-break:normal;overflow-wrap:break-word;line-height:1.5}
+.ames-legacy-shell .ames-failures-table .ames-pcba-id{min-width:165px;white-space:nowrap;word-break:normal;overflow-wrap:normal;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.ames-legacy-shell .ames-failures-table td{min-width:95px}
+.ames-legacy-shell [data-console-pane="base"] .table-wrap table{min-width:1150px;table-layout:auto}
+.ames-legacy-shell [data-console-pane="base"] .table-wrap td{min-width:105px;line-height:1.45;white-space:normal;word-break:normal;overflow-wrap:break-word}
+.ames-legacy-shell [data-console-pane="base"] .table-wrap td:nth-child(1){min-width:155px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ames-legacy-shell [data-console-pane="base"] .table-wrap td:nth-child(3){min-width:210px;max-width:440px}
+.ames-legacy-shell .ames-line-center [data-current-coverage]{font-size:9px;line-height:1.6}
