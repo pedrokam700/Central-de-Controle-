@@ -2,6 +2,7 @@ import {explainFailureComparison} from './data/failure-taxonomy.mjs';
 import {formatFactoryDateTime as time} from './data/time-display.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {pcbaUsageEvidence} from './console-sn-history-detail.mjs';
+import {parseFailureInstant,productionEvidenceForOccurrence} from './data/production-evidence.mjs';
 import {provenRepairUserName} from './console-sn-repair-evidence.mjs';
 
 const text=value=>String(value??'').trim();
@@ -83,42 +84,175 @@ function compactEvidence(alert,locale,result={},currentPcba=''){
   return rows.join('')||`<div class="ames-sn-forensic-empty">${esc(t(locale,'A correlação existe, mas a evidência detalhada não foi projetada nesta resposta.','The correlation exists, but detailed evidence was not projected in this response.'))}</div>`;
 }
 
+
+function sameBoardHistory(alerts,model={},currentPcba=''){
+  const seen=new Map(),pcba=text(currentPcba),current=model.current||null;
+  const add=(failure,isCurrent=false)=>{
+    if(!failure||text(failure.pcba_sn)!==pcba||!pcba)return;
+    const key=[pcba,failure.hist_seq===null||failure.hist_seq===undefined?'?':failure.hist_seq,
+      text(failure.defect_code),text(failure.defect_time)].join('|');
+    const prev=seen.get(key);
+    if(!prev||isCurrent)seen.set(key,{failure,current:isCurrent});
+  };
+  for(const failure of model.own_history||[])add(failure,false);
+  for(const alert of alerts)for(const proof of evidenceList(alert)){
+    add(proof.failure,false);
+    add(proof.current_failure,true);
+  }
+  add(current,true);
+  return [...seen.values()].sort((a,b)=>{
+    const aa=Number(a.failure.hist_seq),bb=Number(b.failure.hist_seq);
+    if(a.failure.hist_seq!=null&&b.failure.hist_seq!=null&&Number.isFinite(aa)&&Number.isFinite(bb)&&aa!==bb)return aa-bb;
+    const at=parseFailureInstant(a.failure.defect_time),bt=parseFailureInstant(b.failure.defect_time);
+    return (at??0)-(bt??0);
+  });
+}
+
+function productionSnapshot(model={},result={},locale='pt-BR',currentPcba=''){
+  const current=model.current||{},board=text(currentPcba);
+  const trusted=productionEvidenceForOccurrence(current,model.process_contexts||[]);
+  // A real 3022 assembly station passage is not proof of the instant the
+  // defect began. Require the exact PCBA and an actual timestamp before MES.
+  const failedAt=parseFailureInstant(current.defect_time);
+  const trace=result.trace_3022||{};
+  const passages=[...(trace.process_passages||[])].filter(row=>{
+    const name=text(row.operation_name||row.process||row['Working Oper']||row['Operation Name']);
+    const rowBoard=text(row.pcba_sn||row.PCBA);
+    const at=parseFailureInstant(row.event_time||row['Event Time']);
+    return rowBoard===board&&at!==null&&failedAt!==null&&at<=failedAt&&
+      /(assembly|montagem)/i.test(name);
+  }).sort((a,b)=>
+    parseFailureInstant(b.event_time||b['Event Time'])-parseFailureInstant(a.event_time||a['Event Time']));
+  const assembly=passages[0]||null;
+  const sourceLabel=t(locale,'3022 · montagem e referência produtiva','3022 · assembly and production reference');
+  const fields=[];
+  if(assembly){
+    const station=text(assembly.station||assembly.operation_code||assembly['Working Oper Code']);
+    const at=assembly.event_time||assembly['Event Time'];
+    fields.push('<div><small>'+esc(t(locale,'Passagem em montagem (3022)','Assembly station passage (3022)'))+'</small><b>'+
+      esc(time(at))+'</b><span>'+esc(station||'—')+'</span></div>');
+  }
+  if(trusted.trusted){
+    fields.push('<div><small>'+esc(t(locale,'Referência produtiva comprovada (3022)','Proven production reference (3022)'))+'</small><b>'+
+      esc(time(trusted.event_time))+'</b><span>'+esc(trusted.station||'—')+
+      (trusted.shift?' · '+esc(trusted.shift):'')+'</span></div>');
+  }
+  if(!fields.length)fields.push('<p class="ames-sn-alert-muted">'+esc(t(locale,
+    'Horário de montagem não comprovado para esta ocorrência. As passagens 3022 continuam disponíveis na aba Processo 3022.',
+    'Assembly time is not proven for this occurrence. 3022 passages remain available in the Process 3022 tab.'))+'</p>');
+  return '<section class="ames-sn-alert-white ames-sn-alert-production" data-sn-alert-production><h4>'+esc(sourceLabel)+
+    '</h4><div class="ames-sn-alert-production-grid">'+fields.join('')+'</div>'+
+    (fields.length&&assembly?'<small>'+esc(t(locale,
+      'Passagem registrada no posto; não prova quando o defeito começou.',
+      'Recorded station passage; does not prove when the defect began.'))+'</small>':'')+'</section>';
+}
+
+function uniqueBoardProof(alerts,model,locale,currentPcba){
+  const observations=sameBoardHistory(alerts,model,currentPcba);
+  const rows=observations.map(({failure,current},i)=>proof2114(
+    current?t(locale,'Falha atual','Current failure'):t(locale,'Falha anterior','Previous failure'),
+    failure,locale)).filter(Boolean);
+  const proofRows=alerts.flatMap(alert=>evidenceList(alert));
+  const ordered=proofRows.some(p=>p.order_basis==='hist_seq_same_clock'||p.order_basis==='hist_seq_only');
+  const kinds=new Set(observations.map(p=>text(p.failure.defect_type)).filter(Boolean));
+  const messages=[];
+  if(ordered)messages.push(t(locale,
+    'Defect Hist Seq ordena os registros 2114, mas não identifica quem realizou cada análise.',
+    'Defect Hist Seq orders 2114 records but does not identify the technician for each analysis.'));
+  if(kinds.size>1)messages.push(t(locale,
+    'Tipos de análise diferentes na 2114: comparar os comentários e resultados dos ATs; isso não demonstra erro no diagnóstico anterior.',
+    'Different 2114 analysis types: compare technician comments and outcomes; this does not prove an earlier diagnosis was wrong.'));
+  const comparisons=[...new Map(proofRows.filter(p=>p.comparison).map(p=>[
+    JSON.stringify([p.comparison.version,p.comparison.kind,p.comparison.reason]),p.comparison
+  ])).values()];
+  const rest=[];
+  for(const p of proofRows){
+    if(p.binding)rest.push('<div class="ames-sn-smart-proof"><small>3074 · '+esc(t(locale,'Vínculo comprovado','Proven binding'))+'</small><b>'+
+      esc(fmt(p.binding.item_sn))+'</b><span>'+esc(fmt(p.binding.previous_pcba))+' → '+esc(fmt(p.binding.current_pcba))+'</span></div>');
+    if(p.return)rest.push('<div class="ames-sn-smart-proof"><small>3022 · '+esc(t(locale,'Retorno comprovado','Proven return'))+'</small><b>'+
+      esc([p.return.station,p.return.operation].filter(Boolean).join(' · ')||'—')+'</b><span>'+
+      esc(p.return.time?time(p.return.time):'—')+'</span></div>');
+  }
+  const uniqueRest=[...new Set(rest)];
+  return '<div class="ames-sn-alert-evidence-content" data-sn-alert-2114-evidence>'+
+    '<div class="ames-sn-alert-evidence-head"><b>'+esc(t(locale,'Registros 2114 distintos','Distinct 2114 records'))+
+    '</b><span>'+observations.length+'</span></div>'+
+    '<div class="ames-sn-alert-evidence-grid">'+rows.join('')+'</div>'+
+    messages.map(m=>'<p class="ames-sn-alert-rule-note">'+esc(m)+'</p>').join('')+
+    (comparisons.length?'<p class="ames-sn-alert-muted">'+comparisons.map(c=>esc(explainFailureComparison(c,locale))).join(' · ')+'</p>':'')+
+    uniqueRest.join('')+
+    '<small class="ames-sn-alert-muted">'+esc(t(locale,
+      'Comentários 3012 já aparecem acima, sem repetição. Uma correlação não confirma a causa raiz.',
+      '3012 comments are shown above without duplication. Correlation does not establish root cause.'))+'</small>'+
+    '</div>';
+}
+
 function shortTechnicianEvidence(alerts,locale,result,currentPcba){
   const entries=new Map();
   const add=(repair,label)=>{
     const id=text(repair?.repair_user),comment=text(repair?.repair_comment);
     if(!id&&!comment)return;
-    const key=[text(repair?.row_key),text(repair?.repair_time),id,comment].join('|');
-    if(!entries.has(key))entries.set(key,{repair,label});
-    else if(label==='3012 · análise anterior associada')entries.set(key,{repair,label});
+    // Stable physical repair row first. A fallback uses the exact PCBA,
+    // technician, instant and comment; do not dedupe by technician alone.
+    const key=repair?.row_key?'key:'+text(repair.row_key):
+      'fields:'+JSON.stringify([repair?.pcba_sn,repair?.repair_time,id,comment,repair?.defect_code]);
+    const prev=entries.get(key);
+    if(!prev||label==='3012 · análise anterior associada')entries.set(key,{repair,label});
   };
   for(const alert of alerts)for(const proof of evidenceList(alert)){
     for(const item of proof.repairs||[])add(item,'3012 · análise anterior associada');
     for(const item of proof.current_3012||[])add(item,'3012 · análise atual candidata');
-    for(const item of proof.ambiguous_3012||[])add(item,'3012 · sequência não atribuída');
+    for(const item of proof.ambiguous_3012||[])add(item,'3012 · não atribuído à sequência 2114');
     for(const item of proof.candidates_3012||[])add(item,'3012 · registro candidato');
   }
-  const items=[...entries.values()].slice(0,5);
-  if(!items.length)return '';
-  const evidence=items.map(({repair,label})=>{
+  const rows=[...entries.values()].sort((a,b)=>String(a.repair.repair_time||'').localeCompare(String(b.repair.repair_time||'')));
+  if(!rows.length)return '';
+  const evidence=({repair,label})=>{
     const id=text(repair.repair_user),name=provenRepairUserName(repair,result,currentPcba);
     const person=name?name+(id?' ('+id+')':''):(id?t(locale,'Nome não comprovado · ','Name not proven · ')+id:'—');
-    return '<div class="ames-sn-alert-tech-preview" style="border-top:1px solid var(--line,#ddd);padding:6px 0;overflow-wrap:anywhere">'+
-      '<small>'+esc(label)+'</small> · <b>'+esc(person)+'</b>'+
-      '<div>'+esc(t(locale,'Comentário do AT','Technician comment'))+': '+esc(fmt(repair.repair_comment))+'</div></div>';
-  }).join('');
-  return '<div data-sn-alert-technician-preview style="margin-top:8px">'+
-    '<small>'+esc(t(locale,'Evidência técnica disponível · nomes somente quando comprovados pela 3012/3022','Available technician evidence · names only when proven by 3012/3022'))+'</small>'+
-    evidence+(entries.size>5?'<small>+'+(entries.size-5)+'</small>':'')+'</div>';
+    return '<div class="ames-sn-alert-tech-preview" data-sn-alert-repair-row><div class="ames-sn-alert-tech-id">'+
+      '<small>'+esc(label)+'</small><b>'+esc(person)+'</b><time>'+esc(repair.repair_time?time(repair.repair_time):'—')+'</time></div>'+
+      '<p>'+esc(fmt(repair.repair_comment))+'</p></div>';
+  };
+  const maxVisible=3;
+  return '<section data-sn-alert-technician-preview class="ames-sn-alert-white ames-sn-alert-technicians">'+
+    '<div class="ames-sn-alert-evidence-head"><b>'+esc(t(locale,'ATs e comentários · 3012','Technicians and comments · 3012'))+
+    '</b><span>'+rows.length+' '+esc(t(locale,'registro(s)','record(s)'))+'</span></div>'+
+    '<p class="ames-sn-alert-muted">'+esc(t(locale,
+      'Nomes apresentados somente quando comprovados. Registros sem vínculo temporal não são atribuídos individualmente à sequência 2114.',
+      'Names appear only with evidence. Rows without temporal linkage are not assigned to individual 2114 sequences.'))+'</p>'+
+    '<div class="ames-sn-alert-technician-list">'+rows.slice(0,maxVisible).map(evidence).join('')+'</div>'+
+    (rows.length>maxVisible?'<details class="ames-sn-alert-extra-repairs"><summary>'+
+      esc(t(locale,'Outros comentários 3012','Other 3012 comments'))+' ('+(rows.length-maxVisible)+')</summary>'+
+      rows.slice(maxVisible).map(evidence).join('')+'</details>':'')+
+    '</section>';
 }
 
-function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,result={},currentPcba=''){
-  const high=severity==='high';
+function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,result={},currentPcba='',model={}){
+  const high=severity==='high',boardAlert=id.startsWith('pcba-')||id.startsWith('mainboard-');
   const tone=high?'var(--danger,#d92d20)':'var(--warning,#b54708)';
   const background=high?'var(--danger-soft,#fef3f2)':'var(--warning-soft,#fffaeb)';
   const badge=high?t(locale,'ALTA PRIORIDADE','HIGH PRIORITY'):t(locale,'PRIORIDADE MÉDIA','MEDIUM PRIORITY');
-  const usageLine=usage?.proven?`<span>${esc(t(locale,'Uso da PCBA','PCBA use'))}: <b>${esc(usage.use_index?`${usage.use_index}º`:fmt(usage.known_uses))}</b>${usage.previous_uses!==null?` · ${esc(t(locale,'reusos anteriores','previous reuses'))}: ${esc(fmt(usage.previous_uses))}`:''}</span>`:'';
-  return `<article class="ames-sn-smart-alert" data-smart-alert="${esc(id)}" style="border:1px solid color-mix(in srgb,${tone} 35%,transparent);border-left:6px solid ${tone};background:${background};border-radius:10px;padding:11px 12px"><div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap"><span aria-hidden="true" style="font-size:18px">⚠</span><div style="min-width:0;flex:1"><b style="display:block">${esc(title)}</b><p style="margin:4px 0 0">${esc(summary)}</p>${usageLine}<small>${esc([...new Set(alerts.flatMap(a=>evidenceList(a).map(p=>[p.failure?.defect_type,p.current_failure?.defect_type].filter(Boolean).join(" → "))).filter(Boolean))].join(" · "))}</small></div><span style="font-size:10px;font-weight:800;color:${tone}">${esc(badge)}</span></div>${shortTechnicianEvidence(alerts,locale,result,currentPcba)}<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:750">${esc(t(locale,`Ver evidências (${alerts.length})`,`View evidence (${alerts.length})`))}</summary><div style="display:grid;gap:7px;margin-top:8px">${alerts.map(alert=>compactEvidence(alert,locale,result,currentPcba)).join('')}</div><small style="display:block;margin-top:8px;font-weight:700">${esc(t(locale,'Correlação técnica — não confirma causa raiz.','Technical correlation — does not confirm root cause.'))}</small></details></article>`;
+  const usageLine=usage?.proven?'<span>'+esc(t(locale,'Uso da PCBA','PCBA use'))+': <b>'+
+    esc(usage.use_index?String(usage.use_index)+'º':fmt(usage.known_uses))+'</b>'+
+    (usage.previous_uses!==null?' · '+esc(t(locale,'reusos anteriores','previous reuses'))+': '+esc(fmt(usage.previous_uses)):'')+'</span>':'';
+  const analysisKinds=[...new Set(alerts.flatMap(a=>evidenceList(a).map(p=>
+    [p.failure?.defect_type,p.current_failure?.defect_type].filter(Boolean).join(' → '))).filter(Boolean))].join(' · ');
+  const proof=boardAlert?uniqueBoardProof(alerts,model,locale,currentPcba):
+    alerts.map(alert=>compactEvidence(alert,locale,result,currentPcba)).join('');
+  const header='<div class="ames-sn-alert-header"><span aria-hidden="true" class="ames-sn-alert-symbol">⚠</span>'+
+    '<div class="ames-sn-alert-intro"><b class="ames-sn-alert-title">'+esc(title)+'</b><p>'+esc(summary)+'</p>'+
+    usageLine+(analysisKinds?'<small>'+esc(analysisKinds)+'</small>':'')+'</div>'+
+    '<span class="ames-sn-alert-priority" style="color:'+tone+'">'+esc(badge)+'</span></div>';
+  return '<article class="ames-sn-smart-alert" data-smart-alert="'+esc(id)+'" style="border:1px solid color-mix(in srgb,'+
+    tone+' 35%,transparent);border-left:6px solid '+tone+';background:'+background+';border-radius:10px;padding:13px 14px">'+
+    header+(boardAlert?productionSnapshot(model,result,locale,currentPcba):'')+
+    shortTechnicianEvidence(alerts,locale,result,currentPcba)+
+    '<details style="margin-top:8px"><summary>'+esc(t(locale,'Ver evidências ('+alerts.length+')','View evidence ('+alerts.length+')'))+
+    '</summary><div class="ames-sn-alert-proof-body">'+proof+'</div>'+
+    '<small class="ames-sn-alert-final-warning">'+esc(t(locale,
+    'Correlação técnica — não confirma causa raiz.','Technical correlation — does not confirm root cause.'))+
+    '</small></details></article>';
 }
 
 export function buildSmartSnAlerts(model={},result={}){
@@ -216,7 +350,7 @@ export function renderSmartSnAlerts(model={},result={},locale='pt-BR'){
   const alerts=buildSmartSnAlerts(model,result).map(alert=>translateAlert(alert,locale));
   if(!alerts.length)return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="false"><h3>${esc(t(locale,'Alertas inteligentes da consulta','Smart lookup alerts'))}</h3><p>${esc(t(locale,'Nenhum alerta técnico comprovado com as evidências atuais. Isso não prova ausência de histórico.','No technical alert is proven from current evidence. This does not prove absence of history.'))}</p></section>`;
   const high=alerts.filter(alert=>alert.severity==='high').length;
-  return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${high?` · ${high} ${t(locale,'alta','high')}`:''}`)}</span></div>${alerts.map(alert=>card(alert,locale,result,model.current_pcba)).join('')}</section>`;
+  return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${high?` · ${high} ${t(locale,'alta','high')}`:''}`)}</span></div>${alerts.map(alert=>card(alert,locale,result,model.current_pcba,model)).join('')}</section>`;
 }
 
 const expansionState=new WeakMap();
