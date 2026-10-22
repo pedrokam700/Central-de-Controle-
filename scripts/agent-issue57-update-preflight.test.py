@@ -132,6 +132,26 @@ with tempfile.TemporaryDirectory() as tmp:
     with closing(sqlite3.connect(runtime / 'ames_local.sqlite3')) as snapshot:
         assert snapshot.execute('SELECT COUNT(*) FROM jobs').fetchone()[0] == 2
     assert p.verify_operational_backup(runtime)['verified']
+    restored = p.rehearse_operational_restore(runtime)
+    assert restored['restored_into_temporary_fixture']
+    assert restored['sqlite_quick_check']
+    assert restored['runtime_files_verified'] == len(contents)
+    assert restored['private_identity_verified']
+    assert not restored['external_browser_outbox_attested']
+    assert not restored['exclusive_maintenance_lease_held']
+    assert not restored['update_authorized']
+    for boundary in ('after_sqlite', 'after_first_data_file'):
+        try:
+            p.rehearse_operational_restore(runtime, interrupt_after=boundary)
+            raise AssertionError('simulated restoration interruption must fail closed')
+        except ValueError as exc:
+            assert 'simulated_restore_interruption' in str(exc)
+    try:
+        p.rehearse_operational_restore(runtime, interrupt_after='other')
+        raise AssertionError('unknown interruption boundary must be rejected')
+    except ValueError:
+        pass
+    assert p.verify_operational_backup(runtime)['verified']
     manifest_file = runtime / 'runtime-backup-manifest.json'
     assert 'test-only-local-token' not in manifest_file.read_text(encoding='utf-8')
     try:
@@ -149,6 +169,11 @@ with tempfile.TemporaryDirectory() as tmp:
     try:
         p.verify_operational_backup(runtime)
         raise AssertionError('restore check must catch changed backed-up file')
+    except ValueError:
+        pass
+    try:
+        p.rehearse_operational_restore(runtime)
+        raise AssertionError('tampered backup must never enter restore rehearsal')
     except ValueError:
         pass
     assert (live.parent / 'imports/export_3028.xlsx').read_bytes() == contents['imports/export_3028.xlsx']

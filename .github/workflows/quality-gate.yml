@@ -59,6 +59,7 @@ jobs:
       - name: Run updater Python contract
         run: |
           python3 scripts/agent-update.test.py
+          python3 scripts/agent-issue57-update-preflight.test.py
           python3 scripts/agent-issue57-maintenance-ledger.test.py
 
       - name: Agent auto-start registry contract (mocked, no real Windows changes)

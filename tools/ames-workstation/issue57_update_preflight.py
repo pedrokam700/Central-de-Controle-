@@ -20,6 +20,7 @@ import shutil
 import sqlite3
 import stat
 import subprocess
+import tempfile
 import uuid
 import zipfile
 
@@ -364,3 +365,67 @@ def verify_operational_backup(destination):
         if db.execute("PRAGMA quick_check").fetchone() != ("ok",):
             raise ValueError("runtime_backup_sqlite_invalid")
     return {"verified": True, "update_authorized": False}
+
+
+def rehearse_operational_restore(private_backup, *, interrupt_after=None):
+    """Restore a verified agent snapshot ONLY into a disposable temp directory.
+
+    Reconstruct data files, config, local token and a consistent SQLite backup
+    independently, then revalidate all contents. Never accept a caller-chosen
+    restoration destination or modify a CLEAN/backup directory. A successful
+    rehearsal is still NOT an updater lease or proof of external browser data.
+    """
+    if interrupt_after not in (None, "after_sqlite", "after_first_data_file"):
+        raise ValueError("invalid_restore_interruption_point")
+    private_backup = Path(private_backup)
+    verify_operational_backup(private_backup)
+    manifest = json.loads((private_backup / "runtime-backup-manifest.json").read_text(encoding="utf-8"))
+    source_data = private_backup / "ames-agent" / "data"
+
+    def copy_checked(source, target, expected_digest=None):
+        if not _regular_file(source) or target.exists():
+            raise ValueError("restoration_source_or_target_untrusted")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with source.open("rb") as reader, target.open("xb") as writer:
+            if os.name != "nt":
+                os.chmod(target, 0o600)
+            shutil.copyfileobj(reader, writer, length=1024 * 1024)
+            writer.flush()
+            os.fsync(writer.fileno())
+        actual = sha256_file(target)
+        if actual != sha256_file(source) or (expected_digest is not None and actual != expected_digest):
+            raise ValueError("restored_file_digest_mismatch")
+
+    with tempfile.TemporaryDirectory(prefix="issue57-restore-rehearsal-") as fixture:
+        target = Path(fixture) / "private-restored-snapshot"
+        private_backup_directory(target)  # Windows ACL before copying any secrets.
+        restored_data = target / "ames-agent" / "data"
+        restored_data.mkdir(parents=True, exist_ok=False)
+        copy_checked(private_backup / "ames_local.sqlite3", restored_data / "ames_local.sqlite3")
+        if interrupt_after == "after_sqlite":
+            raise ValueError("simulated_restore_interruption_after_sqlite")
+        copy_checked(private_backup / "config.json", target / "ames-agent" / "config.json")
+        copy_checked(private_backup / "local_agent_token", restored_data / "local_agent_token")
+        for index, item in enumerate(manifest["files"]):
+            copy_checked(source_data / item["path"], restored_data / item["path"], item["sha256"])
+            if interrupt_after == "after_first_data_file" and index == 0:
+                raise ValueError("simulated_restore_interruption_after_first_data_file")
+        # The restored DB is a closed copy; no original SQLite/WAL is accessed.
+        with closing(sqlite3.connect((restored_data / "ames_local.sqlite3").as_uri() + "?mode=ro",
+                                     uri=True)) as db:
+            if db.execute("PRAGMA quick_check").fetchone() != ("ok",):
+                raise ValueError("restored_sqlite_quick_check_failed")
+        if _runtime_inventory(restored_data, MAX_RUNTIME_BACKUP_BYTES) != manifest["files"]:
+            raise ValueError("restored_runtime_tree_mismatch")
+        for private_name, source in (("config.json", private_backup / "config.json"),
+                                     ("local_agent_token", private_backup / "local_agent_token")):
+            dst = (target / "ames-agent" / "config.json" if private_name == "config.json"
+                   else restored_data / "local_agent_token")
+            if sha256_file(dst) != sha256_file(source):
+                raise ValueError("restored_private_identity_mismatch")
+        # The input backup is rechecked after the exercise to reject mutation.
+        verify_operational_backup(private_backup)
+        return {"restored_into_temporary_fixture": True,
+                "sqlite_quick_check": True, "runtime_files_verified": len(manifest["files"]),
+                "private_identity_verified": True, "external_browser_outbox_attested": False,
+                "exclusive_maintenance_lease_held": False, "update_authorized": False}
