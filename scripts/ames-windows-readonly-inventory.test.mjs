@@ -43,3 +43,17 @@ test('guardian inventory checks external relaunch sources without claiming an id
   assert.match(classifier,/update_authorized=\$false/);
   assert.doesNotMatch(classifier,/\b(?:Stop-Process|Start-Process|Set-ItemProperty|Get-Content)\b/);
 });
+
+test('independent Windows backup ACL verifier is observational and cannot authorize updates',()=>{
+  const verifier=readFileSync('tools/ames-workstation/VERIFY_PRIVATE_BACKUP_ACL.ps1','utf8');
+  const fixture=readFileSync('scripts/issue57-private-backup-acl.windows.test.ps1','utf8');
+  for(const needed of [/Get-Acl -LiteralPath/,/AreAccessRulesProtected/,/IdentityReference\.Translate/,/backup_reparse_point/,/update_authorized=\$false/,/physical_acl_attested=\$false/]){
+    assert.match(verifier,needed);
+  }
+  for(const mutating of [/\bStop-Process\b/,/\bRemove-Item\b/,/\bStart-Process\b/,/\bCopy-Item\b/,/\bMove-Item\b/,/\bSet-Acl\b/,/\bicacls\b/]){
+    assert.doesNotMatch(verifier,mutating);
+  }
+  assert.match(fixture,/GITHUB_ACTIONS/);
+  assert.match(fixture,/RUNNER_TEMP/);
+  assert.match(fixture,/broad_allow_ace_not_rejected/);
+});

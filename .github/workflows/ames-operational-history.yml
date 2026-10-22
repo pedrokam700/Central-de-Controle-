@@ -116,8 +116,10 @@ jobs:
                              'tools/ames-workstation/INVENTARIAR_INSTALACOES_READONLY.ps1',
                              'tools/ames-workstation/INVENTARIAR_GUARDIANS_READONLY.ps1',
                              'tools/ames-workstation/ISSUE57_GUARDIAN_SIGNALS.ps1',
+                             'tools/ames-workstation/VERIFY_PRIVATE_BACKUP_ACL.ps1',
                              'scripts/issue57-guardian-signals.windows.test.ps1',
-                             'scripts/issue57-guardian-global-mutex.windows.test.ps1')) {
+                             'scripts/issue57-guardian-global-mutex.windows.test.ps1',
+                             'scripts/issue57-private-backup-acl.windows.test.ps1')) {
             $tokens=$null; $parseErrors=$null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$parseErrors)|Out-Null
             if($parseErrors.Count -gt 0){$parseErrors|ForEach-Object{Write-Error $_};exit 1}
@@ -125,6 +127,8 @@ jobs:
           & ./scripts/issue57-guardian-signals.windows.test.ps1
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           & ./scripts/issue57-guardian-global-mutex.windows.test.ps1
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          & ./scripts/issue57-private-backup-acl.windows.test.ps1
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
   reading-firestore:
     runs-on: ubuntu-latest
