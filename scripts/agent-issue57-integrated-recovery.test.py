@@ -104,8 +104,13 @@ with tempfile.TemporaryDirectory(prefix=ledger.FIXTURE_PARENT_PREFIX) as tmp:
             assert (case / 'previous' / 'ames-agent' / 'agent_hardened_entry.py').read_bytes() == b'# old agent synthetic bytes\n'
         assert preflight.verify_operational_backup(snapshot)['verified']
         assert preflight.rehearse_operational_restore(snapshot)['sqlite_quick_check']
-        with sqlite3.connect(data / 'ames_local.sqlite3') as db:
+        db = sqlite3.connect(data / 'ames_local.sqlite3')
+        try:
             assert db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0] == 1
+        finally:
+            # sqlite3.Connection's context manager commits but does NOT close.
+            # Windows will not remove a disposable fixture with a live handle.
+            db.close()
         assert (data / 'local_agent_token').read_text() == 'secret-in-fixture-never-printed'
         assert (data / 'exports' / 'report.txt').read_text() == 'preserved fixture report'
         record = ledger.inspect_fixture(case)
