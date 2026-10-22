@@ -59,19 +59,28 @@ def confirm(headers, address, port, form_body, gate=GATE):
     origin = str(headers.get("Origin") or "").strip().rstrip("/").lower()
     site = str(headers.get("Sec-Fetch-Site") or "").lower()
     mode = str(headers.get("Sec-Fetch-Mode") or "").lower()
-    # On a real local form submission some Chromium/Edge configurations do not
-    # send Origin at all. Require the browser's unforgeable same-origin
-    # Fetch Metadata in that case. Never accept "null", cross-site, or
-    # requests lacking BOTH Origin and Fetch Metadata.
+    dest = str(headers.get("Sec-Fetch-Dest") or "").lower()
+    user = str(headers.get("Sec-Fetch-User") or "").strip()
+    # Edge 127 was observed sending Origin: null from this *local* form even
+    # with Sec-Fetch-Site: same-origin. A generic opaque Origin is NOT trusted:
+    # the narrow exception additionally requires an explicit user-initiated,
+    # top-level same-origin navigation. Host, loopback and one-time nonce are
+    # independently enforced. This is not an exception for cross-site forms.
     local_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
-    if origin:
+    if origin == "null":
+        if not (site == "same-origin" and mode == "navigate"
+                and dest == "document" and user == "?1"):
+            return False
+    elif origin:
         if origin not in local_origins:
             return False
         if site not in {"same-origin", "none", ""}:
             return False
     elif site != "same-origin":
+        # If Origin is omitted entirely, browser Fetch Metadata must confirm
+        # same-origin. Missing BOTH is never accepted.
         return False
-    # The authorization page is a top-level local navigation, not an XHR API.
+    # All supported flows require a regular navigation, never an XHR API.
     if mode not in {"navigate", ""}:
         return False
     try:
