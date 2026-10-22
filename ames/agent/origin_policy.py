@@ -7,6 +7,7 @@ validators existed. It never mutates config and never expands permissions.
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Set
+from urllib.parse import urlsplit
 
 import candidate_config
 import workstation_pairing
@@ -24,7 +25,12 @@ def evaluate(config: Dict[str, Any] | None, port: int) -> Dict[str, Any]:
 
     # One exact GitHub Pages owner origin, never arbitrary github.io or wildcard.
     # Private APIs still require the local workstation capability token.
-    official = workstation_pairing.OFFICIAL_CENTRAL.split("/Central-de-Controle/")[0]
+    site = urlsplit(workstation_pairing.OFFICIAL_CENTRAL)
+    # Origin has no path. Never trim a hard-coded repository path:
+    # the official project name itself ends with a hyphen.
+    if site.scheme != "https" or site.hostname != "pedrokam700.github.io" or site.username or site.password or site.port is not None:
+        raise ValueError("Official Pages origin must remain the pinned HTTPS host")
+    official = f"{site.scheme}://{site.netloc}"
     allowed: Set[str] = set(local) | {official}
     rejected = 0
     remote = 0
