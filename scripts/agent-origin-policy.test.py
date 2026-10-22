@@ -45,6 +45,25 @@ def test_legacy_invalid_origins_are_rejected_at_runtime_without_mutating_config(
     assert state["summary"]["ok"] is False
 
 
+def test_official_host_does_not_depend_on_project_path_spelling():
+    original = origin_policy.workstation_pairing.OFFICIAL_CENTRAL
+    try:
+        origin_policy.workstation_pairing.OFFICIAL_CENTRAL = "https://pedrokam700.github.io/Central-de-Controle-/"
+        state = origin_policy.evaluate({}, 8765)
+        assert state["summary"]["official_github_pages_origin"] == "https://pedrokam700.github.io"
+        assert "https://pedrokam700.github.io" in state["allowed"]
+        assert not any("/Central-de-Controle" in candidate for candidate in state["allowed"])
+        origin_policy.workstation_pairing.OFFICIAL_CENTRAL = "https://malicious.example/Central-de-Controle-/"
+        try:
+            origin_policy.evaluate({}, 8765)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("unexpected unpinned origin accepted")
+    finally:
+        origin_policy.workstation_pairing.OFFICIAL_CENTRAL = original
+
+
 def test_duplicate_and_non_list_legacy_values_fail_closed():
     duplicated = origin_policy.evaluate(
         {"allowed_origins": ["https://central-cora-v2.vercel.app", "https://central-cora-v2.vercel.app/"]},
@@ -63,6 +82,7 @@ def main():
         test_loopback_is_always_allowed_and_remote_https_is_explicit,
         test_legacy_invalid_origins_are_rejected_at_runtime_without_mutating_config,
         test_duplicate_and_non_list_legacy_values_fail_closed,
+        test_official_host_does_not_depend_on_project_path_spelling,
     ]
     for test in tests:
         test()
