@@ -150,9 +150,10 @@ jobs:
           except (AssertionError,ValueError,KeyError,TypeError): sys.exit(1)
           PY
               then
-                # A valid release-build.json alone is insufficient: a user may
-                # still receive a GitHub Pages 404 at the actual entry route.
-                root="https://pedrokam700.github.io/Central-de-Controle/"
+                # A valid release-build.json alone is insufficient. This MUST
+                # use the exact repository base path with its trailing hyphen:
+                # Central-de-Controle-/ (not Central-de-Controle/).
+                root="https://pedrokam700.github.io/Central-de-Controle-/"
                 root_status="$(curl --location --silent --show-error --max-time 10 --header 'Cache-Control: no-cache' \
                   --output "$RUNNER_TEMP/pages-home.html" --write-out '%{http_code}' \
                   "${root}?check=$GITHUB_RUN_ID-$attempt" || echo 000)"
