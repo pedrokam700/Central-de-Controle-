@@ -275,3 +275,18 @@ A pasta extraída `Downloads/AMES_Central_CLEAN_b283b176` também existe. **Não
 **Ação exata para continuar**: NÃO repetir o inventário já enviado. Planejar/implementar o **atualizador de agente seguro** da Issue #57 com testes Windows/SQLite e procedimento de campo; não pedir ao usuário para executar simples `Copy-Item`, `Stop-Process` ou iniciar o CLEAN novo. Primeiro auditar a arquitetura e o updater legado (`ames/agent/update_candidate.py` é legado, NÃO atende gates B/C/G1–G6), obter prova de inatividade/backup, identificar todas as instalações concorrentes, projetar transação/rollback e testar fora da produção. Quando houver procedimento validado, guiar a instalação no PC autorizado, **somente com operador presente**. Guardar checkpoints no GitHub. O usuário pretende migrar imediatamente de conversa; ao retomar, leia todo este documento e priorize este §14 sobre trechos históricos §1–9 (que ainda citam 0.5.38 por serem registro histórico).
 
 **UX e processo de comunicação**: respostas em português técnico, objetivas e apoiadas em evidências. Fazer as operações possíveis no GitHub, sem obrigar o usuário a repetir informação comprovada. Distinguir implementação, CI, release, Pages, teste físico; manter 9 views, alertas 2114/3012/3022, histórico de FPY/snapshots e dados offline. Não oferecer novo download CLEAN como solução de upgrade físico até existir atualizador seguro.
+
+## 15. Retomada técnica — Issue #57, incremental seguro após o §14 (22/10/2026)
+
+**Sem alteração de estado físico:** o último inventário do §14 permanece a única prova da fábrica. O agente antigo 0.5.36 continua sendo o último processo confirmado na porta 8765; 0.5.39 segue baixada/extraída, **NÃO instalada**. Nenhum comando adicional de produção foi solicitado ou executado nesta etapa. Nem SQLite, token, `source_id`, MES nem configurações reais foram acessados.
+
+**Reconciliação sem perda da PR #65**: o conflito estava em `.github/workflows/ames-operational-history.yml`, lista de branches. A resolução preserva a branch da PR #64 e a branch de teste de Edge da PR #65, mantendo `ames/agent/workstation_pairing.py` e os testes de `Origin:null` exatamente como na `main` 0.5.39. A PR permanece draft, nunca mergear sem checks do novo HEAD.
+
+**Código do próximo bloco, não pronto para rollout:**
+
+1. Inventário Windows read-only de instalações, processos canônicos e porta 8765 com `updater_eligible=false` obrigatório; scanner isolado de token/source_id.
+2. Observação de jobs em memória, SQLite e scheduler exposta somente para cliente autorizado; `update_authorized=false` em todos os casos. Ainda não existe prova atômica de idle nem sync/browser/guardian interlock.
+3. Pré-verificação offline para **release pinada 0.5.39**: digest do ZIP e hashes de cada arquivo; estágio separado com restrições de paths, sem executar binários. Ensaiado com ZIP oficial: SHA-256 `4407332be1d7e6ed78ee11ad2cf7dca893d2ba9c72e55bf4b93d453892cc482a`, 288 entradas válidas.
+4. Backup SQLite via API SQLite em modo read-only com WAL, `quick_check` e restore ensaiado em memória; cópia de `config.json` e token para backup privado em testes isolados. **Backup total da árvore de dados não comprovado**; função retorna `data_tree_complete=false`. Não deve ser usada como procedimento físico até completar lock/ACL/backup total.
+
+**Gates pendentes**: Windows CI do novo código, idle lease com bloqueio real de novos jobs/guardian/sync, snapshot dos arquivos auxiliares/filas, journal de transação, troca allowlisted, health pós-restart, rollback power-loss, piloto no primeiro coletor, 2 coletores + viewer, observabilidade G6. Não considerar CI verde como fábrica GREEN e não disponibilizar botão executável.
