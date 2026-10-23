@@ -82,6 +82,8 @@ try {
       throw 'authenticated_drain_fixture_not_completed'
     }
     Write-Output 'Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden'
+    if($drain -notcontains 'Issue57 observed maintenance: Win32 identity + mutexes + drain + bound backup; production forbidden'){throw 'observed_maintenance_fixture_not_completed'}
+    Write-Output 'Issue57 observed maintenance: Win32 identity + mutexes + drain + bound backup; production forbidden'
   } finally {
     $env:TEMP=$previousFixtureTemp
     $env:TMP=$previousFixtureTmp

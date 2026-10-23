@@ -8,9 +8,70 @@ The injected process witness MUST come from an independent OS observation;
 neither /ready nor the agent's own signed reply can attest its own PID/port.
 """
 
+import hashlib
+import json
+import os
+from pathlib import Path
 import re
+import subprocess
 
 from issue57_maintenance_ledger import begin_fixture, inspect_fixture, transition_fixture
+
+
+class WindowsProcessWitness:
+    """Bind the existing OS witness to a selected installation and pinned code.
+
+    No PID/port information from /ready or from a signed IPC reply is trusted
+    as OS evidence. This adapter never starts/stops an operational process.
+    """
+
+    def __init__(self, installation_sha256, expected_script, expected_script_sha256,
+                 port=8765, *, fixture_only=False, run=subprocess.run):
+        if (not re.fullmatch("[0-9a-f]{64}", installation_sha256)
+                or not re.fullmatch("[0-9a-f]{64}", expected_script_sha256)
+                or type(port) is not int or not 1 <= port <= 65535):
+            raise ValueError("windows_witness_configuration_invalid")
+        if port != 8765 and not fixture_only:
+            raise ValueError("windows_witness_port_invalid")
+        self.installation = installation_sha256
+        self.script = str(Path(expected_script).resolve(strict=True))
+        self.script_digest = expected_script_sha256
+        self.port, self.fixture_only, self._run = port, fixture_only, run
+
+    def __call__(self, pid):
+        try:
+            if os.name != "nt" or type(pid) is not int or pid <= 0:
+                raise ValueError()
+            arguments = ["powershell.exe", "-NoProfile", "-NonInteractive", "-File",
+                         str(Path(__file__).with_name("ISSUE57_PROCESS_WITNESS_READONLY.ps1")),
+                         "-TargetPid", str(pid), "-ExpectedScript", self.script,
+                         "-Port", str(self.port)]
+            if self.fixture_only:
+                arguments.append("-FixtureOnly")
+            completed = self._run(arguments, capture_output=True, timeout=20, check=False)
+            if completed.returncode != 0 or len(completed.stdout) > 4096:
+                raise ValueError()
+            result = json.loads(completed.stdout)
+            path_digest = hashlib.sha256(self.script.lower().encode("utf-8")).hexdigest()
+            if (result.get("schema") != "ames-windows-process-witness-v1"
+                    or result.get("read_only") is not True
+                    or result.get("process_identity_observed") is not True
+                    or type(result.get("pid")) is not int or result["pid"] != pid
+                    or type(result.get("endpoint_owner_pid")) is not int
+                    or result["endpoint_owner_pid"] != pid
+                    or result.get("script_sha256") != self.script_digest
+                    or result.get("script_path_sha256") != path_digest
+                    or result.get("update_authorized") is not False
+                    or result.get("guardian_attested") is not False
+                    or result.get("all_sessions_attested") is not False
+                    or not isinstance(result.get("start_marker"), str)
+                    or not re.fullmatch("[0-9a-f]{64}", result["start_marker"])):
+                raise ValueError()
+            return {"pid": pid, "endpoint_owner_pid": pid,
+                    "installation_sha256": self.installation,
+                    "start_marker": result["start_marker"]}
+        except Exception:
+            raise ValueError("independent_windows_witness_unverified") from None
 
 
 class FixtureDrainCoordinator:
@@ -68,7 +129,7 @@ class FixtureDrainCoordinator:
             self._assert_witness_stable()
             persisted = inspect_fixture(self.root)
             if persisted != self.claim or self.claim["phase"] not in {
-                    "drain_requested", "awaiting_external_attestations"}:
+                    "drain_requested", "awaiting_external_attestations", "backup_verified"}:
                 raise ValueError("coordinator_journal_mismatch")
             result = self.client.request("poll")
             self._assert_witness_stable()
@@ -77,6 +138,64 @@ class FixtureDrainCoordinator:
             return {"state": result["state"], "phase": self.claim["phase"],
                     "guardian_attested": False, "browser_profiles_attested": False,
                     "update_authorized": False}
+        except Exception:
+            self._recovery_required()
+            raise
+
+    def prepare_backup(self):
+        """Create/restore-check a backup bound to THIS fixture transaction.
+
+        Only reads the explicitly marked fixture's persistent-clean subtree.
+        No caller-selected production source, backup reuse or update approval.
+        """
+        from issue57_update_preflight import (backup_operational_tree,
+                                              rehearse_operational_restore, sha256_file)
+        try:
+            if self.claim["phase"] != "awaiting_external_attestations":
+                raise ValueError("coordinator_backup_out_of_order")
+            if self.observe()["state"] != "agent_quiescent_only":
+                raise ValueError("coordinator_agent_not_quiescent")
+            source = Path(self.root) / "persistent-clean"
+            backup = Path(self.root) / "private-backup"
+            # The ledger has already rejected any operational/CLEAN root.
+            # Refuse links before resolving so it cannot escape that fixture.
+            if (source.is_symlink() or backup.is_symlink()
+                    or (hasattr(source, "is_junction") and source.is_junction())
+                    or (hasattr(backup, "is_junction") and backup.is_junction())
+                    or source.resolve().parent != Path(self.root).resolve()):
+                raise ValueError("coordinator_backup_source_untrusted")
+            backup_operational_tree(source, backup)
+            rehearse_operational_restore(backup)
+            if self.observe()["state"] != "agent_quiescent_only":
+                raise ValueError("coordinator_agent_not_quiescent")
+            receipt = {"transaction_id": self.claim["transaction_id"],
+                       "installation_identity_sha256": self.client.target["installation_sha256"],
+                       "manifest_sha256": sha256_file(backup / "runtime-backup-manifest.json"),
+                       "restoration_verified": True}
+            self.claim = transition_fixture(self.root, self.claim["transaction_id"],
+                                            self.claim["revision"], "backup_verified",
+                                            backup_receipt=receipt)
+            return {"backup_verified": True, "bound_to_transaction": True,
+                    "browser_profiles_attested": False, "guardian_attested": False,
+                    "update_authorized": False}
+        except Exception:
+            self._recovery_required()
+            raise
+
+    def verify_bound_backup(self):
+        """Recheck the receipt AND bytes before any future staging/swap step."""
+        from issue57_update_preflight import verify_operational_backup, sha256_file
+        try:
+            if self.claim["phase"] != "backup_verified":
+                raise ValueError("coordinator_backup_not_bound")
+            if self.observe()["state"] != "agent_quiescent_only":
+                raise ValueError("coordinator_agent_not_quiescent")
+            backup = Path(self.root) / "private-backup"
+            verify_operational_backup(backup)
+            if sha256_file(backup / "runtime-backup-manifest.json") != self.claim["backup_receipt"]["manifest_sha256"]:
+                raise ValueError("coordinator_backup_receipt_mismatch")
+            self._assert_witness_stable()
+            return {"verified": True, "update_authorized": False}
         except Exception:
             self._recovery_required()
             raise

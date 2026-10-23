@@ -84,7 +84,7 @@ test('Windows CI must reach guardian, dual lock, crash, direct launcher and ACL 
   const workflow=readFileSync('.github/workflows/ames-operational-history.yml','utf8');
   const step=workflow.split('      - name: Validate background guardian and temporary safe pairing launcher syntax\n')[1]?.split('\n  reading-firestore:')[0];
   assert.ok(step,'Windows fixture step required');
-  for(const marker of [/guardian_fixture_not_completed/,/mutex_fixture_not_completed/,/dual_lock_ledger_fixture_not_completed/,/authenticated_drain_fixture_not_completed/,/coordinator_crash_fixture_not_completed/,/direct_launcher_claim_fixture_not_completed/,/private_acl_fixture_not_completed/,/Windows fixtures: guardian \+ mutex \+ dual-lock ledger \+ coordinator crash \+ direct launcher \+ backup ACL end-to-end GREEN/]){
+  for(const marker of [/guardian_fixture_not_completed/,/mutex_fixture_not_completed/,/dual_lock_ledger_fixture_not_completed/,/authenticated_drain_fixture_not_completed/,/observed_maintenance_fixture_not_completed/,/coordinator_crash_fixture_not_completed/,/direct_launcher_claim_fixture_not_completed/,/private_acl_fixture_not_completed/,/Windows fixtures: guardian \+ mutex \+ dual-lock ledger \+ coordinator crash \+ direct launcher \+ backup ACL end-to-end GREEN/]){
     assert.match(step,marker);
   }
   const fixture=readFileSync('scripts/issue57-dual-lock-ledger.windows.test.ps1','utf8');

@@ -29,7 +29,8 @@ TRANSITION_FILE = "transition.lock"
 SAFE_PHASES = {
     "claimed": {"drain_requested", "recovery_required"},
     "drain_requested": {"awaiting_external_attestations", "recovery_required"},
-    "awaiting_external_attestations": {"recovery_required"},
+    "awaiting_external_attestations": {"backup_verified", "recovery_required"},
+    "backup_verified": {"recovery_required"},
     "recovery_required": {"recovered_fixture_only"},
     "recovered_fixture_only": set(),
 }
@@ -131,6 +132,15 @@ def _valid_transaction_id(value):
     return type(value) is str and re.fullmatch(r"[0-9a-f]{32}", value) is not None
 
 
+def _valid_backup_receipt(receipt, transaction_id, identity):
+    return (type(receipt) is dict and set(receipt) == {
+        "transaction_id", "installation_identity_sha256", "manifest_sha256", "restoration_verified"}
+        and receipt["transaction_id"] == transaction_id
+        and receipt["installation_identity_sha256"] == identity
+        and _valid_identity(receipt["manifest_sha256"])
+        and receipt["restoration_verified"] is True)
+
+
 def inspect_fixture(root):
     """Read-only state. Never clears a stale lock or starts a guardian."""
     ledger = _ledger(root)
@@ -162,8 +172,15 @@ def inspect_fixture(root):
                 a.get("update_authorized") is not False or
                 b.get("update_authorized") is not False):
             return result
+        receipt = b.get("backup_receipt")
+        if ((b["phase"] == "backup_verified" and receipt is None)
+                or (receipt is not None and not _valid_backup_receipt(
+                    receipt, b["transaction_id"], b["installation_identity_sha256"]))):
+            return result
         result.update(state="blocked_persistent_transaction", phase=b["phase"],
                       revision=b["revision"], transaction_id=b["transaction_id"])
+        if receipt is not None:
+            result["backup_receipt"] = receipt
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
         pass
     return result
@@ -191,7 +208,7 @@ def begin_fixture(root, installation_identity_sha256, interrupt_after=None):
 
 
 def transition_fixture(root, transaction_id, expected_revision, next_phase,
-                       interrupt_after=None):
+                       interrupt_after=None, *, backup_receipt=None):
     """CAS-like persistent transition; a crash leaves a blocking marker.
 
     The caller cannot pass a production path, skip a phase or erase history.
@@ -219,6 +236,13 @@ def transition_fixture(root, transaction_id, expected_revision, next_phase,
                 current.get("revision") != expected_revision or
                 next_phase not in SAFE_PHASES.get(current.get("phase"), set())):
             raise ValueError("transaction_identity_or_phase_mismatch")
+        if next_phase == "backup_verified":
+            if not _valid_backup_receipt(backup_receipt, transaction_id,
+                                         current["installation_identity_sha256"]):
+                raise ValueError("transaction_backup_receipt_invalid")
+            current = {**current, "backup_receipt": dict(backup_receipt)}
+        elif backup_receipt is not None:
+            raise ValueError("transaction_backup_receipt_out_of_order")
         temp = ledger / (".phase." + uuid.uuid4().hex + ".incomplete")
         _write_exclusive(temp, {**current, "phase": next_phase,
                                 "revision": expected_revision + 1})

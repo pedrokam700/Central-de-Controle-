@@ -2,24 +2,28 @@
 
 from contextlib import closing, nullcontext
 import json
+import hashlib
 import multiprocessing
 import os
 import re
+import subprocess
+from queue import Queue
 from pathlib import Path
 import secrets
 import sqlite3
 import sys
 import tempfile
-from threading import Lock
+from threading import Lock, Thread
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "ames/agent"), str(ROOT / "tools/ames-workstation")]
 from maintenance_admission import MaintenanceAdmission, MaintenanceBlocked
 from maintenance_protocol import (DrainSession, DrainClient, ProtocolRejected,
                                   SCHEMA, MAX_MESSAGE, seal, unseal, serve_connection)
-from issue57_drain_coordinator import FixtureDrainCoordinator
+from issue57_drain_coordinator import FixtureDrainCoordinator, WindowsProcessWitness
 import issue57_maintenance_ledger as ledger
 from update_readiness import observe
 
@@ -223,6 +227,98 @@ class ProtocolTests(unittest.TestCase):
             self.assertNotIn("maintenance_protocol", (ROOT / "ames/agent" / name).read_text(encoding="utf-8"))
 
 
+class BoundBackupTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix=ledger.FIXTURE_PARENT_PREFIX)
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / "fixture"
+        self.root.mkdir()
+        (self.root / ledger.FIXTURE_MARKER).write_text(ledger.FIXTURE_MAGIC, encoding="utf-8")
+        self.data = self.root / "persistent-clean/ames-agent/data"
+        self.data.mkdir(parents=True)
+        self.db_path = self.data / "ames_local.sqlite3"
+        with closing(sqlite3.connect(self.db_path)) as db:
+            db.execute("CREATE TABLE jobs(status TEXT)")
+            db.execute("INSERT INTO jobs VALUES ('completed')")
+            db.commit()
+        (self.data.parent / "config.json").write_text('{"source_id":"fixture-stable"}')
+        (self.data / "local_agent_token").write_bytes(b"private-fixture-token")
+        self.admission = MaintenanceAdmission()
+        scheduler = SimpleNamespace(snapshot=lambda: {"busy": False, "queued": 0, "normal_jobs": 0})
+        def connect(transaction):
+            key = secrets.token_bytes(32)
+            session = DrainSession(self.admission, lambda: observe(scheduler, {}, Lock(),
+                                   SimpleNamespace(path=self.db_path), self.admission), key, IDENTITY, transaction)
+            return DrainClient(session.handle, key, session.target, transaction)
+        self.coordinator = FixtureDrainCoordinator(self.root, IDENTITY, connect, lambda pid: {
+            "pid": pid, "endpoint_owner_pid": pid, "installation_sha256": IDENTITY, "start_marker": "c" * 64})
+        self.coordinator.observe()
+
+    def test_backup_and_restore_are_bound_to_same_transaction_and_installation(self):
+        result = self.coordinator.prepare_backup()
+        self.assertTrue(result["bound_to_transaction"])
+        self.assertFalse(result["update_authorized"])
+        persisted = ledger.inspect_fixture(self.root)
+        self.assertEqual(persisted["phase"], "backup_verified")
+        self.assertEqual(persisted["backup_receipt"]["transaction_id"], self.coordinator.client.transaction_id)
+        self.assertEqual(persisted["backup_receipt"]["installation_identity_sha256"], IDENTITY)
+        self.assertTrue(self.coordinator.verify_bound_backup()["verified"])
+        self.assertTrue(self.admission.snapshot()["draining"])
+        self.assertEqual((self.data / "local_agent_token").read_bytes(), b"private-fixture-token")
+
+    def test_structurally_valid_replaced_backup_cannot_rewrite_journal_receipt(self):
+        from issue57_update_preflight import verify_operational_backup, sha256_file
+        self.coordinator.prepare_backup()
+        backup = self.root / "private-backup"
+        (backup / "config.json").write_text('{"source_id":"substituted-fixture"}')
+        manifest = backup / "runtime-backup-manifest.json"
+        report = json.loads(manifest.read_text(encoding="utf-8"))
+        report["core_sha256"]["config.json"] = sha256_file(backup / "config.json")
+        manifest.write_text(json.dumps(report), encoding="utf-8")
+        # A self-consistent edited bundle still fails the independent journal binding.
+        self.assertTrue(verify_operational_backup(backup)["verified"])
+        with self.assertRaisesRegex(ValueError, "coordinator_backup_receipt_mismatch"):
+            self.coordinator.verify_bound_backup()
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertTrue(self.admission.snapshot()["draining"])
+
+    def test_failed_restore_keeps_claim_and_drain_without_backup_approval(self):
+        with patch("issue57_update_preflight.rehearse_operational_restore", side_effect=ValueError("fixture crash")):
+            with self.assertRaises(ValueError):
+                self.coordinator.prepare_backup()
+        persisted = ledger.inspect_fixture(self.root)
+        self.assertEqual(persisted["phase"], "recovery_required")
+        self.assertNotIn("backup_receipt", persisted)
+        self.assertTrue(self.admission.snapshot()["draining"])
+
+    def test_queued_job_blocks_backup_before_any_copy(self):
+        with closing(sqlite3.connect(self.db_path)) as db:
+            db.execute("UPDATE jobs SET status='queued'")
+            db.commit()
+        with self.assertRaisesRegex(ValueError, "coordinator_agent_not_quiescent"):
+            self.coordinator.prepare_backup()
+        self.assertFalse((self.root / "private-backup").exists())
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+
+    def test_source_link_and_existing_backup_are_never_adopted(self):
+        # Existing evidence may belong to another attempt; do not overwrite it.
+        backup = self.root / "private-backup"
+        backup.mkdir()
+        (backup / "evidence.txt").write_bytes(b"retained evidence")
+        with self.assertRaises(FileExistsError):
+            self.coordinator.prepare_backup()
+        self.assertEqual((backup / "evidence.txt").read_bytes(), b"retained evidence")
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+
+    def test_receipt_from_another_transaction_is_rejected_by_ledger(self):
+        self.coordinator.prepare_backup()
+        journal = self.root / ".ames-update/transaction.json"
+        document = json.loads(journal.read_text(encoding="utf-8"))
+        document["backup_receipt"]["transaction_id"] = "e" * 32
+        journal.write_text(json.dumps(document), encoding="utf-8")
+        self.assertEqual(ledger.inspect_fixture(self.root)["state"], "blocked_partial_or_corrupt_transaction")
+
+
 class CrossProcessTests(unittest.TestCase):
     def test_self_reported_identity_without_independent_os_witness_never_drains(self):
         # Even an authentic signed reply is insufficient if an independent
@@ -360,11 +456,90 @@ class CrossProcessTests(unittest.TestCase):
         self.assertIn(Path(os.environ["RUNNER_TEMP"]).resolve(), root.resolve().parents)
         marker = root.parent / ".issue57_dual_lock_fixture_ONLY"
         self.assertEqual(marker.read_text(encoding="utf-8"), "ISSUE57_DISPOSABLE_NO_PRODUCTION")
-        self.run_ipc_case(True, root)
-        # Coordinator disconnect left a real claim/journal. PowerShell will
-        # now release the two mutexes and check both relaunch probes veto it.
-        self.assertEqual(ledger.inspect_fixture(root)["phase"], "recovery_required")
-        print("Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden")
+        root.mkdir()
+        (root / ledger.FIXTURE_MARKER).write_text(ledger.FIXTURE_MAGIC, encoding="utf-8")
+        data = root / "persistent-clean/ames-agent/data"
+        data.mkdir(parents=True)
+        writer = sqlite3.connect(data / "ames_local.sqlite3")
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute("CREATE TABLE jobs(status TEXT)")
+        writer.execute("INSERT INTO jobs VALUES ('completed')")
+        writer.commit()
+        (data.parent / "config.json").write_text('{"source_id":"existing-synthetic-origin"}')
+        (data / "local_agent_token").write_bytes(b"synthetic-token-preserved")
+        (data / "exports").mkdir()
+        (data / "exports/report.txt").write_bytes(b"preserved offline report")
+        identity = hashlib.sha256(str(root.resolve()).lower().encode("utf-8")).hexdigest()
+        peer_script = ROOT / "scripts/issue57_process_witness_fixture.py"
+        child = adapter = None
+        checks = 0
+        def read_line():
+            completed = Queue(maxsize=1)
+            def read():
+                try:
+                    completed.put(child.stdout.readline(MAX_MESSAGE + 1))
+                except Exception:
+                    completed.put(None)
+            Thread(target=read, daemon=True).start()
+            wire = completed.get(timeout=25)
+            if not wire or len(wire) > MAX_MESSAGE or not wire.endswith(b"\n"):
+                raise ValueError("fixture_peer_frame_unverified")
+            return wire[:-1]
+        def connect(transaction):
+            nonlocal child, adapter
+            key = secrets.token_bytes(32)
+            child = subprocess.Popen([sys.executable, "-u", str(peer_script), "--maintenance-fixture-peer"],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            child.stdin.write(json.dumps({"key": key.hex(), "transaction_id": transaction,
+                                          "installation_sha256": identity}).encode() + b"\n")
+            child.stdin.flush()
+            hello = json.loads(read_line())
+            self.assertEqual(hello["target"]["pid"], child.pid)
+            self.assertNotEqual(hello["port"], 8765)
+            adapter = WindowsProcessWitness(identity, peer_script, hashlib.sha256(peer_script.read_bytes()).hexdigest(),
+                                            hello["port"], fixture_only=True)
+            def exchange(wire):
+                child.stdin.write(wire + b"\n")
+                child.stdin.flush()
+                return read_line()
+            return DrainClient(exchange, key, hello["target"], transaction)
+        def observed_process(pid):
+            nonlocal checks
+            self.assertTrue(assert_dual_fixture_mutexes_held())
+            checks += 1
+            return adapter(pid)
+        try:
+            coordinator = FixtureDrainCoordinator(root, identity, connect, observed_process)
+            self.assertEqual(coordinator.observe()["state"], "agent_quiescent_only")
+            self.assertTrue(coordinator.prepare_backup()["bound_to_transaction"])
+            self.assertTrue(coordinator.verify_bound_backup()["verified"])
+            self.assertEqual(ledger.inspect_fixture(root)["phase"], "backup_verified")
+            self.assertGreaterEqual(checks, 8)
+            child.stdin.close()
+            self.assertEqual(json.loads(read_line()), {"fenced": True, "new_job_blocked": True})
+            child.wait(timeout=10)
+            self.assertEqual(child.returncode, 0)
+            # Once the OS no longer witnesses the same process/listener,
+            # coordinator recovery is mandatory; the backup/claim survive.
+            with self.assertRaises(ValueError):
+                coordinator.observe()
+            persisted = ledger.inspect_fixture(root)
+            self.assertEqual(persisted["phase"], "recovery_required")
+            self.assertEqual(persisted["backup_receipt"]["transaction_id"], coordinator.client.transaction_id)
+            self.assertFalse(persisted["update_authorized"])
+            self.assertEqual((data / "local_agent_token").read_bytes(), b"synthetic-token-preserved")
+            self.assertEqual((data / "exports/report.txt").read_bytes(), b"preserved offline report")
+            print("Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden")
+            print("Issue57 observed maintenance: Win32 identity + mutexes + drain + bound backup; production forbidden")
+        finally:
+            writer.close()
+            if child is not None:
+                if child.stdin and not child.stdin.closed:
+                    child.stdin.close()
+                if child.poll() is None:
+                    child.terminate()  # Only this exact disposable child.
+                child.wait(timeout=10)
+                child.stdout.close()
 
     def test_external_coordinator_with_independent_process_and_explicit_cancel(self):
         self.run_ipc_case(False)

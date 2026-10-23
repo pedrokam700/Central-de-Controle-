@@ -145,6 +145,8 @@ jobs:
           if(-not ($dual -contains 'Issue57 dual-lock ledger: guardian + direct launcher fenced, persistent claim blocks after release; production forbidden')){throw 'dual_lock_ledger_fixture_not_completed'}
           if(-not ($dual -contains 'Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden')){throw 'authenticated_drain_fixture_not_completed'}
           Write-Output 'Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden'
+          if(-not ($dual -contains 'Issue57 observed maintenance: Win32 identity + mutexes + drain + bound backup; production forbidden')){throw 'observed_maintenance_fixture_not_completed'}
+          Write-Output 'Issue57 observed maintenance: Win32 identity + mutexes + drain + bound backup; production forbidden'
           $crash=@(& ./scripts/issue57-coordinator-abandonment.windows.test.ps1)
           if(-not ($crash -contains 'Issue57 coordinator crash: both Global mutexes abandoned; incomplete claim persists and blocks recovery; production forbidden')){throw 'coordinator_crash_fixture_not_completed'}
           $direct=@(& ./scripts/issue57-direct-launcher-claim.windows.test.ps1)
