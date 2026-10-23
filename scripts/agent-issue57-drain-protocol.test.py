@@ -25,7 +25,7 @@ sys.path[:0] = [str(ROOT / "ames/agent"), str(ROOT / "tools/ames-workstation")]
 from maintenance_admission import MaintenanceAdmission, MaintenanceBlocked
 from maintenance_protocol import (DrainSession, DrainClient, ProtocolRejected,
                                   SCHEMA, MAX_MESSAGE, seal, unseal, serve_connection)
-from issue57_drain_coordinator import FixtureDrainCoordinator, WindowsProcessWitness
+from issue57_drain_coordinator import FixtureDrainCoordinator, WindowsProcessWitness, WindowsRelauncherWitness, RelauncherClient
 import issue57_maintenance_ledger as ledger
 from update_readiness import observe
 
@@ -306,6 +306,79 @@ class BoundBackupTests(unittest.TestCase):
         self.coordinator = FixtureDrainCoordinator(self.root, IDENTITY, connect, lambda pid: {
             "pid": pid, "endpoint_owner_pid": pid, "installation_sha256": IDENTITY, "start_marker": "c" * 64})
         self.coordinator.observe()
+
+    def participant_clients(self):
+        clients, states = [], []
+        root_digest = hashlib.sha256(str((self.root / "persistent-clean").resolve()).lower().encode()).hexdigest()
+        for role, pid in (("guardian", 8001), ("launcher", 8002)):
+            state = {"role": role, "pid": pid, "start_marker": "c" * 64,
+                     "account_sha256": "d" * 64, "session_id": 1,
+                     "root_sha256": root_digest, "script_sha256": "e" * 64, "helper_sha256": "f" * 64}
+            key = secrets.token_bytes(32)
+            def exchange(wire, state=state, key=key):
+                request = unseal(key, wire, "relauncher-request")
+                if state.get("timeout"):
+                    raise TimeoutError()
+                response = {**request, "pid": state["pid"], "role": state["role"],
+                            "barrier_state": "mutex_and_claim_blocked", "update_authorized": False}
+                if state.get("replay"):
+                    response["challenge"] = "0" * 64
+                return seal(key, response, "relauncher-response")
+            def observer(pid, state=state):
+                return {k: v for k, v in state.items() if k not in {"timeout", "replay"}}
+            clients.append(RelauncherClient(exchange, key, pid, observer))
+            states.append(state)
+        return clients, states
+
+    def test_enrollment_is_bound_to_backup_journal_and_never_proves_all_origins(self):
+        participants, states = self.participant_clients()
+        self.assertEqual(self.coordinator.enroll_relaunchers(participants, unknown_origins=[])["enrolled_relaunchers"], 2)
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "relaunchers_enrolled")
+        result = self.coordinator.observe()
+        self.assertEqual(result["enrolled_relaunchers"], 2)
+        self.assertFalse(result["guardian_attested"])
+        self.assertFalse(result["update_authorized"])
+        self.coordinator.prepare_backup()
+        receipt = ledger.inspect_fixture(self.root)["relauncher_receipt"]
+        self.assertEqual(receipt["transaction_id"], self.coordinator.claim["transaction_id"])
+        self.assertFalse(receipt["all_origins_attested"])
+        self.assertTrue(self.coordinator.verify_bound_backup()["verified"])
+
+    def test_enrolled_process_pid_reuse_or_disconnect_keeps_claim_and_drain(self):
+        for failure in ("timeout", "replay", "start_marker", "session_id", "account_sha256"):
+            # Each uncertainty makes its client unusable, including restored
+            # communication; it never releases admission or persistent claim.
+            participants, states = self.participant_clients()
+            participants[0].attest(self.coordinator.claim["transaction_id"], IDENTITY)
+            if failure in {"timeout", "replay"}:
+                states[0][failure] = True
+            else:
+                states[0][failure] = 2 if failure == "session_id" else "0" * 64
+            with self.assertRaisesRegex(ValueError, "relauncher_enrollment_recovery_required"):
+                participants[0].attest(self.coordinator.claim["transaction_id"], IDENTITY)
+            states[0].pop("timeout", None)
+            states[0].pop("replay", None)
+            with self.assertRaises(ValueError):
+                participants[0].attest(self.coordinator.claim["transaction_id"], IDENTITY)
+            self.assertTrue(self.admission.snapshot()["draining"])
+            self.assertTrue(ledger.inspect_fixture(self.root)["claim_present"])
+
+    def test_enrolled_participant_lost_during_backup_requires_recovery(self):
+        participants, states = self.participant_clients()
+        self.coordinator.enroll_relaunchers(participants, unknown_origins=[])
+        states[0]["timeout"] = True
+        with self.assertRaises(ValueError):
+            self.coordinator.prepare_backup()
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertFalse((self.root / "private-backup").exists())
+        self.assertTrue(self.admission.snapshot()["draining"])
+
+    def test_opaque_or_legacy_origin_is_veto_even_with_compatible_participants(self):
+        participants, states = self.participant_clients()
+        with self.assertRaisesRegex(ValueError, "relauncher_inventory_unverified"):
+            self.coordinator.enroll_relaunchers(participants, unknown_origins=["opaque_supervisor_unverified"])
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertTrue(self.admission.snapshot()["draining"])
 
     def test_backup_and_restore_are_bound_to_same_transaction_and_installation(self):
         result = self.coordinator.prepare_backup()
@@ -597,6 +670,7 @@ class CrossProcessTests(unittest.TestCase):
         identity = hashlib.sha256(str(root.resolve()).lower().encode("utf-8")).hexdigest()
         peer_script = ROOT / "scripts/issue57_process_witness_fixture.py"
         child = adapter = None
+        relaunch_children = []
         checks = 0
         def read_line():
             completed = Queue(maxsize=1)
@@ -636,6 +710,45 @@ class CrossProcessTests(unittest.TestCase):
         try:
             coordinator = FixtureDrainCoordinator(root, identity, connect, observed_process)
             self.assertEqual(coordinator.observe()["state"], "agent_quiescent_only")
+            participants = []
+            for role, script_name, mutex_name in (
+                    ("guardian", "KEEP_AGENT_RUNNING.ps1", os.environ["ISSUE57_DRAIN_UPDATE_MUTEX"]),
+                    ("launcher", "START_AGENT_CANONICAL.ps1", os.environ["ISSUE57_DRAIN_BOOTSTRAP_MUTEX"])):
+                script = ROOT / "tools/ames-workstation" / script_name
+                key = secrets.token_bytes(32)
+                process = subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(script),
+                    "-Root", str(root / "persistent-clean"), "-MaintenanceEnrollment", "-MaintenanceRoot", str(root),
+                    "-FixtureMutex", mutex_name], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                relaunch_children.append(process)
+                root_hash = hashlib.sha256(str((root / "persistent-clean").resolve()).lower().encode()).hexdigest()
+                process.stdin.write(json.dumps({"key": key.hex(), "transaction_id": coordinator.claim["transaction_id"],
+                    "installation_sha256": identity, "root_sha256": root_hash}).encode() + b"\n")
+                process.stdin.flush()
+                def exchange_relauncher(wire, process=process):
+                    process.stdin.write(wire + b"\n")
+                    process.stdin.flush()
+                    pending = Queue(maxsize=1)
+                    def read():
+                        try:
+                            pending.put(process.stdout.readline(MAX_MESSAGE + 1))
+                        except Exception:
+                            pending.put(None)
+                    Thread(target=read, daemon=True).start()
+                    answer = pending.get(timeout=25)
+                    if not answer or len(answer) > MAX_MESSAGE or not answer.endswith(b"\n"):
+                        raise ValueError("enrolled_relauncher_frame_unverified")
+                    return answer[:-1]
+                witness = WindowsRelauncherWitness(role, script, root / "persistent-clean", root,
+                                                  adapter.account_sha256, adapter.session_id)
+                participants.append(RelauncherClient(exchange_relauncher, key, process.pid, witness))
+            self.assertEqual(coordinator.enroll_relaunchers(participants, unknown_origins=[])["enrolled_relaunchers"], 2)
+            self.assertEqual(coordinator.observe()["enrolled_relaunchers"], 2)
+            # A mismatching account/session/root is rejected by independent
+            # OS evidence, not by trusting the participant's own response.
+            wrong = WindowsRelauncherWitness("guardian", ROOT / "tools/ames-workstation/KEEP_AGENT_RUNNING.ps1",
+                root / "persistent-clean", root, "0" * 64, adapter.session_id)
+            with self.assertRaises(ValueError):
+                wrong(relaunch_children[0].pid)
             self.assertTrue(coordinator.prepare_backup()["bound_to_transaction"])
             self.assertTrue(coordinator.verify_bound_backup()["verified"])
             self.assertEqual(ledger.inspect_fixture(root)["phase"], "backup_verified")
@@ -665,7 +778,25 @@ class CrossProcessTests(unittest.TestCase):
             print("Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden")
             print("Issue57 observed maintenance: Win32 identity + mutexes + drain + bound backup; production forbidden")
             print("Issue57 candidate transaction: pinned staging + process ready + rollback + data retained; production forbidden")
+            self.assertIn("relauncher_receipt", persisted)
+            # Disconnect invalidates enrollment, while the journal and admission
+            # fence persist. Neither canonical child falls through to startup.
+            relaunch_children[0].stdin.close()
+            relaunch_children[0].wait(timeout=10)
+            self.assertEqual(relaunch_children[0].returncode, 0)
+            with self.assertRaises(ValueError):
+                coordinator._assert_relaunchers_stable()
+            print("Issue57 enrolled relaunchers: canonical guardian + launcher + OS account/session + same journal + disconnect fenced; production forbidden")
         finally:
+            for process in relaunch_children:
+                if not process.stdin.closed:
+                    process.stdin.close()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.terminate() # Only this exact disposable participant.
+                    process.wait(timeout=10)
+                process.stdout.close()
             writer.close()
             if child is not None:
                 if child.stdin and not child.stdin.closed:

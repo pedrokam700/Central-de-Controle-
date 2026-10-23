@@ -22,6 +22,7 @@ try {
   if($guards.Count -ne 1){throw 'maintenance_guard_missing_or_ambiguous'}
   # Repo-owned function body only. None of the other launcher functions,
   # process handlers, startup loops or filesystem writes is executed here.
+  . (Join-Path $PSScriptRoot '..\tools\ames-workstation\ISSUE57_RELAUNCH_ENROLLMENT.ps1')
   . ([ScriptBlock]::Create($guards[0].Extent.Text))
 
   Assert-NoPendingUpdateClaim $root # untouched root may launch

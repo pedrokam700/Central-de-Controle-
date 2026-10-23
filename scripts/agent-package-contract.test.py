@@ -102,6 +102,7 @@ def test_integrated_clean_support_files_are_explicit():
         "START_AGENT_CANONICAL.ps1",
         "DIAGNOSTICO_POSTO.ps1",
         "KEEP_AGENT_RUNNING.ps1",
+        "ISSUE57_RELAUNCH_ENROLLMENT.ps1",
     )
     source = (ROOT / "scripts" / "build-integrated-candidate.py").read_text(encoding="utf-8")
     assert "for p in ws.iterdir()" not in source

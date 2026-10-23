@@ -1,8 +1,18 @@
 param(
-  [Parameter(Mandatory=$true)][string]$Root
+  [Parameter(Mandatory=$true)][string]$Root,
+  [switch]$MaintenanceEnrollment,
+  [string]$MaintenanceRoot,
+  [string]$FixtureMutex
 )
 # Per-user opt-in guardian. Never opens Chrome, logs into A-MES, collects data or installs updates.
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'ISSUE57_RELAUNCH_ENROLLMENT.ps1')
+if($MaintenanceEnrollment){
+  Invoke-Issue57RelaunchEnrollment -InstallationRoot $Root -JournalRoot $MaintenanceRoot -Role 'guardian' -MutexName $FixtureMutex
+  exit 0
+}
+if($MaintenanceRoot -or $FixtureMutex){throw 'enrollment_arguments_without_enrollment'}
+
 try { $root=(Resolve-Path -LiteralPath $Root).Path } catch { exit 1 }
 $starter=Join-Path $root 'suporte\ames-workstation\START_AGENT_CANONICAL.ps1'
 if(-not (Test-Path -LiteralPath $starter)){exit 2}
@@ -42,19 +52,7 @@ try {
       if(-not $transactionLocked){
         Record-State 'UPDATE_MUTEX_BUSY; guardian restart suppressed'
       }else{
-        $maintenanceBlocked=$false
-        try{
-          if(Test-Path -LiteralPath $maintenanceDir -ErrorAction Stop){
-            $directory=Get-Item -LiteralPath $maintenanceDir -Force -ErrorAction Stop
-            if(-not $directory.PSIsContainer -or ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)){
-              $maintenanceBlocked=$true
-            }elseif(@(Get-ChildItem -LiteralPath $maintenanceDir -Force -ErrorAction Stop).Count -gt 0){
-              # This includes claim.lock BEFORE transaction.json, unknown
-              # partial files and crash recovery markers. Never auto-clear.
-              $maintenanceBlocked=$true
-            }
-          }
-        }catch{$maintenanceBlocked=$true}
+        $maintenanceBlocked=Test-Issue57RelaunchBlocked $root
         if($maintenanceBlocked){
           Record-State 'UPDATE_DIR_NONEMPTY_OR_UNVERIFIED; guardian restart suppressed pending manual recovery'
         }else{

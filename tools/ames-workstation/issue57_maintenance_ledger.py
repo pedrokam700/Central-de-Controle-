@@ -29,7 +29,8 @@ TRANSITION_FILE = "transition.lock"
 SAFE_PHASES = {
     "claimed": {"drain_requested", "recovery_required"},
     "drain_requested": {"awaiting_external_attestations", "recovery_required"},
-    "awaiting_external_attestations": {"backup_verified", "recovery_required"},
+    "awaiting_external_attestations": {"relaunchers_enrolled", "backup_verified", "recovery_required"},
+    "relaunchers_enrolled": {"backup_verified", "recovery_required"},
     "backup_verified": {"candidate_staged", "recovery_required"},
     "candidate_staged": {"fixture_applying", "recovery_required"},
     "fixture_applying": {"fixture_committed", "fixture_rolled_back", "recovery_required"},
@@ -155,6 +156,26 @@ def _valid_candidate_receipt(receipt, transaction_id, backup):
         and _valid_identity(receipt["asset_sha256"]) and _valid_identity(receipt["slot_sha256"]))
 
 
+def _valid_relauncher_receipt(receipt, transaction_id, identity):
+    if (type(receipt) is not dict or set(receipt) != {
+            "transaction_id", "installation_identity_sha256", "participants", "all_origins_attested"}
+            or receipt["transaction_id"] != transaction_id
+            or receipt["installation_identity_sha256"] != identity
+            or receipt["all_origins_attested"] is not False
+            or type(receipt["participants"]) is not list or len(receipt["participants"]) != 2):
+        return False
+    participants = receipt["participants"]
+    for p in participants:
+        if (type(p) is not dict or set(p) != {"role", "pid", "start_marker", "account_sha256", "session_id", "root_sha256", "script_sha256", "helper_sha256"}
+                or p["role"] not in {"guardian", "launcher"} or type(p["pid"]) is not int or p["pid"] <= 0
+                or type(p["session_id"]) is not int or p["session_id"] < 0
+                or any(not _valid_identity(p[k]) for k in ("start_marker", "account_sha256", "root_sha256", "script_sha256", "helper_sha256"))):
+            return False
+    return (len({p["pid"] for p in participants}) == 2
+            and {p["role"] for p in participants} == {"guardian", "launcher"}
+            and len({(p["account_sha256"], p["session_id"], p["root_sha256"], p["helper_sha256"]) for p in participants}) == 1)
+
+
 def inspect_fixture(root):
     """Read-only state. Never clears a stale lock or starts a guardian."""
     ledger = _ledger(root)
@@ -186,6 +207,11 @@ def inspect_fixture(root):
                 a.get("update_authorized") is not False or
                 b.get("update_authorized") is not False):
             return result
+        enrollment = b.get("relauncher_receipt")
+        if ((b["phase"] == "relaunchers_enrolled" and enrollment is None)
+                or (enrollment is not None and not _valid_relauncher_receipt(
+                    enrollment, b["transaction_id"], b["installation_identity_sha256"]))):
+            return result
         receipt = b.get("backup_receipt")
         if ((b["phase"] in {"backup_verified", "candidate_staged", "fixture_applying",
                            "fixture_committed", "fixture_rolled_back"} and receipt is None)
@@ -194,6 +220,8 @@ def inspect_fixture(root):
             return result
         result.update(state="blocked_persistent_transaction", phase=b["phase"],
                       revision=b["revision"], transaction_id=b["transaction_id"])
+        if enrollment is not None:
+            result["relauncher_receipt"] = enrollment
         if receipt is not None:
             result["backup_receipt"] = receipt
         candidate = b.get("candidate_receipt")
@@ -233,7 +261,7 @@ def begin_fixture(root, installation_identity_sha256, interrupt_after=None):
 
 
 def transition_fixture(root, transaction_id, expected_revision, next_phase,
-                       interrupt_after=None, *, backup_receipt=None, candidate_receipt=None):
+                       interrupt_after=None, *, backup_receipt=None, candidate_receipt=None, relauncher_receipt=None):
     """CAS-like persistent transition; a crash leaves a blocking marker.
 
     The caller cannot pass a production path, skip a phase or erase history.
@@ -261,6 +289,12 @@ def transition_fixture(root, transaction_id, expected_revision, next_phase,
                 current.get("revision") != expected_revision or
                 next_phase not in SAFE_PHASES.get(current.get("phase"), set())):
             raise ValueError("transaction_identity_or_phase_mismatch")
+        if next_phase == "relaunchers_enrolled":
+            if not _valid_relauncher_receipt(relauncher_receipt, transaction_id, current["installation_identity_sha256"]):
+                raise ValueError("transaction_relauncher_receipt_invalid")
+            current = {**current, "relauncher_receipt": relauncher_receipt}
+        elif relauncher_receipt is not None:
+            raise ValueError("transaction_relauncher_receipt_out_of_order")
         if next_phase == "backup_verified":
             if not _valid_backup_receipt(backup_receipt, transaction_id,
                                          current["installation_identity_sha256"]):

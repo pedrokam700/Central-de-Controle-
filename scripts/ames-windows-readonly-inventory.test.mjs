@@ -117,8 +117,14 @@ test('canonical launcher checks pending update claim under bootstrap mutex befor
   assert.ok(lock>=0 && gate>lock && processStop>gate,'read-only maintenance gate must precede all process stop/start actions');
   assert.match(source,/MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED/);
   assert.match(source,/if\(\$failure -eq 'MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED'\)/);
-  assert.match(source,/Get-ChildItem -LiteralPath \$dir -Force -ErrorAction Stop/);
-  assert.match(source,/\[IO\.FileAttributes\]::ReparsePoint/);
+  assert.match(source,/Test-Issue57RelaunchBlocked \$PackageRoot/);
+  const shared=readFileSync('tools/ames-workstation/ISSUE57_RELAUNCH_ENROLLMENT.ps1','utf8');
+  assert.match(shared,/Get-ChildItem -LiteralPath \$dir -Force -ErrorAction Stop/);
+  assert.match(shared,/\[IO\.FileAttributes\]::ReparsePoint/);
+  assert.match(shared,/enrollment_not_operationally_enabled/);
+  assert.match(shared,/relauncher-request/);
+  assert.match(shared,/relauncher-response/);
+  assert.match(shared,/claim_blocks_after_mutex_release/);
 });
 
 test('fresh Windows private backup root replaces explicit broad ACEs before copying identities',()=>{

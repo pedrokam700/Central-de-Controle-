@@ -88,13 +88,14 @@ class AutoStartContract(TestCase):
         assert "Global\\CentralAMES.OperatorGuardian.8765" in content
         assert "Global\\CentralAMES.UpdateTransaction.8765" in content
         assert ".ames-update'" in content
-        assert "claim.lock BEFORE transaction.json" in content
+        shared = (Path(__file__).resolve().parents[1] / "tools/ames-workstation/ISSUE57_RELAUNCH_ENROLLMENT.ps1").read_text()
+        assert "Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop" in shared
         assert "UPDATE_DIR_NONEMPTY_OR_UNVERIFIED; guardian restart suppressed" in content
         assert "UPDATE_MUTEX_BUSY; guardian restart suppressed" in content
-        assert content.index("$transactionMutex.WaitOne(0)") < content.index("Get-ChildItem -LiteralPath $maintenanceDir")
-        assert content.index("Get-ChildItem -LiteralPath $maintenanceDir") < content.index("& powershell.exe")
+        assert content.index("$transactionMutex.WaitOne(0)") < content.index("$maintenanceBlocked=Test-Issue57RelaunchBlocked $root")
+        assert content.index("$maintenanceBlocked=Test-Issue57RelaunchBlocked $root") < content.index("& powershell.exe")
         assert "if($maintenanceBlocked)" in content
-        assert "($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)" in content
+        assert "($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)" in shared
         assert "$transactionMutex.ReleaseMutex()" in content
         assert "if(-not $portActive)" in content
 

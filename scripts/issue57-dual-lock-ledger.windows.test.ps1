@@ -86,6 +86,8 @@ try {
     Write-Output 'Issue57 observed maintenance: Win32 identity + mutexes + drain + bound backup; production forbidden'
     if($drain -notcontains 'Issue57 candidate transaction: pinned staging + process ready + rollback + data retained; production forbidden'){throw 'candidate_transaction_fixture_not_completed'}
     Write-Output 'Issue57 candidate transaction: pinned staging + process ready + rollback + data retained; production forbidden'
+    if($drain -notcontains 'Issue57 enrolled relaunchers: canonical guardian + launcher + OS account/session + same journal + disconnect fenced; production forbidden'){throw 'enrolled_relaunchers_fixture_not_completed'}
+    Write-Output 'Issue57 enrolled relaunchers: canonical guardian + launcher + OS account/session + same journal + disconnect fenced; production forbidden'
   } finally {
     $env:TEMP=$previousFixtureTemp
     $env:TMP=$previousFixtureTmp

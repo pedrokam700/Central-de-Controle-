@@ -1,9 +1,19 @@
 param(
   [Parameter(Mandatory=$true)][string]$Root,
   [int]$StartupTimeoutSeconds=60,
-  [ValidateRange(1,5)][int]$MaxAttempts=3
+  [ValidateRange(1,5)][int]$MaxAttempts=3,
+  [switch]$MaintenanceEnrollment,
+  [string]$MaintenanceRoot,
+  [string]$FixtureMutex
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'ISSUE57_RELAUNCH_ENROLLMENT.ps1')
+if($MaintenanceEnrollment){
+  Invoke-Issue57RelaunchEnrollment -InstallationRoot $Root -JournalRoot $MaintenanceRoot -Role 'launcher' -MutexName $FixtureMutex
+  exit 0
+}
+if($MaintenanceRoot -or $FixtureMutex){throw 'enrollment_arguments_without_enrollment'}
+
 $root=(Resolve-Path -LiteralPath $Root).Path
 $expected=[IO.Path]::GetFullPath($root).TrimEnd([char]92)
 $python=Join-Path $root '.venv\Scripts\python.exe'
@@ -219,19 +229,7 @@ function Assert-NoPendingUpdateClaim([string]$PackageRoot) {
   # must hold UpdateTransaction, then CanonicalBootstrap, before creating the
   # persistent claim. This makes a direct launcher respect crash recovery,
   # without changing any of its normal startup/kill/PID logic.
-  $dir=Join-Path $PackageRoot '.ames-update'
-  try {
-    if(Test-Path -LiteralPath $dir -ErrorAction Stop){
-      $entry=Get-Item -LiteralPath $dir -Force -ErrorAction Stop
-      if(-not $entry.PSIsContainer -or ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)){
-        throw 'untrusted_maintenance_directory'
-      }
-      if(@(Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop).Count -gt 0){
-        throw 'pending_maintenance_transaction'
-      }
-    }
-  } catch {
-    # Do not disclose paths, transaction IDs, tokens or user details.
+  if(Test-Issue57RelaunchBlocked $PackageRoot){
     throw 'MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED'
   }
 }

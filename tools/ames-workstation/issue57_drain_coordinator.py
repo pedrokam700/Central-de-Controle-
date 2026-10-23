@@ -3,7 +3,8 @@
 No production entrypoint: the existing ledger rejects CLEAN/operational roots.
 The transport session is bound to the claim BEFORE requesting agent drain.
 This reuses the admission protocol, not a second updater or a second agent.
-Windows guardian/browser enrollment remains a mandatory, unresolved gate.
+Compatible relaunchers can enroll in the same fixture transaction; coverage
+of installed/legacy origins and browser writers remains an unresolved gate.
 The injected process witness MUST come from an independent OS observation;
 neither /ready nor the agent's own signed reply can attest its own PID/port.
 """
@@ -15,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import secrets
 
 from issue57_maintenance_ledger import begin_fixture, inspect_fixture, transition_fixture
 
@@ -48,6 +50,7 @@ class WindowsProcessWitness:
         self.script = str(Path(expected_script).resolve(strict=True))
         self.script_digest = expected_script_sha256
         self.port, self.fixture_only, self._run = port, fixture_only, run
+        self.account_sha256 = self.session_id = None
 
     def __call__(self, pid):
         reason = "adapter_platform_or_pid_invalid"
@@ -99,11 +102,107 @@ class WindowsProcessWitness:
                     or not isinstance(result.get("start_marker"), str)
                     or not re.fullmatch("[0-9a-f]{64}", result["start_marker"])):
                 raise ValueError()
+            self.account_sha256, self.session_id = result["account_sha256"], result["session_id"]
             return {"pid": pid, "endpoint_owner_pid": pid,
                     "installation_sha256": self.installation,
                     "start_marker": result["start_marker"]}
         except Exception:
             raise ValueError("independent_windows_witness_unverified:" + reason) from None
+
+
+class WindowsRelauncherWitness:
+    """Independent, code-pinned identity for an explicitly enrolled entrypoint.
+
+    This does not enumerate other accounts, registrations or opaque launchers.
+    Unobserved origins remain a veto even when these participants cooperate.
+    """
+    def __init__(self, role, script, installation_root, maintenance_root,
+                 account_sha256, session_id, *, run=subprocess.run):
+        if (role not in {"guardian", "launcher"} or type(session_id) is not int
+                or not isinstance(account_sha256, str)
+                or not re.fullmatch("[0-9a-f]{64}", account_sha256)):
+            raise ValueError("relauncher_expected_identity_invalid")
+        expected = "KEEP_AGENT_RUNNING.ps1" if role == "guardian" else "START_AGENT_CANONICAL.ps1"
+        self.script = Path(script).resolve(strict=True)
+        if self.script.name != expected:
+            raise ValueError("relauncher_entrypoint_unsupported")
+        self.role, self.root = role, Path(installation_root).resolve(strict=True)
+        self.maintenance_root = Path(maintenance_root).resolve(strict=True)
+        self.account, self.session, self._run = account_sha256, session_id, run
+        self.script_digest = hashlib.sha256(self.script.read_bytes()).hexdigest()
+        self.helper_digest = hashlib.sha256(self.script.with_name("ISSUE57_RELAUNCH_ENROLLMENT.ps1").read_bytes()).hexdigest()
+
+    def __call__(self, pid):
+        try:
+            if os.name != "nt" or type(pid) is not int or pid <= 0:
+                raise ValueError()
+            result = self._run(["powershell.exe", "-NoProfile", "-NonInteractive", "-File",
+                str(Path(__file__).with_name("ISSUE57_PROCESS_WITNESS_READONLY.ps1")),
+                "-TargetPid", str(pid), "-ExpectedScript", str(self.script), "-FixtureOnly",
+                "-Role", self.role, "-ExpectedRoot", str(self.root),
+                "-ExpectedMaintenanceRoot", str(self.maintenance_root)],
+                capture_output=True, timeout=20, check=False)
+            if result.returncode or len(result.stdout) > 4096:
+                raise ValueError()
+            body = json.loads(result.stdout)
+            root_digest = hashlib.sha256(str(self.root).lower().encode()).hexdigest()
+            if (body.get("schema") != "ames-windows-process-witness-v1"
+                    or body.get("read_only") is not True
+                    or body.get("process_identity_observed") is not True
+                    or type(body.get("pid")) is not int or body["pid"] != pid
+                    or body.get("endpoint_owner_pid") != 0
+                    or body.get("script_sha256") != self.script_digest
+                    or body.get("script_path_sha256") != hashlib.sha256(str(self.script).lower().encode()).hexdigest()
+                    or body.get("helper_sha256") != self.helper_digest
+                    or body.get("account_sha256") != self.account
+                    or type(body.get("session_id")) is not int or body["session_id"] != self.session
+                    or body.get("root_sha256") != root_digest
+                    or body.get("update_authorized") is not False
+                    or not isinstance(body.get("start_marker"), str)
+                    or not re.fullmatch("[0-9a-f]{64}", body["start_marker"])):
+                raise ValueError()
+            return {"role": self.role, "pid": pid, "start_marker": body["start_marker"],
+                    "account_sha256": self.account, "session_id": self.session,
+                    "root_sha256": root_digest, "script_sha256": self.script_digest,
+                    "helper_sha256": self.helper_digest}
+        except Exception:
+            raise ValueError("relauncher_os_identity_unverified") from None
+
+
+class RelauncherClient:
+    """Challenge an OS-witnessed participant over private inherited handles.
+
+    Uses the existing maintenance authentication codec, with separate MAC
+    domains. An uncertain exchange permanently invalidates this client.
+    """
+    def __init__(self, exchange, key, pid, observe_process):
+        self._exchange, self._key = exchange, key
+        self._observe, self.pid = observe_process, pid
+        self.identity = observe_process(pid)
+        self._sequence, self._uncertain = 0, False
+
+    def attest(self, transaction_id, installation_sha256):
+        from maintenance_protocol import seal, unseal
+        try:
+            if self._uncertain or self._observe(self.pid) != self.identity:
+                raise ValueError()
+            request = {"schema": "ames-relauncher-enrollment-v1", "transaction_id": transaction_id,
+                       "installation_sha256": installation_sha256, "root_sha256": self.identity["root_sha256"],
+                       "sequence": self._sequence + 1, "operation": "attest", "challenge": secrets.token_hex(32)}
+            response = unseal(self._key, self._exchange(seal(self._key, request, "relauncher-request")), "relauncher-response")
+            if (set(response) != set(request) | {"pid", "role", "barrier_state", "update_authorized"}
+                    or any(response.get(k) != v for k, v in request.items())
+                    or type(response["pid"]) is not int or response["pid"] != self.pid
+                    or response["role"] != self.identity["role"]
+                    or response["barrier_state"] not in {"mutex_and_claim_blocked", "claim_blocks_after_mutex_release"}
+                    or response["update_authorized"] is not False
+                    or self._observe(self.pid) != self.identity):
+                raise ValueError()
+            self._sequence += 1
+            return dict(self.identity)
+        except Exception:
+            self._uncertain = True
+            raise ValueError("relauncher_enrollment_recovery_required") from None
 
 
 class FixtureDrainCoordinator:
@@ -113,6 +212,7 @@ class FixtureDrainCoordinator:
         self.client = None
         self._observe_process = observe_process
         self._witness = None
+        self._relaunchers = []
         try:
             # connect must bind the independently verified process target and
             # a fresh maintenance credential to THIS journal transaction.
@@ -156,12 +256,49 @@ class FixtureDrainCoordinator:
         if self.claim["phase"] != "recovery_required":
             self._transition("recovery_required")
 
+    def enroll_relaunchers(self, participants, *, unknown_origins):
+        """Bind explicit compatible participants to the SAME journal/claim.
+
+        No discovery by absence: incomplete account/profile/registration scope
+        is still unproven. Unknown or legacy signals are never auto-enrolled.
+        """
+        try:
+            if (self.claim["phase"] != "awaiting_external_attestations" or unknown_origins
+                    or len(participants) != 2
+                    or {p.identity["role"] for p in participants} != {"guardian", "launcher"}):
+                raise ValueError("relauncher_inventory_unverified")
+            self._assert_witness_stable()
+            root_digest = hashlib.sha256(str((Path(self.root) / "persistent-clean").resolve()).lower().encode()).hexdigest()
+            identities = [p.attest(self.claim["transaction_id"], self.client.target["installation_sha256"]) for p in participants]
+            if (len({p["pid"] for p in identities}) != 2
+                    or any(p["root_sha256"] != root_digest for p in identities)
+                    or len({(p["account_sha256"], p["session_id"]) for p in identities}) != 1):
+                raise ValueError("relauncher_installation_or_session_mismatch")
+            receipt = {"transaction_id": self.claim["transaction_id"],
+                       "installation_identity_sha256": self.client.target["installation_sha256"],
+                       "participants": identities, "all_origins_attested": False}
+            self.claim = transition_fixture(self.root, self.claim["transaction_id"], self.claim["revision"],
+                                            "relaunchers_enrolled", relauncher_receipt=receipt)
+            self._relaunchers = list(participants)
+            return {"enrolled_relaunchers": 2, "all_origins_attested": False, "update_authorized": False}
+        except Exception:
+            self._recovery_required()
+            raise
+
+    def _assert_relaunchers_stable(self):
+        receipt = self.claim.get("relauncher_receipt")
+        if receipt is not None:
+            identities = [p.attest(self.claim["transaction_id"], self.client.target["installation_sha256"]) for p in self._relaunchers]
+            if identities != receipt["participants"]:
+                raise ValueError("relauncher_receipt_mismatch")
+
     def observe(self):
         try:
             self._assert_witness_stable()
+            self._assert_relaunchers_stable()
             persisted = inspect_fixture(self.root)
             if persisted != self.claim or self.claim["phase"] not in {
-                    "drain_requested", "awaiting_external_attestations", "backup_verified",
+                    "drain_requested", "awaiting_external_attestations", "relaunchers_enrolled", "backup_verified",
                     "candidate_staged", "fixture_applying"}:
                 raise ValueError("coordinator_journal_mismatch")
             result = self.client.request("poll")
@@ -169,6 +306,7 @@ class FixtureDrainCoordinator:
             if result["state"] == "agent_quiescent_only" and self.claim["phase"] == "drain_requested":
                 self._transition("awaiting_external_attestations")
             return {"state": result["state"], "phase": self.claim["phase"],
+                    "enrolled_relaunchers": len(self._relaunchers),
                     "guardian_attested": False, "browser_profiles_attested": False,
                     "update_authorized": False}
         except Exception:
@@ -184,7 +322,7 @@ class FixtureDrainCoordinator:
         from issue57_update_preflight import (backup_operational_tree,
                                               rehearse_operational_restore, sha256_file)
         try:
-            if self.claim["phase"] != "awaiting_external_attestations":
+            if self.claim["phase"] not in {"awaiting_external_attestations", "relaunchers_enrolled"}:
                 raise ValueError("coordinator_backup_out_of_order")
             if self.observe()["state"] != "agent_quiescent_only":
                 raise ValueError("coordinator_agent_not_quiescent")
@@ -282,8 +420,10 @@ class FixtureDrainCoordinator:
             self._transition("fixture_applying")
             def observed_health(active):
                 self._assert_witness_stable()
+                self._assert_relaunchers_stable()
                 healthy = health_probe(active) is True
                 self._assert_witness_stable()
+                self._assert_relaunchers_stable()
                 return healthy
             result = model.simulate_swap(slots, transaction_id=self.claim["transaction_id"],
                                          health_probe=observed_health, interrupt_after=interrupt_after)

@@ -19,7 +19,9 @@ spec.loader.exec_module(ledger)
 guardian_source = (module_path.parent / "KEEP_AGENT_RUNNING.ps1").read_text(encoding="utf-8")
 assert "'.ames-update'" in guardian_source
 assert "Global\\CentralAMES.UpdateTransaction.8765" in guardian_source
-assert "Get-ChildItem -LiteralPath $maintenanceDir" in guardian_source
+assert "Test-Issue57RelaunchBlocked $root" in guardian_source
+shared_guard = (module_path.parent / "ISSUE57_RELAUNCH_ENROLLMENT.ps1").read_text(encoding="utf-8")
+assert "Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop" in shared_guard
 
 
 def fixture(base, name):
