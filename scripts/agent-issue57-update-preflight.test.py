@@ -112,9 +112,15 @@ with tempfile.TemporaryDirectory() as tmp:
     for case, source in (('config', live.parent.parent / 'config.json'),
                          ('token', live.parent / 'local_agent_token')):
         original = source.read_bytes()
+        injected = []
         def changed_while_copying(src, dst):
             result = original_copy(src, dst)
-            if Path(src) == source:
+            # Windows temporary roots can resolve through a different spelling
+            # (junction/short path). Select the destination role, then attest
+            # that this source is the same file before injecting a change.
+            if Path(dst).name == source.name:
+                assert Path(src).samefile(source), 'must mutate the copied source'
+                injected.append(case)
                 source.write_bytes(b'changed-source-in-temporary-test-only')
             return result
         try:
@@ -125,6 +131,7 @@ with tempfile.TemporaryDirectory() as tmp:
             except ValueError as exc:
                 assert str(exc) == 'private_identity_changed_during_backup'
                 assert 'changed-source' not in str(exc)
+            assert injected == [case], 'concurrent change must actually be injected'
         finally:
             p.copy_private_identity = original_copy
             source.write_bytes(original)
