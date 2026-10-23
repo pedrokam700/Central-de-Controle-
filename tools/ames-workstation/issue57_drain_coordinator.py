@@ -134,6 +134,7 @@ def inspect_readonly_installation_inventory(report, *, selected_root=None):
     Matching the listener is an observation, not consent, guardian enrollment,
     scope coverage, a stable process lease or authorization to replace code.
     """
+    stage = "header"
     try:
         fields = {"schema", "candidates", "port_8765_verified", "listener_pids",
                   "unmatched_listener_pids", "canonical_agents_outside_scan",
@@ -152,16 +153,19 @@ def inspect_readonly_installation_inventory(report, *, selected_root=None):
                 raise ValueError()
             return set(value)
 
+        stage = "pid_collections"
         listeners = pids(report["listener_pids"])
         unmatched = pids(report["unmatched_listener_pids"])
         outside = pids(report["canonical_agents_outside_scan"])
         if not unmatched <= listeners:
             raise ValueError()
+        stage = "candidate_collection"
         candidates = report["candidates"]
         if type(candidates) is not list or len(candidates) > 64:
             raise ValueError()
         names, all_matched = {}, set()
         for entry in candidates:
+            stage = "candidate_fields"
             expected = {"root", "canonical_entry_exists", "sqlite_exists",
                         "config_exists", "token_exists", "matching_agent_pids",
                         "listener_owner_matches"}
@@ -171,6 +175,7 @@ def inspect_readonly_installation_inventory(report, *, selected_root=None):
                         "token_exists", "listener_owner_matches"))):
                 raise ValueError()
             root = entry["root"]
+            stage = "candidate_root"
             if (type(root) is not str or len(root) > 2048 or "\x00" in root
                     or not re.fullmatch(r"[A-Za-z]:\\[^\r\n]+", root)
                     or ntpath.normpath(root) != root
@@ -178,6 +183,7 @@ def inspect_readonly_installation_inventory(report, *, selected_root=None):
                                         ntpath.basename(root), flags=re.IGNORECASE)):
                 raise ValueError()
             normalized = root.casefold()
+            stage = "candidate_owner"
             if normalized in names:
                 raise ValueError()
             owners = pids(entry["matching_agent_pids"])
@@ -189,13 +195,16 @@ def inspect_readonly_installation_inventory(report, *, selected_root=None):
             if entry["listener_owner_matches"] is not expected_match:
                 raise ValueError()
             names[normalized] = entry
+        stage = "owner_consistency"
         if unmatched & (all_matched | outside) or outside & all_matched:
             raise ValueError()
+        stage = "selection"
         if (type(selected_root) is not str and selected_root is not None):
             raise ValueError()
         selected = names.get(selected_root.casefold()) if selected_root is not None else None
         if selected_root is not None and selected is None:
             raise ValueError()
+        stage = "digest"
         digest = hashlib.sha256(json.dumps(report, sort_keys=True, separators=(",", ":"),
                                                 ensure_ascii=True).encode("utf-8")).hexdigest()
         return {"schema": "ames-readonly-installation-review-v1", "inventory_sha256": digest,
@@ -209,7 +218,8 @@ def inspect_readonly_installation_inventory(report, *, selected_root=None):
                 "installed_root_attested": False, "all_accounts_attested": False,
                 "update_authorized": False}
     except (TypeError, ValueError, KeyError):
-        raise ValueError("readonly_installation_inventory_unverified") from None
+        # Fixed enum only; no report content, path, PID or command line in CI.
+        raise ValueError("readonly_installation_inventory_unverified:" + stage) from None
 
 
 class WindowsProcessWitness:
