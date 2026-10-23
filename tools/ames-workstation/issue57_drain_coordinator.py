@@ -380,14 +380,14 @@ class FixtureDrainCoordinator:
             self._recovery_required()
             raise
 
-    def prepare_backup(self):
+    def prepare_backup(self, *, installed_release_asset=None):
         """Create/restore-check a backup bound to THIS fixture transaction.
 
         Only reads the explicitly marked fixture installation root.
         No caller-selected production source, backup reuse or update approval.
         """
         from issue57_update_preflight import (backup_operational_tree,
-                                              rehearse_operational_restore, sha256_file)
+                                              rehearse_operational_restore, sha256_file, inventory_known_external)
         try:
             if self.claim["phase"] not in {"awaiting_external_attestations", "relaunchers_enrolled", "browser_enrolled"}:
                 raise ValueError("coordinator_backup_out_of_order")
@@ -403,7 +403,11 @@ class FixtureDrainCoordinator:
                     or backup.resolve().parent != source.resolve().parent
                     or source.resolve() in backup.resolve().parents):
                 raise ValueError("coordinator_backup_source_untrusted")
-            backup_operational_tree(source, backup)
+            inventory = inventory_known_external(source, release_asset=installed_release_asset, fixture_controls=True)
+            backup_operational_tree(source, backup, external_inventory=inventory)
+            after_inventory = inventory_known_external(source, release_asset=installed_release_asset, fixture_controls=True)
+            if after_inventory != inventory:
+                raise ValueError("external_installation_changed_during_backup")
             rehearse_operational_restore(backup)
             if self.observe()["state"] != "agent_quiescent_only":
                 raise ValueError("coordinator_agent_not_quiescent")

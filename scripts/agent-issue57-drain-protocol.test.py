@@ -474,6 +474,94 @@ class BoundBackupTests(unittest.TestCase):
         self.assertTrue(self.admission.snapshot()["draining"])
         self.assertFalse(self.coordinator.backup_directory.exists())
 
+    def test_known_external_logs_are_private_bound_and_restorable_with_interruptions(self):
+        from issue57_update_preflight import verify_operational_backup, rehearse_operational_restore
+        logs = self.root / "logs"
+        (logs / "nested/empty").mkdir(parents=True)
+        (logs / "agent_guardian.log").write_bytes(b"synthetic guardian state")
+        self.coordinator.prepare_backup()
+        backup = self.coordinator.backup_directory
+        manifest = json.loads((backup / "runtime-backup-manifest.json").read_text())
+        self.assertEqual(manifest["external"]["files"][0]["path"], "logs/agent_guardian.log")
+        self.assertFalse(manifest["external"]["scope_complete"])
+        self.assertTrue((backup / "external/logs/nested/empty").is_dir())
+        self.assertTrue(verify_operational_backup(backup)["verified"])
+        with self.assertRaisesRegex(ValueError, "simulated_restore_interruption_after_external_file"):
+            rehearse_operational_restore(backup, interrupt_after="after_first_external_file")
+        self.assertTrue(rehearse_operational_restore(backup)["restored_into_temporary_fixture"])
+        (backup / "external/logs/agent_guardian.log").write_bytes(b"tampered")
+        with self.assertRaises(ValueError):
+            self.coordinator.verify_bound_backup()
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertEqual((logs / "agent_guardian.log").read_bytes(), b"synthetic guardian state")
+
+    def test_unclassified_external_entries_block_before_backup_without_deletion(self):
+        (self.root / "unregistered-fixture-data").mkdir()
+        (self.root / "unregistered-fixture-data/evidence.txt").write_bytes(b"must preserve")
+        with self.assertRaisesRegex(ValueError, "external_unclassified_installation_entry"):
+            self.coordinator.prepare_backup()
+        self.assertFalse(self.coordinator.backup_directory.exists())
+        self.assertTrue((self.root / "unregistered-fixture-data/evidence.txt").exists())
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+
+    def test_external_symlink_or_windows_junction_is_never_followed(self):
+        outside = Path(self.temp.name) / "outside"
+        outside.mkdir()
+        (outside / "private.txt").write_bytes(b"not authorized")
+        link = self.root / "logs"
+        if os.name == "nt":
+            result = subprocess.run(["cmd.exe", "/c", "mklink", "/J", str(link), str(outside)], capture_output=True)
+            self.assertEqual(result.returncode, 0, "disposable junction fixture creation failed")
+        else:
+            link.symlink_to(outside, target_is_directory=True)
+        try:
+            with self.assertRaises(ValueError):
+                self.coordinator.prepare_backup()
+            self.assertFalse(self.coordinator.backup_directory.exists())
+            self.assertEqual((outside / "private.txt").read_bytes(), b"not authorized")
+        finally:
+            if os.name == "nt":
+                link.rmdir() # Only the test-created junction, never its target.
+            else:
+                link.unlink()
+
+    def test_concurrent_external_append_invalidates_backup_and_keeps_claim(self):
+        import issue57_update_preflight as preflight
+        logs = self.root / "logs"
+        logs.mkdir()
+        source = logs / "agent_guardian.log"
+        source.write_bytes(b"initial state")
+        original = preflight.shutil.copyfileobj
+        def append_after_copy(reader, writer, *args, **kwargs):
+            result = original(reader, writer, *args, **kwargs)
+            if Path(writer.name).name == "agent_guardian.log":
+                source.write_bytes(b"new concurrent state")
+            return result
+        with patch.object(preflight.shutil, "copyfileobj", side_effect=append_after_copy):
+            with self.assertRaisesRegex(ValueError, "external_source_changed_during_backup"):
+                self.coordinator.prepare_backup()
+        self.assertTrue(ledger.inspect_fixture(self.root)["claim_present"])
+        self.assertTrue(self.admission.snapshot()["draining"])
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+
+    def test_software_classification_requires_authenticated_release_bytes(self):
+        from issue57_update_preflight import inventory_known_external
+        content = b"# synthetic pinned software"
+        raw = json.dumps({"sha": "d" * 40, "files": {"ames-agent/pinned_fixture.py": hashlib.sha256(content).hexdigest()}})
+        archive = Path(self.temp.name) / "synthetic-software.zip"
+        with zipfile.ZipFile(archive, "w") as output:
+            output.writestr("ames-agent/pinned_fixture.py", content)
+            output.writestr("CANDIDATE_MANIFEST.json", raw)
+        (self.root / "ames-agent/pinned_fixture.py").write_bytes(content)
+        (self.root / "CANDIDATE_MANIFEST.json").write_text(raw)
+        expected = {"asset": archive.name, "commit": "d" * 40, "sha256": hashlib.sha256(archive.read_bytes()).hexdigest()}
+        result = inventory_known_external(self.root, release_asset=archive, expected=expected, fixture_controls=True)
+        self.assertEqual(result["software_files_verified"], 2)
+        self.assertEqual(result["unknown_entries"], [])
+        (self.root / "ames-agent/pinned_fixture.py").write_bytes(b"changed")
+        self.assertIn("ames-agent/pinned_fixture.py", inventory_known_external(self.root, release_asset=archive,
+            expected=expected, fixture_controls=True)["unknown_entries"])
+
     def test_backup_and_restore_are_bound_to_same_transaction_and_installation(self):
         result = self.coordinator.prepare_backup()
         self.assertTrue(result["bound_to_transaction"])
@@ -762,6 +850,8 @@ class CrossProcessTests(unittest.TestCase):
         (data / "local_agent_token").write_bytes(b"synthetic-token-preserved")
         (data / "exports").mkdir()
         (data / "exports/report.txt").write_bytes(b"preserved offline report")
+        (root / "logs").mkdir()
+        (root / "logs/agent_guardian.log").write_bytes(b"synthetic retained guardian log")
         identity = hashlib.sha256(str(root.resolve()).lower().encode("utf-8")).hexdigest()
         peer_script = ROOT / "scripts/issue57_process_witness_fixture.py"
         child = adapter = None

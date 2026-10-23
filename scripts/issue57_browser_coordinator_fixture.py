@@ -43,6 +43,8 @@ with tempfile.TemporaryDirectory(prefix=FIXTURE_PARENT_PREFIX) as tmp:
     with closing(sqlite3.connect(data / 'ames_local.sqlite3')) as db:
         db.execute('CREATE TABLE jobs(status TEXT)')
         db.commit()
+    (root / 'logs').mkdir()
+    (root / 'logs/agent_guardian.log').write_bytes(b'synthetic browser integration guardian log')
     identity = hashlib.sha256(str(root).encode()).hexdigest()
     admission = MaintenanceAdmission()
     def connect(transaction):

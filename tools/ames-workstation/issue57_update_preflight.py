@@ -361,7 +361,7 @@ def _regular_file(path):
                  getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)))
 
 
-def _runtime_inventory(directory, max_bytes):
+def _runtime_inventory(directory, max_bytes, *, exclude_core=True):
     """Enumerate every regular agent/data file; exclude DB online journal.
 
     No unknown directories, links or in-progress files may be silently skipped.
@@ -388,7 +388,9 @@ def _runtime_inventory(directory, max_bytes):
             if not _regular_file(src):
                 raise ValueError("runtime_file_not_regular")
             rel = src.relative_to(directory).as_posix()
-            if rel in ("ames_local.sqlite3", "local_agent_token") or rel in SQLITE_TRANSIENT:
+            if not exclude_core and (src.suffix.lower() in {".sqlite", ".sqlite3", ".db"} or src.name.endswith(("-wal", "-shm"))):
+                raise ValueError("external_sqlite_requires_separate_consistent_backup")
+            if exclude_core and (rel in ("ames_local.sqlite3", "local_agent_token") or rel in SQLITE_TRANSIENT):
                 # The SQLite snapshot and token are stored outside this
                 # runtime tree and verified by private core digests.
                 continue
@@ -401,8 +403,111 @@ def _runtime_inventory(directory, max_bytes):
     return manifest
 
 
+def _external_directory(path):
+    path = Path(path)
+    if path.is_symlink():
+        return False
+    state = path.stat(follow_symlinks=False)
+    return stat.S_ISDIR(state.st_mode) and not (getattr(state, "st_file_attributes", 0) & 0x400)
+
+
+def _external_walk_failure(error):
+    raise error
+
+
+def _external_logs(root):
+    """Only Root/logs is established by canonical launcher/guardian code.
+
+    Paths/digests returned here are PRIVATE inventory, never a public report.
+    No arbitrary folder or user home scan; unknown external locations remain
+    unproved. Databases in this scope require their own consistent snapshot.
+    """
+    root = Path(root)
+    logs = root / "logs"
+    if logs.is_symlink() or (hasattr(logs, "is_junction") and logs.is_junction()):
+        raise ValueError("external_path_reparse_point")
+    if not logs.exists():
+        return {"files": [], "directories": [], "known_paths": ["logs"], "scope_complete": False}
+    files = _runtime_inventory(logs, MAX_RUNTIME_BACKUP_BYTES, exclude_core=False)
+    directories = ["logs"]
+    for parent, children, _ in os.walk(logs, onerror=_external_walk_failure):
+        for name in children:
+            child = Path(parent) / name
+            if not _external_directory(child):
+                raise ValueError("external_directory_reparse_point")
+            directories.append(child.relative_to(root).as_posix())
+    if len(directories) > MAX_ENTRIES:
+        raise ValueError("external_inventory_capacity_exceeded")
+    return {"files": [{**item, "path": "logs/" + item["path"]} for item in files],
+            "directories": sorted(directories), "known_paths": ["logs"], "scope_complete": False}
+
+
+def inventory_known_external(clean_root, *, release_asset=None, expected=OFFICIAL, fixture_controls=False):
+    """Classify the selected root against authenticated software + known data.
+
+    Unclassified files/directories are returned PRIVATE and must veto backup.
+    This does NOT certify locations outside the selected root or user profiles.
+    """
+    root = Path(clean_root)
+    if not _external_directory(root):
+        raise ValueError("external_installation_root_untrusted")
+    software = {}
+    if release_asset is not None:
+        verify_archive(release_asset, expected)
+        with zipfile.ZipFile(release_asset) as archive:
+            raw = archive.read("CANDIDATE_MANIFEST.json")
+            software = {**json.loads(raw)["files"], "CANDIDATE_MANIFEST.json": hashlib.sha256(raw).hexdigest()}
+    controls = set()
+    if fixture_controls:
+        from issue57_maintenance_ledger import _fixture_root, FIXTURE_MARKER, inspect_fixture
+        _fixture_root(root)
+        if inspect_fixture(root).get("state") != "blocked_persistent_transaction":
+            raise ValueError("external_control_transaction_unverified")
+        controls = {".ames-update", FIXTURE_MARKER}
+    unknown, observed = [], set()
+    for parent, dirs, files in os.walk(root, followlinks=False, onerror=_external_walk_failure):
+        for name in list(dirs):
+            child = Path(parent) / name
+            relative = child.relative_to(root).as_posix()
+            if not _external_directory(child):
+                raise ValueError("external_directory_reparse_point")
+            if relative in {"ames-agent/data", "logs"} | controls:
+                dirs.remove(name)
+            elif relative != "ames-agent" and not any(path.startswith(relative + "/") for path in software):
+                unknown.append(relative)
+                dirs.remove(name)
+        for name in files:
+            child = Path(parent) / name
+            relative = child.relative_to(root).as_posix()
+            if not _regular_file(child):
+                raise ValueError("external_file_untrusted")
+            if relative in controls or relative == "ames-agent/config.json":
+                continue
+            if relative in software and sha256_file(child) == software[relative]:
+                observed.add(relative)
+            else:
+                unknown.append(relative)
+            if len(unknown) + len(observed) > MAX_ENTRIES:
+                raise ValueError("external_inventory_capacity_exceeded")
+    return {**_external_logs(root), "unknown_entries": sorted(unknown),
+            "missing_software_files": sorted(set(software) - observed),
+            "software_files_verified": len(observed), "software_identity_proven": release_asset is not None,
+            "software_release": ({"commit": expected["commit"], "asset_sha256": expected["sha256"]} if release_asset is not None else None)}
+
+
+def _verify_external_backup(destination, external):
+    if (type(external) is not dict or set(external) != {"files", "directories", "known_paths", "scope_complete"}
+            or external.get("scope_complete") is not False):
+        raise ValueError("external_backup_manifest_invalid")
+    directory = Path(destination) / "external"
+    if directory.is_symlink() or (hasattr(directory, "is_junction") and directory.is_junction()) or not directory.is_dir():
+        raise ValueError("external_backup_directory_untrusted")
+    if any(path.name != "logs" for path in directory.iterdir()) or _external_logs(directory) != external:
+        raise ValueError("external_backup_integrity_mismatch")
+
+
 def backup_operational_tree(clean_root, destination,
-                            max_bytes=MAX_RUNTIME_BACKUP_BYTES):
+                            max_bytes=MAX_RUNTIME_BACKUP_BYTES, *, external_inventory=None):
     """Backup ALL agent/data files in an isolated private directory.
 
     Only the agent's data subtree is covered. Browser IndexedDB/Firestore
@@ -417,8 +522,16 @@ def backup_operational_tree(clean_root, destination,
         raise ValueError("invalid_runtime_backup_limit")
     agent_data = clean_root / "ames-agent" / "data"
     initial = _runtime_inventory(agent_data, max_bytes)
+    external = None
+    if external_inventory is not None:
+        if external_inventory.get("unknown_entries") or external_inventory.get("missing_software_files"):
+            raise ValueError("external_unclassified_installation_entry")
+        external = {key: external_inventory[key] for key in ("files", "directories", "known_paths", "scope_complete")}
+        if external != _external_logs(clean_root):
+            raise ValueError("external_source_changed_before_backup")
     require_backup_capacity(destination, sum(item["size"] for item in initial)
-                            + _core_backup_size(clean_root / "ames-agent"))
+                            + _core_backup_size(clean_root / "ames-agent")
+                            + sum(item["size"] for item in (external or {}).get("files", [])))
     # Core function creates private permissions before writing identities.
     backup_core_identity(clean_root, destination)
     output = destination / "ames-agent" / "data"
@@ -437,6 +550,25 @@ def backup_operational_tree(clean_root, destination,
             os.fsync(writer.fileno())
         if target.stat().st_size != item["size"] or sha256_file(target) != item["sha256"]:
             raise ValueError("runtime_backup_integrity_mismatch")
+    if external is not None:
+        output_external = destination / "external"
+        output_external.mkdir(exist_ok=False)
+        for name in external["directories"]:
+            (output_external / name).mkdir(parents=True, exist_ok=True)
+        for item in external["files"]:
+            source, target = clean_root / item["path"], output_external / item["path"]
+            if not _regular_file(source) or not source.resolve().is_relative_to(clean_root / "logs"):
+                raise ValueError("external_file_changed_during_backup")
+            with source.open("rb") as reader, target.open("xb") as writer:
+                if os.name != "nt":
+                    os.chmod(target, 0o600)
+                shutil.copyfileobj(reader, writer, length=1024 * 1024)
+                writer.flush()
+                os.fsync(writer.fileno())
+            if target.stat().st_size != item["size"] or sha256_file(target) != item["sha256"]:
+                raise ValueError("external_backup_integrity_mismatch")
+        if _external_logs(clean_root) != external:
+            raise ValueError("external_source_changed_during_backup")
     if _runtime_inventory(agent_data, max_bytes) != initial:
         raise ValueError("runtime_data_changed_during_backup")
     # Fingerprints remain ONLY in the ACL-protected private manifest. Never
@@ -451,6 +583,11 @@ def backup_operational_tree(clean_root, destination,
                 "identity_copied_separately": ["config.json", "local_agent_token"],
                 "excluded_runtime_journals": sorted(SQLITE_TRANSIENT),
                 "browser_sync_attested": False, "update_authorized": False}
+    if external is not None:
+        manifest["external"] = external
+        manifest["installation_inventory"] = {"software_release": external_inventory["software_release"],
+            "software_files_verified": external_inventory["software_files_verified"],
+            "unknown_entries_count": 0, "external_scope_complete": False}
     (destination / "runtime-backup-manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2),
         encoding="utf-8")
@@ -470,6 +607,15 @@ def verify_operational_backup(destination):
     report = json.loads(manifest_file.read_text(encoding="utf-8"))
     if report.get("schema") != "ames-runtime-backup-v2" or not isinstance(report.get("files"), list):
         raise ValueError("runtime_backup_manifest_invalid")
+    if "external" in report:
+        _verify_external_backup(destination, report["external"])
+        inventory = report.get("installation_inventory")
+        if (type(inventory) is not dict or set(inventory) != {"software_release", "software_files_verified", "unknown_entries_count", "external_scope_complete"}
+                or type(inventory["software_files_verified"]) is not int or inventory["software_files_verified"] < 0
+                or inventory["unknown_entries_count"] != 0 or inventory["external_scope_complete"] is not False):
+            raise ValueError("external_inventory_receipt_invalid")
+    elif (destination / "external").exists() or "installation_inventory" in report:
+        raise ValueError("external_backup_scope_unmanifested")
     data = destination / "ames-agent" / "data"
     listed = report["files"]
     if len(listed) > MAX_ENTRIES or any(not isinstance(i, dict) or
@@ -505,7 +651,7 @@ def rehearse_operational_restore(private_backup, *, interrupt_after=None):
     restoration destination or modify a CLEAN/backup directory. A successful
     rehearsal is still NOT an updater lease or proof of external browser data.
     """
-    if interrupt_after not in (None, "after_sqlite", "after_first_data_file"):
+    if interrupt_after not in (None, "after_sqlite", "after_first_data_file", "after_first_external_file"):
         raise ValueError("invalid_restore_interruption_point")
     private_backup = Path(private_backup)
     verify_operational_backup(private_backup)
@@ -514,6 +660,7 @@ def rehearse_operational_restore(private_backup, *, interrupt_after=None):
     restore_size = sum(item["size"] for item in manifest["files"]) + sum(
         (private_backup / name).stat().st_size
         for name in ("config.json", "local_agent_token", "ames_local.sqlite3"))
+    restore_size += sum(item["size"] for item in manifest.get("external", {}).get("files", []))
     require_backup_capacity(Path(tempfile.gettempdir()), restore_size)
 
     def copy_checked(source, target, expected_digest=None):
@@ -544,6 +691,15 @@ def rehearse_operational_restore(private_backup, *, interrupt_after=None):
             copy_checked(source_data / item["path"], restored_data / item["path"], item["sha256"])
             if interrupt_after == "after_first_data_file" and index == 0:
                 raise ValueError("simulated_restore_interruption_after_first_data_file")
+        if "external" in manifest:
+            for name in manifest["external"]["directories"]:
+                (target / name).mkdir(parents=True, exist_ok=True)
+            for index, item in enumerate(manifest["external"]["files"]):
+                copy_checked(private_backup / "external" / item["path"], target / item["path"], item["sha256"])
+                if interrupt_after == "after_first_external_file" and index == 0:
+                    raise ValueError("simulated_restore_interruption_after_external_file")
+            if _external_logs(target) != manifest["external"]:
+                raise ValueError("restored_external_inventory_mismatch")
         # The restored DB is a closed copy; no original SQLite/WAL is accessed.
         with closing(sqlite3.connect((restored_data / "ames_local.sqlite3").as_uri() + "?mode=ro",
                                      uri=True)) as db:
