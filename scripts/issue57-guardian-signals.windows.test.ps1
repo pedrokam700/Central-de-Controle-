@@ -80,4 +80,9 @@ foreach($key in @('updater_eligible','all_sessions_attested','installed_guardian
 }
 if(@($inventory.checks).Count -lt 5){throw 'Insufficient read-only inventory coverage'}
 if($inventory.direct_launcher_fenced -ne $false -or @($inventory.coordination_blockers).Count -lt 3){throw 'Live runner inventory must remain blocked'}
+$inventoryJson=$inventory|ConvertTo-Json -Depth 8 -Compress
+$validated=@($inventoryJson | python -c 'import json,sys;sys.path.insert(0,"tools/ames-workstation");from issue57_drain_coordinator import inspect_readonly_guardian_inventory;review=inspect_readonly_guardian_inventory(json.load(sys.stdin));assert review["update_authorized"] is False;print("Issue57 scanner to Python review: read-only and update blocked")')
+if($LASTEXITCODE -ne 0 -or $validated -notcontains 'Issue57 scanner to Python review: read-only and update blocked'){
+  throw 'Windows scanner output did not satisfy Python registration-review contract'
+}
 Write-Output "Issue57 guardian fixtures ($($cases.Count)) and Windows runner scanner: GREEN (no update authorized)"
