@@ -143,6 +143,33 @@ test('different current installations cannot silently replace one another on PC 
   assert.equal(store.read('TAN10103').snapshot,null);
   assert.equal(store.agent().sync.read_status,'origin_conflict');
   assert.deepEqual(store.agent().sync.origin_conflict_lines,['TAN10103']);
+  assert.deepEqual(store.agent().sync.origin_conflict_candidates.map(x=>[x.line_id,x.installations,x.distinct_sources,x.identity_collision]),
+    [['TAN10103',2,2,false]]);
+  assert.deepEqual(store.agent().sync.origin_conflict_candidates[0].candidates.map(x=>x.source_id).sort(),['new-source','source']);
+  assert.equal(JSON.stringify(store.agent().sync.origin_conflict_candidates).includes('owner_uid'),false);
+  sync.stop();
+  assert.deepEqual(store.agent().sync.origin_conflict_candidates,[],'logout removes reviewer metadata');
+});
+
+test('same source ID reused under different owners stays in conflict without exposing owner UID',async()=>{
+  const payload=canonicalFixture('TAN10102');
+  const a=await publication('installation-owner-A',payload,{now:FACTORY_NOW});
+  const b=await publication('installation-owner-B',payload,{now:FACTORY_NOW});
+  const parts=new Map();for(const item of [a,b])item.parts.forEach((v,i)=>parts.set(item.head.owner_uid+':'+i,v));
+  const remote={
+    getPart:async(owner,_head,index)=>parts.get(owner+':'+index),
+    watch:(_uid,cb)=>{cb([{...a.head,...a.history},{...b.head,...b.history}],{day_index_available:true});return()=>{};}
+  };
+  const queue={put:async()=>{},remove:async()=>{},list:async()=>[]},store=createAmesStore();
+  const sync=createMesSync(store,remote,{queue,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
+  sync.start('third-workstation');await new Promise(resolve=>setTimeout(resolve,40));
+  assert.equal(store.agent().sync.read_status,'origin_conflict');
+  const conflict=store.agent().sync.origin_conflict_candidates[0];
+  assert.deepEqual([conflict.line_id,conflict.installations,conflict.distinct_sources,conflict.identity_collision],
+    ['TAN10102',2,1,true]);
+  assert.equal(conflict.candidates.length,2);
+  assert.equal(JSON.stringify(conflict).includes('installation-owner-'),false);
+  assert.equal(store.read('TAN10102').snapshot,null);
   sync.stop();
 });
 

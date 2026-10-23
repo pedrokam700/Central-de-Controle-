@@ -60,7 +60,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
   const currentConfig=()=>typeof productionConfig==='function'?productionConfig():productionConfig;
   const entryScope=e=>publicationIntent(JSON.parse(e.parts.join('')),now(),currentConfig());
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
-  const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null,identity_blocked:[],last_publish_timing:null});
+  const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null,origin_conflict_lines:[],origin_conflict_candidates:[],identity_blocked:[],last_publish_timing:null});
   async function flush(){
     if(!uid||running)return;running=true;const u=uid,g=generation;
     try{
@@ -139,7 +139,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         if(!byLine.has(h.line_id))byLine.set(h.line_id,[]);
         byLine.get(h.line_id).push(h);
       }
-      const payloads=[],selectedHeads=[],originConflictLines=[];
+      const payloads=[],selectedHeads=[],originConflictLines=[],originConflictCandidates=[];
       let downloaded=0,cacheHits=0,skippedVersions=0,downloadMs=0;
       for(const [line,variants] of byLine){
         const recent=variants.sort((a,b)=>Date.parse(b.collected_at||0)-Date.parse(a.collected_at||0)||Number(b.snapshot_num)-Number(a.snapshot_num)||Number(b.snapshot_revision)-Number(a.snapshot_revision));
@@ -179,7 +179,19 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         }
         if(!byInstallation.size)continue;
         if(byInstallation.size>1){
-          originConflictLines.push(line);continue;
+          // Keep verified candidate metadata visible for human review, but
+          // never expose owner UIDs, combine rows, or promote a competing head.
+          const verified=[...byInstallation.values()].map(({head,payload})=>({
+            ...syncHeadMetadata(head,meta.day_index_available?'operational_day_history':'team_latest'),
+            period_start:payload.summary?.period?.start_at||null,
+            period_end:payload.summary?.period?.end_at||null
+          }));
+          const distinctSources=new Set(verified.map(h=>h.source_id));
+          originConflictLines.push(line);
+          originConflictCandidates.push({line_id:line,installations:verified.length,
+            distinct_sources:distinctSources.size,identity_collision:distinctSources.size<verified.length,
+            candidates:verified.slice(0,10)});
+          continue;
         }
         const selected=byInstallation.values().next().value;
         selectedHeads.push(selected.head);payloads.push(selected.payload);
@@ -192,6 +204,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
           read_status:originConflictLines.length?'origin_conflict':meta.from_cache?'cached':'ready',
           read_error:originConflictLines.length?'Múltiplas instalações publicaram a mesma linha e dia. Nenhuma foi escolhida automaticamente.':'',
           origin_conflict_lines:originConflictLines,
+          origin_conflict_candidates:originConflictCandidates,
           last_receive_timing:{read_ms:Date.now()-receivedAt,download_ms:downloadMs,
             candidates:candidates.length,downloaded,cache_hits:cacheHits,skipped_versions:skippedVersions},
           last_received_at:stamp,

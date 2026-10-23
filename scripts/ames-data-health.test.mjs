@@ -111,6 +111,29 @@ test('shared sync read error preserves last valid provenance instead of erasing 
   assert.equal(JSON.stringify(model).includes('technical details'),false);
 });
 
+test('origin conflict diagnostics expose verified candidates, never Firebase account identities',()=>{
+  const agent={status:'offline',sync:{read_status:'origin_conflict',origin_conflict_lines:['TAN10102'],
+    origin_conflict_candidates:[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true,
+      owner_uid:'PRIVATE-ACCOUNT',candidates:[
+        {source_id:'station-<A>',snapshot_id:'8',snapshot_revision:2,collected_at:'2026-10-23T12:00:00Z',owner_uid:'SECRET'},
+        {source_id:'station-<A>',snapshot_id:'9',snapshot_revision:3,collected_at:'2026-10-23T12:30:00Z'}]}]}};
+  const model=buildSyncHealth(agent);
+  assert.equal(model.read_status,'origin_conflict');
+  assert.equal(model.conflicts[0].identity_collision,true);
+  assert.deepEqual(model.conflicts[0].candidates.map(c=>c.snapshot_id),['8','9']);
+  assert.equal(JSON.stringify(model).includes('PRIVATE-ACCOUNT'),false);
+  assert.equal(JSON.stringify(model).includes('SECRET'),false);
+  const store={agent:()=>agent,read:()=>({snapshot:null,freshness:'unknown',source:null})};
+  const root={innerHTML:'',setAttribute(){},removeAttribute(){},replaceChildren(){this.innerHTML='';},querySelectorAll(){return [];}};
+  createDataHealthView(root,store).render();
+  assert.match(root.innerHTML,/data-sync-origin-conflicts/);
+  assert.match(root.innerHTML,/station-&lt;A&gt;/);
+  assert.doesNotMatch(root.innerHTML,/PRIVATE-ACCOUNT|SECRET/);
+  const copy=factorySyncEvidence(agent);
+  assert.deepEqual(copy.receiving.conflict_candidates,[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true}]);
+  assert.equal(JSON.stringify(copy).includes('station-'),false);
+});
+
 test('data health renders shared workstation authority and escaped source metadata',()=>{
   const agent={status:'offline',agent_build:'build-<1>',runtime:{candidate_version:'candidate-&-2',setup_complete:true,network:{secret:'must-not-render'}},readiness:{engine:true},capabilities:{process_timeline:false},sync:{
     read_status:'ready',remote_scope:'team_latest',remote_latest_collected_at:'2026-10-14T12:00:00Z',
