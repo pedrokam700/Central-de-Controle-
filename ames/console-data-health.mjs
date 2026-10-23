@@ -167,12 +167,21 @@ export function buildWorkstationHealth(agent={}){
 
 export function buildSyncHealth(agent={}){
   const sync=agent?.sync||{};
+  const safePair=value=>Array.isArray(value)&&value.length===2&&value.every(n=>Number.isInteger(n)&&n>=0)?value.slice():null;
+  const comparisonStates=['unsupported_installation_count','period_unverified','different_periods','ambiguous_identifiers','candidate_overlap','no_candidate_matches'];
+  const comparison=value=>({state:comparisonStates.includes(value?.state)?value.state:'period_unverified',
+    window_scope:['same_window','overlap_only'].includes(value?.window_scope)?value.window_scope:null,
+    observed_defects:safePair(value?.observed_defects),coverage_complete:Array.isArray(value?.coverage_complete)&&value.coverage_complete.length===2?value.coverage_complete.map(x=>x===true):null,
+    unverifiable_rows:safePair(value?.unverifiable_rows),ambiguous_keys:safePair(value?.ambiguous_keys),outside_common_window:safePair(value?.outside_common_window),
+    candidate_matches:Number.isInteger(value?.candidate_matches)&&value.candidate_matches>=0?value.candidate_matches:null,
+    unmatched_observed:safePair(value?.unmatched_observed)});
   const conflicts=(Array.isArray(sync.origin_conflict_candidates)?sync.origin_conflict_candidates:[])
     .filter(item=>LINE_IDS.includes(item?.line_id))
     .map(item=>({line_id:item.line_id,
       installations:Number.isInteger(item.installations)?item.installations:0,
       distinct_sources:Number.isInteger(item.distinct_sources)?item.distinct_sources:0,
       identity_collision:item.identity_collision===true,
+      observation_comparison:comparison(item.observation_comparison),
       candidates:(Array.isArray(item.candidates)?item.candidates:[]).slice(0,10).map(candidate=>({
         source_id:String(candidate.source_id||''),snapshot_id:String(candidate.snapshot_id??''),
         snapshot_revision:Number(candidate.snapshot_revision)||0,collected_at:candidate.collected_at||null
@@ -263,7 +272,9 @@ export function factorySyncEvidence(agent={},at=new Date()){
         line_id:item.line_id,
         installations:Number.isInteger(item.installations)?item.installations:null,
         distinct_sources:Number.isInteger(item.distinct_sources)?item.distinct_sources:null,
-        identity_collision:item.identity_collision===true
+        identity_collision:item.identity_collision===true,
+        comparison_state:['candidate_overlap','no_candidate_matches','different_periods','period_unverified','ambiguous_identifiers','unsupported_installation_count'].includes(item.observation_comparison?.state)?item.observation_comparison.state:null,
+        candidate_matches:Number.isInteger(item.observation_comparison?.candidate_matches)&&item.observation_comparison.candidate_matches>=0?item.observation_comparison.candidate_matches:null
       })),
       visible_heads:rHeads.filter(h=>line(h?.line_id)).map(h=>({
         line_id:h.line_id,snapshot_id:safeId(h.snapshot_id),
@@ -290,7 +301,16 @@ export function createDataHealthView(root,store,{onEvidence=()=>{}}={}){
     const key=JSON.stringify([model,agent.status,agent.agent_build,agent.connection_error,agent.sync,workstationState,syncState,security,securityLoading,repairStatus,repairLoading,typeof document==='undefined'?'':document.documentElement.lang]);if(key===last)return;last=key;
     const syncAuthority=syncState.authority==='operational_day_history'?t('Revisão imutável do dia operacional','Immutable operational-day revision'):syncState.authority==='team_latest'?t('Mais recente da equipe','Latest team snapshot'):t('Não informada','Not provided');
     const syncLines=syncState.heads.map((head,index)=>`${t('Linha','Line')} ${LINE_IDS.indexOf(head.line_id)+1||index+1} · ${esc(head.line_id)} · ${t('Origem','Source')} ${esc(head.source_id||'—')} · Snapshot ${esc(head.snapshot_id||'—')} r${esc(head.snapshot_revision)} · ${esc(head.collected_at||'—')}`).join('<br>');
-    const syncConflicts=(syncState.conflicts||[]).map(item=>`<li><b>${esc(item.line_id)}</b> · ${item.installations} ${t('instalações verificadas','verified installations')} · ${item.distinct_sources} ${t('identidades de origem','source identities')}${item.identity_collision?` · <strong>${t('identidade repetida entre instalações','same source identity across installations')}</strong>`:''}<ul>${item.candidates.map(candidate=>`<li>${esc(candidate.source_id||'—')} · Snapshot ${esc(candidate.snapshot_id)} r${esc(candidate.snapshot_revision)} · ${esc(candidate.collected_at||'—')}</li>`).join('')}</ul></li>`).join('');
+    const syncConflicts=(syncState.conflicts||[]).map(item=>{
+      const compare=item.observation_comparison;
+      const label={candidate_overlap:t('Possíveis correspondências entre 3028 (não confirmadas)','Possible matches between 3028 captures (unconfirmed)'),no_candidate_matches:t('Sem correspondências candidatas entre as linhas observadas','No candidate matches between observed rows'),different_periods:t('Períodos divergentes: comparação bloqueada','Different periods: comparison blocked'),period_unverified:t('Período não comprovado: comparação bloqueada','Unverified period: comparison blocked'),ambiguous_identifiers:t('Identificadores ambíguos: contagens comparativas bloqueadas','Ambiguous identities: comparison counts blocked'),unsupported_installation_count:t('Comparação disponível apenas para duas instalações','Comparison requires exactly two installations')}[compare.state];
+      const scope=compare.window_scope==='overlap_only'?` · ${t('Comparação restrita à janela temporal comum','Comparison restricted to common time window')}`:'';
+      const counts=compare.observed_defects?` · ${t('Falhas observadas em cada coleta dentro da janela comum','Observed defects per capture inside common window')}: ${compare.observed_defects.join(' / ')}`:'';
+      const possible=compare.candidate_matches!=null?` · ${t('Coincidências candidatas','Candidate matches')}: ${compare.candidate_matches}`:'';
+      const outside=compare.outside_common_window?.some(x=>x)?` · ${t('Fora da janela comum (não comparadas)','Outside common window (not compared)')}: ${compare.outside_common_window.join(' / ')}`:'';
+      const coverage=compare.coverage_complete?` · ${t('Cobertura 3028 reportada completa por coleta','3028 coverage reported complete per capture')}: ${compare.coverage_complete.map(x=>x?'sim':'não').join(' / ')}`:'';
+      return `<li><b>${esc(item.line_id)}</b> · ${item.installations} ${t('instalações verificadas','verified installations')} · ${item.distinct_sources} ${t('identidades de origem','source identities')}${item.identity_collision?` · <strong>${t('identidade repetida entre instalações','same source identity across installations')}</strong>`:''}<ul>${item.candidates.map(candidate=>`<li>${esc(candidate.source_id||'—')} · Snapshot ${esc(candidate.snapshot_id)} r${esc(candidate.snapshot_revision)} · ${esc(candidate.collected_at||'—')}</li>`).join('')}</ul><p>${label}${scope}${counts}${possible}${outside}${coverage}</p></li>`;
+    }).join('');
     const sync=agent.sync||{},sent=sync.last_sent,blockCount=Array.isArray(sync.identity_blocked)?sync.identity_blocked.length:0;
     const syncDetails=`<br><small>${t('Fila pendente','Pending queue')}: ${Number.isInteger(sync.pending)?sync.pending:'—'} · ${t('Publicação','Publication')}: ${esc(sync.status||'—')}<br>${t('Último snapshot enviado','Last snapshot sent')}: ${sent?`${esc(sent.line_id)} / ${esc(sent.source_id)} / ${esc(sent.snapshot_id)} r${esc(sent.snapshot_revision)} · ${esc(sent.sent_at)}`:'—'}<br>${t('Último recebimento','Last received')}: ${esc(sync.last_received_at||'—')} · ${t('Evento remoto recebido (relógio local)','Remote listener event (local clock)')}: ${esc(sync.server_received_at||'—')}<br>${t('Erro de publicação','Publication error')}: ${esc(sync.error||'—')}<br>${t('Erro de leitura','Read error')}: ${esc(sync.read_error||'—')}<br>${t('Cabeçalho legado bloqueado','Legacy head blocked')}: ${blockCount?esc(sync.identity_blocked.join(', ')):'—'} · ${t('Conflito de origens','Origin conflict')}: ${esc((sync.origin_conflict_lines||[]).join(', ')||'—')}<br>${t('Duração do último envio','Last publish duration')}: ${sync.last_publish_timing?.total_ms??'—'} ms · ${t('Recebimento','Receive duration')}: ${sync.last_receive_timing?.read_ms??'—'} ms · ${t('Revisões no índice','Indexed revisions')}: ${sync.last_receive_timing?.candidates??'—'} · ${t('Baixadas','Downloaded')}: ${sync.last_receive_timing?.downloaded??'—'} · ${t('Evitadas','Skipped')}: ${sync.last_receive_timing?.skipped_versions??'—'}<br>${t('Tempos locais de leitura e publicação não representam a latência total A → B.','Local read and publish timings are not the full A → B latency.')}</small>`;
     const setupLabel=workstationState.setup===true?t('concluído','complete'):workstationState.setup===false?t('pendente','pending'):'—';

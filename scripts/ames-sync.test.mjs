@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createAmesStore} from '../ames/data/store.mjs';
 import {normalizeCanonical,DATASETS} from '../ames/data/canonical.mjs';
-import {publication,createMesSync,sanitizeSnapshot} from '../ames/sync.mjs';
+import {publication,createMesSync,sanitizeSnapshot,compareCompetingPublisherObservations} from '../ames/sync.mjs';
 import {selectCoraContext} from '../ames/data/cora.mjs';
 import {selectProcess} from '../ames/data/process-timeline.mjs';
 const FACTORY_NOW=new Date('2026-10-09T12:00:00Z');
@@ -26,6 +26,29 @@ test('canonical revision validation and CPH-specific 3074/2114 CORA projection',
 test('publication strips credential fields and is idempotent',async()=>{
   const p=canonicalFixture();p.cookie='secret';p.datasets.defects[0].raw_json='secret';p.datasets.defects[0].password='secret';
   const a=await publication('A',p),b=await publication('A',p);assert.equal(a.id,b.id);assert(!a.parts.join('').includes('secret'));assert.equal(a.head.owner_uid,'A');assert.notEqual(a.id,(await publication('B',p)).id);
+});
+test('two collectors only produce candidate 3028 overlap, never an aggregate or proven deduplication',()=>{
+  const a=canonicalFixture('TAN10102'),b=structuredClone(a);
+  b.source_id='different-collector';b.datasets.defects[0].defect_time='2026-10-09T07:00:00-03:00';
+  const r=compareCompetingPublisherObservations([{payload:a},{payload:b}]);
+  assert.deepEqual(r,{state:'candidate_overlap',window_scope:'same_window',observed_defects:[1,1],outside_common_window:[0,0],coverage_complete:[false,false],
+    unverifiable_rows:[0,0],ambiguous_keys:[0,0],candidate_matches:1,unmatched_observed:[0,0]});
+  assert.equal(JSON.stringify(r).includes('P'),false,'no PCBA/SN in comparison evidence');
+  assert.equal('merged_defects' in r,false,'a comparison is never a synthesized team snapshot');
+  const other=structuredClone(b);other.datasets.defects[0].defect_code='D2';
+  assert.equal(compareCompetingPublisherObservations([{payload:a},{payload:other}]).state,'no_candidate_matches');
+  other.summary.period={mode:'today',start_at:'2026-10-09T11:00',end_at:'2026-10-09T12:00'};
+  assert.deepEqual(compareCompetingPublisherObservations([{payload:a},{payload:other}]),{state:'different_periods'});
+  const longer=structuredClone(b);longer.summary.period.end_at='2026-10-09T12:00';
+  longer.datasets.defects.push({...longer.datasets.defects[0],record_id:'LATE',defect_time:'2026-10-09T11:00'});
+  const partial=compareCompetingPublisherObservations([{payload:a},{payload:longer}]);
+  assert.deepEqual([partial.state,partial.window_scope,partial.candidate_matches,partial.observed_defects,partial.outside_common_window],
+    ['candidate_overlap','overlap_only',1,[1,1],[0,1]],'late-only data must not be treated as absent on shorter collection');
+  const incomplete=structuredClone(a);incomplete.datasets.defects[0].defect_time=null;
+  assert.equal(compareCompetingPublisherObservations([{payload:incomplete},{payload:b}]).state,'ambiguous_identifiers');
+  const repeated=structuredClone(a);repeated.datasets.defects.push({...repeated.datasets.defects[0],record_id:'ANOTHER'});
+  assert.deepEqual(compareCompetingPublisherObservations([{payload:repeated},{payload:b}]).ambiguous_keys,[1,0]);
+  assert.deepEqual(compareCompetingPublisherObservations([{payload:a}]),{state:'unsupported_installation_count'});
 });
 test('offline/reconnect publishes once; active teammates read sanitized latest line; logout clears state',async()=>{
   let online=false,watcher;const pending=new Map(),parts=new Map(),heads=new Map(),writes=[];let fail=true;
@@ -147,6 +170,7 @@ test('different current installations cannot silently replace one another on PC 
     [['TAN10103',2,2,false]]);
   assert.deepEqual(store.agent().sync.origin_conflict_candidates[0].candidates.map(x=>x.source_id).sort(),['new-source','source']);
   assert.equal(JSON.stringify(store.agent().sync.origin_conflict_candidates).includes('owner_uid'),false);
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].observation_comparison.state,'candidate_overlap');
   sync.stop();
   assert.deepEqual(store.agent().sync.origin_conflict_candidates,[],'logout removes reviewer metadata');
 });
@@ -168,6 +192,7 @@ test('same source ID reused under different owners stays in conflict without exp
   assert.deepEqual([conflict.line_id,conflict.installations,conflict.distinct_sources,conflict.identity_collision],
     ['TAN10102',2,1,true]);
   assert.equal(conflict.candidates.length,2);
+  assert.equal(conflict.observation_comparison.candidate_matches,1);
   assert.equal(JSON.stringify(conflict).includes('installation-owner-'),false);
   assert.equal(store.read('TAN10102').snapshot,null);
   sync.stop();

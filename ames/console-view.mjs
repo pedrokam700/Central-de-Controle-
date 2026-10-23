@@ -150,7 +150,24 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     }
     else if(id==='process'){pane.innerHTML='<section data-process-main></section><section data-process-3012></section>';const processRoot=pane.querySelector('[data-process-main]'),processBase=withProcessOperatorLayout(withProcessCapability(createProcessConsoleView(processRoot,store),processRoot,store,'process'),processRoot),base=withAgentRefresh(processBase,processRoot,store,client,{label:'Atualizar'}),repair3012=historical?createStoredPeriodRecords(pane.querySelector('[data-process-3012]'),store,{kind:'repairs'}):create3012FastlaneView(pane.querySelector('[data-process-3012]'),store);view={render(){base.render();repair3012.render();},clear(){base.clear?.();repair3012.clear?.();pane.replaceChildren();}};}
     else if(id==='base'){pane.innerHTML='<section data-base-history></section><section data-base-local></section>';const local=pane.querySelector('[data-base-local]'),base=withBaseCatalog(createBaseConsoleView(local,store,client),local,store,client),periods=createHistoryView(pane.querySelector('[data-base-history]'),store,client,history);view={render(){periods.render();base.render();},clear(){periods.clear();base.clear();}};}
-    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);views.set(id,view);return view;
+    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);
+    if(id==='monitor'){
+      // Visible even while the technical accordion is closed: operators must
+      // not have to guess where the cross-workstation conflict is reported.
+      const details=pane.querySelector('[data-monitor-technical]');
+      if(details){
+        const shortcut=pane.ownerDocument.createElement('button');
+        shortcut.type='button';shortcut.className='button secondary';
+        shortcut.dataset.openSyncHealth='';
+        shortcut.textContent='Sincronização entre postos · ver diagnóstico';
+        details.before(shortcut);
+        shortcut.addEventListener('click',()=>{
+          details.open=true;
+          pane.querySelector('[data-sync-health]')?.scrollIntoView?.({block:'nearest'});
+        });
+      }
+    }
+    views.set(id,view);return view;
   }
   function paintHeader(){if(!mounted)return;const a=store.agent(),m=meta(),title=root.querySelector('[data-console-title]'),sub=root.querySelector('[data-console-sub]'),status=root.querySelector('[data-console-status]'),foot=root.querySelector('[data-console-build-foot]'),dot=root.querySelector('[data-console-dot]'),top3Nav=root.querySelector('[data-console-nav-label="top3"]'),en=document.documentElement.lang.startsWith('en');if(top3Nav)top3Nav.textContent=en?'Daily failures & FPY':'Falhas do dia & FPY';for(const group of VIEW_GROUPS){const el=root.querySelector(`[data-console-group-label="${group.id}"]`);if(el)el.textContent=en?group.en:group.pt;}if(title)title.textContent=en&&active==='top3'?'Daily failures & FPY':m[3];if(sub)sub.textContent=en&&active==='top3'?'Top 3 summary, full ranking, occurrences, shift and reuse context in one scope.':m[4];const connected=a.status==='connected';const connect=root.querySelector('[data-console-pair]');
     if(connect){connect.hidden=connected||!client.canPairFromOfficial?.();connect.textContent=client.paired?.()?'Refazer conexão deste PC':'Conectar agente deste PC';}

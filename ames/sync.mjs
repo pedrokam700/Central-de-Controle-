@@ -1,6 +1,6 @@
 import {normalizeCanonical,CANONICAL_SCHEMA} from './data/canonical.mjs';
 import {LINE_IDS} from './data/contract.mjs';
-import {historyMetadata} from './data/history.mjs';
+import {factoryWallMinute,historyMetadata} from './data/history.mjs';
 import {publicationIntent,factoryWindow,isTodaySnapshot} from './data/operational-period.mjs';
 const sha=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const syncHeadMetadata=(head,authority='team_latest')=>Object.freeze({
@@ -16,6 +16,50 @@ const syncHeadsMetadata=(heads,authority='team_latest')=>{
   const latest=remote_heads.map(h=>h.collected_at).filter(Boolean).sort().at(-1)||null;
   return {remote_scope:authority,remote_heads,remote_line_count:remote_heads.length,remote_latest_collected_at:latest};
 };
+// Comparison is diagnostic only: timestamps + PCBA + defect code are possible
+// matches between 3028 extractions, NOT proven shared occurrence identities.
+// No output may contain an SN, account identity or original observation key.
+export function compareCompetingPublisherObservations(installs){
+  if(!Array.isArray(installs)||installs.length!==2)return {state:'unsupported_installation_count'};
+  const windows=installs.map(x=>[
+    factoryWallMinute(x.payload?.summary?.period?.start_at),
+    factoryWallMinute(x.payload?.summary?.period?.end_at)
+  ]);
+  if(windows.some(([start,end])=>!start||!end||start>=end))return {state:'period_unverified'};
+  const overlapStart=windows.map(w=>w[0]).sort().at(-1),overlapEnd=windows.map(w=>w[1]).sort()[0];
+  if(overlapStart>=overlapEnd)return {state:'different_periods'};
+  const window_scope=JSON.stringify(windows[0])===JSON.stringify(windows[1])?'same_window':'overlap_only';
+  const observations=installs.map(({payload})=>{
+    const rows=Array.isArray(payload.datasets?.defects)?payload.datasets.defects:[];
+    const keys=new Set();let unverifiable=0,ambiguous=0,outside=0,observed=0;
+    for(const row of rows){
+      const sn=String(row?.pcba_sn||'').trim(),code=String(row?.defect_code||'').trim();
+      const time=factoryWallMinute(row?.defect_time);
+      if(!sn||!code||!time){unverifiable++;continue;}
+      // Compare only the actually shared time window. Rows outside it are
+      // neither missing from nor zero in the other workstation's collection.
+      if(time<overlapStart||time>overlapEnd){outside++;continue;}
+      observed++;
+      const key=JSON.stringify([sn,code,time]);
+      if(keys.has(key))ambiguous++;
+      keys.add(key);
+    }
+    const coverage=payload.coverage?.defects||{};
+    return {keys,observed,unverifiable,ambiguous,outside,
+      source_complete:coverage.transport_complete===true&&coverage.source_complete===true};
+  });
+  const summary={window_scope,observed_defects:observations.map(x=>x.observed),
+    outside_common_window:observations.map(x=>x.outside),
+    coverage_complete:observations.map(x=>x.source_complete),
+    unverifiable_rows:observations.map(x=>x.unverifiable),
+    ambiguous_keys:observations.map(x=>x.ambiguous)};
+  if(observations.some(x=>x.unverifiable||x.ambiguous))
+    return {state:'ambiguous_identifiers',...summary};
+  const [first,second]=observations;
+  const matches=[...first.keys].filter(k=>second.keys.has(k)).length;
+  return {state:matches?'candidate_overlap':'no_candidate_matches',...summary,
+    candidate_matches:matches,unmatched_observed:[first.keys.size-matches,second.keys.size-matches]};
+}
 export function sanitizeSnapshot(payload){
   normalizeCanonical(payload);
   const allowed=['schema','schema_version','source_id','snapshot_id','snapshot_revision','content_hash','line_id','collected_at','source_view','source_timestamp','summary','datasets','coverage','insights','capabilities','process_contexts'];
@@ -181,7 +225,8 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         if(byInstallation.size>1){
           // Keep verified candidate metadata visible for human review, but
           // never expose owner UIDs, combine rows, or promote a competing head.
-          const verified=[...byInstallation.values()].map(({head,payload})=>({
+          const installs=[...byInstallation.values()];
+          const verified=installs.map(({head,payload})=>({
             ...syncHeadMetadata(head,meta.day_index_available?'operational_day_history':'team_latest'),
             period_start:payload.summary?.period?.start_at||null,
             period_end:payload.summary?.period?.end_at||null
@@ -190,7 +235,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
           originConflictLines.push(line);
           originConflictCandidates.push({line_id:line,installations:verified.length,
             distinct_sources:distinctSources.size,identity_collision:distinctSources.size<verified.length,
-            candidates:verified.slice(0,10)});
+            candidates:verified.slice(0,10),observation_comparison:compareCompetingPublisherObservations(installs)});
           continue;
         }
         const selected=byInstallation.values().next().value;

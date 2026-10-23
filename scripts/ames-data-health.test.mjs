@@ -1,6 +1,15 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {buildDataHealth,buildSecurityHealth,buildWorkstationHealth,buildSyncHealth,factorySyncEvidence,createDataHealthView} from '../ames/console-data-health.mjs';
+
+test('the Monitor exposes a direct cross-workstation sync shortcut without mutating sync state',()=>{
+  const code=fs.readFileSync(new URL('../ames/console-view.mjs',import.meta.url),'utf8');
+  assert.match(code,/data-monitor-technical/);
+  assert.match(code,/shortcut\.dataset\.openSyncHealth/);
+  assert.match(code,/Sincronização entre postos · ver diagnóstico/);
+  assert.match(code,/details\.open=true/);
+});
 
 function fakeStore(occurrences=[]){
   return {
@@ -116,7 +125,8 @@ test('origin conflict diagnostics expose verified candidates, never Firebase acc
     origin_conflict_candidates:[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true,
       owner_uid:'PRIVATE-ACCOUNT',candidates:[
         {source_id:'station-<A>',snapshot_id:'8',snapshot_revision:2,collected_at:'2026-10-23T12:00:00Z',owner_uid:'SECRET'},
-        {source_id:'station-<A>',snapshot_id:'9',snapshot_revision:3,collected_at:'2026-10-23T12:30:00Z'}]}]}};
+        {source_id:'station-<A>',snapshot_id:'9',snapshot_revision:3,collected_at:'2026-10-23T12:30:00Z'}],
+      observation_comparison:{state:'candidate_overlap',window_scope:'overlap_only',observed_defects:[5,6],outside_common_window:[0,1],coverage_complete:[false,true],candidate_matches:4,unmatched_observed:[1,2]}}]}};
   const model=buildSyncHealth(agent);
   assert.equal(model.read_status,'origin_conflict');
   assert.equal(model.conflicts[0].identity_collision,true);
@@ -128,9 +138,13 @@ test('origin conflict diagnostics expose verified candidates, never Firebase acc
   createDataHealthView(root,store).render();
   assert.match(root.innerHTML,/data-sync-origin-conflicts/);
   assert.match(root.innerHTML,/station-&lt;A&gt;/);
+  assert.match(root.innerHTML,/Coincidências candidatas.*4/);
+  assert.match(root.innerHTML,/Comparação restrita à janela temporal comum/);
+  assert.match(root.innerHTML,/Fora da janela comum.*0 \/ 1/);
+  assert.match(root.innerHTML,/Cobertura 3028 reportada completa por coleta.*não \/ sim/);
   assert.doesNotMatch(root.innerHTML,/PRIVATE-ACCOUNT|SECRET/);
   const copy=factorySyncEvidence(agent);
-  assert.deepEqual(copy.receiving.conflict_candidates,[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true}]);
+  assert.deepEqual(copy.receiving.conflict_candidates,[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true,comparison_state:'candidate_overlap',candidate_matches:4}]);
   assert.equal(JSON.stringify(copy).includes('station-'),false);
 });
 
