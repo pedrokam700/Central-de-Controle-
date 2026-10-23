@@ -71,6 +71,13 @@ function compactEvidence(alert,locale,result={},currentPcba=''){
     }
     if(proof.comparison)rows.push(`<p>${esc(explainFailureComparison(proof.comparison,locale))} · ${esc(t(locale,'Regra','Rule'))} ${esc(proof.comparison.version)}</p>`);
     if(binding)rows.push(`<div class="ames-sn-smart-proof"><small>3074 · ${esc(t(locale,'Vínculo comprovado','Proven binding'))}</small><b>${esc(fmt(binding.item_sn))}</b><span>${esc(fmt(binding.previous_pcba))} → ${esc(fmt(binding.current_pcba))}</span></div>`);
+    if(alert.kind==='COMPONENT_TYPE_COMPATIBLE'&&proof.current_failure){
+      const match=alert.match||{};
+      rows.push(proof2114(t(locale,'Última falha registrada nesta PCBA','Last failure recorded on this PCBA'),proof.current_failure,locale));
+      rows.push(`<p class="ames-sn-alert-rule-note">${esc(t(locale,
+        'Correspondência física entre o tipo de componente reutilizado e o subsistema da falha; não comprova que a peça falhou ou causou o defeito.',
+        'Physical compatibility between reused component type and failure subsystem; does not prove the part failed or caused the defect.'))} · ${esc(fmt(match.classification))} · ${esc(fmt(match.reason))} · ${esc(fmt(match.version))}</p>`);
+    }
     for(const repair of proof.repairs||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro anterior associado','3012 · associated prior record'),result,currentPcba));
     for(const repair of proof.current_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro atual candidato','3012 · candidate current record'),result,currentPcba));
     for(const repair of proof.ambiguous_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · não atribuído à sequência 2114','3012 · unassigned to 2114 sequence'),result,currentPcba));
@@ -297,6 +304,13 @@ export function buildSmartSnAlerts(model={},result={}){
     const count=new Set(componentFamily.map(itemIdentity)).size;
     out.push({id:'component-same-family',severity:'medium',title:`${count} componente${count===1?'':'s'} reutilizado${count===1?'':'s'} com mesma família`,summary:'Há componente reutilizado vindo de PCBA com falha da mesma família técnica.',alerts:componentFamily});
   }
+  const compatible=byKind('COMPONENT_TYPE_COMPATIBLE');
+  if(compatible.length){
+    const count=new Set(compatible.map(itemIdentity)).size;
+    out.push({id:'component-compatible-failure',severity:'medium',
+      title:`${count} componente${count===1?'':'s'} reutilizado${count===1?'':'s'} compatível${count===1?'':'is'} com a falha`,
+      summary:'O tipo físico da peça já reutilizada é compatível com a falha registrada; exige investigação e não comprova defeito do material.',alerts:compatible});
+  }
 
   const recurrence=byKind('PCBA_MAINBOARD_REPAIR_RECURRENCE');
   if(recurrence.length)out.push({id:'mainboard-recurrence',severity:'high',title:'Falha reapareceu após MainBoard repair',summary:'Há reparo MainBoard comprovado em ciclo anterior e uma nova falha posterior relacionada; retorno 3022 só entra quando comprovado.',alerts:recurrence});
@@ -339,12 +353,14 @@ function translateAlert(alert,locale){
   title=title.replace(/^(\d+) falhas anteriores diferentes nesta PCBA$/,(_,n)=>`${n} different previous failures on this PCBA`);
   title=title.replace(/^(\d+) componentes? reutilizados? com mesma falha$/,(_,n)=>`${n} reused component${n==='1'?'':'s'} with the same failure`)
     .replace(/^(\d+) componentes? reutilizados? com mesma família$/,(_,n)=>`${n} reused component${n==='1'?'':'s'} with the same family`);
+  title=title.replace(/^(\d+) componentes? reutilizados? compatíve(?:l|is) com a falha$/,(_,n)=>`${n} reused component${n==='1'?'':'s'} compatible with the failure`);
   const summaries={
     'A própria placa possui evidência de reutilização e a mesma falha aparece no histórico anterior.':'The board itself has reuse evidence and the same failure appears in its prior history.',
     'A mesma falha atual aparece em ocorrência anterior comprovada desta PCBA.':'The current failure appears in a proven prior occurrence of this PCBA.',
     'Existe ocorrência anterior comprovada da mesma família técnica nesta PCBA.':'A proven prior occurrence from the same technical family exists on this PCBA.',
     'O componente estava anteriormente vinculado a outra PCBA com a mesma falha e o vínculo temporal foi comprovado.':'The component was previously bound to another PCBA with the same failure and the temporal binding was proven.',
     'Há componente reutilizado vindo de PCBA com falha da mesma família técnica.':'A reused component came from a PCBA with a failure in the same technical family.',
+    'O tipo físico da peça já reutilizada é compatível com a falha registrada; exige investigação e não comprova defeito do material.':'The reused physical component type matches the recorded failure; investigate it, but a material defect is not established.',
     'Há reparo MainBoard comprovado em ciclo anterior e uma nova falha posterior relacionada; retorno 3022 só entra quando comprovado.':'A prior MainBoard repair is proven and a related later failure exists; 3022 return is included only when proven.',
     'Foram identificadas intervenções MainBoard distintas e temporalmente válidas nesta placa.':'Distinct, temporally valid MainBoard interventions were identified on this board.',
     'Existe reparo MainBoard anterior comprovado na própria PCBA.':'A prior MainBoard repair is proven on this PCBA.',

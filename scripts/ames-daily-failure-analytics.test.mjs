@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {buildDailyFailureRows,filterDailyFailureRows,productionMetrics,rankDailyFailures} from '../ames/daily-failure-analytics.mjs';
 import {aggregatePcbas,componentGroup,reuseKpis,reuseLinks} from '../ames/data/reuse-analysis.mjs';
 import {pcbaReuseCategoryMap} from '../ames/reuse-table-view.mjs';
+import {reuseGroup,reuseCriteriaEvidence} from '../ames/data/daily-reuse-evidence.mjs';
 
 test('ranking counts occurrences but deduplicates affected PCBAs',()=>{
   const rows=[
@@ -29,7 +30,9 @@ test('daily filters preserve shift and association semantics without inferring c
 });
 
 test('production rate fails closed when temporal denominator does not match the filter scope',()=>{
-  const snapshot={snapshot_id:1,revision:1,summary:{quantity:100,check_fpy:96.5},occurrences:[]};
+  const snapshot={line_id:'TAN10101',snapshot_id:1,revision:1,
+    summary:{quantity:100,check_fpy:96.5,period:{start_at:'2026-10-13T07:00:00-03:00',end_at:'2026-10-14T07:00:00-03:00'}},
+    coverage:{defects:{source_complete:true,transport_complete:true}},occurrences:[]};
   const store={read:()=>({snapshot}),occurrences:()=>({rows:[],coverage:{status:'partial'}})};
   const rows=[{line:'TAN10101',production_evidence_proven:true,production_operational_date:'2026-10-13',failure_record_date:'2026-10-13',defect_time:'2026-10-13T09:00:00'}];
   const proven=productionMetrics(store,{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows);
@@ -38,6 +41,17 @@ test('production rate fails closed when temporal denominator does not match the 
   assert.equal(productionMetrics(store,{line:'TAN10101',hour:'09:00',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
   assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-10-12',to:'2026-10-12'},rows).quantity,null);
   assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-10-12',to:'2026-10-13'},rows).quantity,null);
+  assert.equal(productionMetrics(store,{line:'TAN10101'},rows).quantity,null);
+  assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-99-99',to:'2026-99-99'},rows).quantity,null);
+  const wrongPeriod={...snapshot,summary:{...snapshot.summary,period:{start_at:'2026-10-12T07:00:00-03:00',end_at:'2026-10-13T07:00:00-03:00'}}};
+  assert.equal(productionMetrics({...store,read:()=>({snapshot:wrongPeriod})},{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
+  const partial={...snapshot,coverage:{defects:{source_complete:false,transport_complete:true}}};
+  assert.equal(productionMetrics({...store,read:()=>({snapshot:partial})},{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
+  const unavailable={...snapshot,summary:{...snapshot.summary,quantity:null,check_fpy:null}};
+  const missingStore={...store,read:()=>({snapshot:unavailable})};
+  const absent=productionMetrics(missingStore,{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows);
+  assert.equal(absent.denominatorProven,false);
+  assert.equal(absent.quantity,null,'missing production denominator cannot become numeric zero');
 });
 
 test('daily occurrence preserves loaded AT repair fields without falsely claiming 3012',()=>{
@@ -50,6 +64,64 @@ test('daily occurrence preserves loaded AT repair fields without falsely claimin
   assert.equal(rows[0].repair_code,'RC1');
   assert.equal(rows[0].repair_source,'3028-repair-refresh');
   assert.equal(rows[0].repair_rows.length,0);
+});
+
+test('a material from PCBA context never inherits an unrelated 3028 occurrence',()=>{
+  const events=[
+    {pcba_sn:'P1',defect_key:'K1',defect_code:'CAM',defect_time:'2026-10-22T10:00:00-03:00'},
+    {pcba_sn:'P1',defect_key:'K2',defect_code:'LCD',defect_time:'2026-10-22T11:00:00-03:00'},
+  ];
+  const trace=[
+    {current_pcba_sn:'P1',current_defect_key:'K1',item_sn:'MAT-EXACT',item_type:'Rear Camera',
+      known_use_count:2,previous_pcbas:['OLD']},
+    {current_pcba_sn:'P1',item_sn:'MAT-CONTEXT',item_type:'Screen',
+      known_use_count:2,previous_pcbas:['OLD']},
+    {current_pcba_sn:'P1',current_defect_key:'K1',item_sn:'MAT-NEW-CYCLE',item_type:'Rear Camera',
+      bind_time_utc:'2026-10-22T14:30:00Z',known_use_count:2,previous_pcbas:['OLD']},
+  ];
+  const snapshot={line_id:'TAN10101',occurrences:events,material_trace:{records:trace},
+    process_timeline:{contexts:[]},pcba_history:{records:[]},insights:{drilldowns:{}}};
+  const rows=buildDailyFailureRows({read:line=>({snapshot:line==='TAN10101'?snapshot:null})});
+  assert.equal(rows.length,2);
+  assert.deepEqual(rows[0].component_links_exact.map(x=>x.material),['MAT-EXACT']);
+  assert.equal(rows[0].component_links_count,3,'PCBA context remains visible, not attributed');
+  assert.equal(rows[1].component_links_exact.length,0);
+  assert.equal(reuseGroup(rows[0]),'material_only');
+  assert.equal(reuseGroup(rows[1]),'no_reuse_evidence');
+  assert.equal(reuseCriteriaEvidence(rows[1]).material_reused,false);
+});
+
+test('raw matching defect code and instant can anchor material without a defect key',()=>{
+  const defect={pcba_sn:'P2',defect_key:'K3',defect_code:'D3',defect_time:'2026-10-22T10:00:00-03:00'};
+  const earlier={pcba_sn:'P2',defect_key:'K2',defect_code:'OTHER',defect_time:'2026-10-22T09:00:00-03:00'};
+  const material={current_pcba_sn:'P2',item_sn:'MAT-1',item_type:'LCM',
+    'Defect Code atual':'D3','Defect Time atual':'2026-10-22T13:00:00Z',
+    known_use_count:2,previous_pcbas:['OLD']};
+  const snapshot={line_id:'TAN10101',occurrences:[earlier,defect],
+    material_trace:{records:[material]},pcba_history:{records:[]},
+    process_timeline:{contexts:[]},insights:{drilldowns:{}}};
+  const rows=buildDailyFailureRows({read:line=>({snapshot:line==='TAN10101'?snapshot:null})});
+  assert.equal(rows[0].component_links_exact.length,0);
+  assert.deepEqual(rows[1].component_links_exact.map(x=>x.material),['MAT-1']);
+});
+
+test('PCBA same/family recurrence only consults 2114 history before the 3028 event',()=>{
+  const snapshot={line_id:'TAN10101',occurrences:[{
+    pcba_sn:'P4',defect_key:'K4',defect_code:'CAM-A',defect_desc:'Front camera failed',
+    defect_time:'2026-10-22T10:00:00-03:00'}],
+  material_trace:{records:[]},process_timeline:{contexts:[]},
+  pcba_history:{records:[
+    {pcba_sn:'P4',defect_code:'CAM-B',defect_desc:'Front camera not working',defect_time:'2026-10-21T09:00:00-03:00'},
+    {pcba_sn:'P4',defect_code:'CAM-A',defect_desc:'Front camera failed',defect_time:'2026-10-23T10:00:00-03:00'},
+    {pcba_sn:'P4',defect_code:'CAM-A',defect_desc:'Front camera failed',defect_time:'invalid'},
+    {pcba_sn:'OTHER',defect_code:'CAM-A',defect_desc:'Front camera failed',defect_time:'2026-10-21T09:00:00-03:00'}]},
+  insights:{drilldowns:{pcba_second_use:[{PCBA:'P4'}],pcba_reused_with_prior_failure:[{PCBA:'P4'}]}}};
+  const [row]=buildDailyFailureRows({read:line=>({snapshot:line==='TAN10101'?snapshot:null})});
+  assert.equal(row.pcba_prior_events.length,1);
+  assert.equal(row.pcba_prior_events[0].defect_code,'CAM-B');
+  const flags=reuseCriteriaEvidence(row);
+  assert.equal(flags.pcba_prior_family,true);
+  assert.equal(flags.pcba_prior_same,false,'future same code cannot become prior evidence');
 });
 
 test('three reuse granularities never turn three material links into three PCBAs',()=>{

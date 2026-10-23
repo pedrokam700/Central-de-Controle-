@@ -1,6 +1,7 @@
 import {factoryWallMinute} from './history.mjs';
 import {normalizeCanonical} from './canonical.mjs';
 import {buildReuseCohorts} from './reuse-cohorts.mjs';
+import {fullDayClosureEvidence} from './full-day-closure.mjs';
 const DAY=86400000;
 export const shiftDay=(day,n)=>new Date(Date.parse(day+'T12:00:00Z')+n*DAY).toISOString().slice(0,10);
 const dayOf=e=>factoryWallMinute(e.period_start)?.slice(0,10);
@@ -64,15 +65,22 @@ export function createHistoryTrendReader(history){
   for(let i=0;i<plan.length;i+=6){
    const batch=await Promise.all(plan.slice(i,i+6).map(async day=>{
     if(day.status!=='indexed')return {...day,candidates:undefined};
-    let point=null;
+    let point=null,readable=0;
     for(const entry of day.candidates){
      try{const snapshot=await open(entry);
       // Custom queries are distinct identities, even when their bounds look like a day.
       if(!dailyModes.has(snapshot.canonical.summary.period?.mode))continue;
+      readable++;
+      // The observed trend intentionally permits partial snapshots. An opt-in
+      // FULL trend must skip newer partial revisions and retain the latest
+      // independently proven complete revision instead.
+      if(options.requireFullClosure===true&&fullDayClosureEvidence(snapshot.canonical).status!=='FULL')continue;
       point={...trendPoint(snapshot,entry,options.filters),stored_revisions:day.candidates.length};break;
      }catch(error){point={date:day.date,status:'unavailable',error:error.message,entry};break;}
     }
-    return point||{date:day.date,status:'not_collected'};
+    return point||(options.requireFullClosure===true&&readable>0?
+      {date:day.date,status:'unproven_full',entry:day.candidates[0],stored_revisions:day.candidates.length}:
+      {date:day.date,status:'not_collected'});
    }));
    points.push(...batch);
   }
