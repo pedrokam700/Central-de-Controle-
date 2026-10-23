@@ -120,10 +120,10 @@ def spawn_fixture_relaunchers(root, identity, transaction_id, account_sha256, se
             script = ROOT / "tools/ames-workstation" / script_name
             key = secrets.token_bytes(32)
             process = subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(script),
-                "-Root", str(root / "persistent-clean"), "-MaintenanceEnrollment", "-MaintenanceRoot", str(root),
+                "-Root", str(root), "-MaintenanceEnrollment", "-MaintenanceRoot", str(root),
                 "-FixtureMutex", mutex_name], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             processes.append(process)
-            root_hash = hashlib.sha256(str((root / "persistent-clean").resolve()).lower().encode()).hexdigest()
+            root_hash = hashlib.sha256(str(root.resolve()).lower().encode()).hexdigest()
             process.stdin.write(json.dumps({"key": key.hex(), "transaction_id": transaction_id,
                 "installation_sha256": identity, "root_sha256": root_hash}).encode() + b"\n")
             process.stdin.flush()
@@ -141,7 +141,7 @@ def spawn_fixture_relaunchers(root, identity, transaction_id, account_sha256, se
                 if not answer or len(answer) > MAX_MESSAGE or not answer.endswith(b"\n"):
                     raise ValueError("enrolled_relauncher_frame_unverified")
                 return answer[:-1]
-            witness = WindowsRelauncherWitness(role, script, root / "persistent-clean", root,
+            witness = WindowsRelauncherWitness(role, script, root, root,
                                               account_sha256, session_id)
             participants.append(RelauncherClient(exchange_relauncher, key, process.pid, witness))
     except BaseException:
@@ -332,7 +332,7 @@ class BoundBackupTests(unittest.TestCase):
         self.root = Path(self.temp.name) / "fixture"
         self.root.mkdir()
         (self.root / ledger.FIXTURE_MARKER).write_text(ledger.FIXTURE_MAGIC, encoding="utf-8")
-        self.data = self.root / "persistent-clean/ames-agent/data"
+        self.data = self.root / "ames-agent/data"
         self.data.mkdir(parents=True)
         self.db_path = self.data / "ames_local.sqlite3"
         with closing(sqlite3.connect(self.db_path)) as db:
@@ -354,7 +354,7 @@ class BoundBackupTests(unittest.TestCase):
 
     def participant_clients(self):
         clients, states = [], []
-        root_digest = hashlib.sha256(str((self.root / "persistent-clean").resolve()).lower().encode()).hexdigest()
+        root_digest = hashlib.sha256(str(self.root.resolve()).lower().encode()).hexdigest()
         for role, pid in (("guardian", 8001), ("launcher", 8002)):
             state = {"role": role, "pid": pid, "start_marker": "c" * 64,
                      "account_sha256": "d" * 64, "session_id": 1,
@@ -415,7 +415,7 @@ class BoundBackupTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.coordinator.prepare_backup()
         self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
-        self.assertFalse((self.root / "private-backup").exists())
+        self.assertFalse(self.coordinator.backup_directory.exists())
         self.assertTrue(self.admission.snapshot()["draining"])
 
     def test_released_mutex_does_not_keep_enrollment_valid_merely_because_claim_exists(self):
@@ -426,7 +426,14 @@ class BoundBackupTests(unittest.TestCase):
             self.coordinator.prepare_backup()
         self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
         self.assertTrue(self.admission.snapshot()["draining"])
-        self.assertFalse((self.root / "private-backup").exists())
+        self.assertFalse(self.coordinator.backup_directory.exists())
+
+    def test_relauncher_root_and_journal_cannot_be_two_different_installations(self):
+        other = self.root / "other-installation"
+        other.mkdir()
+        with self.assertRaisesRegex(ValueError, "relauncher_root_journal_mismatch"):
+            WindowsRelauncherWitness("guardian", ROOT / "tools/ames-workstation/KEEP_AGENT_RUNNING.ps1",
+                                    other, self.root, "d" * 64, 1)
 
     def test_opaque_or_legacy_origin_is_veto_even_with_compatible_participants(self):
         participants, states = self.participant_clients()
@@ -438,6 +445,7 @@ class BoundBackupTests(unittest.TestCase):
     def test_backup_and_restore_are_bound_to_same_transaction_and_installation(self):
         result = self.coordinator.prepare_backup()
         self.assertTrue(result["bound_to_transaction"])
+        self.assertNotIn(self.root.resolve(), self.coordinator.backup_directory.resolve().parents)
         self.assertFalse(result["update_authorized"])
         persisted = ledger.inspect_fixture(self.root)
         self.assertEqual(persisted["phase"], "backup_verified")
@@ -450,7 +458,7 @@ class BoundBackupTests(unittest.TestCase):
     def test_structurally_valid_replaced_backup_cannot_rewrite_journal_receipt(self):
         from issue57_update_preflight import verify_operational_backup, sha256_file
         self.coordinator.prepare_backup()
-        backup = self.root / "private-backup"
+        backup = self.coordinator.backup_directory
         (backup / "config.json").write_text('{"source_id":"substituted-fixture"}')
         manifest = backup / "runtime-backup-manifest.json"
         report = json.loads(manifest.read_text(encoding="utf-8"))
@@ -478,12 +486,12 @@ class BoundBackupTests(unittest.TestCase):
             db.commit()
         with self.assertRaisesRegex(ValueError, "coordinator_agent_not_quiescent"):
             self.coordinator.prepare_backup()
-        self.assertFalse((self.root / "private-backup").exists())
+        self.assertFalse(self.coordinator.backup_directory.exists())
         self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
 
     def test_source_link_and_existing_backup_are_never_adopted(self):
         # Existing evidence may belong to another attempt; do not overwrite it.
-        backup = self.root / "private-backup"
+        backup = self.coordinator.backup_directory
         backup.mkdir()
         (backup / "evidence.txt").write_bytes(b"retained evidence")
         with self.assertRaises(FileExistsError):
@@ -503,7 +511,7 @@ class BoundBackupTests(unittest.TestCase):
         with patch("issue57_update_preflight.shutil.disk_usage", return_value=SimpleNamespace(free=0)):
             with self.assertRaisesRegex(ValueError, "backup_capacity_insufficient"):
                 self.coordinator.prepare_backup()
-        self.assertFalse((self.root / "private-backup").exists())
+        self.assertFalse(self.coordinator.backup_directory.exists())
         self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
         self.assertTrue(self.admission.snapshot()["draining"])
         self.assertEqual((self.data / "local_agent_token").read_bytes(), b"private-fixture-token")
@@ -711,7 +719,7 @@ class CrossProcessTests(unittest.TestCase):
         self.assertEqual(marker.read_text(encoding="utf-8"), "ISSUE57_DISPOSABLE_NO_PRODUCTION")
         root.mkdir()
         (root / ledger.FIXTURE_MARKER).write_text(ledger.FIXTURE_MAGIC, encoding="utf-8")
-        data = root / "persistent-clean/ames-agent/data"
+        data = root / "ames-agent/data"
         data.mkdir(parents=True)
         writer = sqlite3.connect(data / "ames_local.sqlite3")
         writer.execute("PRAGMA journal_mode=WAL")
@@ -772,7 +780,7 @@ class CrossProcessTests(unittest.TestCase):
             # A mismatching account/session/root is rejected by independent
             # OS evidence, not by trusting the participant's own response.
             wrong = WindowsRelauncherWitness("guardian", ROOT / "tools/ames-workstation/KEEP_AGENT_RUNNING.ps1",
-                root / "persistent-clean", root, "0" * 64, adapter.session_id)
+                root, root, "0" * 64, adapter.session_id)
             with self.assertRaises(ValueError):
                 wrong(relaunch_children[0].pid)
             if abandon_after_enrollment:

@@ -38,7 +38,7 @@ def maintenance_peer(listener):
     claim = json.loads((root / '.ames-update/claim.lock').read_text(encoding='utf-8'))
     if claim['installation_identity_sha256'] != setup['installation_sha256']:
         raise RuntimeError('fixture_installation_mismatch')
-    db_path = root / 'persistent-clean/ames-agent/data/ames_local.sqlite3'
+    db_path = root / 'ames-agent/data/ames_local.sqlite3'
     # Both the drain/readiness and backup use THIS exact synthetic installation.
     with closing(sqlite3.connect(db_path.as_uri() + '?mode=ro', uri=True)) as db:
         if db.execute('PRAGMA quick_check').fetchone() != ('ok',):

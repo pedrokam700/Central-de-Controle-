@@ -128,6 +128,8 @@ class WindowsRelauncherWitness:
             raise ValueError("relauncher_entrypoint_unsupported")
         self.role, self.root = role, Path(installation_root).resolve(strict=True)
         self.maintenance_root = Path(maintenance_root).resolve(strict=True)
+        if self.root != self.maintenance_root:
+            raise ValueError("relauncher_root_journal_mismatch")
         self.account, self.session, self._run = account_sha256, session_id, run
         self.script_digest = hashlib.sha256(self.script.read_bytes()).hexdigest()
         self.helper_digest = hashlib.sha256(self.script.with_name("ISSUE57_RELAUNCH_ENROLLMENT.ps1").read_bytes()).hexdigest()
@@ -270,7 +272,7 @@ class FixtureDrainCoordinator:
                     or {p.identity["role"] for p in participants} != {"guardian", "launcher"}):
                 raise ValueError("relauncher_inventory_unverified")
             self._assert_witness_stable()
-            root_digest = hashlib.sha256(str((Path(self.root) / "persistent-clean").resolve()).lower().encode()).hexdigest()
+            root_digest = hashlib.sha256(str(Path(self.root).resolve()).lower().encode()).hexdigest()
             identities = [p.attest(self.claim["transaction_id"], self.client.target["installation_sha256"]) for p in participants]
             if (any(p.last_barrier_state != "mutex_and_claim_blocked" for p in participants)
                     or len({p["pid"] for p in identities}) != 2
@@ -320,7 +322,7 @@ class FixtureDrainCoordinator:
     def prepare_backup(self):
         """Create/restore-check a backup bound to THIS fixture transaction.
 
-        Only reads the explicitly marked fixture's persistent-clean subtree.
+        Only reads the explicitly marked fixture installation root.
         No caller-selected production source, backup reuse or update approval.
         """
         from issue57_update_preflight import (backup_operational_tree,
@@ -330,14 +332,15 @@ class FixtureDrainCoordinator:
                 raise ValueError("coordinator_backup_out_of_order")
             if self.observe()["state"] != "agent_quiescent_only":
                 raise ValueError("coordinator_agent_not_quiescent")
-            source = Path(self.root) / "persistent-clean"
-            backup = Path(self.root) / "private-backup"
+            source = Path(self.root)
+            backup = self.backup_directory
             # The ledger has already rejected any operational/CLEAN root.
             # Refuse links before resolving so it cannot escape that fixture.
             if (source.is_symlink() or backup.is_symlink()
                     or (hasattr(source, "is_junction") and source.is_junction())
                     or (hasattr(backup, "is_junction") and backup.is_junction())
-                    or source.resolve().parent != Path(self.root).resolve()):
+                    or backup.resolve().parent != source.resolve().parent
+                    or source.resolve() in backup.resolve().parents):
                 raise ValueError("coordinator_backup_source_untrusted")
             backup_operational_tree(source, backup)
             rehearse_operational_restore(backup)
@@ -365,7 +368,7 @@ class FixtureDrainCoordinator:
                 raise ValueError("coordinator_backup_not_bound")
             if self.observe()["state"] != "agent_quiescent_only":
                 raise ValueError("coordinator_agent_not_quiescent")
-            backup = Path(self.root) / "private-backup"
+            backup = self.backup_directory
             verify_operational_backup(backup)
             if sha256_file(backup / "runtime-backup-manifest.json") != self.claim["backup_receipt"]["manifest_sha256"]:
                 raise ValueError("coordinator_backup_receipt_mismatch")
@@ -374,6 +377,12 @@ class FixtureDrainCoordinator:
         except Exception:
             self._recovery_required()
             raise
+
+    @property
+    def backup_directory(self):
+        # Outside the installation, with a transaction-specific, non-reused
+        # name. The existing private ACL/capacity/integrity checks still apply.
+        return Path(self.root).parent / ("private-backup-" + self.claim["transaction_id"])
 
     @property
     def fixture_slots(self):
@@ -455,7 +464,7 @@ class FixtureDrainCoordinator:
             raise ValueError("coordinator_fixture_recovery_unverified")
         if assert_exclusive() is not True:
             raise ValueError("coordinator_recovery_exclusion_unverified")
-        backup = Path(root) / "private-backup"
+        backup = Path(root).parent / ("private-backup-" + current["transaction_id"])
         verify_operational_backup(backup)
         if sha256_file(backup / "runtime-backup-manifest.json") != current["backup_receipt"]["manifest_sha256"]:
             raise ValueError("coordinator_backup_receipt_mismatch")

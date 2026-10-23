@@ -27,7 +27,7 @@ function Invoke-Issue57RelaunchEnrollment {
   if(-not $journal.StartsWith($temporary,[StringComparison]::OrdinalIgnoreCase) -or
      [IO.Path]::GetFileName($journal) -cne 'fixture' -or
      [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($journal)) -notmatch '^issue57-maintenance-ledger-[0-9a-f]{32}$' -or
-     $installation -ine (Join-Path $journal 'persistent-clean') -or
+     $installation -ine $journal -or
      [IO.File]::ReadAllText((Join-Path $journal '.issue57_maintenance_fixture_ONLY')) -cne 'ISSUE57_TEST_ROOT_NOT_A_PRODUCTION_CLEAN'){
     throw 'enrollment_fixture_root_untrusted'
   }
