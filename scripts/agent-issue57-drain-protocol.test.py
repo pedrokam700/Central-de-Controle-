@@ -669,6 +669,37 @@ class BoundBackupTests(unittest.TestCase):
         self.assertTrue(probe_candidate_http(self.coordinator.fixture_slots / "previous", "old"))
         self.assertEqual((self.data / "local_agent_token").read_bytes(), b"private-fixture-token")
 
+    def test_registration_review_binds_live_journal_and_never_manufactures_consent(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        self.coordinator.stage_fixture_candidate(archive, release)
+        before = (self.root / ".ames-update/transaction.json").read_bytes()
+        review = self.coordinator.prepare_registration_review()
+        self.assertEqual(review["binding"]["transaction_id"], self.coordinator.claim["transaction_id"])
+        self.assertEqual(review["binding"]["journal_revision"], self.coordinator.claim["revision"])
+        self.assertEqual(review["binding"]["release_commit"], release["commit"])
+        self.assertRegex(review["review_sha256"], "^[a-f0-9]{64}$")
+        self.assertIn("operator_consent_missing", review["blockers"])
+        self.assertIn("runtime_environment_unverified", review["blockers"])
+        self.assertFalse(review["operational_registration_complete"])
+        self.assertFalse(review["update_authorized"])
+        self.assertFalse(review["operator_consent_observed"])
+        self.assertEqual((self.root / ".ames-update/transaction.json").read_bytes(), before)
+        self.coordinator._transition("recovery_required")
+        with self.assertRaises(ValueError):
+            self.coordinator.prepare_registration_review()
+
+    def test_registration_review_rejects_candidate_tampering_and_retains_drain(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        self.coordinator.stage_fixture_candidate(archive, release)
+        (self.coordinator.fixture_slots / "incoming/ames-agent/health_fixture.py").write_bytes(b"tampered")
+        with self.assertRaisesRegex(ValueError, "registration_review_candidate_changed"):
+            self.coordinator.prepare_registration_review()
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertTrue(self.admission.snapshot()["draining"])
+        self.assertTrue(ledger.inspect_fixture(self.root)["claim_present"])
+
     def test_bad_ready_version_rolls_back_and_preserves_previous_data(self):
         self.coordinator.prepare_backup()
         archive, release = prepare_candidate_files(self.coordinator)

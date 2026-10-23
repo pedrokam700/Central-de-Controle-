@@ -481,6 +481,57 @@ class FixtureDrainCoordinator:
             self._recovery_required()
             raise
 
+    def prepare_registration_review(self):
+        """Prepare a consent-review binding from LIVE evidence, never consent.
+
+        Reuses this coordinator/claim/receipts; no installed-root activation,
+        user-supplied attestation booleans, extra journal or process operation.
+        The returned digest is tied to the exact transaction/revision/code.
+        """
+        try:
+            if self.claim["phase"] != "candidate_staged":
+                raise ValueError("registration_review_requires_staged_candidate")
+            self.verify_bound_backup()
+            model = _fixture_slot_model()
+            slots = model._fixture(self.fixture_slots)
+            if (model._phase(slots) is not None or model._fingerprint(slots / "incoming")
+                    != self.claim["candidate_receipt"]["slot_sha256"]):
+                raise ValueError("registration_review_candidate_changed")
+            previous = model._fingerprint(slots / "active")
+            inventory = json.loads((self.backup_directory / "runtime-backup-manifest.json").read_text(encoding="utf-8")).get("installation_inventory", {})
+            binding = {"transaction_id": self.claim["transaction_id"], "journal_revision": self.claim["revision"],
+                       "installation_sha256": self.client.target["installation_sha256"],
+                       "root_sha256": hashlib.sha256(str(Path(self.root).resolve()).lower().encode()).hexdigest(),
+                       "process_start_marker": self._witness["start_marker"],
+                       "backup_manifest_sha256": self.claim["backup_receipt"]["manifest_sha256"],
+                       "release_commit": self.claim["candidate_receipt"]["release_commit"],
+                       "candidate_sha256": self.claim["candidate_receipt"]["slot_sha256"],
+                       "retained_fixture_code_sha256": previous}
+            blockers = ["operational_installation_not_enrolled", "all_relaunch_origins_unattested",
+                        "browser_profiles_and_unregistered_writers_unattested", "external_locations_unattested",
+                        "runtime_environment_unverified", "operational_rollback_unverified",
+                        "operator_consent_missing", "factory_physical_validation_pending"]
+            if not self._relaunchers:
+                blockers.append("compatible_relaunchers_not_enrolled")
+            if self._browser is None:
+                blockers.append("browser_scope_not_enrolled")
+            if not inventory.get("software_release"):
+                blockers.append("installed_software_identity_unverified")
+            # Recheck live participants AND the exact journal after reading all
+            # evidence. A stale review can never be used to clear a barrier.
+            if self.observe()["state"] != "agent_quiescent_only" or inspect_fixture(self.root) != self.claim:
+                raise ValueError("registration_review_observation_changed")
+            digest = hashlib.sha256(json.dumps(binding, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            return {"schema": "ames-registration-review-v1", "binding": binding,
+                    "review_sha256": digest, "blockers": blockers,
+                    "cooperative_browser_scope_observed": self._browser is not None,
+                    "cooperative_relaunchers_observed": len(self._relaunchers) == 2,
+                    "operational_registration_complete": False, "operator_consent_observed": False,
+                    "update_authorized": False, "fixture_only": True}
+        except Exception:
+            self._recovery_required()
+            raise
+
     def exercise_fixture_update(self, health_probe, *, interrupt_after=None):
         """Apply/health/rollback ONLY the existing marked, disposable model.
 
