@@ -82,9 +82,10 @@ foreach($startupSpec in @(
   try {
     if($startupSpec.path -and (Test-Path -LiteralPath $startupSpec.path -PathType Container)){
       foreach($file in @(Get-ChildItem -LiteralPath $startupSpec.path -File -ErrorAction Stop)){
-        # Shortcut targets are NOT proven from the filename; any relevant name
-        # is a blocker until the real installed guardian is identified.
-        $signal=Get-Issue57GuardianSignal -RegistrationName ([string]$file.BaseName)
+        # An arbitrary shortcut NAME cannot prove its target is unrelated.
+        # Read only the already-existing .lnk metadata, NEVER its payload
+        # as a command and NEVER serialize TargetPath or Arguments.
+        $signal=Get-Issue57StartupSignal -ShortcutPath $file.FullName -RegistrationName ([string]$file.BaseName)
         if($signal -eq 'unrelated' -and $file.BaseName -match '(?i)(?:^|[^a-z0-9])(?:AMES|Central|Guardian)(?:[^a-z0-9]|$)'){
           $signal='startup_shortcut_unverified'
         }

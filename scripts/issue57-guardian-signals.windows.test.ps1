@@ -5,12 +5,61 @@ $cases=@(
   @{cmd='powershell -File C:\temp\START_AGENT_CANONICAL.ps1';name='';want='agent_launcher'},
   @{cmd='python C:\temp\ames-agent\agent_hardened_entry.py --port 8765';name='';want='agent_entry'},
   @{cmd='powershell.exe -WindowStyle Hidden';name='CentralAMESOperatorAgent';want='named_registration_unverified'},
+  @{cmd='powershell.exe -NoProfile -EncodedCommand SQBFAFgA';name='Routine normal';want='opaque_supervisor_unverified'},
+  @{cmd='python.exe -c "import os; os.system(\"hello\")"';name='';want='opaque_supervisor_unverified'},
   @{cmd='"C:\Program Files\Unrelated\start.exe"';name='Unrelated Service';want='unrelated'},
   @{cmd='';name='';want='unrelated'}
 )
 foreach($case in $cases){
   $actual=Get-Issue57GuardianSignal -CommandText $case.cmd -RegistrationName $case.name
   if($actual -cne $case.want){throw "Guardian fixture classification mismatch: expected $($case.want) got $actual"}
+}
+$opaque=Get-Issue57CoordinationBlockers -Observations @([pscustomobject]@{signal='opaque_supervisor_unverified'})
+if($opaque.update_authorized -or 'opaque_supervisor_command_unverified' -notin $opaque.blockers){
+  throw 'Opaque guardian launcher must be a blocker'
+}
+if($env:GITHUB_ACTIONS -eq 'true' -and $env:RUNNER_OS -eq 'Windows'){
+  if(-not $env:RUNNER_TEMP){throw 'missing_runner_temp'}
+  $id=[guid]::NewGuid().ToString('N')
+  $fixture=Join-Path $env:RUNNER_TEMP ('issue57-startup-link-test-'+$id)
+  $null=New-Item -ItemType Directory -Path $fixture -ErrorAction Stop
+  try {
+    $shell=New-Object -ComObject WScript.Shell
+    $powershellExe=(Get-Command pwsh.exe -ErrorAction Stop).Source
+    $link=Join-Path $fixture 'Daily-Handoff.lnk'
+    $shortcut=$shell.CreateShortcut($link)
+    $shortcut.TargetPath=$powershellExe
+    $shortcut.Arguments='-NoProfile -File C:\Factory\KEEP_AGENT_RUNNING.ps1'
+    $shortcut.Save()
+    if((Get-Issue57StartupSignal -ShortcutPath $link -RegistrationName 'Daily-Handoff') -cne 'guardian_script'){
+      throw 'Generic name masked guardian startup target'
+    }
+    $shortcut=$shell.CreateShortcut($link)
+    $shortcut.Arguments='-NoProfile -EncodedCommand SQBFAFgA'
+    $shortcut.Save()
+    if((Get-Issue57StartupSignal -ShortcutPath $link -RegistrationName 'Daily-Handoff') -cne 'opaque_supervisor_unverified'){
+      throw 'Encoded startup shortcut was considered safe'
+    }
+    $shortcut=$shell.CreateShortcut($link)
+    $shortcut.Arguments='-NoProfile -File C:\Unlisted\daily.ps1'
+    $shortcut.Save()
+    if((Get-Issue57StartupSignal -ShortcutPath $link -RegistrationName 'Daily-Handoff') -cne 'startup_shortcut_unverified'){
+      throw 'Unknown interpreter startup shortcut was considered safe'
+    }
+    $broken=Join-Path $fixture 'Daily-Unknown.lnk'
+    [IO.File]::WriteAllText($broken,'not a valid windows shortcut')
+    if((Get-Issue57StartupSignal -ShortcutPath $broken -RegistrationName 'Daily-Unknown') -cne 'startup_shortcut_unverified'){
+      throw 'Broken startup shortcut was considered safe'
+    }
+    if((Get-Issue57StartupSignal -ShortcutPath (Join-Path $fixture 'Routine.cmd') -RegistrationName 'Routine') -cne 'startup_shortcut_unverified'){
+      throw 'Uninspected startup script was considered safe'
+    }
+  }finally {
+    # Only the unique synthetic runner fixture is removable.
+    if((Split-Path -Leaf $fixture) -eq ('issue57-startup-link-test-'+$id)){
+      Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction Stop
+    }
+  }
 }
 $direct=Get-Issue57CoordinationBlockers -Observations @([pscustomobject]@{signal='agent_launcher';source='scheduled_task'}) -Checks @([pscustomobject]@{checked=$true})
 if($direct.schema -ne 'ames-issue57-coordination-blockers-v1' -or $direct.update_authorized -or $direct.direct_launcher_fenced){throw 'Direct launcher must never authorize a transaction'}
