@@ -112,16 +112,25 @@ git diff --check
 3. Regressão testada: duas falhas na mesma PCBA, material de uma falha apenas, linha 3074 sem identificação da ocorrência e Bind posterior excluídos; a correspondência UTC / hora de fábrica da segunda falha permanece válida.
 4. Testes locais: `node --test scripts/ames-daily-failure-analytics.test.mjs scripts/ames-issue66-dashboard.test.mjs scripts/ames-reuse-localization.test.mjs scripts/ames-failure-occurrence-evidence.test.mjs scripts/ames-reuse-cohorts.test.mjs scripts/ames-clean-v3.test.mjs scripts/ames-cache.test.mjs` **7/7 arquivos PASS**.
 
-## Checkpoint P7 · reincidência mesma falha vs mesma família (em preparação)
+## Checkpoint P7 · reincidência mesma falha vs mesma família (publicado)
+
+- **Publicado na PR draft #67** com commit remoto `1f9e1af1ccf4eab19e1e1a79a6245e38c87b6d19`.
+- CI run `39987334555` por SHA: `Static quality checks` e `Agent and sync E2E with Firestore Rules` **SUCCESS**; `Console themes, languages and mobile` em execução no último check; `Published preview smoke` **FAILURE** pelo `release_build_http_401` confirmado no log. Não chamar integrado GREEN.
 
 1. O dashboard configurável passa de 5 para **9 critérios**. Acrescenta PCBA 2º+ com falha 2114 **anterior da mesma falha** e **da mesma família**, e material físico com falha **da mesma falha** / **mesma família** em PCBA anterior. Os dois critérios de Material SN são explicitamente **candidatos**, não provam que a peça causou a falha antiga.
 2. As reincidências da PCBA usam 2114 da própria PCBA estritamente **anterior** ao instante 3028, nunca histórico de outra PCBA, falha futura ou registro sem hora. A classificação usa taxonomia oficial versionada `failure-taxonomy.mjs`: `EXACT` distinto de `SIMILAR`, sem promover texto agregado `D1, D2` a um único código comprovado.
 3. Mantém OU/E, drilldown observado sem duplicação, matcher de tipo compatível, tradução PT/EN. Os 5 critérios anteriores e presets continuam funcionando.
-4. Testes locais direcionados: Node `ames-issue66-dashboard`, `ames-daily-failure-analytics`, `ames-reuse-cohorts`, `ames-cache`, `ames-clean-v3` **5/5 arquivos PASS**. Suite adicional `ames-failure-taxonomy` local foi **interrompida** após ficar sem progresso no subprocesso de checagem Python; não declarar PASS. CI do SHA P7 e físico aguardam publicação/execução.
+4. Testes locais direcionados: Node `ames-issue66-dashboard`, `ames-daily-failure-analytics`, `ames-reuse-cohorts`, `ames-cache`, `ames-clean-v3` **5/5 arquivos PASS**. Suite adicional `ames-failure-taxonomy` local foi **interrompida** após ficar sem progresso no subprocesso de checagem Python; não declarar PASS. Evidência remota por SHA acima; físico ainda requer execução na fábrica.
+
+## Checkpoint P8 · tendência somente a partir de FULL comprovado (em preparação)
+
+1. `ames/data/history-trends.mjs` tem opção de leitura `requireFullClosure`: ao percorrer as revisões imutáveis de cada dia/linha/origem, salta capturas posteriores parciais e usa apenas a **revisão completa mais recente** demonstrada por `fullDayClosureEvidence` (3028+3074+2114+3022, dia 07:00→07:00, hash e escopo). Dia sem prova vira `unproven_full` e lacuna, não zero; origem em conflito e revisão inválida continuam bloqueadas.
+2. `ames/console-history-trends.mjs`: checkbox **Somente fechamentos FULL comprovados** dentro do gráfico histórico 7/30/93 dias; o padrão existente continua sendo tendência de dados observados/possivelmente parciais. O modo FULL não lê o MES, não publica, não altera snapshot atual, e não faz uma coleta parcial virar completa.
+3. Regressão em `ames-history-trends.test.mjs`: dia com r1 FULL e r2 posterior parcial seleciona **r1 somente no modo FULL**; modo observado mantém r2; sem FULL retorna lacuna/`—`, não ocorrência zero. Testes locais `ames-history-trends`, `ames-issue66-full-closure`, `ames-cache`, `ames-issue66-dashboard` **4/4 arquivos PASS**. CI do SHA P8 e homologação física pendentes.
 
 ## Continuidade imediata
 
-1. Publicar P7 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
+1. Publicar P8 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
 2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
 3. P1 física: confirmar na fábrica respostas 3074 PCBA/Material SN, Bind/Unbind reais, alarme GN06-X015 e 3022 dos respectivos ciclos. Resolver possíveis lacunas de parser/driver somente com evidência sanitizada.
 4. P2 pendente: persistência autoritativa de fechamento FULL real, leitura da linha do tempo de fechamentos e gráficos dia-a-dia com denominações/Check FPY comprovadas. A classificação/UI fail-closed do leitor já está em andamento; não inferir fonte completa de dados parciais.
