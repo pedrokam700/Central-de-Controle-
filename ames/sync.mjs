@@ -29,7 +29,11 @@ export async function publication(uid,payload,{now=new Date(),productionConfig}=
   const head={schema:CANONICAL_SCHEMA,owner_uid:uid,line_id:safe.line_id,source_id:safe.source_id,snapshot_id:safe.snapshot_id,snapshot_num:Number(safe.snapshot_id),snapshot_revision:safe.snapshot_revision,key,hash,parts:parts.length,collected_at:safe.collected_at};
   return {id:uid+':'+safe.line_id+':'+key,uid,head,parts,history:historyMetadata(safe),publish_scope:publicationIntent(safe,now,productionConfig)};
 }
-export function indexedQueue(){
+// Native Web Locks coordinate writers in *cooperating, current* tabs of one
+// browser origin/profile. Previously opened tabs, other profiles and machines
+// may still write without this lock; it is never update authorization.
+const OUTBOX_WRITER_LOCK='central-ames-outbox-v2-cooperative-writer-v1';
+export function indexedQueue({lockManager=globalThis.navigator?.locks}={}){
   let db,markersDb;
   // Preserve the already proven IndexedDB outbox schema/version EXACTLY.
   const open=()=>db||(db=new Promise((resolve,reject)=>{
@@ -45,15 +49,35 @@ export function indexedQueue(){
     r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
   }));
   const run=async(mode,work,marker=false)=>{const d=await (marker?openMarkers():open());return new Promise((resolve,reject)=>{const t=d.transaction(marker?'sent':'pending',mode),s=t.objectStore(marker?'sent':'pending');let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
+  const lockSupported=()=>typeof lockManager?.request==='function';
+  const withWriter=work=>lockSupported()?lockManager.request(OUTBOX_WRITER_LOCK,{mode:'shared'},work):work();
+  const failedFence=reason=>({schema:'ames-browser-cooperative-fence-v1',cooperative_fence_observed:false,pending_entries:null,reason,multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false});
   return {
-    put:x=>run('readwrite',s=>s.put(x)),
-    remove:id=>run('readwrite',s=>s.delete(id)),
+    put:x=>withWriter(()=>run('readwrite',s=>s.put(x))),
+    remove:id=>withWriter(()=>run('readwrite',s=>s.delete(id))),
     list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid),
     // Count every UID in this browser origin, including evidence left by a
     // previous login. Never fetch payloads or mutate the offline outbox.
     countAll:()=>run('readonly',s=>s.count()),
+    // Candidate-only inter-tab probe. The caller's asynchronous observation
+    // runs while the exclusive lock blocks NEW cooperating writers; Web Locks
+    // releases the lock even if the observer rejects or its tab closes. This
+    // does not fence older clients, unrelated profiles or Firestore uploads.
+    async withCooperativeMaintenanceFence(observe=async()=>{}){
+      if(typeof observe!=='function')throw TypeError('maintenance_observer_must_be_function');
+      if(!lockSupported())return failedFence('browser_web_locks_unavailable');
+      try{
+        return await lockManager.request(OUTBOX_WRITER_LOCK,{mode:'exclusive',ifAvailable:true},async lock=>{
+          if(!lock)return failedFence('cooperative_outbox_writer_busy');
+          const pending=await run('readonly',s=>s.count());
+          if(!Number.isSafeInteger(pending)||pending<0)return failedFence('browser_outbox_unavailable');
+          await observe(Object.freeze({cooperative_fence_held:true,pending_entries:pending,update_authorized:false,multi_tab_attested:false,other_browser_profiles_attested:false}));
+          return {schema:'ames-browser-cooperative-fence-v1',cooperative_fence_observed:true,cooperative_fence_released:true,pending_entries:pending,reason:pending?'pending_outbox_evidence':'other_tabs_profiles_and_legacy_clients_unattested',multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false};
+        });
+      }catch{return failedFence('cooperative_outbox_fence_failed');}
+    },
     hasHistory:async id=>!!(await run('readonly',s=>s.get(id),true)),
-    markHistory:id=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),true)
+    markHistory:id=>withWriter(()=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),true))
   };
 }
 

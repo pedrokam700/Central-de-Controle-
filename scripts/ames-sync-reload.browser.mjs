@@ -34,7 +34,7 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));
 let browser;
 try{
   browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH||undefined,channel:process.env.PLAYWRIGHT_CHANNEL||undefined});
-  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const context=await browser.newContext(),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>window.qa?.store.agent().sync.pending===0);
   await page.evaluate(()=>qa.seed());await page.waitForFunction(()=>qa.store.agent().sync.pending===1);
   assert.equal(await page.evaluate(()=>qa.writes.length),0);
@@ -54,9 +54,50 @@ try{
   assert.equal(drained.pending_entries,0);
   assert.equal(drained.multi_tab_attested,false,'empty current origin cannot attest all tabs/profiles');
   assert.equal(drained.update_authorized,false,'browser observation never permits motor update');
+  // A second tab with the same origin/profile must not enqueue a new pending
+  // record while the candidate maintenance observer owns its cooperative lock.
+  // This is NOT an authorization gate for legacy tabs or other browser profiles.
+  const peer=await context.newPage();
+  await peer.goto('http://127.0.0.1:'+server.address().port);
+  await peer.waitForFunction(()=>window.qa?.queue);
+  assert.equal(await page.evaluate(()=>typeof navigator.locks?.request),'function','Web Locks must be present in this Chromium fixture');
+  await page.evaluate(()=>{
+    const gate=window.maintenanceGate={};
+    gate.wait=new Promise(resolve=>{gate.release=resolve;});
+    gate.result=qa.queue.withCooperativeMaintenanceFence(async evidence=>{
+      gate.evidence=evidence;
+      await gate.wait;
+    });
+  });
+  await page.waitForFunction(()=>window.maintenanceGate?.evidence?.cooperative_fence_held);
+  assert.deepEqual(await page.evaluate(()=>({pending:maintenanceGate.evidence.pending_entries,authorized:maintenanceGate.evidence.update_authorized})),{pending:0,authorized:false});
+  await peer.evaluate(()=>{
+    window.queueWrite='waiting';
+    window.queueWritePromise=qa.queue.put({id:'fixture:held-write',uid:'fixture-other-user'}).then(()=>{window.queueWrite='committed';});
+  });
+  await peer.waitForFunction(async()=>{
+    const state=await navigator.locks.query();
+    return state.pending.some(item=>item.mode==='shared'&&item.name==='central-ames-outbox-v2-cooperative-writer-v1');
+  });
+  assert.equal(await peer.evaluate(()=>window.queueWrite),'waiting','peer enqueue must wait without changing IndexedDB');
+  assert.equal(await page.evaluate(()=>qa.queue.countAll()),0);
+  const refused=await peer.evaluate(()=>qa.queue.withCooperativeMaintenanceFence());
+  assert.equal(refused.cooperative_fence_observed,false,'a second lease attempt must not overtake the holder');
+  assert.equal(refused.update_authorized,false);
+  await page.evaluate(()=>maintenanceGate.release());
+  const gateResult=await page.evaluate(()=>maintenanceGate.result);
+  assert.equal(gateResult.cooperative_fence_observed,true);
+  assert.equal(gateResult.cooperative_fence_released,true);
+  assert.equal(gateResult.multi_tab_attested,false);
+  assert.equal(gateResult.update_authorized,false);
+  await peer.evaluate(()=>window.queueWritePromise);
+  assert.equal(await page.evaluate(()=>qa.queue.countAll()),1,'peer write resumes after lock is released');
+  await peer.evaluate(()=>qa.queue.remove('fixture:held-write'));
+  assert.equal(await page.evaluate(()=>qa.queue.countAll()),0,'fixture evidence removed without disturbing original outbox');
+  await peer.close();
   await page.reload();await page.waitForFunction(()=>window.qa?.store.agent().sync.pending===0);
   assert.deepEqual(errors,[]);
   const out=process.env.BROWSER_OUTPUT||'../browser-evidence';fs.mkdirSync(out,{recursive:true});
-  fs.writeFileSync(path.join(out,'sync-reload.json'),JSON.stringify({result:'PASS',browser:'chromium',checks:['real IndexedDB offline enqueue','reload restores pending count','UID isolation','cross-UID read-only pending audit','reconnect drains once','empty audit never authorizes updater','second reload empty'],production:false},null,2));
-  console.log('PASS: real IndexedDB offline/reload/account isolation/reconnect/second reload; no Console mounted');
+  fs.writeFileSync(path.join(out,'sync-reload.json'),JSON.stringify({result:'PASS',browser:'chromium',checks:['real IndexedDB offline enqueue','reload restores pending count','UID isolation','cross-UID read-only pending audit','reconnect drains once','empty audit never authorizes updater','cooperative cross-tab Web Locks fence blocks new writers','second probe refused','release resumes peer writer','second reload empty'],production:false},null,2));
+  console.log('PASS: real IndexedDB offline/reload/account isolation/reconnect/cooperative multi-tab fence/second reload; no Console mounted');
 }finally{await browser?.close();await new Promise(r=>server.close(r));}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createMesSync} from '../ames/sync.mjs';
+import {createMesSync,indexedQueue} from '../ames/sync.mjs';
 
 const wait=()=>new Promise(resolve=>setTimeout(resolve,0));
 function deferred(){
@@ -111,5 +111,32 @@ test('session transition during async audit invalidates its stable observation',
   assert.equal(result.observation_stable,false);
   assert.equal(result.reason,'session_or_activity_changed_during_observation');
   assert.equal(result.advisory_no_pending,false);
+  assert.equal(result.update_authorized,false);
+});
+
+test('cooperative fence refuses unsupported browsers without touching IndexedDB or pending evidence',async()=>{
+  const queue=indexedQueue({lockManager:null});
+  const result=await queue.withCooperativeMaintenanceFence();
+  assert.equal(result.cooperative_fence_observed,false);
+  assert.equal(result.reason,'browser_web_locks_unavailable');
+  assert.equal(result.pending_entries,null);
+  assert.equal(result.update_authorized,false);
+  assert.equal(result.multi_tab_attested,false);
+  assert.equal(result.other_browser_profiles_attested,false);
+});
+
+test('cooperative fence refuses a busy writer immediately and never runs an observer',async()=>{
+  let requests=0,observations=0;
+  const queue=indexedQueue({lockManager:{request:async(name,options,callback)=>{
+    requests++;
+    assert.equal(name,'central-ames-outbox-v2-cooperative-writer-v1');
+    assert.deepEqual(options,{mode:'exclusive',ifAvailable:true});
+    return callback(null);
+  }}});
+  const result=await queue.withCooperativeMaintenanceFence(async()=>{observations++;});
+  assert.equal(requests,1);
+  assert.equal(observations,0);
+  assert.equal(result.reason,'cooperative_outbox_writer_busy');
+  assert.equal(result.cooperative_fence_observed,false);
   assert.equal(result.update_authorized,false);
 });
