@@ -153,7 +153,59 @@ with tempfile.TemporaryDirectory() as tmp:
         pass
     assert p.verify_operational_backup(runtime)['verified']
     manifest_file = runtime / 'runtime-backup-manifest.json'
-    assert 'test-only-local-token' not in manifest_file.read_text(encoding='utf-8')
+    manifest_bytes = manifest_file.read_bytes()
+    assert b'test-only-local-token' not in manifest_bytes
+    private_manifest = json.loads(manifest_bytes)
+    assert private_manifest['schema'] == 'ames-runtime-backup-v2'
+    assert set(private_manifest['core_sha256']) == {
+        'config.json', 'local_agent_token', 'ames_local.sqlite3'}
+
+    def reject_corruption():
+        for operation in (p.verify_operational_backup, p.rehearse_operational_restore):
+            try:
+                operation(runtime)
+                raise AssertionError('tampered or unproven backup must fail closed')
+            except ValueError:
+                pass
+
+    # Changing a secret or config without affecting SQLite structure used to
+    # pass the old verifier. Digest checks must now reject even same-size edits.
+    for name, replacement in (
+            ('config.json', b'{"source_id":"TAMPERED-IDENTITY"}'),
+            ('local_agent_token', b'altered-fixture-token'),
+    ):
+        target = runtime / name
+        original = target.read_bytes()
+        target.write_bytes(replacement)
+        reject_corruption()
+        target.write_bytes(original)
+        assert p.verify_operational_backup(runtime)['verified']
+
+    # A structurally valid SQLite file can contain a changed source identity.
+    # quick_check remains "ok"; the independent snapshot checksum must fail.
+    sqlite_snapshot = runtime / 'ames_local.sqlite3'
+    original_db = sqlite_snapshot.read_bytes()
+    with closing(sqlite3.connect(sqlite_snapshot)) as altered:
+        altered.execute('UPDATE schema_meta SET value = ? WHERE key = ?',
+                        ('fixture-identity-changed', 'ames_source_id'))
+        altered.commit()
+        assert altered.execute('PRAGMA quick_check').fetchone() == ('ok',)
+    reject_corruption()
+    sqlite_snapshot.write_bytes(original_db)
+    assert p.verify_operational_backup(runtime)['verified']
+
+    # Missing/legacy/corrupt core attestations are not silently accepted.
+    for mutated in (
+            {**private_manifest, 'core_sha256': {}},
+            {**private_manifest, 'schema': 'ames-runtime-backup-v1'},
+            {**private_manifest, 'core_sha256': {
+                **private_manifest['core_sha256'], 'config.json': '0' * 64}},
+    ):
+        manifest_file.write_text(json.dumps(mutated), encoding='utf-8')
+        reject_corruption()
+        manifest_file.write_bytes(manifest_bytes)
+        assert p.verify_operational_backup(runtime)['verified']
+
     try:
         p.backup_operational_tree(root / 'live', runtime)
         raise AssertionError('runtime backup must not overwrite protected evidence')

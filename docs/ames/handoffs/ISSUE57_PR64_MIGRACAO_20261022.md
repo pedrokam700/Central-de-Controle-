@@ -575,3 +575,11 @@ O usuário pediu explicitamente a preservação antecipada de toda a continuidad
 5. Regras para continuar mesmo que o chat exceda seu limite: revalidar HEAD/CI remoto, preservar código e histórico existentes, não forçar push/merge, não solicitar novamente os comandos da fábrica e não tocar em `source_id`, token, SQLite ou processo físico.
 
 **Esta alteração é apenas documentação/checkpoint e não libera instalação.** O SHA deste commit de handoff e seus gates devem ser acrescentados por comentário na PR #64 após publicação; não inserir um SHA futuro especulativo neste texto. O operador poderá solicitar novo adendo se a conversa continuar por muito tempo.
+
+## 40. Recuperação do Work e correção da prova de integridade do backup T3 (23/10/2026)
+
+Após o limite de uso do Work, o operador forneceu o último histórico e print. O remoto havia avançado até `a4019ca1d96b8ce3cb3cace85d895e885924b1fc` com ensaio de drenagem autenticada sob dois mutexes sintéticos, PR #64 ainda draft. O último defeito encontrado pelo Work foi confirmado no `issue57_update_preflight.py`: `verify_operational_backup()` comparava a árvore operacional e `quick_check`, mas não hashes dos conteúdos privados `config.json`, token e SQLite, permitindo corrupção ou troca de identidade estruturalmente válida passar.
+
+O incremento T3 introduz manifesto **privado v2** com SHA-256 dos três arquivos críticos, comparação independente antes da restauração e rejeição fail-closed de manifesto antigo/incompleto/corrompido. Novos testes em diretórios temporários adulteram os três arquivos (incluindo SQLite válido), depois restauram os bytes sintéticos originais; nenhum token/config/SQLite de fábrica é lido ou modificado. Hashes dos arquivos privados nunca são retornados ou impressos, embora constem no manifesto restrito por ACL; não equivalem a assinatura autenticada se o diretório privado for comprometido.
+
+Este checkpoint é **somente preparação de T3** e não corrige por si só a ausência de cooperação do guardian físico, múltiplas origens de navegador, cobertura de dados externos ou transação NTFS. `update_authorized=false`, sem merge, release, Pages, atualização física ou novo CLEAN. Evidências exatas de commit e CI devem constar na PR #64 após o push, sem inventar GREEN.

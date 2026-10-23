@@ -338,8 +338,8 @@ def _runtime_inventory(directory, max_bytes):
                 raise ValueError("runtime_file_not_regular")
             rel = src.relative_to(directory).as_posix()
             if rel in ("ames_local.sqlite3", "local_agent_token") or rel in SQLITE_TRANSIENT:
-                # SQLite has its own consistent API snapshot; private token
-                # has a separate copy without an exposed manifest digest.
+                # The SQLite snapshot and token are stored outside this
+                # runtime tree and verified by private core digests.
                 continue
             item = src.stat(follow_symlinks=False)
             total += item.st_size
@@ -386,7 +386,13 @@ def backup_operational_tree(clean_root, destination,
             raise ValueError("runtime_backup_integrity_mismatch")
     if _runtime_inventory(agent_data, max_bytes) != initial:
         raise ValueError("runtime_data_changed_during_backup")
-    manifest = {"schema": "ames-runtime-backup-v1", "files": initial,
+    # Fingerprints remain ONLY in the ACL-protected private manifest. Never
+    # return or log the token/config digest, even though they are required to
+    # catch changes which SQLite quick_check alone cannot detect.
+    core = {name: sha256_file(destination / name) for name in
+            ("config.json", "local_agent_token", "ames_local.sqlite3")}
+    manifest = {"schema": "ames-runtime-backup-v2", "files": initial,
+                "core_sha256": core,
                 "sqlite_source": "ames-agent/data/ames_local.sqlite3",
                 "sqlite_online_backup": "ames_local.sqlite3",
                 "identity_copied_separately": ["config.json", "local_agent_token"],
@@ -405,8 +411,11 @@ def backup_operational_tree(clean_root, destination,
 def verify_operational_backup(destination):
     """Reopen backup files independently; no access to the live installation."""
     destination = Path(destination)
-    report = json.loads((destination / "runtime-backup-manifest.json").read_text(encoding="utf-8"))
-    if report.get("schema") != "ames-runtime-backup-v1" or not isinstance(report.get("files"), list):
+    manifest_file = destination / "runtime-backup-manifest.json"
+    if not _regular_file(manifest_file):
+        raise ValueError("runtime_backup_manifest_invalid")
+    report = json.loads(manifest_file.read_text(encoding="utf-8"))
+    if report.get("schema") != "ames-runtime-backup-v2" or not isinstance(report.get("files"), list):
         raise ValueError("runtime_backup_manifest_invalid")
     data = destination / "ames-agent" / "data"
     listed = report["files"]
@@ -416,9 +425,18 @@ def verify_operational_backup(destination):
     actual = _runtime_inventory(data, MAX_RUNTIME_BACKUP_BYTES)
     if actual != listed:
         raise ValueError("runtime_backup_restore_verification_failed")
-    for required in ("config.json", "local_agent_token", "ames_local.sqlite3"):
-        if not _regular_file(destination / required):
+    required_core = ("config.json", "local_agent_token", "ames_local.sqlite3")
+    core = report.get("core_sha256")
+    if (not isinstance(core, dict) or set(core) != set(required_core) or
+            any(not isinstance(value, str) or len(value) != 64 or
+                any(c not in "0123456789abcdef" for c in value)
+                for value in core.values())):
+        raise ValueError("runtime_backup_core_manifest_invalid")
+    for required in required_core:
+        if not (destination / required).is_file() or not _regular_file(destination / required):
             raise ValueError("runtime_backup_identity_incomplete")
+        if sha256_file(destination / required) != core[required]:
+            raise ValueError("runtime_backup_core_integrity_mismatch")
     with closing(sqlite3.connect((destination / "ames_local.sqlite3").as_uri() + "?mode=ro",
                                  uri=True)) as db:
         if db.execute("PRAGMA quick_check").fetchone() != ("ok",):
