@@ -601,6 +601,12 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 "3022_process_passages": len(process_passages),
             },
             "trace_3074": {
+                # Query success is independent of whether temporal forensics
+                # could classify a reused material. Without this, a successful
+                # grid with zero proven reuse was displayed as "not collected".
+                "status": "complete",
+                "query_row_count": len(rows3074),
+                "query_no_data_confirmed": r3074.get("no_data") is True,
                 "query": r3074,
                 "components": components,
                 "material_selection": material_scope,

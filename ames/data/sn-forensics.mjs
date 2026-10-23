@@ -347,11 +347,18 @@ export function buildLiveSnForensics(result={}){
     return {bindings:liveBindings(trace3074,item,queryPcba),item_sn:item.item_sn||null,item_type:item.item_type||null,known_use_count:item.known_use_count??null,reuse_count:item.reuse_count??null,relation:item.relation_to_current_failure||null,previous_pcbas:previous,history,error:item.error||null,source:'3074',raw:item};
   });
   const rawHistoryCount=[...rawByPcba.values()].reduce((sum,rows)=>sum+rows.length,0);
+  const gridRows=trace3074?.query?.rows;
+  const gridConfirmed=Array.isArray(gridRows)&&
+    (gridRows.length>0||trace3074.query?.no_data===true);
+  const unknownMaterialTimes=Number(trace3074?.material_selection?.temporal_unknown||0);
+  const trace3074State=gridConfirmed
+    ?sourceStateFromTrace({...trace3074,status:trace3074.status||'complete'},
+        {recordCount:gridRows.length,countProven:true})
+    :sourceStateFromTrace(trace3074,{recordCount:materials.length,countProven:chosen?
+        unknownMaterialTimes===0:Array.isArray(trace3074?.reused_components)});
   const sourceStates={
     '2114':sourceStateFromTrace(trace2114,{recordCount:Math.max(rawHistoryCount,(current?1:0)+ownHistory.length),countProven:Array.isArray(trace2114?.previous_failures)||Array.isArray(trace2114?.pcbas)||Array.isArray(trace2114?.rows)}),
-    '3074':sourceStateFromTrace(trace3074,{recordCount:materials.length,countProven:chosen?
-      Number(trace3074?.material_selection?.temporal_unknown||0)===0:
-      Array.isArray(trace3074?.reused_components)}),
+    '3074':gridConfirmed&&unknownMaterialTimes>0?SOURCE_STATE.PARTIAL:trace3074State,
     '3022':sourceStateFromTrace(trace3022,{recordCount:process.length,countProven:Boolean(trace3022&&(Array.isArray(trace3022.operator_evidence)||Array.isArray(trace3022.process_passages)||Array.isArray(trace3022.rows)))}),
     '3012':live3012State(result,trace3012),
     '3028':result.local_snapshot?SOURCE_STATE.CACHED:SOURCE_STATE.NOT_COLLECTED,

@@ -1,0 +1,42 @@
+# Issue #66 · Handoff funcional (23/10/2026)
+
+## Escopo e proteção
+
+- Fonte oficial no início: `main` e tag `ames-v0.5.39-multipc-20261022` no SHA `b283b1764432f5d90486d38a7553b30542a5c118`.
+- Branch dedicada: `work/ames-issue66-forensics-functional-20261023`; PR **draft**, sem merge/release/instalação. Não tocar na PR #64, updater, árvores do Work ou máquina da fábrica.
+- Contratos preservados: Rastreabilidade ancorada na ocorrência **3028** da revisão/linha/período exatos; Consulta SN independente, ancorada na 2114 ou diretamente em Material SN; Y/N não destrói histórico, 3012 pode ser candidata, causalidade nunca inferida.
+- Issues relacionadas lidas: #39 (contexto temporal único e fechamento), #52 (live/matriz/alertas). Issue #66 e fluxo da conversa são a especificação funcional.
+
+## Checkpoint P0 inicial — implementado localmente
+
+1. `ames/data/trace-targets.mjs`: pré-validação por linha da revisão 3028, identidade de origem local, período, snapshot/revisão/hash, com falha explícita somente nas linhas efetivamente selecionadas. O cliente HTTP usa **o mesmo verificador** para formar `snapshot_targets`, sem recorrer a `latest_snapshot_id`.
+2. `ames/console-specialized-views.mjs`: a coleta da Rastreabilidade inicia somente com a linha operacional ativa marcada. Cada linha exibe a disponibilidade da revisão local. Trocar período reinicia o escopo de linha e não mistura inadvertidamente três datas/origens. Continua permitido escolher múltiplas linhas conscientemente. A leitura de ontem permanece separada da ação explícita de enriquecer aquele snapshot.
+3. `ames/agent/engine_bridge.py` e `ames/data/sn-forensics.mjs`: retorno confirmado da grade 3074 agora tem status explícito e quantidade de linhas. A classificação de proveniência distingue **grade consultada**, **zero confirmado**, **parcialidade temporal** e **ausência/erro da fonte**, mesmo se nenhum material for comprovado no escopo da falha. O KPI da Consulta SN não declara 0 reutilizados quando a classificação temporal não foi comprovada.
+4. `sw.js`: novo módulo importado incluído no pré-cache offline da branch, com revisionamento próprio de candidato.
+5. `scripts/ames-issue66-p0.test.mjs`: fixtures L3/snapshot14 de 22/10→23/10 (L1/L2 ausentes), origem divergente e estados 3074 zero/ok/parcial/ausente/erro.
+
+### Evidência de teste local (não é gate CI nem homologação física)
+
+Executados nesta branch:
+
+```
+node --test scripts/ames-issue66-p0.test.mjs scripts/ames-sn-contract.test.mjs scripts/ames-sn-source-provenance.test.mjs scripts/ames-sn-forensics.test.mjs scripts/ames-sn-live-context.test.mjs scripts/ames-trace-scope.test.mjs scripts/ames-period-history-matching.test.mjs scripts/ames-trace-status.test.mjs scripts/ames-offline-central.test.mjs
+  9/9 arquivos PASS
+python3 scripts/agent-trace-target.test.py
+  5/5 PASS
+python3 scripts/agent-sn-lookup-context.test.py
+  PASS
+git diff --check
+  PASS
+```
+
+**Limites conhecidos:** não há resposta física da 3074 nem logs redigidos do snapshot 14. A classificação incorreta de `3074 Não coletado` foi reproduzida por fixture, mas uma falha independente de navegação/parser do MES ainda precisa ser investigada no posto. Não declarar P0 aceito fisicamente. Playwright não está disponível no checkout deste runtime; executar testes browser na CI oficial e no Windows antes de homologar.
+
+## Continuidade imediata
+
+1. Revalidar o commit e jobs de CI por **SHA exato**. Abrir PR em draft se ainda não criada. Não fazer merge nem publicar.
+2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
+3. P1a: ciclo atual Y após última 2114 toma prioridade; ausência de novo ciclo reconstrói vínculo da última falha, mantendo candidatos e proveniência separados. Histórico de ciclos apenas secundário.
+4. P1b/P1c: Material SN como alvo 3074, janelas de vínculo por PCBA, 2114/3012/3022, alerta de falha que acompanhou material; matcher falha × tipo com subtipo frontal/traseiro conservador.
+5. P1d: exatidão do observado nas contagens com cobertura separada. P2: dashboard união/interseção, duas visualizações, drilldown e último fechamento FULL (3028+3074+2114+3022) imutável/deduplicado.
+6. Testes: Node/Python, integração HTTP, browser, Windows e gate físico L3/snapshot14; nenhum teste local equivale à validação física A-MES.
