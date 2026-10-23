@@ -388,8 +388,17 @@ def _runtime_inventory(directory, max_bytes, *, exclude_core=True):
             if not _regular_file(src):
                 raise ValueError("runtime_file_not_regular")
             rel = src.relative_to(directory).as_posix()
-            if not exclude_core and (src.suffix.lower() in {".sqlite", ".sqlite3", ".db"} or src.name.endswith(("-wal", "-shm"))):
-                raise ValueError("external_sqlite_requires_separate_consistent_backup")
+            if not exclude_core:
+                # Extension alone cannot prove this is an ordinary log. Never
+                # byte-copy a disguised SQLite database/WAL/rollback journal.
+                with src.open("rb") as reader:
+                    header = reader.read(16)
+                if (src.suffix.lower() in {".sqlite", ".sqlite3", ".db"}
+                        or src.name.endswith(("-wal", "-shm", "-journal"))
+                        or header == b"SQLite format 3\x00"
+                        or header[:4] in (bytes.fromhex("377f0682"), bytes.fromhex("377f0683"))
+                        or header[:8] == bytes.fromhex("d9d505f920a163d7")):
+                    raise ValueError("external_sqlite_requires_separate_consistent_backup")
             if exclude_core and (rel in ("ames_local.sqlite3", "local_agent_token") or rel in SQLITE_TRANSIENT):
                 # The SQLite snapshot and token are stored outside this
                 # runtime tree and verified by private core digests.

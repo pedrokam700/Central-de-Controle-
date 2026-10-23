@@ -544,6 +544,27 @@ class BoundBackupTests(unittest.TestCase):
         self.assertTrue(self.admission.snapshot()["draining"])
         self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
 
+    def test_opaque_sqlite_and_journals_are_not_generic_external_logs(self):
+        import issue57_update_preflight as preflight
+        logs = self.root / "logs"
+        logs.mkdir()
+        path = logs / "opaque-fixture.log"
+        with closing(sqlite3.connect(path)) as db:
+            db.execute("CREATE TABLE evidence(value TEXT)")
+            db.commit()
+        with self.assertRaisesRegex(ValueError, "external_sqlite_requires_separate_consistent_backup"):
+            preflight._external_logs(self.root)
+        path.unlink()
+        for header in (bytes.fromhex("377f0682") + bytes(28), bytes.fromhex("d9d505f920a163d7") + bytes(20)):
+            path.write_bytes(header)
+            with self.assertRaisesRegex(ValueError, "external_sqlite_requires_separate_consistent_backup"):
+                preflight._external_logs(self.root)
+        with self.assertRaisesRegex(ValueError, "external_sqlite_requires_separate_consistent_backup"):
+            self.coordinator.prepare_backup()
+        self.assertFalse(self.coordinator.backup_directory.exists())
+        self.assertTrue(path.exists())
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+
     def test_software_classification_requires_authenticated_release_bytes(self):
         from issue57_update_preflight import inventory_known_external
         content = b"# synthetic pinned software"
