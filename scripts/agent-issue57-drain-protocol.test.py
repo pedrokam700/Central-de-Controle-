@@ -25,7 +25,7 @@ sys.path[:0] = [str(ROOT / "ames/agent"), str(ROOT / "tools/ames-workstation")]
 from maintenance_admission import MaintenanceAdmission, MaintenanceBlocked
 from maintenance_protocol import (DrainSession, DrainClient, ProtocolRejected,
                                   SCHEMA, MAX_MESSAGE, seal, unseal, serve_connection)
-from issue57_drain_coordinator import FixtureDrainCoordinator, WindowsProcessWitness, WindowsRelauncherWitness, RelauncherClient
+from issue57_drain_coordinator import FixtureDrainCoordinator, WindowsProcessWitness, WindowsRelauncherWitness, RelauncherClient, BrowserMaintenanceClient
 import issue57_maintenance_ledger as ledger
 from update_readiness import observe
 
@@ -441,6 +441,38 @@ class BoundBackupTests(unittest.TestCase):
             self.coordinator.enroll_relaunchers(participants, unknown_origins=["opaque_supervisor_unverified"])
         self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
         self.assertTrue(self.admission.snapshot()["draining"])
+
+    def browser_client(self):
+        key = secrets.token_bytes(32)
+        state = {"disconnect": False}
+        def exchange(wire):
+            if state["disconnect"]:
+                raise TimeoutError()
+            request = unseal(key, wire, "browser-request")
+            return seal(key, {**request, "pending_entries": 0, "persistent_claim_held": True,
+                             "writers_fenced": True, "all_profiles_attested": False, "update_authorized": False}, "browser-response")
+        return BrowserMaintenanceClient(exchange, key, "f" * 64), state
+
+    def test_browser_scope_receipt_is_bound_to_same_backup_and_journal(self):
+        browser, state = self.browser_client()
+        self.coordinator.enroll_browser(browser)
+        self.assertEqual(self.coordinator.observe()["enrolled_browser_scopes"], 1)
+        self.assertFalse(self.coordinator.observe()["browser_profiles_attested"])
+        self.coordinator.prepare_backup()
+        receipt = ledger.inspect_fixture(self.root)["browser_receipt"]
+        self.assertEqual(receipt["transaction_id"], self.coordinator.claim["transaction_id"])
+        self.assertEqual(receipt["installation_identity_sha256"], IDENTITY)
+        self.assertFalse(receipt["all_profiles_attested"])
+
+    def test_lost_browser_scope_preserves_journal_and_drain_before_backup(self):
+        browser, state = self.browser_client()
+        self.coordinator.enroll_browser(browser)
+        state["disconnect"] = True
+        with self.assertRaisesRegex(ValueError, "browser_enrollment_recovery_required"):
+            self.coordinator.prepare_backup()
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertTrue(self.admission.snapshot()["draining"])
+        self.assertFalse(self.coordinator.backup_directory.exists())
 
     def test_backup_and_restore_are_bound_to_same_transaction_and_installation(self):
         result = self.coordinator.prepare_backup()

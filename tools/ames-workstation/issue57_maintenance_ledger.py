@@ -29,8 +29,9 @@ TRANSITION_FILE = "transition.lock"
 SAFE_PHASES = {
     "claimed": {"drain_requested", "recovery_required"},
     "drain_requested": {"awaiting_external_attestations", "recovery_required"},
-    "awaiting_external_attestations": {"relaunchers_enrolled", "backup_verified", "recovery_required"},
-    "relaunchers_enrolled": {"backup_verified", "recovery_required"},
+    "awaiting_external_attestations": {"relaunchers_enrolled", "browser_enrolled", "backup_verified", "recovery_required"},
+    "relaunchers_enrolled": {"browser_enrolled", "backup_verified", "recovery_required"},
+    "browser_enrolled": {"backup_verified", "recovery_required"},
     "backup_verified": {"candidate_staged", "recovery_required"},
     "candidate_staged": {"fixture_applying", "recovery_required"},
     "fixture_applying": {"fixture_committed", "fixture_rolled_back", "recovery_required"},
@@ -176,6 +177,13 @@ def _valid_relauncher_receipt(receipt, transaction_id, identity):
             and len({(p["account_sha256"], p["session_id"], p["root_sha256"], p["helper_sha256"]) for p in participants}) == 1)
 
 
+def _valid_browser_receipt(receipt, transaction_id, identity):
+    return (type(receipt) is dict and set(receipt) == {"transaction_id", "installation_identity_sha256", "scope_id", "persistent_claim_held", "writer_scope", "all_profiles_attested"}
+            and receipt["transaction_id"] == transaction_id and receipt["installation_identity_sha256"] == identity
+            and _valid_identity(receipt["scope_id"]) and receipt["persistent_claim_held"] is True
+            and receipt["writer_scope"] == "cooperative_outbox_and_publication" and receipt["all_profiles_attested"] is False)
+
+
 def inspect_fixture(root):
     """Read-only state. Never clears a stale lock or starts a guardian."""
     ledger = _ledger(root)
@@ -212,6 +220,10 @@ def inspect_fixture(root):
                 or (enrollment is not None and not _valid_relauncher_receipt(
                     enrollment, b["transaction_id"], b["installation_identity_sha256"]))):
             return result
+        browser = b.get("browser_receipt")
+        if ((b["phase"] == "browser_enrolled" and browser is None) or
+                (browser is not None and not _valid_browser_receipt(browser, b["transaction_id"], b["installation_identity_sha256"]))):
+            return result
         receipt = b.get("backup_receipt")
         if ((b["phase"] in {"backup_verified", "candidate_staged", "fixture_applying",
                            "fixture_committed", "fixture_rolled_back"} and receipt is None)
@@ -220,6 +232,8 @@ def inspect_fixture(root):
             return result
         result.update(state="blocked_persistent_transaction", phase=b["phase"],
                       revision=b["revision"], transaction_id=b["transaction_id"])
+        if browser is not None:
+            result["browser_receipt"] = browser
         if enrollment is not None:
             result["relauncher_receipt"] = enrollment
         if receipt is not None:
@@ -261,7 +275,7 @@ def begin_fixture(root, installation_identity_sha256, interrupt_after=None):
 
 
 def transition_fixture(root, transaction_id, expected_revision, next_phase,
-                       interrupt_after=None, *, backup_receipt=None, candidate_receipt=None, relauncher_receipt=None):
+                       interrupt_after=None, *, backup_receipt=None, candidate_receipt=None, relauncher_receipt=None, browser_receipt=None):
     """CAS-like persistent transition; a crash leaves a blocking marker.
 
     The caller cannot pass a production path, skip a phase or erase history.
@@ -289,6 +303,12 @@ def transition_fixture(root, transaction_id, expected_revision, next_phase,
                 current.get("revision") != expected_revision or
                 next_phase not in SAFE_PHASES.get(current.get("phase"), set())):
             raise ValueError("transaction_identity_or_phase_mismatch")
+        if next_phase == "browser_enrolled":
+            if not _valid_browser_receipt(browser_receipt, transaction_id, current["installation_identity_sha256"]):
+                raise ValueError("transaction_browser_receipt_invalid")
+            current = {**current, "browser_receipt": browser_receipt}
+        elif browser_receipt is not None:
+            raise ValueError("transaction_browser_receipt_out_of_order")
         if next_phase == "relaunchers_enrolled":
             if not _valid_relauncher_receipt(relauncher_receipt, transaction_id, current["installation_identity_sha256"]):
                 raise ValueError("transaction_relauncher_receipt_invalid")

@@ -209,6 +209,43 @@ class RelauncherClient:
             raise ValueError("relauncher_enrollment_recovery_required") from None
 
 
+class BrowserMaintenanceClient:
+    """One explicitly registered browser scope over private inherited IPC.
+
+    No heartbeat/empty profile inventory can authorize an update. The bridge
+    must be independently enrolled; this is not a public HTTP API.
+    """
+    def __init__(self, exchange, key, scope_id):
+        if not isinstance(scope_id, str) or not re.fullmatch("[0-9a-f]{64}", scope_id):
+            raise ValueError("browser_scope_invalid")
+        self._exchange, self._key, self.scope_id = exchange, key, scope_id
+        self._sequence, self._uncertain = 0, False
+
+    def attest(self, transaction_id, installation_sha256):
+        from maintenance_protocol import seal, unseal
+        try:
+            if self._uncertain:
+                raise ValueError()
+            request = {"schema": "ames-browser-enrollment-v1", "operation": "attest",
+                       "transaction_id": transaction_id, "installation_sha256": installation_sha256,
+                       "scope_id": self.scope_id, "sequence": self._sequence + 1,
+                       "challenge": secrets.token_hex(32)}
+            answer = unseal(self._key, self._exchange(seal(self._key, request, "browser-request")), "browser-response")
+            if (set(answer) != set(request) | {"pending_entries", "persistent_claim_held", "writers_fenced", "all_profiles_attested", "update_authorized"}
+                    or any(answer.get(k) != v for k, v in request.items())
+                    or type(answer["pending_entries"]) is not int or answer["pending_entries"] != 0
+                    or answer["persistent_claim_held"] is not True or answer["writers_fenced"] is not True
+                    or answer["all_profiles_attested"] is not False or answer["update_authorized"] is not False):
+                raise ValueError()
+            self._sequence += 1
+            return {"transaction_id": transaction_id, "installation_identity_sha256": installation_sha256,
+                    "scope_id": self.scope_id, "persistent_claim_held": True,
+                    "writer_scope": "cooperative_outbox_and_publication", "all_profiles_attested": False}
+        except Exception:
+            self._uncertain = True
+            raise ValueError("browser_enrollment_recovery_required") from None
+
+
 class FixtureDrainCoordinator:
     def __init__(self, root, installation_sha256, connect, observe_process):
         self.root = root
@@ -217,6 +254,7 @@ class FixtureDrainCoordinator:
         self._observe_process = observe_process
         self._witness = None
         self._relaunchers = []
+        self._browser = None
         try:
             # connect must bind the independently verified process target and
             # a fresh maintenance credential to THIS journal transaction.
@@ -290,6 +328,27 @@ class FixtureDrainCoordinator:
             self._recovery_required()
             raise
 
+    def enroll_browser(self, participant):
+        try:
+            if self.claim["phase"] not in {"awaiting_external_attestations", "relaunchers_enrolled"}:
+                raise ValueError("browser_enrollment_out_of_order")
+            if self.observe()["state"] != "agent_quiescent_only":
+                raise ValueError("coordinator_agent_not_quiescent")
+            receipt = participant.attest(self.claim["transaction_id"], self.client.target["installation_sha256"])
+            self.claim = transition_fixture(self.root, self.claim["transaction_id"], self.claim["revision"],
+                                            "browser_enrolled", browser_receipt=receipt)
+            self._browser = participant
+            return {"enrolled_browser_scopes": 1, "all_profiles_attested": False, "update_authorized": False}
+        except Exception:
+            self._recovery_required()
+            raise
+
+    def _assert_browser_stable(self):
+        receipt = self.claim.get("browser_receipt")
+        if receipt is not None and (self._browser is None or self._browser.attest(
+                self.claim["transaction_id"], self.client.target["installation_sha256"]) != receipt):
+            raise ValueError("browser_receipt_mismatch")
+
     def _assert_relaunchers_stable(self):
         receipt = self.claim.get("relauncher_receipt")
         if receipt is not None:
@@ -302,9 +361,10 @@ class FixtureDrainCoordinator:
         try:
             self._assert_witness_stable()
             self._assert_relaunchers_stable()
+            self._assert_browser_stable()
             persisted = inspect_fixture(self.root)
             if persisted != self.claim or self.claim["phase"] not in {
-                    "drain_requested", "awaiting_external_attestations", "relaunchers_enrolled", "backup_verified",
+                    "drain_requested", "awaiting_external_attestations", "relaunchers_enrolled", "browser_enrolled", "backup_verified",
                     "candidate_staged", "fixture_applying"}:
                 raise ValueError("coordinator_journal_mismatch")
             result = self.client.request("poll")
@@ -313,6 +373,7 @@ class FixtureDrainCoordinator:
                 self._transition("awaiting_external_attestations")
             return {"state": result["state"], "phase": self.claim["phase"],
                     "enrolled_relaunchers": len(self._relaunchers),
+                    "enrolled_browser_scopes": int(self._browser is not None),
                     "guardian_attested": False, "browser_profiles_attested": False,
                     "update_authorized": False}
         except Exception:
@@ -328,7 +389,7 @@ class FixtureDrainCoordinator:
         from issue57_update_preflight import (backup_operational_tree,
                                               rehearse_operational_restore, sha256_file)
         try:
-            if self.claim["phase"] not in {"awaiting_external_attestations", "relaunchers_enrolled"}:
+            if self.claim["phase"] not in {"awaiting_external_attestations", "relaunchers_enrolled", "browser_enrolled"}:
                 raise ValueError("coordinator_backup_out_of_order")
             if self.observe()["state"] != "agent_quiescent_only":
                 raise ValueError("coordinator_agent_not_quiescent")
@@ -434,9 +495,11 @@ class FixtureDrainCoordinator:
             def observed_health(active):
                 self._assert_witness_stable()
                 self._assert_relaunchers_stable()
+                self._assert_browser_stable()
                 healthy = health_probe(active) is True
                 self._assert_witness_stable()
                 self._assert_relaunchers_stable()
+                self._assert_browser_stable()
                 return healthy
             result = model.simulate_swap(slots, transaction_id=self.claim["transaction_id"],
                                          health_probe=observed_health, interrupt_after=interrupt_after)

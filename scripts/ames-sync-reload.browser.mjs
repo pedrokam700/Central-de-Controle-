@@ -3,6 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import {spawn} from 'node:child_process';
+import {createInterface} from 'node:readline';
 import assert from 'node:assert/strict';
 import {pathToFileURL} from 'node:url';
 import {canonicalAgentFixture,productFixture} from './ames-fixtures.mjs';
@@ -16,10 +18,11 @@ const harness=`
 import {createAmesStore} from '/ames/data/store.mjs';
 import {createMesIntegration} from '/ames/integration-session.mjs';
 import {indexedQueue,publication} from '/ames/sync.mjs';
+import {createBrowserMaintenanceParticipant} from '/ames/maintenance-browser.mjs';
 const store=createAmesStore(),queue=indexedQueue(),writes=[];let online=false;
 const remote={watch:()=>()=>{},putPart:async()=>{if(window.qa?.holdPart){window.remoteFlight.entered=true;await window.qa.holdPart;}},commitHead:async(u,h)=>writes.push(h),commitHistory:async()=>{}};
 const integration=createMesIntegration(store,remote,{syncOptions:{online:()=>online,now:()=>new Date('${fixtureDay}T12:00:00Z')},schedule:()=>0,unschedule:()=>{}});
-window.qa={store,queue,writes,integration,publication,sample:${JSON.stringify(fixture)},seed:async()=>{store.replaceLocalSnapshots([${JSON.stringify(fixture)}]);await integration.sync.capture();},online:()=>{online=true;return integration.sync.retry();}};
+window.qa={store,queue,writes,integration,publication,createBrowserMaintenanceParticipant,sample:${JSON.stringify(fixture)},seed:async()=>{store.replaceLocalSnapshots([${JSON.stringify(fixture)}]);await integration.sync.capture();},online:()=>{online=true;return integration.sync.retry();}};
 integration.start('A');
 `;
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -124,8 +127,67 @@ try{
   assert.equal(dual.update_authorized,false);
   await peer.close();
   await page.reload();await page.waitForFunction(()=>window.qa?.store.agent().sync.pending===0);
+  // Same canonical Python coordinator/journal, real Chromium Web Locks and
+  // IndexedDB, private inherited stdio. No production HTTP/agent activation.
+  const controller=spawn(process.env.PYTHON||'python3',['scripts/issue57_browser_coordinator_fixture.py'],{stdio:['pipe','pipe','pipe']});
+  let controllerErrors='';controller.stderr.on('data',chunk=>{controllerErrors+=chunk;});
+  const completed=new Promise((resolve,reject)=>{controller.on('error',reject);controller.on('exit',code=>code===0?resolve():reject(Error('coordinator_fixture_failed: '+controllerErrors.slice(-600))));});
+  let boundResult,boundSetup,scopePage=page;
+  const deadline=setTimeout(()=>controller.kill(),90000);
+  try{
+    for await(const line of createInterface({input:controller.stdout})){
+      const message=JSON.parse(line);
+      if(message.type==='setup'){
+        boundSetup=message.binding;
+        await scopePage.evaluate(({binding,key})=>{
+          const gate=window.boundMaintenance={};
+          gate.wait=new Promise(resolve=>{gate.release=resolve;});
+          gate.result=qa.integration.sync.withMaintenanceTransaction(binding,async evidence=>{
+            gate.evidence=evidence;
+            gate.participant=await qa.createBrowserMaintenanceParticipant({key,binding,evidence,
+              inspect:()=>qa.integration.sync.inspectUpdateReadiness(),readClaim:()=>qa.integration.sync.inspectMaintenanceClaim()});
+            await gate.wait;
+          });
+        },message);
+        await scopePage.waitForFunction(()=>window.boundMaintenance?.participant);
+        controller.stdin.write(JSON.stringify({ready:true})+'\n');
+      }else if(message.type==='exchange'){
+        try{
+          const wire=await scopePage.evaluate(wire=>boundMaintenance.participant.handle(wire),message.wire);
+          controller.stdin.write(JSON.stringify({wire})+'\n');
+        }catch{controller.stdin.write(JSON.stringify({error:'scope_disconnected'})+'\n');}
+      }else if(message.type==='close-scope'){
+        await scopePage.close(); // Browser releases volatile locks; claim survives.
+        controller.stdin.write(JSON.stringify({closed:true})+'\n');
+      }else if(message.type==='done')boundResult=message;
+      else throw Error('unknown_private_fixture_frame');
+    }
+    await completed;
+    assert.equal(boundResult.phase,'recovery_required');
+    assert.deepEqual(boundResult.binding,boundSetup);
+    assert.equal(boundResult.browser_receipt.transaction_id,boundSetup.transaction_id);
+    assert.equal(boundResult.browser_receipt.all_profiles_attested,false);
+    assert.equal(boundResult.update_authorized,false);
+    const resumed=await context.newPage();
+    await resumed.goto('http://127.0.0.1:'+server.address().port);await resumed.waitForFunction(()=>window.qa?.queue);
+    const afterClose=await resumed.evaluate(async()=>{
+      const outcomes=[];
+      for(const work of [()=>qa.queue.put({id:'forbidden',uid:'A'}),()=>qa.queue.remove('forbidden'),()=>qa.queue.markHistory('forbidden')]){
+        try{await work();outcomes.push('unexpected_write');}catch(e){outcomes.push(e.code);}
+      }
+      return {outcomes,pending:await qa.queue.countAll(),claim:await qa.queue.maintenanceClaim()};
+    });
+    assert.deepEqual(afterClose.outcomes,Array(3).fill('ames_browser_maintenance_pending'));
+    assert.equal(afterClose.pending,0);
+    assert.equal(afterClose.claim.transaction_id,boundSetup.transaction_id);
+    // A distinct browser profile has no such barrier: explicitly NOT attested.
+    const otherContext=await browser.newContext(),other=await otherContext.newPage();
+    await other.goto('http://127.0.0.1:'+server.address().port);await other.waitForFunction(()=>window.qa?.queue);
+    assert.equal(await other.evaluate(()=>qa.queue.maintenanceClaim()),undefined);
+    await otherContext.close();await resumed.close();
+  }finally{clearTimeout(deadline);controller.stdin.end();if(controller.exitCode===null)controller.kill();}
   assert.deepEqual(errors,[]);
   const out=process.env.BROWSER_OUTPUT||'../browser-evidence';fs.mkdirSync(out,{recursive:true});
-  fs.writeFileSync(path.join(out,'sync-reload.json'),JSON.stringify({result:'PASS',browser:'chromium',checks:['real IndexedDB offline enqueue','reload restores pending count','UID isolation','cross-UID read-only pending audit','reconnect drains once','empty audit never authorizes updater','cooperative cross-tab Web Locks fence blocks new writers','second probe refused','release resumes peer writer','inflight remote upload refuses dual fence','remote acknowledgement completes without deadlock','dual fence observes empty queue without authorizing update','second reload empty'],production:false},null,2));
+  fs.writeFileSync(path.join(out,'sync-reload.json'),JSON.stringify({result:'PASS',browser:'chromium',checks:['real IndexedDB offline enqueue','reload restores pending count','UID isolation','cross-UID read-only pending audit','reconnect drains once','empty audit never authorizes updater','cooperative cross-tab Web Locks fence blocks new writers','second probe refused','release resumes peer writer','inflight remote upload refuses dual fence','remote acknowledgement completes without deadlock','dual fence observes empty queue without authorizing update','second reload empty','same Python coordinator journal browser enrollment','scope close keeps IDB claim after reload','peer writers denied after volatile locks released','unknown profiles remain unattested'],production:false},null,2));
   console.log('PASS: IndexedDB/reload/UID isolation/cooperative cross-tab writer and publication fences; no Console mounted');
 }finally{await browser?.close();await new Promise(r=>server.close(r));}

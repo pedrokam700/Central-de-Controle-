@@ -194,3 +194,28 @@ test('pending browser outbox denies dual observer while keeping update forbidden
   assert.equal(result.reason,'pending_outbox_evidence');
   assert.equal(result.update_authorized,false);
 });
+
+test('bound browser participant authenticates challenge and never attests other profiles',async()=>{
+  const {createBrowserMaintenanceParticipant}=await import('../ames/maintenance-browser.mjs');
+  const {createHmac}=await import('node:crypto');
+  const binding={transaction_id:'b'.repeat(32),installation_sha256:'a'.repeat(64),scope_id:'c'.repeat(64)},key='d'.repeat(64);
+  const evidence={persistent_claim_held:true,cooperative_fence_held:true,remote_publication_fence_held:true,pending_entries:0,transaction:binding};
+  const claim={schema:'ames-browser-maintenance-claim-v1',...binding,update_authorized:false};
+  const state={pending_entries:0,observation_stable:true,uploads_inflight:0,captures_inflight:0,reads_inflight:0};
+  const canonical=b=>JSON.stringify(Object.fromEntries(Object.keys(b).sort().map(k=>[k,b[k]])));
+  const participant=await createBrowserMaintenanceParticipant({key,binding,evidence,inspect:async()=>state,readClaim:async()=>claim});
+  const body={schema:'ames-browser-enrollment-v1',operation:'attest',...binding,sequence:1,challenge:'e'.repeat(64)};
+  const wire=JSON.stringify({body,mac:createHmac('sha256',Buffer.from(key,'hex')).update('browser-request\0'+canonical(body)).digest('hex')});
+  const response=JSON.parse(await participant.handle(wire));
+  assert.equal(response.body.all_profiles_attested,false);
+  assert.equal(response.body.update_authorized,false);
+  assert.equal(response.body.challenge,body.challenge);
+  assert.equal(response.mac,createHmac('sha256',Buffer.from(key,'hex')).update('browser-response\0'+canonical(response.body)).digest('hex'));
+  await assert.rejects(()=>participant.handle(wire),/recovery_required/,'replay is rejected');
+  assert.equal(claim.transaction_id,binding.transaction_id,'failed channel never erases persistent barrier');
+});
+
+test('a claimed but unfenced browser cannot enroll',async()=>{
+  const {createBrowserMaintenanceParticipant}=await import('../ames/maintenance-browser.mjs');
+  await assert.rejects(()=>createBrowserMaintenanceParticipant({key:'a'.repeat(64),binding:{transaction_id:'b'.repeat(32),installation_sha256:'c'.repeat(64),scope_id:'d'.repeat(64)},evidence:{persistent_claim_held:true}}),/browser_enrollment_unproven/);
+});
