@@ -224,7 +224,42 @@ class ProtocolTests(unittest.TestCase):
 
 
 class CrossProcessTests(unittest.TestCase):
-    def run_ipc_case(self, disconnect, root_override=None):
+    def test_self_reported_identity_without_independent_os_witness_never_drains(self):
+        # Even an authentic signed reply is insufficient if an independent
+        # witness cannot prove the listener owner and process incarnation.
+        for violation in ("missing", "wrong_owner", "wrong_installation", "bad_start"):
+            with self.subTest(violation=violation):
+                admission = MaintenanceAdmission()
+                key = secrets.token_bytes(32)
+                with tempfile.TemporaryDirectory(prefix=ledger.FIXTURE_PARENT_PREFIX) as tmp:
+                    root = Path(tmp) / "fixture"
+                    root.mkdir()
+                    (root / ledger.FIXTURE_MARKER).write_text(ledger.FIXTURE_MAGIC, encoding="utf-8")
+                    expected = {}
+                    def connect(transaction):
+                        session = DrainSession(admission, lambda: idle_runtime(admission),
+                                               key, IDENTITY, transaction)
+                        expected.update(session.target)
+                        return DrainClient(session.handle, key, session.target, transaction)
+                    def observer(_pid):
+                        if violation == "missing":
+                            return None
+                        witness = {"pid": expected["pid"], "installation_sha256": IDENTITY,
+                                   "start_marker": secrets.token_hex(16),
+                                   "endpoint_owner_pid": expected["pid"]}
+                        if violation == "wrong_owner":
+                            witness["endpoint_owner_pid"] += 1
+                        elif violation == "wrong_installation":
+                            witness["installation_sha256"] = "f" * 64
+                        elif violation == "bad_start":
+                            witness["start_marker"] = "not-a-process-creation-identity"
+                        return witness
+                    with self.assertRaisesRegex(ValueError, "coordinator_process_witness_untrusted"):
+                        FixtureDrainCoordinator(root, IDENTITY, connect, observer)
+                    self.assertFalse(admission.snapshot()["draining"])
+                    self.assertEqual(ledger.inspect_fixture(root)["phase"], "recovery_required")
+
+    def run_ipc_case(self, disconnect, root_override=None, witness_change=False):
         context = multiprocessing.get_context("spawn")
         child = channel = report = None
         context_root = (tempfile.TemporaryDirectory(prefix=ledger.FIXTURE_PARENT_PREFIX)
@@ -233,6 +268,16 @@ class CrossProcessTests(unittest.TestCase):
             root = Path(tmp) / "fixture" if root_override is None else root_override
             root.mkdir()
             (root / ledger.FIXTURE_MARKER).write_text(ledger.FIXTURE_MAGIC, encoding="utf-8")
+            witness_state = {"start_marker": secrets.token_hex(16)}
+            def process_witness(pid):
+                # The independently launched fixture process is the IPC peer.
+                # Production MUST replace this with OS PID/creation/port-owner
+                # evidence, and separately enroll the installed guardian.
+                if child is None or not child.is_alive():
+                    raise ValueError("fixture_process_not_alive")
+                return {"pid": child.pid, "installation_sha256": IDENTITY,
+                        "start_marker": witness_state["start_marker"],
+                        "endpoint_owner_pid": child.pid}
             def connect(transaction_id):
                 nonlocal child, channel, report
                 channel, worker_channel = context.Pipe(duplex=True)
@@ -252,14 +297,22 @@ class CrossProcessTests(unittest.TestCase):
                     return channel.recv_bytes(MAX_MESSAGE)
                 return DrainClient(exchange, key, target, transaction_id)
             try:
-                coordinator = FixtureDrainCoordinator(root, IDENTITY, connect)
+                coordinator = FixtureDrainCoordinator(root, IDENTITY, connect, process_witness)
                 result = coordinator.observe()
                 self.assertEqual(result["state"], "agent_quiescent_only")
                 self.assertEqual(result["phase"], "awaiting_external_attestations")
                 self.assertFalse(result["guardian_attested"])
                 self.assertFalse(result["browser_profiles_attested"])
                 self.assertFalse(result["update_authorized"])
-                if disconnect:
+                if witness_change:
+                    # PID alone is insufficient when a process is replaced.
+                    # A different independent start marker must keep the
+                    # journal and agent drain closed pending recovery.
+                    witness_state["start_marker"] = secrets.token_hex(16)
+                    with self.assertRaisesRegex(ValueError, "coordinator_process_incarnation_changed"):
+                        coordinator.observe()
+                    channel.close()
+                elif disconnect:
                     channel.close()
                     with self.assertRaises(ProtocolRejected):
                         coordinator.observe()
@@ -273,7 +326,8 @@ class CrossProcessTests(unittest.TestCase):
                     self.assertGreaterEqual(mutex_checks, 3)
                 else:
                     self.assertEqual(mutex_checks, 0)
-                self.assertEqual(final, {"fenced": disconnect, "new_job_blocked": disconnect})
+                fenced = disconnect or witness_change
+                self.assertEqual(final, {"fenced": fenced, "new_job_blocked": fenced})
                 child.join(10)
                 self.assertEqual(child.exitcode, 0)
                 persisted = ledger.inspect_fixture(root)
@@ -318,6 +372,9 @@ class CrossProcessTests(unittest.TestCase):
     def test_lost_external_coordinator_keeps_agent_fenced_and_journal_blocking(self):
         self.run_ipc_case(True)
 
+    def test_changed_process_incarnation_keeps_drain_and_journal_closed(self):
+        self.run_ipc_case(False, witness_change=True)
+
     def test_unreachable_or_wrong_installation_records_recovery_without_clearing_claim(self):
         for wrong_target in (False, True):
             with tempfile.TemporaryDirectory(prefix=ledger.FIXTURE_PARENT_PREFIX) as tmp:
@@ -329,7 +386,8 @@ class CrossProcessTests(unittest.TestCase):
                         raise OSError("unavailable")
                     return SimpleNamespace(transaction_id=transaction, target={"installation_sha256": "f" * 64})
                 with self.assertRaises((OSError, ValueError)):
-                    FixtureDrainCoordinator(root, IDENTITY, connect)
+                    FixtureDrainCoordinator(root, IDENTITY, connect,
+                                            lambda pid: self.fail("untrusted target reached observer"))
                 self.assertEqual(ledger.inspect_fixture(root)["phase"], "recovery_required")
 
 
