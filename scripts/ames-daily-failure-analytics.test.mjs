@@ -38,6 +38,11 @@ test('production rate fails closed when temporal denominator does not match the 
   assert.equal(productionMetrics(store,{line:'TAN10101',hour:'09:00',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
   assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-10-12',to:'2026-10-12'},rows).quantity,null);
   assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-10-12',to:'2026-10-13'},rows).quantity,null);
+  const unavailable={...snapshot,summary:{quantity:null,check_fpy:null}};
+  const missingStore={...store,read:()=>({snapshot:unavailable})};
+  const absent=productionMetrics(missingStore,{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows);
+  assert.equal(absent.denominatorProven,false);
+  assert.equal(absent.quantity,null,'missing production denominator cannot become numeric zero');
 });
 
 test('daily occurrence preserves loaded AT repair fields without falsely claiming 3012',()=>{

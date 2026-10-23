@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {observedReuseDashboard,reuseGroup} from '../ames/data/daily-reuse-evidence.mjs';
+import {observedReuseDashboard,reuseGroup,theoreticalReuseSensitivity} from '../ames/data/daily-reuse-evidence.mjs';
 
 const occurrence=(pcba,day,patch={})=>({line:'L3',pcba,defect_code:'CAM',
   defect_time:`2026-10-${day} 10:00:00`,failure_record_date:`2026-10-${day}`,
@@ -34,4 +34,23 @@ test('a material matched only by PCBA cannot contaminate a different 3028 defect
  assert.equal(reuseGroup(unrelated),'no_reuse_evidence');
  const exact={...unrelated,component_links_exact:[{material:'M1',defect_code:'CAM'}]};
  assert.equal(reuseGroup(exact),'material_only');
+});
+
+test('1600 production, 57 observed defects and 10 flagged implies only theoretical scale',()=>{
+ const rows=Array.from({length:57},(_,i)=>occurrence('P'+i,'22',{
+   pcba_reused:i<10,production_evidence_proven:true,
+   production_operational_date:'2026-10-22'}));
+ const model=observedReuseDashboard(rows);
+ const p=theoreticalReuseSensitivity(model,model.union,{
+   quantity:1600,denominatorProven:true,operationalDate:'2026-10-22'});
+ assert.equal(Number(p.share_of_observed_pct.toFixed(2)),17.54);
+ assert.equal(Number(p.theoretical_scale_pp.toFixed(3)),0.625);
+ assert.equal(p.check_fpy_gain,null);
+ assert.equal(p.root_cause_confirmed,false);
+ const missing=theoreticalReuseSensitivity(model,model.union,{quantity:1600,
+   denominatorProven:false,operationalDate:'2026-10-22'});
+ assert.equal(missing.theoretical_scale_pp,null);
+ const duplicate=theoreticalReuseSensitivity(model,[...model.union,model.union[0]],{
+   quantity:1600,denominatorProven:true,operationalDate:'2026-10-22'});
+ assert.equal(duplicate.theoretical_scale_pp,null);
 });

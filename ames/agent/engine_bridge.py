@@ -435,8 +435,9 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             current_without_2114_anchor = selection["state"] == "current_cycle_unanchored"
             material_scope = {
                 "status": "current_mounting_new_cycle" if is_new_cycle else (
+                    "current_mounting_unanchored" if current_without_2114_anchor else (
                     "selected_at_latest_2114_candidate" if selection["state"] in
-                    ("last_failure_assembly", "current_same_cycle") else "indeterminate"),
+                    ("last_failure_assembly", "current_same_cycle") else "indeterminate")),
                 "cycle_state": selection["state"],
                 "basis": selection["reference"],
                 "defect_time": anchor_time,

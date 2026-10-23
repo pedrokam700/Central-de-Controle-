@@ -36,6 +36,12 @@ class MountingCycles(unittest.TestCase):
         self.assertEqual(result["state"], "current_same_cycle")
         self.assertEqual(len(result["components"]), 1)
 
+    def test_current_mounting_without_2114_failure_is_present_but_unanchored(self):
+        live = component("CAM-NO-FAILURE", "2026-10-23 09:00:00", status="Y")
+        result = montagem_principal_da_consulta([live], "BOARD", None)
+        self.assertEqual(result["state"], "current_cycle_unanchored")
+        self.assertEqual([v["item_sn"] for v in result["components"]], ["CAM-NO-FAILURE"])
+
     def test_ambiguous_y_cannot_make_old_failure_the_main_cycle(self):
         unknown = component("CAM-UNKNOWN", "", status="Y")
         old = component("CAM-OLD", "2026-10-22 09:00:00", "2026-10-22 15:00:00")

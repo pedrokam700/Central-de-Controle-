@@ -335,7 +335,8 @@ export function buildLiveSnForensics(result={}){
   // those already identified as reused. Older offline fixtures may provide
   // reused_components only; do not accidentally restore historical broad lists
   // when the new occurrence-bound selection is present.
-  const chosen=['selected_at_latest_2114_candidate','current_mounting_new_cycle'].includes(trace3074?.material_selection?.status);
+  const chosen=['selected_at_latest_2114_candidate','current_mounting_new_cycle',
+    'current_mounting_unanchored'].includes(trace3074?.material_selection?.status);
   const reused=new Map((trace3074?.reused_components||[]).map(item=>[text(item.item_sn),item]));
   const scopedItems=chosen?(trace3074?.component_usage||[]):(trace3074?.reused_components||[]);
   const materials=scopedItems.map(sourceItem=>{

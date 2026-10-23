@@ -108,6 +108,9 @@ function decorate(root,result){
       :scope.cycle_state==='current_same_cycle'
         ?t('Montagem atual Y pertence ao mesmo ciclo da última falha 2114; não duplicamos conjuntos.',
            'Current Y assembly belongs to the last 2114 failure cycle; no duplicated assemblies.')
+      :scope.cycle_state==='current_cycle_unanchored'
+        ?t('Vínculos atuais Y comprovados na 3074, mas não há última falha 2114 para ancorar análise de recorrência.',
+           'Current Y bindings proven in 3074, but no last 2114 failure exists to anchor recurrence analysis.')
       :scope.cycle_state==='last_failure_assembly'
         ?t('Sem conjunto atual Y: reconstrução dos vínculos da última falha 2114, inclusive materiais hoje N comprovados naquele instante.',
            'No current Y assembly: links from the last 2114 failure, including materials now N but proven at that instant.')

@@ -77,14 +77,22 @@ git diff --check
 
 ## Checkpoint P3 · Drilldown físico e métricas com identidade exata (em preparação)
 
+- **Publicado na PR draft #67** com commit remoto `3b3172f4bc82feb04b4f5ba7e7b24160f383fc39`. CI: `Static quality checks` SUCCESS e `Agent and sync E2E with Firestore Rules` SUCCESS; browser ainda instalando ferramenta Playwright na última consulta; preview externo **FAILURE**, diagnóstico comprovado `release_build_http_401` para `deploy-preview-67--productcontrolcenter.netlify.app` (run `39983517233`). Esse 401 não deve ser mascarado como código GREEN; configuração/deploy externo fica pendente.
+
 1. Na Consulta por SN de PCBA, cada cartão de Material SN agora oferece botão **Investigar este Material SN na 3074** usando a consulta já existente; o caminho inverso Material → PCBA também está presente. O identificador é escapado no HTML; sem consultas implícitas ao abrir o cartão.
 2. Falhas agrupadas ganharam **Materiais 2º+***: SNs físicos distintos, com ocorrência exata PCBA + Defect Code + Defect Time; não multiplicar linhas de kit, não transferir componente de outra falha da placa. Falta de chave exata exibe `—`, nunca zero comprovado.
 3. No Dashboard de reuso, o eixo **linha** ganhou barras segmentadas para PCBA somente / material somente / ambos; o eixo **dia MES** ganhou gráfico de linha sem interpolar lacunas. A associação de material na contagem só aceita ligação à ocorrência 3028 exata; associação PCBA genérica fica como contexto, não como defeito físico comprovado.
 4. Testes direcionados `ames-failures-grouped-summary`, `ames-issue66-dashboard`, `ames-issue66-compatibility`, `ames-sn-history-detail`, `ames-sn-live-context` e `ames-daily-failure-analytics` passaram localmente. Revalidar a CI do SHA remoto correspondente antes de alegar GREEN.
 
+## Checkpoint P4 · sensibilidade teórica e PCBA sem âncora 2114 (em preparação)
+
+1. `data/daily-reuse-evidence.mjs`: cálculo puro de participação dos sinalizados no conjunto 3028 observado e escala de **pontos percentuais teóricos**, somente com Quantity verdadeiro, dia operacional único, evidência 3022 e uma ocorrência distinta por PCBA. Exemplo da Issue #66: 57 falhas observadas, 10 sinalizadas, 1600 produzidas → 17,54% das falhas e 0,625 pp de escala teórica; `check_fpy_gain` fica **null** e nenhum ganho real é atribuído. Sem provas suficientes retorna `—`. `daily-failure-analytics` expõe cards, SNs distintos e evita transformar Quantity ausente em `0`.
+2. PCBA sem qualquer falha 2114, mas com materiais atuais Y comprovados pela 3074, agora tem seleção `current_mounting_unanchored` explícita. A montagem atual não desaparece e não recebe falso alerta de falha. Consulta PCBA e histórico seguem independentes da Rastreabilidade 3028.
+3. Testes `ames-issue66-dashboard`, `ames-issue66-compatibility`, `ames-daily-failure-analytics` e Python `test_issue66_mounting_cycles` ampliados, incluindo ausência de denominador e ciclo atual sem 2114.
+
 ## Continuidade imediata
 
-1. Publicar P3 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o gate browser e o preview externo. Não fazer merge nem publicar.
+1. Publicar P4 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o gate browser e o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
 2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
 3. P1 física: confirmar na fábrica respostas 3074 PCBA/Material SN, Bind/Unbind reais, alarme GN06-X015 e 3022 dos respectivos ciclos. Resolver possíveis lacunas de parser/driver somente com evidência sanitizada.
 4. P2 pendente: persistência autoritativa de fechamento FULL real, leitura da linha do tempo de fechamentos e gráficos dia-a-dia com denominações/Check FPY comprovadas. A classificação/UI fail-closed do leitor já está em andamento; não inferir fonte completa de dados parciais.

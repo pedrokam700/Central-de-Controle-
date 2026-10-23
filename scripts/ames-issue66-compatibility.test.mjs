@@ -63,3 +63,15 @@ test('PCBA component card provides explicit Material SN drilldown with escaped i
   }]},{},'en-US');
   assert.doesNotMatch(unsafe,/<script>/);
 });
+
+test('verified current Y material stays visible without a 2114 failure anchor',()=>{
+  const model=buildLiveSnForensics({sn:'BOARD-X',detected_type:'PCBA',
+    trace_3074:{status:'complete',query:{rows:[{'Barcode':'CAM-CURRENT','Sn Type':'Rear Camera','Iss Status':'Y'}]},
+      material_selection:{status:'current_mounting_unanchored',cycle_state:'current_cycle_unanchored'},
+      component_usage:[{item_sn:'CAM-CURRENT',item_type:'Rear Camera',current_pcba_confirmed:true,
+        known_use_count:1,previous_pcbas:[],query:{rows:[],no_data:true}}]}});
+  assert.equal(model.current,null);
+  assert.equal(model.materials.length,1);
+  assert.equal(model.materials[0].item_sn,'CAM-CURRENT');
+  assert.equal(model.alerts.length,0);
+});
