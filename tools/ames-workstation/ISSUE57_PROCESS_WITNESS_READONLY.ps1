@@ -22,6 +22,7 @@ $result=[ordered]@{
   all_sessions_attested=$false
   update_authorized=$false
   reason='unverified'
+  reason_code=$null
 }
 
 function Get-Issue57Hash([string]$value){
@@ -30,6 +31,7 @@ function Get-Issue57Hash([string]$value){
   finally{$sha.Dispose()}
 }
 
+$witnessStage='witness_configuration_failed'
 try{
   # Port 8765 is the only operational target. Random fixture ports are
   # permitted exclusively on a GitHub-hosted Windows CI runner.
@@ -38,17 +40,20 @@ try{
        -not $env:RUNNER_TEMP){throw 'fixture_environment_required'}
   }elseif($Port -ne 8765){throw 'production_port_mismatch'}
 
+  $witnessStage='witness_script_inspection_failed'
   $scriptPath=[IO.Path]::GetFullPath($ExpectedScript)
   $file=Get-Item -LiteralPath $scriptPath -ErrorAction Stop
   if($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)){
     throw 'script_file_untrusted'
   }
+  $witnessStage='witness_process_lookup_failed'
   $proc=Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $TargetPid) -ErrorAction Stop
   if(@($proc).Count -ne 1 -or -not $proc.CommandLine -or
      [string]$proc.Name -notmatch '^(?:python|pythonw)\.exe$' -or
      -not $proc.CreationDate -or -not $proc.ExecutablePath){throw 'process_unverified'}
 
   # The independent kernel TCP table, not /ready, must prove the listener.
+  $witnessStage='witness_listener_lookup_failed'
   $owners=@(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop)
   if($owners.Count -eq 0){throw 'listener_absent'}
   foreach($owner in $owners){
@@ -60,6 +65,7 @@ try{
 
   # Parse command-line arguments with the Windows API: a substring search
   # would incorrectly accept an attacker-controlled prefix/path argument.
+  $witnessStage='witness_command_line_parse_failed'
   if(-not ('Issue57ArgvReadOnly' -as [type])){
     Add-Type -TypeDefinition @'
 using System;
@@ -96,6 +102,7 @@ public static class Issue57ArgvReadOnly {
 
   # The marker binds OS process creation, PID and executed image, but it is
   # not an authorization token and not an attestation of guardian cooperation.
+  $witnessStage='witness_identity_hash_failed'
   $creation=([DateTime]$proc.CreationDate).ToUniversalTime().Ticks
   $result.endpoint_owner_pid=$TargetPid
   $result.script_sha256=(Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -110,6 +117,11 @@ public static class Issue57ArgvReadOnly {
   $result.script_path_sha256=$null
   $result.start_marker=$null
   $result.process_identity_observed=$false
+  $safeReasons=@('fixture_environment_required','production_port_mismatch',
+    'script_file_untrusted','process_unverified','listener_absent',
+    'port_owner_or_bind_mismatch','command_line_unparseable','script_argument_mismatch')
   $result.reason='independent_windows_witness_failed_closed'
+  $result.reason_code=$witnessStage
+  if($_.Exception.Message -cin $safeReasons){$result.reason_code=$_.Exception.Message}
 }
 [pscustomobject]$result|ConvertTo-Json -Compress -Depth 3

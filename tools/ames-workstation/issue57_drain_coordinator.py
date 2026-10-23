@@ -39,6 +39,7 @@ class WindowsProcessWitness:
         self.port, self.fixture_only, self._run = port, fixture_only, run
 
     def __call__(self, pid):
+        reason = "adapter_platform_or_pid_invalid"
         try:
             if os.name != "nt" or type(pid) is not int or pid <= 0:
                 raise ValueError()
@@ -48,11 +49,29 @@ class WindowsProcessWitness:
                          "-Port", str(self.port)]
             if self.fixture_only:
                 arguments.append("-FixtureOnly")
+            reason = "adapter_observer_execution_failed"
             completed = self._run(arguments, capture_output=True, timeout=20, check=False)
             if completed.returncode != 0 or len(completed.stdout) > 4096:
                 raise ValueError()
+            reason = "adapter_observer_json_invalid"
             result = json.loads(completed.stdout)
+            safe_reasons = {"witness_configuration_failed", "witness_script_inspection_failed",
+                            "witness_process_lookup_failed", "witness_listener_lookup_failed",
+                            "witness_command_line_parse_failed", "witness_identity_hash_failed",
+                            "fixture_environment_required", "production_port_mismatch", "script_file_untrusted",
+                            "process_unverified", "listener_absent", "port_owner_or_bind_mismatch",
+                            "command_line_unparseable", "script_argument_mismatch"}
+            if result.get("process_identity_observed") is not True:
+                reason = result.get("reason_code") if result.get("reason_code") in safe_reasons else "adapter_os_witness_rejected"
+                raise ValueError()
             path_digest = hashlib.sha256(self.script.lower().encode("utf-8")).hexdigest()
+            reason = "adapter_observer_contract_mismatch"
+            if result.get("script_sha256") != self.script_digest:
+                reason = "adapter_script_digest_mismatch"
+                raise ValueError()
+            if result.get("script_path_sha256") != path_digest:
+                reason = "adapter_script_path_mismatch"
+                raise ValueError()
             if (result.get("schema") != "ames-windows-process-witness-v1"
                     or result.get("read_only") is not True
                     or result.get("process_identity_observed") is not True
@@ -71,7 +90,7 @@ class WindowsProcessWitness:
                     "installation_sha256": self.installation,
                     "start_marker": result["start_marker"]}
         except Exception:
-            raise ValueError("independent_windows_witness_unverified") from None
+            raise ValueError("independent_windows_witness_unverified:" + reason) from None
 
 
 class FixtureDrainCoordinator:
