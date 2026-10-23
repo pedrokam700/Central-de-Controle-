@@ -112,6 +112,10 @@ export function buildDailyFailureRows(store){
       const relation=uniq(componentLinks.flatMap(r=>String(r.relations||'').split(',').map(x=>relationText(x.trim())).filter(Boolean)));
       const reused=self.reuse.get(pcba),selfPrior=self.prior.get(pcba);
       const historyRows=history.filter(h=>String(h.pcba_sn||'')===pcba&&String(h.defect_time||'')!==String(occ.defect_time||''));
+      const pcbaPriorEvents=moment===null?[]:historyRows.filter(h=>{
+        const previous=parseFailureInstant(h.defect_time);
+        return h.defect_code&&previous!==null&&previous<moment;
+      });
       const prior=priorFailureText(selfPrior,selfPrior?historyRows:[]);
       const explicitCause=Boolean(occ.root_cause_confirmed||repair.root_cause_confirmed||componentLinks.some(r=>r.root_cause_confirmed));
       out.push({
@@ -120,6 +124,7 @@ export function buildDailyFailureRows(store){
         production_event_time:production.event_time,production_shift:production.shift,production_operational_date:production.operational_date,production_evidence_proven:production.trusted,
         repair_user:repair.repair_user||occ.repair_user||null,repair_comment:repair.repair_comment||occ.repair_comment||null,repair_time:repair.repair_time||occ.repair_time||null,repair_code:repair.repair_code||occ.repair_code||null,repair_source:repairs.best?'3012':(occ.repair_source||occ.source_view||null),repair_rows:repairs.rows,
         pcba_reused:Boolean(reused),pcba_prior_failure:Boolean(selfPrior),pcba_prior_failure_code:prior.code,pcba_prior_failure_desc:prior.desc,
+        pcba_prior_events:pcbaPriorEvents,
         component_links:componentLinks,component_links_count:componentLinks.length,
         component_links_exact:componentLinksExact,component_families:componentFamilies,component_group_count:componentFamilies.length,
         component_history_links:componentHistory,component_history_count:componentHistory.length,component_history_families:componentHistoryFamilies,
@@ -256,8 +261,12 @@ function renderReuseDashboard(rows,state,metrics={}){
   const criterionLabels={
     pcba_reused:t('PCBA 2º+ uso observado','Observed 2nd+ use PCBA'),
     pcba_prior_history:t('PCBA reutilizada com falha histórica','Reused PCBA with prior failure history'),
+    pcba_prior_same:t('PCBA 2º+ · mesma falha anterior comprovada','PCBA 2nd+ · proven same prior failure'),
+    pcba_prior_family:t('PCBA 2º+ · falha anterior da mesma família','PCBA 2nd+ · prior failure in same family'),
     material_reused:t('Material físico reutilizado com vínculo na ocorrência','Reused physical material linked to occurrence'),
     material_prior_candidate:t('Material com falha histórica na PCBA anterior · candidato','Material with previous-board fault · candidate'),
+    material_prior_same_candidate:t('Material com mesma falha na PCBA anterior · candidato','Material with same prior-board failure · candidate'),
+    material_prior_family_candidate:t('Material com falha similar na PCBA anterior · candidato','Material with similar prior-board failure · candidate'),
     material_type_candidate:t('Tipo de material compatível com a falha · hipótese','Material type compatible with defect · hypothesis')};
   const selected=classes[focused]||model.union,max=Math.max(1,...model.bins.map(b=>b.total));
   const sensitivity=theoreticalReuseSensitivity(model,selected,{

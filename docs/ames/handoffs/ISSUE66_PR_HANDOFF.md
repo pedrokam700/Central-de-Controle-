@@ -102,16 +102,26 @@ git diff --check
 2. `daily-failure-analytics.mjs`: painel de combinação com checkboxes, seletor OU/E, resultados deduplicados, drilldown por ocorrência e percentagem/escala teórica guardadas. O modo pré-configurado União/Interseção anterior permanece intacto.
 3. Testes de união/interseção configurável e não transferência entre ocorrências em `scripts/ames-issue66-dashboard.test.mjs`, além dos suites diários: 10 arquivos Node selecionados e 12 casos Python passaram localmente antes do checkpoint; gate CI interno 3/3 SUCCESS acima, físico pendente.
 
-## Checkpoint P6 · atribuição material ↔ ocorrência 3028 (em preparação)
+## Checkpoint P6 · atribuição material ↔ ocorrência 3028 (publicado)
+
+- **Publicado na PR draft #67** com commit remoto `e471953812483de5f1420589841590bb91b103ed`.
+- CI run `39986560229` por SHA: `Static quality checks`, `Console themes, languages and mobile` e `Agent and sync E2E with Firestore Rules` **SUCCESS**. `Published preview smoke` **FAILURE**, log comprovou `release_build_http_401` no Netlify. Nenhum gate externo/físico declarado aprovado.
 
 1. Foi identificada uma contaminação no dashboard: `reuseLinks` podia preencher o código/horário da **primeira** ocorrência da PCBA quando a fonte 3074 tinha apenas contexto da placa; a comparação posterior no dashboard podia atribuir esse Material SN àquela falha sem identificação real. Não alterar a visualização contextual legada.
 2. `ames/data/reuse-analysis.mjs` agora reconcilia o material por `current_defect_key` **ou** código+instante explícitos da fonte, exigindo identidade única; a associação genérica de PCBA fica só como contexto. `ames/daily-failure-analytics.mjs` exige também identidade bruta por ocorrência, intervalo Bind/Unbind quando disponível e unicidade 3028 antes de incluir material nos indicadores de falha exata. Vínculo de novo ciclo posterior à falha não conta.
 3. Regressão testada: duas falhas na mesma PCBA, material de uma falha apenas, linha 3074 sem identificação da ocorrência e Bind posterior excluídos; a correspondência UTC / hora de fábrica da segunda falha permanece válida.
-4. Testes locais: `node --test scripts/ames-daily-failure-analytics.test.mjs scripts/ames-issue66-dashboard.test.mjs scripts/ames-reuse-localization.test.mjs scripts/ames-failure-occurrence-evidence.test.mjs scripts/ames-reuse-cohorts.test.mjs scripts/ames-clean-v3.test.mjs scripts/ames-cache.test.mjs` **7/7 arquivos PASS**. CI por SHA e físico precisam ser avaliados após publicar.
+4. Testes locais: `node --test scripts/ames-daily-failure-analytics.test.mjs scripts/ames-issue66-dashboard.test.mjs scripts/ames-reuse-localization.test.mjs scripts/ames-failure-occurrence-evidence.test.mjs scripts/ames-reuse-cohorts.test.mjs scripts/ames-clean-v3.test.mjs scripts/ames-cache.test.mjs` **7/7 arquivos PASS**.
+
+## Checkpoint P7 · reincidência mesma falha vs mesma família (em preparação)
+
+1. O dashboard configurável passa de 5 para **9 critérios**. Acrescenta PCBA 2º+ com falha 2114 **anterior da mesma falha** e **da mesma família**, e material físico com falha **da mesma falha** / **mesma família** em PCBA anterior. Os dois critérios de Material SN são explicitamente **candidatos**, não provam que a peça causou a falha antiga.
+2. As reincidências da PCBA usam 2114 da própria PCBA estritamente **anterior** ao instante 3028, nunca histórico de outra PCBA, falha futura ou registro sem hora. A classificação usa taxonomia oficial versionada `failure-taxonomy.mjs`: `EXACT` distinto de `SIMILAR`, sem promover texto agregado `D1, D2` a um único código comprovado.
+3. Mantém OU/E, drilldown observado sem duplicação, matcher de tipo compatível, tradução PT/EN. Os 5 critérios anteriores e presets continuam funcionando.
+4. Testes locais direcionados: Node `ames-issue66-dashboard`, `ames-daily-failure-analytics`, `ames-reuse-cohorts`, `ames-cache`, `ames-clean-v3` **5/5 arquivos PASS**. Suite adicional `ames-failure-taxonomy` local foi **interrompida** após ficar sem progresso no subprocesso de checagem Python; não declarar PASS. CI do SHA P7 e físico aguardam publicação/execução.
 
 ## Continuidade imediata
 
-1. Publicar P6 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
+1. Publicar P7 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
 2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
 3. P1 física: confirmar na fábrica respostas 3074 PCBA/Material SN, Bind/Unbind reais, alarme GN06-X015 e 3022 dos respectivos ciclos. Resolver possíveis lacunas de parser/driver somente com evidência sanitizada.
 4. P2 pendente: persistência autoritativa de fechamento FULL real, leitura da linha do tempo de fechamentos e gráficos dia-a-dia com denominações/Check FPY comprovadas. A classificação/UI fail-closed do leitor já está em andamento; não inferir fonte completa de dados parciais.

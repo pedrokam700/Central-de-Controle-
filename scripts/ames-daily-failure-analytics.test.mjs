@@ -97,6 +97,25 @@ test('raw matching defect code and instant can anchor material without a defect 
   assert.deepEqual(rows[1].component_links_exact.map(x=>x.material),['MAT-1']);
 });
 
+test('PCBA same/family recurrence only consults 2114 history before the 3028 event',()=>{
+  const snapshot={line_id:'TAN10101',occurrences:[{
+    pcba_sn:'P4',defect_key:'K4',defect_code:'CAM-A',defect_desc:'Front camera failed',
+    defect_time:'2026-10-22T10:00:00-03:00'}],
+  material_trace:{records:[]},process_timeline:{contexts:[]},
+  pcba_history:{records:[
+    {pcba_sn:'P4',defect_code:'CAM-B',defect_desc:'Front camera not working',defect_time:'2026-10-21T09:00:00-03:00'},
+    {pcba_sn:'P4',defect_code:'CAM-A',defect_desc:'Front camera failed',defect_time:'2026-10-23T10:00:00-03:00'},
+    {pcba_sn:'P4',defect_code:'CAM-A',defect_desc:'Front camera failed',defect_time:'invalid'},
+    {pcba_sn:'OTHER',defect_code:'CAM-A',defect_desc:'Front camera failed',defect_time:'2026-10-21T09:00:00-03:00'}]},
+  insights:{drilldowns:{pcba_second_use:[{PCBA:'P4'}],pcba_reused_with_prior_failure:[{PCBA:'P4'}]}}};
+  const [row]=buildDailyFailureRows({read:line=>({snapshot:line==='TAN10101'?snapshot:null})});
+  assert.equal(row.pcba_prior_events.length,1);
+  assert.equal(row.pcba_prior_events[0].defect_code,'CAM-B');
+  const flags=reuseCriteriaEvidence(row);
+  assert.equal(flags.pcba_prior_family,true);
+  assert.equal(flags.pcba_prior_same,false,'future same code cannot become prior evidence');
+});
+
 test('three reuse granularities never turn three material links into three PCBAs',()=>{
   const links=['M1','M2','M3'].map(material=>({pcba:'P1',line:'TAN10103',material,component_group:'DISPLAY_SET',family:'Screen / LCD',relations:'MESMA FALHA'}));
   const grouped=aggregatePcbas(links),kpi=reuseKpis(links);

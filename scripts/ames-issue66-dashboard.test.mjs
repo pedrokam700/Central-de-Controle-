@@ -71,3 +71,26 @@ test('configurable OR/AND uses exact material evidence and keeps candidates sepa
  assert.deepEqual(filterReuseCriteria(rows,['pcba_prior_history','material_type_candidate'],'and'),[]);
  assert.deepEqual(filterReuseCriteria(rows,[],'or'),[]);
 });
+
+test('same defect differs from same operational family; material histories remain candidates',()=>{
+ const row=occurrence('BOARD','22',{defect_code:'CAM-01',defect_desc:'Front camera failed',
+   pcba_reused:true,pcba_prior_failure:true,
+   pcba_prior_events:[{defect_code:'CAM-01',defect_desc:'Front camera failed'},
+     {defect_code:'CAM-02',defect_desc:'Front camera not working'}],
+   component_links_exact:[{material:'PHYS-CAM',item_type:'Front Camera',
+     historical_evidence:[{pcba:'BOARD-OLD',defect_code:'CAM-01',defect_desc:'Front camera failed'},
+       {pcba:'BOARD-OLDER',defect_code:'CAM-03',defect_desc:'Front camera not working'}]}]});
+ const proof=reuseCriteriaEvidence(row);
+ for(const key of ['pcba_prior_same','pcba_prior_family','material_prior_same_candidate',
+   'material_prior_family_candidate'])assert.equal(proof[key],true,key);
+ assert.equal(filterReuseCriteria([row],['pcba_prior_same','material_prior_same_candidate'],'and').length,1);
+ const ambiguous={...row,pcba_prior_events:[{defect_code:'CAM-01, CAM-02',defect_desc:'Front camera failed'}],
+   component_links_exact:[{material:'PHYS-CAM',historical_evidence:[{
+     defect_code:'CAM-01 | CAM-03',defect_desc:'Front camera failed'}]}]};
+ assert.equal(reuseCriteriaEvidence(ambiguous).pcba_prior_same,false);
+ assert.equal(reuseCriteriaEvidence(ambiguous).material_prior_same_candidate,false);
+ const unrelated=occurrence('NEXT','22',{pcba_reused:true,pcba_prior_failure:true,
+   pcba_prior_events:[{defect_code:'LCD-01',defect_desc:'Screen black spot'}]});
+ assert.equal(reuseCriteriaEvidence(unrelated).pcba_prior_same,false);
+ assert.equal(reuseCriteriaEvidence(unrelated).pcba_prior_family,false);
+});
