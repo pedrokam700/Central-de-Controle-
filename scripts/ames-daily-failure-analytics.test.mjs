@@ -30,7 +30,9 @@ test('daily filters preserve shift and association semantics without inferring c
 });
 
 test('production rate fails closed when temporal denominator does not match the filter scope',()=>{
-  const snapshot={snapshot_id:1,revision:1,summary:{quantity:100,check_fpy:96.5},occurrences:[]};
+  const snapshot={line_id:'TAN10101',snapshot_id:1,revision:1,
+    summary:{quantity:100,check_fpy:96.5,period:{start_at:'2026-10-13T07:00:00-03:00',end_at:'2026-10-14T07:00:00-03:00'}},
+    coverage:{defects:{source_complete:true,transport_complete:true}},occurrences:[]};
   const store={read:()=>({snapshot}),occurrences:()=>({rows:[],coverage:{status:'partial'}})};
   const rows=[{line:'TAN10101',production_evidence_proven:true,production_operational_date:'2026-10-13',failure_record_date:'2026-10-13',defect_time:'2026-10-13T09:00:00'}];
   const proven=productionMetrics(store,{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows);
@@ -39,7 +41,13 @@ test('production rate fails closed when temporal denominator does not match the 
   assert.equal(productionMetrics(store,{line:'TAN10101',hour:'09:00',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
   assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-10-12',to:'2026-10-12'},rows).quantity,null);
   assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-10-12',to:'2026-10-13'},rows).quantity,null);
-  const unavailable={...snapshot,summary:{quantity:null,check_fpy:null}};
+  assert.equal(productionMetrics(store,{line:'TAN10101'},rows).quantity,null);
+  assert.equal(productionMetrics(store,{line:'TAN10101',from:'2026-99-99',to:'2026-99-99'},rows).quantity,null);
+  const wrongPeriod={...snapshot,summary:{...snapshot.summary,period:{start_at:'2026-10-12T07:00:00-03:00',end_at:'2026-10-13T07:00:00-03:00'}}};
+  assert.equal(productionMetrics({...store,read:()=>({snapshot:wrongPeriod})},{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
+  const partial={...snapshot,coverage:{defects:{source_complete:false,transport_complete:true}}};
+  assert.equal(productionMetrics({...store,read:()=>({snapshot:partial})},{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows).quantity,null);
+  const unavailable={...snapshot,summary:{...snapshot.summary,quantity:null,check_fpy:null}};
   const missingStore={...store,read:()=>({snapshot:unavailable})};
   const absent=productionMetrics(missingStore,{line:'TAN10101',from:'2026-10-13',to:'2026-10-13'},rows);
   assert.equal(absent.denominatorProven,false);

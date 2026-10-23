@@ -122,15 +122,23 @@ git diff --check
 3. Mantém OU/E, drilldown observado sem duplicação, matcher de tipo compatível, tradução PT/EN. Os 5 critérios anteriores e presets continuam funcionando.
 4. Testes locais direcionados: Node `ames-issue66-dashboard`, `ames-daily-failure-analytics`, `ames-reuse-cohorts`, `ames-cache`, `ames-clean-v3` **5/5 arquivos PASS**. Suite adicional `ames-failure-taxonomy` local foi **interrompida** após ficar sem progresso no subprocesso de checagem Python; não declarar PASS. Evidência remota por SHA acima; físico ainda requer execução na fábrica.
 
-## Checkpoint P8 · tendência somente a partir de FULL comprovado (em preparação)
+## Checkpoint P8 · tendência somente a partir de FULL comprovado (publicado)
+
+- **Publicado na PR draft #67** com commit remoto `1bf6089c57d04f00c16fda8540663aa0257aff88`.
+- CI run `39988259534` por SHA: `Static quality checks`, `Console themes, languages and mobile` e `Agent and sync E2E with Firestore Rules` **SUCCESS**. `Published preview smoke` **FAILURE**, mesmo `release_build_http_401` comprovado no log. Não declarar release/deploy/homologação GREEN.
 
 1. `ames/data/history-trends.mjs` tem opção de leitura `requireFullClosure`: ao percorrer as revisões imutáveis de cada dia/linha/origem, salta capturas posteriores parciais e usa apenas a **revisão completa mais recente** demonstrada por `fullDayClosureEvidence` (3028+3074+2114+3022, dia 07:00→07:00, hash e escopo). Dia sem prova vira `unproven_full` e lacuna, não zero; origem em conflito e revisão inválida continuam bloqueadas.
 2. `ames/console-history-trends.mjs`: checkbox **Somente fechamentos FULL comprovados** dentro do gráfico histórico 7/30/93 dias; o padrão existente continua sendo tendência de dados observados/possivelmente parciais. O modo FULL não lê o MES, não publica, não altera snapshot atual, e não faz uma coleta parcial virar completa.
-3. Regressão em `ames-history-trends.test.mjs`: dia com r1 FULL e r2 posterior parcial seleciona **r1 somente no modo FULL**; modo observado mantém r2; sem FULL retorna lacuna/`—`, não ocorrência zero. Testes locais `ames-history-trends`, `ames-issue66-full-closure`, `ames-cache`, `ames-issue66-dashboard` **4/4 arquivos PASS**. CI do SHA P8 e homologação física pendentes.
+3. Regressão em `ames-history-trends.test.mjs`: dia com r1 FULL e r2 posterior parcial seleciona **r1 somente no modo FULL**; modo observado mantém r2; sem FULL retorna lacuna/`—`, não ocorrência zero. Testes locais `ames-history-trends`, `ames-issue66-full-closure`, `ames-cache`, `ames-issue66-dashboard` **4/4 arquivos PASS**. CI exata registrada acima; homologação física pendente.
+
+## Checkpoint P9 · denominador de produção com recorte temporal exato (em preparação)
+
+1. Corrige risco de `daily-failure-analytics.mjs`: `productionMetrics` poderia ler Quantity/Check FPY do snapshot atual ao filtrar um dia MES diferente. O agregado só é exibido como comprovado se o snapshot da mesma linha corresponder **exatamente** ao dia selecionado 07:00→07:00, possuir `coverage.defects.source_complete` e `transport_complete`, e suas ocorrências carregadas tiverem prova de 3022 para o mesmo dia operacional. Não compara produtos/linhas/turnos/horas misturados. Caso contrário, Quantity/Check FPY e projeção teórica retornam `—`/null, nunca zero ou ganho.
+2. `scripts/ames-daily-failure-analytics.test.mjs`: cenário válido 100 produzidos/96,5% Check FPY, período divergente, origem parcial, filtro sem dia e data inválida. Testes direcionados `ames-daily-failure-analytics`, `ames-issue66-dashboard`, `ames-history-trends`, `ames-cache` **4/4 arquivos PASS**; CI por SHA e teste físico pendentes.
 
 ## Continuidade imediata
 
-1. Publicar P8 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
+1. Publicar P9 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
 2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
 3. P1 física: confirmar na fábrica respostas 3074 PCBA/Material SN, Bind/Unbind reais, alarme GN06-X015 e 3022 dos respectivos ciclos. Resolver possíveis lacunas de parser/driver somente com evidência sanitizada.
 4. P2 pendente: persistência autoritativa de fechamento FULL real, leitura da linha do tempo de fechamentos e gráficos dia-a-dia com denominações/Check FPY comprovadas. A classificação/UI fail-closed do leitor já está em andamento; não inferir fonte completa de dados parciais.

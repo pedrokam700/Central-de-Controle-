@@ -5,6 +5,7 @@ import {selectDashboard} from './data/dashboard.mjs';
 import {reuseLinks} from './data/reuse-analysis.mjs';
 import {productionEvidenceForOccurrence,parseFailureInstant} from './data/production-evidence.mjs';
 import {factoryHourKey,formatFactoryDateTime as displayTime,formatFactoryDate as displayDate} from './data/time-display.mjs';
+import {factoryWallMinute} from './data/history.mjs';
 import {observedReuseDashboard,theoreticalReuseSensitivity,filterReuseCriteria,REUSE_CRITERIA} from './data/daily-reuse-evidence.mjs';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -190,12 +191,26 @@ export function rankDailyFailures(rows){
 function metric(model,name){return model?.aggregates?.find(x=>x.name===name)?.value??null;}
 export function productionMetrics(store,state,rows=[]){
   const lines=state.line?[state.line]:LINE_IDS;let quantity=0,weightedCheck=0,weight=0,complete=true;
-  let temporalScopeProven=!state.shift&&!state.hour;
-  if(temporalScopeProven&&(state.from||state.to)){
-    temporalScopeProven=Boolean(state.from&&state.to&&state.from===state.to);
-    if(temporalScopeProven){for(const line of lines){const lineRows=rows.filter(r=>r.line===line&&(!state.from||r.failure_record_date>=state.from)&&(!state.to||r.failure_record_date<=state.to));if(!lineRows.length||!lineRows.every(r=>r.production_evidence_proven&&r.production_operational_date===state.from)){temporalScopeProven=false;break;}}}
+  let temporalScopeProven=!state.shift&&!state.hour&&Boolean(state.from&&state.to&&state.from===state.to&&/^\d{4}-\d{2}-\d{2}$/.test(state.from));
+  const startMs=temporalScopeProven?Date.parse(state.from+'T12:00:00Z'):NaN;
+  temporalScopeProven=temporalScopeProven&&Number.isFinite(startMs);
+  const next=temporalScopeProven?new Date(startMs+86400000).toISOString().slice(0,10):'';
+  for(const line of lines){
+    const snapshot=store.read(line)?.snapshot;
+    const period=snapshot?.canonical?.summary?.period||snapshot?.summary?.period||{};
+    const coverage=snapshot?.canonical?.coverage?.defects||snapshot?.coverage?.datasets?.defects||snapshot?.coverage?.defects||{};
+    const sourceMatches=temporalScopeProven&&snapshot?.line_id===line&&
+      factoryWallMinute(period.start_at)===state.from+'T07:00'&&
+      factoryWallMinute(period.end_at)===next+'T07:00'&&
+      coverage.source_complete===true&&coverage.transport_complete===true;
+    const lineRows=rows.filter(r=>r.line===line&&r.failure_record_date>=state.from&&r.failure_record_date<=state.to);
+    if(!sourceMatches||!lineRows.length||!lineRows.every(r=>r.production_evidence_proven&&
+      r.production_operational_date===state.from))temporalScopeProven=false;
+    const m=selectDashboard(store,{line_id:line,product:state.product||undefined});
+    const q=num(metric(m,'quantity')),c=num(metric(m,'check_fpy'));
+    if(q===null||!sourceMatches){complete=false;continue;}
+    quantity+=q;if(c!==null){weightedCheck+=c*q;weight+=q;}
   }
-  for(const line of lines){const m=selectDashboard(store,{line_id:line,product:state.product||undefined}),q=num(metric(m,'quantity')),c=num(metric(m,'check_fpy'));if(q===null){complete=false;continue;}quantity+=q;if(c!==null){weightedCheck+=c*q;weight+=q;}}
   const trustworthy=complete&&temporalScopeProven;
   return {quantity:trustworthy?quantity:null,checkFpy:trustworthy&&weight?weightedCheck/weight:null,denominatorProven:trustworthy};
 }
