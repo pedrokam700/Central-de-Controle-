@@ -83,22 +83,31 @@ def build(destination, development=False):
   if doc.is_file():payload['evidence/'+doc.name]=doc.read_bytes()
  analytics_doc=ROOT/'docs/ames/falhas-do-dia-analytics.md'
  if analytics_doc.exists():payload['evidence/'+analytics_doc.name]=analytics_doc.read_bytes()
+ unified_handoff=ROOT/'docs/ames/handoffs/ISSUE66_CANDIDATA_CONSOLIDADA_20261023.md'
+ if unified_handoff.exists():payload['evidence/'+unified_handoff.name]=unified_handoff.read_bytes()
  payload['LEIA_PRIMEIRO.txt']=(f'''CENTRAL + A-MES — PACOTE CLEAN INTEGRADO (GITHUB / CANDIDATO DE TESTE)
 HEAD: {sha}
 Gate fisico pendente. Nao e uma promocao de producao.
 
-INSTALACAO / TESTE:
-1. PC EXISTENTE: NAO altere nem apague a pasta/SQLite funcional. Ela continua sendo o rollback.
-   PC NOVO: nenhuma base anterior precisa ser copiada.
-2. Extraia ESTE ZIP em uma pasta NOVA e independente.
-3. Execute apenas 00_INICIAR_AQUI.bat.
-4. Primeiro uso cria .venv, config.json e SQLite somente nesta pasta.
+INSTALACAO / TESTE — LEIA ANTES DE EXECUTAR:
+1. PC COM 0.5.39 OU OUTRO GUARDIAN EM EXECUCAO: NAO EXECUTE 00_INICIAR_AQUI.bat.
+   Esse launcher ainda NAO substitui o guardian antigo. O guardian antigo pode
+   reiniciar o agente enquanto a candidata tenta assumir a mesma porta 8765.
+   Primeiro faça o INVENTARIO READ-ONLY do guardian/instalacoes, confira
+   coletas/sincronizacoes pendentes e aguarde o plano supervisionado de transicao.
+   Nenhuma deteccao automatica deste ZIP autoriza o desligamento do guardian.
+2. Guarde intactas a pasta, o SQLite, a configuracao e o guardian da 0.5.39.
+   Backup e rollback devem ser comprovados ANTES de liberar a mudanca.
+3. Extraia ESTE ZIP em uma pasta NOVA e independente, sem sobrescrever a antiga.
+4. SOMENTE em posto sem guardian anterior, ou APOS a migracao supervisionada
+   e a liberacao expressa, execute 00_INICIAR_AQUI.bat.
+5. Primeiro uso cria .venv, config.json e SQLite somente nesta pasta.
    Se Python 3.12, Google Chrome ou dependencias nao existirem, o primeiro uso requer internet.
-5. Central e Console MES usam o MESMO frontend local: http://127.0.0.1:8765/Central-de-Controle-/
-6. Console MES e uma view interna da Central: entrar/sair nao abre outra aplicacao nem exige um segundo login.
-7. O primeiro login da Central pode exigir internet. Depois, Auth/Firestore usam persistencia/cache do navegador quando disponiveis.
+6. Central e Console MES usam o MESMO frontend local: http://127.0.0.1:8765/Central-de-Controle-/
+7. Console MES e uma view interna da Central: entrar/sair nao abre outra aplicacao nem exige um segundo login.
+8. O primeiro login da Central pode exigir internet. Depois, Auth/Firestore usam persistencia/cache do navegador quando disponiveis.
 
-ESTE PACOTE NAO E UM UPDATER:
+ESTE PACOTE NAO E UM UPDATER NEM UMA MIGRACAO AUTOMATICA:
 - nao sobrepoe CLEAN V3;
 - nao traz banco operacional, senha, cookie, sessao CDP ou token;
 - o A-MES, agente, SQLite, coletores e scheduler continuam locais/offline por padrao;

@@ -16,6 +16,18 @@ function Invoke-StartupDiagnostic {
 }
 
 try {
+  # Candidate launches never take over an already serving agent. The canonical
+  # bootstrap may terminate a *known* older agent, but an older independent
+  # guardian could restart it. Only the supervised migration can retire that
+  # guardian; this preliminary check is deliberately fail-closed.
+  if(-not (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)){
+    throw 'Windows nao disponibilizou Get-NetTCPConnection; nao e seguro assumir a porta 8765 sem inventario.'
+  }
+  $listeners=@(Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue)
+  if($listeners.Count -gt 0){
+    $ownerIds=($listeners|ForEach-Object { [string]$_.OwningProcess }|Sort-Object -Unique) -join ', '
+    throw "Porta 8765 ja ocupada pelo(s) PID(s) $ownerIds. NAO iniciar o candidato sobre o agente existente. Inventariar guardian e executar transicao supervisionada primeiro."
+  }
   if(!(Test-Path $Python)){& "$Root\01_INSTALAR_UMA_VEZ.bat" /auto;if($LASTEXITCODE -ne 0){throw 'Instalacao Python falhou'}}
   & $Python -c "import pandas,openpyxl,playwright,pyautogui,pyperclip; from playwright.sync_api import sync_playwright; from zoneinfo import ZoneInfo; ZoneInfo('America/Sao_Paulo')"
   if($LASTEXITCODE -ne 0){& "$Root\09_REPARAR_DEPENDENCIAS.bat" /auto;if($LASTEXITCODE -ne 0){throw 'Reparo de dependencias falhou'}}

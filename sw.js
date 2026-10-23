@@ -7,6 +7,7 @@ ASSETS.push(BASE+'ames/console-sn-material-investigation.mjs');
 ASSETS.push(BASE+'ames/data/component-failure-compatibility.mjs');
 ASSETS.push(BASE+'ames/data/daily-reuse-evidence.mjs');
 ASSETS.push(BASE+'ames/data/full-day-closure.mjs');
+ASSETS.push(BASE+'ames/automation-support.mjs');
 const FIREBASE_SDK=Object.freeze([
   'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js',
