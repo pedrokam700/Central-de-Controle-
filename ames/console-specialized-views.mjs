@@ -10,6 +10,14 @@ import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
 import {traceTargetForLine} from './data/trace-targets.mjs';
 
 const lineOptions=(selected)=>LINE_IDS.map((line,i)=>`<option value="${line}"${selected===line?' selected':''}>Linha ${i+1} · ${line}</option>`).join('');
+const traceText=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
+const traceReasonEnglish=Object.freeze({
+  'Linha inválida':'Invalid line',
+  'Sem revisão 3028 neste período':'No 3028 revision for this period',
+  'Revisão não pertence ao agente local conectado':'Revision does not belong to the connected local agent',
+  'Período operacional não comprovado':'Operational period not proven',
+  'Identidade da revisão incompleta':'Incomplete revision identity',
+});
 const fmt=value=>value===null||value===undefined||value===''?'—':String(value);
 const relationLabel=value=>({MESMA_FALHA:'MESMA FALHA',FALHA_SIMILAR:'MESMA FAMÍLIA / SIMILAR',FALHA_DIFERENTE:'OUTRA FALHA',SEM_HISTORICO:'SEM HISTÓRICO',SEM_FALHA_ATUAL:'SEM FALHA ATUAL'})[value]||fmt(value);
 const kv=(label,value,note='')=>`<div class="ames-kv"><small>${esc(label)}</small><b>${esc(fmt(value))}</b>${note?`<span>${esc(note)}</span>`:''}</div>`;
@@ -98,8 +106,9 @@ export function createSnConsoleView(root,store,client){
     if(!result){root.querySelector('[data-sn-result]').innerHTML=`<div class="ames-empty ames-empty-large"><span>⌕</span><h3>Consulte uma SN para abrir a investigação completa</h3><p>O resultado reunirá falha atual, falhas anteriores, materiais em 2º+ uso, PCBAs anteriores/desvinculadas e evidência temporal 3022 quando retornadas pela fonte.</p></div>`;return;}
     const trace2114=result.trace_2114,trace3074=result.trace_3074,trace3022=result.trace_3022;
     const has2114=!!trace2114&&Array.isArray(trace2114.previous_failures),has3074=!!trace3074&&Array.isArray(trace3074.reused_components),has3022=!!trace3022&&(Array.isArray(trace3022.process_passages)||Number.isFinite(result.summary?.['3022_events']));
-    const reuseCountVerified=has3074&&trace3074?.material_selection?.status==='selected_at_latest_2114_candidate'&&
+    const reuseCountVerified=has3074&&['selected_at_latest_2114_candidate','current_mounting_new_cycle'].includes(trace3074?.material_selection?.status)&&
       trace3074?.material_selection?.temporal_unknown===0&&
+      !(trace3074?.component_usage||[]).some(item=>item.error||item.current_pcba_confirmed!==true)&&
       (Array.isArray(trace3074?.query?.rows)||trace3074?.status==='complete');
     const current=has2114?trace2114.current_failure||null:null,previous=has2114?trace2114.previous_failures:[],reused=has3074?trace3074.reused_components:[],local=result.local_snapshot||{},process=trace3022||{},contexts=(local.process_contexts||[]).map(safeProcessContext),passages=Array.isArray(process.process_passages)?process.process_passages:[];
     const processCount=has3022?(Number.isFinite(result.summary?.['3022_events'])?result.summary['3022_events']:passages.length):'indisponível';
@@ -157,13 +166,16 @@ export function createTraceConsoleView(root,store,client){
     }
     for(const id of LINE_IDS){
       const eligibility=traceTargetForLine(store,id),target=root.querySelector(`[data-trace-line-state="${id}"]`);
-      if(target){target.textContent=eligibility.available?`snapshot ${eligibility.snapshot_id} · r${eligibility.revision}`:eligibility.reason;
-        target.title=eligibility.available?'Revisão local deste período disponível':eligibility.reason;}
+      if(target){const reason=traceText(eligibility.reason,traceReasonEnglish[eligibility.reason]||eligibility.reason);
+        target.textContent=eligibility.available?`snapshot ${eligibility.snapshot_id} · r${eligibility.revision}`:reason;
+        target.title=eligibility.available?traceText('Revisão local deste período disponível','Local revision for this period available'):reason;}
     }
     const contextNote=root.querySelector('[data-trace-context]');
     if(contextNote)contextNote.textContent=currentPeriod?.mode==='today'
-      ?'Coleta explícita da revisão 3028 selecionada. Nenhuma consulta ao A-MES é iniciada ao navegar.'
-      :'Período histórico somente leitura · Para completar 3074/2114/3022, marque as linhas com revisão local comprovada. Linhas sem revisão não bloqueiam as demais.';
+      ?traceText('Coleta explícita da revisão 3028 selecionada. Nenhuma consulta ao A-MES é iniciada ao navegar.',
+        'Explicit collection for the selected 3028 revision. Navigation never starts an A-MES query.')
+      :traceText('Período histórico somente leitura · Para completar 3074/2114/3022, marque as linhas com revisão local comprovada. Linhas sem revisão não bloqueiam as demais.',
+        'Read-only historical period · To complete 3074/2114/3022, select lines with a proven local revision. Missing lines do not block the rest.');
     const a=store.agent(),status=root.querySelector('[data-trace-status]');
     root.querySelector('[data-trace-run]').disabled=!!a.submitting;
     status.setAttribute('aria-live','polite');status.innerHTML=collectionStatus(a);

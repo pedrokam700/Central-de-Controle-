@@ -14,9 +14,13 @@ const when=row=>first(row,['defect_time','Defect Time atual','Defect Time']);
 const named=(snapshot,key)=>Array.isArray(snapshot?.insights?.drilldowns?.[key])?snapshot.insights.drilldowns[key]:[];
 const keysOf=(snapshot,keys)=>keys.flatMap(k=>named(snapshot,k));
 const identity=row=>{const board=pcba(row),defect=code(row),at=parseFailureInstant(when(row));return board&&defect&&at!==null?JSON.stringify([board,defect,at]):null;};
-const result=(set,allowed)=>({count:[...set].filter(x=>allowed.has(x)).length,exact:false});
+// An observed DISTINCT count is exact for the rows inspected, even when the
+// overall MES extraction is partial. Keep population completeness separate.
+const result=(set,allowed)=>({count:[...set].filter(x=>allowed.has(x)).length,
+  observed:true,population_complete:false});
 export function groupedFailureName(row={}){return knownDescription(row.defect_desc)||nonempty(row.defect_code)||'Falha não identificada';}
-export function evidenceCountLabel(value){const n=Number(value?.count||0);return value?.exact?String(n):n>0?'≥ '+n:'—';}
+export function evidenceCountLabel(value){const n=Number(value?.count||0);
+  return value?.exact?String(n):n>0?(value?.observed?String(n):'≥ '+n):'—';}
 export function formatFailureLastOccurrence(value){const s=formatFactoryDateTime(value,{seconds:false});return s==='—'?s:s.replace(/\s+(\d{2}:\d{2})$/,' · $1');}
 
 export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailureName){
@@ -52,7 +56,7 @@ export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailur
    output[name]={
      pcbaReuse:result(reuseBoards,g.boards),
      itemReuse:result(itemBoards,g.boards),
-     sameFailureOrFamily:{count:relatedBoards.size,exact:false},
+     sameFailureOrFamily:{count:relatedBoards.size,observed:true,population_complete:false},
    };
  }
  return output;

@@ -7,7 +7,10 @@
 - Contratos preservados: Rastreabilidade ancorada na ocorrência **3028** da revisão/linha/período exatos; Consulta SN independente, ancorada na 2114 ou diretamente em Material SN; Y/N não destrói histórico, 3012 pode ser candidata, causalidade nunca inferida.
 - Issues relacionadas lidas: #39 (contexto temporal único e fechamento), #52 (live/matriz/alertas). Issue #66 e fluxo da conversa são a especificação funcional.
 
-## Checkpoint P0 inicial — implementado localmente
+## Checkpoint P0 inicial — salvo na PR #67 draft
+
+- Checkpoint remoto P0: commit `c6b35daf8f1a8e0abc62693a3714c1cf5f563b05` na PR https://github.com/pedrokam700/Central-de-Controle-/pull/67.
+- CI desse SHA: `Central Quality Gate` **FAILURE**, job de idioma/experiência apontou duas frases de rastreabilidade PT na visualização EN; corrigidas no bloco seguinte, aguardando novo SHA/CI. Preview Netlify retornou HTTP 401, gate externo não GREEN. Outros jobs do Central Gate observados: `Agent & sync E2E with Firestore Rules` SUCCESS e `Static quality checks` SUCCESS. Não atribuir esses resultados ao SHA seguinte.
 
 1. `ames/data/trace-targets.mjs`: pré-validação por linha da revisão 3028, identidade de origem local, período, snapshot/revisão/hash, com falha explícita somente nas linhas efetivamente selecionadas. O cliente HTTP usa **o mesmo verificador** para formar `snapshot_targets`, sem recorrer a `latest_snapshot_id`.
 2. `ames/console-specialized-views.mjs`: a coleta da Rastreabilidade inicia somente com a linha operacional ativa marcada. Cada linha exibe a disponibilidade da revisão local. Trocar período reinicia o escopo de linha e não mistura inadvertidamente três datas/origens. Continua permitido escolher múltiplas linhas conscientemente. A leitura de ontem permanece separada da ação explícita de enriquecer aquele snapshot.
@@ -32,11 +35,27 @@ git diff --check
 
 **Limites conhecidos:** não há resposta física da 3074 nem logs redigidos do snapshot 14. A classificação incorreta de `3074 Não coletado` foi reproduzida por fixture, mas uma falha independente de navegação/parser do MES ainda precisa ser investigada no posto. Não declarar P0 aceito fisicamente. Playwright não está disponível no checkout deste runtime; executar testes browser na CI oficial e no Windows antes de homologar.
 
+## Checkpoint P1 · ciclos, Material SN, alertas e observado (em preparação)
+
+1. `core/temporal_3074.py`: recorte independente de **Consulta SN** por montagem principal: vínculo `Y` atual com Bind posterior à falha 2114 é **novo ciclo**, exibido sozinho; `Y` anterior segue o mesmo ciclo; ausência de `Y` reconstrói montagem da última falha com inclusões `N` temporalmente demonstradas. Datas ausentes, status conflitantes, desvínculos sem hora e intervalos conflitantes tornam o material candidato, não comprovado. Rastreabilidade por 3028 não usa essa seleção.
+2. `engine_bridge.py`: varredura explícita 3074 dos componentes selecionados; consulta inversa por **Material SN** (3074 → PCBAs relacionadas → 2114 → contexto 3012/3022), até 25 PCBAs por chamada, com limite/omissões à vista. Falhas da PCBA anterior à vinculação ou posterior ao desvínculo não são atribuídas ao componente. Agrupamento de linhas de posto evita contar duplicata como novo ciclo; retorno mantém status Y/N.
+3. `console-sn-material-investigation.mjs` e `console-sn-live-context.mjs`: painel de Material SN com ciclos, PCBAs clicáveis, defeitos associados/candidatos/excluídos e alerta de recorrência entre PCBAs; anotação da montagem investigada, histórico secundário, candidato colapsável. Troca de PCBA usa a própria consulta explícita, não disparo em segundo plano.
+4. `sn-forensics.mjs`: ao ver novo ciclo `Y` posterior à última falha, a última ocorrência 2114 passa a **histórico**, sem fingir que já há falha da montagem recém-criada. Históricos 3074 `N` sem Unbind não provam presença em falhas pretéritas.
+5. `component-failure-compatibility.mjs` + `console-sn-smart-alerts.mjs`: alerta de prioridade média para componente **reutilizado, fisicamente compatível com a falha 2114 atual**, sem alegar causa raiz. Matcher versionado conservador para câmera frontal/traseira e principal/secundária, áudio, LCD, RF etc.; detalhamento com 3074/2114. Não replica alerta da falha antiga numa montagem nova.
+6. `failure-group-evidence.mjs`: UI diferencia **contagem exata observada** de **população completa**. Ex.: `13` significa 13 registros distintos encontrados nesse recorte, não `≥13`; ausência de prova mostra `—` e jamais zero inferido. O texto da tabela esclarece cobertura parcial/causa não comprovada.
+7. Correção dos dois trechos de tradução do gate de idioma P0; cache offline dos novos módulos versionado.
+
+### Evidências locais do P1, antes do commit remoto
+
+- `python3 -m unittest ames/factory-engine/tests/test_issue66_mounting_cycles.py`: **11/11 testes de casos PASS**.
+- `node --test scripts/ames-issue66-compatibility.test.mjs scripts/ames-issue66-material.test.mjs scripts/ames-issue66-p0.test.mjs`: **3/3 arquivos PASS**.
+- `node --test scripts/ames-failures-grouped-summary.test.mjs scripts/ames-daily-autoread-ui.test.mjs scripts/ames-sn-smart-alerts.test.mjs scripts/ames-issue66-compatibility.test.mjs`: **4/4 arquivos PASS**.
+- `git diff --check`: PASS. Executar bateria ampliada e gates por SHA antes de marcar integração aceita.
+
 ## Continuidade imediata
 
-1. Revalidar o commit e jobs de CI por **SHA exato**. Abrir PR em draft se ainda não criada. Não fazer merge nem publicar.
+1. Publicar P1 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**, incluindo a regressão EN. Não fazer merge nem publicar.
 2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
-3. P1a: ciclo atual Y após última 2114 toma prioridade; ausência de novo ciclo reconstrói vínculo da última falha, mantendo candidatos e proveniência separados. Histórico de ciclos apenas secundário.
-4. P1b/P1c: Material SN como alvo 3074, janelas de vínculo por PCBA, 2114/3012/3022, alerta de falha que acompanhou material; matcher falha × tipo com subtipo frontal/traseiro conservador.
-5. P1d: exatidão do observado nas contagens com cobertura separada. P2: dashboard união/interseção, duas visualizações, drilldown e último fechamento FULL (3028+3074+2114+3022) imutável/deduplicado.
+3. P1 física: confirmar na fábrica respostas 3074 PCBA/Material SN, Bind/Unbind reais, alarme GN06-X015 e 3022 dos respectivos ciclos. Resolver possíveis lacunas de parser/driver somente com evidência sanitizada.
+4. P2: dashboard união/interseção, duas visualizações, drilldown e último fechamento FULL (3028+3074+2114+3022) imutável/deduplicado.
 6. Testes: Node/Python, integração HTTP, browser, Windows e gate físico L3/snapshot14; nenhum teste local equivale à validação física A-MES.

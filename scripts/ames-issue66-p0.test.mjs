@@ -54,3 +54,17 @@ test('3074 confirmed empty, absent, and errored remain distinct',()=>{
     reused_components:[]}});
   assert.equal(broken.source_states['3074'],'error');
 });
+
+test('new cycle model investigates current items and keeps candidates separate',()=>{
+  const trace_3074={status:'complete',query:{rows:[{Barcode:'NOW',"Sn Type":'Camera'}]},
+    material_selection:{status:'current_mounting_new_cycle',cycle_state:'current_new_cycle',temporal_unknown:1},
+    component_usage:[{item_sn:'NOW',item_type:'Rear Camera',known_use_count:2,reuse_count:1,
+      previous_pcbas:['PREVIOUS'],current_pcba_confirmed:true}],
+    candidate_components:[{item_sn:'MAYBE',item_type:'Screen',temporal_reason:'missing_bind_time'}],
+    reused_components:[{item_sn:'NOW',item_type:'Rear Camera',known_use_count:2,
+      reuse_count:1,previous_pcbas:['PREVIOUS'],relation_to_current_failure:'SEM_FALHA_ATUAL'}]};
+  const model=buildLiveSnForensics({...base,trace_3074});
+  assert.deepEqual(model.materials.map(m=>m.item_sn),['NOW']);
+  assert.equal(model.candidate_materials[0].item_sn,'MAYBE');
+  assert.equal(model.source_states['3074'],'partial');
+});

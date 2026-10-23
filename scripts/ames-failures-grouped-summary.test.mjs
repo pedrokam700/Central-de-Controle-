@@ -16,12 +16,12 @@ const snapshot={occurrences:rows,insights:{drilldowns:{
 }}};
 test('groups preserve PCBA and material distinct with only proven occurrence-level correlation',()=>{
  const by=failureGroupReuseSummaries(snapshot,rows);
- const a=by['Falha teste'];assert.deepEqual(a.pcbaReuse,{count:1,exact:false});
- assert.deepEqual(a.itemReuse,{count:1,exact:false});
- assert.deepEqual(a.sameFailureOrFamily,{count:1,exact:false});
- assert.equal(evidenceCountLabel(a.pcbaReuse),'≥ 1');
- assert.equal(evidenceCountLabel(a.itemReuse),'≥ 1');
- assert.equal(evidenceCountLabel(a.sameFailureOrFamily),'≥ 1');
+ const a=by['Falha teste'];assert.deepEqual(a.pcbaReuse,{count:1,observed:true,population_complete:false});
+ assert.deepEqual(a.itemReuse,{count:1,observed:true,population_complete:false});
+ assert.deepEqual(a.sameFailureOrFamily,{count:1,observed:true,population_complete:false});
+ assert.equal(evidenceCountLabel(a.pcbaReuse),'1');
+ assert.equal(evidenceCountLabel(a.itemReuse),'1');
+ assert.equal(evidenceCountLabel(a.sameFailureOrFamily),'1');
  assert.equal(evidenceCountLabel(by['Outra falha'].pcbaReuse),'—');
 });
 test('same PCBA with different defect or event instant never borrows same-family history',()=>{
@@ -40,7 +40,7 @@ test('missing and partial evidence never claims zero, totals or material causali
  const source=fs.readFileSync(new URL('../ames/console-legacy-parity.mjs',import.meta.url),'utf8');
  assert.match(source,/failureGroupReuseSummaries\(snapshot,baseFiltered\)/);
  assert.match(source,/grupo|grupos|Falhas agrupadas/);
- assert.match(source,/≥ significa quantidade mínima comprovada/);
+ assert.match(source,/contagem exata dos registros observados/);
  assert.doesNotMatch(source,/root_cause_confirmed\s*=\s*true/);
 });
 
@@ -52,7 +52,7 @@ test('canonical numeric and ordinal reuses work without old categorical drilldow
                      {'PCBA atual':'P3','Material SN':'M3','Uso material na falha':'1º uso'}]
  }}};
  const tally=failureGroupReuseSummaries(snap,rows)['Falha teste'];
- assert.equal(evidenceCountLabel(tally.pcbaReuse),'≥ 1');
- assert.equal(evidenceCountLabel(tally.itemReuse),'≥ 1');
+ assert.equal(evidenceCountLabel(tally.pcbaReuse),'1');
+ assert.equal(evidenceCountLabel(tally.itemReuse),'1');
  assert.equal(evidenceCountLabel(tally.sameFailureOrFamily),'—');
 });
