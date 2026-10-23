@@ -1,6 +1,7 @@
 """T2 isolated IPC tests. No real agent, MES, 8765, tokens or CLEAN roots."""
 
 from contextlib import closing, nullcontext
+from copy import deepcopy
 import json
 import hashlib
 import multiprocessing
@@ -25,12 +26,85 @@ sys.path[:0] = [str(ROOT / "ames/agent"), str(ROOT / "tools/ames-workstation")]
 from maintenance_admission import MaintenanceAdmission, MaintenanceBlocked
 from maintenance_protocol import (DrainSession, DrainClient, ProtocolRejected,
                                   SCHEMA, MAX_MESSAGE, seal, unseal, serve_connection)
-from issue57_drain_coordinator import FixtureDrainCoordinator, WindowsProcessWitness, WindowsRelauncherWitness, RelauncherClient, BrowserMaintenanceClient
+from issue57_drain_coordinator import FixtureDrainCoordinator, WindowsProcessWitness, WindowsRelauncherWitness, RelauncherClient, BrowserMaintenanceClient, inspect_readonly_guardian_inventory
 import issue57_maintenance_ledger as ledger
 from update_readiness import observe
 
 IDENTITY = "a" * 64
 TRANSACTION = "b" * 32
+
+
+def readonly_guardian_inventory(*, observed=None, incomplete=False):
+    """Exact scrubbed contract of INVENTARIAR_GUARDIANS_READONLY.ps1."""
+    sources = ["running_processes", "hkcu_run", "hkcu_runonce", "hklm_run",
+               "hklm_runonce", "hklm_wow_run", "scheduled_tasks", "windows_services",
+               "startup_current_user", "startup_common"]
+    blockers = {"installed_guardian_cooperation_not_attested", "direct_launcher_not_fenced",
+                "other_windows_sessions_not_attested"}
+    for entry in observed or []:
+        blockers.add({"guardian_script": "guardian_registration_or_process_observed",
+                      "agent_launcher": "direct_launcher_registration_or_process_observed",
+                      "agent_entry": "agent_process_observed_requires_idle_proof",
+                      "opaque_supervisor_unverified": "opaque_supervisor_command_unverified",
+                      "named_registration_unverified": "named_registration_unverified",
+                      "startup_shortcut_unverified": "startup_shortcut_unverified"}[entry["signal"]])
+    if incomplete:
+        blockers.add("inventory_source_incomplete")
+    return {"schema": "ames-windows-guardian-inventory-v1", "read_only": True,
+            "checks": [{"source": source, "checked": not (incomplete and source == "hkcu_run")}
+                       for source in sources],
+            "observations": observed or [], "unreadable_supervisor_processes": 0,
+            "coordination_blockers": sorted(blockers),
+            "direct_launcher_fenced": False, "observed_sources_complete": not incomplete,
+            "all_sessions_attested": False, "installed_guardian_cooperation_attested": False,
+            "exclusive_maintenance_lease_held": False, "updater_eligible": False,
+            "reason": "read_only_observation_cannot_authorize_process_stop_or_update"}
+
+
+class ReadonlyGuardianInventoryTests(unittest.TestCase):
+    def test_all_real_observation_sources_are_parsed_as_diagnostics_only(self):
+        examples = [("running_process", "guardian_script", 8401),
+                    ("scheduled_task", "agent_launcher", None),
+                    ("windows_service", "agent_entry", None),
+                    ("hkcu_run", "opaque_supervisor_unverified", None),
+                    ("startup_common", "startup_shortcut_unverified", None)]
+        for source, signal, pid in examples:
+            observation = {"source": source, "signal": signal}
+            if pid is not None:
+                observation["pid"] = pid
+            report = readonly_guardian_inventory(observed=[observation])
+            sanitized = inspect_readonly_guardian_inventory(report)
+            self.assertTrue(sanitized["enumerated_sources_complete"])
+            self.assertEqual(sanitized["observed_signals"], 1)
+            self.assertFalse(sanitized["update_authorized"])
+            self.assertFalse(sanitized["all_sessions_attested"])
+            self.assertNotIn(str(pid), json.dumps(sanitized))
+        self.assertFalse(inspect_readonly_guardian_inventory(
+            readonly_guardian_inventory(incomplete=True))["enumerated_sources_complete"])
+
+    def test_forged_inventory_or_sensitive_payload_is_rejected_fail_closed(self):
+        original = readonly_guardian_inventory(observed=[{
+            "source": "running_process", "signal": "guardian_script", "pid": 8401}])
+        mutations = [
+            lambda x: x.update(updater_eligible=True),
+            lambda x: x.update(all_sessions_attested=True),
+            lambda x: x.update(observed_sources_complete=False),
+            lambda x: x.update(unreadable_supervisor_processes=1),
+            lambda x: x.update(coordination_blockers=[]),
+            lambda x: x["checks"].append(x["checks"][0]),
+            lambda x: x["checks"][0].update(source="unknown_source"),
+            lambda x: x["observations"][0].update(command_line="secret"),
+            lambda x: x["observations"][0].update(pid=-1),
+            lambda x: x["observations"][0].pop("pid"),
+            lambda x: x["observations"][0].update(source="scheduled_tasks"),
+            lambda x: x["observations"][0].update(signal="unrelated"),
+        ]
+        for mutation in mutations:
+            candidate = deepcopy(original)
+            mutation(candidate)
+            with self.subTest(candidate=candidate):
+                with self.assertRaisesRegex(ValueError, "readonly_guardian_inventory_unverified"):
+                    inspect_readonly_guardian_inventory(candidate)
 
 
 def idle_runtime(admission):
@@ -688,6 +762,45 @@ class BoundBackupTests(unittest.TestCase):
         self.coordinator._transition("recovery_required")
         with self.assertRaises(ValueError):
             self.coordinator.prepare_registration_review()
+
+    def test_registration_review_binds_readonly_inventory_but_never_enrolls_installation(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        self.coordinator.stage_fixture_candidate(archive, release)
+        inventory = readonly_guardian_inventory(observed=[
+            {"source": "scheduled_task", "signal": "guardian_script"}])
+        before = (self.root / ".ames-update/transaction.json").read_bytes()
+        review = self.coordinator.prepare_registration_review(guardian_inventory=inventory)
+        witness = inspect_readonly_guardian_inventory(inventory)
+        self.assertEqual(review["schema"], "ames-registration-review-v2")
+        self.assertEqual(review["binding"]["readonly_guardian_inventory_sha256"], witness["inventory_sha256"])
+        self.assertEqual(review["readonly_guardian_inventory"], witness)
+        self.assertIn("readonly_guardian_inventory_not_operational_attestation", review["blockers"])
+        self.assertIn("all_relaunch_origins_unattested", review["blockers"])
+        self.assertFalse(review["operational_registration_complete"])
+        self.assertFalse(review["update_authorized"])
+        self.assertFalse(review["operator_consent_observed"])
+        self.assertEqual((self.root / ".ames-update/transaction.json").read_bytes(), before)
+        changed = deepcopy(inventory)
+        changed["checks"][0]["checked"] = False
+        changed["observed_sources_complete"] = False
+        changed["coordination_blockers"].append("inventory_source_incomplete")
+        refreshed = self.coordinator.prepare_registration_review(guardian_inventory=changed)
+        self.assertNotEqual(refreshed["review_sha256"], review["review_sha256"])
+        self.assertIn("readonly_guardian_inventory_incomplete", refreshed["blockers"])
+        self.assertFalse(refreshed["update_authorized"])
+
+    def test_registration_review_rejects_forged_inventory_without_unlocking_barrier(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        self.coordinator.stage_fixture_candidate(archive, release)
+        inventory = readonly_guardian_inventory()
+        inventory["all_sessions_attested"] = True
+        with self.assertRaisesRegex(ValueError, "readonly_guardian_inventory_unverified"):
+            self.coordinator.prepare_registration_review(guardian_inventory=inventory)
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertTrue(ledger.inspect_fixture(self.root)["claim_present"])
+        self.assertTrue(self.admission.snapshot()["draining"])
 
     def test_registration_review_rejects_candidate_tampering_and_retains_drain(self):
         self.coordinator.prepare_backup()

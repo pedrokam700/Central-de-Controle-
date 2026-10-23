@@ -31,6 +31,101 @@ def _fixture_slot_model():
     return model
 
 
+_GUARDIAN_INVENTORY_CHECKS = frozenset({
+    "running_processes", "hkcu_run", "hkcu_runonce", "hklm_run",
+    "hklm_runonce", "hklm_wow_run", "scheduled_tasks", "windows_services",
+    "startup_current_user", "startup_common",
+})
+_GUARDIAN_OBSERVATION_SOURCES = (_GUARDIAN_INVENTORY_CHECKS - {
+    "running_processes", "scheduled_tasks", "windows_services"
+}) | {"running_process", "scheduled_task", "windows_service"}
+_GUARDIAN_INVENTORY_SIGNALS = {
+    "guardian_script": "guardian_registration_or_process_observed",
+    "agent_launcher": "direct_launcher_registration_or_process_observed",
+    "agent_entry": "agent_process_observed_requires_idle_proof",
+    "opaque_supervisor_unverified": "opaque_supervisor_command_unverified",
+    "named_registration_unverified": "named_registration_unverified",
+    "startup_shortcut_unverified": "startup_shortcut_unverified",
+}
+_GUARDIAN_INVENTORY_BASE_BLOCKERS = frozenset({
+    "installed_guardian_cooperation_not_attested", "direct_launcher_not_fenced",
+    "other_windows_sessions_not_attested",
+})
+
+
+def inspect_readonly_guardian_inventory(report):
+    """Validate the existing read-only Windows inventory as *diagnostic* input.
+
+    This is neither a proof of all sessions nor an authenticated enrollment.
+    Never retain/return raw command lines, paths, registry values or PIDs.
+    A consistent report still cannot authorize an update.
+    """
+    try:
+        expected = {"schema", "read_only", "checks", "observations",
+                    "unreadable_supervisor_processes", "coordination_blockers",
+                    "direct_launcher_fenced", "observed_sources_complete",
+                    "all_sessions_attested", "installed_guardian_cooperation_attested",
+                    "exclusive_maintenance_lease_held", "updater_eligible", "reason"}
+        if (type(report) is not dict or set(report) != expected
+                or report["schema"] != "ames-windows-guardian-inventory-v1"
+                or report["read_only"] is not True
+                or any(report[key] is not False for key in (
+                    "direct_launcher_fenced", "all_sessions_attested",
+                    "installed_guardian_cooperation_attested",
+                    "exclusive_maintenance_lease_held", "updater_eligible"))
+                or report["reason"] != "read_only_observation_cannot_authorize_process_stop_or_update"):
+            raise ValueError()
+        checks, observations = report["checks"], report["observations"]
+        unreadable = report["unreadable_supervisor_processes"]
+        if (type(checks) is not list or type(observations) is not list
+                or len(checks) != len(_GUARDIAN_INVENTORY_CHECKS)
+                or len(observations) > 20000 or type(unreadable) is not int
+                or unreadable < 0):
+            raise ValueError()
+        checked = {}
+        for check in checks:
+            if (type(check) is not dict or set(check) != {"source", "checked"}
+                    or check["source"] not in _GUARDIAN_INVENTORY_CHECKS
+                    or check["source"] in checked or type(check["checked"]) is not bool):
+                raise ValueError()
+            checked[check["source"]] = check["checked"]
+        if set(checked) != _GUARDIAN_INVENTORY_CHECKS:
+            raise ValueError()
+        blockers = set(_GUARDIAN_INVENTORY_BASE_BLOCKERS)
+        if unreadable:
+            blockers.add("supervisor_commandline_unreadable")
+        if not all(checked.values()):
+            blockers.add("inventory_source_incomplete")
+        for entry in observations:
+            if (type(entry) is not dict or set(entry) not in (
+                    {"source", "signal"}, {"source", "signal", "pid"})
+                    or entry["source"] not in _GUARDIAN_OBSERVATION_SOURCES
+                    or entry["signal"] not in _GUARDIAN_INVENTORY_SIGNALS):
+                raise ValueError()
+            if entry["source"] == "running_process":
+                if ("pid" not in entry or type(entry["pid"]) is not int or entry["pid"] <= 0):
+                    raise ValueError()
+            elif "pid" in entry:
+                raise ValueError()
+            blockers.add(_GUARDIAN_INVENTORY_SIGNALS[entry["signal"]])
+        reported = report["coordination_blockers"]
+        complete = all(checked.values()) and unreadable == 0
+        if (type(reported) is not list or len(reported) != len(blockers)
+                or any(type(item) is not str for item in reported)
+                or set(reported) != blockers
+                or report["observed_sources_complete"] is not complete):
+            raise ValueError()
+        fingerprint = hashlib.sha256(json.dumps(report, sort_keys=True,
+            separators=(",", ":"), ensure_ascii=True).encode("utf-8")).hexdigest()
+        return {"schema": "ames-readonly-guardian-review-v1", "inventory_sha256": fingerprint,
+                "enumerated_sources_complete": complete,
+                "observed_signals": len(observations),
+                "all_origins_attested": False, "all_sessions_attested": False,
+                "update_authorized": False}
+    except (TypeError, ValueError, KeyError):
+        raise ValueError("readonly_guardian_inventory_unverified") from None
+
+
 class WindowsProcessWitness:
     """Bind the existing OS witness to a selected installation and pinned code.
 
@@ -481,7 +576,7 @@ class FixtureDrainCoordinator:
             self._recovery_required()
             raise
 
-    def prepare_registration_review(self):
+    def prepare_registration_review(self, *, guardian_inventory=None):
         """Prepare a consent-review binding from LIVE evidence, never consent.
 
         Reuses this coordinator/claim/receipts; no installed-root activation,
@@ -499,6 +594,8 @@ class FixtureDrainCoordinator:
                 raise ValueError("registration_review_candidate_changed")
             previous = model._fingerprint(slots / "active")
             inventory = json.loads((self.backup_directory / "runtime-backup-manifest.json").read_text(encoding="utf-8")).get("installation_inventory", {})
+            inventory_review = (inspect_readonly_guardian_inventory(guardian_inventory)
+                                if guardian_inventory is not None else None)
             binding = {"transaction_id": self.claim["transaction_id"], "journal_revision": self.claim["revision"],
                        "installation_sha256": self.client.target["installation_sha256"],
                        "root_sha256": hashlib.sha256(str(Path(self.root).resolve()).lower().encode()).hexdigest(),
@@ -507,6 +604,8 @@ class FixtureDrainCoordinator:
                        "release_commit": self.claim["candidate_receipt"]["release_commit"],
                        "candidate_sha256": self.claim["candidate_receipt"]["slot_sha256"],
                        "retained_fixture_code_sha256": previous}
+            if inventory_review:
+                binding["readonly_guardian_inventory_sha256"] = inventory_review["inventory_sha256"]
             blockers = ["operational_installation_not_enrolled", "all_relaunch_origins_unattested",
                         "browser_profiles_and_unregistered_writers_unattested", "external_locations_unattested",
                         "runtime_environment_unverified", "operational_rollback_unverified",
@@ -517,17 +616,27 @@ class FixtureDrainCoordinator:
                 blockers.append("browser_scope_not_enrolled")
             if not inventory.get("software_release"):
                 blockers.append("installed_software_identity_unverified")
+            if inventory_review is None:
+                blockers.append("readonly_guardian_inventory_not_observed")
+            else:
+                blockers.append("readonly_guardian_inventory_not_operational_attestation")
+                if not inventory_review["enumerated_sources_complete"]:
+                    blockers.append("readonly_guardian_inventory_incomplete")
             # Recheck live participants AND the exact journal after reading all
             # evidence. A stale review can never be used to clear a barrier.
             if self.observe()["state"] != "agent_quiescent_only" or inspect_fixture(self.root) != self.claim:
                 raise ValueError("registration_review_observation_changed")
-            digest = hashlib.sha256(json.dumps(binding, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-            return {"schema": "ames-registration-review-v1", "binding": binding,
-                    "review_sha256": digest, "blockers": blockers,
+            review = {"schema": "ames-registration-review-v2", "binding": binding,
+                    "blockers": blockers, "readonly_guardian_inventory": inventory_review,
                     "cooperative_browser_scope_observed": self._browser is not None,
                     "cooperative_relaunchers_observed": len(self._relaunchers) == 2,
                     "operational_registration_complete": False, "operator_consent_observed": False,
                     "update_authorized": False, "fixture_only": True}
+            # Fingerprint all review flags and blockers as well as the binding.
+            # This is integrity bookkeeping, NOT authentication or consent.
+            review["review_sha256"] = hashlib.sha256(json.dumps(
+                review, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            return review
         except Exception:
             self._recovery_required()
             raise
