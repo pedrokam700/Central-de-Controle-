@@ -18,6 +18,25 @@ class MaintenanceBlocked(RuntimeError):
     """An attempted new mutation was rejected while the agent is draining."""
 
 
+class _BackgroundWorkTicket:
+    """One-shot handoff of an already admitted write to a worker thread."""
+
+    def __init__(self, admission):
+        self._admission = admission
+        self._finished = False
+
+    def finish(self):
+        # The worker may finish after begin_drain(), so completing a ticket
+        # must not be treated as a *new* admission.
+        with self._admission._condition:
+            if self._finished:
+                raise ValueError("background_work_already_finished")
+            self._finished = True
+            self._admission._inflight -= 1
+            self._admission._revision += 1
+            self._admission._condition.notify_all()
+
+
 class MaintenanceAdmission:
     MAX_DRAIN_WAIT_SECONDS = 60
 
@@ -69,6 +88,21 @@ class MaintenanceAdmission:
             self._lease = object()
             self._revision += 1
             return self._lease
+
+    def reserve_background_work(self):
+        """Keep a scheduled worker counted until its final write completes.
+
+        Only a thread inside an existing accepted mutation may reserve a
+        ticket. The handoff may finish on another thread, even while draining.
+        Reserving after the outer mutation exits, or as a fresh operation
+        during a drain, is never allowed.
+        """
+        if not getattr(self._thread, "depth", 0):
+            raise ValueError("background_work_requires_admission")
+        with self._condition:
+            self._inflight += 1
+            self._revision += 1
+            return _BackgroundWorkTicket(self)
 
     def release_drain(self, lease):
         with self._condition:

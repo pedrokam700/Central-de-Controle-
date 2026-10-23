@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ames" / "agent"))
@@ -18,6 +19,37 @@ from maintenance_admission import MaintenanceAdmission, MaintenanceBlocked
 
 
 class BarrierTests(unittest.TestCase):
+    def test_accepted_background_worker_remains_counted_across_threads(self):
+        fence = MaintenanceAdmission()
+        with fence.mutation():
+            ticket = fence.reserve_background_work()
+            self.assertEqual(fence.snapshot()['inflight_mutations'], 2)
+        self.assertEqual(fence.snapshot()['inflight_mutations'], 1)
+        lease = fence.begin_drain()
+        try:
+            self.assertFalse(fence.wait_for_quiescence(lease, .01))
+            with self.assertRaises(MaintenanceBlocked):
+                with fence.mutation():
+                    self.fail('new job admitted during background drain')
+            thread = threading.Thread(target=ticket.finish)
+            thread.start()
+            thread.join(2)
+            self.assertFalse(thread.is_alive())
+            self.assertTrue(fence.wait_for_quiescence(lease, 1))
+        finally:
+            fence.release_drain(lease)
+
+    def test_background_ticket_requires_parent_admission_and_one_finish(self):
+        fence = MaintenanceAdmission()
+        with self.assertRaises(ValueError):
+            fence.reserve_background_work()
+        with fence.mutation():
+            ticket = fence.reserve_background_work()
+        ticket.finish()
+        with self.assertRaisesRegex(ValueError, 'already_finished'):
+            ticket.finish()
+        self.assertEqual(fence.snapshot()['inflight_mutations'], 0)
+
     def test_quiescence_wait_times_out_without_releasing_fence(self):
         fence = MaintenanceAdmission()
         entered, release = threading.Event(), threading.Event()
@@ -202,6 +234,53 @@ class BarrierTests(unittest.TestCase):
                 self.assertFalse(agent.MES.snapshot()["busy"])
             finally:
                 agent.MAINTENANCE.release_drain(lease)
+
+    def test_agent_worker_remains_admitted_until_job_finalization(self):
+        with tempfile.TemporaryDirectory() as folder:
+            agent_dir = Path(folder) / 'ames-agent'
+            agent_dir.mkdir()
+            agent_file = agent_dir / 'agent.py'
+            shutil.copyfile(ROOT / 'ames' / 'agent' / 'agent.py', agent_file)
+            spec = importlib.util.spec_from_file_location('issue57_tracked_agent', agent_file)
+            agent = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(agent)
+            running, complete = threading.Event(), threading.Event()
+
+            def simulated_worker(_job_id, _cfg):
+                running.set()
+                self.assertTrue(complete.wait(3))
+
+            agent._launch_new_mes_job('analysis', {}, simulated_worker)
+            lease = None
+            try:
+                self.assertTrue(running.wait(2))
+                lease = agent.MAINTENANCE.begin_drain()
+                self.assertFalse(agent.MAINTENANCE.wait_for_quiescence(lease, .01))
+                self.assertGreaterEqual(agent.MAINTENANCE.snapshot()['inflight_mutations'], 1)
+                complete.set()
+                self.assertTrue(agent.MAINTENANCE.wait_for_quiescence(lease, 2))
+            finally:
+                complete.set()
+                if lease is not None:
+                    agent.MAINTENANCE.release_drain(lease)
+
+    def test_worker_thread_start_failure_does_not_leak_ticket(self):
+        with tempfile.TemporaryDirectory() as folder:
+            agent_dir = Path(folder) / 'ames-agent'
+            agent_dir.mkdir()
+            agent_file = agent_dir / 'agent.py'
+            shutil.copyfile(ROOT / 'ames' / 'agent' / 'agent.py', agent_file)
+            spec = importlib.util.spec_from_file_location('issue57_failed_thread_agent', agent_file)
+            agent = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(agent)
+            with patch.object(agent.threading.Thread, 'start', side_effect=RuntimeError('fixture_start_failure')):
+                with self.assertRaisesRegex(RuntimeError, 'fixture_start_failure'):
+                    agent._launch_new_mes_job('analysis', {}, lambda *_: None)
+            self.assertEqual(agent.MAINTENANCE.snapshot()['inflight_mutations'], 0)
+            # The queued database job intentionally remains: a future
+            # readiness observation must fail closed instead of erasing it.
+            with agent.STORE.connect() as connection:
+                self.assertEqual(connection.execute('SELECT COUNT(*) FROM jobs WHERE status=\'queued\'').fetchone()[0], 1)
 
 
 if __name__ == "__main__":

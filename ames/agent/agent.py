@@ -617,10 +617,21 @@ def _launch_new_admitted_mes_job(kind, cfg, worker, monitor=False, admission=Non
             except Exception as exc:
                 _persist_job(_job_update(job['id'],status='error',stage='error',finished_at=utc_now(),message=str(exc),error=type(exc).__name__))
             finally:
-                _job_update(job["id"], mes_state="idle")
-                with JOBS_LOCK:
-                    JOB_CANCEL.pop(job["id"], None)
-        threading.Thread(target=run, daemon=True).start()
+                try:
+                    _job_update(job["id"], mes_state="idle")
+                    with JOBS_LOCK:
+                        JOB_CANCEL.pop(job["id"], None)
+                finally:
+                    # The ticket bridges the short HTTP/scheduler admission
+                    # and the actual MES thread, including its final writes.
+                    background_work.finish()
+        background_work = MAINTENANCE.reserve_background_work()
+        try:
+            threading.Thread(target=run, daemon=True).start()
+        except BaseException:
+            # Thread.start may fail before ownership reaches the worker.
+            background_work.finish()
+            raise
         return job
     except BaseException:
         if reservation is not None:
