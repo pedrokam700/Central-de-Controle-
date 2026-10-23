@@ -105,8 +105,15 @@ export function createSnConsoleView(root,store,client){
     else status.innerHTML='<b>Pronto para consulta</b><span>Sem job de SN em execução.</span>';
     if(!result){root.querySelector('[data-sn-result]').innerHTML=`<div class="ames-empty ames-empty-large"><span>⌕</span><h3>Consulte uma SN para abrir a investigação completa</h3><p>O resultado reunirá falha atual, falhas anteriores, materiais em 2º+ uso, PCBAs anteriores/desvinculadas e evidência temporal 3022 quando retornadas pela fonte.</p></div>`;return;}
     const trace2114=result.trace_2114,trace3074=result.trace_3074,trace3022=result.trace_3022;
-    const has2114=!!trace2114&&Array.isArray(trace2114.previous_failures),has3074=!!trace3074&&Array.isArray(trace3074.reused_components),has3022=!!trace3022&&(Array.isArray(trace3022.process_passages)||Number.isFinite(result.summary?.['3022_events']));
-    const reuseCountVerified=has3074&&['selected_at_latest_2114_candidate','current_mounting_new_cycle'].includes(trace3074?.material_selection?.status)&&
+    const has2114=!!trace2114&&Array.isArray(trace2114.previous_failures),
+      state3074=String(trace3074?.status||'').toLowerCase(),
+      grid3074=trace3074?.query?.rows,
+      queryConfirmed3074=Array.isArray(grid3074)&&(grid3074.length>0||trace3074?.query?.no_data===true),
+      has3074=!!trace3074&&!trace3074.error&&['complete','partial','ok'].includes(state3074)&&Array.isArray(trace3074.reused_components)&&
+        (queryConfirmed3074||trace3074.reused_components.length>0),
+      fullyCollected3074=has3074&&state3074!=='partial'&&queryConfirmed3074,
+      has3022=!!trace3022&&(Array.isArray(trace3022.process_passages)||Number.isFinite(result.summary?.['3022_events']));
+    const reuseCountVerified=fullyCollected3074&&['selected_at_latest_2114_candidate','current_mounting_new_cycle'].includes(trace3074?.material_selection?.status)&&
       trace3074?.material_selection?.temporal_unknown===0&&
       !(trace3074?.component_usage||[]).some(item=>item.error||item.current_pcba_confirmed!==true)&&
       (Array.isArray(trace3074?.query?.rows)||trace3074?.status==='complete');

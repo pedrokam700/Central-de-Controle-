@@ -24,6 +24,7 @@ test('SN provenance keeps independent states and never invents PC/line or collec
   assert.equal(rows.find(r=>r.view==='2114').period_start,'2026-10-17T07:30:00-03:00');
   assert.equal(rows.find(r=>r.view==='2114').workstation_id,null);
   assert.equal(rows.find(r=>r.view==='3074').state,'error');
+  assert.equal(rows.find(r=>r.view==='3074').observed_count,null,'error cannot be displayed as observed zero');
   assert.equal(rows.find(r=>r.view==='3022').state,'partial');
   assert.equal(rows.find(r=>r.view==='3012').state,'unavailable');
   assert.equal(rows.find(r=>r.view==='3028').state,'cached');
@@ -56,6 +57,22 @@ test('failed 3074 live query does not erase 2114 evidence or report zero materia
   assert.equal(model.coverage['2114'],true);
   const provenance=snLiveSourceProvenance(result,model);
   assert.equal(provenance.find(r=>r.view==='3074').state,'error');
+  assert.equal(provenance.find(r=>r.view==='3074').observed_count,null);
+});
+
+test('3074 zero requires direct query proof; legacy empty arrays are incomplete',()=>{
+  const old=lookup();
+  old.trace_3074={status:'complete',reused_components:[],component_usage:[]};
+  assert.equal(buildLiveSnForensics(old).source_states['3074'],'partial');
+  const proven=lookup();
+  proven.trace_3074={status:'complete',query:{rows:[],no_data:true},reused_components:[],component_usage:[]};
+  const model=buildLiveSnForensics(proven);
+  assert.equal(model.source_states['3074'],'zero');
+  assert.equal(snLiveSourceProvenance(proven,model).find(r=>r.view==='3074').observed_count,0);
+  const hasRows=lookup();
+  hasRows.trace_3074={status:'complete',query:{rows:[{'Barcode':'CAM-USED'}],no_data:false},
+    reused_components:[{item_sn:'CAM-USED',previous_pcbas:['PCBA-OLD']}]};
+  assert.equal(buildLiveSnForensics(hasRows).source_states['3074'],'ok');
 });
 
 test('bilingual live SN details escape MES values and remain collapsed until requested',()=>{
@@ -80,4 +97,10 @@ test('live SN UI adds the source details without invoking a new MES request',()=
   assert.match(source,/renderSnLiveSourceProvenance\(result,model,locale\(\)\)/);
   assert.match(source,/section\.after\(panel\.firstElementChild\)/);
   assert.match(source,/renderLiveSources\(root,store\)/);
+  const summary=fs.readFileSync(new URL('../ames/console-fastlane-sn-reuse.mjs',import.meta.url),'utf8');
+  const specialized=fs.readFileSync(new URL('../ames/console-specialized-views.mjs',import.meta.url),'utf8');
+  assert.match(summary,/\['ok','zero'\]\.includes\(model\.source_states\['3074'\]\)/);
+  assert.match(summary,/countProven\?model\.materials\.length:'—'/);
+  assert.match(specialized,/queryConfirmed3074/);
+  assert.match(specialized,/fullyCollected3074/);
 });

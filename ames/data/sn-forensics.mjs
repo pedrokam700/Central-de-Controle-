@@ -363,7 +363,8 @@ export function buildLiveSnForensics(result={}){
   const trace3074State=gridConfirmed
     ?sourceStateFromTrace({...trace3074,status:trace3074.status||'complete'},
         {recordCount:gridRows.length,countProven:true})
-    :sourceStateFromTrace(trace3074,{recordCount:materials.length,countProven:chosen?
+    :sourceStateFromTrace(trace3074?.status==='complete'&&!trace3074?.error?
+        {...trace3074,status:'partial'}:trace3074,{recordCount:materials.length,countProven:chosen?
         unknownMaterialTimes===0:Array.isArray(trace3074?.reused_components)});
   const itemLookupIncomplete=(trace3074?.component_usage||[]).some(item=>item.error||item.current_pcba_confirmed===false);
   const sourceStates={
