@@ -136,11 +136,12 @@ def inspect_readonly_installation_inventory(report, *, selected_root=None):
     """
     stage = "header"
     try:
-        fields = {"schema", "candidates", "port_8765_verified", "listener_pids",
+        fields = {"schema", "read_only", "candidates", "port_8765_verified", "listener_pids",
                   "unmatched_listener_pids", "canonical_agents_outside_scan",
                   "updater_eligible", "reason"}
         if (type(report) is not dict or set(report) != fields
                 or report["schema"] != "ames-windows-inventory-v1"
+                or report["read_only"] is not True
                 or report["updater_eligible"] is not False
                 or report["reason"] != "inventory_only_no_idle_or_backup_proof"
                 or type(report["port_8765_verified"]) is not bool):

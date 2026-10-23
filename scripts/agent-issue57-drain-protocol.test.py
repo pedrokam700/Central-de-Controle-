@@ -73,7 +73,8 @@ def readonly_installation_inventory(*, multiple=False, listener=True):
                            "canonical_entry_exists": True, "sqlite_exists": True,
                            "config_exists": True, "token_exists": True,
                            "matching_agent_pids": [], "listener_owner_matches": False})
-    return {"schema": "ames-windows-inventory-v1", "candidates": candidates,
+    return {"schema": "ames-windows-inventory-v1", "read_only": True,
+            "candidates": candidates,
             "port_8765_verified": True, "listener_pids": [4810] if listener else [],
             "unmatched_listener_pids": [], "canonical_agents_outside_scan": [],
             "updater_eligible": False, "reason": "inventory_only_no_idle_or_backup_proof"}
@@ -105,6 +106,7 @@ class ReadonlyGuardianInventoryTests(unittest.TestCase):
             "source": "running_process", "signal": "guardian_script", "pid": 8401}])
         mutations = [
             lambda x: x.update(updater_eligible=True),
+            lambda x: x.update(read_only=False),
             lambda x: x.update(all_sessions_attested=True),
             lambda x: x.update(observed_sources_complete=False),
             lambda x: x.update(unreadable_supervisor_processes=1),
