@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {observedReuseDashboard,reuseGroup,theoreticalReuseSensitivity} from '../ames/data/daily-reuse-evidence.mjs';
+import {observedReuseDashboard,reuseGroup,theoreticalReuseSensitivity,
+  reuseCriteriaEvidence,filterReuseCriteria} from '../ames/data/daily-reuse-evidence.mjs';
 
 const occurrence=(pcba,day,patch={})=>({line:'L3',pcba,defect_code:'CAM',
   defect_time:`2026-10-${day} 10:00:00`,failure_record_date:`2026-10-${day}`,
@@ -53,4 +54,20 @@ test('1600 production, 57 observed defects and 10 flagged implies only theoretic
  const duplicate=theoreticalReuseSensitivity(model,[...model.union,model.union[0]],{
    quantity:1600,denominatorProven:true,operationalDate:'2026-10-22'});
  assert.equal(duplicate.theoretical_scale_pp,null);
+});
+
+test('configurable OR/AND uses exact material evidence and keeps candidates separate',()=>{
+ const a=occurrence('P1','22',{pcba_reused:true,pcba_prior_failure:true});
+ const b=occurrence('P2','22',{component_links_exact:[{material:'CAM2',item_type:'Rear Camera Secondary',
+   historical_evidence:[{pcba:'OLD',defect_code:'OTHER'}]}],
+   defect_desc:'Rear secondary camera no image'});
+ const c=occurrence('P3','22',{pcba_reused:true,component_links_exact:[{material:'SCREEN',
+   item_type:'Screen'}]});
+ const rows=[a,b,c];
+ assert.equal(filterReuseCriteria(rows,['pcba_reused','material_reused'],'or').length,3);
+ assert.deepEqual(filterReuseCriteria(rows,['pcba_reused','material_reused'],'and').map(r=>r.pcba),['P3']);
+ assert.deepEqual(filterReuseCriteria(rows,['material_type_candidate'],'or').map(r=>r.pcba),['P2']);
+ assert.equal(reuseCriteriaEvidence(b).material_prior_candidate,true);
+ assert.deepEqual(filterReuseCriteria(rows,['pcba_prior_history','material_type_candidate'],'and'),[]);
+ assert.deepEqual(filterReuseCriteria(rows,[],'or'),[]);
 });

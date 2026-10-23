@@ -1,7 +1,31 @@
 // Counts are exact for observed, distinct 3028 defect occurrences only. They
 // are NOT production totals, Check FPY denominators or causal conclusions.
+import {matchComponentToCurrentFailure} from './component-failure-compatibility.mjs';
 const txt=v=>String(v??'').trim();
 export const REUSE_GROUPS=Object.freeze(['pcba_only','material_only','both','no_reuse_evidence']);
+export const REUSE_CRITERIA=Object.freeze(['pcba_reused','pcba_prior_history',
+  'material_reused','material_prior_candidate','material_type_candidate']);
+
+export function reuseCriteriaEvidence(row={}){
+  const exact=Array.isArray(row.component_links_exact)?row.component_links_exact:[];
+  const links=exact.filter(link=>txt(link.material));
+  const compatible=links.some(link=>['EXACT_COMPATIBLE','FAMILY_COMPATIBLE'].includes(
+    matchComponentToCurrentFailure(link.item_type,row.defect_code,row.defect_desc).classification));
+  return {pcba_reused:row.pcba_reused===true,
+    pcba_prior_history:row.pcba_reused===true&&row.pcba_prior_failure===true,
+    material_reused:links.length>0,
+    material_prior_candidate:links.some(link=>(link.historical_evidence||[]).some(e=>e.defect_code)),
+    material_type_candidate:compatible};
+}
+
+export function filterReuseCriteria(rows=[],criteria=[],mode='or'){
+  const selected=[...new Set(criteria)].filter(key=>REUSE_CRITERIA.includes(key));
+  if(!selected.length)return [];
+  return rows.filter(row=>{
+    const flags=reuseCriteriaEvidence(row);
+    return mode==='and'?selected.every(key=>flags[key]):selected.some(key=>flags[key]);
+  });
+}
 
 export function reuseGroup(row={}){
   const board=row.pcba_reused===true;

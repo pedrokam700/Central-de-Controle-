@@ -5,7 +5,7 @@ import {selectDashboard} from './data/dashboard.mjs';
 import {reuseLinks} from './data/reuse-analysis.mjs';
 import {productionEvidenceForOccurrence,parseFailureInstant} from './data/production-evidence.mjs';
 import {factoryHourKey,formatFactoryDateTime as displayTime,formatFactoryDate as displayDate} from './data/time-display.mjs';
-import {observedReuseDashboard,theoreticalReuseSensitivity} from './data/daily-reuse-evidence.mjs';
+import {observedReuseDashboard,theoreticalReuseSensitivity,filterReuseCriteria,REUSE_CRITERIA} from './data/daily-reuse-evidence.mjs';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -217,11 +217,19 @@ function renderHourChart(rows,selected=''){
 function renderReuseDashboard(rows,state,metrics={}){
   const model=observedReuseDashboard(rows,state.reuseAxis),focused=state.reuseFocus||'union';
   const classes={union:model.union,both:model.intersection,pcba_only:model.groups.pcba_only,
-    material_only:model.groups.material_only,no_reuse_evidence:model.groups.no_reuse_evidence};
+    material_only:model.groups.material_only,no_reuse_evidence:model.groups.no_reuse_evidence,
+    custom:filterReuseCriteria(model.rows,state.reuseCriteria,state.reuseBoolean)};
   const labels={union:t('União · PCBA ou material','Union · PCBA or material'),
     both:t('Interseção · ambos','Intersection · both'),
     pcba_only:t('Somente PCBA','PCBA only'),material_only:t('Somente material','Material only'),
-    no_reuse_evidence:t('Reuso não comprovado','Reuse unproven')};
+    no_reuse_evidence:t('Reuso não comprovado','Reuse unproven'),
+    custom:t('Combinação configurada','Custom combination')};
+  const criterionLabels={
+    pcba_reused:t('PCBA 2º+ uso observado','Observed 2nd+ use PCBA'),
+    pcba_prior_history:t('PCBA reutilizada com falha histórica','Reused PCBA with prior failure history'),
+    material_reused:t('Material físico reutilizado com vínculo na ocorrência','Reused physical material linked to occurrence'),
+    material_prior_candidate:t('Material com falha histórica na PCBA anterior · candidato','Material with previous-board fault · candidate'),
+    material_type_candidate:t('Tipo de material compatível com a falha · hipótese','Material type compatible with defect · hypothesis')};
   const selected=classes[focused]||model.union,max=Math.max(1,...model.bins.map(b=>b.total));
   const sensitivity=theoreticalReuseSensitivity(model,selected,{
     quantity:metrics.quantity,denominatorProven:metrics.denominatorProven,
@@ -264,6 +272,13 @@ function renderReuseDashboard(rows,state,metrics={}){
       'Union and intersection of distinct 3028 failures with evidence of reused PCBA or material. Counts are exact within the observed rows, even if MES coverage is partial. Not production total, Check FPY or causality.')}</p></div>
     <span class="status warn">${model.total} ${t('falhas observadas','observed failures')}</span></div>
     <div class="ames-summary-grid">${Object.entries(classes).map(([key,items])=>`<button class="stat ames-dfa-kpi" type="button" data-dfa-reuse-class="${key}" aria-pressed="${focused===key}"><span class="stat-label">${labels[key]}</span><strong class="stat-value">${items.length}</strong></button>`).join('')}</div>
+    <details class="central-mes-details"${focused==='custom'?' open':''}><summary>${t('Combinar critérios técnicos · OU/E','Combine technical criteria · OR/AND')}</summary>
+      <div class="mes-filters"><label>${t('Operador lógico','Logical operator')}<select data-dfa-reuse-boolean>
+        <option value="or"${state.reuseBoolean==='or'?' selected':''}>${t('OU · união dos critérios','OR · union of criteria')}</option>
+        <option value="and"${state.reuseBoolean==='and'?' selected':''}>${t('E · interseção dos critérios','AND · intersection of criteria')}</option>
+      </select></label>${REUSE_CRITERIA.map(key=>`<label><input type="checkbox" data-dfa-reuse-criterion="${key}"${state.reuseCriteria.includes(key)?' checked':''}>${esc(criterionLabels[key])}</label>`).join('')}</div>
+      <p class="mes-context">${t('Falha em PCBA anterior e compatibilidade de tipo são hipóteses/candidatos quando o vínculo temporal da falha anterior não está completo.',
+        'Previous-board failure and component-type compatibility remain candidates/hypotheses without complete temporal proof of the previous binding.')}</p></details>
     <div class="ames-summary-grid"><div class="stat"><small>${t('% das falhas 3028 observadas no filtro','% of observed 3028 failures in filter')}</small><strong>${observedShare}</strong></div>
       <div class="stat"><small>${t('PCBAs distintas no recorte','Distinct PCBAs in selection')}</small><strong>${uniquePcbas}</strong></div>
       <div class="stat"><small>${t('Material SNs distintos com ocorrência exata','Distinct Material SNs with exact occurrence')}</small><strong>${physicalSns||'—'}</strong></div>
@@ -286,7 +301,7 @@ function renderReuseDashboard(rows,state,metrics={}){
 }
 
 export function createDailyFailureAnalytics(root,store){
-  let mounted=false,last='',state={mode:'ranking',query:'',line:'',shift:'',hour:'',product:'',defect:'',defectName:'',repairUser:'',pcba:'',family:'',reuse:'',relation:'',from:'',to:'',reuseAxis:'day',reuseFocus:'union'},initializedDate=false;
+  let mounted=false,last='',state={mode:'ranking',query:'',line:'',shift:'',hour:'',product:'',defect:'',defectName:'',repairUser:'',pcba:'',family:'',reuse:'',relation:'',from:'',to:'',reuseAxis:'day',reuseFocus:'union',reuseBoolean:'or',reuseCriteria:['pcba_reused','material_reused']},initializedDate=false;
   function render(){
     const base=buildDailyFailureRows(store);
     if(!initializedDate&&base.length){const latest=uniq(base.map(r=>r.failure_record_date).filter(Boolean)).sort().at(-1);if(latest){state.from=latest;state.to=latest;}initializedDate=true;}
@@ -308,6 +323,15 @@ export function createDailyFailureAnalytics(root,store){
     root.querySelectorAll('[data-dfa-reuse-class]').forEach(button=>button.onclick=()=>{
       state.reuseFocus=button.dataset.dfaReuseClass;last='';render();
     });
+    root.querySelector('[data-dfa-reuse-boolean]')?.addEventListener('change',event=>{
+      state.reuseBoolean=event.target.value==='and'?'and':'or';state.reuseFocus='custom';last='';render();
+    });
+    root.querySelectorAll('[data-dfa-reuse-criterion]').forEach(input=>input.addEventListener('change',()=>{
+      const next=new Set(state.reuseCriteria),key=input.dataset.dfaReuseCriterion;
+      if(input.checked)next.add(key);else next.delete(key);
+      state.reuseCriteria=REUSE_CRITERIA.filter(key=>next.has(key));
+      state.reuseFocus='custom';last='';render();
+    }));
     root.querySelector('[data-dfa-clear]')?.addEventListener('click',()=>{state={...state,query:'',line:'',shift:'',hour:'',product:'',defect:'',defectName:'',repairUser:'',pcba:'',family:'',reuse:'',relation:'',from:'',to:''};initializedDate=true;last='';render();});
     root.querySelectorAll('[data-matrix-line]').forEach(b=>b.onclick=()=>{state.line=b.dataset.matrixLine;state.shift=b.dataset.matrixShift;state.mode='occurrences';last='';render();});
     root.querySelectorAll('[data-dfa-hour]').forEach(b=>b.onclick=()=>{state.hour=b.dataset.dfaHour;state.mode='occurrences';last='';render();});

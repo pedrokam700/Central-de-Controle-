@@ -86,13 +86,22 @@ git diff --check
 
 ## Checkpoint P4 · sensibilidade teórica e PCBA sem âncora 2114 (em preparação)
 
+- **Publicado na PR draft #67** com commit remoto `5903256741cbfcd0215d73e2a946d09e51bfd695`.
+- CI por SHA: `Static quality checks` SUCCESS, `Agent and sync E2E with Firestore Rules` SUCCESS, `Console themes, languages and mobile` SUCCESS. `Published preview smoke` ainda em progresso na última verificação; previews anteriores responderam `release_build_http_401` externo. Ainda não declarar gate integrado GREEN.
+
 1. `data/daily-reuse-evidence.mjs`: cálculo puro de participação dos sinalizados no conjunto 3028 observado e escala de **pontos percentuais teóricos**, somente com Quantity verdadeiro, dia operacional único, evidência 3022 e uma ocorrência distinta por PCBA. Exemplo da Issue #66: 57 falhas observadas, 10 sinalizadas, 1600 produzidas → 17,54% das falhas e 0,625 pp de escala teórica; `check_fpy_gain` fica **null** e nenhum ganho real é atribuído. Sem provas suficientes retorna `—`. `daily-failure-analytics` expõe cards, SNs distintos e evita transformar Quantity ausente em `0`.
 2. PCBA sem qualquer falha 2114, mas com materiais atuais Y comprovados pela 3074, agora tem seleção `current_mounting_unanchored` explícita. A montagem atual não desaparece e não recebe falso alerta de falha. Consulta PCBA e histórico seguem independentes da Rastreabilidade 3028.
 3. Testes `ames-issue66-dashboard`, `ames-issue66-compatibility`, `ames-daily-failure-analytics` e Python `test_issue66_mounting_cycles` ampliados, incluindo ausência de denominador e ciclo atual sem 2114.
 
+## Checkpoint P5 · seleção múltipla de categorias (em preparação)
+
+1. `data/daily-reuse-evidence.mjs`: novos critérios combináveis sob **OU/E**: PCBA reutilizada, PCBA reutilizada com falha histórica, material físico reutilizado com associação à ocorrência exata, falha histórica da PCBA anterior **candidata**, e tipo físico compatível com falha atual **hipótese** (matcher determinístico); flags sem evidência ficam false, nunca são causalidade.
+2. `daily-failure-analytics.mjs`: painel de combinação com checkboxes, seletor OU/E, resultados deduplicados, drilldown por ocorrência e percentagem/escala teórica guardadas. O modo pré-configurado União/Interseção anterior permanece intacto.
+3. Testes de união/interseção configurável e não transferência entre ocorrências em `scripts/ames-issue66-dashboard.test.mjs`, além dos suites diários; requer nova CI/QA física antes de aceitação.
+
 ## Continuidade imediata
 
-1. Publicar P4 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o gate browser e o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
+1. Publicar P5 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
 2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
 3. P1 física: confirmar na fábrica respostas 3074 PCBA/Material SN, Bind/Unbind reais, alarme GN06-X015 e 3022 dos respectivos ciclos. Resolver possíveis lacunas de parser/driver somente com evidência sanitizada.
 4. P2 pendente: persistência autoritativa de fechamento FULL real, leitura da linha do tempo de fechamentos e gráficos dia-a-dia com denominações/Check FPY comprovadas. A classificação/UI fail-closed do leitor já está em andamento; não inferir fonte completa de dados parciais.
