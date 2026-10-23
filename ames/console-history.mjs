@@ -4,6 +4,7 @@ import { isTodaySnapshot } from './data/operational-period.mjs';
 import { formatFactoryDateTime as displayTime, displayValue } from './data/time-display.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
+import {fullDayClosureEvidence} from './data/full-day-closure.mjs';
 
 const labels={fresh:'Atualizado',partial:'Parcial',stale:'Desatualizado',not_collected:'Não coletado'};
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
@@ -128,6 +129,18 @@ export function createHistoryView(root,store,client,history) {
     if(!selected){host.replaceChildren();return;}
     const rows=selected.datasets?.defects||[],contexts=selected.process_contexts||selected.datasets?.process_contexts||[],coverage=selected.coverage?.defects||{};
     host.innerHTML=`<section class="mes-context-panel"><div class="section-head"><div><h3>${t('VISUALIZAÇÃO HISTÓRICA','HISTORICAL VIEW')} · ${esc(selected.line_id)}</h3><p>${t('Esta visualização é somente leitura e não substitui o snapshot atual da Central.','This view is read-only and does not replace the current Work Center snapshot.')}</p></div><span class="status">${esc(revisionLabel(selectedEntry||selected))}</span></div><div class="ames-summary-grid"><div class="stat"><span class="stat-label">${t('Coletado em','Collected at')}</span><strong class="stat-value">${esc(displayTime(selected.collected_at))}</strong></div><div class="stat"><span class="stat-label">${t('Origem','Source')}</span><strong class="stat-value">${esc(selected.source_id||'—')}</strong></div><div class="stat"><span class="stat-label">${t('Falhas','Failures')}</span><strong class="stat-value">${rows.length}</strong></div><div class="stat"><span class="stat-label">3022 · ${t('contextos','contexts')}</span><strong class="stat-value">${contexts.length}</strong></div></div><p>${coverage.source_complete===true?t('Cobertura de falhas completa','Complete failure coverage'):t('Cobertura de falhas parcial/indisponível','Partial/unavailable failure coverage')}</p><div class="table-wrap"><table><thead><tr><th>PCBA</th><th>CPH</th><th>Defect Code</th><th>${t('Registro da falha (MES)','Failure record (MES)')}</th><th>${t('Vínculo (2114)','Linkage (2114)')}</th><th>${t('AT (3012) · candidatos','AT (3012) · candidates')}</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.pcba_sn||'—')}</td><td>${esc(r.product_model||'—')}</td><td>${esc(r.defect_code||'—')}</td><td>${esc(displayValue('defect_time',r.defect_time))}</td><td>${esc(linkageStatus(r.repair_status_current))}</td><td>${repairEvidenceCell(r)}</td></tr>`).join('')}</tbody></table></div><section data-history-captures></section></section>`;
+    const closure=fullDayClosureEvidence(selected);
+    const closureNote=host.ownerDocument.createElement('p');
+    closureNote.dataset.historyFullClosure='';
+    closureNote.className=closure.status==='FULL'?'mes-context':'notice warn';
+    closureNote.textContent=closure.status==='FULL'
+      ?t('Fechamento FULL comprovado para esta revisão: 3028 + 3074 + 2114 + 3022; revisão preservada.',
+        'FULL closure proven for this revision: 3028 + 3074 + 2114 + 3022; revision preserved.')
+      :t('Fechamento FULL não comprovado para esta revisão. Fontes sem integralidade: ',
+        'FULL closure unproven for this revision. Sources without complete proof: ')+
+        (closure.missing_sources.join(', ')||t('identidade/período','identity/period'))+
+        '. '+t('Uma captura parcial não substitui fechamento diário.','A partial capture does not replace daily closure.');
+    host.querySelector('[data-history-captures]')?.before(closureNote);
     capturePanel=createSourceCaptureHistory(host.querySelector('[data-history-captures]'),client,store);
     capturePanel.show(selected,selectedEntry);
   }

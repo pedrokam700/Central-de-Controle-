@@ -37,6 +37,9 @@ git diff --check
 
 ## Checkpoint P1 · ciclos, Material SN, alertas e observado (em preparação)
 
+- **Publicado na PR draft #67** com commit remoto `e272f34ceacfb0c8cbee2eea237cd2f5d0e8d036`.
+- CI desse SHA: `Central Quality Gate` **FAILURE**; `Console themes, languages and mobile` **SUCCESS** (regressão PT/EN P0 corrigida); `Agent and sync E2E with Firestore Rules` **SUCCESS**; `Static quality checks` **FAILURE** com duas causas reproduzidas e corrigidas no bloco P2 seguinte: módulo `component-failure-compatibility.mjs` ausente do pré-cache e SHA da política `temporal_3074.py` não repinado no contrato CLEAN V3. Não declarar o SHA P1 GREEN.
+
 1. `core/temporal_3074.py`: recorte independente de **Consulta SN** por montagem principal: vínculo `Y` atual com Bind posterior à falha 2114 é **novo ciclo**, exibido sozinho; `Y` anterior segue o mesmo ciclo; ausência de `Y` reconstrói montagem da última falha com inclusões `N` temporalmente demonstradas. Datas ausentes, status conflitantes, desvínculos sem hora e intervalos conflitantes tornam o material candidato, não comprovado. Rastreabilidade por 3028 não usa essa seleção.
 2. `engine_bridge.py`: varredura explícita 3074 dos componentes selecionados; consulta inversa por **Material SN** (3074 → PCBAs relacionadas → 2114 → contexto 3012/3022), até 25 PCBAs por chamada, com limite/omissões à vista. Falhas da PCBA anterior à vinculação ou posterior ao desvínculo não são atribuídas ao componente. Agrupamento de linhas de posto evita contar duplicata como novo ciclo; retorno mantém status Y/N.
 3. `console-sn-material-investigation.mjs` e `console-sn-live-context.mjs`: painel de Material SN com ciclos, PCBAs clicáveis, defeitos associados/candidatos/excluídos e alerta de recorrência entre PCBAs; anotação da montagem investigada, histórico secundário, candidato colapsável. Troca de PCBA usa a própria consulta explícita, não disparo em segundo plano.
@@ -52,10 +55,27 @@ git diff --check
 - `node --test scripts/ames-failures-grouped-summary.test.mjs scripts/ames-daily-autoread-ui.test.mjs scripts/ames-sn-smart-alerts.test.mjs scripts/ames-issue66-compatibility.test.mjs`: **4/4 arquivos PASS**.
 - `git diff --check`: PASS. Executar bateria ampliada e gates por SHA antes de marcar integração aceita.
 
+## Checkpoint P2 · Dashboard e contrato de fechamento (em preparação)
+
+1. `data/daily-reuse-evidence.mjs` e `daily-failure-analytics.mjs`: novo modo **Dashboard de reuso** integrado à visão de falhas do dia. Conta sem duplicar ocorrências 3028 por linha + PCBA + Defect Code + instante; separa união, interseção, somente PCBA, somente material e sem evidência, com clique nas métricas para abrir as ocorrências específicas, eixo configurável **dia MES** ou **linha**, e números observados sem fingir produção total/Check FPY. A filtragem já existente por data, modelo, posto e falha continua aplicável.
+2. `data/full-day-closure.mjs` e `console-history.mjs`: verificador fail-closed de fechamento: exige dia completo 07:00→07:00, identidade imutável de snapshot/revisão/hash e comprovação de integralidade 3028+3074+2114+3022. Ao abrir uma revisão no histórico, informa **FULL comprovado** ou lista as fontes sem comprovação. Seleciona último fechamento comprovado entre candidatos deduplicados, mas **não cria novos registros nem promove as capturas parciais existentes a FULL**.
+3. `sw.js`: versão nova do cache com os módulos de compatibilidade, dashboard e fechamento. `ames-clean-v3.test.mjs`: hash da extensão temporal Issue #66 explicitamente fixado; arquivos congelados CLEAN V3/3028 continuam verificados byte a byte.
+
+### Evidências locais P2
+
+- `node scripts/ames-cache.test.mjs`: **8/8 PASS**, inclusive grafo completo de imports offline.
+- `node scripts/ames-clean-v3.test.mjs`: **11/11 PASS**, inclusive preservação dos arquivos congelados e pin temporal.
+- `node scripts/ames-issue66-dashboard.test.mjs`: **2/2 PASS**.
+- `node scripts/ames-issue66-full-closure.test.mjs`: **2/2 PASS**.
+- `node --check ames/daily-failure-analytics.mjs`, `node --check ames/console-history.mjs`, `git diff --check`: **PASS**.
+- Bateria Node global em execução na elaboração deste registro. O `node scripts/quality-gate.mjs` local foi **interrompido** após mais de 2 minutos sem novos logs no teste Python de atualização (não declarar sucesso).
+
+**Limite de dados de fechamento:** na versão oficial `ames/agent/canonical.py` a `source_coverage` das fontes 3074/2114/3022 é intencionalmente `observed_partial`/`source_complete=false`. Para existir um fechamento FULL real, ainda será necessário coletar e armazenar prova de integralidade da janela/fonte vinculada exatamente à revisão, respeitando os limites e sem sobrescrever histórico. Até isso e homologação de fábrica, a interface continuará mostrando **não comprovado**.
+
 ## Continuidade imediata
 
-1. Publicar P1 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**, incluindo a regressão EN. Não fazer merge nem publicar.
+1. Publicar P2 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**, incluindo pré-cache e pin temporal. Não fazer merge nem publicar.
 2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
 3. P1 física: confirmar na fábrica respostas 3074 PCBA/Material SN, Bind/Unbind reais, alarme GN06-X015 e 3022 dos respectivos ciclos. Resolver possíveis lacunas de parser/driver somente com evidência sanitizada.
-4. P2: dashboard união/interseção, duas visualizações, drilldown e último fechamento FULL (3028+3074+2114+3022) imutável/deduplicado.
+4. P2 pendente: persistência autoritativa de fechamento FULL real, leitura da linha do tempo de fechamentos e gráficos dia-a-dia com denominações/Check FPY comprovadas. A classificação/UI fail-closed do leitor já está em andamento; não inferir fonte completa de dados parciais.
 6. Testes: Node/Python, integração HTTP, browser, Windows e gate físico L3/snapshot14; nenhum teste local equivale à validação física A-MES.

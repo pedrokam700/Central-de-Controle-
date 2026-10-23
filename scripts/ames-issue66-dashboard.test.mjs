@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {observedReuseDashboard,reuseGroup} from '../ames/data/daily-reuse-evidence.mjs';
+
+const occurrence=(pcba,day,patch={})=>({line:'L3',pcba,defect_code:'CAM',
+  defect_time:`2026-10-${day} 10:00:00`,failure_record_date:`2026-10-${day}`,
+  pcba_reused:false,component_links:[],...patch});
+test('union, intersection and exclusive groups never double count an observed defect',()=>{
+ const rows=[occurrence('P1','22',{pcba_reused:true,component_links:[{material:'M1'}]}),
+   occurrence('P2','22',{pcba_reused:true}),occurrence('P3','23',{component_links:[{material:'M2'}]}),
+   occurrence('P4','23')];
+ const data=observedReuseDashboard([...rows,{...rows[0]}]);
+ assert.equal(data.total,4);
+ assert.equal(data.pcba.length,2);assert.equal(data.material.length,2);
+ assert.equal(data.union.length,3);assert.equal(data.intersection.length,1);
+ assert.deepEqual(Object.fromEntries(Object.entries(data.groups).map(([k,v])=>[k,v.length])),
+   {pcba_only:1,material_only:1,both:1,no_reuse_evidence:1});
+ assert.deepEqual(data.bins.map(b=>[b.key,b.total,b.both]),[['2026-10-22',2,1],['2026-10-23',2,0]]);
+ assert.equal(data.population_complete,false);
+ assert.equal(data.basis,'observed_3028_occurrences');
+});
+
+test('line view and missing identity stay distinct; no proof is not proof of first use',()=>{
+ const first=occurrence('P1','22'),second={...first,line:'L2'};
+ const data=observedReuseDashboard([first,second,occurrence('','22'),occurrence('','22')],'line');
+ assert.equal(data.total,4);
+ assert.deepEqual(data.bins.map(b=>[b.key,b.total]),[['L2',1],['L3',3]]);
+ assert.equal(reuseGroup(first),'no_reuse_evidence');
+ assert.equal(data.groups.no_reuse_evidence.length,4);
+});
