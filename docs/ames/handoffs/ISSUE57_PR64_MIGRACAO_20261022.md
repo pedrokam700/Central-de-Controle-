@@ -561,3 +561,17 @@ A pasta extraída `Downloads/AMES_Central_CLEAN_b283b176` também existe. **Não
 4. **Fronteira de confiança:** a classificação de um `.lnk` não prova que o guardian executado tem bytecode correto nem coordena sessões cruzadas, contas diferentes, autostart legado, launcher direto, processos já ativos, fila Firestore, transações SQLite ou rollback. Portanto os campos permanecem `updater_eligible=false`, `all_sessions_attested=false`, `installed_guardian_cooperation_attested=false` e `exclusive_maintenance_lease_held=false`. B2m não é instalador e não concede permissão de encerrar PID, sobrescrever CLEAN ou mexer em dados da fábrica.
 
 **Após CI:** continuar a implementação do coordenador externo com atestação *positiva* do guardian realmente instalado e exclusão global, drenagem autenticada MES/browser, backups externos, journal/rollback NTFS e piloto G1–G6; jamais considerar inventário vazio como prova de autorização. GitHub/Pages são oficiais; Netlify não participa deste gate.
+
+**B2m confirmado no GitHub:** SHA `07c6447b0a99ac3656b8f6e4cfa4036e0f0fff3f`; [A-MES Operational History #39937249020](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/39937249020) **4/4 SUCCESS**, inclusive fixture Windows com marker terminal auditado; [Central Quality Gate #39937257941](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/39937257941) **3/3 SUCCESS**. PR #64 continua aberta/draft/mergeable; sem alteração de `main`, release/Pages ou posto.
+
+## 39. Handoff mestre consolidado e correção de rumo (23/10/2026)
+
+O usuário pediu explicitamente a preservação antecipada de toda a continuidade para migração segura de conversa, inclusive a explicação de como uma correção HTTP 403 virou projeto maior de atualizador Windows. Foi criado o documento autossuficiente **`docs/ames/handoffs/ISSUE57_PR64_HANDOFF_MESTRE_20261023.md`**, que deve ser lido integralmente junto a este histórico (sobretudo §14, §37, §38). O documento novo preserva:
+
+1. Estado remoto 0.5.39, PR #65 já integrada, Issue #57 e PR #64 draft, SHA exato do último B2m GREEN; distinção entre CI e homologação física.
+2. Último inventário PowerShell (sem repetir), pasta Python antiga versus ZIP 0.5.39 apenas extraído, arquivo SQLite/token/config existente mas ainda não comprovadamente recuperável, guardian antigo em execução no instante do teste.
+3. Lista das implementações/arquivos já entregues, regressões RED corrigidas, restrições de segurança e GitHub como canal exclusivo — não Netlify.
+4. **Roteiro simplificado com prioridades T1–T5**, evitando crescimento desnecessário em novas análises: T1 atestação positiva do guardian e relançadores; T2 coordenação autenticada/drain; T3 backup completo; T4 troca/rollback real Windows; T5 piloto físico. O próximo trabalho tem de aproximar a entrega real, não criar um instalador paralelo ou declarar o motor atualizado sem prova.
+5. Regras para continuar mesmo que o chat exceda seu limite: revalidar HEAD/CI remoto, preservar código e histórico existentes, não forçar push/merge, não solicitar novamente os comandos da fábrica e não tocar em `source_id`, token, SQLite ou processo físico.
+
+**Esta alteração é apenas documentação/checkpoint e não libera instalação.** O SHA deste commit de handoff e seus gates devem ser acrescentados por comentário na PR #64 após publicação; não inserir um SHA futuro especulativo neste texto. O operador poderá solicitar novo adendo se a conversa continuar por muito tempo.

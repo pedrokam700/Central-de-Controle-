@@ -2,6 +2,8 @@
 
 Data: 2026-10-21. Estado: decisão arquitetural e contrato de implantação. **Não significa que o atual agente já tenha autoatualização segura instalada.**
 
+**Prioridade de execução consolidada em 23/10/2026:** [handoff mestre da Issue #57](../handoffs/ISSUE57_PR64_HANDOFF_MESTRE_20261023.md). A correção do POST 403 já está publicada na 0.5.39; a dificuldade remanescente é migrar o **Python físico antigo** com guardian e dados preservados. As várias provas read-only da PR #64 são preparatórias, não devem se transformar em um segundo produto. Foco no caminho único **T1 guardian e relançadores reais → T2 coordenador autenticado/drain → T3 backup completo → T4 swap/rollback Windows → T5 piloto G1–G6**. Até lá `update_authorized=false`, PR draft e sem instalação na fábrica.
+
 ## Problema físico comprovado
 - A interface no GitHub Pages acessa loopback `127.0.0.1:8765` da máquina atual, não o notebook de outro operador.
 - A Central local é origem HTTP e a oficial é origem HTTPS; sessionStorage, IndexedDB e permissões do navegador não são compartilhadas automaticamente entre origens.
