@@ -32,6 +32,7 @@ OFFICIAL = {
 MAX_UNCOMPRESSED = 300 * 1024 * 1024
 MAX_ENTRIES = 10000
 MAX_RUNTIME_BACKUP_BYTES = 8 * 1024 * 1024 * 1024
+BACKUP_FREE_RESERVE = 16 * 1024 * 1024
 SQLITE_TRANSIENT = {"ames_local.sqlite3-wal", "ames_local.sqlite3-shm",
                     "ames_local.sqlite3-journal"}
 ROOT_FILES = {
@@ -276,6 +277,43 @@ def copy_private_identity(source, target):
     return True
 
 
+def require_backup_capacity(destination, payload_bytes):
+    """Conservative preflight, not a disk-space reservation or updater lease.
+
+    Include two copies plus manifest/headroom for backup + restore on the same
+    volume. Restore separately checks its actual temporary volume as well.
+    A race consuming space later must still fail the write/verification.
+    """
+    if type(payload_bytes) is not int or payload_bytes < 0:
+        raise ValueError("backup_capacity_estimate_invalid")
+    try:
+        location = Path(destination)
+        while not location.exists():
+            if location.parent == location:
+                raise ValueError()
+            location = location.parent
+        if not location.is_dir():
+            location = location.parent
+        free = shutil.disk_usage(location).free
+        if type(free) is not int or free < 0:
+            raise ValueError()
+    except (OSError, ValueError, AttributeError):
+        raise ValueError("backup_capacity_unverified") from None
+    if free < 2 * payload_bytes + BACKUP_FREE_RESERVE:
+        raise ValueError("backup_capacity_insufficient")
+
+
+def _core_backup_size(agent):
+    paths = [agent / "config.json", agent / "data/local_agent_token",
+             agent / "data/ames_local.sqlite3"]
+    wal = agent / "data/ames_local.sqlite3-wal"
+    if wal.exists():
+        paths.append(wal)
+    if any(not _regular_file(path) for path in paths):
+        raise ValueError("backup_capacity_source_untrusted")
+    return sum(path.stat().st_size for path in paths)
+
+
 def backup_core_identity(clean_root, private_destination):
     """Test primitive for SQLite/config/token. DOES NOT cover all data-dir files.
 
@@ -291,6 +329,7 @@ def backup_core_identity(clean_root, private_destination):
     for rel in ("config.json", "data/local_agent_token", "data/ames_local.sqlite3"):
         if not (agent / rel).is_file():
             raise ValueError("missing_critical_identity_file")
+    require_backup_capacity(destination, _core_backup_size(agent))
     # Without a verified external lease, an identity can change in the middle
     # of the copy. Detect observable source changes even though this alone is
     # NOT sufficient to attest a production maintenance window.
@@ -378,6 +417,8 @@ def backup_operational_tree(clean_root, destination,
         raise ValueError("invalid_runtime_backup_limit")
     agent_data = clean_root / "ames-agent" / "data"
     initial = _runtime_inventory(agent_data, max_bytes)
+    require_backup_capacity(destination, sum(item["size"] for item in initial)
+                            + _core_backup_size(clean_root / "ames-agent"))
     # Core function creates private permissions before writing identities.
     backup_core_identity(clean_root, destination)
     output = destination / "ames-agent" / "data"
@@ -470,6 +511,10 @@ def rehearse_operational_restore(private_backup, *, interrupt_after=None):
     verify_operational_backup(private_backup)
     manifest = json.loads((private_backup / "runtime-backup-manifest.json").read_text(encoding="utf-8"))
     source_data = private_backup / "ames-agent" / "data"
+    restore_size = sum(item["size"] for item in manifest["files"]) + sum(
+        (private_backup / name).stat().st_size
+        for name in ("config.json", "local_agent_token", "ames_local.sqlite3"))
+    require_backup_capacity(Path(tempfile.gettempdir()), restore_size)
 
     def copy_checked(source, target, expected_digest=None):
         if not _regular_file(source) or target.exists():

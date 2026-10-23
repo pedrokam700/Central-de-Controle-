@@ -8,6 +8,8 @@ import sqlite3
 import os
 import tempfile
 import zipfile
+from types import SimpleNamespace
+from unittest.mock import patch
 
 module_path = Path(__file__).resolve().parents[1] / 'tools/ames-workstation/issue57_update_preflight.py'
 spec = spec_from_file_location('issue57_update_preflight', module_path)
@@ -182,6 +184,40 @@ with tempfile.TemporaryDirectory() as tmp:
     except ValueError:
         pass
     assert p.verify_operational_backup(runtime)['verified']
+    # A size limit is not proof of free space. Refuse before creating a new
+    # backup or restore tree, including when the OS measurement is unknown.
+    for index, available in enumerate((0, None, -1, True)):
+        refused = root / ('capacity-refused-' + str(index))
+        expected_reason = 'backup_capacity_insufficient' if available == 0 and type(available) is int else 'backup_capacity_unverified'
+        with patch.object(p.shutil, 'disk_usage', return_value=SimpleNamespace(free=available)):
+            for backup in (p.backup_operational_tree, p.backup_core_identity):
+                try:
+                    backup(root / 'live', refused)
+                    raise AssertionError('insufficient/unknown capacity must block backup')
+                except ValueError as exc:
+                    assert str(exc) == expected_reason
+            try:
+                p.rehearse_operational_restore(runtime)
+                raise AssertionError('restore volume capacity must be checked too')
+            except ValueError as exc:
+                assert str(exc) == expected_reason
+        assert not refused.exists()
+        assert p.verify_operational_backup(runtime)['verified']
+    with patch.object(p.shutil, 'disk_usage', side_effect=OSError('private native fixture error')):
+        try:
+            p.backup_operational_tree(root / 'live', root / 'capacity-error')
+            raise AssertionError('unmeasured capacity must block backup')
+        except ValueError as exc:
+            assert str(exc) == 'backup_capacity_unverified'
+    assert not (root / 'capacity-error').exists()
+    # Exact margin boundary, no real disk filling in a CI runner.
+    with patch.object(p.shutil, 'disk_usage', return_value=SimpleNamespace(free=p.BACKUP_FREE_RESERVE + 2)):
+        p.require_backup_capacity(root, 1)
+        try:
+            p.require_backup_capacity(root, 2)
+            raise AssertionError('capacity reserve must not be consumed')
+        except ValueError as exc:
+            assert str(exc) == 'backup_capacity_insufficient'
     manifest_file = runtime / 'runtime-backup-manifest.json'
     manifest_bytes = manifest_file.read_bytes()
     assert b'test-only-local-token' not in manifest_bytes

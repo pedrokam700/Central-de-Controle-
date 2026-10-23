@@ -371,6 +371,15 @@ class BoundBackupTests(unittest.TestCase):
         journal.write_text(json.dumps(document), encoding="utf-8")
         self.assertEqual(ledger.inspect_fixture(self.root)["state"], "blocked_partial_or_corrupt_transaction")
 
+    def test_low_disk_capacity_keeps_journal_and_drain_without_partial_backup(self):
+        with patch("issue57_update_preflight.shutil.disk_usage", return_value=SimpleNamespace(free=0)):
+            with self.assertRaisesRegex(ValueError, "backup_capacity_insufficient"):
+                self.coordinator.prepare_backup()
+        self.assertFalse((self.root / "private-backup").exists())
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertTrue(self.admission.snapshot()["draining"])
+        self.assertEqual((self.data / "local_agent_token").read_bytes(), b"private-fixture-token")
+
     def test_staging_apply_and_real_candidate_ready_share_one_transaction(self):
         self.coordinator.prepare_backup()
         archive, release = prepare_candidate_files(self.coordinator)
