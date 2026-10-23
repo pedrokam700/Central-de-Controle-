@@ -7,6 +7,14 @@
 - Contratos preservados: Rastreabilidade ancorada na ocorrência **3028** da revisão/linha/período exatos; Consulta SN independente, ancorada na 2114 ou diretamente em Material SN; Y/N não destrói histórico, 3012 pode ser candidata, causalidade nunca inferida.
 - Issues relacionadas lidas: #39 (contexto temporal único e fechamento), #52 (live/matriz/alertas). Issue #66 e fluxo da conversa são a especificação funcional.
 
+## Regra canônica de publicação e CI · correção de contexto (P10)
+
+- **O GitHub é a única fonte oficial de verdade.** Código e revisão: GitHub; publicação oficial: GitHub Pages somente a partir da última **Release GitHub verificada**, por `.github/workflows/publish-github-pages.yml`. Netlify **não é utilizado como hospedagem oficial** e seus HTTP 401 de preview não representam falha da Central ou bloqueio de homologação da Issue #66.
+- O antigo `post-deploy-smoke` em `.github/workflows/quality-gate.yml` fazia toda PR tentar `deploy-preview-${PR_NUMBER}--productcontrolcenter.netlify.app`, embora o projeto não dependa desse serviço. **P10 remove apenas esse job da branch da PR #67**. Mantém `static-quality`, `sync-emulator` e `console-experience`; preserva integralmente workflow de publicação GitHub Pages, scripts legados e histórico de execuções anteriores.
+- `scripts/ames-issue66-official-ci-gate.test.mjs` testa o contrato de CI e a origem oficial da publicação. P10 não modifica `main`, PR #64, branch do updater, release, Firebase ou instalação de fábrica. Até merge autorizado, a `main` ainda contém o job legado.
+- As referências abaixo a falhas anteriores `Published preview smoke` são **registros históricos factuais de runs antigos**, não itens pendentes nem gate oficial atual. O gate da PR #67 no SHA P10 deve ser verificado separadamente por seus três jobs internos. PASS automatizado **nunca equivale a homologação física**.
+- **Verificação local P10:** `node --test --test-isolation=none scripts/ames-issue66-*.test.mjs scripts/ames-deploy-routing.test.mjs` = **25/25 casos PASS**; parser YAML confirmou exatamente os três jobs internos; `git diff --check` PASS. Evidência de CI GitHub deve ser associada ao SHA remoto publicado, sem antecipar resultado.
+
 ## Checkpoint P0 inicial — salvo na PR #67 draft
 
 - Checkpoint remoto P0: commit `c6b35daf8f1a8e0abc62693a3714c1cf5f563b05` na PR https://github.com/pedrokam700/Central-de-Controle-/pull/67.
@@ -131,14 +139,16 @@ git diff --check
 2. `ames/console-history-trends.mjs`: checkbox **Somente fechamentos FULL comprovados** dentro do gráfico histórico 7/30/93 dias; o padrão existente continua sendo tendência de dados observados/possivelmente parciais. O modo FULL não lê o MES, não publica, não altera snapshot atual, e não faz uma coleta parcial virar completa.
 3. Regressão em `ames-history-trends.test.mjs`: dia com r1 FULL e r2 posterior parcial seleciona **r1 somente no modo FULL**; modo observado mantém r2; sem FULL retorna lacuna/`—`, não ocorrência zero. Testes locais `ames-history-trends`, `ames-issue66-full-closure`, `ames-cache`, `ames-issue66-dashboard` **4/4 arquivos PASS**. CI exata registrada acima; homologação física pendente.
 
-## Checkpoint P9 · denominador de produção com recorte temporal exato (em preparação)
+## Checkpoint P9 · denominador de produção com recorte temporal exato (publicado)
+
+- **Publicado na PR draft #67** como `01e176ed4a5d91a6031dd8f2972c07b3922b4d79`. CI `39989202325`: o workflow terminou `failure` por exigência legada de preview Netlify, que foi removida somente no P10. Revalidar cada job se necessário; não atribuir sucesso do SHA P10 a esta execução.
 
 1. Corrige risco de `daily-failure-analytics.mjs`: `productionMetrics` poderia ler Quantity/Check FPY do snapshot atual ao filtrar um dia MES diferente. O agregado só é exibido como comprovado se o snapshot da mesma linha corresponder **exatamente** ao dia selecionado 07:00→07:00, possuir `coverage.defects.source_complete` e `transport_complete`, e suas ocorrências carregadas tiverem prova de 3022 para o mesmo dia operacional. Não compara produtos/linhas/turnos/horas misturados. Caso contrário, Quantity/Check FPY e projeção teórica retornam `—`/null, nunca zero ou ganho.
 2. `scripts/ames-daily-failure-analytics.test.mjs`: cenário válido 100 produzidos/96,5% Check FPY, período divergente, origem parcial, filtro sem dia e data inválida. Testes direcionados `ames-daily-failure-analytics`, `ames-issue66-dashboard`, `ames-history-trends`, `ames-cache` **4/4 arquivos PASS**; CI por SHA e teste físico pendentes.
 
 ## Continuidade imediata
 
-1. Publicar P9 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o preview Netlify externo HTTP 401. Não fazer merge nem publicar.
+1. Publicar P10 na branch da PR #67 draft e revalidar **os três jobs internos por SHA exato**; não executar ou exigir Netlify como gate da Central. Não fazer merge nem publicar.
 2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
 3. P1 física: confirmar na fábrica respostas 3074 PCBA/Material SN, Bind/Unbind reais, alarme GN06-X015 e 3022 dos respectivos ciclos. Resolver possíveis lacunas de parser/driver somente com evidência sanitizada.
 4. P2 pendente: persistência autoritativa de fechamento FULL real, leitura da linha do tempo de fechamentos e gráficos dia-a-dia com denominações/Check FPY comprovadas. A classificação/UI fail-closed do leitor já está em andamento; não inferir fonte completa de dados parciais.
