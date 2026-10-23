@@ -31,6 +31,15 @@ function Get-Issue57Hash([string]$value){
   finally{$sha.Dispose()}
 }
 
+function Get-Issue57ScriptDigest([string]$path){
+  # Use .NET directly in both Windows PowerShell 5.1 and PowerShell 7. The
+  # subprocess must not depend on a parent shell's Get-FileHash module state.
+  $stream=[IO.File]::OpenRead($path)
+  $sha=[Security.Cryptography.SHA256]::Create()
+  try{return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToLowerInvariant()}
+  finally{$sha.Dispose();$stream.Dispose()}
+}
+
 $witnessStage='witness_configuration_failed'
 try{
   # Port 8765 is the only operational target. Random fixture ports are
@@ -102,11 +111,14 @@ public static class Issue57ArgvReadOnly {
 
   # The marker binds OS process creation, PID and executed image, but it is
   # not an authorization token and not an attestation of guardian cooperation.
-  $witnessStage='witness_identity_hash_failed'
+  $witnessStage='witness_creation_time_failed'
   $creation=([DateTime]$proc.CreationDate).ToUniversalTime().Ticks
   $result.endpoint_owner_pid=$TargetPid
-  $result.script_sha256=(Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
-  $result.script_path_sha256=Get-Issue57Hash $scriptPath.ToLowerInvariant()
+  $witnessStage='witness_script_digest_failed'
+  $result.script_sha256=Get-Issue57ScriptDigest $scriptPath
+  $witnessStage='witness_script_path_digest_failed'
+  $result.script_path_sha256=Get-Issue57Hash ($scriptPath.ToLowerInvariant())
+  $witnessStage='witness_process_marker_failed'
   $result.start_marker=Get-Issue57Hash ("{0}|{1}|{2}" -f $TargetPid,$creation,([string]$proc.ExecutablePath).ToLowerInvariant())
   $result.process_identity_observed=$true
   $result.reason='process_only_guardian_and_writers_unattested'

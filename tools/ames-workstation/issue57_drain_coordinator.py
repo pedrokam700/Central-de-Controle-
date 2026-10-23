@@ -58,6 +58,8 @@ class WindowsProcessWitness:
             safe_reasons = {"witness_configuration_failed", "witness_script_inspection_failed",
                             "witness_process_lookup_failed", "witness_listener_lookup_failed",
                             "witness_command_line_parse_failed", "witness_identity_hash_failed",
+                            "witness_creation_time_failed", "witness_script_digest_failed",
+                            "witness_script_path_digest_failed", "witness_process_marker_failed",
                             "fixture_environment_required", "production_port_mismatch", "script_file_untrusted",
                             "process_unverified", "listener_absent", "port_owner_or_bind_mismatch",
                             "command_line_unparseable", "script_argument_mismatch"}

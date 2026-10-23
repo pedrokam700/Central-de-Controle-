@@ -52,7 +52,7 @@ test('guardian inventory checks external relaunch sources without claiming an id
 test('independent Windows process witness checks TCP owner and birth but never grants update',()=>{
   const witness=readFileSync('tools/ames-workstation/ISSUE57_PROCESS_WITNESS_READONLY.ps1','utf8');
   const fixture=readFileSync('scripts/issue57-process-witness.windows.test.ps1','utf8');
-  for(const proof of [/Get-CimInstance Win32_Process/,/Get-NetTCPConnection/,/CommandLineToArgvW/,/CreationDate/,/Get-FileHash/,/scriptArgument=\$text/,/script_argument_mismatch/,/endpoint_owner_pid/,/process_identity_observed/,/guardian_attested=\$false/,/update_authorized=\$false/,/reason='independent_windows_witness_failed_closed'/]){
+  for(const proof of [/Get-CimInstance Win32_Process/,/Get-NetTCPConnection/,/CommandLineToArgvW/,/CreationDate/,/File\]::OpenRead/,/ComputeHash\(\$stream\)/,/scriptArgument=\$text/,/script_argument_mismatch/,/endpoint_owner_pid/,/process_identity_observed/,/guardian_attested=\$false/,/update_authorized=\$false/,/reason='independent_windows_witness_failed_closed'/]){
     assert.match(witness,proof);
   }
   for(const forbidden of [/\bStop-Process\b/,/\bStart-Process\b/,/\bRemove-Item\b/,/\bMove-Item\b/,/\bCopy-Item\b/,/\bSet-Content\b/,/\bInvoke-RestMethod\b/,/\bInvoke-WebRequest\b/]){
