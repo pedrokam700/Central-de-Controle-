@@ -13,6 +13,7 @@ test('Pull request quality gate runs all three internal suites without obsolete 
   assert.match(qualityGate,/\n  console-experience:\n/);
   assert.doesNotMatch(qualityGate,/post-deploy-smoke|Published preview smoke|deploy-preview-|netlify\.app/i);
   assert.match(qualityGate,/node --test --test-isolation=none .*ames-\*\.test\.mjs/);
+  assert.match(qualityGate,/run: python3 scripts\/agent-individual-assembly\.test\.py/);
 });
 
 test('Official publication remains exclusively GitHub Pages from verified GitHub Release SHA',()=>{

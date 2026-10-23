@@ -323,17 +323,43 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
     try:
         nav = session_object(navigation_mod.AmesNavigation(browser._target))
         if line_callback: line_callback("3074", 12, "Abrindo AWIP3074")
-        nav.ensure_3074()
-        tela3074 = session_object(tela3074_mod.Tela3074(browser._target, engine_dir))
-        r3074 = tela3074.consultar(query)
-        rows3074 = r3074.get("rows") or []
+        tela3074 = None
+        r3074 = None
+        source3074_error = None
+        source3074_stage = "navigation"
+        try:
+            nav.ensure_3074()
+            source3074_stage = "query"
+            tela3074 = session_object(tela3074_mod.Tela3074(browser._target, engine_dir))
+            r3074 = tela3074.consultar(query)
+            if not isinstance(r3074, dict) or not isinstance(r3074.get("rows"), list):
+                raise RuntimeError("3074_GRID_NOT_CONFIRMED")
+            if not r3074["rows"] and r3074.get("no_data") is not True:
+                raise RuntimeError("3074_ZERO_NOT_CONFIRMED")
+            if r3074["rows"] and r3074.get("no_data") is True:
+                raise RuntimeError("3074_GRID_CONTRADICTORY")
+        except Exception as exc:
+            # A failed AWIP3074 must not abort the independent 2114/3022
+            # investigation or invent a zero-material result.
+            detail = str(exc).lower()
+            if "timeout" in detail or "timed out" in detail or "dentro de" in detail:
+                source3074_error = "3074_TIMEOUT"
+            elif "grid" in detail or "grade" in detail or "store" in detail or "not_confirmed" in detail:
+                source3074_error = "3074_GRID_NOT_CONFIRMED"
+            elif source3074_stage == "navigation":
+                source3074_error = "3074_NAVIGATION_FAILED"
+            else:
+                source3074_error = "3074_QUERY_FAILED"
+            warnings.append(f"3074 indisponível ({source3074_stage}, {source3074_error}); 2114/3022 continuam independentes.")
+            r3074 = None
+        rows3074 = (r3074 or {}).get("rows") or []
 
         # A 3074 pode ser consultada tanto por PCBA quanto por Material SN.
         # The raw grid is an audit trail across multiple mounting cycles, not
         # the bill of materials of any one defect occurrence.
         raw_components = tela3074_mod.componentes_serializados(rows3074, pcba_consultada=query)
         components = []
-        material_scope = {"status": "no_defect_anchor", "basis": None,
+        material_scope = {"status": "not_collected" if source3074_error else "no_defect_anchor", "basis": None,
                           "scanned_components": 0,
                           "historical_components_ignored": len(raw_components)}
         historical_pcbas = tela3074_mod.pcbas_historicas(rows3074)
@@ -373,12 +399,12 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         detected_type = "PCBA" if query_hist else ("MATERIAL_SN" if historical_pcbas else "SN_INDETERMINADO")
         material_cycles = []
         related_pcbas_total = len(historical_pcbas)
-        if detected_type == "PCBA":
+        if detected_type == "PCBA" and r3074 is not None:
             # Old PCBA-type rows on this PCBA's own 3074 page may belong to
             # unrelated mounting cycles. Only prior PCBAs found by querying
             # the selected materials can extend the investigation.
             historical_pcbas = []
-        elif detected_type == "MATERIAL_SN":
+        elif detected_type == "MATERIAL_SN" and r3074 is not None:
             material_cycles = temporal3074.ciclos_fisicos_do_material(rows3074)
             # Bounded, most recent related boards first. No implicit traversal
             # of every PCBA ever present in the material's history.
@@ -421,7 +447,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         # same 3028 occurrence requested by an operator. Deep-trace has the
         # exact 3028 timestamp and remains authoritative for failure KPIs.
         anchor_time = (current_failure_2114 or {}).get("Defect Time")
-        if detected_type == "PCBA":
+        if detected_type == "PCBA" and r3074 is not None:
             selection = temporal3074.montagem_principal_da_consulta(rows3074, query, anchor_time)
             components = [
                 {"item_sn": c["item_sn"], "item_type": c["item_type"],
@@ -452,7 +478,9 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         else:
             candidate_components = []
             is_new_cycle = False
-            warnings.append("3074: consulta Material SN requer histórico de vínculos independente da 2114 da própria SN.")
+            current_without_2114_anchor = False
+            if detected_type == "MATERIAL_SN" and r3074 is not None:
+                warnings.append("3074: consulta Material SN requer histórico de vínculos independente da 2114 da própria SN.")
         for idx, comp in enumerate(components, start=1):
             item_sn = str(comp.get("item_sn") or "").strip()
             if not item_sn:
@@ -648,12 +676,12 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             "product_model": model,
             "shift_2114": shift,
             "summary": {
-                "3074_rows": len(rows3074),
-                "serialized_components": len(components),
-                "raw_historical_component_candidates": len(raw_components),
+                "3074_rows": len(rows3074) if r3074 is not None else None,
+                "serialized_components": len(components) if r3074 is not None else None,
+                "raw_historical_component_candidates": len(raw_components) if r3074 is not None else None,
                 "related_pcbas": len(historical_pcbas),
                 "related_pcbas_total": related_pcbas_total,
-                "reused_components": len(reused_components),
+                "reused_components": len(reused_components) if r3074 is not None else None,
                 "pcba_previous_failures": len(previous_failures_2114),
                 "2114_histories": len(all_hist_rows),
                 "repair_n": repair_n,
@@ -667,9 +695,11 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 # Query success is independent of whether temporal forensics
                 # could classify a reused material. Without this, a successful
                 # grid with zero proven reuse was displayed as "not collected".
-                "status": "complete",
-                "query_row_count": len(rows3074),
-                "query_no_data_confirmed": r3074.get("no_data") is True,
+                "status": "error" if source3074_error else "complete",
+                "error": source3074_error,
+                "query_stage": source3074_stage if source3074_error else None,
+                "query_row_count": len(rows3074) if r3074 is not None else None,
+                "query_no_data_confirmed": r3074.get("no_data") is True if r3074 else False,
                 "query": r3074,
                 "components": components,
                 "candidate_components": candidate_components,

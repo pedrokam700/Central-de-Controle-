@@ -42,6 +42,22 @@ test('missing traces are explicitly not collected; only declared workstation and
   assert.equal(rows2.find(row=>row.view==='2114').period_start,null);
 });
 
+test('failed 3074 live query does not erase 2114 evidence or report zero materials',()=>{
+  const result=lookup();
+  result.trace_3074={status:'error',error:'3074_TIMEOUT',query:null,query_row_count:null,
+    query_no_data_confirmed:false,material_selection:{status:'not_collected'},components:[],reused_components:[]};
+  const model=buildLiveSnForensics(result);
+  assert.equal(model.source_states['3074'],'error');
+  assert.equal(model.source_states['2114'],'ok');
+  assert.equal(model.source_states['3022'],'partial');
+  assert.equal(model.current.defect_code,'F1');
+  assert.deepEqual(model.materials,[]);
+  assert.equal(model.coverage['3074'],false);
+  assert.equal(model.coverage['2114'],true);
+  const provenance=snLiveSourceProvenance(result,model);
+  assert.equal(provenance.find(r=>r.view==='3074').state,'error');
+});
+
 test('bilingual live SN details escape MES values and remain collapsed until requested',()=>{
   const result=lookup();result.trace_2114.source_id='<img src=x onerror=alert(1)>';
   const model=buildLiveSnForensics(result);

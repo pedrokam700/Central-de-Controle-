@@ -41,6 +41,9 @@ jobs:
       - name: Run read-only workstation preflight tests
         run: python3 scripts/agent-preflight.test.py
 
+      - name: Run individual SN source isolation tests
+        run: python3 scripts/agent-individual-assembly.test.py
+
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
 
