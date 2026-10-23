@@ -8,7 +8,7 @@ function deferred(){
   const promise=new Promise(done=>{resolve=done;});
   return {promise,resolve};
 }
-function fixture(queue,remote={watch:()=>()=>{}}){
+function fixture(queue,remote={watch:()=>()=>{}},options={}){
   let status={sync:{}};
   const store={
     agent:()=>status,
@@ -16,7 +16,7 @@ function fixture(queue,remote={watch:()=>()=>{}}){
     localCanonical:()=>[],
     replaceSyncedSnapshots:()=>{},
   };
-  return createMesSync(store,remote,{queue,online:()=>true,schedule:()=>0,unschedule:()=>{}});
+  return createMesSync(store,remote,{queue,online:()=>true,schedule:()=>0,unschedule:()=>{},...options});
 }
 
 test('read-only outbox audit counts pending evidence across all users, without publishing',async()=>{
@@ -138,5 +138,59 @@ test('cooperative fence refuses a busy writer immediately and never runs an obse
   assert.equal(observations,0);
   assert.equal(result.reason,'cooperative_outbox_writer_busy');
   assert.equal(result.cooperative_fence_observed,false);
+  assert.equal(result.update_authorized,false);
+});
+
+test('dual browser fence is fail closed without both cooperating locks',async()=>{
+  const missing=await fixture({countAll:async()=>0},undefined,{publicationLocks:null}).withCooperativeBrowserFence();
+  assert.equal(missing.reason,'browser_cooperative_locks_unavailable');
+  assert.equal(missing.update_authorized,false);
+  let outboxCalled=false;
+  const busy=await fixture({withCooperativeMaintenanceFence:async()=>{outboxCalled=true;}},undefined,{publicationLocks:{request:async(_name,options,callback)=>{
+    assert.deepEqual(options,{mode:'exclusive',ifAvailable:true});
+    return callback(null);
+  }}}).withCooperativeBrowserFence();
+  assert.equal(outboxCalled,false,'refuse remote busy before trying outbox, avoiding reversed lock order');
+  assert.equal(busy.reason,'cooperative_remote_publication_busy');
+  assert.equal(busy.update_authorized,false);
+});
+
+test('dual fence acquires remote before outbox and never attests old tabs/profiles',async()=>{
+  const order=[];
+  const queue={withCooperativeMaintenanceFence:async observer=>{
+    order.push('outbox');
+    await observer({cooperative_fence_held:true,pending_entries:0,update_authorized:false});
+    return {cooperative_fence_observed:true,pending_entries:0};
+  }};
+  const locks={request:async(name,options,callback)=>{
+    order.push('remote');
+    assert.equal(name,'central-ames-firestore-v1-cooperative-publisher-v1');
+    assert.deepEqual(options,{mode:'exclusive',ifAvailable:true});
+    return callback({name});
+  }};
+  let attested;
+  const result=await fixture(queue,undefined,{publicationLocks:locks}).withCooperativeBrowserFence(async evidence=>{attested=evidence;order.push('observe');});
+  assert.deepEqual(order,['remote','outbox','observe']);
+  assert.equal(attested.remote_publication_fence_held,true);
+  assert.equal(attested.cooperative_fence_held,true);
+  assert.equal(attested.update_authorized,false);
+  assert.equal(result.cooperative_fence_observed,true);
+  assert.equal(result.cooperative_fence_released,true);
+  assert.equal(result.multi_tab_attested,false);
+  assert.equal(result.other_browser_profiles_attested,false);
+  assert.equal(result.update_authorized,false);
+});
+
+test('pending browser outbox denies dual observer while keeping update forbidden',async()=>{
+  const queue={withCooperativeMaintenanceFence:async observer=>{
+    await observer({cooperative_fence_held:true,pending_entries:2});
+    return {cooperative_fence_observed:true,pending_entries:2};
+  }};
+  const locks={request:async(_name,_options,callback)=>callback({})};
+  let called=false;
+  const result=await fixture(queue,undefined,{publicationLocks:locks}).withCooperativeBrowserFence(async()=>{called=true;});
+  assert.equal(called,false);
+  assert.equal(result.cooperative_fence_observed,false);
+  assert.equal(result.reason,'pending_outbox_evidence');
   assert.equal(result.update_authorized,false);
 });

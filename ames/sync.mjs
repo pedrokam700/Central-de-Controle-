@@ -33,6 +33,7 @@ export async function publication(uid,payload,{now=new Date(),productionConfig}=
 // browser origin/profile. Previously opened tabs, other profiles and machines
 // may still write without this lock; it is never update authorization.
 const OUTBOX_WRITER_LOCK='central-ames-outbox-v2-cooperative-writer-v1';
+const REMOTE_PUBLISH_LOCK='central-ames-firestore-v1-cooperative-publisher-v1';
 export function indexedQueue({lockManager=globalThis.navigator?.locks}={}){
   let db,markersDb;
   // Preserve the already proven IndexedDB outbox schema/version EXACTLY.
@@ -81,7 +82,7 @@ export function indexedQueue({lockManager=globalThis.navigator?.locks}={}){
   };
 }
 
-export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
+export function createMesSync(store,remote,{queue=indexedQueue(),publicationLocks=globalThis.navigator?.locks,online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),watchDay='';
   // Do not erase the counters on logout: an already-started remote promise may
   // still be unsettled after its session has been invalidated.
@@ -98,6 +99,11 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       if(!alive(u,g))return;
       status({pending:entries.length,status:entries.length?'pending':(store.agent().sync?.last_sent?'synchronized':'idle')});
       if(!online())return;
+      // Keep the shared publication lease until Firestore writes AND the
+      // matching IndexedDB acknowledgement have completed. An exclusive
+      // maintenance observer must acquire this lease BEFORE the outbox lease
+      // to avoid deadlock with queue.remove/markHistory below.
+      const transfer=async()=>{
       while(entries.length&&alive(u,g)){
         entries.sort((a,b)=>b.head.snapshot_num-a.head.snapshot_num||b.head.snapshot_revision-a.head.snapshot_revision);
         const errors=[];
@@ -156,6 +162,9 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       }
       retry=1000;
       if(alive(u,g))status({status:identityBlocked.size?'shared_history_legacy_conflict':store.agent().sync?.last_sent?'synchronized':'idle',pending:0,error:'',identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values()]});
+      };
+      if(typeof publicationLocks?.request==='function')await publicationLocks.request(REMOTE_PUBLISH_LOCK,{mode:'shared'},transfer);
+      else await transfer();
     }catch(error){if(alive(u,g)){status({status:'pending',error:error.message});unschedule(timer);timer=schedule(()=>{if(alive(u,g))flush();},retry);retry=Math.min(retry*2,60000);}}
     finally{uploadsInFlight--;if(alive(u,g))running=false;}
   }
@@ -274,6 +283,31 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     try{await work;}finally{capturesInFlight--;if(capturing===work)capturing=null;}
   }
   return {
+    async withCooperativeBrowserFence(observer=async()=>{}){
+      // This is an optional, unconnected candidate primitive. Neither this
+      // callback nor its return value may authorize Windows maintenance.
+      const fail=reason=>({schema:'ames-browser-dual-cooperative-fence-v1',cooperative_fence_observed:false,reason,pending_entries:null,multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false});
+      if(typeof observer!=='function')throw TypeError('maintenance_observer_must_be_function');
+      if(typeof publicationLocks?.request!=='function'||typeof queue.withCooperativeMaintenanceFence!=='function')return fail('browser_cooperative_locks_unavailable');
+      const initial={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+      if(initial.uploadsInFlight||initial.capturesInFlight||initial.readsInFlight)return fail('local_browser_activity_in_flight');
+      try{
+        return await publicationLocks.request(REMOTE_PUBLISH_LOCK,{mode:'exclusive',ifAvailable:true},async lock=>{
+          if(!lock)return fail('cooperative_remote_publication_busy');
+          let blocked=false;
+          const outbox=await queue.withCooperativeMaintenanceFence(async evidence=>{
+            const current={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+            if(evidence.pending_entries!==0||Object.keys(initial).some(key=>initial[key]!==current[key])){blocked=true;return;}
+            await observer(Object.freeze({...evidence,remote_publication_fence_held:true,update_authorized:false,multi_tab_attested:false,other_browser_profiles_attested:false}));
+            const after={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+            if(Object.keys(initial).some(key=>initial[key]!==after[key]))blocked=true;
+          });
+          if(!outbox.cooperative_fence_observed)return fail(outbox.reason||'cooperative_outbox_fence_failed');
+          if(blocked)return fail(outbox.pending_entries?'pending_outbox_evidence':'local_browser_activity_changed');
+          return {schema:'ames-browser-dual-cooperative-fence-v1',cooperative_fence_observed:true,cooperative_fence_released:true,pending_entries:0,reason:'legacy_tabs_other_profiles_and_other_machines_unattested',multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false};
+        });
+      }catch{return fail('cooperative_browser_fence_failed');}
+    },
     async inspectUpdateReadiness(){
       // This is only an observation of ONE browser origin/profile. Other
       // profiles, old tabs and a concurrently changing queue cannot be fenced

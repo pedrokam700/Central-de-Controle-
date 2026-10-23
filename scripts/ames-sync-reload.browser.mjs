@@ -15,11 +15,11 @@ for(const rows of Object.values(fixture.datasets))for(const row of rows)row.snap
 const harness=`
 import {createAmesStore} from '/ames/data/store.mjs';
 import {createMesIntegration} from '/ames/integration-session.mjs';
-import {indexedQueue} from '/ames/sync.mjs';
+import {indexedQueue,publication} from '/ames/sync.mjs';
 const store=createAmesStore(),queue=indexedQueue(),writes=[];let online=false;
-const remote={watch:()=>()=>{},putPart:async()=>{},commitHead:async(u,h)=>writes.push(h),commitHistory:async()=>{}};
+const remote={watch:()=>()=>{},putPart:async()=>{if(window.qa?.holdPart){window.remoteFlight.entered=true;await window.qa.holdPart;}},commitHead:async(u,h)=>writes.push(h),commitHistory:async()=>{}};
 const integration=createMesIntegration(store,remote,{syncOptions:{online:()=>online,now:()=>new Date('${fixtureDay}T12:00:00Z')},schedule:()=>0,unschedule:()=>{}});
-window.qa={store,queue,writes,integration,seed:async()=>{store.replaceLocalSnapshots([${JSON.stringify(fixture)}]);await integration.sync.capture();},online:()=>{online=true;return integration.sync.retry();}};
+window.qa={store,queue,writes,integration,publication,sample:${JSON.stringify(fixture)},seed:async()=>{store.replaceLocalSnapshots([${JSON.stringify(fixture)}]);await integration.sync.capture();},online:()=>{online=true;return integration.sync.retry();}};
 integration.start('A');
 `;
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -94,10 +94,38 @@ try{
   assert.equal(await page.evaluate(()=>qa.queue.countAll()),1,'peer write resumes after lock is released');
   await peer.evaluate(()=>qa.queue.remove('fixture:held-write'));
   assert.equal(await page.evaluate(()=>qa.queue.countAll()),0,'fixture evidence removed without disturbing original outbox');
+  // A different cooperative tab can be in the middle of remote Firestore
+  // publication even when its pending queue looks locally idle elsewhere.
+  // The dual observer must acquire REMOTE exclusive BEFORE OUTBOX exclusive;
+  // otherwise it could deadlock a publishing tab in queue.remove().
+  await peer.evaluate(async()=>{
+    const flight=window.remoteFlight={};
+    flight.wait=new Promise(resolve=>{flight.release=resolve;});
+    qa.holdPart=flight.wait;
+    const entry=await qa.publication('A',qa.sample,{now:new Date('${fixtureDay}T12:00:00Z'),productionConfig:{timezone:'America/Sao_Paulo',dayStart:'07:00'}});
+    await qa.queue.put(entry);
+    flight.publish=qa.online();
+  });
+  await peer.waitForFunction(()=>window.remoteFlight?.entered);
+  const uploadBusy=await page.evaluate(()=>qa.integration.sync.withCooperativeBrowserFence());
+  assert.equal(uploadBusy.cooperative_fence_observed,false,'remote upload in another tab must deny dual maintenance probe');
+  assert.equal(uploadBusy.reason,'cooperative_remote_publication_busy');
+  assert.equal(uploadBusy.update_authorized,false);
+  await peer.evaluate(()=>remoteFlight.release());
+  await peer.evaluate(()=>remoteFlight.publish);
+  await page.waitForFunction(async()=>await qa.queue.countAll()===0);
+  const dual=await page.evaluate(()=>qa.integration.sync.withCooperativeBrowserFence(async evidence=>{
+    if(!evidence.remote_publication_fence_held||!evidence.cooperative_fence_held||evidence.pending_entries!==0)throw Error('dual_fence_unproven');
+  }));
+  assert.equal(dual.cooperative_fence_observed,true);
+  assert.equal(dual.cooperative_fence_released,true);
+  assert.equal(dual.pending_entries,0);
+  assert.equal(dual.multi_tab_attested,false);
+  assert.equal(dual.update_authorized,false);
   await peer.close();
   await page.reload();await page.waitForFunction(()=>window.qa?.store.agent().sync.pending===0);
   assert.deepEqual(errors,[]);
   const out=process.env.BROWSER_OUTPUT||'../browser-evidence';fs.mkdirSync(out,{recursive:true});
-  fs.writeFileSync(path.join(out,'sync-reload.json'),JSON.stringify({result:'PASS',browser:'chromium',checks:['real IndexedDB offline enqueue','reload restores pending count','UID isolation','cross-UID read-only pending audit','reconnect drains once','empty audit never authorizes updater','cooperative cross-tab Web Locks fence blocks new writers','second probe refused','release resumes peer writer','second reload empty'],production:false},null,2));
-  console.log('PASS: real IndexedDB offline/reload/account isolation/reconnect/cooperative multi-tab fence/second reload; no Console mounted');
+  fs.writeFileSync(path.join(out,'sync-reload.json'),JSON.stringify({result:'PASS',browser:'chromium',checks:['real IndexedDB offline enqueue','reload restores pending count','UID isolation','cross-UID read-only pending audit','reconnect drains once','empty audit never authorizes updater','cooperative cross-tab Web Locks fence blocks new writers','second probe refused','release resumes peer writer','inflight remote upload refuses dual fence','remote acknowledgement completes without deadlock','dual fence observes empty queue without authorizing update','second reload empty'],production:false},null,2));
+  console.log('PASS: IndexedDB/reload/UID isolation/cooperative cross-tab writer and publication fences; no Console mounted');
 }finally{await browser?.close();await new Promise(r=>server.close(r));}
