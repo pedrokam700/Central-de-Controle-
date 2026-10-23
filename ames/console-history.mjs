@@ -5,12 +5,21 @@ import { formatFactoryDateTime as displayTime, displayValue } from './data/time-
 import { escapeHtml as esc } from './evidence-view.mjs';
 import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
 import {fullDayClosureEvidence} from './data/full-day-closure.mjs';
+import {historySharingState} from './history-source.mjs';
 
 const labels={fresh:'Atualizado',partial:'Parcial',stale:'Desatualizado',not_collected:'Não coletado'};
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 const pad=n=>String(n).padStart(2,'0');
 const inputDate=date=>`${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 const revisionLabel=entry=>`${entry.snapshot_id??'—'} · r${Number(entry.snapshot_revision)||0}`;
+const sharingLabel=entry=>{
+  switch(historySharingState(entry)){
+    case 'local_and_shared':return t('Local + índice no Firebase','Local + indexed on Firebase');
+    case 'local_only':return t('Somente local · compartilhamento não comprovado','Local only · sharing unverified');
+    case 'shared':return t('Compartilhado','Shared');
+    default:return t('Compartilhamento não comprovado','Sharing unverified');
+  }
+};
 
 const linkageStatus=value=>{
   const code=String(value??'').trim().toUpperCase();
@@ -103,7 +112,7 @@ export function createHistoryView(root,store,client,history) {
       return;
     }
     host.innerHTML=loading?`<p role="status">${t('Consultando histórico…','Loading history…')}</p>`:error?`<p role="status" class="notice warn">${esc(error)}</p>`:
-      `${entries.some(e=>e.history_source==='local')?`<p class="mes-context" role="status">${t('Há revisões salvas neste computador. Local ≠ publicado no Firebase; o outro posto só recebe as versões marcadas como compartilhadas.','Local revisions exist on this workstation. Local does not mean published to Firebase; other workstations receive only shared revisions.')}</p>`:''}${message?`<p role="status" class="mes-context">${esc(message)}</p>`:''}${matches.length?`<div class="table-wrap"><table><thead><tr><th>${t('Período','Period')}</th><th>CPH</th><th>${t('Versão','Version')}</th><th>${t('Coleta','Collected')}</th><th>${t('Posto/origem','Workstation/source')}</th><th>${t('Compartilhamento','Sharing')}</th><th></th></tr></thead><tbody>${matches.map((e,i)=>`<tr><td>${esc(e.period_start&&e.period_end?e.period_start+' → '+e.period_end:t('Período não informado pela fonte','Period not reported by source'))}</td><td>${esc(e.products||'—')}</td><td><b>${esc(revisionLabel(e))}</b></td><td>${esc(displayTime(e.collected_at))}</td><td>${esc(e.source_id||'—')}</td><td><strong>${e.history_source==='local'?t('Local · não confirmado na equipe','Local · not confirmed with team'):t('Compartilhado','Shared')}</strong></td><td><button type="button" class="button secondary" data-history-open="${i}">${t('Abrir sem substituir atual','Open without replacing current')}</button></td></tr>`).join('')}</tbody></table></div><p class="mes-context">${t('Cada linha é uma versão preservada. Uma atualização do mesmo período cria/publica nova evidência; versões anteriores continuam disponíveis.','Each row is a preserved version. Refreshing the same period creates/publishes new evidence; older versions remain available.')}</p>`:`<p>${t('Período ainda não coletado','Period not collected yet')}</p>`}
+      `${entries.some(e=>e.history_source==='local')?`<p class="mes-context" role="status">${t('Revisões locais podem ter um índice correspondente no Firebase: confira a coluna Compartilhamento. Índice compartilhado não confirma cobertura FULL nem resolve conflito entre origens.','Local revisions may also have a matching Firebase index: check the Sharing column. A shared index does not prove FULL coverage or resolve source conflicts.')}</p>`:''}${message?`<p role="status" class="mes-context">${esc(message)}</p>`:''}${matches.length?`<div class="table-wrap"><table><thead><tr><th>${t('Período','Period')}</th><th>CPH</th><th>${t('Versão','Version')}</th><th>${t('Coleta','Collected')}</th><th>${t('Posto/origem','Workstation/source')}</th><th>${t('Compartilhamento','Sharing')}</th><th></th></tr></thead><tbody>${matches.map((e,i)=>`<tr><td>${esc(e.period_start&&e.period_end?e.period_start+' → '+e.period_end:t('Período não informado pela fonte','Period not reported by source'))}</td><td>${esc(e.products||'—')}</td><td><b>${esc(revisionLabel(e))}</b></td><td>${esc(displayTime(e.collected_at))}</td><td>${esc(e.source_id||'—')}</td><td><strong>${esc(sharingLabel(e))}</strong></td><td><button type="button" class="button secondary" data-history-open="${i}">${t('Abrir sem substituir atual','Open without replacing current')}</button></td></tr>`).join('')}</tbody></table></div><p class="mes-context">${t('Cada linha é uma versão preservada. Uma atualização do mesmo período cria/publica nova evidência; versões anteriores continuam disponíveis.','Each row is a preserved version. Refreshing the same period creates/publishes new evidence; older versions remain available.')}</p>`:`<p>${t('Período ainda não coletado','Period not collected yet')}</p>`}
       ${canCollect?`<button type="button" class="button secondary" data-history-collect>${matches.length?t('Atualizar este período (preservar histórico)','Refresh this period (preserve history)'):t('Coletar este período','Collect this period')}</button>`:''}`;
     host.querySelectorAll('[data-history-open]').forEach(button=>button.addEventListener('click',async()=>{
       const entry=matches[Number(button.dataset.historyOpen)],token=++generation;loading=true;error='';message='';results();

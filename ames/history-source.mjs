@@ -1,5 +1,13 @@
 import {LINE_IDS} from './data/contract.mjs';
 
+// A local preference for opening a revision does not negate its presence in
+// the immutable Firebase history index. Keep transport and sharing separate.
+export function historySharingState(entry){
+  if(entry?.history_source==='shared')return 'shared';
+  if(entry?.history_source==='local')return entry.shared_available===true?'local_and_shared':'local_only';
+  return 'unverified';
+}
+
 // History can exist on this workstation before Firebase publication. Never
 // mistake a local-only revision for a shared team revision or for Today.
 export function createMesHistorySource(sync,client,store){

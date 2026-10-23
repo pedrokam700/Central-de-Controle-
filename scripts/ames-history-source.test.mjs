@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {createMesHistorySource} from '../ames/history-source.mjs';
+import {createMesHistorySource,historySharingState} from '../ames/history-source.mjs';
 const local={
   line_id:'TAN10103',snapshot_id:'2',snapshot_revision:1,source_id:'local-original',
   period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00',
@@ -49,7 +49,14 @@ test('do not claim unconfirmed local version is shared; de-duplicate versions wi
  const rows=await source.list('TAN10103');
  assert.equal(rows.length,1);assert.equal(rows[0].history_source,'local');
  assert.equal(rows[0].shared_available,true);
+ assert.equal(historySharingState(rows[0]),'local_and_shared','a locally preferred opening does not negate a matching remote index');
  assert.equal((await source.open(rows[0])).from,'local');
+});
+test('sharing state never treats an unverified local revision as synchronized',()=>{
+ assert.equal(historySharingState({history_source:'local'}),'local_only');
+ assert.equal(historySharingState({history_source:'local',shared_available:false}),'local_only');
+ assert.equal(historySharingState({history_source:'shared'}),'shared');
+ assert.equal(historySharingState({}),'unverified');
 });
 test('Firebase listener failure must not hide preserved local history',async()=>{
  const source=createMesHistorySource({
