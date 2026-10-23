@@ -85,4 +85,27 @@ $validated=@($inventoryJson | python -c 'import json,sys;sys.path.insert(0,"tool
 if($LASTEXITCODE -ne 0 -or $validated -notcontains 'Issue57 scanner to Python review: read-only and update blocked'){
   throw 'Windows scanner output did not satisfy Python registration-review contract'
 }
+if($env:GITHUB_ACTIONS -eq 'true' -and $env:RUNNER_OS -eq 'Windows'){
+  # Inventory the runner's OWN disposable directory, never a factory install.
+  $installId=[guid]::NewGuid().ToString('N')
+  $installFixture=Join-Path $env:RUNNER_TEMP ('issue57-installation-inventory-'+$installId)
+  $null=New-Item -ItemType Directory -Path $installFixture -ErrorAction Stop
+  try {
+    $syntheticRoot=Join-Path $installFixture ('AMES_Central_CLEAN_'+$installId)
+    $null=New-Item -ItemType Directory -Path $syntheticRoot -ErrorAction Stop
+    $installed=& (Join-Path $PSScriptRoot '..\tools\ames-workstation\INVENTARIAR_INSTALACOES_READONLY.ps1') -SearchRoots @($installFixture) | ConvertFrom-Json
+    if($installed.schema -ne 'ames-windows-inventory-v1' -or $installed.updater_eligible -ne $false -or @($installed.candidates).Count -ne 1){
+      throw 'Scoped runner CLEAN inventory changed its read-only contract'
+    }
+    $installationJson=$installed|ConvertTo-Json -Depth 8 -Compress
+    $validatedInstallation=@($installationJson | python -c 'import json,sys;sys.path.insert(0,"tools/ames-workstation");from issue57_drain_coordinator import inspect_readonly_installation_inventory;data=json.load(sys.stdin);review=inspect_readonly_installation_inventory(data,selected_root=data["candidates"][0]["root"]);assert review["candidate_count"]==1 and review["candidate_selected"] and review["update_authorized"] is False and review["installed_root_attested"] is False;print("Issue57 installed CLEAN scanner to Python: observation only, no update")')
+    if($LASTEXITCODE -ne 0 -or $validatedInstallation -notcontains 'Issue57 installed CLEAN scanner to Python: observation only, no update'){
+      throw 'Installed CLEAN scanner did not satisfy Python registration-review contract'
+    }
+  }finally {
+    if((Split-Path -Leaf $installFixture) -eq ('issue57-installation-inventory-'+$installId)){
+      Remove-Item -LiteralPath $installFixture -Recurse -Force -ErrorAction Stop
+    }
+  }
+}
 Write-Output "Issue57 guardian fixtures ($($cases.Count)) and Windows runner scanner: GREEN (no update authorized)"

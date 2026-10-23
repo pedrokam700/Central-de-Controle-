@@ -12,6 +12,7 @@ neither /ready nor the agent's own signed reply can attest its own PID/port.
 import hashlib
 from importlib.util import module_from_spec, spec_from_file_location
 import json
+import ntpath
 import os
 from pathlib import Path
 import re
@@ -124,6 +125,91 @@ def inspect_readonly_guardian_inventory(report):
                 "update_authorized": False}
     except (TypeError, ValueError, KeyError):
         raise ValueError("readonly_guardian_inventory_unverified") from None
+
+
+def inspect_readonly_installation_inventory(report, *, selected_root=None):
+    """Scrub a CLEAN directory/port inventory for a *read-only* candidate review.
+
+    Candidate paths and PIDs only participate in a private report fingerprint.
+    Matching the listener is an observation, not consent, guardian enrollment,
+    scope coverage, a stable process lease or authorization to replace code.
+    """
+    try:
+        fields = {"schema", "candidates", "port_8765_verified", "listener_pids",
+                  "unmatched_listener_pids", "canonical_agents_outside_scan",
+                  "updater_eligible", "reason"}
+        if (type(report) is not dict or set(report) != fields
+                or report["schema"] != "ames-windows-inventory-v1"
+                or report["updater_eligible"] is not False
+                or report["reason"] != "inventory_only_no_idle_or_backup_proof"
+                or type(report["port_8765_verified"]) is not bool):
+            raise ValueError()
+
+        def pids(value):
+            if (type(value) is not list or len(value) > 256
+                    or any(type(pid) is not int or pid <= 0 for pid in value)
+                    or len(value) != len(set(value))):
+                raise ValueError()
+            return set(value)
+
+        listeners = pids(report["listener_pids"])
+        unmatched = pids(report["unmatched_listener_pids"])
+        outside = pids(report["canonical_agents_outside_scan"])
+        if not unmatched <= listeners:
+            raise ValueError()
+        candidates = report["candidates"]
+        if type(candidates) is not list or len(candidates) > 64:
+            raise ValueError()
+        names, all_matched = {}, set()
+        for entry in candidates:
+            expected = {"root", "canonical_entry_exists", "sqlite_exists",
+                        "config_exists", "token_exists", "matching_agent_pids",
+                        "listener_owner_matches"}
+            if (type(entry) is not dict or set(entry) != expected
+                    or any(type(entry[key]) is not bool for key in (
+                        "canonical_entry_exists", "sqlite_exists", "config_exists",
+                        "token_exists", "listener_owner_matches"))):
+                raise ValueError()
+            root = entry["root"]
+            if (type(root) is not str or len(root) > 2048 or "\x00" in root
+                    or not re.fullmatch(r"[A-Za-z]:\\[^\r\n]+", root)
+                    or ntpath.normpath(root) != root
+                    or not re.fullmatch(r"AMES_Central_CLEAN_[^\\/]+",
+                                        ntpath.basename(root), flags=re.IGNORECASE)):
+                raise ValueError()
+            normalized = root.casefold()
+            if normalized in names:
+                raise ValueError()
+            owners = pids(entry["matching_agent_pids"])
+            if all_matched & owners:
+                raise ValueError()
+            all_matched.update(owners)
+            expected_match = (report["port_8765_verified"] and len(listeners) == 1
+                              and len(owners) == 1 and listeners == owners)
+            if entry["listener_owner_matches"] is not expected_match:
+                raise ValueError()
+            names[normalized] = entry
+        if unmatched & (all_matched | outside) or outside & all_matched:
+            raise ValueError()
+        if (type(selected_root) is not str and selected_root is not None):
+            raise ValueError()
+        selected = names.get(selected_root.casefold()) if selected_root is not None else None
+        if selected_root is not None and selected is None:
+            raise ValueError()
+        digest = hashlib.sha256(json.dumps(report, sort_keys=True, separators=(",", ":"),
+                                                ensure_ascii=True).encode("utf-8")).hexdigest()
+        return {"schema": "ames-readonly-installation-review-v1", "inventory_sha256": digest,
+                "candidate_count": len(names), "candidate_selected": selected is not None,
+                "selected_root_sha256": (hashlib.sha256(selected_root.casefold().encode("utf-8")).hexdigest()
+                                         if selected is not None else None),
+                "observed_listener_match": (selected["listener_owner_matches"]
+                                            if selected is not None else False),
+                "other_candidates_or_agents_observed": (len(names) > 1 or bool(outside or unmatched)),
+                "port_inventory_checked": report["port_8765_verified"],
+                "installed_root_attested": False, "all_accounts_attested": False,
+                "update_authorized": False}
+    except (TypeError, ValueError, KeyError):
+        raise ValueError("readonly_installation_inventory_unverified") from None
 
 
 class WindowsProcessWitness:
@@ -576,7 +662,8 @@ class FixtureDrainCoordinator:
             self._recovery_required()
             raise
 
-    def prepare_registration_review(self, *, guardian_inventory=None):
+    def prepare_registration_review(self, *, guardian_inventory=None,
+                                    installation_inventory=None, selected_installation_root=None):
         """Prepare a consent-review binding from LIVE evidence, never consent.
 
         Reuses this coordinator/claim/receipts; no installed-root activation,
@@ -596,6 +683,11 @@ class FixtureDrainCoordinator:
             inventory = json.loads((self.backup_directory / "runtime-backup-manifest.json").read_text(encoding="utf-8")).get("installation_inventory", {})
             inventory_review = (inspect_readonly_guardian_inventory(guardian_inventory)
                                 if guardian_inventory is not None else None)
+            if selected_installation_root is not None and installation_inventory is None:
+                raise ValueError("installation_selection_without_inventory")
+            installation_review = (inspect_readonly_installation_inventory(
+                installation_inventory, selected_root=selected_installation_root)
+                if installation_inventory is not None else None)
             binding = {"transaction_id": self.claim["transaction_id"], "journal_revision": self.claim["revision"],
                        "installation_sha256": self.client.target["installation_sha256"],
                        "root_sha256": hashlib.sha256(str(Path(self.root).resolve()).lower().encode()).hexdigest(),
@@ -606,6 +698,10 @@ class FixtureDrainCoordinator:
                        "retained_fixture_code_sha256": previous}
             if inventory_review:
                 binding["readonly_guardian_inventory_sha256"] = inventory_review["inventory_sha256"]
+            if installation_review:
+                binding["readonly_installation_inventory_sha256"] = installation_review["inventory_sha256"]
+                if installation_review["candidate_selected"]:
+                    binding["selected_installed_root_sha256"] = installation_review["selected_root_sha256"]
             blockers = ["operational_installation_not_enrolled", "all_relaunch_origins_unattested",
                         "browser_profiles_and_unregistered_writers_unattested", "external_locations_unattested",
                         "runtime_environment_unverified", "operational_rollback_unverified",
@@ -622,12 +718,23 @@ class FixtureDrainCoordinator:
                 blockers.append("readonly_guardian_inventory_not_operational_attestation")
                 if not inventory_review["enumerated_sources_complete"]:
                     blockers.append("readonly_guardian_inventory_incomplete")
+            if installation_review is None:
+                blockers.append("readonly_installation_inventory_not_observed")
+            else:
+                blockers.append("readonly_installation_inventory_not_operational_attestation")
+                if not installation_review["candidate_selected"]:
+                    blockers.append("readonly_installation_root_not_selected")
+                if installation_review["other_candidates_or_agents_observed"]:
+                    blockers.append("readonly_installation_ambiguous_candidates")
+                if not installation_review["observed_listener_match"]:
+                    blockers.append("readonly_installation_listener_not_matched")
             # Recheck live participants AND the exact journal after reading all
             # evidence. A stale review can never be used to clear a barrier.
             if self.observe()["state"] != "agent_quiescent_only" or inspect_fixture(self.root) != self.claim:
                 raise ValueError("registration_review_observation_changed")
             review = {"schema": "ames-registration-review-v2", "binding": binding,
                     "blockers": blockers, "readonly_guardian_inventory": inventory_review,
+                    "readonly_installation_inventory": installation_review,
                     "cooperative_browser_scope_observed": self._browser is not None,
                     "cooperative_relaunchers_observed": len(self._relaunchers) == 2,
                     "operational_registration_complete": False, "operator_consent_observed": False,

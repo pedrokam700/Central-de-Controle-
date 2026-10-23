@@ -26,7 +26,7 @@ sys.path[:0] = [str(ROOT / "ames/agent"), str(ROOT / "tools/ames-workstation")]
 from maintenance_admission import MaintenanceAdmission, MaintenanceBlocked
 from maintenance_protocol import (DrainSession, DrainClient, ProtocolRejected,
                                   SCHEMA, MAX_MESSAGE, seal, unseal, serve_connection)
-from issue57_drain_coordinator import FixtureDrainCoordinator, WindowsProcessWitness, WindowsRelauncherWitness, RelauncherClient, BrowserMaintenanceClient, inspect_readonly_guardian_inventory
+from issue57_drain_coordinator import FixtureDrainCoordinator, WindowsProcessWitness, WindowsRelauncherWitness, RelauncherClient, BrowserMaintenanceClient, inspect_readonly_guardian_inventory, inspect_readonly_installation_inventory
 import issue57_maintenance_ledger as ledger
 from update_readiness import observe
 
@@ -59,6 +59,24 @@ def readonly_guardian_inventory(*, observed=None, incomplete=False):
             "all_sessions_attested": False, "installed_guardian_cooperation_attested": False,
             "exclusive_maintenance_lease_held": False, "updater_eligible": False,
             "reason": "read_only_observation_cannot_authorize_process_stop_or_update"}
+
+
+def readonly_installation_inventory(*, multiple=False, listener=True):
+    """Shape emitted by INVENTARIAR_INSTALACOES_READONLY.ps1, not OS proof."""
+    first = {"root": r"C:\Fixture\AMES_Central_CLEAN_TEST1", "canonical_entry_exists": True,
+             "sqlite_exists": True, "config_exists": True, "token_exists": True,
+             "matching_agent_pids": [4810] if listener else [],
+             "listener_owner_matches": listener}
+    candidates = [first]
+    if multiple:
+        candidates.append({"root": r"C:\Fixture\AMES_Central_CLEAN_TEST2",
+                           "canonical_entry_exists": True, "sqlite_exists": True,
+                           "config_exists": True, "token_exists": True,
+                           "matching_agent_pids": [], "listener_owner_matches": False})
+    return {"schema": "ames-windows-inventory-v1", "candidates": candidates,
+            "port_8765_verified": True, "listener_pids": [4810] if listener else [],
+            "unmatched_listener_pids": [], "canonical_agents_outside_scan": [],
+            "updater_eligible": False, "reason": "inventory_only_no_idle_or_backup_proof"}
 
 
 class ReadonlyGuardianInventoryTests(unittest.TestCase):
@@ -105,6 +123,47 @@ class ReadonlyGuardianInventoryTests(unittest.TestCase):
             with self.subTest(candidate=candidate):
                 with self.assertRaisesRegex(ValueError, "readonly_guardian_inventory_unverified"):
                     inspect_readonly_guardian_inventory(candidate)
+
+
+class ReadonlyInstallationInventoryTests(unittest.TestCase):
+    def test_selection_is_a_digest_bound_observation_not_an_authority(self):
+        original = readonly_installation_inventory(multiple=True)
+        selected = original["candidates"][0]["root"]
+        review = inspect_readonly_installation_inventory(original, selected_root=selected)
+        self.assertEqual(review["candidate_count"], 2)
+        self.assertTrue(review["candidate_selected"])
+        self.assertTrue(review["observed_listener_match"])
+        self.assertTrue(review["other_candidates_or_agents_observed"])
+        self.assertFalse(review["installed_root_attested"])
+        self.assertFalse(review["all_accounts_attested"])
+        self.assertFalse(review["update_authorized"])
+        self.assertNotIn("C:\\", json.dumps(review))
+        self.assertNotIn("4810", json.dumps(review))
+        self.assertNotEqual(review["inventory_sha256"], inspect_readonly_installation_inventory(
+            readonly_installation_inventory())["inventory_sha256"])
+
+    def test_false_or_forged_port_and_root_evidence_is_rejected(self):
+        original = readonly_installation_inventory()
+        mutations = [
+            lambda x: x.update(updater_eligible=True),
+            lambda x: x.update(reason="operational_enrolled"),
+            lambda x: x.update(listener_pids=[9999]),
+            lambda x: x.update(unmatched_listener_pids=[4810]),
+            lambda x: x["candidates"][0].update(listener_owner_matches=False),
+            lambda x: x["candidates"][0].update(command_line="secret"),
+            lambda x: x["candidates"].append(deepcopy(x["candidates"][0])),
+            lambda x: x["candidates"][0].update(root=r"C:\Fixture\..\AMES_Central_CLEAN_TEST1"),
+            lambda x: x["candidates"][0].update(matching_agent_pids=[0]),
+            lambda x: x.update(canonical_agents_outside_scan=[4810]),
+        ]
+        for mutation in mutations:
+            report = deepcopy(original)
+            mutation(report)
+            with self.subTest(report=report):
+                with self.assertRaisesRegex(ValueError, "readonly_installation_inventory_unverified"):
+                    inspect_readonly_installation_inventory(report)
+        with self.assertRaisesRegex(ValueError, "readonly_installation_inventory_unverified"):
+            inspect_readonly_installation_inventory(original, selected_root=r"C:\Other\AMES_Central_CLEAN_NEW")
 
 
 def idle_runtime(admission):
@@ -801,6 +860,43 @@ class BoundBackupTests(unittest.TestCase):
         self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
         self.assertTrue(ledger.inspect_fixture(self.root)["claim_present"])
         self.assertTrue(self.admission.snapshot()["draining"])
+
+    def test_readonly_installed_candidate_is_bound_but_never_consented(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        self.coordinator.stage_fixture_candidate(archive, release)
+        report = readonly_installation_inventory(multiple=True)
+        root = report["candidates"][0]["root"]
+        before = (self.root / ".ames-update/transaction.json").read_bytes()
+        review = self.coordinator.prepare_registration_review(
+            installation_inventory=report, selected_installation_root=root)
+        self.assertEqual(review["readonly_installation_inventory"]["candidate_count"], 2)
+        self.assertEqual(review["binding"]["readonly_installation_inventory_sha256"],
+                         review["readonly_installation_inventory"]["inventory_sha256"])
+        self.assertEqual(review["binding"]["selected_installed_root_sha256"],
+                         review["readonly_installation_inventory"]["selected_root_sha256"])
+        self.assertIn("readonly_installation_inventory_not_operational_attestation", review["blockers"])
+        self.assertIn("readonly_installation_ambiguous_candidates", review["blockers"])
+        self.assertIn("operational_installation_not_enrolled", review["blockers"])
+        self.assertFalse(review["operational_registration_complete"])
+        self.assertFalse(review["update_authorized"])
+        self.assertEqual((self.root / ".ames-update/transaction.json").read_bytes(), before)
+        changed = deepcopy(report)
+        changed["candidates"][1]["sqlite_exists"] = False
+        refreshed = self.coordinator.prepare_registration_review(
+            installation_inventory=changed, selected_installation_root=root)
+        self.assertNotEqual(review["review_sha256"], refreshed["review_sha256"])
+
+    def test_installation_review_rejects_wrong_root_and_preserves_claim(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        self.coordinator.stage_fixture_candidate(archive, release)
+        with self.assertRaisesRegex(ValueError, "readonly_installation_inventory_unverified"):
+            self.coordinator.prepare_registration_review(
+                installation_inventory=readonly_installation_inventory(),
+                selected_installation_root=r"C:\Other\AMES_Central_CLEAN_WRONG")
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertTrue(ledger.inspect_fixture(self.root)["claim_present"])
 
     def test_registration_review_rejects_candidate_tampering_and_retains_drain(self):
         self.coordinator.prepare_backup()
