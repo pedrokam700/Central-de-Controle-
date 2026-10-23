@@ -69,13 +69,17 @@ test('Windows CI must reach guardian, dual lock, crash, direct launcher and ACL 
   const workflow=readFileSync('.github/workflows/ames-operational-history.yml','utf8');
   const step=workflow.split('      - name: Validate background guardian and temporary safe pairing launcher syntax\n')[1]?.split('\n  reading-firestore:')[0];
   assert.ok(step,'Windows fixture step required');
-  for(const marker of [/guardian_fixture_not_completed/,/mutex_fixture_not_completed/,/dual_lock_ledger_fixture_not_completed/,/coordinator_crash_fixture_not_completed/,/direct_launcher_claim_fixture_not_completed/,/private_acl_fixture_not_completed/,/Windows fixtures: guardian \+ mutex \+ dual-lock ledger \+ coordinator crash \+ direct launcher \+ backup ACL end-to-end GREEN/]){
+  for(const marker of [/guardian_fixture_not_completed/,/mutex_fixture_not_completed/,/dual_lock_ledger_fixture_not_completed/,/authenticated_drain_fixture_not_completed/,/coordinator_crash_fixture_not_completed/,/direct_launcher_claim_fixture_not_completed/,/private_acl_fixture_not_completed/,/Windows fixtures: guardian \+ mutex \+ dual-lock ledger \+ coordinator crash \+ direct launcher \+ backup ACL end-to-end GREEN/]){
     assert.match(step,marker);
   }
   const fixture=readFileSync('scripts/issue57-dual-lock-ledger.windows.test.ps1','utf8');
   for(const proof of [/GITHUB_ACTIONS/,/RUNNER_TEMP/,/Global\\CentralAMES\.Issue57DualUpdateTest/,/Global\\CentralAMES\.Issue57DualBootstrapTest/,/MUTEX_BLOCKED/,/PERSISTENT_CLAIM_BLOCKED/,/update_authorized.*false/]){
     assert.match(fixture,proof);
   }
+  assert.match(fixture,/authenticated_drain_fixture_not_completed/);
+  assert.match(fixture,/--windows-dual-lock-fixture/);
+  assert.ok(fixture.indexOf('--windows-dual-lock-fixture')>fixture.indexOf('$bootstrapHeld=$bootstrapMutex.WaitOne(0)'));
+  assert.ok(fixture.indexOf('--windows-dual-lock-fixture')<fixture.indexOf('$bootstrapMutex.ReleaseMutex();$bootstrapHeld=$false'));
   assert.doesNotMatch(fixture,/Global\\CentralAMES\.UpdateTransaction\.8765|Global\\CentralAMES\.CanonicalBootstrap\.8765/);
   const crash=readFileSync('scripts/issue57-coordinator-abandonment.windows.test.ps1','utf8');
   for(const proof of [/GITHUB_ACTIONS/,/RUNNER_OS/,/RUNNER_TEMP/,/Issue57CrashUpdateTest/,/Issue57CrashBootstrapTest/,/\.Kill\(\)/,/AbandonedMutexException/,/claim\.lock/,/update_authorized.*false/]){

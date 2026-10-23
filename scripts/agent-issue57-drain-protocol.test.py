@@ -1,8 +1,10 @@
 """T2 isolated IPC tests. No real agent, MES, 8765, tokens or CLEAN roots."""
 
-from contextlib import closing
+from contextlib import closing, nullcontext
 import json
 import multiprocessing
+import os
+import re
 from pathlib import Path
 import secrets
 import sqlite3
@@ -31,18 +33,65 @@ def idle_runtime(admission):
             "observation_stable": True, "new_admissions_fenced": snapshot["draining"]}
 
 
+def assert_dual_fixture_mutexes_held():
+    """Open existing random CI mutexes, NEVER create/acquire production ones."""
+    if not os.environ.get("ISSUE57_DRAIN_FIXTURE_ROOT"):
+        return False
+    if (os.name != "nt" or os.environ.get("GITHUB_ACTIONS") != "true"
+            or os.environ.get("RUNNER_OS") != "Windows"):
+        raise RuntimeError("github_windows_runner_fixture_only")
+    names = [os.environ.get("ISSUE57_DRAIN_UPDATE_MUTEX", ""),
+             os.environ.get("ISSUE57_DRAIN_BOOTSTRAP_MUTEX", "")]
+    suffixes = []
+    for name, kind in zip(names, ("Update", "Bootstrap")):
+        prefix = "Global\\CentralAMES.Issue57Dual" + kind + "Test."
+        if not name.startswith(prefix) or not re.fullmatch("[0-9a-f]{32}", name[len(prefix):]):
+            raise RuntimeError("production_mutex_name_forbidden")
+        suffixes.append(name[len(prefix):])
+    if suffixes[0] != suffixes[1]:
+        raise RuntimeError("fixture_mutex_scope_mismatch")
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenMutexW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel.OpenMutexW.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.ReleaseMutex.argtypes = [wintypes.HANDLE]
+    kernel.ReleaseMutex.restype = wintypes.BOOL
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.CloseHandle.restype = wintypes.BOOL
+    for name in names:
+        handle = kernel.OpenMutexW(0x00100001, False, name)
+        if not handle:
+            raise RuntimeError("fixture_mutex_not_opened")
+        try:
+            state = kernel.WaitForSingleObject(handle, 0)
+            if state in (0, 0x80):
+                kernel.ReleaseMutex(handle)
+            if state != 0x102:  # WAIT_TIMEOUT: parent STILL holds this mutex.
+                raise RuntimeError("coordinator_exclusion_not_held")
+        finally:
+            kernel.CloseHandle(handle)
+    return True
+
+
 def ipc_worker(connection, report, key, transaction):
     # Spawned interpreter uses the REAL admission/readiness code, a synthetic
     # SQLite jobs table and OS pipe. It never imports/runs the A-MES agent.
     admission = MaintenanceAdmission()
+    mutex_checks = int(assert_dual_fixture_mutexes_held())
     with tempfile.TemporaryDirectory(prefix="issue57-ipc-agent-") as tmp:
         db_path = Path(tmp) / "fixture.sqlite3"
         with closing(sqlite3.connect(db_path)) as db:
             db.execute("CREATE TABLE jobs (status TEXT)")
             db.commit()
         scheduler = SimpleNamespace(snapshot=lambda: {"busy": False, "queued": 0, "normal_jobs": 0})
-        session = DrainSession(admission, lambda: observe(scheduler, {}, Lock(),
-                               SimpleNamespace(path=db_path), admission), key, IDENTITY, transaction)
+        def runtime():
+            nonlocal mutex_checks
+            mutex_checks += int(assert_dual_fixture_mutexes_held())
+            return observe(scheduler, {}, Lock(), SimpleNamespace(path=db_path), admission)
+        session = DrainSession(admission, runtime, key, IDENTITY, transaction)
         report.send_bytes(json.dumps(session.target).encode())
         serve_connection(connection, session)
         blocked = False
@@ -52,7 +101,7 @@ def ipc_worker(connection, report, key, transaction):
         except MaintenanceBlocked:
             blocked = True
         report.send_bytes(json.dumps({"fenced": admission.snapshot()["draining"],
-                                     "new_job_blocked": blocked}).encode())
+                                     "new_job_blocked": blocked, "mutex_checks": mutex_checks}).encode())
         report.close()
 
 
@@ -175,11 +224,13 @@ class ProtocolTests(unittest.TestCase):
 
 
 class CrossProcessTests(unittest.TestCase):
-    def run_ipc_case(self, disconnect):
+    def run_ipc_case(self, disconnect, root_override=None):
         context = multiprocessing.get_context("spawn")
         child = channel = report = None
-        with tempfile.TemporaryDirectory(prefix=ledger.FIXTURE_PARENT_PREFIX) as tmp:
-            root = Path(tmp) / "fixture"
+        context_root = (tempfile.TemporaryDirectory(prefix=ledger.FIXTURE_PARENT_PREFIX)
+                        if root_override is None else nullcontext(None))
+        with context_root as tmp:
+            root = Path(tmp) / "fixture" if root_override is None else root_override
             root.mkdir()
             (root / ledger.FIXTURE_MARKER).write_text(ledger.FIXTURE_MAGIC, encoding="utf-8")
             def connect(transaction_id):
@@ -217,6 +268,11 @@ class CrossProcessTests(unittest.TestCase):
                     channel.close()
                 self.assertTrue(report.poll(10))
                 final = json.loads(report.recv_bytes(MAX_MESSAGE))
+                mutex_checks = final.pop("mutex_checks")
+                if root_override is not None:
+                    self.assertGreaterEqual(mutex_checks, 3)
+                else:
+                    self.assertEqual(mutex_checks, 0)
                 self.assertEqual(final, {"fenced": disconnect, "new_job_blocked": disconnect})
                 child.join(10)
                 self.assertEqual(child.exitcode, 0)
@@ -238,6 +294,23 @@ class CrossProcessTests(unittest.TestCase):
                         child.join(10)
                 if report is not None:
                     report.close()
+
+    def run_windows_fixture(self):
+        # Invoked only from the EXISTING dual-lock Windows fixture, while its
+        # PowerShell process holds BOTH random Global mutexes in fixed order.
+        self.assertTrue(assert_dual_fixture_mutexes_held())
+        root = Path(os.environ["ISSUE57_DRAIN_FIXTURE_ROOT"])
+        self.assertFalse(root.exists())
+        self.assertEqual(root.name, "fixture")
+        self.assertRegex(root.parent.name, r"^issue57-maintenance-ledger-[0-9a-f]{32}$")
+        self.assertIn(Path(os.environ["RUNNER_TEMP"]).resolve(), root.resolve().parents)
+        marker = root.parent / ".issue57_dual_lock_fixture_ONLY"
+        self.assertEqual(marker.read_text(encoding="utf-8"), "ISSUE57_DISPOSABLE_NO_PRODUCTION")
+        self.run_ipc_case(True, root)
+        # Coordinator disconnect left a real claim/journal. PowerShell will
+        # now release the two mutexes and check both relaunch probes veto it.
+        self.assertEqual(ledger.inspect_fixture(root)["phase"], "recovery_required")
+        print("Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden")
 
     def test_external_coordinator_with_independent_process_and_explicit_cancel(self):
         self.run_ipc_case(False)
@@ -261,4 +334,7 @@ class CrossProcessTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if sys.argv[1:] == ["--windows-dual-lock-fixture"]:
+        CrossProcessTests("run_windows_fixture").debug()
+    else:
+        unittest.main()

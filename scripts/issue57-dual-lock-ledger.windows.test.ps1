@@ -11,11 +11,12 @@ if($env:GITHUB_ACTIONS -ne 'true' -or -not $env:RUNNER_TEMP -or
 $id=[guid]::NewGuid().ToString('N')
 $updateName='Global\CentralAMES.Issue57DualUpdateTest.'+$id
 $bootstrapName='Global\CentralAMES.Issue57DualBootstrapTest.'+$id
-$base=Join-Path $env:RUNNER_TEMP ('issue57-dual-lock-test-'+$id)
+$base=Join-Path $env:RUNNER_TEMP ('issue57-maintenance-ledger-'+$id)
 $null=New-Item -ItemType Directory -Path $base -ErrorAction Stop
 $fixture=Join-Path $base '.issue57_dual_lock_fixture_ONLY'
 [IO.File]::WriteAllText($fixture,'ISSUE57_DISPOSABLE_NO_PRODUCTION')
-$ledger=Join-Path $base '.ames-update'
+$drainRoot=Join-Path $base 'fixture'
+$ledger=Join-Path $drainRoot '.ames-update'
 $updateMutex=$null;$bootstrapMutex=$null
 $updateHeld=$false;$bootstrapHeld=$false
 
@@ -63,14 +64,36 @@ try {
   if((Invoke-IsolatedProbe $updateName) -ne 'MUTEX_BLOCKED') {throw 'guardian_bypassed_coordinator'}
   if((Invoke-IsolatedProbe $bootstrapName) -ne 'MUTEX_BLOCKED') {throw 'direct_launcher_bypassed_coordinator'}
 
-  # Claim is written *before* releasing the exclusive locks. A transient
-  # mutex alone would become available after an updater crash, so the disk
-  # marker must block every cooperating relaunch until verified recovery.
-  $null=New-Item -ItemType Directory -Path $ledger -ErrorAction Stop
+  # The REAL fixture ledger claim and authenticated admission drain now run
+  # under these same held mutexes, not in unrelated sequential tests. Python
+  # opens the existing random mutexes from its spawned process and must find
+  # BOTH occupied at startup and during each readiness observation.
+  $previousFixtureTemp=$env:TEMP
+  $previousFixtureTmp=$env:TMP
+  $env:TEMP=$env:RUNNER_TEMP
+  $env:TMP=$env:RUNNER_TEMP
+  $env:ISSUE57_DRAIN_FIXTURE_ROOT=$drainRoot
+  $env:ISSUE57_DRAIN_UPDATE_MUTEX=$updateName
+  $env:ISSUE57_DRAIN_BOOTSTRAP_MUTEX=$bootstrapName
+  try {
+    $drain=@(& python ./scripts/agent-issue57-drain-protocol.test.py --windows-dual-lock-fixture)
+    if($LASTEXITCODE -ne 0){throw 'authenticated_drain_fixture_failed'}
+    if($drain -notcontains 'Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden') {
+      throw 'authenticated_drain_fixture_not_completed'
+    }
+    Write-Output 'Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden'
+  } finally {
+    $env:TEMP=$previousFixtureTemp
+    $env:TMP=$previousFixtureTmp
+    Remove-Item Env:\ISSUE57_DRAIN_FIXTURE_ROOT -ErrorAction SilentlyContinue
+    Remove-Item Env:\ISSUE57_DRAIN_UPDATE_MUTEX -ErrorAction SilentlyContinue
+    Remove-Item Env:\ISSUE57_DRAIN_BOOTSTRAP_MUTEX -ErrorAction SilentlyContinue
+  }
   $claim=Join-Path $ledger 'claim.lock'
-  $bytes=[Text.Encoding]::UTF8.GetBytes('{"fixture_only":true,"update_authorized":false}')
-  $stream=[IO.File]::Open($claim,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-  try {$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)} finally {$stream.Dispose()}
+  $journal=Get-Content -LiteralPath (Join-Path $ledger 'transaction.json') -Raw | ConvertFrom-Json
+  if($journal.phase -ne 'recovery_required' -or $journal.update_authorized -ne $false) {
+    throw 'authenticated_drain_journal_not_blocking'
+  }
 
   $bootstrapMutex.ReleaseMutex();$bootstrapHeld=$false
   $updateMutex.ReleaseMutex();$updateHeld=$false
@@ -86,7 +109,7 @@ try {
   # Cleanup is limited to an exact GUID-scoped disposable fixture with magic.
   if((Test-Path -LiteralPath $fixture -PathType Leaf) -and
      ([IO.File]::ReadAllText($fixture) -eq 'ISSUE57_DISPOSABLE_NO_PRODUCTION') -and
-     ([IO.Path]::GetFileName($base) -eq ('issue57-dual-lock-test-'+$id))) {
+     ([IO.Path]::GetFileName($base) -eq ('issue57-maintenance-ledger-'+$id))) {
     Remove-Item -LiteralPath $base -Recurse -Force
   }
 }
