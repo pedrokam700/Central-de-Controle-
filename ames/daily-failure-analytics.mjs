@@ -60,6 +60,34 @@ function priorFailureText(row,history=[]){
   return {code:codes.join(', ')||null,desc:descs.join(' | ')||null};
 }
 
+function materialLinkAtExactOccurrence(link,occ,occurrences){
+  const instant=parseFailureInstant(occ.defect_time);
+  if(instant===null||!occ.pcba_sn||!occ.defect_code)return false;
+  // `reuseLinks` carries PCBA-wide context, including a fallback to the first
+  // loaded defect on that board. Only raw source identity can prove that the
+  // physical material belongs to THIS 3028 defect occurrence.
+  const sources=Array.isArray(link._sourceRows)?link._sourceRows:[];
+  return sources.some(source=>{
+    const defectKey=String(source.current_defect_key||'');
+    const rawCode=String(first(source,'defect_code','Defect Code atual')||'');
+    const rawTime=parseFailureInstant(first(source,'defect_time','Defect Time atual'));
+    if(defectKey&&defectKey!==String(occ.defect_key||''))return false;
+    if(rawCode&&rawCode!==String(occ.defect_code))return false;
+    if(rawTime!==null&&rawTime!==instant)return false;
+    if(!defectKey&&(!rawCode||rawTime===null))return false;
+    const bind=parseFailureInstant(source.bind_time_utc);
+    const unbind=parseFailureInstant(source.unbind_time_utc);
+    if(bind!==null&&bind>instant)return false;
+    if(unbind!==null&&unbind<instant)return false;
+    // Duplicate source occurrences cannot establish which physical event was
+    // investigated. Keep the link as PCBA context instead.
+    return occurrences.filter(event=>String(event.pcba_sn||'')===String(occ.pcba_sn)&&
+      String(event.defect_code||'')===String(occ.defect_code)&&
+      parseFailureInstant(event.defect_time)===instant&&
+      (!defectKey||String(event.defect_key||'')===defectKey)).length===1;
+  });
+}
+
 export function buildDailyFailureRows(store){
   const out=[];
   for(const line of LINE_IDS){
@@ -76,7 +104,8 @@ export function buildDailyFailureRows(store){
       const moment=parseFailureInstant(occ.defect_time);
       const componentLinksExact=componentLinks.filter(link=>
         String(link.pcba||'')===pcba&&String(link.defect_code||'')===String(occ.defect_code||'')&&
-        moment!==null&&parseFailureInstant(link.defect_time)===moment);
+        moment!==null&&parseFailureInstant(link.defect_time)===moment&&
+        materialLinkAtExactOccurrence(link,occ,occurrences));
       const componentHistory=componentLinks.filter(r=>r.history_code||r.history_desc);
       const componentFamilies=uniq(componentLinks.map(r=>r.component_group||r.family||r.item_type));
       const componentHistoryFamilies=uniq(componentHistory.map(r=>r.component_group||r.family||r.item_type));

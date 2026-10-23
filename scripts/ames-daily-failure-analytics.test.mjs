@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {buildDailyFailureRows,filterDailyFailureRows,productionMetrics,rankDailyFailures} from '../ames/daily-failure-analytics.mjs';
 import {aggregatePcbas,componentGroup,reuseKpis,reuseLinks} from '../ames/data/reuse-analysis.mjs';
 import {pcbaReuseCategoryMap} from '../ames/reuse-table-view.mjs';
+import {reuseGroup,reuseCriteriaEvidence} from '../ames/data/daily-reuse-evidence.mjs';
 
 test('ranking counts occurrences but deduplicates affected PCBAs',()=>{
   const rows=[
@@ -55,6 +56,45 @@ test('daily occurrence preserves loaded AT repair fields without falsely claimin
   assert.equal(rows[0].repair_code,'RC1');
   assert.equal(rows[0].repair_source,'3028-repair-refresh');
   assert.equal(rows[0].repair_rows.length,0);
+});
+
+test('a material from PCBA context never inherits an unrelated 3028 occurrence',()=>{
+  const events=[
+    {pcba_sn:'P1',defect_key:'K1',defect_code:'CAM',defect_time:'2026-10-22T10:00:00-03:00'},
+    {pcba_sn:'P1',defect_key:'K2',defect_code:'LCD',defect_time:'2026-10-22T11:00:00-03:00'},
+  ];
+  const trace=[
+    {current_pcba_sn:'P1',current_defect_key:'K1',item_sn:'MAT-EXACT',item_type:'Rear Camera',
+      known_use_count:2,previous_pcbas:['OLD']},
+    {current_pcba_sn:'P1',item_sn:'MAT-CONTEXT',item_type:'Screen',
+      known_use_count:2,previous_pcbas:['OLD']},
+    {current_pcba_sn:'P1',current_defect_key:'K1',item_sn:'MAT-NEW-CYCLE',item_type:'Rear Camera',
+      bind_time_utc:'2026-10-22T14:30:00Z',known_use_count:2,previous_pcbas:['OLD']},
+  ];
+  const snapshot={line_id:'TAN10101',occurrences:events,material_trace:{records:trace},
+    process_timeline:{contexts:[]},pcba_history:{records:[]},insights:{drilldowns:{}}};
+  const rows=buildDailyFailureRows({read:line=>({snapshot:line==='TAN10101'?snapshot:null})});
+  assert.equal(rows.length,2);
+  assert.deepEqual(rows[0].component_links_exact.map(x=>x.material),['MAT-EXACT']);
+  assert.equal(rows[0].component_links_count,3,'PCBA context remains visible, not attributed');
+  assert.equal(rows[1].component_links_exact.length,0);
+  assert.equal(reuseGroup(rows[0]),'material_only');
+  assert.equal(reuseGroup(rows[1]),'no_reuse_evidence');
+  assert.equal(reuseCriteriaEvidence(rows[1]).material_reused,false);
+});
+
+test('raw matching defect code and instant can anchor material without a defect key',()=>{
+  const defect={pcba_sn:'P2',defect_key:'K3',defect_code:'D3',defect_time:'2026-10-22T10:00:00-03:00'};
+  const earlier={pcba_sn:'P2',defect_key:'K2',defect_code:'OTHER',defect_time:'2026-10-22T09:00:00-03:00'};
+  const material={current_pcba_sn:'P2',item_sn:'MAT-1',item_type:'LCM',
+    'Defect Code atual':'D3','Defect Time atual':'2026-10-22T13:00:00Z',
+    known_use_count:2,previous_pcbas:['OLD']};
+  const snapshot={line_id:'TAN10101',occurrences:[earlier,defect],
+    material_trace:{records:[material]},pcba_history:{records:[]},
+    process_timeline:{contexts:[]},insights:{drilldowns:{}}};
+  const rows=buildDailyFailureRows({read:line=>({snapshot:line==='TAN10101'?snapshot:null})});
+  assert.equal(rows[0].component_links_exact.length,0);
+  assert.deepEqual(rows[1].component_links_exact.map(x=>x.material),['MAT-1']);
 });
 
 test('three reuse granularities never turn three material links into three PCBAs',()=>{
