@@ -3,6 +3,7 @@
 Purely disposable fixtures; NEVER touches the real 8765 port or factory data.
 """
 import importlib.util
+import math
 from pathlib import Path
 import shutil
 import sys
@@ -17,6 +18,83 @@ from maintenance_admission import MaintenanceAdmission, MaintenanceBlocked
 
 
 class BarrierTests(unittest.TestCase):
+    def test_quiescence_wait_times_out_without_releasing_fence(self):
+        fence = MaintenanceAdmission()
+        entered, release = threading.Event(), threading.Event()
+
+        def existing_mutation():
+            with fence.mutation():
+                entered.set()
+                self.assertTrue(release.wait(3))
+
+        worker = threading.Thread(target=existing_mutation)
+        worker.start()
+        self.assertTrue(entered.wait(2))
+        lease = fence.begin_drain()
+        try:
+            self.assertFalse(fence.wait_for_quiescence(lease, .01))
+            self.assertTrue(fence.snapshot()['draining'])
+            with self.assertRaises(MaintenanceBlocked):
+                with fence.mutation():
+                    self.fail('new admission during timed-out drain')
+            release.set()
+            self.assertTrue(fence.wait_for_quiescence(lease, 2))
+            # Zero admitted writers under the lease is NOT update permission.
+            self.assertTrue(fence.snapshot()['draining'])
+            self.assertEqual(fence.snapshot()['inflight_mutations'], 0)
+        finally:
+            release.set()
+            worker.join(2)
+            self.assertFalse(worker.is_alive())
+            fence.release_drain(lease)
+
+    def test_quiescence_requires_current_lease_and_bounded_timeout(self):
+        fence = MaintenanceAdmission()
+        lease = fence.begin_drain()
+        try:
+            self.assertTrue(fence.wait_for_quiescence(lease, 0))
+            with self.assertRaises(ValueError):
+                fence.wait_for_quiescence(object(), 0)
+            for bad in (-.1, 61, math.nan, math.inf, -math.inf, True, '1'):
+                with self.subTest(timeout=repr(bad)), self.assertRaises(ValueError):
+                    fence.wait_for_quiescence(lease, bad)
+        finally:
+            fence.release_drain(lease)
+        with self.assertRaises(ValueError):
+            fence.wait_for_quiescence(lease, 0)
+
+    def test_quiescence_rejects_lease_revoked_while_waiting(self):
+        fence = MaintenanceAdmission()
+        entered, release = threading.Event(), threading.Event()
+
+        def existing_mutation():
+            with fence.mutation():
+                entered.set()
+                self.assertTrue(release.wait(3))
+
+        worker = threading.Thread(target=existing_mutation)
+        worker.start()
+        self.assertTrue(entered.wait(2))
+        lease = fence.begin_drain()
+        result = []
+
+        def observer():
+            try:
+                result.append(fence.wait_for_quiescence(lease, 2))
+            except ValueError:
+                result.append('lease_revoked')
+
+        observer_thread = threading.Thread(target=observer)
+        observer_thread.start()
+        # Revoking the lease must wake observers; none may report success.
+        fence.release_drain(lease)
+        observer_thread.join(2)
+        release.set()
+        worker.join(2)
+        self.assertFalse(observer_thread.is_alive())
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(result, ['lease_revoked'])
+
     def test_monotonic_revision_tracks_outer_mutations_and_drain(self):
         fence = MaintenanceAdmission()
         r0 = fence.snapshot()['admission_revision']

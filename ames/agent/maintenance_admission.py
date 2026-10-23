@@ -9,7 +9,9 @@ new request or scheduled MES job from being admitted during an update drain.
 """
 
 from contextlib import contextmanager
+import math
 from threading import Condition, local
+from time import monotonic
 
 
 class MaintenanceBlocked(RuntimeError):
@@ -17,6 +19,8 @@ class MaintenanceBlocked(RuntimeError):
 
 
 class MaintenanceAdmission:
+    MAX_DRAIN_WAIT_SECONDS = 60
+
     def __init__(self):
         self._condition = Condition()
         self._thread = local()
@@ -73,6 +77,30 @@ class MaintenanceAdmission:
             self._lease = None
             self._revision += 1
             self._condition.notify_all()
+
+    def wait_for_quiescence(self, lease, timeout_seconds=0):
+        """Wait for admitted in-process mutations while holding the drain fence.
+
+        A true result proves only that this instance had zero admitted writers
+        under the same still-active lease at the moment of observation. It is
+        NOT proof about MES subprocesses, browser sync, other agents or Windows
+        guardians, and it never grants authorization to update files.
+        """
+        if (type(timeout_seconds) not in (int, float)
+                or not math.isfinite(timeout_seconds)
+                or not 0 <= timeout_seconds <= self.MAX_DRAIN_WAIT_SECONDS):
+            raise ValueError("invalid_quiescence_timeout")
+        deadline = monotonic() + timeout_seconds
+        with self._condition:
+            while True:
+                if lease is None or lease is not self._lease:
+                    raise ValueError("invalid_maintenance_lease")
+                if self._inflight == 0:
+                    return True
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    return False
+                self._condition.wait(remaining)
 
     def snapshot(self):
         with self._condition:
