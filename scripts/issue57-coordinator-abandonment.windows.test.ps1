@@ -45,16 +45,14 @@ try {
 [IO.File]::WriteAllText($childFile,$childSource)
 $pwsh=(Get-Command pwsh -ErrorAction Stop).Source
 
-function Assert-AbandonedMutexRecovery([string]$Name,[string]$Stage) {
-  $mutex=[Threading.Mutex]::new($false,$Name)
+function Assert-AbandonedMutexRecovery([Threading.Mutex]$Mutex,[string]$Stage) {
   $owned=$false;$abandoned=$false
   try {
-    try {$owned=$mutex.WaitOne(0)}
+    try {$owned=$Mutex.WaitOne(0)}
     catch [Threading.AbandonedMutexException] {$owned=$true;$abandoned=$true}
     if(-not $owned -or -not $abandoned){throw ('mutex_was_not_abandoned_'+$Stage)}
   } finally {
-    if($owned){$mutex.ReleaseMutex()}
-    $mutex.Dispose()
+    if($owned){$Mutex.ReleaseMutex()}
   }
 }
 
@@ -68,6 +66,13 @@ function Invoke-CrashFixture([string]$Mode) {
      $bootstrapName -eq 'Global\CentralAMES.CanonicalBootstrap.8765') {
     throw 'production_mutex_name_forbidden'
   }
+  # Keep observer handles open BEFORE the child acquires both locks. Without
+  # these handles, the named kernel mutex ceases to exist at process death;
+  # creating a fresh mutex afterwards cannot report an abandoned owner.
+  $updateHandle=[Threading.Mutex]::new($false,$updateName)
+  $bootstrapHandle=[Threading.Mutex]::new($false,$bootstrapName)
+  $child=$null
+  try {
   $start=[Diagnostics.ProcessStartInfo]::new()
   $start.FileName=$pwsh
   $start.UseShellExecute=$false
@@ -94,12 +99,20 @@ function Invoke-CrashFixture([string]$Mode) {
     if(-not $readyConfirmed -or $child.HasExited){
       throw 'fixture_child_never_acquired_both_mutexes'
     }
+    if($updateHandle.WaitOne(0)){
+      $updateHandle.ReleaseMutex()
+      throw 'fixture_update_lock_not_owned_by_child'
+    }
+    if($bootstrapHandle.WaitOne(0)){
+      $bootstrapHandle.ReleaseMutex()
+      throw 'fixture_bootstrap_lock_not_owned_by_child'
+    }
     # Kill ONLY our exact Process object in an isolated CI fixture, never PID
     # discovered on the workstation. This is the synthetic power-loss event.
     $child.Kill()
     if(-not $child.WaitForExit(10000)){throw 'fixture_child_did_not_exit'}
-    Assert-AbandonedMutexRecovery $updateName ($Mode+'_update')
-    Assert-AbandonedMutexRecovery $bootstrapName ($Mode+'_bootstrap')
+    Assert-AbandonedMutexRecovery $updateHandle ($Mode+'_update')
+    Assert-AbandonedMutexRecovery $bootstrapHandle ($Mode+'_bootstrap')
     $ledger=Join-Path $case '.ames-update'
     if($Mode -eq 'claim') {
       $claim=Join-Path $ledger 'claim.lock'
@@ -118,8 +131,13 @@ function Invoke-CrashFixture([string]$Mode) {
       if(Test-Path -LiteralPath $ledger){throw 'premature_transaction_marker'}
     }
   } finally {
-    if(-not $child.HasExited){$child.Kill();$null=$child.WaitForExit(10000)}
-    $child.Dispose()
+    if($child){
+      if(-not $child.HasExited){$child.Kill();$null=$child.WaitForExit(10000)}
+      $child.Dispose()
+    }
+  }
+  } finally {
+    $bootstrapHandle.Dispose();$updateHandle.Dispose()
   }
 }
 
