@@ -227,12 +227,18 @@ def recover_simulation(root, *, interrupt_after=None):
     return 'rolled_back'
 
 
-def simulate_swap(root, *, health_ok=False, interrupt_after=None):
+def simulate_swap(root, *, health_ok=False, interrupt_after=None,
+                  transaction_id=None, health_probe=None):
     root = _fixture(root)
     old, new, previous = (root / x for x in ('active', 'incoming', 'previous'))
     if _phase(root) is not None or not old.is_dir() or not new.is_dir() or previous.exists():
         raise ValueError('simulation_preconditions_not_met')
-    evidence = {'transaction_id': uuid.uuid4().hex,
+    if transaction_id is not None and (type(transaction_id) is not str or
+            re.fullmatch(r'[a-f0-9]{32}', transaction_id) is None):
+        raise ValueError('invalid_coordinator_transaction')
+    if health_probe is not None and not callable(health_probe):
+        raise ValueError('invalid_fixture_health_probe')
+    evidence = {'transaction_id': transaction_id or uuid.uuid4().hex,
                 'old_sha256': _fingerprint(old),
                 'incoming_sha256': _fingerprint(new)}
     _journal(root, 'prepared', evidence)
@@ -251,6 +257,13 @@ def simulate_swap(root, *, health_ok=False, interrupt_after=None):
     _journal(root, 'awaiting_health', evidence)
     if interrupt_after == 'awaiting_health':
         raise SimulatedPowerLoss('awaiting_health')
+    if health_probe is not None:
+        try:
+            # A coordinator can now check an actually launched disposable
+            # candidate instead of substituting a precomputed healthy flag.
+            health_ok = health_probe(old) is True
+        except Exception:
+            health_ok = False
     if not health_ok:
         return recover_simulation(root)
     # Previous slot remains available. No automatic deletion of a last-good

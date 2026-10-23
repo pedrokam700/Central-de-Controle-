@@ -30,8 +30,12 @@ SAFE_PHASES = {
     "claimed": {"drain_requested", "recovery_required"},
     "drain_requested": {"awaiting_external_attestations", "recovery_required"},
     "awaiting_external_attestations": {"backup_verified", "recovery_required"},
-    "backup_verified": {"recovery_required"},
-    "recovery_required": {"recovered_fixture_only"},
+    "backup_verified": {"candidate_staged", "recovery_required"},
+    "candidate_staged": {"fixture_applying", "recovery_required"},
+    "fixture_applying": {"fixture_committed", "fixture_rolled_back", "recovery_required"},
+    "fixture_committed": {"recovery_required"},
+    "fixture_rolled_back": {"recovery_required"},
+    "recovery_required": {"recovered_fixture_only", "fixture_rolled_back"},
     "recovered_fixture_only": set(),
 }
 
@@ -141,6 +145,16 @@ def _valid_backup_receipt(receipt, transaction_id, identity):
         and receipt["restoration_verified"] is True)
 
 
+def _valid_candidate_receipt(receipt, transaction_id, backup):
+    return (type(receipt) is dict and set(receipt) == {
+        "transaction_id", "backup_manifest_sha256", "release_commit", "asset_sha256", "slot_sha256"}
+        and receipt["transaction_id"] == transaction_id and type(backup) is dict
+        and receipt["backup_manifest_sha256"] == backup["manifest_sha256"]
+        and type(receipt["release_commit"]) is str
+        and re.fullmatch("[0-9a-f]{40}", receipt["release_commit"]) is not None
+        and _valid_identity(receipt["asset_sha256"]) and _valid_identity(receipt["slot_sha256"]))
+
+
 def inspect_fixture(root):
     """Read-only state. Never clears a stale lock or starts a guardian."""
     ledger = _ledger(root)
@@ -173,7 +187,8 @@ def inspect_fixture(root):
                 b.get("update_authorized") is not False):
             return result
         receipt = b.get("backup_receipt")
-        if ((b["phase"] == "backup_verified" and receipt is None)
+        if ((b["phase"] in {"backup_verified", "candidate_staged", "fixture_applying",
+                           "fixture_committed", "fixture_rolled_back"} and receipt is None)
                 or (receipt is not None and not _valid_backup_receipt(
                     receipt, b["transaction_id"], b["installation_identity_sha256"]))):
             return result
@@ -181,6 +196,16 @@ def inspect_fixture(root):
                       revision=b["revision"], transaction_id=b["transaction_id"])
         if receipt is not None:
             result["backup_receipt"] = receipt
+        candidate = b.get("candidate_receipt")
+        if ((b["phase"] in {"candidate_staged", "fixture_applying", "fixture_committed", "fixture_rolled_back"}
+             and candidate is None) or (candidate is not None and not _valid_candidate_receipt(
+                 candidate, b["transaction_id"], receipt))):
+            # Clear any partially populated approval fields on invalid proof.
+            return {"schema": JOURNAL_SCHEMA, "state": "blocked_partial_or_corrupt_transaction",
+                    "journal_present": True, "claim_present": True,
+                    "transition_present": False, "update_authorized": False}
+        if candidate is not None:
+            result["candidate_receipt"] = candidate
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
         pass
     return result
@@ -208,7 +233,7 @@ def begin_fixture(root, installation_identity_sha256, interrupt_after=None):
 
 
 def transition_fixture(root, transaction_id, expected_revision, next_phase,
-                       interrupt_after=None, *, backup_receipt=None):
+                       interrupt_after=None, *, backup_receipt=None, candidate_receipt=None):
     """CAS-like persistent transition; a crash leaves a blocking marker.
 
     The caller cannot pass a production path, skip a phase or erase history.
@@ -243,6 +268,12 @@ def transition_fixture(root, transaction_id, expected_revision, next_phase,
             current = {**current, "backup_receipt": dict(backup_receipt)}
         elif backup_receipt is not None:
             raise ValueError("transaction_backup_receipt_out_of_order")
+        if next_phase == "candidate_staged":
+            if not _valid_candidate_receipt(candidate_receipt, transaction_id, current.get("backup_receipt")):
+                raise ValueError("transaction_candidate_receipt_invalid")
+            current = {**current, "candidate_receipt": dict(candidate_receipt)}
+        elif candidate_receipt is not None:
+            raise ValueError("transaction_candidate_receipt_out_of_order")
         temp = ledger / (".phase." + uuid.uuid4().hex + ".incomplete")
         _write_exclusive(temp, {**current, "phase": next_phase,
                                 "revision": expected_revision + 1})

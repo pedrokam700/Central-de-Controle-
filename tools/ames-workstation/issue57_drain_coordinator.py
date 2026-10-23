@@ -9,6 +9,7 @@ neither /ready nor the agent's own signed reply can attest its own PID/port.
 """
 
 import hashlib
+from importlib.util import module_from_spec, spec_from_file_location
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,16 @@ import re
 import subprocess
 
 from issue57_maintenance_ledger import begin_fixture, inspect_fixture, transition_fixture
+
+
+def _fixture_slot_model():
+    # Reuse the already tested recovery model. Its own marker/temp-directory
+    # checks remain mandatory; never route through legacy update_candidate.py.
+    path = Path(__file__).resolve().parents[2] / "scripts/issue57_transaction_simulation.py"
+    spec = spec_from_file_location("issue57_coordinator_slot_model", path)
+    model = module_from_spec(spec)
+    spec.loader.exec_module(model)
+    return model
 
 
 class WindowsProcessWitness:
@@ -150,7 +161,8 @@ class FixtureDrainCoordinator:
             self._assert_witness_stable()
             persisted = inspect_fixture(self.root)
             if persisted != self.claim or self.claim["phase"] not in {
-                    "drain_requested", "awaiting_external_attestations", "backup_verified"}:
+                    "drain_requested", "awaiting_external_attestations", "backup_verified",
+                    "candidate_staged", "fixture_applying"}:
                 raise ValueError("coordinator_journal_mismatch")
             result = self.client.request("poll")
             self._assert_witness_stable()
@@ -207,7 +219,7 @@ class FixtureDrainCoordinator:
         """Recheck the receipt AND bytes before any future staging/swap step."""
         from issue57_update_preflight import verify_operational_backup, sha256_file
         try:
-            if self.claim["phase"] != "backup_verified":
+            if self.claim["phase"] not in {"backup_verified", "candidate_staged", "fixture_applying"}:
                 raise ValueError("coordinator_backup_not_bound")
             if self.observe()["state"] != "agent_quiescent_only":
                 raise ValueError("coordinator_agent_not_quiescent")
@@ -220,6 +232,104 @@ class FixtureDrainCoordinator:
         except Exception:
             self._recovery_required()
             raise
+
+    @property
+    def fixture_slots(self):
+        return Path(self.root) / ("issue57-slot-transaction-" + self.claim["transaction_id"]) / "candidate"
+
+    def stage_fixture_candidate(self, archive, expected=None):
+        """Pin release/staging to the same backup + journal, fixture only."""
+        from issue57_update_preflight import stage_verified_archive, OFFICIAL
+        try:
+            if self.claim["phase"] != "backup_verified":
+                raise ValueError("coordinator_staging_out_of_order")
+            self.verify_bound_backup()
+            model = _fixture_slot_model()
+            slots = model._fixture(self.fixture_slots)
+            if not (slots / "active").is_dir() or model._phase(slots) is not None:
+                raise ValueError("coordinator_original_slot_unverified")
+            model._fingerprint(slots / "active")
+            release = dict(OFFICIAL if expected is None else expected)
+            stage_verified_archive(archive, slots / "incoming", release)
+            # Recheck the drain/backup after potentially long extraction.
+            self.verify_bound_backup()
+            receipt = {"transaction_id": self.claim["transaction_id"],
+                       "backup_manifest_sha256": self.claim["backup_receipt"]["manifest_sha256"],
+                       "release_commit": release["commit"], "asset_sha256": release["sha256"],
+                       "slot_sha256": model._fingerprint(slots / "incoming")}
+            self.claim = transition_fixture(self.root, self.claim["transaction_id"],
+                                            self.claim["revision"], "candidate_staged",
+                                            candidate_receipt=receipt)
+            return {"staged": True, "bound_to_transaction": True, "update_authorized": False}
+        except Exception:
+            self._recovery_required()
+            raise
+
+    def exercise_fixture_update(self, health_probe, *, interrupt_after=None):
+        """Apply/health/rollback ONLY the existing marked, disposable model.
+
+        No production stop/start API, no physical PID, no automatic promotion.
+        health_probe launches/verifies only software owned by the fixture.
+        """
+        try:
+            if self.claim["phase"] != "candidate_staged" or not callable(health_probe):
+                raise ValueError("coordinator_fixture_apply_out_of_order")
+            self.verify_bound_backup()
+            model = _fixture_slot_model()
+            slots = model._fixture(self.fixture_slots)
+            if model._fingerprint(slots / "incoming") != self.claim["candidate_receipt"]["slot_sha256"]:
+                raise ValueError("coordinator_staged_slot_changed")
+            self._transition("fixture_applying")
+            def observed_health(active):
+                self._assert_witness_stable()
+                healthy = health_probe(active) is True
+                self._assert_witness_stable()
+                return healthy
+            result = model.simulate_swap(slots, transaction_id=self.claim["transaction_id"],
+                                         health_probe=observed_health, interrupt_after=interrupt_after)
+            self.verify_bound_backup()
+            phase = "fixture_committed" if result == "committed_old_slot_retained" else "fixture_rolled_back"
+            self._transition(phase)
+            return {"result": result, "phase": phase, "update_authorized": False}
+        except Exception:
+            self._recovery_required()
+            raise
+
+    @staticmethod
+    def recover_fixture_candidate(root, assert_exclusive):
+        """Restart-safe recovery without requiring the dead agent to respond.
+
+        An external holder must assert its exclusion at each boundary. This
+        method still rejects operational roots through the SAME fixture ledger
+        and slot guards; it cannot enroll/stop an installed guardian or PID.
+        """
+        from issue57_update_preflight import verify_operational_backup, sha256_file
+        current = inspect_fixture(root)
+        if (current.get("state") != "blocked_persistent_transaction"
+                or current.get("phase") not in {"fixture_applying", "recovery_required", "fixture_rolled_back"}
+                or "candidate_receipt" not in current or not callable(assert_exclusive)):
+            raise ValueError("coordinator_fixture_recovery_unverified")
+        if assert_exclusive() is not True:
+            raise ValueError("coordinator_recovery_exclusion_unverified")
+        backup = Path(root) / "private-backup"
+        verify_operational_backup(backup)
+        if sha256_file(backup / "runtime-backup-manifest.json") != current["backup_receipt"]["manifest_sha256"]:
+            raise ValueError("coordinator_backup_receipt_mismatch")
+        slots = Path(root) / ("issue57-slot-transaction-" + current["transaction_id"]) / "candidate"
+        model = _fixture_slot_model()
+        model._fixture(slots)
+        state = model._phase(slots)
+        if (state is None or state["transaction_id"] != current["transaction_id"]
+                or state["incoming_sha256"] != current["candidate_receipt"]["slot_sha256"]):
+            raise ValueError("coordinator_recovery_slot_receipt_mismatch")
+        result = model.recover_simulation(slots)
+        if result != "rolled_back" or assert_exclusive() is not True:
+            raise ValueError("coordinator_fixture_recovery_unverified")
+        if current["phase"] != "fixture_rolled_back":
+            if current["phase"] == "fixture_applying":
+                current = transition_fixture(root, current["transaction_id"], current["revision"], "recovery_required")
+            transition_fixture(root, current["transaction_id"], current["revision"], "fixture_rolled_back")
+        return {"result": result, "claim_retained": True, "update_authorized": False}
 
     def cancel_before_update(self):
         # This coordinator cannot perform a swap. Keep the durable claim for

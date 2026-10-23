@@ -16,6 +16,8 @@ import tempfile
 from threading import Lock, Thread
 from types import SimpleNamespace
 import unittest
+import zipfile
+from urllib.request import urlopen
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -227,6 +229,57 @@ class ProtocolTests(unittest.TestCase):
             self.assertNotIn("maintenance_protocol", (ROOT / "ames/agent" / name).read_text(encoding="utf-8"))
 
 
+def prepare_candidate_files(coordinator):
+    from issue57_drain_coordinator import _fixture_slot_model
+    model = _fixture_slot_model()
+    slots = coordinator.fixture_slots
+    slots.mkdir(parents=True)
+    (slots / model.MARKER).write_text(model.MAGIC, encoding="utf-8")
+    (slots / "active/ames-agent").mkdir(parents=True)
+    def program(version):
+        return ("from http.server import HTTPServer,BaseHTTPRequestHandler\n"
+                "import json,os\n"
+                "class Ready(BaseHTTPRequestHandler):\n"
+                " def do_GET(self):\n"
+                "  body=json.dumps({'ready':True,'pid':os.getpid(),'version':" + repr(version) + "}).encode()\n"
+                "  self.send_response(200 if self.path=='/ready' else 404);self.end_headers();self.wfile.write(body)\n"
+                " def log_message(self,*args):pass\n"
+                "server=HTTPServer(('127.0.0.1',0),Ready);server.timeout=5\n"
+                "print(server.server_port,flush=True);server.handle_request();server.server_close()\n").encode()
+    (slots / "active/ames-agent/health_fixture.py").write_bytes(program("old"))
+    files = {"ames-agent/health_fixture.py": program("new")}
+    commit = "d" * 40
+    archive = Path(coordinator.root) / ("AMES_Central_CLEAN_" + commit[:8] + ".zip")
+    with zipfile.ZipFile(archive, "w") as output:
+        for name, content in files.items():
+            output.writestr(name, content)
+        output.writestr("CANDIDATE_MANIFEST.json", json.dumps({"sha": commit, "files": {
+            name: hashlib.sha256(content).hexdigest() for name, content in files.items()}}))
+    return archive, {"tag": "fixture-only", "commit": commit, "asset": archive.name,
+                     "sha256": hashlib.sha256(archive.read_bytes()).hexdigest()}
+
+
+def probe_candidate_http(active, version="new"):
+    """Launch ONLY fixture-owned code and confirm /ready PID + version."""
+    child = subprocess.Popen([sys.executable, "-u", str(active / "ames-agent/health_fixture.py")],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        ready_line = Queue(maxsize=1)
+        Thread(target=lambda: ready_line.put(child.stdout.readline(32)), daemon=True).start()
+        port = int(ready_line.get(timeout=10))
+        if not 1024 < port < 65536 or port == 8765:
+            raise ValueError("fixture_health_port_invalid")
+        with urlopen("http://127.0.0.1:%d/ready" % port, timeout=5) as response:
+            payload = json.loads(response.read(1024))
+        child.wait(timeout=10)
+        return payload == {"ready": True, "pid": child.pid, "version": version} and child.returncode == 0
+    finally:
+        if child.poll() is None:
+            child.terminate()  # This exact fixture child only.
+        child.wait(timeout=10)
+        child.stdout.close()
+
+
 class BoundBackupTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix=ledger.FIXTURE_PARENT_PREFIX)
@@ -317,6 +370,69 @@ class BoundBackupTests(unittest.TestCase):
         document["backup_receipt"]["transaction_id"] = "e" * 32
         journal.write_text(json.dumps(document), encoding="utf-8")
         self.assertEqual(ledger.inspect_fixture(self.root)["state"], "blocked_partial_or_corrupt_transaction")
+
+    def test_staging_apply_and_real_candidate_ready_share_one_transaction(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        self.assertTrue(self.coordinator.stage_fixture_candidate(archive, release)["bound_to_transaction"])
+        result = self.coordinator.exercise_fixture_update(probe_candidate_http)
+        self.assertEqual(result["phase"], "fixture_committed")
+        self.assertFalse(result["update_authorized"])
+        state = json.loads((self.coordinator.fixture_slots / "transaction.json").read_text())
+        self.assertEqual(state["transaction_id"], self.coordinator.client.transaction_id)
+        self.assertTrue(probe_candidate_http(self.coordinator.fixture_slots / "previous", "old"))
+        self.assertEqual((self.data / "local_agent_token").read_bytes(), b"private-fixture-token")
+
+    def test_bad_ready_version_rolls_back_and_preserves_previous_data(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        self.coordinator.stage_fixture_candidate(archive, release)
+        result = self.coordinator.exercise_fixture_update(lambda active: probe_candidate_http(active, "unexpected"))
+        self.assertEqual(result["phase"], "fixture_rolled_back")
+        self.assertTrue(probe_candidate_http(self.coordinator.fixture_slots / "active", "old"))
+        self.assertTrue((self.coordinator.fixture_slots / "quarantine").is_dir())
+        self.assertEqual((self.data.parent / "config.json").read_text(), '{"source_id":"fixture-stable"}')
+
+    def test_modified_staged_code_is_refused_before_detaching_original(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        self.coordinator.stage_fixture_candidate(archive, release)
+        (self.coordinator.fixture_slots / "incoming/ames-agent/health_fixture.py").write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "coordinator_staged_slot_changed"):
+            self.coordinator.exercise_fixture_update(probe_candidate_http)
+        self.assertFalse((self.coordinator.fixture_slots / "previous").exists())
+        self.assertTrue(probe_candidate_http(self.coordinator.fixture_slots / "active", "old"))
+
+    def test_invalid_asset_digest_cannot_become_staged_receipt(self):
+        self.coordinator.prepare_backup()
+        archive, release = prepare_candidate_files(self.coordinator)
+        with self.assertRaises(ValueError):
+            self.coordinator.stage_fixture_candidate(archive, {**release, "sha256": "0" * 64})
+        self.assertNotIn("candidate_receipt", ledger.inspect_fixture(self.root))
+        self.assertFalse((self.coordinator.fixture_slots / "incoming").exists())
+
+    def test_interruption_at_each_swap_boundary_recovers_idempotently(self):
+        for boundary in ("prepared", "old_detached", "new_promoted", "awaiting_health"):
+            with self.subTest(boundary=boundary):
+                case = BoundBackupTests()
+                case.setUp()
+                try:
+                    case.coordinator.prepare_backup()
+                    archive, release = prepare_candidate_files(case.coordinator)
+                    case.coordinator.stage_fixture_candidate(archive, release)
+                    with self.assertRaisesRegex(Exception, boundary):
+                        case.coordinator.exercise_fixture_update(probe_candidate_http, interrupt_after=boundary)
+                    self.assertEqual(ledger.inspect_fixture(case.root)["phase"], "recovery_required")
+                    with self.assertRaisesRegex(ValueError, "coordinator_recovery_exclusion_unverified"):
+                        FixtureDrainCoordinator.recover_fixture_candidate(case.root, lambda: False)
+                    for _ in range(2):
+                        recovered = FixtureDrainCoordinator.recover_fixture_candidate(case.root, lambda: True)
+                        self.assertEqual(recovered["result"], "rolled_back")
+                        self.assertTrue(recovered["claim_retained"])
+                    self.assertTrue(probe_candidate_http(case.coordinator.fixture_slots / "active", "old"))
+                    self.assertTrue(case.admission.snapshot()["draining"])
+                finally:
+                    case.doCleanups()
 
 
 class CrossProcessTests(unittest.TestCase):
@@ -514,6 +630,13 @@ class CrossProcessTests(unittest.TestCase):
             self.assertTrue(coordinator.prepare_backup()["bound_to_transaction"])
             self.assertTrue(coordinator.verify_bound_backup()["verified"])
             self.assertEqual(ledger.inspect_fixture(root)["phase"], "backup_verified")
+            archive, release = prepare_candidate_files(coordinator)
+            coordinator.stage_fixture_candidate(archive, release)
+            # Actual candidate process replies /ready with the wrong expected
+            # version: rollback must restore the old software, not the data.
+            result = coordinator.exercise_fixture_update(lambda active: probe_candidate_http(active, "wrong-version"))
+            self.assertEqual(result["phase"], "fixture_rolled_back")
+            self.assertTrue(probe_candidate_http(coordinator.fixture_slots / "active", "old"))
             self.assertGreaterEqual(checks, 8)
             child.stdin.close()
             self.assertEqual(json.loads(read_line()), {"fenced": True, "new_job_blocked": True})
@@ -522,7 +645,8 @@ class CrossProcessTests(unittest.TestCase):
             # Once the OS no longer witnesses the same process/listener,
             # coordinator recovery is mandatory; the backup/claim survive.
             with self.assertRaises(ValueError):
-                coordinator.observe()
+                coordinator._assert_witness_stable()
+            coordinator._recovery_required()
             persisted = ledger.inspect_fixture(root)
             self.assertEqual(persisted["phase"], "recovery_required")
             self.assertEqual(persisted["backup_receipt"]["transaction_id"], coordinator.client.transaction_id)
@@ -531,6 +655,7 @@ class CrossProcessTests(unittest.TestCase):
             self.assertEqual((data / "exports/report.txt").read_bytes(), b"preserved offline report")
             print("Issue57 authenticated drain: dual mutex + IPC + journal + disconnect fenced; production forbidden")
             print("Issue57 observed maintenance: Win32 identity + mutexes + drain + bound backup; production forbidden")
+            print("Issue57 candidate transaction: pinned staging + process ready + rollback + data retained; production forbidden")
         finally:
             writer.close()
             if child is not None:
