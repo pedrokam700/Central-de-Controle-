@@ -139,3 +139,13 @@ Após cada novo checkpoint relevante, anexar adendo com **SHA real**, CI do mesm
 **Testes candidatos:** `scripts/agent-issue57-update-preflight.test.py` agora prova rejeição de adulteração de `config.json`, token e **SQLite ainda válido para `PRAGMA quick_check`**, e de manifesto incompleto, legado ou divergente. O ensaio integrado de restore e protocolo T2 permanecem separados. **O SHA de commit e a CI deste incremento devem ser preenchidos por comentário no PR após a publicação real**; não confundir passagem local com Windows CI.
 
 **Próxima ação segura após CI:** continuar T3 com inventário dos arquivos mutáveis externos e comprovação de estabilidade sob lease; em paralelo conectar T1/T2 à identidade positiva do guardian legado e ao enrollment autenticado. T4/T5 continuam bloqueados para fábrica. PR **DRAFT até homologação física e aprovação explícita do operador**, sem merge, release ou GitHub Pages.
+
+## 12. T3 — estabilidade observável da identidade durante a cópia (23/10/2026)
+
+**Base remota:** checkpoint T3 de manifesto privado v2 no SHA `ceb90d9a5e5ee15f23fbf2460a7c96cf8dd35b29`, [Central Quality Gate #39946041494](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/39946041494) 3/3 SUCCESS. O workflow A-MES/Windows específico desse SHA deve ser comprovado separadamente. PR #64 segue aberta/draft; `main`/Release 0.5.39 continuam intactos.
+
+**Risco remanescente no mesmo fluxo:** cópia fiel de um `config.json` ou token **já alterado durante o próprio processo de backup** poderia produzir um manifesto consistente dos bytes errados. `backup_core_identity()` agora captura hashes dos dois arquivos de origem antes do backup SQLite, rejeita arquivos de origem irregulares/reparse e confirma novamente o hash de origem e de cada cópia depois da leitura. Diferença => `private_identity_changed_during_backup`, sem emitir valores/hashes em erro ou devolver `update_authorized=true`.
+
+**Teste determinístico e isolado:** `agent-issue57-update-preflight.test.py` altera deliberadamente o `config.json` e o token **sintéticos** entre a cópia e a verificação; as duas situações devem ser recusadas, sem tocar a instalação real. Também exercitar restauração integrada e drenagem autenticada para regressões.
+
+**Limite:** dupla comparação não substitui guarda transacional. Uma alteração entre verificações ou em outros arquivos externos ainda exige lease exclusivo, guardian real e atestação do navegador. O backup aqui continua preparatório; T1/T2/T3 externo, T4 e T5 permanecem abertos. A CI do novo commit deve ser validada e comentada pelo SHA exato antes de declarar GREEN remoto.

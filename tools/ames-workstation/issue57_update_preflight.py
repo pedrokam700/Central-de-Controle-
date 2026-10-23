@@ -291,10 +291,22 @@ def backup_core_identity(clean_root, private_destination):
     for rel in ("config.json", "data/local_agent_token", "data/ames_local.sqlite3"):
         if not (agent / rel).is_file():
             raise ValueError("missing_critical_identity_file")
+    # Without a verified external lease, an identity can change in the middle
+    # of the copy. Detect observable source changes even though this alone is
+    # NOT sufficient to attest a production maintenance window.
+    private_sources = (agent / "config.json", agent / "data/local_agent_token")
+    if not all(_regular_file(source) for source in private_sources):
+        raise ValueError("private_identity_source_untrusted")
+    before = tuple(sha256_file(source) for source in private_sources)
     private_backup_directory(destination)
     consistent_sqlite_backup(agent / "data/ames_local.sqlite3", destination / "ames_local.sqlite3")
     copy_private_identity(agent / "config.json", destination / "config.json")
     copy_private_identity(agent / "data/local_agent_token", destination / "local_agent_token")
+    if (not all(_regular_file(source) for source in private_sources) or
+            tuple(sha256_file(source) for source in private_sources) != before or
+            sha256_file(destination / "config.json") != before[0] or
+            sha256_file(destination / "local_agent_token") != before[1]):
+        raise ValueError("private_identity_changed_during_backup")
     return {"core_identity_verified": True, "data_tree_complete": False,
             "exclusive_lease_held": False, "update_authorized": False}
 

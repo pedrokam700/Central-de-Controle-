@@ -106,6 +106,29 @@ with tempfile.TemporaryDirectory() as tmp:
     except FileExistsError:
         pass
 
+    # Synthetic concurrent source edit: the copied credential/config must
+    # still match the source observed before the SQLite online snapshot.
+    original_copy = p.copy_private_identity
+    for case, source in (('config', live.parent.parent / 'config.json'),
+                         ('token', live.parent / 'local_agent_token')):
+        original = source.read_bytes()
+        def changed_while_copying(src, dst):
+            result = original_copy(src, dst)
+            if Path(src) == source:
+                source.write_bytes(b'changed-source-in-temporary-test-only')
+            return result
+        try:
+            p.copy_private_identity = changed_while_copying
+            try:
+                p.backup_core_identity(root / 'live', root / ('unstable-' + case))
+                raise AssertionError('concurrent identity change must fail')
+            except ValueError as exc:
+                assert str(exc) == 'private_identity_changed_during_backup'
+                assert 'changed-source' not in str(exc)
+        finally:
+            p.copy_private_identity = original_copy
+            source.write_bytes(original)
+
     # Runtime evidence outside SQLite: imports, exports and engine checkpoints.
     contents = {
         'imports/export_3028.xlsx': b'workbook only in fixture',
