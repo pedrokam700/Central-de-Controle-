@@ -29,7 +29,15 @@ export async function publication(uid,payload,{now=new Date(),productionConfig}=
   const head={schema:CANONICAL_SCHEMA,owner_uid:uid,line_id:safe.line_id,source_id:safe.source_id,snapshot_id:safe.snapshot_id,snapshot_num:Number(safe.snapshot_id),snapshot_revision:safe.snapshot_revision,key,hash,parts:parts.length,collected_at:safe.collected_at};
   return {id:uid+':'+safe.line_id+':'+key,uid,head,parts,history:historyMetadata(safe),publish_scope:publicationIntent(safe,now,productionConfig)};
 }
-export function indexedQueue(){
+// Native Web Locks coordinate writers in *cooperating, current* tabs of one
+// browser origin/profile. Previously opened tabs, other profiles and machines
+// may still write without this lock; it is never update authorization.
+const OUTBOX_WRITER_LOCK='central-ames-outbox-v2-cooperative-writer-v1';
+const REMOTE_PUBLISH_LOCK='central-ames-firestore-v1-cooperative-publisher-v1';
+const MAINTENANCE_CLAIM_ID='!ames-maintenance-active-v1';
+const validMaintenanceBinding=b=>b&&Object.keys(b).sort().join(',')==='installation_sha256,scope_id,transaction_id'&&/^[a-f0-9]{64}$/.test(b.installation_sha256)&&/^[a-f0-9]{64}$/.test(b.scope_id)&&/^[a-f0-9]{32}$/.test(b.transaction_id);
+const maintenanceBlocked=()=>Object.assign(Error('ames_browser_maintenance_pending'),{code:'ames_browser_maintenance_pending'});
+export function indexedQueue({lockManager=globalThis.navigator?.locks}={}){
   let db,markersDb;
   // Preserve the already proven IndexedDB outbox schema/version EXACTLY.
   const open=()=>db||(db=new Promise((resolve,reject)=>{
@@ -45,29 +53,78 @@ export function indexedQueue(){
     r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
   }));
   const run=async(mode,work,marker=false)=>{const d=await (marker?openMarkers():open());return new Promise((resolve,reject)=>{const t=d.transaction(marker?'sent':'pending',mode),s=t.objectStore(marker?'sent':'pending');let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
+  const lockSupported=()=>typeof lockManager?.request==='function';
+  const readClaim=()=>run('readonly',s=>s.get(MAINTENANCE_CLAIM_ID),true);
+  const assertWritable=async()=>{if(await readClaim())throw maintenanceBlocked();};
+  const withWriter=work=>{
+    const guarded=async()=>{await assertWritable();return work();};
+    return lockSupported()?lockManager.request(OUTBOX_WRITER_LOCK,{mode:'shared'},guarded):guarded();
+  };
+  const failedFence=reason=>({schema:'ames-browser-cooperative-fence-v1',cooperative_fence_observed:false,pending_entries:null,reason,multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false});
   return {
-    put:x=>run('readwrite',s=>s.put(x)),
-    remove:id=>run('readwrite',s=>s.delete(id)),
+    put:x=>withWriter(()=>run('readwrite',s=>s.put(x))),
+    remove:id=>withWriter(()=>run('readwrite',s=>s.delete(id))),
     list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid),
+    // Count every UID in this browser origin, including evidence left by a
+    // previous login. Never fetch payloads or mutate the offline outbox.
+    countAll:()=>run('readonly',s=>s.count()),
+    // Metadata only, existing marker DB/store; no schema change or expiry.
+    maintenanceClaim:readClaim,
+    // Candidate-only inter-tab probe. The caller's asynchronous observation
+    // runs while the exclusive lock blocks NEW cooperating writers; Web Locks
+    // releases the lock even if the observer rejects or its tab closes. This
+    // does not fence older clients, unrelated profiles or Firestore uploads.
+    async withCooperativeMaintenanceFence(observe=async()=>{},{transaction}={}){
+      if(typeof observe!=='function')throw TypeError('maintenance_observer_must_be_function');
+      if(transaction!==undefined&&!validMaintenanceBinding(transaction))return failedFence('browser_maintenance_binding_invalid');
+      if(!lockSupported())return failedFence('browser_web_locks_unavailable');
+      try{
+        return await lockManager.request(OUTBOX_WRITER_LOCK,{mode:'exclusive',ifAvailable:true},async lock=>{
+          if(!lock)return failedFence('cooperative_outbox_writer_busy');
+          const pending=await run('readonly',s=>s.count());
+          if(!Number.isSafeInteger(pending)||pending<0)return failedFence('browser_outbox_unavailable');
+          let persistent={};
+          if(transaction){
+            if(pending!==0)return failedFence('pending_outbox_evidence');
+            const desired={id:MAINTENANCE_CLAIM_ID,schema:'ames-browser-maintenance-claim-v1',...transaction,update_authorized:false};
+            const previous=await readClaim();
+            if(previous&&JSON.stringify(previous)!==JSON.stringify(desired))return failedFence('browser_maintenance_claim_conflict');
+            if(!previous)await run('readwrite',s=>s.put(desired),true);
+            persistent={persistent_claim_held:true,transaction:Object.freeze({...transaction})};
+          }else if(await readClaim())return failedFence('browser_maintenance_recovery_required');
+          await observe(Object.freeze({cooperative_fence_held:true,pending_entries:pending,...persistent,update_authorized:false,multi_tab_attested:false,other_browser_profiles_attested:false}));
+          return {schema:'ames-browser-cooperative-fence-v1',cooperative_fence_observed:true,cooperative_fence_released:true,pending_entries:pending,reason:pending?'pending_outbox_evidence':'other_tabs_profiles_and_legacy_clients_unattested',multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false};
+        });
+      }catch{return failedFence('cooperative_outbox_fence_failed');}
+    },
     hasHistory:async id=>!!(await run('readonly',s=>s.get(id),true)),
-    markHistory:id=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),true)
+    markHistory:id=>withWriter(()=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),true))
   };
 }
 
-export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
+export function createMesSync(store,remote,{queue=indexedQueue(),publicationLocks=globalThis.navigator?.locks,online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),watchDay='';
+  // Do not erase the counters on logout: an already-started remote promise may
+  // still be unsettled after its session has been invalidated.
+  let uploadsInFlight=0,capturesInFlight=0,readsInFlight=0;
   const alive=(u,g)=>u===uid&&g===generation;
   const currentConfig=()=>typeof productionConfig==='function'?productionConfig():productionConfig;
   const entryScope=e=>publicationIntent(JSON.parse(e.parts.join('')),now(),currentConfig());
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
   const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null,identity_blocked:[],last_publish_timing:null});
   async function flush(){
-    if(!uid||running)return;running=true;const u=uid,g=generation;
+    if(!uid||running)return;running=true;uploadsInFlight++;const u=uid,g=generation;
     try{
       let entries=await queue.list(u);
       if(!alive(u,g))return;
       status({pending:entries.length,status:entries.length?'pending':(store.agent().sync?.last_sent?'synchronized':'idle')});
       if(!online())return;
+      // Keep the shared publication lease until Firestore writes AND the
+      // matching IndexedDB acknowledgement have completed. An exclusive
+      // maintenance observer must acquire this lease BEFORE the outbox lease
+      // to avoid deadlock with queue.remove/markHistory below.
+      const transfer=async()=>{
+      if(typeof queue.maintenanceClaim==='function'&&await queue.maintenanceClaim())throw maintenanceBlocked();
       while(entries.length&&alive(u,g)){
         entries.sort((a,b)=>b.head.snapshot_num-a.head.snapshot_num||b.head.snapshot_revision-a.head.snapshot_revision);
         const errors=[];
@@ -126,10 +183,14 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       }
       retry=1000;
       if(alive(u,g))status({status:identityBlocked.size?'shared_history_legacy_conflict':store.agent().sync?.last_sent?'synchronized':'idle',pending:0,error:'',identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values()]});
+      };
+      if(typeof publicationLocks?.request==='function')await publicationLocks.request(REMOTE_PUBLISH_LOCK,{mode:'shared'},transfer);
+      else await transfer();
     }catch(error){if(alive(u,g)){status({status:'pending',error:error.message});unschedule(timer);timer=schedule(()=>{if(alive(u,g))flush();},retry);retry=Math.min(retry*2,60000);}}
-    finally{if(alive(u,g))running=false;}
+    finally{uploadsInFlight--;if(alive(u,g))running=false;}
   }
   async function receive(heads,meta=lastReadMeta){
+    readsInFlight++;
     const u=uid,g=generation,read=++readGeneration,receivedAt=Date.now();
     try{
       const candidates=meta.day_index_available?heads.filter(h=>h.period_start):heads;
@@ -200,6 +261,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         });
       }
     }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads,lastReadMeta);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
+    finally{readsInFlight--;}
   }
   function subscribe(){
     if(!uid)return;
@@ -228,6 +290,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     if(!uid)return;
     if(capturing){await capturing;if(!uid)return;return capture();}
     const u=uid,g=generation;
+    capturesInFlight++;
     const work=(async()=>{
       const payloads=store.localCanonical();
       const signature=JSON.stringify(payloads.map(p=>[p.line_id,p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));
@@ -238,9 +301,71 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       if(alive(u,g)){status({status:pending?'pending':'idle',pending});void flush();}
     })();
     capturing=work;
-    try{await work;}finally{if(capturing===work)capturing=null;}
+    try{await work;}finally{capturesInFlight--;if(capturing===work)capturing=null;}
   }
   return {
+    async withCooperativeBrowserFence(observer=async()=>{},{transaction}={}){
+      // This is an optional, unconnected candidate primitive. Neither this
+      // callback nor its return value may authorize Windows maintenance.
+      const fail=reason=>({schema:'ames-browser-dual-cooperative-fence-v1',cooperative_fence_observed:false,reason,pending_entries:null,multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false});
+      if(typeof observer!=='function')throw TypeError('maintenance_observer_must_be_function');
+      if(transaction!==undefined&&!validMaintenanceBinding(transaction))return fail('browser_maintenance_binding_invalid');
+      if(typeof publicationLocks?.request!=='function'||typeof queue.withCooperativeMaintenanceFence!=='function')return fail('browser_cooperative_locks_unavailable');
+      const initial={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+      if(initial.uploadsInFlight||initial.capturesInFlight||initial.readsInFlight)return fail('local_browser_activity_in_flight');
+      try{
+        return await publicationLocks.request(REMOTE_PUBLISH_LOCK,{mode:'exclusive',ifAvailable:true},async lock=>{
+          if(!lock)return fail('cooperative_remote_publication_busy');
+          let blocked=false;
+          const outbox=await queue.withCooperativeMaintenanceFence(async evidence=>{
+            const current={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+            if((transaction&&(!evidence.persistent_claim_held||JSON.stringify(evidence.transaction)!==JSON.stringify(transaction)))||evidence.pending_entries!==0||Object.keys(initial).some(key=>initial[key]!==current[key])){blocked=true;return;}
+            await observer(Object.freeze({...evidence,remote_publication_fence_held:true,update_authorized:false,multi_tab_attested:false,other_browser_profiles_attested:false}));
+            const after={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+            if(Object.keys(initial).some(key=>initial[key]!==after[key]))blocked=true;
+          },{transaction});
+          if(!outbox.cooperative_fence_observed)return fail(outbox.reason||'cooperative_outbox_fence_failed');
+          if(blocked)return fail(outbox.pending_entries?'pending_outbox_evidence':'local_browser_activity_changed');
+          return {schema:'ames-browser-dual-cooperative-fence-v1',cooperative_fence_observed:true,cooperative_fence_released:true,pending_entries:0,reason:'legacy_tabs_other_profiles_and_other_machines_unattested',multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false};
+        });
+      }catch{return fail('cooperative_browser_fence_failed');}
+    },
+    async withMaintenanceTransaction(binding,observer){
+      // Opt-in only: no UI/HTTP activation. Failure never deletes the claim.
+      if(!validMaintenanceBinding(binding))throw TypeError('browser_maintenance_binding_invalid');
+      return this.withCooperativeBrowserFence(observer,{transaction:binding});
+    },
+    async inspectMaintenanceClaim(){return typeof queue.maintenanceClaim==='function'?queue.maintenanceClaim():null;},
+    async inspectUpdateReadiness(){
+      // This is only an observation of ONE browser origin/profile. Other
+      // profiles, old tabs and a concurrently changing queue cannot be fenced
+      // here; only an external coordinator can eventually authorize an update.
+      const initial={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+      let pending=null,reason='browser_outbox_unavailable';
+      if(typeof queue.countAll==='function'){
+        try{
+          const total=await queue.countAll();
+          if(Number.isSafeInteger(total)&&total>=0){pending=total;reason='';}
+        }catch{/* IndexedDB locked, denied or unavailable: fail closed. */}
+      }
+      const observed={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+      const changed=Object.keys(initial).some(key=>initial[key]!==observed[key]);
+      return {
+        schema:'ames-browser-outbox-readonly-v1',
+        pending_entries:pending,
+        uploads_inflight:observed.uploadsInFlight,
+        captures_inflight:observed.capturesInFlight,
+        reads_inflight:observed.readsInFlight,
+        observation_stable:!changed,
+        advisory_no_pending:pending===0&&!changed&&
+          !observed.uploadsInFlight&&!observed.capturesInFlight&&!observed.readsInFlight,
+        reason:reason||(changed?'session_or_activity_changed_during_observation':pending?'pending_outbox_evidence':''),
+        multi_tab_attested:false,
+        other_browser_profiles_attested:false,
+        exclusive_lease_held:false,
+        update_authorized:false,
+      };
+    },
     async listHistory(line){
       if(!uid||!remote.listHistory)throw Error('History unavailable');
       const u=uid,g=generation,rows=await remote.listHistory(line);

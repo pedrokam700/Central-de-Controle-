@@ -57,7 +57,14 @@ jobs:
         run: python3 scripts/agent-canonical.test.py
 
       - name: Run updater Python contract
-        run: python3 scripts/agent-update.test.py
+        run: |
+          python3 scripts/agent-update.test.py
+          python3 scripts/agent-issue57-update-preflight.test.py
+          python3 scripts/agent-issue57-maintenance-ledger.test.py
+          python3 scripts/agent-issue57-drain-protocol.test.py
+          python3 scripts/agent-issue57-transaction-simulation.test.py
+          python3 scripts/agent-issue57-integrated-recovery.test.py
+          python3 scripts/agent-issue57-direct-python-recovery.test.py
 
       - name: Agent auto-start registry contract (mocked, no real Windows changes)
         run: python3 scripts/agent-workstation-autostart.test.py
@@ -146,26 +153,8 @@ jobs:
           name: console-experience-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/console-evidence
 
-  post-deploy-smoke:
-    name: Published preview smoke
-    if: github.event_name == 'pull_request'
-    needs: static-quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-      - name: Verify exact SHA and canonical route on deployed preview
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: >-
-          node scripts/post-deploy-smoke.mjs
-          --origin "https://deploy-preview-${PR_NUMBER}--productcontrolcenter.netlify.app"
-          --sha "$EXPECTED_SHA"
-          --wait-ms 180000
-          --max-redirects 4
+  # Pull requests do not deploy to the official GitHub Pages URL, so they
+  # validate code and browser behavior in the three jobs above. Do NOT depend
+  # on a third-party preview (historically Netlify returned HTTP 401 here).
+  # On main, .github/workflows/publish-github-pages.yml verifies the exact
+  # immutable official GitHub Release SHA and live home/index/bootstrap 200s.
