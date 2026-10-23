@@ -98,14 +98,14 @@ try{
   // publication even when its pending queue looks locally idle elsewhere.
   // The dual observer must acquire REMOTE exclusive BEFORE OUTBOX exclusive;
   // otherwise it could deadlock a publishing tab in queue.remove().
-  await peer.evaluate(async()=>{
+  await peer.evaluate(async sampleDay=>{
     const flight=window.remoteFlight={};
     flight.wait=new Promise(resolve=>{flight.release=resolve;});
     qa.holdPart=flight.wait;
-    const entry=await qa.publication('A',qa.sample,{now:new Date('${fixtureDay}T12:00:00Z'),productionConfig:{timezone:'America/Sao_Paulo',dayStart:'07:00'}});
+    const entry=await qa.publication('A',qa.sample,{now:new Date(sampleDay+'T12:00:00Z'),productionConfig:{timezone:'America/Sao_Paulo',dayStart:'07:00'}});
     await qa.queue.put(entry);
     flight.publish=qa.online();
-  });
+  },fixtureDay);
   await peer.waitForFunction(()=>window.remoteFlight?.entered);
   const uploadBusy=await page.evaluate(()=>qa.integration.sync.withCooperativeBrowserFence());
   assert.equal(uploadBusy.cooperative_fence_observed,false,'remote upload in another tab must deny dual maintenance probe');
