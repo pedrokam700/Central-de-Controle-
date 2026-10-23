@@ -4,12 +4,22 @@ import { isTodaySnapshot } from './data/operational-period.mjs';
 import { formatFactoryDateTime as displayTime, displayValue } from './data/time-display.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
+import {fullDayClosureEvidence} from './data/full-day-closure.mjs';
+import {historySharingState,summarizeHistoryPublishers} from './history-source.mjs';
 
 const labels={fresh:'Atualizado',partial:'Parcial',stale:'Desatualizado',not_collected:'Não coletado'};
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 const pad=n=>String(n).padStart(2,'0');
 const inputDate=date=>`${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 const revisionLabel=entry=>`${entry.snapshot_id??'—'} · r${Number(entry.snapshot_revision)||0}`;
+const sharingLabel=entry=>{
+  switch(historySharingState(entry)){
+    case 'local_and_shared':return t('Local + índice no Firebase','Local + indexed on Firebase');
+    case 'local_only':return t('Somente local · compartilhamento não comprovado','Local only · sharing unverified');
+    case 'shared':return t('Compartilhado','Shared');
+    default:return t('Compartilhamento não comprovado','Sharing unverified');
+  }
+};
 
 const linkageStatus=value=>{
   const code=String(value??'').trim().toUpperCase();
@@ -56,7 +66,7 @@ export function operationalRange(store,offset=0,now=new Date()){
 }
 
 export function createHistoryView(root,store,client,history) {
-  let line=LINE_IDS[0],tab='today',loading=false,error='',message='',entries=[],selected=null,selectedEntry=null,disposed=false,generation=0,renderedLanguage='',capturePanel=null;
+  let line=LINE_IDS[0],tab='today',loading=false,error='',message='',entries=[],originFilter='',selected=null,selectedEntry=null,disposed=false,generation=0,renderedLanguage='',capturePanel=null;
   const formValues=()=>root.querySelector('form')?Object.fromEntries(new FormData(root.querySelector('form'))):{};
   function setPeriod(start,end){const form=root.querySelector('form');if(!form)return;form.elements.start.value=start;form.elements.end.value=end;}
   function quickPeriod(offset){const range=operationalRange(store,offset);setPeriod(range.start,range.end);line=root.querySelector('form').elements.line.value;void load();}
@@ -68,7 +78,7 @@ export function createHistoryView(root,store,client,history) {
     host.innerHTML=`<div class="ames-history-head"><div><strong>${esc(heading)}</strong><p>${window?esc(window.start.replace('T',' ')+' → '+window.end.replace('T',' ')):t('Escolha a linha e o período; consultas investigativas não atualizam o painel Hoje.','Choose line and period; investigations never update Today.')}</p></div><div class="ames-history-state">${tab==='today'?esc(labels[coverageState(read)]):t('Histórico preservado','Preserved history')}</div></div><div class="ames-history-facts"><span>${t('Linha','Line')}: <b>${esc(line)}</b></span><span>${t('Snapshot','Snapshot')}: <b>${tab==='today'?esc(p?revisionLabel(p):'—'):'—'}</b></span><span>${t('Última extração','Last extraction')}: <b>${tab==='today'?esc(p?displayTime(p.collected_at):'—'):'—'}</b></span><span>${t('Origem','Origin')}: <b>${tab==='today'?esc(read.source||'—'):t('Local / compartilhada','Local / shared')}</b></span><span>AT: <b>${t('Conforme evidência da revisão','Per revision evidence')}</b></span></div>`;
   }
   function chooseTab(next){
-    tab=next;message='';error='';selected=null;selectedEntry=null;showSelected();
+    tab=next;originFilter='';message='';error='';selected=null;selectedEntry=null;showSelected();
     root.querySelectorAll('[data-history-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.historyMode===tab)));
     const inputs=root.querySelector('form');
     if(inputs){inputs.elements.start.readOnly=tab==='today'||tab==='previous';inputs.elements.end.readOnly=tab==='today'||tab==='previous';}
@@ -77,7 +87,10 @@ export function createHistoryView(root,store,client,history) {
   }
   function results(){
     const host=root.querySelector('[data-period-results]');if(!host)return;summary();
-    const values=formValues(),matches=tab==='today'?[]:entries.filter(e=>matchesPeriod(e,values)),canCollect=store.agent().status==='connected'&&values.start&&values.end;
+    const values=formValues(),periodMatches=tab==='today'?[]:entries.filter(e=>matchesPeriod(e,values));
+    const publishers=summarizeHistoryPublishers(periodMatches,line);
+    const matches=originFilter?periodMatches.filter(e=>e.source_id===originFilter):periodMatches;
+    const canCollect=store.agent().status==='connected'&&values.start&&values.end;
     if(tab==='today'){
       // The mutable end of a live 3028 window never equals tomorrow at 07:00.
       // Use the already verified current-day canonical store instead of
@@ -102,8 +115,11 @@ export function createHistoryView(root,store,client,history) {
       return;
     }
     host.innerHTML=loading?`<p role="status">${t('Consultando histórico…','Loading history…')}</p>`:error?`<p role="status" class="notice warn">${esc(error)}</p>`:
-      `${entries.some(e=>e.history_source==='local')?`<p class="mes-context" role="status">${t('Há revisões salvas neste computador. Local ≠ publicado no Firebase; o outro posto só recebe as versões marcadas como compartilhadas.','Local revisions exist on this workstation. Local does not mean published to Firebase; other workstations receive only shared revisions.')}</p>`:''}${message?`<p role="status" class="mes-context">${esc(message)}</p>`:''}${matches.length?`<div class="table-wrap"><table><thead><tr><th>${t('Período','Period')}</th><th>CPH</th><th>${t('Versão','Version')}</th><th>${t('Coleta','Collected')}</th><th>${t('Posto/origem','Workstation/source')}</th><th>${t('Compartilhamento','Sharing')}</th><th></th></tr></thead><tbody>${matches.map((e,i)=>`<tr><td>${esc(e.period_start&&e.period_end?e.period_start+' → '+e.period_end:t('Período não informado pela fonte','Period not reported by source'))}</td><td>${esc(e.products||'—')}</td><td><b>${esc(revisionLabel(e))}</b></td><td>${esc(displayTime(e.collected_at))}</td><td>${esc(e.source_id||'—')}</td><td><strong>${e.history_source==='local'?t('Local · não confirmado na equipe','Local · not confirmed with team'):t('Compartilhado','Shared')}</strong></td><td><button type="button" class="button secondary" data-history-open="${i}">${t('Abrir sem substituir atual','Open without replacing current')}</button></td></tr>`).join('')}</tbody></table></div><p class="mes-context">${t('Cada linha é uma versão preservada. Uma atualização do mesmo período cria/publica nova evidência; versões anteriores continuam disponíveis.','Each row is a preserved version. Refreshing the same period creates/publishes new evidence; older versions remain available.')}</p>`:`<p>${t('Período ainda não coletado','Period not collected yet')}</p>`}
+      `${entries.some(e=>e.history_source==='local')?`<p class="mes-context" role="status">${t('Revisões locais podem ter um índice correspondente no Firebase: confira a coluna Compartilhamento. Índice compartilhado não confirma cobertura FULL nem resolve conflito entre origens.','Local revisions may also have a matching Firebase index: check the Sharing column. A shared index does not prove FULL coverage or resolve source conflicts.')}</p>`:''}${message?`<p role="status" class="mes-context">${esc(message)}</p>`:''}${publishers.origins.length>1?`<div class="notice warn" data-history-multi-publisher><strong>${t('Múltiplos postos no histórico','Multiple workstations in history')}: ${publishers.origins.length}</strong><p>${publishers.overlapping_days.length?t('Origens com coletas no mesmo dia produtivo: ','Sources with captures on the same production day: ')+esc(publishers.overlapping_days.map(d=>d.day).join(', ')):t('Há registros de postos diferentes, sem sobreposição diária comprovada neste filtro.','Different workstation origins exist; no same-day overlap is proven within this filter.')} ${t('Não somar ocorrências de coletas sobrepostas nem escolher origem automaticamente.','Do not add overlapping capture occurrences or automatically choose a source.')}</p><div class="mes-filters"><label>${t('Exibir posto/origem','Show workstation/source')}<select data-history-origin-filter><option value="">${t('Todas as origens · revisões separadas','All origins · separate revisions')}</option>${publishers.origins.map(o=>`<option value="${esc(o.source_id)}"${originFilter===o.source_id?' selected':''}>${esc(o.source_id)} · ${o.revisions} ${t('revisões','revisions')}</option>`).join('')}</select></label></div></div>`:''}${matches.length?`<div class="table-wrap"><table><thead><tr><th>${t('Período','Period')}</th><th>CPH</th><th>${t('Versão','Version')}</th><th>${t('Coleta','Collected')}</th><th>${t('Posto/origem','Workstation/source')}</th><th>${t('Compartilhamento','Sharing')}</th><th></th></tr></thead><tbody>${matches.map((e,i)=>`<tr><td>${esc(e.period_start&&e.period_end?e.period_start+' → '+e.period_end:t('Período não informado pela fonte','Period not reported by source'))}</td><td>${esc(e.products||'—')}</td><td><b>${esc(revisionLabel(e))}</b></td><td>${esc(displayTime(e.collected_at))}</td><td>${esc(e.source_id||'—')}</td><td><strong>${esc(sharingLabel(e))}</strong></td><td><button type="button" class="button secondary" data-history-open="${i}">${t('Abrir sem substituir atual','Open without replacing current')}</button></td></tr>`).join('')}</tbody></table></div><p class="mes-context">${t('Cada linha é uma versão preservada. Uma atualização do mesmo período cria/publica nova evidência; versões anteriores continuam disponíveis.','Each row is a preserved version. Refreshing the same period creates/publishes new evidence; older versions remain available.')}</p>`:`<p>${t('Período ainda não coletado','Period not collected yet')}</p>`}
       ${canCollect?`<button type="button" class="button secondary" data-history-collect>${matches.length?t('Atualizar este período (preservar histórico)','Refresh this period (preserve history)'):t('Coletar este período','Collect this period')}</button>`:''}`;
+    host.querySelector('[data-history-origin-filter]')?.addEventListener('change',event=>{
+      generation++;originFilter=event.target.value;selected=null;selectedEntry=null;loading=false;showSelected();results();
+    });
     host.querySelectorAll('[data-history-open]').forEach(button=>button.addEventListener('click',async()=>{
       const entry=matches[Number(button.dataset.historyOpen)],token=++generation;loading=true;error='';message='';results();
       try{const payload=await history.open(entry);if(disposed||token!==generation)return;selected=payload;selectedEntry=entry;}
@@ -128,6 +144,18 @@ export function createHistoryView(root,store,client,history) {
     if(!selected){host.replaceChildren();return;}
     const rows=selected.datasets?.defects||[],contexts=selected.process_contexts||selected.datasets?.process_contexts||[],coverage=selected.coverage?.defects||{};
     host.innerHTML=`<section class="mes-context-panel"><div class="section-head"><div><h3>${t('VISUALIZAÇÃO HISTÓRICA','HISTORICAL VIEW')} · ${esc(selected.line_id)}</h3><p>${t('Esta visualização é somente leitura e não substitui o snapshot atual da Central.','This view is read-only and does not replace the current Work Center snapshot.')}</p></div><span class="status">${esc(revisionLabel(selectedEntry||selected))}</span></div><div class="ames-summary-grid"><div class="stat"><span class="stat-label">${t('Coletado em','Collected at')}</span><strong class="stat-value">${esc(displayTime(selected.collected_at))}</strong></div><div class="stat"><span class="stat-label">${t('Origem','Source')}</span><strong class="stat-value">${esc(selected.source_id||'—')}</strong></div><div class="stat"><span class="stat-label">${t('Falhas','Failures')}</span><strong class="stat-value">${rows.length}</strong></div><div class="stat"><span class="stat-label">3022 · ${t('contextos','contexts')}</span><strong class="stat-value">${contexts.length}</strong></div></div><p>${coverage.source_complete===true?t('Cobertura de falhas completa','Complete failure coverage'):t('Cobertura de falhas parcial/indisponível','Partial/unavailable failure coverage')}</p><div class="table-wrap"><table><thead><tr><th>PCBA</th><th>CPH</th><th>Defect Code</th><th>${t('Registro da falha (MES)','Failure record (MES)')}</th><th>${t('Vínculo (2114)','Linkage (2114)')}</th><th>${t('AT (3012) · candidatos','AT (3012) · candidates')}</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.pcba_sn||'—')}</td><td>${esc(r.product_model||'—')}</td><td>${esc(r.defect_code||'—')}</td><td>${esc(displayValue('defect_time',r.defect_time))}</td><td>${esc(linkageStatus(r.repair_status_current))}</td><td>${repairEvidenceCell(r)}</td></tr>`).join('')}</tbody></table></div><section data-history-captures></section></section>`;
+    const closure=fullDayClosureEvidence(selected);
+    const closureNote=host.ownerDocument.createElement('p');
+    closureNote.dataset.historyFullClosure='';
+    closureNote.className=closure.status==='FULL'?'mes-context':'notice warn';
+    closureNote.textContent=closure.status==='FULL'
+      ?t('Fechamento FULL comprovado para esta revisão: 3028 + 3074 + 2114 + 3022; revisão preservada.',
+        'FULL closure proven for this revision: 3028 + 3074 + 2114 + 3022; revision preserved.')
+      :t('Fechamento FULL não comprovado para esta revisão. Fontes sem integralidade: ',
+        'FULL closure unproven for this revision. Sources without complete proof: ')+
+        (closure.missing_sources.join(', ')||t('identidade/período','identity/period'))+
+        '. '+t('Uma captura parcial não substitui fechamento diário.','A partial capture does not replace daily closure.');
+    host.querySelector('[data-history-captures]')?.before(closureNote);
     capturePanel=createSourceCaptureHistory(host.querySelector('[data-history-captures]'),client,store);
     capturePanel.show(selected,selectedEntry);
   }
@@ -143,8 +171,8 @@ export function createHistoryView(root,store,client,history) {
     if(renderedLanguage!==language){generation++;capturePanel?.clear();capturePanel=null;root.replaceChildren();renderedLanguage=language;}
     if(!root.querySelector('form')){
       root.innerHTML=`<details open class="mes-context-panel ames-history-root" data-history-panel><summary>${t('Histórico de produção','Production history')}</summary><nav class="ames-history-tabs" aria-label="${t('Modo do histórico','History mode')}"><button type="button" class="button secondary" aria-pressed="true" data-history-mode="today">${t('Hoje','Today')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="previous">${t('Último dia de produção','Last production day')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="history">${t('Histórico por data','History by date')}</button><button type="button" class="button secondary" aria-pressed="false" data-history-mode="advanced">${t('Consulta avançada','Advanced query')}</button></nav><section class="ames-history-overview" data-production-context></section><p class="mes-context">${t('O 3028 usa 07:00 → 07:00; turnos 07:30/17:30 permanecem distintos. Dados não comprovados nunca viram zero.','3028 uses 07:00 → 07:00; shifts 07:30/17:30 remain distinct. Missing evidence is never zero.')}</p><form><div class="mes-filters"><label>${t('Linha','Line')}<select name="line">${LINE_IDS.map(l=>`<option>${l}</option>`).join('')}</select></label><label>${t('Início','Start')}<input type="datetime-local" name="start"></label><label>${t('Fim','End')}<input type="datetime-local" name="end"></label><label>CPH ${t('exato','exact')}<input name="product" placeholder="CPH"></label></div><button type="submit" class="button secondary">${t('Consultar outro período','Query another period')}</button></form><section data-period-results></section><section data-period-snapshot></section></details>`;
-      root.querySelector('form').addEventListener('submit',e=>{e.preventDefault();line=e.currentTarget.elements.line.value;void load();});
-      root.querySelector('select').addEventListener('change',e=>{line=e.target.value;generation++;entries=[];selected=null;selectedEntry=null;root.querySelector('[data-period-results]').replaceChildren();showSelected();});
+      root.querySelector('form').addEventListener('submit',e=>{e.preventDefault();originFilter='';line=e.currentTarget.elements.line.value;void load();});
+      root.querySelector('select').addEventListener('change',e=>{originFilter='';line=e.target.value;generation++;entries=[];selected=null;selectedEntry=null;root.querySelector('[data-period-results]').replaceChildren();showSelected();});
       root.querySelectorAll('[data-history-mode]').forEach(button=>button.addEventListener('click',()=>chooseTab(button.dataset.historyMode)));
       chooseTab('today');
     }else{summary();capturePanel?.show(selected,selectedEntry);}
