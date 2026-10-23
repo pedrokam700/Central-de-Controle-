@@ -158,9 +158,9 @@ export function withSnLiveContext(base,root,store){
   // navigation/collection should be triggered from a UI refresh.
   let openBySn=new Map(),lastSn='',linked=false;
   const openRelatedPcba=event=>{
-    const trigger=event.target.closest('[data-sn-open-pcba]');
+    const trigger=event.target.closest('[data-sn-open-pcba],[data-sn-open-material]');
     if(!trigger)return;
-    const sn=String(trigger.dataset.snOpenPcba||'').trim();
+    const sn=String(trigger.dataset.snOpenPcba||trigger.dataset.snOpenMaterial||'').trim();
     if(!sn)return;
     const input=root.querySelector('[data-sn-form] [name=sn]');
     if(!input)return;

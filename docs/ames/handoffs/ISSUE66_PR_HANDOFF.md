@@ -57,6 +57,9 @@ git diff --check
 
 ## Checkpoint P2 · Dashboard e contrato de fechamento (em preparação)
 
+- **Publicado na PR draft #67** com commit remoto `8cf09bc7967ba95830d2776d161a3df519450737`.
+- CI por SHA: `Static quality checks` **SUCCESS**, `Agent and sync E2E with Firestore Rules` **SUCCESS**; `Console themes, languages and mobile` ainda em execução na última consulta deste handoff, `Published preview smoke` **FAILURE** na verificação do SHA/rota do preview externo (investigar resposta HTTP/URL; não atribuir automaticamente a falha ao código). Run `39982286786`.
+
 1. `data/daily-reuse-evidence.mjs` e `daily-failure-analytics.mjs`: novo modo **Dashboard de reuso** integrado à visão de falhas do dia. Conta sem duplicar ocorrências 3028 por linha + PCBA + Defect Code + instante; separa união, interseção, somente PCBA, somente material e sem evidência, com clique nas métricas para abrir as ocorrências específicas, eixo configurável **dia MES** ou **linha**, e números observados sem fingir produção total/Check FPY. A filtragem já existente por data, modelo, posto e falha continua aplicável.
 2. `data/full-day-closure.mjs` e `console-history.mjs`: verificador fail-closed de fechamento: exige dia completo 07:00→07:00, identidade imutável de snapshot/revisão/hash e comprovação de integralidade 3028+3074+2114+3022. Ao abrir uma revisão no histórico, informa **FULL comprovado** ou lista as fontes sem comprovação. Seleciona último fechamento comprovado entre candidatos deduplicados, mas **não cria novos registros nem promove as capturas parciais existentes a FULL**.
 3. `sw.js`: versão nova do cache com os módulos de compatibilidade, dashboard e fechamento. `ames-clean-v3.test.mjs`: hash da extensão temporal Issue #66 explicitamente fixado; arquivos congelados CLEAN V3/3028 continuam verificados byte a byte.
@@ -72,9 +75,16 @@ git diff --check
 
 **Limite de dados de fechamento:** na versão oficial `ames/agent/canonical.py` a `source_coverage` das fontes 3074/2114/3022 é intencionalmente `observed_partial`/`source_complete=false`. Para existir um fechamento FULL real, ainda será necessário coletar e armazenar prova de integralidade da janela/fonte vinculada exatamente à revisão, respeitando os limites e sem sobrescrever histórico. Até isso e homologação de fábrica, a interface continuará mostrando **não comprovado**.
 
+## Checkpoint P3 · Drilldown físico e métricas com identidade exata (em preparação)
+
+1. Na Consulta por SN de PCBA, cada cartão de Material SN agora oferece botão **Investigar este Material SN na 3074** usando a consulta já existente; o caminho inverso Material → PCBA também está presente. O identificador é escapado no HTML; sem consultas implícitas ao abrir o cartão.
+2. Falhas agrupadas ganharam **Materiais 2º+***: SNs físicos distintos, com ocorrência exata PCBA + Defect Code + Defect Time; não multiplicar linhas de kit, não transferir componente de outra falha da placa. Falta de chave exata exibe `—`, nunca zero comprovado.
+3. No Dashboard de reuso, o eixo **linha** ganhou barras segmentadas para PCBA somente / material somente / ambos; o eixo **dia MES** ganhou gráfico de linha sem interpolar lacunas. A associação de material na contagem só aceita ligação à ocorrência 3028 exata; associação PCBA genérica fica como contexto, não como defeito físico comprovado.
+4. Testes direcionados `ames-failures-grouped-summary`, `ames-issue66-dashboard`, `ames-issue66-compatibility`, `ames-sn-history-detail`, `ames-sn-live-context` e `ames-daily-failure-analytics` passaram localmente. Revalidar a CI do SHA remoto correspondente antes de alegar GREEN.
+
 ## Continuidade imediata
 
-1. Publicar P2 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**, incluindo pré-cache e pin temporal. Não fazer merge nem publicar.
+1. Publicar P3 na branch da PR #67 draft e revalidar jobs de CI por **SHA exato**; acompanhar especialmente o gate browser e o preview externo. Não fazer merge nem publicar.
 2. P0b diagnóstico da consulta 3074 na grade real sanitizada: discriminar `no_data` confirmado, timeout, store ExtJS não correspondente e linha com material porém sem vínculo temporal. Nunca aceitar grid velha ou inferir que uma peça N não existiu na falha. Preservar demais fontes no erro.
 3. P1 física: confirmar na fábrica respostas 3074 PCBA/Material SN, Bind/Unbind reais, alarme GN06-X015 e 3022 dos respectivos ciclos. Resolver possíveis lacunas de parser/driver somente com evidência sanitizada.
 4. P2 pendente: persistência autoritativa de fechamento FULL real, leitura da linha do tempo de fechamentos e gráficos dia-a-dia com denominações/Check FPY comprovadas. A classificação/UI fail-closed do leitor já está em andamento; não inferir fonte completa de dados parciais.

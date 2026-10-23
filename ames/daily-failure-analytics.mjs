@@ -3,7 +3,7 @@ import {targetRankingRows,targetRankingCoverage} from './data/target-impact.mjs'
 import {LINE_IDS} from './data/contract.mjs';
 import {selectDashboard} from './data/dashboard.mjs';
 import {reuseLinks} from './data/reuse-analysis.mjs';
-import {productionEvidenceForOccurrence} from './data/production-evidence.mjs';
+import {productionEvidenceForOccurrence,parseFailureInstant} from './data/production-evidence.mjs';
 import {factoryHourKey,formatFactoryDateTime as displayTime,formatFactoryDate as displayDate} from './data/time-display.mjs';
 import {observedReuseDashboard,REUSE_GROUPS} from './data/daily-reuse-evidence.mjs';
 
@@ -73,6 +73,10 @@ export function buildDailyFailureRows(store){
       const production=productionEvidenceForOccurrence(occ,contexts);
       const repairs=repairCandidate(occ),repair=repairs.best||{};
       const componentLinks=linksByPcba.get(pcba)||[];
+      const moment=parseFailureInstant(occ.defect_time);
+      const componentLinksExact=componentLinks.filter(link=>
+        String(link.pcba||'')===pcba&&String(link.defect_code||'')===String(occ.defect_code||'')&&
+        moment!==null&&parseFailureInstant(link.defect_time)===moment);
       const componentHistory=componentLinks.filter(r=>r.history_code||r.history_desc);
       const componentFamilies=uniq(componentLinks.map(r=>r.component_group||r.family||r.item_type));
       const componentHistoryFamilies=uniq(componentHistory.map(r=>r.component_group||r.family||r.item_type));
@@ -87,7 +91,8 @@ export function buildDailyFailureRows(store){
         production_event_time:production.event_time,production_shift:production.shift,production_operational_date:production.operational_date,production_evidence_proven:production.trusted,
         repair_user:repair.repair_user||occ.repair_user||null,repair_comment:repair.repair_comment||occ.repair_comment||null,repair_time:repair.repair_time||occ.repair_time||null,repair_code:repair.repair_code||occ.repair_code||null,repair_source:repairs.best?'3012':(occ.repair_source||occ.source_view||null),repair_rows:repairs.rows,
         pcba_reused:Boolean(reused),pcba_prior_failure:Boolean(selfPrior),pcba_prior_failure_code:prior.code,pcba_prior_failure_desc:prior.desc,
-        component_links:componentLinks,component_links_count:componentLinks.length,component_families:componentFamilies,component_group_count:componentFamilies.length,
+        component_links:componentLinks,component_links_count:componentLinks.length,
+        component_links_exact:componentLinksExact,component_families:componentFamilies,component_group_count:componentFamilies.length,
         component_history_links:componentHistory,component_history_count:componentHistory.length,component_history_families:componentHistoryFamilies,
         relations:relation,cause_confirmed:explicitCause,
         reuse_present:Boolean(reused||componentLinks.length),reuse_with_failure:Boolean(selfPrior||componentHistory.length),
@@ -218,6 +223,34 @@ function renderReuseDashboard(rows,state){
     pcba_only:t('Somente PCBA','PCBA only'),material_only:t('Somente material','Material only'),
     no_reuse_evidence:t('Reuso não comprovado','Reuse unproven')};
   const selected=classes[focused]||model.union,max=Math.max(1,...model.bins.map(b=>b.total));
+  const chart=()=>{
+    if(model.axis==='line')return model.bins.map(bin=>{
+      const observed=bin.pcba_only+bin.material_only+bin.both;
+      const parts=[['pcba_only','#4263a6'],['material_only','#b4781d'],['both','#287c69']];
+      return `<div class="ames-dfa-hour-row"><span>${esc(bin.key)}</span><i style="display:flex;overflow:hidden">${parts.map(([kind,color])=>
+        `<b title="${esc(kind)}: ${bin[kind]}" style="width:${bin[kind]/max*100}%;background:${color};height:100%;min-width:0"></b>`).join('')}</i>
+        <strong>${observed} / ${bin.total}</strong></div>`;
+    }).join('');
+    const valid=model.bins.filter(b=>/^\d{4}-\d{2}-\d{2}$/.test(b.key));
+    if(!valid.length)return '';
+    const earliest=Date.parse(valid[0].key+'T12:00:00Z'),latest=Date.parse(valid.at(-1).key+'T12:00:00Z'),
+      span=Math.max(86400000,latest-earliest),peak=Math.max(1,...valid.map(b=>b.pcba_only+b.material_only+b.both));
+    const xy=bin=>{const at=Date.parse(bin.key+'T12:00:00Z');return {
+      x:25+(at-earliest)/span*650,y:150-(bin.pcba_only+bin.material_only+bin.both)/peak*125};};
+    const segments=[];
+    for(let i=1;i<valid.length;i++){
+      const prev=valid[i-1],now=valid[i];
+      if(Date.parse(now.key+'T12:00:00Z')-Date.parse(prev.key+'T12:00:00Z')>86400000)continue;
+      const a=xy(prev),b=xy(now);segments.push(`<path d="M ${a.x} ${a.y} L ${b.x} ${b.y}" fill="none" stroke="#287c69" stroke-width="3"/>`);
+    }
+    return `<svg viewBox="0 0 700 185" role="img" aria-label="${esc(t('Linha temporal de falhas observadas com reuso, sem interpolar datas ausentes',
+      'Observed failures with reuse trend line, without interpolating missing dates'))}" style="width:100%;max-height:190px">
+      <line x1="25" y1="150" x2="675" y2="150" stroke="currentColor" opacity="0.3"/>
+      ${segments.join('')}${valid.map(bin=>{const p=xy(bin),value=bin.pcba_only+bin.material_only+bin.both;
+        return `<circle cx="${p.x}" cy="${p.y}" r="5" fill="#287c69"><title>${esc(bin.key)} · ${value} / ${bin.total}</title></circle>`;}).join('')}
+      <text x="25" y="174" fill="currentColor" font-size="12">${esc(valid[0].key)}</text>
+      <text x="675" y="174" text-anchor="end" fill="currentColor" font-size="12">${esc(valid.at(-1).key)}</text></svg>`;
+  };
   return `<section class="ames-dfa-reuse-dashboard" data-dfa-reuse-dashboard>
     <div class="section-head"><div><h3>${t('Dashboard de reuso · evidência observada','Reuse dashboard · observed evidence')}</h3>
     <p>${t('União e interseção das ocorrências 3028 distintas com evidência de PCBA ou material reutilizado. A contagem é exata no conjunto observado, mesmo com cobertura MES parcial. Não é total produzido, Check FPY nem causalidade.',
@@ -228,12 +261,10 @@ function renderReuseDashboard(rows,state){
       <option value="day"${model.axis==='day'?' selected':''}>${t('Evolução por dia de registro MES','MES record date trend')}</option>
       <option value="line"${model.axis==='line'?' selected':''}>${t('Comparação por linha','Comparison by line')}</option>
     </select></label></div>
-    <div class="ames-dfa-hour-chart">${model.bins.map(bin=>{
-      const observed=bin.pcba_only+bin.material_only+bin.both;
-      return `<div class="ames-dfa-hour-row"><span>${esc(bin.key==='UNKNOWN'?t('Data/linha não comprovada','Unproven date/line'):bin.key)}</span>
-        <i><b style="width:${Math.max(2,observed/max*100)}%"></b></i><strong>${observed} / ${bin.total}</strong>
-      </div>`;
-    }).join('')||`<p>${t('Nenhuma ocorrência 3028 no filtro atual.','No 3028 occurrences in the current filter.')}</p>`}</div>
+    <div class="ames-dfa-hour-chart">${chart()||`<p>${t('Nenhuma ocorrência 3028 com data/linha comprovada no filtro atual.','No 3028 occurrence with proven date/line in current filters.')}</p>`}</div>
+    ${model.axis==='line'?`<small>${t('Cores: azul = só PCBA, âmbar = só material, verde = ambos.','Colors: blue = PCBA only, amber = material only, green = both.')}</small>`:
+      `<small>${t('Linha representa contagens observadas por dia MES. Lacunas no histórico permanecem desconectadas; não representa Check FPY.',
+        'Line shows observed counts per MES date. Missing days remain disconnected; it is not Check FPY.')}</small>`}
     <details open><summary>${esc(labels[focused]||labels.union)} · ${selected.length} ${t('ocorrências distintas','distinct occurrences')}</summary>
       ${occurrenceMiniTable(selected)}</details>
     <p class="mes-context">${t('Sem evidência de reuso não significa primeiro uso. Gráfico: numerador = falhas observadas com reuso; denominador = falhas 3028 carregadas no filtro, nunca produção total.',

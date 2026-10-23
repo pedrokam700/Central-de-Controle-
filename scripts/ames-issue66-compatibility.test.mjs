@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {matchComponentToCurrentFailure,compatibleComponentReuseAlerts} from '../ames/data/component-failure-compatibility.mjs';
 import {buildSmartSnAlerts,renderSmartSnAlerts} from '../ames/console-sn-smart-alerts.mjs';
 import {buildLiveSnForensics} from '../ames/data/sn-forensics.mjs';
+import {renderSnHistoryDetail} from '../ames/console-sn-history-detail.mjs';
 
 test('GN06-X015 rear secondary camera matches the physical subtype, not front/main',()=>{
   const desc='Rear secondary camera no image';
@@ -49,4 +50,16 @@ test('post-defect new assembly keeps latest 2114 as history, not current failure
   assert.equal(model.own_history.length,1);
   assert.equal(model.own_history[0].defect_code,'GN06-X015');
   assert.equal(model.alerts.length,0);
+});
+
+test('PCBA component card provides explicit Material SN drilldown with escaped identity',()=>{
+  const html=renderSnHistoryDetail({current_pcba:'P1',own_history:[],materials:[{
+    item_sn:'MAT-001',item_type:'Rear Camera Secondary',bindings:[],history:[],known_use_count:2
+  }]},{},'pt-BR');
+  assert.match(html,/data-sn-open-material="MAT-001"/);
+  assert.match(html,/Investigar este Material SN na 3074/);
+  const unsafe=renderSnHistoryDetail({current_pcba:'P1',own_history:[],materials:[{
+    item_sn:'\"><script>alert(1)<\/script>',item_type:'Screen',bindings:[],history:[]
+  }]},{},'en-US');
+  assert.doesNotMatch(unsafe,/<script>/);
 });

@@ -28,3 +28,10 @@ test('line view and missing identity stay distinct; no proof is not proof of fir
  assert.equal(reuseGroup(first),'no_reuse_evidence');
  assert.equal(data.groups.no_reuse_evidence.length,4);
 });
+
+test('a material matched only by PCBA cannot contaminate a different 3028 defect',()=>{
+ const unrelated=occurrence('P1','22',{component_links:[{material:'M1'}],component_links_exact:[]});
+ assert.equal(reuseGroup(unrelated),'no_reuse_evidence');
+ const exact={...unrelated,component_links_exact:[{material:'M1',defect_code:'CAM'}]};
+ assert.equal(reuseGroup(exact),'material_only');
+});

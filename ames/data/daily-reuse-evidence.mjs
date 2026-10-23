@@ -5,7 +5,8 @@ export const REUSE_GROUPS=Object.freeze(['pcba_only','material_only','both','no_
 
 export function reuseGroup(row={}){
   const board=row.pcba_reused===true;
-  const material=Array.isArray(row.component_links)&&row.component_links.some(link=>txt(link.material));
+  const links=Array.isArray(row.component_links_exact)?row.component_links_exact:row.component_links;
+  const material=Array.isArray(links)&&links.some(link=>txt(link.material));
   return board&&material?'both':board?'pcba_only':material?'material_only':'no_reuse_evidence';
 }
 

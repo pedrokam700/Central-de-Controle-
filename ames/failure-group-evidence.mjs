@@ -8,7 +8,7 @@ import {knownDescription} from './defect-label.mjs';
 
 const nonempty=v=>v!==null&&v!==undefined&&String(v).trim()!==''?String(v).trim():'';
 const first=(row,keys)=>keys.map(k=>nonempty(row?.[k])).find(Boolean)||'';
-const pcba=row=>first(row,['current_pcba_sn','PCBA atual','pcba_sn','PCBA']);
+const pcba=row=>first(row,['current_pcba_sn','PCBA atual','pcba_sn','pcba','PCBA']);
 const code=row=>first(row,['defect_code','Defect Code atual','Defect Code']);
 const when=row=>first(row,['defect_time','Defect Time atual','Defect Time']);
 const named=(snapshot,key)=>Array.isArray(snapshot?.insights?.drilldowns?.[key])?snapshot.insights.drilldowns[key]:[];
@@ -25,7 +25,15 @@ export function formatFailureLastOccurrence(value){const s=formatFactoryDateTime
 
 export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailureName){
  const reuseBoards=new Set(keysOf(snapshot,['pcba_second_use','pcba_3plus_use','pcba_reused_with_prior_failure']).map(pcba).filter(Boolean));
- const itemBoards=new Set(reuseLinks(snapshot||{}).map(x=>nonempty(x.pcba)).filter(Boolean));
+ const observedLinks=reuseLinks(snapshot||{});
+ const itemBoards=new Set(observedLinks.map(x=>nonempty(x.pcba)).filter(Boolean));
+ const materialsByOccurrence=new Map();
+ for(const link of observedLinks){
+   const key=identity(link),material=nonempty(link.material);
+   if(!key||!material)continue;
+   if(!materialsByOccurrence.has(key))materialsByOccurrence.set(key,new Set());
+   materialsByOccurrence.get(key).add(material);
+ }
  // The newer canonical insight may expose a numeric or a human-readable ordinal
  // instead of the old categorical drilldowns. Count these only when they
  // explicitly prove 2nd+ use; do not infer use from past defects alone.
@@ -53,9 +61,11 @@ export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailur
  const output={};
  for(const [name,g] of grouped){
    const relatedBoards=new Set([...g.occurrences].filter(([k])=>relatedIds.has(k)).map(([,board])=>board));
+   const physical=new Set([...g.occurrences].flatMap(([k])=>[...(materialsByOccurrence.get(k)||[])]));
    output[name]={
      pcbaReuse:result(reuseBoards,g.boards),
      itemReuse:result(itemBoards,g.boards),
+     physicalMaterials:{count:physical.size,observed:true,population_complete:false},
      sameFailureOrFamily:{count:relatedBoards.size,observed:true,population_complete:false},
    };
  }
