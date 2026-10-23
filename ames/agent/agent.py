@@ -1,5 +1,40 @@
 from __future__ import annotations
 
+# Issue #57: reject a direct Python launch during a pending update/recovery,
+# before importing MES, opening the store or loading any workstation settings.
+# This is only defense in depth; it does NOT attest exclusive maintenance idle.
+import os as _issue57_os
+import stat as _issue57_stat
+from pathlib import Path as _Issue57Path
+
+
+def _issue57_refuse_pending_recovery():
+    try:
+        install_root = _Issue57Path(__file__).resolve().parent.parent
+        metadata_dir = install_root / '.ames-update'
+    except (OSError, RuntimeError, ValueError):
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED') from None
+    try:
+        metadata = metadata_dir.lstat()
+    except FileNotFoundError:
+        return  # The existing installation has never started an update.
+    except OSError:
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED') from None
+    reparse = (getattr(metadata, 'st_file_attributes', 0)
+               & getattr(_issue57_stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))
+    if not _issue57_stat.S_ISDIR(metadata.st_mode) or reparse:
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED')
+    try:
+        with _issue57_os.scandir(metadata_dir) as entries:
+            if next(entries, None) is not None:
+                # claim.lock alone, journal, unexpected files: manual recovery.
+                raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED')
+    except OSError:
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED') from None
+
+
+_issue57_refuse_pending_recovery()
+
 from mes_scheduler import MES, mes_call, Cancelled, MonitorSkipped
 from maintenance_admission import MAINTENANCE, MaintenanceBlocked
 
