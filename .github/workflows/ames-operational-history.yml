@@ -121,13 +121,15 @@ jobs:
                              'tools/ames-workstation/INVENTARIAR_INSTALACOES_READONLY.ps1',
                              'tools/ames-workstation/INVENTARIAR_GUARDIANS_READONLY.ps1',
                              'tools/ames-workstation/ISSUE57_GUARDIAN_SIGNALS.ps1',
+                             'tools/ames-workstation/ISSUE57_PROCESS_WITNESS_READONLY.ps1',
                              'tools/ames-workstation/VERIFY_PRIVATE_BACKUP_ACL.ps1',
                              'scripts/issue57-guardian-signals.windows.test.ps1',
                              'scripts/issue57-guardian-global-mutex.windows.test.ps1',
                              'scripts/issue57-dual-lock-ledger.windows.test.ps1',
                              'scripts/issue57-coordinator-abandonment.windows.test.ps1',
                              'scripts/issue57-direct-launcher-claim.windows.test.ps1',
-                             'scripts/issue57-private-backup-acl.windows.test.ps1')) {
+                             'scripts/issue57-private-backup-acl.windows.test.ps1',
+                             'scripts/issue57-process-witness.windows.test.ps1')) {
             $tokens=$null; $parseErrors=$null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$parseErrors)|Out-Null
             if($parseErrors.Count -gt 0){$parseErrors|ForEach-Object{Write-Error $_};exit 1}
@@ -149,6 +151,8 @@ jobs:
           if(-not ($direct -contains 'Issue57 direct launcher claim: absent/empty allowed; claim, journal, unknown, invalid directory blocked before bootstrap')){throw 'direct_launcher_claim_fixture_not_completed'}
           $acl=@(& ./scripts/issue57-private-backup-acl.windows.test.ps1)
           if(-not ($acl -contains 'Issue57 private backup ACL: verified synthetic data and rejected broad ACE; no production touch')){throw 'private_acl_fixture_not_completed'}
+          $witness=@(& ./scripts/issue57-process-witness.windows.test.ps1)
+          if(-not ($witness -contains 'Issue57 Windows process witness: OS listener PID + creation + exact script; negative cases fail closed; no update')){throw 'process_witness_fixture_not_completed'}
           Write-Output 'Issue57 Windows fixtures: guardian + mutex + dual-lock ledger + coordinator crash + direct launcher + backup ACL end-to-end GREEN'
   reading-firestore:
     runs-on: ubuntu-latest

@@ -49,6 +49,21 @@ test('guardian inventory checks external relaunch sources without claiming an id
   assert.doesNotMatch(classifier,/\.Save\s*\(/);
 });
 
+test('independent Windows process witness checks TCP owner and birth but never grants update',()=>{
+  const witness=readFileSync('tools/ames-workstation/ISSUE57_PROCESS_WITNESS_READONLY.ps1','utf8');
+  const fixture=readFileSync('scripts/issue57-process-witness.windows.test.ps1','utf8');
+  for(const proof of [/Get-CimInstance Win32_Process/,/Get-NetTCPConnection/,/CommandLineToArgvW/,/CreationDate/,/Get-FileHash/,/scriptArgument=\$text/,/script_argument_mismatch/,/endpoint_owner_pid/,/process_identity_observed/,/guardian_attested=\$false/,/update_authorized=\$false/,/reason='independent_windows_witness_failed_closed'/]){
+    assert.match(witness,proof);
+  }
+  for(const forbidden of [/\bStop-Process\b/,/\bStart-Process\b/,/\bRemove-Item\b/,/\bMove-Item\b/,/\bCopy-Item\b/,/\bSet-Content\b/,/\bInvoke-RestMethod\b/,/\bInvoke-WebRequest\b/]){
+    assert.doesNotMatch(witness,forbidden);
+  }
+  for(const proof of [/GITHUB_ACTIONS/,/RUNNER_OS/,/wrong_script_accepted/,/wrong_pid_accepted/,/wrong_port_accepted/,/process_creation_marker_unstable/,/python_eval_argument_camouflage_accepted/]){
+    assert.match(fixture,proof);
+  }
+  assert.match(readFileSync('.github/workflows/ames-operational-history.yml','utf8'),/process_witness_fixture_not_completed/);
+});
+
 test('independent Windows backup ACL verifier is observational and cannot authorize updates',()=>{
   const verifier=readFileSync('tools/ames-workstation/VERIFY_PRIVATE_BACKUP_ACL.ps1','utf8');
   const fixture=readFileSync('scripts/issue57-private-backup-acl.windows.test.ps1','utf8');
