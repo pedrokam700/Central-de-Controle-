@@ -8,6 +8,8 @@ test('the Monitor exposes a direct cross-workstation sync shortcut without mutat
   assert.match(code,/data-monitor-technical/);
   assert.match(code,/shortcut\.dataset\.openSyncHealth/);
   assert.match(code,/Sincronização entre postos · ver diagnóstico/);
+  assert.match(code,/Cross-workstation sync · view diagnostics/);
+  assert.match(code,/view\.render=function\(\.\.\.args\)/,'label refreshes when language changes');
   assert.match(code,/details\.open=true/);
 });
 

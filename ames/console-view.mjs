@@ -159,7 +159,12 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
         const shortcut=pane.ownerDocument.createElement('button');
         shortcut.type='button';shortcut.className='button secondary';
         shortcut.dataset.openSyncHealth='';
-        shortcut.textContent='Sincronização entre postos · ver diagnóstico';
+        const shortcutLabel=()=>document.documentElement.lang.startsWith('en')
+          ?'Cross-workstation sync · view diagnostics'
+          :'Sincronização entre postos · ver diagnóstico';
+        shortcut.textContent=shortcutLabel();
+        const previousRender=view.render;
+        view.render=function(...args){shortcut.textContent=shortcutLabel();return previousRender.apply(this,args);};
         details.before(shortcut);
         shortcut.addEventListener('click',()=>{
           details.open=true;
