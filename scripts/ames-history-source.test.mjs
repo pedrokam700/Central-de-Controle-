@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {createMesHistorySource,historySharingState} from '../ames/history-source.mjs';
+import {createMesHistorySource,historySharingState,summarizeHistoryPublishers} from '../ames/history-source.mjs';
 const local={
   line_id:'TAN10103',snapshot_id:'2',snapshot_revision:1,source_id:'local-original',
   period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00',
@@ -57,6 +57,29 @@ test('sharing state never treats an unverified local revision as synchronized',(
  assert.equal(historySharingState({history_source:'local',shared_available:false}),'local_only');
  assert.equal(historySharingState({history_source:'shared'}),'shared');
  assert.equal(historySharingState({}),'unverified');
+});
+test('two legitimate publishers on the same line/day remain separate observations',()=>{
+ const a={...local,line_id:'TAN10102',source_id:'workstation-A',snapshot_id:'11',snapshot_revision:1,
+  period_start:'2026-10-23T07:00:00-03:00',period_end:'2026-10-23T12:00:00-03:00'};
+ const b={...a,source_id:'workstation-B',snapshot_id:'20',period_end:'2026-10-23T14:00:00-03:00'};
+ const summary=summarizeHistoryPublishers([a,a,{...a,snapshot_revision:2},b], 'TAN10102');
+ assert.deepEqual(summary.origins.map(o=>[o.source_id,o.revisions]),[['workstation-A',2],['workstation-B',1]]);
+ assert.deepEqual(summary.overlapping_days,[{day:'2026-10-23',source_ids:['workstation-A','workstation-B']}]);
+ assert.equal(summarizeHistoryPublishers([a,{...b,line_id:'TAN10103'}],'TAN10102').overlapping_days.length,0);
+});
+test('multiple origins on separate days are not falsely labeled as simultaneous publishers',()=>{
+ const a={...local,source_id:'PC-A',snapshot_id:'1'};
+ const b={...a,source_id:'PC-B',snapshot_id:'2',period_start:'2026-10-17T07:00',period_end:'2026-10-18T07:00'};
+ const result=summarizeHistoryPublishers([a,b],'TAN10103');
+ assert.equal(result.origins.length,2);
+ assert.deepEqual(result.overlapping_days,[]);
+});
+test('multi-publisher historical UI is explicitly read-only and keeps source filtering local',()=>{
+ const view=fs.readFileSync(new URL('../ames/console-history.mjs',import.meta.url),'utf8');
+ assert.match(view,/data-history-multi-publisher/);
+ assert.match(view,/data-history-origin-filter/);
+ assert.match(view,/Não somar ocorrências de coletas sobrepostas/);
+ assert.match(view,/originFilter=event\.target\.value/);
 });
 test('Firebase listener failure must not hide preserved local history',async()=>{
  const source=createMesHistorySource({

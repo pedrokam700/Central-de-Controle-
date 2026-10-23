@@ -1,4 +1,5 @@
 import {LINE_IDS} from './data/contract.mjs';
+import {factoryWallMinute} from './data/history.mjs';
 
 // A local preference for opening a revision does not negate its presence in
 // the immutable Firebase history index. Keep transport and sharing separate.
@@ -6,6 +7,34 @@ export function historySharingState(entry){
   if(entry?.history_source==='shared')return 'shared';
   if(entry?.history_source==='local')return entry.shared_available===true?'local_and_shared':'local_only';
   return 'unverified';
+}
+
+// This is an index of immutable observations, never an aggregate of defects.
+// Two independent collectors can overlap on the same factory production day.
+// Only their original source/revision identities may be counted here.
+export function summarizeHistoryPublishers(entries=[],line){
+  const versions=new Map();
+  for(const entry of Array.isArray(entries)?entries:[]){
+    if(entry?.line_id!==line||!entry.source_id||entry.snapshot_id==null)continue;
+    const key=JSON.stringify([entry.line_id,entry.source_id,entry.snapshot_id,entry.snapshot_revision??null]);
+    if(!versions.has(key))versions.set(key,entry);
+  }
+  const origins=new Map(),days=new Map();
+  for(const entry of versions.values()){
+    const source_id=String(entry.source_id);
+    const origin=origins.get(source_id)||{source_id,revisions:0,last_collected_at:null};
+    origin.revisions++;
+    if(entry.collected_at&&(!origin.last_collected_at||Date.parse(entry.collected_at)>Date.parse(origin.last_collected_at)))
+      origin.last_collected_at=entry.collected_at;
+    origins.set(source_id,origin);
+    const day=factoryWallMinute(entry.period_start)?.slice(0,10);
+    if(day){if(!days.has(day))days.set(day,new Set());days.get(day).add(source_id);}
+  }
+  return {
+    origins:[...origins.values()].sort((a,b)=>a.source_id.localeCompare(b.source_id)),
+    overlapping_days:[...days.entries()].filter(([,sources])=>sources.size>1)
+      .map(([day,sources])=>({day,source_ids:[...sources].sort()})).sort((a,b)=>b.day.localeCompare(a.day))
+  };
 }
 
 // History can exist on this workstation before Firebase publication. Never
