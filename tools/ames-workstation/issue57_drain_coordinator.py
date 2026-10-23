@@ -180,6 +180,7 @@ class RelauncherClient:
         self._observe, self.pid = observe_process, pid
         self.identity = observe_process(pid)
         self._sequence, self._uncertain = 0, False
+        self.last_barrier_state = None
 
     def attest(self, transaction_id, installation_sha256):
         from maintenance_protocol import seal, unseal
@@ -199,6 +200,7 @@ class RelauncherClient:
                     or self._observe(self.pid) != self.identity):
                 raise ValueError()
             self._sequence += 1
+            self.last_barrier_state = response["barrier_state"]
             return dict(self.identity)
         except Exception:
             self._uncertain = True
@@ -270,7 +272,8 @@ class FixtureDrainCoordinator:
             self._assert_witness_stable()
             root_digest = hashlib.sha256(str((Path(self.root) / "persistent-clean").resolve()).lower().encode()).hexdigest()
             identities = [p.attest(self.claim["transaction_id"], self.client.target["installation_sha256"]) for p in participants]
-            if (len({p["pid"] for p in identities}) != 2
+            if (any(p.last_barrier_state != "mutex_and_claim_blocked" for p in participants)
+                    or len({p["pid"] for p in identities}) != 2
                     or any(p["root_sha256"] != root_digest for p in identities)
                     or len({(p["account_sha256"], p["session_id"]) for p in identities}) != 1):
                 raise ValueError("relauncher_installation_or_session_mismatch")
@@ -289,7 +292,8 @@ class FixtureDrainCoordinator:
         receipt = self.claim.get("relauncher_receipt")
         if receipt is not None:
             identities = [p.attest(self.claim["transaction_id"], self.client.target["installation_sha256"]) for p in self._relaunchers]
-            if identities != receipt["participants"]:
+            if (identities != receipt["participants"]
+                    or any(p.last_barrier_state != "mutex_and_claim_blocked" for p in self._relaunchers)):
                 raise ValueError("relauncher_receipt_mismatch")
 
     def observe(self):

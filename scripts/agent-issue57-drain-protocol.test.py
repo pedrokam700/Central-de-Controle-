@@ -13,7 +13,7 @@ import secrets
 import sqlite3
 import sys
 import tempfile
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from types import SimpleNamespace
 import unittest
 import zipfile
@@ -109,6 +109,51 @@ def ipc_worker(connection, report, key, transaction):
         report.send_bytes(json.dumps({"fenced": admission.snapshot()["draining"],
                                      "new_job_blocked": blocked, "mutex_checks": mutex_checks}).encode())
         report.close()
+
+
+def spawn_fixture_relaunchers(root, identity, transaction_id, account_sha256, session_id):
+    participants, processes = [], []
+    try:
+        for role, script_name, mutex_name in (
+                ("guardian", "KEEP_AGENT_RUNNING.ps1", os.environ["ISSUE57_DRAIN_UPDATE_MUTEX"]),
+                ("launcher", "START_AGENT_CANONICAL.ps1", os.environ["ISSUE57_DRAIN_BOOTSTRAP_MUTEX"])):
+            script = ROOT / "tools/ames-workstation" / script_name
+            key = secrets.token_bytes(32)
+            process = subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(script),
+                "-Root", str(root / "persistent-clean"), "-MaintenanceEnrollment", "-MaintenanceRoot", str(root),
+                "-FixtureMutex", mutex_name], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            processes.append(process)
+            root_hash = hashlib.sha256(str((root / "persistent-clean").resolve()).lower().encode()).hexdigest()
+            process.stdin.write(json.dumps({"key": key.hex(), "transaction_id": transaction_id,
+                "installation_sha256": identity, "root_sha256": root_hash}).encode() + b"\n")
+            process.stdin.flush()
+            def exchange_relauncher(wire, process=process):
+                process.stdin.write(wire + b"\n")
+                process.stdin.flush()
+                pending = Queue(maxsize=1)
+                def read():
+                    try:
+                        pending.put(process.stdout.readline(MAX_MESSAGE + 1))
+                    except Exception:
+                        pending.put(None)
+                Thread(target=read, daemon=True).start()
+                answer = pending.get(timeout=25)
+                if not answer or len(answer) > MAX_MESSAGE or not answer.endswith(b"\n"):
+                    raise ValueError("enrolled_relauncher_frame_unverified")
+                return answer[:-1]
+            witness = WindowsRelauncherWitness(role, script, root / "persistent-clean", root,
+                                              account_sha256, session_id)
+            participants.append(RelauncherClient(exchange_relauncher, key, process.pid, witness))
+    except BaseException:
+        for process in processes:
+            if not process.stdin.closed:
+                process.stdin.close()
+            if process.poll() is None:
+                process.terminate() # Only this just-spawned fixture participant.
+            process.wait(timeout=10)
+            process.stdout.close()
+        raise
+    return participants, processes
 
 
 class ProtocolTests(unittest.TestCase):
@@ -320,12 +365,12 @@ class BoundBackupTests(unittest.TestCase):
                 if state.get("timeout"):
                     raise TimeoutError()
                 response = {**request, "pid": state["pid"], "role": state["role"],
-                            "barrier_state": "mutex_and_claim_blocked", "update_authorized": False}
+                            "barrier_state": state.get("barrier_state", "mutex_and_claim_blocked"), "update_authorized": False}
                 if state.get("replay"):
                     response["challenge"] = "0" * 64
                 return seal(key, response, "relauncher-response")
             def observer(pid, state=state):
-                return {k: v for k, v in state.items() if k not in {"timeout", "replay"}}
+                return {k: v for k, v in state.items() if k not in {"timeout", "replay", "barrier_state"}}
             clients.append(RelauncherClient(exchange, key, pid, observer))
             states.append(state)
         return clients, states
@@ -372,6 +417,16 @@ class BoundBackupTests(unittest.TestCase):
         self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
         self.assertFalse((self.root / "private-backup").exists())
         self.assertTrue(self.admission.snapshot()["draining"])
+
+    def test_released_mutex_does_not_keep_enrollment_valid_merely_because_claim_exists(self):
+        participants, states = self.participant_clients()
+        self.coordinator.enroll_relaunchers(participants, unknown_origins=[])
+        states[0]["barrier_state"] = "claim_blocks_after_mutex_release"
+        with self.assertRaisesRegex(ValueError, "relauncher_receipt_mismatch"):
+            self.coordinator.prepare_backup()
+        self.assertEqual(ledger.inspect_fixture(self.root)["phase"], "recovery_required")
+        self.assertTrue(self.admission.snapshot()["draining"])
+        self.assertFalse((self.root / "private-backup").exists())
 
     def test_opaque_or_legacy_origin_is_veto_even_with_compatible_participants(self):
         participants, states = self.participant_clients()
@@ -643,7 +698,7 @@ class CrossProcessTests(unittest.TestCase):
                 if report is not None:
                     report.close()
 
-    def run_windows_fixture(self):
+    def run_windows_fixture(self, abandon_after_enrollment=False):
         # Invoked only from the EXISTING dual-lock Windows fixture, while its
         # PowerShell process holds BOTH random Global mutexes in fixed order.
         self.assertTrue(assert_dual_fixture_mutexes_held())
@@ -710,37 +765,8 @@ class CrossProcessTests(unittest.TestCase):
         try:
             coordinator = FixtureDrainCoordinator(root, identity, connect, observed_process)
             self.assertEqual(coordinator.observe()["state"], "agent_quiescent_only")
-            participants = []
-            for role, script_name, mutex_name in (
-                    ("guardian", "KEEP_AGENT_RUNNING.ps1", os.environ["ISSUE57_DRAIN_UPDATE_MUTEX"]),
-                    ("launcher", "START_AGENT_CANONICAL.ps1", os.environ["ISSUE57_DRAIN_BOOTSTRAP_MUTEX"])):
-                script = ROOT / "tools/ames-workstation" / script_name
-                key = secrets.token_bytes(32)
-                process = subprocess.Popen(["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(script),
-                    "-Root", str(root / "persistent-clean"), "-MaintenanceEnrollment", "-MaintenanceRoot", str(root),
-                    "-FixtureMutex", mutex_name], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                relaunch_children.append(process)
-                root_hash = hashlib.sha256(str((root / "persistent-clean").resolve()).lower().encode()).hexdigest()
-                process.stdin.write(json.dumps({"key": key.hex(), "transaction_id": coordinator.claim["transaction_id"],
-                    "installation_sha256": identity, "root_sha256": root_hash}).encode() + b"\n")
-                process.stdin.flush()
-                def exchange_relauncher(wire, process=process):
-                    process.stdin.write(wire + b"\n")
-                    process.stdin.flush()
-                    pending = Queue(maxsize=1)
-                    def read():
-                        try:
-                            pending.put(process.stdout.readline(MAX_MESSAGE + 1))
-                        except Exception:
-                            pending.put(None)
-                    Thread(target=read, daemon=True).start()
-                    answer = pending.get(timeout=25)
-                    if not answer or len(answer) > MAX_MESSAGE or not answer.endswith(b"\n"):
-                        raise ValueError("enrolled_relauncher_frame_unverified")
-                    return answer[:-1]
-                witness = WindowsRelauncherWitness(role, script, root / "persistent-clean", root,
-                                                  adapter.account_sha256, adapter.session_id)
-                participants.append(RelauncherClient(exchange_relauncher, key, process.pid, witness))
+            participants, relaunch_children = spawn_fixture_relaunchers(root, identity, coordinator.claim["transaction_id"],
+                                                                        adapter.account_sha256, adapter.session_id)
             self.assertEqual(coordinator.enroll_relaunchers(participants, unknown_origins=[])["enrolled_relaunchers"], 2)
             self.assertEqual(coordinator.observe()["enrolled_relaunchers"], 2)
             # A mismatching account/session/root is rejected by independent
@@ -749,6 +775,19 @@ class CrossProcessTests(unittest.TestCase):
                 root / "persistent-clean", root, "0" * 64, adapter.session_id)
             with self.assertRaises(ValueError):
                 wrong(relaunch_children[0].pid)
+            if abandon_after_enrollment:
+                # Parent kills only this exact coordinator Process object.
+                # Its separate owner thread holds BOTH random mutexes; EOF
+                # must terminate participants without normal restart fallback.
+                report = {"transaction_id": coordinator.claim["transaction_id"], "agent_pid": child.pid,
+                          "participant_pids": [p.pid for p in relaunch_children], "update_authorized": False}
+                report_path = root.parent / "enrollment-ready.json"
+                with report_path.open("x", encoding="utf-8") as out:
+                    json.dump(report, out)
+                    out.flush()
+                    os.fsync(out.fileno())
+                Event().wait(120)
+                self.fail("parent_did_not_interrupt_fixture_coordinator")
             self.assertTrue(coordinator.prepare_backup()["bound_to_transaction"])
             self.assertTrue(coordinator.verify_bound_backup()["verified"])
             self.assertEqual(ledger.inspect_fixture(root)["phase"], "backup_verified")
@@ -831,8 +870,85 @@ class CrossProcessTests(unittest.TestCase):
                 self.assertEqual(ledger.inspect_fixture(root)["phase"], "recovery_required")
 
 
+def run_enrollment_abandonment_worker():
+    if (os.name != "nt" or os.environ.get("GITHUB_ACTIONS") != "true"
+            or os.environ.get("RUNNER_OS") != "Windows"):
+        raise ValueError("windows_fixture_only")
+    ready, stop = Event(), Event()
+    errors = []
+    def own_mutexes():
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenMutexW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+        kernel.OpenMutexW.restype = wintypes.HANDLE
+        kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel.WaitForSingleObject.restype = wintypes.DWORD
+        kernel.ReleaseMutex.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        handles = []
+        try:
+            for kind in ("UPDATE", "BOOTSTRAP"):
+                name = os.environ["ISSUE57_DRAIN_" + kind + "_MUTEX"]
+                expected = "Update" if kind == "UPDATE" else "Bootstrap"
+                if not re.fullmatch(r"Global\\CentralAMES\.Issue57Dual" + expected + r"Test\.[0-9a-f]{32}", name):
+                    raise ValueError("production_mutex_forbidden")
+                handle = kernel.OpenMutexW(0x00100001, False, name)
+                if not handle or kernel.WaitForSingleObject(handle, 0) != 0:
+                    raise ValueError("fixture_owner_mutex_unavailable")
+                handles.append(handle)
+            ready.set()
+            stop.wait(150)
+        except Exception as error:
+            errors.append(error)
+            ready.set()
+        finally:
+            for handle in reversed(handles):
+                kernel.ReleaseMutex(handle)
+                kernel.CloseHandle(handle)
+    thread = Thread(target=own_mutexes, daemon=True)
+    thread.start()
+    if not ready.wait(10) or errors:
+        raise ValueError("fixture_owner_did_not_acquire_pair")
+    try:
+        CrossProcessTests("run_windows_fixture").run_windows_fixture(abandon_after_enrollment=True)
+    finally:
+        stop.set()
+        thread.join(10)
+
+
+def observe_enrollment_after_coordinator_death():
+    # No new coordinator or ledger write: merely prove the canonical scripts
+    # still refuse relaunch on the abandoned transaction with free mutexes.
+    root = Path(os.environ["ISSUE57_DRAIN_FIXTURE_ROOT"])
+    claim = ledger.inspect_fixture(root)
+    assert claim["phase"] == "relaunchers_enrolled" and claim["claim_present"]
+    receipt = claim["relauncher_receipt"]
+    before = (root / ".ames-update/transaction.json").read_bytes()
+    expected = receipt["participants"][0]
+    processes = []
+    try:
+        clients, processes = spawn_fixture_relaunchers(root, receipt["installation_identity_sha256"],
+            claim["transaction_id"], expected["account_sha256"], expected["session_id"])
+        for client in clients:
+            client.attest(claim["transaction_id"], receipt["installation_identity_sha256"])
+            assert client.last_barrier_state == "claim_blocks_after_mutex_release"
+        assert (root / ".ames-update/transaction.json").read_bytes() == before
+        print("Issue57 enrolled crash: coordinator killed, both mutexes abandoned, canonical relaunchers blocked by retained claim; production forbidden")
+    finally:
+        for process in processes:
+            process.stdin.close()
+            process.wait(timeout=10)
+            process.stdout.close()
+
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["--windows-dual-lock-fixture"]:
         CrossProcessTests("run_windows_fixture").debug()
+    elif sys.argv[1:] == ["--windows-enrollment-abandon-worker"]:
+        run_enrollment_abandonment_worker()
+    elif sys.argv[1:] == ["--windows-enrollment-after-death"]:
+        observe_enrollment_after_coordinator_death()
     else:
         unittest.main()

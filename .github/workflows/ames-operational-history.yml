@@ -152,6 +152,7 @@ jobs:
           if(-not ($dual -contains 'Issue57 candidate transaction: pinned staging + process ready + rollback + data retained; production forbidden')){throw 'candidate_transaction_fixture_not_completed'}
           Write-Output 'Issue57 candidate transaction: pinned staging + process ready + rollback + data retained; production forbidden'
           $crash=@(& ./scripts/issue57-coordinator-abandonment.windows.test.ps1)
+          if(-not ($crash -contains 'Issue57 enrolled crash: coordinator killed, both mutexes abandoned, canonical relaunchers blocked by retained claim; production forbidden')){throw 'enrolled_coordinator_crash_fixture_not_completed'}
           if(-not ($crash -contains 'Issue57 coordinator crash: both Global mutexes abandoned; incomplete claim persists and blocks recovery; production forbidden')){throw 'coordinator_crash_fixture_not_completed'}
           $direct=@(& ./scripts/issue57-direct-launcher-claim.windows.test.ps1)
           if(-not ($direct -contains 'Issue57 direct launcher claim: absent/empty allowed; claim, journal, unknown, invalid directory blocked before bootstrap')){throw 'direct_launcher_claim_fixture_not_completed'}

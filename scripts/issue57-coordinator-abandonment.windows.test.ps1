@@ -141,12 +141,112 @@ function Invoke-CrashFixture([string]$Mode) {
   }
 }
 
+function Invoke-EnrolledCoordinatorCrash {
+  $scope=[guid]::NewGuid().ToString('N')
+  $enrolledBase=Join-Path $env:RUNNER_TEMP ('issue57-maintenance-ledger-'+$scope)
+  $null=New-Item -ItemType Directory -Path $enrolledBase -ErrorAction Stop
+  $marker=Join-Path $enrolledBase '.issue57_dual_lock_fixture_ONLY'
+  [IO.File]::WriteAllText($marker,'ISSUE57_DISPOSABLE_NO_PRODUCTION')
+  $fixtureRoot=Join-Path $enrolledBase 'fixture'
+  $updateName='Global\CentralAMES.Issue57DualUpdateTest.'+$scope
+  $bootstrapName='Global\CentralAMES.Issue57DualBootstrapTest.'+$scope
+  # Observer handles exist before the coordinator's owner thread acquires the
+  # pair, so actual OS abandonment can be proved after terminating its process.
+  $update=[Threading.Mutex]::new($false,$updateName)
+  $bootstrap=[Threading.Mutex]::new($false,$bootstrapName)
+  $child=$null
+  $previousTemp=$env:TEMP;$previousTmp=$env:TMP
+  $previousRoot=$env:ISSUE57_DRAIN_FIXTURE_ROOT
+  $previousUpdate=$env:ISSUE57_DRAIN_UPDATE_MUTEX
+  $previousBootstrap=$env:ISSUE57_DRAIN_BOOTSTRAP_MUTEX
+  try {
+    $env:TEMP=$env:RUNNER_TEMP;$env:TMP=$env:RUNNER_TEMP
+    $env:ISSUE57_DRAIN_FIXTURE_ROOT=$fixtureRoot
+    $env:ISSUE57_DRAIN_UPDATE_MUTEX=$updateName
+    $env:ISSUE57_DRAIN_BOOTSTRAP_MUTEX=$bootstrapName
+    $start=[Diagnostics.ProcessStartInfo]::new()
+    $start.FileName=(Get-Command python -ErrorAction Stop).Source
+    $start.UseShellExecute=$false;$start.CreateNoWindow=$true
+    $start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+    foreach($arg in @('-u',(Join-Path $PSScriptRoot 'agent-issue57-drain-protocol.test.py'),'--windows-enrollment-abandon-worker')){
+      $null=$start.ArgumentList.Add($arg)
+    }
+    $child=[Diagnostics.Process]::Start($start)
+    $stdoutTask=$child.StandardOutput.ReadToEndAsync()
+    $stderrTask=$child.StandardError.ReadToEndAsync()
+    $reportPath=Join-Path $enrolledBase 'enrollment-ready.json'
+    $deadline=[DateTime]::UtcNow.AddSeconds(90)
+    $report=$null
+    while(-not $report -and -not $child.HasExited -and [DateTime]::UtcNow -lt $deadline){
+      if(Test-Path -LiteralPath $reportPath -PathType Leaf){
+        try{$report=[IO.File]::ReadAllText($reportPath)|ConvertFrom-Json}catch{$report=$null}
+      }
+      if(-not $report){Start-Sleep -Milliseconds 50}
+    }
+    if(-not $report -or $child.HasExited -or $report.update_authorized -ne $false -or
+       @($report.participant_pids).Count -ne 2){throw 'enrolled_coordinator_not_ready_for_interruption'}
+    $journalPath=Join-Path $fixtureRoot '.ames-update\transaction.json'
+    $before=[IO.File]::ReadAllText($journalPath)
+    $journal=$before|ConvertFrom-Json
+    if($journal.phase -cne 'relaunchers_enrolled' -or $journal.transaction_id -cne $report.transaction_id -or
+       $journal.update_authorized -ne $false -or @($journal.relauncher_receipt.participants).Count -ne 2){
+      throw 'enrolled_crash_receipt_not_bound'
+    }
+    $births=@{}
+    foreach($ownedPid in @($report.agent_pid)+@($report.participant_pids)){
+      $proc=Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f [int]$ownedPid) -ErrorAction Stop
+      if(-not $proc -or [int]$proc.ParentProcessId -ne $child.Id -or -not $proc.CreationDate){throw 'enrolled_child_ownership_unverified'}
+      $births[[int]$ownedPid]=([datetime]$proc.CreationDate).ToUniversalTime().Ticks
+    }
+    if($update.WaitOne(0)){$update.ReleaseMutex();throw 'enrolled_update_gate_not_held'}
+    if($bootstrap.WaitOne(0)){$bootstrap.ReleaseMutex();throw 'enrolled_bootstrap_gate_not_held'}
+    $child.Kill() # Exact disposable coordinator object, never a discovered PID.
+    if(-not $child.WaitForExit(10000)){throw 'enrolled_coordinator_did_not_exit'}
+    Assert-AbandonedMutexRecovery $update 'enrolled_update'
+    Assert-AbandonedMutexRecovery $bootstrap 'enrolled_bootstrap'
+    $deadline=[DateTime]::UtcNow.AddSeconds(15)
+    do {
+      $alive=0
+      foreach($ownedPid in $births.Keys){
+        $proc=Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $ownedPid) -ErrorAction Stop
+        if($proc){
+          if(([datetime]$proc.CreationDate).ToUniversalTime().Ticks -ne $births[$ownedPid]){throw 'enrolled_pid_reused_requires_recovery'}
+          $alive++
+        }
+      }
+      if($alive -gt 0){Start-Sleep -Milliseconds 100}
+    }while($alive -gt 0 -and [DateTime]::UtcNow -lt $deadline)
+    if($alive -ne 0){throw 'enrolled_channel_eof_not_fail_closed'}
+    . (Join-Path $PSScriptRoot '..\tools\ames-workstation\ISSUE57_RELAUNCH_ENROLLMENT.ps1')
+    if(-not (Test-Issue57RelaunchBlocked $fixtureRoot)){throw 'enrolled_crash_claim_not_blocking'}
+    $probe=@(& python (Join-Path $PSScriptRoot 'agent-issue57-drain-protocol.test.py') --windows-enrollment-after-death)
+    if($LASTEXITCODE -ne 0 -or $probe -notcontains 'Issue57 enrolled crash: coordinator killed, both mutexes abandoned, canonical relaunchers blocked by retained claim; production forbidden'){
+      throw 'enrolled_post_crash_relaunch_not_blocked'
+    }
+    if([IO.File]::ReadAllText($journalPath) -cne $before){throw 'enrolled_crash_journal_changed'}
+    Write-Output 'Issue57 enrolled crash: coordinator killed, both mutexes abandoned, canonical relaunchers blocked by retained claim; production forbidden'
+  } finally {
+    if($child){if(-not $child.HasExited){$child.Kill();$null=$child.WaitForExit(10000)};$child.Dispose()}
+    $bootstrap.Dispose();$update.Dispose()
+    $env:TEMP=$previousTemp;$env:TMP=$previousTmp
+    $env:ISSUE57_DRAIN_FIXTURE_ROOT=$previousRoot
+    $env:ISSUE57_DRAIN_UPDATE_MUTEX=$previousUpdate
+    $env:ISSUE57_DRAIN_BOOTSTRAP_MUTEX=$previousBootstrap
+    if((Test-Path -LiteralPath $marker -PathType Leaf) -and
+       [IO.File]::ReadAllText($marker) -ceq 'ISSUE57_DISPOSABLE_NO_PRODUCTION' -and
+       [IO.Path]::GetFileName($enrolledBase) -ceq ('issue57-maintenance-ledger-'+$scope)){
+      Remove-Item -LiteralPath $enrolledBase -Recurse -Force
+    }
+  }
+}
+
 try {
   if([IO.File]::ReadAllText($magic) -ne 'ISSUE57_DISPOSABLE_NO_PRODUCTION'){
     throw 'fixture_magic_invalid'
   }
   Invoke-CrashFixture 'before_claim'
   Invoke-CrashFixture 'claim'
+  Invoke-EnrolledCoordinatorCrash
   Write-Output 'Issue57 coordinator crash: both Global mutexes abandoned; incomplete claim persists and blocks recovery; production forbidden'
 } finally {
   if((Test-Path -LiteralPath $magic -PathType Leaf) -and
