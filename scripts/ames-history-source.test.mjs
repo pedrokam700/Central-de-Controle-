@@ -168,6 +168,8 @@ test('Today exposes isolated verified-source metrics without leaking identity or
  assert.deepEqual(isolatedCurrentPublisherCards(sync,'TAN10103'),[]);
  const view=fs.readFileSync(new URL('../ames/console-history.mjs',import.meta.url),'utf8');
  assert.match(view,/data-history-isolated-current/);
+ assert.match(view,/data-history-retained-conflict/);
+ assert.match(view,/valores abaixo são das últimas revisões verificadas/);
  assert.match(view,/esc\(c\.source_id\|\|'—'\)/,'source IDs are escaped before HTML rendering');
  assert.match(view,/não um fechamento FULL ou indicador consolidado/);
 });

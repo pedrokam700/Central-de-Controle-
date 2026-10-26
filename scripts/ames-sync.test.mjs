@@ -207,7 +207,8 @@ test('an incomplete Firestore cache cannot revoke a server-verified multiwriter 
   const remote={getPart:async(_u,h,i)=>parts.get(h.key+':'+i),
     watch:(_u,cb)=>{notify=cb;cb([{...pa.head,...pa.history},{...pb.head,...pb.history}],{day_index_available:true,from_cache:false});return()=>{};}};
   const queue={put:async()=>{},remove:async()=>{},list:async()=>[]},store=createAmesStore();
-  const sync=createMesSync(store,remote,{queue,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
+  let clock=FACTORY_NOW;
+  const sync=createMesSync(store,remote,{queue,online:()=>true,now:()=>clock,schedule:()=>0,unschedule:()=>{}});
   sync.start('reader');
   notify([{...pa.head,...pa.history}],{day_index_available:true,from_cache:true});
   await new Promise(r=>setTimeout(r,40));
@@ -223,6 +224,20 @@ test('an incomplete Firestore cache cannot revoke a server-verified multiwriter 
   await new Promise(r=>setTimeout(r,20));
   assert.equal(store.agent().sync.read_status,'origin_conflict','empty cached index cannot clear prior conflict');
   assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
+  notify([{...pa.head,...pa.history}],{day_index_available:true,from_cache:false});
+  await new Promise(r=>setTimeout(r,40));
+  assert.equal(store.agent().sync.read_status,'origin_conflict','server index alone does not prove legitimate writer reconciliation');
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].retained_from_verified_conflict,true);
+  assert.equal(store.agent().sync.remote_line_count,0);
+  assert.equal(store.read('TAN10102').snapshot,null);
+  notify([],{day_index_available:true,from_cache:false});
+  await new Promise(r=>setTimeout(r,30));
+  assert.equal(store.agent().sync.read_status,'origin_conflict','empty server index cannot erase previously verified competing sources for the same day');
+  clock=new Date('2026-10-10T12:00:00Z');sync.ensureOperationalDay();
+  await new Promise(r=>setTimeout(r,40));
+  assert.equal(store.agent().sync.read_status,'ready','conflict from yesterday must not block the next operating day');
+  assert.deepEqual(store.agent().sync.origin_conflict_lines,[]);
   sync.stop();
 });
 

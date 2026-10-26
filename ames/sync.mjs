@@ -115,7 +115,7 @@ export function indexedQueue(){
 }
 
 export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
-  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),watchDay='';
+  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),verifiedConflicts=new Map(),watchDay='';
   const alive=(u,g)=>u===uid&&g===generation;
   const currentConfig=()=>typeof productionConfig==='function'?productionConfig():productionConfig;
   const entryScope=e=>publicationIntent(JSON.parse(e.parts.join('')),now(),currentConfig());
@@ -250,13 +250,23 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
           }));
           const distinctSources=new Set(verified.map(h=>h.source_id));
           originConflictLines.push(line);
-          originConflictCandidates.push({line_id:line,installations:verified.length,
+          const conflict={line_id:line,installations:verified.length,
             distinct_sources:distinctSources.size,identity_collision:distinctSources.size<verified.length,
-            candidates:verified.slice(0,10),observation_comparison:compareCompetingPublisherObservations(installs)});
+            candidates:verified.slice(0,10),observation_comparison:compareCompetingPublisherObservations(installs)};
+          originConflictCandidates.push(conflict);
+          verifiedConflicts.set(line,{day:watchDay,conflict});
           continue;
         }
+        // A server index that temporarily omits one immutable source does
+        // not constitute a verified multiwriter resolution for this day.
+        if(verifiedConflicts.get(line)?.day===watchDay)continue;
         const selected=byInstallation.values().next().value;
         selectedHeads.push(selected.head);payloads.push(selected.payload);
+      }
+      for(const [line,record] of verifiedConflicts){
+        if(record.day!==watchDay||originConflictLines.includes(line))continue;
+        originConflictLines.push(line);
+        originConflictCandidates.push({...record.conflict,retained_from_verified_conflict:true});
       }
       if(alive(u,g)&&read===readGeneration){
         unschedule(readTimer);readRetry=1000;
@@ -279,8 +289,11 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
   function subscribe(){
     if(!uid)return;
     const u=uid,g=generation,w=++watchGeneration;
+    readGeneration++;
     unwatch?.();unwatch=null;watchFailed=false;headsKey='';hasHeads=false;lastHeads=[];
-    watchDay=factoryWindow(now(),currentConfig()).start_at;
+    const nextDay=factoryWindow(now(),currentConfig()).start_at;
+    if(nextDay!==watchDay)verifiedConflicts.clear();
+    watchDay=nextDay;
     status({read_status:'connecting',read_error:''});
     const failed=error=>{
       if(!alive(u,g)||w!==watchGeneration)return;
@@ -364,6 +377,6 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       status({status:'pending',pending:(await queue.list(u)).length});void flush();return true;
     },
     retry(){if(watchFailed)subscribe();else if(uid&&hasHeads)void receive(lastHeads,{...lastReadMeta,from_cache:lastReadMeta.from_cache||!online()});return flush();},
-    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;identityBlocked.clear();uploadedParts.clear();remotePayloadCache.clear();watchDay='';unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
+    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;identityBlocked.clear();uploadedParts.clear();remotePayloadCache.clear();verifiedConflicts.clear();watchDay='';unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
   };
 }

@@ -181,3 +181,16 @@ Só após o piloto de B, o coordenador transacional da PR #64 pode ser elegível
 
 - Um cache parcial também podia chegar **antes** de terminar a verificação dos dois payloads do servidor; nesse momento `origin_conflict_lines` ainda estaria vazio. O listener agora recusa a substituição de **qualquer índice já entregue pelo servidor** por eventos posteriores `from_cache` na mesma assinatura, inclusive durante downloads/validação criptográfica. A mudança para um novo dia continua criando assinatura nova.
 - A regressão envia o índice de uma única origem em cache **imediatamente após** o evento de servidor com duas fontes, ainda durante recepção, e novamente após o estado `origin_conflict`; ambos são ignorados. Uma atualização futura **do servidor** continua apta a ser processada e reconciliar o índice de forma explícita.
+
+### Checkpoints GitHub — cache e prioridade do servidor
+
+- SHA `66acc5932e90d855af0d53e75f5227a5ca87fc01`: barreira inicial de cache parcial, Central Quality Gate #40320862321 **ainda em andamento** na última consulta.
+- SHA `2b2072ac7736e5a997630cfeaa60a01c91586a94`: barreira para eventos de cache durante validação do índice do servidor; Central Quality Gate **#40321116119 SUCCESS, 3/3 jobs** (Console, E2E Firestore, qualidade estática). Sem teste físico dessa candidata.
+
+## Incremento — conflito de origem protegido durante todo o dia operacional
+
+- **Risco residual:** um novo evento do servidor com apenas uma instalação (ou índice vazio), mesmo depois de duas origens anteriormente comprovadas por payload/hash, ainda podia selecionar falso HEAD por descarte transitório de documentos ou escopo de query. Um índice parcial não representa uma conciliação formal.
+- `ames/sync.mjs` agora conserva em **memória de sessão e restrita ao dia operacional** a última evidência comprovada de multiwriter por linha. Eventos subsequentes com uma/zero origem mantêm o conflito sem publicar HEAD; eventos com duas origens válidas atualizam a evidência. O primeiro evento de um novo dia limpa a proteção anterior; logout a limpa também. Uma subscrição reiniciada invalida leituras assíncronas da assinatura anterior.
+- `ames/console-history.mjs` distingue os **últimos números previamente verificados** de uma leitura atual quando o índice mais recente já não contém as duas origens. Não os apresenta como captura ao vivo nem agrega valores. A preferência permanente de um único writer **NÃO está implementada**.
+- Regressões verificam: servidor com duas fontes; cache parcial antes/depois da verificação; servidor novamente com só uma fonte; servidor vazio; proteção de ausência de HEAD; reinício de dia limpo; nota visível em PT/EN. `node --test scripts/ames-sync.test.mjs scripts/ames-data-health.test.mjs scripts/ames-history-source.test.mjs scripts/ames-multipc-shared-contract.test.mjs` **4/4 arquivos PASS local**; `git diff --check` PASS. Gate GitHub do novo SHA **PENDING** até publicação.
+- **Limite importante:** a proteção é da sessão corrente e não constitui registro persistente de coordenação entre máquinas ou prova definitiva de origem. Após recarregar a página, a consulta do índice e a detecção precisam ser verificadas novamente. Política coordenada, FULL e homologação física seguem pendentes. Não modificar Firestore Rules, dados compartilhados, agentes, guardian ou PR #64.
