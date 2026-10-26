@@ -38,6 +38,8 @@ export function compareCompetingPublisherObservations(installs){
       if(!sn||!code||!time){unverifiable++;continue;}
       // Compare only the actually shared time window. Rows outside it are
       // neither missing from nor zero in the other workstation's collection.
+      // The MES extraction may include observations at its end instant;
+      // preserve the source's inclusive boundary until a stronger contract.
       if(time<overlapStart||time>overlapEnd){outside++;continue;}
       observed++;
       const key=JSON.stringify([sn,code,time]);
@@ -59,6 +61,20 @@ export function compareCompetingPublisherObservations(installs){
   const matches=[...first.keys].filter(k=>second.keys.has(k)).length;
   return {state:matches?'candidate_overlap':'no_candidate_matches',...summary,
     candidate_matches:matches,unmatched_observed:[first.keys.size-matches,second.keys.size-matches]};
+}
+// Safe, read-only observations for competing CURRENT sources. These are
+// values inside each verified payload, never a team-wide total or FULL close.
+// Deliberately exclude identifiers, raw records, repair comments and UIDs.
+export function isolatedPublisherMetrics(payload){
+  const percentage=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:null;
+  const nonnegative=value=>Number.isSafeInteger(value)&&value>=0?value:null;
+  return {
+    fpy:percentage(payload?.summary?.fpy),
+    check_fpy:percentage(payload?.summary?.check_fpy),
+    quantity:nonnegative(payload?.summary?.quantity),
+    observed_defects:Array.isArray(payload?.datasets?.defects)?payload.datasets.defects.length:null,
+    defects_source_complete:payload?.coverage?.defects?.source_complete===true&&payload?.coverage?.defects?.transport_complete===true
+  };
 }
 export function sanitizeSnapshot(payload){
   normalizeCanonical(payload);
@@ -229,7 +245,8 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
           const verified=installs.map(({head,payload})=>({
             ...syncHeadMetadata(head,meta.day_index_available?'operational_day_history':'team_latest'),
             period_start:payload.summary?.period?.start_at||null,
-            period_end:payload.summary?.period?.end_at||null
+            period_end:payload.summary?.period?.end_at||null,
+            isolated_metrics:isolatedPublisherMetrics(payload)
           }));
           const distinctSources=new Set(verified.map(h=>h.source_id));
           originConflictLines.push(line);

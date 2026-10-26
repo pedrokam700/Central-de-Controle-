@@ -138,8 +138,8 @@ test('origin conflict diagnostics expose verified candidates, never Firebase acc
   const agent={status:'offline',sync:{read_status:'origin_conflict',origin_conflict_lines:['TAN10102'],
     origin_conflict_candidates:[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true,
       owner_uid:'PRIVATE-ACCOUNT',candidates:[
-        {source_id:'station-<A>',snapshot_id:'8',snapshot_revision:2,collected_at:'2026-10-23T12:00:00Z',owner_uid:'SECRET'},
-        {source_id:'station-<A>',snapshot_id:'9',snapshot_revision:3,collected_at:'2026-10-23T12:30:00Z'}],
+        {source_id:'station-<A>',snapshot_id:'8',snapshot_revision:2,collected_at:'2026-10-23T12:00:00Z',owner_uid:'SECRET',isolated_metrics:{fpy:97.69,check_fpy:97.86,quantity:1124,observed_defects:26,defects_source_complete:false,pcba_sn:'DO_NOT_SHOW'}},
+        {source_id:'station-<A>',snapshot_id:'9',snapshot_revision:3,collected_at:'2026-10-23T12:30:00Z',isolated_metrics:{fpy:97.26,check_fpy:98.31,quantity:1422,observed_defects:39,defects_source_complete:false}}],
       observation_comparison:{state:'candidate_overlap',window_scope:'overlap_only',observed_defects:[5,6],outside_common_window:[0,1],coverage_complete:[false,true],candidate_matches:4,unmatched_observed:[1,2]}}]}};
   const model=buildSyncHealth(agent);
   assert.equal(model.read_status,'origin_conflict');
@@ -156,7 +156,12 @@ test('origin conflict diagnostics expose verified candidates, never Firebase acc
   assert.match(root.innerHTML,/Comparação restrita à janela temporal comum/);
   assert.match(root.innerHTML,/Fora da janela comum.*0 \/ 1/);
   assert.match(root.innerHTML,/Cobertura 3028 reportada completa por coleta.*não \/ sim/);
-  assert.doesNotMatch(root.innerHTML,/PRIVATE-ACCOUNT|SECRET/);
+  assert.match(root.innerHTML,/data-isolated-publisher-metrics/);
+  assert.match(root.innerHTML,/Observação apenas desta origem/);
+  assert.match(root.innerHTML,/1\.124/);
+  assert.match(root.innerHTML,/1\.422/);
+  assert.match(root.innerHTML,/Completude 3028 comprovada: não/);
+  assert.doesNotMatch(root.innerHTML,/PRIVATE-ACCOUNT|SECRET|DO_NOT_SHOW/);
   const copy=factorySyncEvidence(agent);
   assert.deepEqual(copy.receiving.conflict_candidates,[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true,comparison_state:'candidate_overlap',candidate_matches:4}]);
   assert.equal(JSON.stringify(copy).includes('station-'),false);

@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createAmesStore} from '../ames/data/store.mjs';
 import {normalizeCanonical,DATASETS} from '../ames/data/canonical.mjs';
-import {publication,createMesSync,sanitizeSnapshot,compareCompetingPublisherObservations} from '../ames/sync.mjs';
+import {publication,createMesSync,sanitizeSnapshot,compareCompetingPublisherObservations,isolatedPublisherMetrics} from '../ames/sync.mjs';
 import {selectCoraContext} from '../ames/data/cora.mjs';
 import {selectProcess} from '../ames/data/process-timeline.mjs';
 const FACTORY_NOW=new Date('2026-10-09T12:00:00Z');
@@ -49,6 +49,22 @@ test('two collectors only produce candidate 3028 overlap, never an aggregate or 
   const repeated=structuredClone(a);repeated.datasets.defects.push({...repeated.datasets.defects[0],record_id:'ANOTHER'});
   assert.deepEqual(compareCompetingPublisherObservations([{payload:repeated},{payload:b}]).ambiguous_keys,[1,0]);
   assert.deepEqual(compareCompetingPublisherObservations([{payload:a}]),{state:'unsupported_installation_count'});
+});
+test('competing source metrics are verified, bounded, isolated and exclude identifiers',()=>{
+  const payload=canonicalFixture('TAN10102');
+  payload.summary.fpy=97.69;
+  payload.summary.check_fpy=97.86;
+  payload.summary.quantity=1124;
+  payload.summary.owner_uid='private-owner';
+  payload.coverage.defects.source_complete=false;
+  const result=isolatedPublisherMetrics(payload);
+  assert.deepEqual(result,{fpy:97.69,check_fpy:97.86,quantity:1124,observed_defects:1,defects_source_complete:false});
+  assert.equal(JSON.stringify(result).includes('private-owner'),false);
+  assert.equal(JSON.stringify(result).includes('pcba_sn'),false);
+  payload.summary.fpy=150;
+  payload.summary.check_fpy='97.86';
+  payload.summary.quantity=-1;
+  assert.deepEqual([isolatedPublisherMetrics(payload).fpy,isolatedPublisherMetrics(payload).check_fpy,isolatedPublisherMetrics(payload).quantity],[null,null,null]);
 });
 test('offline/reconnect publishes once; active teammates read sanitized latest line; logout clears state',async()=>{
   let online=false,watcher;const pending=new Map(),parts=new Map(),heads=new Map(),writes=[];let fail=true;
@@ -153,6 +169,8 @@ test('Line 3 reaches PC B from immutable day index despite an old legacy owner h
 test('different current installations cannot silently replace one another on PC B',async()=>{
   const first=canonicalFixture('TAN10103'),second=canonicalFixture('TAN10103');
   second.source_id='new-source';
+  first.summary.fpy=97.26;first.summary.quantity=1422;
+  second.summary.fpy=96.5;second.summary.quantity=1420;
   const p1=await publication('A',first,{now:FACTORY_NOW}),p2=await publication('B',second,{now:FACTORY_NOW});
   const parts=new Map();
   for(const p of [p1,p2])p.parts.forEach((v,i)=>parts.set(p.head.key+':'+i,v));
@@ -171,6 +189,12 @@ test('different current installations cannot silently replace one another on PC 
   assert.deepEqual(store.agent().sync.origin_conflict_candidates[0].candidates.map(x=>x.source_id).sort(),['new-source','source']);
   assert.equal(JSON.stringify(store.agent().sync.origin_conflict_candidates).includes('owner_uid'),false);
   assert.equal(store.agent().sync.origin_conflict_candidates[0].observation_comparison.state,'candidate_overlap');
+  const isolated=store.agent().sync.origin_conflict_candidates[0].candidates.map(x=>x.isolated_metrics);
+  assert.deepEqual(isolated.map(x=>x.quantity).sort(),[1420,1422]);
+  assert.deepEqual(isolated.map(x=>x.fpy).sort(),[96.5,97.26]);
+  assert(isolated.every(x=>x.observed_defects===1&&x.defects_source_complete===false));
+  assert.equal(store.agent().sync.remote_line_count,0,'observations must not become a team head');
+  assert.equal(store.read('TAN10103').snapshot,null,'read-only isolated observations never become Today');
   sync.stop();
   assert.deepEqual(store.agent().sync.origin_conflict_candidates,[],'logout removes reviewer metadata');
 });
