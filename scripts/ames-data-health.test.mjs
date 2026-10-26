@@ -161,10 +161,26 @@ test('origin conflict diagnostics expose verified candidates, never Firebase acc
   assert.match(root.innerHTML,/1\.124/);
   assert.match(root.innerHTML,/1\.422/);
   assert.match(root.innerHTML,/Completude 3028 comprovada: não/);
+  assert.match(root.innerHTML,/data-sync-guard-unavailable/,'missing persistence proof must be visible');
   assert.doesNotMatch(root.innerHTML,/PRIVATE-ACCOUNT|SECRET|DO_NOT_SHOW/);
   const copy=factorySyncEvidence(agent);
   assert.deepEqual(copy.receiving.conflict_candidates,[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true,comparison_state:'candidate_overlap',candidate_matches:4}]);
   assert.equal(JSON.stringify(copy).includes('station-'),false);
+});
+
+test('restored conflict marker is labeled as local safety evidence, never zero verified installations',()=>{
+  const agent={status:'offline',sync:{read_status:'origin_conflict',origin_conflict_lines:['TAN10102'],
+    origin_conflict_candidates:[{line_id:'TAN10102',installations:null,distinct_sources:null,
+      persisted_guard:true,candidates:[],observation_comparison:{state:'persisted_guard_no_payload'}}]}};
+  const model=buildSyncHealth(agent);
+  assert.equal(model.conflicts[0].persisted_guard,true);
+  const store={agent:()=>agent,read:()=>({snapshot:null,freshness:'unknown',source:null})};
+  const root={innerHTML:'',setAttribute(){},removeAttribute(){},replaceChildren(){this.innerHTML='';},querySelectorAll(){return []}};
+  createDataHealthView(root,store).render();
+  assert.match(root.innerHTML,/data-sync-persisted-conflict/);
+  assert.match(root.innerHTML,/Conflito comprovado anteriormente neste navegador/);
+  assert.doesNotMatch(root.innerHTML,/0 instalações verificadas/);
+  assert.doesNotMatch(root.innerHTML,/Snapshot undefined/);
 });
 
 test('data health renders shared workstation authority and escaped source metadata',()=>{

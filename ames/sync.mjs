@@ -114,12 +114,45 @@ export function indexedQueue(){
   };
 }
 
-export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
+// A local, account-scoped safety marker only: no snapshots, origin IDs,
+// PCBA, material SN, repair comments or credentials are persisted here.
+// One key per line makes concurrent tabs' identical writes idempotent.
+export function browserConflictJournal(storage=()=>{
+  try{return typeof localStorage==='undefined'?null:localStorage;}catch{return null;}
+}){
+  const key=(uid,day,line)=>`central-ames-verified-conflict-v1:${encodeURIComponent(uid)}:${day}:${line}`;
+  const valid=(uid,day,line)=>typeof uid==='string'&&uid.length>0&&
+    /^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(day)&&LINE_IDS.includes(line);
+  return {
+    list(uid,day){return LINE_IDS.filter(line=>{
+      if(!valid(uid,day,line))return false;
+      try{return storage()?.getItem(key(uid,day,line))==='multiwriter_verified';}catch{return false;}
+    });},
+    mark(uid,day,line){
+      if(!valid(uid,day,line))return false;
+      try{const target=storage();if(!target)return false;
+        target.setItem(key(uid,day,line),'multiwriter_verified');
+        return target.getItem(key(uid,day,line))==='multiwriter_verified';
+      }catch{return false;}
+    }
+  };
+}
+
+export function createMesSync(store,remote,{queue=indexedQueue(),conflictJournal=browserConflictJournal(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
   let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),verifiedConflicts=new Map(),watchDay='';
   const alive=(u,g)=>u===uid&&g===generation;
   const currentConfig=()=>typeof productionConfig==='function'?productionConfig():productionConfig;
   const entryScope=e=>publicationIntent(JSON.parse(e.parts.join('')),now(),currentConfig());
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
+  const preservedGuard=line=>({line_id:line,installations:null,distinct_sources:null,
+    identity_collision:false,candidates:[],observation_comparison:{state:'persisted_guard_no_payload'},
+    retained_from_verified_conflict:true,persisted_guard:true});
+  const restoreConflictMarkers=()=>{
+    if(!uid||!watchDay)return;
+    for(const line of conflictJournal.list(uid,watchDay)){
+      if(!verifiedConflicts.has(line))verifiedConflicts.set(line,{day:watchDay,conflict:preservedGuard(line)});
+    }
+  };
   const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null,origin_conflict_lines:[],origin_conflict_candidates:[],identity_blocked:[],last_publish_timing:null});
   async function flush(){
     if(!uid||running)return;running=true;const u=uid,g=generation;
@@ -192,6 +225,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
   async function receive(heads,meta=lastReadMeta){
     const u=uid,g=generation,read=++readGeneration,receivedAt=Date.now();
     try{
+      restoreConflictMarkers();
       const candidates=meta.day_index_available?heads.filter(h=>h.period_start):heads;
       const byLine=new Map();
       for(const h of candidates){
@@ -250,8 +284,10 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
           }));
           const distinctSources=new Set(verified.map(h=>h.source_id));
           originConflictLines.push(line);
+          const guard_persisted=conflictJournal.mark(u,watchDay,line);
           const conflict={line_id:line,installations:verified.length,
             distinct_sources:distinctSources.size,identity_collision:distinctSources.size<verified.length,
+            guard_persisted,
             candidates:verified.slice(0,10),observation_comparison:compareCompetingPublisherObservations(installs)};
           originConflictCandidates.push(conflict);
           verifiedConflicts.set(line,{day:watchDay,conflict});
@@ -294,7 +330,13 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     const nextDay=factoryWindow(now(),currentConfig()).start_at;
     if(nextDay!==watchDay)verifiedConflicts.clear();
     watchDay=nextDay;
+    restoreConflictMarkers();
     status({read_status:'connecting',read_error:''});
+    if(verifiedConflicts.size){
+      const present=[...verifiedConflicts].filter(([,record])=>record.day===watchDay);
+      if(present.length)status({read_status:'origin_conflict',origin_conflict_lines:present.map(([line])=>line),
+        origin_conflict_candidates:present.map(([,record])=>record.conflict.persisted_guard?record.conflict:{...record.conflict,retained_from_verified_conflict:true})});
+    }
     const failed=error=>{
       if(!alive(u,g)||w!==watchGeneration)return;
       watchFailed=true;readGeneration++;status({read_status:'error',read_error:error.message});

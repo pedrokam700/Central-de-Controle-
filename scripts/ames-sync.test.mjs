@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createAmesStore} from '../ames/data/store.mjs';
 import {normalizeCanonical,DATASETS} from '../ames/data/canonical.mjs';
-import {publication,createMesSync,sanitizeSnapshot,compareCompetingPublisherObservations,isolatedPublisherMetrics} from '../ames/sync.mjs';
+import {publication,createMesSync,sanitizeSnapshot,compareCompetingPublisherObservations,isolatedPublisherMetrics,browserConflictJournal} from '../ames/sync.mjs';
 import {selectCoraContext} from '../ames/data/cora.mjs';
 import {selectProcess} from '../ames/data/process-timeline.mjs';
 const FACTORY_NOW=new Date('2026-10-09T12:00:00Z');
@@ -239,6 +239,47 @@ test('an incomplete Firestore cache cannot revoke a server-verified multiwriter 
   assert.equal(store.agent().sync.read_status,'ready','conflict from yesterday must not block the next operating day');
   assert.deepEqual(store.agent().sync.origin_conflict_lines,[]);
   sync.stop();
+});
+
+test('a verified conflict marker survives a reload without storing source identifiers or metrics',async()=>{
+  const values=new Map();
+  const storage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v)};
+  const journal=browserConflictJournal(()=>storage);
+  assert.deepEqual(journal.list('reader','2026-10-09T07:00'),[]);
+  assert.equal(journal.mark('reader','invalid-day','TAN10102'),false);
+  const a=canonicalFixture('TAN10102'),b=canonicalFixture('TAN10102');b.source_id='second-source';
+  const pa=await publication('owner-A',a,{now:FACTORY_NOW}),pb=await publication('owner-B',b,{now:FACTORY_NOW});
+  const parts=new Map();for(const p of [pa,pb])p.parts.forEach((v,i)=>parts.set(p.head.key+':'+i,v));
+  let index=[{...pa.head,...pa.history},{...pb.head,...pb.history}];
+  const remote={getPart:async(_u,h,i)=>parts.get(h.key+':'+i),
+    watch:(_u,cb)=>{cb(index,{day_index_available:true,from_cache:false});return()=>{}}};
+  const queue={put:async()=>{},remove:async()=>{},list:async()=>[]};
+  const create=()=>{
+    const store=createAmesStore();
+    const sync=createMesSync(store,remote,{queue,conflictJournal:journal,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
+    return {store,sync};
+  };
+  const first=create();first.sync.start('reader');await new Promise(r=>setTimeout(r,40));
+  assert.equal(first.store.agent().sync.read_status,'origin_conflict');
+  first.sync.stop();
+  assert.deepEqual(journal.list('reader','2026-10-09T07:00'),['TAN10102']);
+  assert.deepEqual(journal.list('another-user','2026-10-09T07:00'),[]);
+  assert.deepEqual(journal.list('reader','2026-10-10T07:00'),[]);
+  assert.deepEqual([...values.values()],['multiwriter_verified']);
+  assert.equal(JSON.stringify([...values]).includes('second-source'),false);
+  assert.equal(JSON.stringify([...values]).includes('pcba_sn'),false);
+  index=[{...pa.head,...pa.history}];
+  const second=create();second.sync.start('reader');await new Promise(r=>setTimeout(r,40));
+  assert.equal(second.store.agent().sync.read_status,'origin_conflict');
+  assert.deepEqual(second.store.agent().sync.origin_conflict_lines,['TAN10102']);
+  assert.equal(second.store.agent().sync.origin_conflict_candidates[0].persisted_guard,true);
+  assert.deepEqual(second.store.agent().sync.origin_conflict_candidates[0].candidates,[]);
+  assert.equal(second.store.agent().sync.remote_line_count,0);
+  assert.equal(second.store.read('TAN10102').snapshot,null);
+  second.sync.stop();
+  const denied=browserConflictJournal(()=>{throw Error('storage-denied')});
+  assert.deepEqual(denied.list('reader','2026-10-09T07:00'),[]);
+  assert.equal(denied.mark('reader','2026-10-09T07:00','TAN10102'),false);
 });
 
 test('same source ID reused under different owners stays in conflict without exposing owner UID',async()=>{
