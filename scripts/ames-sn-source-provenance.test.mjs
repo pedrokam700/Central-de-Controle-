@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SN_SOURCE_ORDER,snLiveSourceProvenance,renderSnLiveSourceProvenance} from '../ames/console-sn-source-provenance.mjs';
 import {buildLiveSnForensics} from '../ames/data/sn-forensics.mjs';
+import {operatorSummary} from '../ames/console-fastlane-sn-reuse.mjs';
 import fs from 'node:fs';
 
 const lookup=()=>({
@@ -103,4 +104,38 @@ test('live SN UI adds the source details without invoking a new MES request',()=
   assert.match(summary,/countProven\?model\.materials\.length:'—'/);
   assert.match(specialized,/queryConfirmed3074/);
   assert.match(specialized,/fullyCollected3074/);
+});
+
+test('SN operator summary never presents missing or failed 3074/3022/3012 as confirmed zero',()=>{
+  const original=globalThis.document;
+  globalThis.document={documentElement:{lang:'pt-BR'}};
+  const base={sn:'PCB-QUERY',detected_type:'PCBA',trace_2114:{status:'complete',current_failure:null,previous_failures:[]}};
+  const cards=result=>operatorSummary(result,result.trace_3012?.rows||[]);
+  const metric=(html,label)=>html.match(new RegExp(`aria-label="${label}"[^>]*><small>[^<]*<\\/small><b>([^<]+)<\\/b>`))?.[1];
+  try{
+    const missing=cards(base);
+    assert.match(missing,/3074 não coletada ou sem classificação comprovada/);
+    assert.equal(metric(missing,'Materiais 2º\\+ uso'),'—');
+    assert.equal(metric(missing,'Eventos 3022'),'—');
+    assert.equal(metric(missing,'Reparos 3012'),'—');
+    const failed=cards({...base,trace_3074:{status:'error',error:'timeout',reused_components:[]},
+      trace_3022:{status:'error',process_passages:[]},trace_3012:{status:'error',rows:[]}});
+    assert.match(failed,/A consulta 3074 falhou; reuso desconhecido/);
+    assert.doesNotMatch(failed,/Nenhum material 2º\+ uso confirmado nesta resposta/);
+    assert.equal(metric(failed,'Materiais 2º\\+ uso'),'—');
+    assert.equal(metric(failed,'Eventos 3022'),'—');
+    assert.equal(metric(failed,'Reparos 3012'),'—');
+    const failed2114=cards({...base,trace_2114:{status:'error',previous_failures:[]}});
+    assert.equal(metric(failed2114,'Falha atual'),'—');
+    assert.equal(metric(failed2114,'Falhas antigas PCBA'),'—');
+    assert.equal(metric(failed2114,'Histórias 2114'),'—');
+    const mixed=cards({...base,trace_3022:{status:'partial',process_passages:[],rows:[{pcba_sn:'PCB-QUERY',station:'A5100'}]}});
+    assert.equal(metric(mixed,'Eventos 3022'),'1','non-empty 3022 rows are not hidden behind an empty passage placeholder');
+    const complete=cards({...base,trace_3074:{status:'complete',query:{rows:[],no_data:true},reused_components:[]},
+      trace_3022:{status:'complete',process_passages:[]},trace_3012:{status:'complete',rows:[]}});
+    assert.match(complete,/Nenhum material 2º\+ uso observado nesta consulta 3074 confirmada; não é zero global/);
+    assert.equal(metric(complete,'Materiais 2º\\+ uso'),'0');
+    assert.equal(metric(complete,'Eventos 3022'),'0');
+    assert.equal(metric(complete,'Reparos 3012'),'0');
+  }finally{if(original===undefined)delete globalThis.document;else globalThis.document=original;}
 });
