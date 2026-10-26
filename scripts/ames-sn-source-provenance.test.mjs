@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SN_SOURCE_ORDER,snLiveSourceProvenance,renderSnLiveSourceProvenance} from '../ames/console-sn-source-provenance.mjs';
 import {buildLiveSnForensics} from '../ames/data/sn-forensics.mjs';
-import {operatorSummary} from '../ames/console-fastlane-sn-reuse.mjs';
+import {operatorSummary,provenPcbaReuseCount} from '../ames/console-fastlane-sn-reuse.mjs';
 import fs from 'node:fs';
 
 const lookup=()=>({
@@ -100,8 +100,8 @@ test('live SN UI adds the source details without invoking a new MES request',()=
   assert.match(source,/renderLiveSources\(root,store\)/);
   const summary=fs.readFileSync(new URL('../ames/console-fastlane-sn-reuse.mjs',import.meta.url),'utf8');
   const specialized=fs.readFileSync(new URL('../ames/console-specialized-views.mjs',import.meta.url),'utf8');
-  assert.match(summary,/\['ok','zero'\]\.includes\(model\.source_states\['3074'\]\)/);
-  assert.match(summary,/countProven\?model\.materials\.length:'—'/);
+  assert.match(summary,/provenPcbaReuseCount\(result,model\.source_states\['3074'\]\)/);
+  assert.match(summary,/countVisible\?model\.materials\.length:'—'/);
   assert.match(specialized,/queryConfirmed3074/);
   assert.match(specialized,/fullyCollected3074/);
 });
@@ -114,7 +114,7 @@ test('SN operator summary never presents missing or failed 3074/3022/3012 as con
   const metric=(html,label)=>html.match(new RegExp(`aria-label="${label}"[^>]*><small>[^<]*<\\/small><b>([^<]+)<\\/b>`))?.[1];
   try{
     const missing=cards(base);
-    assert.match(missing,/3074 não coletada ou sem classificação comprovada/);
+    assert.match(missing,/3074 sem cobertura integral de reuso/);
     assert.equal(metric(missing,'Materiais 2º\\+ uso'),'—');
     assert.equal(metric(missing,'Eventos 3022'),'—');
     assert.equal(metric(missing,'Reparos 3012'),'—');
@@ -144,4 +144,32 @@ test('SN operator summary never presents missing or failed 3074/3022/3012 as con
     assert.equal(metric(complete,'Eventos 3022'),'0');
     assert.equal(metric(complete,'Reparos 3012'),'0');
   }finally{if(original===undefined)delete globalThis.document;else globalThis.document=original;}
+});
+
+test('3074 complete does not imply a PCBA reuse zero when target or component investigations are unproven',()=>{
+  const old=globalThis.document;
+  globalThis.document={documentElement:{lang:'pt-BR'}};
+  const base={sn:'QUERY',detected_type:'PCBA',trace_2114:{status:'complete',current_failure:null,previous_failures:[]}};
+  const cards=data=>operatorSummary(data,[]);
+  const metric=html=>html.match(/aria-label="Materiais 2º\+ uso"[^>]*><small>[^<]*<\/small><b>([^<]+)<\/b>/)?.[1];
+  const grid={status:'complete',query:{rows:[{Barcode:'CAM-1', 'Sn Type':'Rear Camera'}],no_data:false},
+    material_selection:{status:'current_mounting_new_cycle'},components:[{item_sn:'CAM-1'}],component_usage:[{item_sn:'CAM-1',is_reused:null}],reused_components:[]};
+  try{
+    assert.equal(provenPcbaReuseCount({...base,trace_3074:grid},'ok'),false);
+    assert.equal(metric(cards({...base,trace_3074:grid})),'—','complete 3074 grid is not complete component reuse');
+    const proven={...grid,component_usage:[{item_sn:'CAM-1',is_reused:false}]};
+    assert.equal(provenPcbaReuseCount({...base,trace_3074:proven},'ok'),true);
+    assert.equal(metric(cards({...base,trace_3074:proven})),'0','zero only after each selected material has a proven non-reuse result');
+    const unknown=cards({...base,detected_type:'SN_INDETERMINADO',trace_3074:proven});
+    assert.equal(metric(unknown),'—');
+    assert.match(unknown,/Tipo de SN indeterminado/);
+    const material=cards({...base,detected_type:'MATERIAL_SN',trace_3074:{...proven,
+      query:{rows:[{Barcode:'PCBA-OLD', 'Sn Type':'PCBA'}],no_data:false}}});
+    assert.equal(metric(material),'—');
+    assert.match(material,/Esta é uma consulta de Material SN/);
+    const failedMaterial={...grid,component_usage:[{item_sn:'CAM-1',is_reused:null,error:'3074_TIMEOUT'}]};
+    assert.equal(metric(cards({...base,trace_3074:failedMaterial})),'—');
+    const positive={...grid,reused_components:[{item_sn:'CAM-1',previous_pcbas:['PCBA-OLD']}]};
+    assert.equal(metric(cards({...base,trace_3074:positive})),'1','one observed reuse stays visible even if others lack proof');
+  }finally{if(old===undefined)delete globalThis.document;else globalThis.document=old;}
 });
