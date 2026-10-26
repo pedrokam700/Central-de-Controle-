@@ -225,3 +225,17 @@ Só após o piloto de B, o coordenador transacional da PR #64 pode ser elegível
 
 - Na auditoria do primeiro incremento foi observado que `status=complete` sem uma grade/lista de origem comprovada ainda poderia produzir `0` em KPIs. O refinamento exige evidência efetiva de contagem: 2114 `previous_failures` comprovada (ou falha observada), 3022 estado `zero` ou linhas observadas (resumo positivo pode complementar), 3012 estado `zero` ou reparos observados. Dados 3012 embutidos na 2114 não se tornam automaticamente `0` reparos coletados da 3012 principal.
 - Testes adicionais cobrem `2114 complete` sem rows, `3022 complete` sem lista com resumo 0 e reparo 3012 embutido sem consulta direta; todos devem mostrar `—` onde não existe prova do zero.
+
+### Checkpoint comprovado — Consulta por SN
+
+- `4d4ea27ab76b9b21387cce198f1bad0b63406baf`: Central Quality Gate **#40327779119 SUCCESS**.
+- `1552845609f10d8e6d01d0532a1e66f3c4b61cc0`: Central Quality Gate **#40328137459 SUCCESS, 3/3 jobs** (interface/nove views, Firestore Rules/E2E, qualidade estática). Os oito contratos Node direcionados também passaram localmente. **Não é homologação física da 3074.**
+
+## Incremento 26/10 — duas representações de horário do mesmo início 3028
+
+- **Falha de cobertura identificada:** `firestoreTransport.watch` buscava revisões imutáveis apenas no intervalo textual de um minuto (`YYYY-MM-DDT07:00` até `07:01`). Uma segunda instalação que escrevesse o mesmo instante como `YYYY-MM-DDT10:00:00Z` ficaria fora da consulta, embora ambas representem as 07:00 da fábrica. Assim, um consumidor novo poderia enxergar apenas um writer e promover um HEAD sem perceber a disputa.
+- **Correção de identificação:** `periodIdentity`/`isTodaySnapshot` normalizam os instantes para `America/Sao_Paulo`, preservando segundos não nulos e recusando período inválido/fora do turno. O período UTC equivalente agora mantém exatamente a mesma identidade de dia produtivo, sem derivá-la do momento da coleta.
+- **Correção de leitura:** a consulta imutável abrange somente a data civil do início de produção, depois **filtra os cabeçalhos por instante 07:00 normalizado antes de baixar partes**. Assim recupera 07:00-03:00 e 10:00Z, mas não carrega como candidato um outro começo de período da mesma data. O índice continua exclusivamente leitura; não modifica documentos, regras, agentes ou fila.
+- **Custo/trade-off:** o listener pode ler mais cabeçalhos leves que a faixa textual de um minuto, mas não baixa payloads de períodos não correspondentes. Medir consumo/latência na homologação futura; não alegar desempenho físico verificado.
+- Regressões Node: `scripts/ames-operational-period.test.mjs` cobre períodos UTC/local equivalentes, segundos inválidos e fim além da janela. `scripts/ames-pr38-day.emulator.mjs` inclui duas instalações independentes com as duas formas de horário e uma terceira revisão no mesmo dia/horário diferente; deve bloquear o HEAD, preservar as duas fontes e excluir a terceira antes do download.
+- **Evidência local:** 7/7 suítes Node direcionadas PASS e `git diff --check` PASS. **Emulador Firestore depende do CI** para execução real; não declarar GREEN do próximo SHA até o job concluir. O receptor no segundo computador real e a autoridade persistente multi-PC seguem não homologados. Nenhum pedido adicional de dados do PC de terceiro.
