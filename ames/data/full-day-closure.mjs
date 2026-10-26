@@ -1,6 +1,7 @@
 import {factoryWallMinute} from './history.mjs';
 
 const VIEWS=Object.freeze(['3028','3074','2114','3022']);
+const DAILY_MODES=new Set(['today','live','monitor_today','previous_day','historical_refresh']);
 const sourceRows=payload=>payload?.source_coverage||payload?.canonical?.source_coverage||null;
 
 export function fullDayClosureEvidence(payload={}){
@@ -11,22 +12,34 @@ export function fullDayClosureEvidence(payload={}){
     end=factoryWallMinute(period.end_at);
   const at=Date.parse((start||'').slice(0,10)+'T12:00:00Z');
   const next=Number.isFinite(at)?new Date(at+86400000).toISOString().slice(0,10):'';
-  const fullDay=Boolean(start&&end&&start.endsWith('T07:00')&&end===next+'T07:00');
-  const identityVerified=Boolean(identity.line_id&&identity.source_id&&identity.snapshot_id&&
+  const fullDay=Boolean(DAILY_MODES.has(String(period.mode||'').toLowerCase())&&
+    start&&end&&start.endsWith('T07:00')&&end===next+'T07:00');
+  const snapshotId=String(identity.snapshot_id??'').trim();
+  const snapshotIdVerified=Boolean(snapshotId&&snapshotId!=='0'&&
+    (!/^\d+$/.test(snapshotId)||(Number.isSafeInteger(Number(snapshotId))&&Number(snapshotId)>0)));
+  const identityVerified=Boolean(identity.line_id&&identity.source_id&&snapshotIdVerified&&
     Number.isSafeInteger(identity.snapshot_revision)&&identity.snapshot_revision>0&&
     /^[a-f0-9]{64}$/.test(identity.content_hash||''));
   const evidence=sourceRows(payload);
   const sources=Object.fromEntries(VIEWS.map(view=>{
     const row=evidence?.[view]||{};
     const coverage=view==='3028'?payload.coverage?.defects||{}:row;
-    const exactScope=view==='3028'||Boolean(row.scope&&
+    const exactScope=Boolean(row.scope&&
+      row.scope.source_id===identity.source_id&&
       row.scope.line_id===identity.line_id&&
       String(row.scope.snapshot_id)===String(identity.snapshot_id)&&
       Number(row.scope.snapshot_revision)===identity.snapshot_revision);
-    const complete=coverage.source_complete===true&&coverage.transport_complete===true&&
-      (view==='3028'||['complete','observed_complete'].includes(row.status))&&exactScope;
+    // The direct 3028 defect coverage is authoritative when no separate
+    // certificate exists. If one is advertised, it must agree on collector,
+    // line and revision: a different post can reuse the same snapshot number.
+    const certificateRequired=view!=='3028'||Boolean(evidence&&Object.hasOwn(evidence,'3028'));
+    const certificateVerified=!certificateRequired||
+      (['complete','observed_complete'].includes(row.status)&&
+        row.source_complete===true&&row.transport_complete===true&&exactScope);
+    const complete=coverage.source_complete===true&&coverage.transport_complete===true&&certificateVerified;
     return [view,{complete,source_complete:coverage.source_complete===true,
-      transport_complete:coverage.transport_complete===true,scope_verified:exactScope}];
+      transport_complete:coverage.transport_complete===true,
+      scope_verified:!certificateRequired||exactScope}];
   }));
   const missing=VIEWS.filter(view=>!sources[view].complete);
   const full=identityVerified&&fullDay&&missing.length===0;

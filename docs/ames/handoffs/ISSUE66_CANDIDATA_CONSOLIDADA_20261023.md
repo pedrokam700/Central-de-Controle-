@@ -337,3 +337,14 @@ Só após o piloto de B, o coordenador transacional da PR #64 pode ser elegível
 - Textos novos em PT/EN, dados de entrada escapados; não inicia/coleta MES, não altera status técnico `done` do scheduler nem substitui a âncora 3028.
 - `scripts/ames-trace-status.test.mjs`: **6/6 PASS** (progresso 100% com 3074 falha, stage ausente, prova full e EN); `scripts/ames-live-trace-feed.test.mjs`: **3/3 PASS**, `node --check`, `git diff --check` PASS. **Próximo CI PENDING** até publicar novo SHA.
 - Homologações físicas de 3074 e L3 snapshot14 continuam pendentes. Não instalar candidata, não alterar `main`, Firebase, PR #64 ou computadores da fábrica.
+
+### Gate GitHub — distinção visual entre execução e coleta
+
+- SHA `ee54a9282e8aa984f43f302dde7975bae1b90764` confirmado na PR #68 DRAFT: **Central Quality Gate #40356574683 COMPLETED SUCCESS, 3/3 jobs** (Console/nove views, Firestore E2E/Rules e Static quality). A execução do agente continua independente da prova de cobertura da 3074 no MES real; **não há homologação física deste SHA**.
+
+## Incremento de segurança — prova do fechamento FULL vinculada ao coletor
+
+- `ames/data/full-day-closure.mjs`: as certificações 3074, 2114 e 3022 exigem `scope.source_id` idêntico ao coletor do snapshot além de linha/SN de revisão. Quando a 3028 publica certificado próprio em `source_coverage['3028']`, esse certificado precisa concordar com o resumo de falhas 3028 e com a mesma identidade; se não existe certificado independente, a cobertura 3028 original permanece fonte de prova.
+- Janela coincidentemente 07:00→07:00 com `mode=custom` **não** pode virar FULL; exige modo diário reconhecido. Snapshot vazio, zero ou identificador numérico inválido **não** passa como identidade imutável. História observada e fechamento FULL permanecem diferentes; nenhuma fonte parcial ou de outro PC promove população completa.
+- Regressões locais: `scripts/ames-issue66-full-closure.test.mjs` **7/7 PASS** (inclui PC de outra origem, certificado 3028 discordante, período personalizado e snapshot zero), `scripts/ames-history-trends.test.mjs` **10/10 PASS**, `scripts/ames-reading-period.test.mjs` **22/22 PASS**, `git diff --check` PASS. CI do próximo SHA **PENDING** até publicar/verificar o commit.
+- Gate físico continua aberto: 3074 real e L3 snapshot 14 (22/10 07:00→23/10 07:00) requerem prova na fábrica **apenas em instalação supervisionada e autorizada**. Não tocar PR #64, main, release, Firebase de produção ou computadores da fábrica.

@@ -82,13 +82,13 @@ test('FULL closure trend keeps prior complete revision when a later capture is p
  full.summary.period.end_at='2026-10-20T07:00-03:00';
  full.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
    status:'complete',transport_complete:true,source_complete:true,
-   scope:{line_id:full.line_id,snapshot_id:full.snapshot_id,snapshot_revision:full.snapshot_revision}}]));
+   scope:{line_id:full.line_id,source_id:full.source_id,snapshot_id:full.snapshot_id,snapshot_revision:full.snapshot_revision}}]));
  const partial=fixture('2026-10-19',{id:'DAY19',revision:2,complete:true});
  partial.content_hash='b'.repeat(64);
  partial.summary.period.end_at='2026-10-20T07:00-03:00';
  partial.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
    status:'observed_partial',transport_complete:true,source_complete:false,
-   scope:{line_id:partial.line_id,snapshot_id:partial.snapshot_id,snapshot_revision:partial.snapshot_revision}}]));
+   scope:{line_id:partial.line_id,source_id:partial.source_id,snapshot_id:partial.snapshot_id,snapshot_revision:partial.snapshot_revision}}]));
  const reader=createHistoryTrendReader(source([full,partial]));
  const observed=(await reader.read(options)).points.at(-1);
  assert.equal(observed.entry.snapshot_revision,2,'observed mode preserves the existing latest-revision behavior');
@@ -107,7 +107,7 @@ test('FULL history preserves an older proven closure when a newer immutable revi
  full.summary.period.end_at='2026-10-20T07:00-03:00';
  full.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
   status:'complete',source_complete:true,transport_complete:true,
-  scope:{line_id:full.line_id,snapshot_id:full.snapshot_id,snapshot_revision:1}}]));
+  scope:{line_id:full.line_id,source_id:full.source_id,snapshot_id:full.snapshot_id,snapshot_revision:1}}]));
  const newest=fixture('2026-10-19',{id:'DAY19',revision:2,complete:true});
  newest.summary.period.end_at='2026-10-20T07:00-03:00';
  const history=source([full,newest]);
