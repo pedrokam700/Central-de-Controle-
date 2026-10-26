@@ -141,8 +141,8 @@ try{
    'grouped failures retain all four distinct reuse/correlation evidence columns');
  const groupedCells=await groupTable.locator('tbody tr').evaluateAll(rows=>rows.map(row=>[...row.querySelectorAll('td')].map(td=>td.textContent.trim())));
  assert.equal(groupedCells.reduce((sum,cells)=>sum+Number(cells[1]),0),old.datasets.defects.length,'grouping cannot duplicate observed 3028 occurrences');
- assert(groupedCells.some(cells=>cells[2]==='1'&&cells[3]==='1'&&cells[4]==='1'),
-   'observed board, component-context and unique physical SN counts remain exact and separate');
+ assert(groupedCells.some(cells=>cells[2]==='1'&&cells[3]==='1'&&cells[4]==='—'),
+   'exact board/context counts cannot invent a physical SN count without an occurrence-bound material link');
  assert(groupedCells.some(cells=>cells[5]==='—'),'unproven correlation remains unknown rather than zero');
  assert.doesNotMatch(await groupTable.locator('tbody').innerText(),/≥/,'exact observed counts must not be confused with population coverage');
  assert.match(await page.locator('[data-failure-groups]').innerText(),/cobertura pode estar incompleta/i,'incomplete population coverage stays explicit');

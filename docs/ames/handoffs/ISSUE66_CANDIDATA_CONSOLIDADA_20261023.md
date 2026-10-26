@@ -467,3 +467,8 @@ SHA `30bd5143542d109e52ec6195a0c058037613e584`, OperationalHistory **#4036931516
 **Arquivos:** scripts/ames-reading-period.browser.mjs e estehandoff. node --check/diff PASS. Navegador local não disponível (sem executável Chromium); a comprovação depende do novoSHA emActions, não presumir PASS. Em Linux limpo doSHA30bd514… benchmarkCI mediu30amostras, p50/p95 ms: replay4,000/4,079, leitura imutável1,973/2,026 e índice10,481/10,638;100jobs preservados e1revisão nojob repetido. Sem extrapolação à fábrica.
 
 **Retomada:** verificar ambos os workflows no próximoSHA; se houver outroRED, corrigir somente causa demonstrada. Após gates, pacote e matriz de aceite final. Source_complete e FULL continuam sem promoção artificial; autoridade entrePCs e instalação dependem de prova/consentimento operacional. PR68 DRAFT; PR64/67/main/Firebase/postos intocados.
+
+
+### Refinamento da expectativa de MaterialSN no browser ampliado
+
+SHA `a515850726daaf26062d732b7ece82097120ebce`: Quality **40370218739 SUCCESS3/3**. OperationalHistory **40370207422 RED3/4**: contratos/Firestore/Windows SUCCESS, browser falhou na NOVA expectativa de contagem física1. Reprodução Node com a mesma fixture normalizada comprovou que reuseLinks retorna[]: há ordinais de reuso daPCBA/contextoitem, mas NÃO existe vínculo de MaterialSN para a ocorrência exata. Interface corretamente mostra1/1/—; o teste deveria exigir isso. Corrigida só essa expectativa, sem mudar UI ou fabricar vínculo. A prova positiva de SN físico distinto/kit permanece nas suítes Node e matriz. Syntax/diff PASS; CI do próximoSHA PENDING. Caso3012 adicionado ainda não executou nesse browser, não declarar sua provaDOM antes de conclusão.
