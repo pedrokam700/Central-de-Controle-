@@ -30,20 +30,27 @@ export function fullDayClosureEvidence(payload={}){
   }));
   const missing=VIEWS.filter(view=>!sources[view].complete);
   const full=identityVerified&&fullDay&&missing.length===0;
-  return {status:full?'FULL':'UNPROVEN',identity,period:{start,end},full_day_window:fullDay,
+  return {status:full?'FULL':'UNPROVEN',identity,period:{start,end},collected_at:payload.collected_at||null,full_day_window:fullDay,
     identity_verified:identityVerified,missing_sources:missing,sources,
     immutable_id:full?JSON.stringify([identity.line_id,identity.source_id,start,end,
       identity.snapshot_id,identity.snapshot_revision,identity.content_hash]):null};
 }
 
-export function latestProvenFullDayClosure(payloads=[]){
+export function latestProvenFullDayClosure(payloads=[],{line='',source=''}={}){
   const seen=new Set();
   const proven=[];
   for(const payload of payloads){
     const c=fullDayClosureEvidence(payload);
-    if(c.status!=='FULL'||seen.has(c.immutable_id))continue;
+    if(c.status!=='FULL'||seen.has(c.immutable_id)||
+      line&&c.identity.line_id!==line||source&&c.identity.source_id!==source)continue;
     seen.add(c.immutable_id);proven.push(c);
   }
+  // Two publishers or lines are not one authoritative closing population.
+  // Without explicit scope, refuse to silently select one as team-wide FULL.
+  if(new Set(proven.map(c=>c.identity.line_id)).size>1||
+    new Set(proven.map(c=>c.identity.source_id)).size>1)return null;
   return proven.sort((a,b)=>String(b.period.end).localeCompare(String(a.period.end))||
-    b.identity.snapshot_revision-a.identity.snapshot_revision)[0]||null;
+    (Date.parse(b.collected_at)||0)-(Date.parse(a.collected_at)||0)||
+    b.identity.snapshot_revision-a.identity.snapshot_revision||
+    String(b.identity.snapshot_id).localeCompare(String(a.identity.snapshot_id)))[0]||null;
 }

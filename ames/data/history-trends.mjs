@@ -65,7 +65,7 @@ export function createHistoryTrendReader(history){
   for(let i=0;i<plan.length;i+=6){
    const batch=await Promise.all(plan.slice(i,i+6).map(async day=>{
     if(day.status!=='indexed')return {...day,candidates:undefined};
-    let point=null,readable=0;
+    let point=null,readable=0,unreadable=0;
     for(const entry of day.candidates){
      try{const snapshot=await open(entry);
       // Custom queries are distinct identities, even when their bounds look like a day.
@@ -75,11 +75,22 @@ export function createHistoryTrendReader(history){
       // FULL trend must skip newer partial revisions and retain the latest
       // independently proven complete revision instead.
       if(options.requireFullClosure===true&&fullDayClosureEvidence(snapshot.canonical).status!=='FULL')continue;
-      point={...trendPoint(snapshot,entry,options.filters),stored_revisions:day.candidates.length};break;
-     }catch(error){point={date:day.date,status:'unavailable',error:error.message,entry};break;}
+      point={...trendPoint(snapshot,entry,options.filters),stored_revisions:day.candidates.length,
+        unreadable_newer_revisions:unreadable};break;
+     }catch(error){
+      if(options.requireFullClosure===true){
+       // An unreadable newer revision cannot disprove a separately verified
+       // older FULL. Keep the evidence gap visible and look for that FULL.
+       unreadable++;continue;
+      }
+      point={date:day.date,status:'unavailable',error:error.message,entry};break;
+     }
     }
     return point||(options.requireFullClosure===true&&readable>0?
-      {date:day.date,status:'unproven_full',entry:day.candidates[0],stored_revisions:day.candidates.length}:
+      {date:day.date,status:'unproven_full',entry:day.candidates[0],stored_revisions:day.candidates.length,
+        unreadable_newer_revisions:unreadable}:
+      unreadable>0?{date:day.date,status:'unavailable',entry:day.candidates[0],
+        stored_revisions:day.candidates.length,unreadable_newer_revisions:unreadable}:
       {date:day.date,status:'not_collected'});
    }));
    points.push(...batch);

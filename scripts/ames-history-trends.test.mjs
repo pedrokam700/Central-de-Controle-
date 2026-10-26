@@ -95,3 +95,31 @@ test('FULL closure trend keeps prior complete revision when a later capture is p
  assert.equal(onlyPartial.snapshot,undefined);
  assert.equal(onlyPartial.observed_failures,undefined,'missing full data is not a zero');
 });
+
+test('FULL history preserves an older proven closure when a newer immutable revision cannot be read',async()=>{
+ const full=fixture('2026-10-19',{id:'DAY19',revision:1,complete:true});
+ full.content_hash='a'.repeat(64);
+ full.summary.period.end_at='2026-10-20T07:00-03:00';
+ full.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
+  status:'complete',source_complete:true,transport_complete:true,
+  scope:{line_id:full.line_id,snapshot_id:full.snapshot_id,snapshot_revision:1}}]));
+ const newest=fixture('2026-10-19',{id:'DAY19',revision:2,complete:true});
+ newest.summary.period.end_at='2026-10-20T07:00-03:00';
+ const history=source([full,newest]);
+ const remote={list:history.list,open:async e=>{
+  if(e.snapshot_revision===2)throw Error('immutable revision unavailable');
+  return history.open(e);
+ }};
+ const reader=createHistoryTrendReader(remote);
+ const fallback=(await reader.read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(fallback.status,'complete');
+ assert.equal(fallback.entry.snapshot_revision,1);
+ assert.equal(fallback.unreadable_newer_revisions,1,'the unreadable newer entry must remain auditable');
+ const observed=(await reader.read(options)).points.at(-1);
+ assert.equal(observed.status,'unavailable','normal historical mode cannot silently fall back');
+ const noFull=(await createHistoryTrendReader({list:async()=>[entry(newest)],open:async()=>{throw Error('missing')}})
+  .read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(noFull.status,'unavailable');
+ assert.equal(noFull.snapshot,undefined);
+ assert.equal(noFull.unreadable_newer_revisions,1);
+});
