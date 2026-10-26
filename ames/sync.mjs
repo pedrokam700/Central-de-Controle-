@@ -290,6 +290,10 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     try{
       unwatch=remote.watch(u,(heads,meta={})=>{
         if(!alive(u,g)||w!==watchGeneration||watchFailed)return;
+        // Once this subscription has received a server index, a later
+        // Firestore cache event has weaker provenance. This also protects
+        // the window while the server payloads are still being verified.
+        if(meta.from_cache&&hasHeads&&lastReadMeta.from_cache===false)return;
         const key=JSON.stringify([heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort(),!!meta.from_cache]);
         if(key===headsKey)return;
         headsKey=key;

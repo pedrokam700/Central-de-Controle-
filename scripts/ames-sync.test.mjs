@@ -208,7 +208,9 @@ test('an incomplete Firestore cache cannot revoke a server-verified multiwriter 
     watch:(_u,cb)=>{notify=cb;cb([{...pa.head,...pa.history},{...pb.head,...pb.history}],{day_index_available:true,from_cache:false});return()=>{};}};
   const queue={put:async()=>{},remove:async()=>{},list:async()=>[]},store=createAmesStore();
   const sync=createMesSync(store,remote,{queue,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
-  sync.start('reader');await new Promise(r=>setTimeout(r,40));
+  sync.start('reader');
+  notify([{...pa.head,...pa.history}],{day_index_available:true,from_cache:true});
+  await new Promise(r=>setTimeout(r,40));
   assert.equal(store.agent().sync.read_status,'origin_conflict');
   assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
   notify([{...pa.head,...pa.history}],{day_index_available:true,from_cache:true});
