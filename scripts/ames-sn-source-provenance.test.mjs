@@ -114,7 +114,7 @@ test('SN operator summary never presents missing or failed 3074/3022/3012 as con
   const metric=(html,label)=>html.match(new RegExp(`aria-label="${label}"[^>]*><small>[^<]*<\\/small><b>([^<]+)<\\/b>`))?.[1];
   try{
     const missing=cards(base);
-    assert.match(missing,/3074 sem cobertura integral de reuso/);
+    assert.match(missing,/3074 não coletada: não é possível concluir sobre reuso/);
     assert.equal(metric(missing,'Materiais 2º\\+ uso'),'—');
     assert.equal(metric(missing,'Eventos 3022'),'—');
     assert.equal(metric(missing,'Reparos 3012'),'—');

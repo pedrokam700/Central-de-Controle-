@@ -96,6 +96,7 @@ export function operatorSummary(result,rows){
     ?t('Nenhum material 2º+ uso observado nesta consulta 3074 confirmada; não é zero global.','No 2nd+ use material observed in this confirmed 3074 lookup; not a global zero.')
     :materialState==='error'?t('A consulta 3074 falhou; reuso desconhecido.','3074 lookup failed; reuse unknown.')
     :materialState==='partial'?t('3074 parcial: não foi possível comprovar a contagem de materiais reutilizados.','3074 partial: the reused-material count is unverified.')
+    :materialState==='not_collected'?t('3074 não coletada: não é possível concluir sobre reuso.','3074 not collected: reuse cannot be determined.')
     :t('3074 sem cobertura integral de reuso para esta montagem; zero não comprovado.','3074 lacks complete reuse coverage for this assembly; zero unproven.');
   const previousPcba=new Set(reused.flatMap(item=>item.previous_pcbas||[]).filter(Boolean));
   const sameFailure=reused.filter(item=>item.relation_to_current_failure==='MESMA_FALHA').length;
