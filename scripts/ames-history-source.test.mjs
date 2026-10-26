@@ -138,6 +138,15 @@ test('multi-publisher historical UI is explicitly read-only and keeps source fil
  assert.match(view,/originFilter=event\.target\.value/);
   assert.match(view,/dataset\.historyIdentityCollision/);
 });
+test('Today with competing publishers links directly to a read-only history query without a mutable end time',()=>{
+ const view=fs.readFileSync(new URL('../ames/console-history.mjs',import.meta.url),'utf8');
+ assert.match(view,/data-history-today-conflict/);
+ assert.match(view,/data-history-compare-today/);
+ assert.match(view,/Ver revisões isoladas de hoje/);
+ assert.match(view,/chooseTab\('history',\{start:range\.start,end:''\}\)/);
+ assert.match(view,/Nenhuma origem remota foi promovida ao Hoje/);
+ assert.doesNotMatch(view,/replaceSyncedSnapshots\(/,'history UI must never adopt a competing live head');
+});
 test('Firebase listener failure must not hide preserved local history',async()=>{
  const source=createMesHistorySource({
   listHistory:async()=>{throw Error('permission-denied');}

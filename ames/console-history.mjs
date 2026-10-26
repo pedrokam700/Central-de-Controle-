@@ -78,13 +78,13 @@ export function createHistoryView(root,store,client,history) {
     const heading={today:t('Hoje · Monitoramento','Today · Monitoring'),previous:t('Último dia produtivo','Last production day'),history:t('Histórico por data','Production history by date'),advanced:t('Consulta avançada isolada','Isolated advanced query')}[tab];
     host.innerHTML=`<div class="ames-history-head"><div><strong>${esc(heading)}</strong><p>${window?esc(window.start.replace('T',' ')+' → '+window.end.replace('T',' ')):t('Escolha a linha e o período; consultas investigativas não atualizam o painel Hoje.','Choose line and period; investigations never update Today.')}</p></div><div class="ames-history-state">${tab==='today'?esc(labels[coverageState(read)]):t('Histórico preservado','Preserved history')}</div></div><div class="ames-history-facts"><span>${t('Linha','Line')}: <b>${esc(line)}</b></span><span>${t('Snapshot','Snapshot')}: <b>${tab==='today'?esc(p?revisionLabel(p):'—'):'—'}</b></span><span>${t('Última extração','Last extraction')}: <b>${tab==='today'?esc(p?displayTime(p.collected_at):'—'):'—'}</b></span><span>${t('Origem','Origin')}: <b>${tab==='today'?esc(read.source||'—'):t('Local / compartilhada','Local / shared')}</b></span><span>AT: <b>${t('Conforme evidência da revisão','Per revision evidence')}</b></span></div>`;
   }
-  function chooseTab(next){
+  function chooseTab(next,{start='',end=''}={}){
     tab=next;originFilter='';message='';error='';selected=null;selectedEntry=null;showSelected();
     root.querySelectorAll('[data-history-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.historyMode===tab)));
     const inputs=root.querySelector('form');
     if(inputs){inputs.elements.start.readOnly=tab==='today'||tab==='previous';inputs.elements.end.readOnly=tab==='today'||tab==='previous';}
     if(tab==='today'||tab==='previous')quickPeriod(tab==='today'?0:-1);
-    else{setPeriod('','');entries=[];const host=root.querySelector('[data-period-results]');if(host)host.replaceChildren();summary();void load();}
+    else{setPeriod(start,end);entries=[];const host=root.querySelector('[data-period-results]');if(host)host.replaceChildren();summary();void load();}
   }
   function results(){
     const host=root.querySelector('[data-period-results]');if(!host)return;summary();
@@ -104,9 +104,15 @@ export function createHistoryView(root,store,client,history) {
       });
       const range=operationalRange(store,0);
       const failures=canonical?.datasets?.defects||[];
+      const competing=Array.isArray(store.agent().sync?.origin_conflict_lines)&&store.agent().sync.origin_conflict_lines.includes(line);
       host.innerHTML=loading?`<p role="status">${t('Consultando histórico…','Loading history…')}</p>`:
         `${verified?`<div class="ames-history-current"><p><b>${t('Evidência do dia operacional confirmada','Current production-day evidence verified')}</b> · ${esc(range.start.replace('T',' '))} → ${esc(range.end.replace('T',' '))}</p><p>${t('Última extração','Last extraction')}: ${esc(displayTime(canonical.collected_at))} · ${t('Origem','Source')}: ${esc(current.source)} · ${t('Revisão','Revision')}: ${esc(revisionLabel(canonical))}</p><p>${t('Ocorrências armazenadas','Stored occurrences')}: <b>${failures.length}</b> · ${t('Cobertura','Coverage')}: ${canonical.coverage?.defects?.source_complete===true?t('Completa','Complete'):t('Parcial/não comprovada','Partial/unverified')}</p></div>`:`<p class="mes-context">${t('Ainda não há evidência comprovada para Hoje nesta linha. Dados de outro período não serão exibidos aqui.','No verified evidence for Today on this line. Another period will not appear here.')}</p>`}
+        ${competing?`<div class="notice warn" data-history-today-conflict><p>${t('Há revisões concorrentes do dia operacional para esta linha. Nenhuma origem remota foi promovida ao Hoje, e as contagens não podem ser somadas.','There are competing operational-day revisions for this line. No remote source was promoted to Today, and counts must not be added.')}</p><button type="button" class="button secondary" data-history-compare-today>${t('Ver revisões isoladas de hoje','View today’s separate revisions')}</button></div>`:''}
         ${canCollect?`<button type="button" class="button secondary" data-history-today-collect>${t('Atualizar Hoje','Refresh Today')}</button>`:''}`;
+      host.querySelector('[data-history-compare-today]')?.addEventListener('click',()=>{
+        // Historical lookup stays read-only; omit the mutable end timestamp.
+        chooseTab('history',{start:range.start,end:''});
+      });
       host.querySelector('[data-history-today-collect]')?.addEventListener('click',async()=>{
         loading=true;results();
         try{await client.collect('today',{lines:[line],performance:'balanced'});message=t('Atualização do dia iniciada. Aguarde a próxima revisão.','Today refresh started. Wait for the next revision.');}

@@ -141,3 +141,15 @@ Só após o piloto de B, o coordenador transacional da PR #64 pode ser elegível
 - A coluna Compartilhamento distingue `Local · índice semelhante, conteúdo não comprovado`; o usuário ainda pode abrir ambas as revisões isoladamente. A candidata remota não é instalada no SQLite nem promovida a Hoje.
 - Testes locais ampliados para proveniência ambígua, hashes incomparáveis e acesso independente: `node --test scripts/ames-history-source.test.mjs scripts/ames-history-origin-choice.test.mjs scripts/ames-history-revisions.test.mjs scripts/ames-history-usability-20261020.test.mjs scripts/ames-sync.test.mjs scripts/ames-data-health.test.mjs` **6/6 arquivos PASS**, `git diff --check` PASS. CI GitHub do novo SHA ainda **PENDING**.
 - Nenhuma alteração em regras Firestore, writers, contas, postos, instalador ou atualização transacional. Investigar uma comparação de conteúdo provada/eficiente somente em trabalho futuro separado, sem fingir equivalência de dois hashes de natureza distinta.
+
+### Checkpoint GitHub confirmado — equivalência de conteúdo
+
+- SHA `3c6e3dac05668d77655ef073b9e1b2536e186d4a` na PR #68 DRAFT: Central Quality Gate **#40318427717 SUCCESS, 3/3 jobs** (Console, sync E2E/Rules, estático); sem homologação da versão candidata na fábrica.
+
+## Incremento 26/10 — acesso imediato a revisões concorrentes de Hoje
+
+- Em **Base local → Hoje**, se a linha selecionada apresentar `origin_conflict`, uma caixa de aviso agora declara explicitamente que nenhuma origem remota foi promovida ao painel corrente e que as falhas não podem ser somadas.
+- O botão **Ver revisões isoladas de hoje** abre diretamente a aba Histórico por data, pré-preenchendo o início do dia operacional da fábrica **e deixando o fim vazio** (o horário final da captura 3028 é móvel, portanto um fim exato impediria consultar versões legítimas do mesmo dia).
+- A transição continua **somente leitura**: o histórico retorna revisões independentes com abertura manual. Ela não instala um snapshot como Today, não altera a base SQLite nem envia comandos de coleta ao MES.
+- Testes locais direcionados: `node --test scripts/ames-history-source.test.mjs scripts/ames-history-origin-choice.test.mjs scripts/ames-period-history-matching.test.mjs scripts/ames-history-usability-20261020.test.mjs scripts/ames-sync.test.mjs scripts/ames-data-health.test.mjs` **6/6 arquivos PASS**, `git diff --check` PASS. Teste navegador e CI do SHA novo ainda pendentes.
+- Teste físico dessa melhoria permanece **PENDING**, inclusive porque os prints do PC receptor foram feitos na página pública antiga, não na PR #68. Não solicitar mais acesso ao PC alheio.
