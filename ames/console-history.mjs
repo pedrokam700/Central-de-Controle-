@@ -22,6 +22,32 @@ const sharingLabel=entry=>{
   }
 };
 
+// A source-scoped observation is not an authoritative Team/Today snapshot.
+// Preserve only numeric metrics from verified candidates; never copy UIDs,
+// PCBAs, records, comments, account identity or other remote payload fields.
+export function isolatedCurrentPublisherCards(sync,line){
+  if(!LINE_IDS.includes(line)||!Array.isArray(sync?.origin_conflict_lines)||!sync.origin_conflict_lines.includes(line))return [];
+  const conflict=(Array.isArray(sync.origin_conflict_candidates)?sync.origin_conflict_candidates:[])
+    .find(x=>x?.line_id===line);
+  if(!conflict||!Array.isArray(conflict.candidates))return [];
+  const pct=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:null;
+  const count=value=>Number.isSafeInteger(value)&&value>=0?value:null;
+  const timestamp=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)?value.slice(0,40):null;
+  return conflict.candidates.slice(0,10).map(candidate=>({
+    source_id:String(candidate?.source_id||'').slice(0,128),
+    snapshot_id:String(candidate?.snapshot_id??'').slice(0,32),
+    snapshot_revision:count(candidate?.snapshot_revision),
+    collected_at:timestamp(candidate?.collected_at),
+    period_start:timestamp(candidate?.period_start),
+    period_end:timestamp(candidate?.period_end),
+    fpy:pct(candidate?.isolated_metrics?.fpy),
+    check_fpy:pct(candidate?.isolated_metrics?.check_fpy),
+    quantity:count(candidate?.isolated_metrics?.quantity),
+    observed_defects:count(candidate?.isolated_metrics?.observed_defects),
+    defects_source_complete:candidate?.isolated_metrics?.defects_source_complete===true
+  }));
+}
+
 const linkageStatus=value=>{
   const code=String(value??'').trim().toUpperCase();
   if(code==='Y')return t('Y · vinculado','Y · linked');
@@ -105,9 +131,13 @@ export function createHistoryView(root,store,client,history) {
       const range=operationalRange(store,0);
       const failures=canonical?.datasets?.defects||[];
       const competing=Array.isArray(store.agent().sync?.origin_conflict_lines)&&store.agent().sync.origin_conflict_lines.includes(line);
+      const isolated=competing?isolatedCurrentPublisherCards(store.agent().sync,line):[];
+      const number=value=>value===null?'—':new Intl.NumberFormat(t('pt-BR','en-US'),{maximumFractionDigits:2}).format(value);
+      const isolatedTable=isolated.some(c=>c.fpy!==null||c.quantity!==null||c.observed_defects!==null)
+        ?`<p><strong>${t('Coletas concorrentes verificadas · cada coluna é por origem, sem total','Verified competing captures · per-source metrics, no team total')}</strong></p><div class="table-wrap" data-history-isolated-current><table><thead><tr><th>${t('Origem / revisão','Source / revision')}</th><th>${t('Período da coleta','Capture period')}</th><th>FPY</th><th>Check FPY</th><th>Quantity</th><th>${t('Falhas observadas','Observed defects')}</th><th>3028</th></tr></thead><tbody>${isolated.map(c=>`<tr><td>${esc(c.source_id||'—')} · ${esc(c.snapshot_id||'—')} r${c.snapshot_revision??'—'}</td><td>${esc(c.period_start||'—')} → ${esc(c.period_end||'—')}</td><td>${number(c.fpy)}${c.fpy!==null?'%':''}</td><td>${number(c.check_fpy)}${c.check_fpy!==null?'%':''}</td><td>${number(c.quantity)}</td><td>${number(c.observed_defects)}</td><td>${c.defects_source_complete?t('Completude comprovada','Completeness proven'):t('Completude não comprovada','Completeness unproven')}</td></tr>`).join('')}</tbody></table></div><p class="mes-context">${t('São números observados em cada revisão, não um fechamento FULL ou indicador consolidado da linha.','These are per-revision observations, not a FULL close or consolidated line indicator.')}</p>`:'';
       host.innerHTML=loading?`<p role="status">${t('Consultando histórico…','Loading history…')}</p>`:
         `${verified?`<div class="ames-history-current"><p><b>${t('Evidência do dia operacional confirmada','Current production-day evidence verified')}</b> · ${esc(range.start.replace('T',' '))} → ${esc(range.end.replace('T',' '))}</p><p>${t('Última extração','Last extraction')}: ${esc(displayTime(canonical.collected_at))} · ${t('Origem','Source')}: ${esc(current.source)} · ${t('Revisão','Revision')}: ${esc(revisionLabel(canonical))}</p><p>${t('Ocorrências armazenadas','Stored occurrences')}: <b>${failures.length}</b> · ${t('Cobertura','Coverage')}: ${canonical.coverage?.defects?.source_complete===true?t('Completa','Complete'):t('Parcial/não comprovada','Partial/unverified')}</p></div>`:`<p class="mes-context">${t('Ainda não há evidência comprovada para Hoje nesta linha. Dados de outro período não serão exibidos aqui.','No verified evidence for Today on this line. Another period will not appear here.')}</p>`}
-        ${competing?`<div class="notice warn" data-history-today-conflict><p>${t('Há revisões concorrentes do dia operacional para esta linha. Nenhuma origem remota foi promovida ao Hoje, e as contagens não podem ser somadas.','There are competing operational-day revisions for this line. No remote source was promoted to Today, and counts must not be added.')}</p><button type="button" class="button secondary" data-history-compare-today>${t('Ver revisões isoladas de hoje','View today’s separate revisions')}</button></div>`:''}
+        ${competing?`<div class="notice warn" data-history-today-conflict><p>${t('Há revisões concorrentes do dia operacional para esta linha. Nenhuma origem remota foi promovida ao Hoje, e as contagens não podem ser somadas.','There are competing operational-day revisions for this line. No remote source was promoted to Today, and counts must not be added.')}</p>${isolatedTable}<button type="button" class="button secondary" data-history-compare-today>${t('Ver revisões isoladas de hoje','View today’s separate revisions')}</button></div>`:''}
         ${canCollect?`<button type="button" class="button secondary" data-history-today-collect>${t('Atualizar Hoje','Refresh Today')}</button>`:''}`;
       host.querySelector('[data-history-compare-today]')?.addEventListener('click',()=>{
         // Historical lookup stays read-only; omit the mutable end timestamp.

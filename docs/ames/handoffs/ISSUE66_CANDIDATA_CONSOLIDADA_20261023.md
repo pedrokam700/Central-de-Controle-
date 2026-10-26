@@ -153,3 +153,15 @@ Só após o piloto de B, o coordenador transacional da PR #64 pode ser elegível
 - A transição continua **somente leitura**: o histórico retorna revisões independentes com abertura manual. Ela não instala um snapshot como Today, não altera a base SQLite nem envia comandos de coleta ao MES.
 - Testes locais direcionados: `node --test scripts/ames-history-source.test.mjs scripts/ames-history-origin-choice.test.mjs scripts/ames-period-history-matching.test.mjs scripts/ames-history-usability-20261020.test.mjs scripts/ames-sync.test.mjs scripts/ames-data-health.test.mjs` **6/6 arquivos PASS**, `git diff --check` PASS. Teste navegador e CI do SHA novo ainda pendentes.
 - Teste físico dessa melhoria permanece **PENDING**, inclusive porque os prints do PC receptor foram feitos na página pública antiga, não na PR #68. Não solicitar mais acesso ao PC alheio.
+
+### Checkpoint confirmado — acesso a revisões concorrentes
+
+- SHA `40a99fc19b39ecf5fd3574b92e2ed38e60408962` na PR #68 DRAFT, Central Quality Gate **#40318835115 SUCCESS, 3/3 jobs**. Sem homologação física da candidata.
+
+## Incremento seguinte — métricas isoladas acessíveis no próprio Hoje
+
+- A visualização **Base local → Hoje** passa a mostrar uma tabela de **coletas concorrentes por origem** sempre que o receptor relata `origin_conflict` para a linha selecionada. Para cada revisão verificada, aparecem origem/revisão, período de extração, FPY, Check FPY, Quantity, contagem **observada** de falhas 3028 e condição de completude. Os dados não são fundidos nem promovidos a um HEAD único.
+- Função pura `isolatedCurrentPublisherCards` faz uma lista restrita de números validados e metadados necessários; descarta UID, PCBA, materiais, comentários e propriedades arbitrárias do payload. HTML escapa IDs de origem, campos inválidos viram `—` e a tela diz explicitamente que valores não representam FULL nem resultado consolidado da linha.
+- O botão **Ver revisões isoladas de hoje** continua levando ao histórico com início fixado e fim omitido. A tabela do Hoje não altera a store, não faz coleta e não transfere dados entre agentes.
+- Testes locais Node: `node --test scripts/ames-history-source.test.mjs scripts/ames-history-origin-choice.test.mjs scripts/ames-sync.test.mjs scripts/ames-data-health.test.mjs` → **4/4 PASS**. Tentativa separada de `ames-reading-period.browser.mjs` **NÃO EXECUTOU** por ausência do pacote Playwright no ambiente local; não confundir com aprovação do teste de navegador. `git diff --check` PASS. CI do SHA novo ainda PENDING.
+- O painel novo **não foi instalado na fábrica**; a prova física de 26/10 confirma a leitura histórica da versão pública anterior, não a interface desta PR.

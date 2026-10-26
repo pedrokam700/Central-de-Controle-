@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createMesHistorySource,historySharingState,summarizeHistoryPublishers} from '../ames/history-source.mjs';
+import {isolatedCurrentPublisherCards} from '../ames/console-history.mjs';
 const local={
   line_id:'TAN10103',snapshot_id:'2',snapshot_revision:1,source_id:'local-original',
   period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00',
@@ -146,6 +147,29 @@ test('Today with competing publishers links directly to a read-only history quer
  assert.match(view,/chooseTab\('history',\{start:range\.start,end:''\}\)/);
  assert.match(view,/Nenhuma origem remota foi promovida ao Hoje/);
  assert.doesNotMatch(view,/replaceSyncedSnapshots\(/,'history UI must never adopt a competing live head');
+});
+test('Today exposes isolated verified-source metrics without leaking identity or inventing full totals',()=>{
+ const sync={origin_conflict_lines:['TAN10102'],origin_conflict_candidates:[{
+   line_id:'TAN10102',owner_uid:'SECRET_UID',candidates:[
+     {source_id:'<img onerror=alert(1)>',snapshot_id:'19',snapshot_revision:2,
+       period_start:'2026-10-23T07:00',period_end:'2026-10-23T14:48',
+       isolated_metrics:{fpy:97.69,check_fpy:97.86,quantity:1124,observed_defects:26,defects_source_complete:false,pcba_sn:'SECRET_PCBA'},owner_uid:'SECRET_OWNER'},
+     {source_id:'origin-B',snapshot_id:'20',snapshot_revision:3,
+       isolated_metrics:{fpy:Infinity,check_fpy:150,quantity:-1,observed_defects:-4,defects_source_complete:false}}
+   ]}]};
+ const result=isolatedCurrentPublisherCards(sync,'TAN10102');
+ assert.equal(result.length,2);
+ assert.equal(result[0].fpy,97.69);
+ assert.equal(result[0].quantity,1124);
+ assert.equal(result[0].observed_defects,26);
+ assert.equal(result[0].defects_source_complete,false);
+ assert.deepEqual([result[1].fpy,result[1].check_fpy,result[1].quantity,result[1].observed_defects],[null,null,null,null]);
+ assert.equal(JSON.stringify(result).includes('SECRET'),false);
+ assert.deepEqual(isolatedCurrentPublisherCards(sync,'TAN10103'),[]);
+ const view=fs.readFileSync(new URL('../ames/console-history.mjs',import.meta.url),'utf8');
+ assert.match(view,/data-history-isolated-current/);
+ assert.match(view,/esc\(c\.source_id\|\|'—'\)/,'source IDs are escaped before HTML rendering');
+ assert.match(view,/não um fechamento FULL ou indicador consolidado/);
 });
 test('Firebase listener failure must not hide preserved local history',async()=>{
  const source=createMesHistorySource({
