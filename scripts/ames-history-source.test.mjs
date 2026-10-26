@@ -67,6 +67,44 @@ test('two legitimate publishers on the same line/day remain separate observation
  assert.deepEqual(summary.overlapping_days,[{day:'2026-10-23',source_ids:['workstation-A','workstation-B']}]);
  assert.equal(summarizeHistoryPublishers([a,{...b,line_id:'TAN10103'}],'TAN10102').overlapping_days.length,0);
 });
+test('two remote owners reusing the same source ID and revision cannot erase each other',async()=>{
+ const base={...local,line_id:'TAN10102',source_id:'collision-source',snapshot_id:'9',snapshot_revision:3,
+   period_start:'2026-10-23T07:00:00-03:00',period_end:'2026-10-23T14:00:00-03:00'};
+ const a={...base,owner_uid:'private-owner-A',key:'immutable-A',hash:'hash-A'};
+ const b={...base,owner_uid:'private-owner-B',key:'immutable-B',hash:'hash-B'};
+ const source=createMesHistorySource({listHistory:async()=>[a,b],openHistory:async h=>({key:h.key})},
+   {localHistoryList:async()=>{throw Error('must not query an unpaired PC');}},
+   {agent:()=>({status:'disconnected'})});
+ const rows=await source.list('TAN10102');
+ assert.equal(rows.length,2,'two immutable cloud documents with identical visible IDs are distinct');
+ assert.deepEqual(new Set(rows.map(x=>x.key)),new Set(['immutable-A','immutable-B']));
+ for(const row of rows)assert.equal((await source.open(row)).key,row.key);
+ const summary=summarizeHistoryPublishers(rows,'TAN10102');
+ assert.deepEqual(summary.identity_collisions,[{source_id:'collision-source',installations:2}]);
+ assert.equal(summary.installation_count,2);
+ assert.deepEqual(summary.overlapping_days,[{day:'2026-10-23',source_ids:['collision-source','collision-source']}]);
+ assert.equal(JSON.stringify(summary).includes('private-owner-'),false,'UI summary never copies owner UID');
+});
+test('ambiguous remote counterpart never makes a local SQLite revision falsely shared',async()=>{
+ const a={...local,owner_uid:'owner-A',key:'key-A'},b={...local,owner_uid:'owner-B',key:'key-B'};
+ const source=createMesHistorySource({listHistory:async()=>[a,b]},
+   {localHistoryList:async()=>[local],historicalPayload:async()=>({opened:'local'})},
+   {agent:()=>({status:'connected'})});
+ const rows=await source.list('TAN10103');
+ assert.equal(rows.length,3,'both remote revisions and local row preserved');
+ const localRow=rows.find(row=>row.history_source==='local');
+ assert.equal(localRow.shared_available,undefined);
+ assert.equal(localRow.shared_ambiguous,true);
+ assert.equal(historySharingState(localRow),'local_only');
+ assert.equal((await source.open(localRow)).opened,'local');
+});
+test('a local unknown-UID revision and one verified owner do not invent another installation',()=>{
+ const a={...local,owner_uid:'private-one'};
+ const result=summarizeHistoryPublishers([a,{...a,owner_uid:undefined,snapshot_id:'3'}],'TAN10103');
+ assert.equal(result.installation_count,1);
+ assert.deepEqual(result.identity_collisions,[]);
+ assert.deepEqual(result.overlapping_days,[]);
+});
 test('multiple origins on separate days are not falsely labeled as simultaneous publishers',()=>{
  const a={...local,source_id:'PC-A',snapshot_id:'1'};
  const b={...a,source_id:'PC-B',snapshot_id:'2',period_start:'2026-10-17T07:00',period_end:'2026-10-18T07:00'};
@@ -80,6 +118,7 @@ test('multi-publisher historical UI is explicitly read-only and keeps source fil
  assert.match(view,/data-history-origin-filter/);
  assert.match(view,/Não somar ocorrências de coletas sobrepostas/);
  assert.match(view,/originFilter=event\.target\.value/);
+  assert.match(view,/dataset\.historyIdentityCollision/);
 });
 test('Firebase listener failure must not hide preserved local history',async()=>{
  const source=createMesHistorySource({

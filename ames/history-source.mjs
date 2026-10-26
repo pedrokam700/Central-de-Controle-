@@ -16,10 +16,13 @@ export function summarizeHistoryPublishers(entries=[],line){
   const versions=new Map();
   for(const entry of Array.isArray(entries)?entries:[]){
     if(entry?.line_id!==line||!entry.source_id||entry.snapshot_id==null)continue;
-    const key=JSON.stringify([entry.line_id,entry.source_id,entry.snapshot_id,entry.snapshot_revision??null]);
+    // Source IDs are not guaranteed unique between authenticated owners.
+    // Preserve two immutable heads even when visible revision numbers match.
+    const key=JSON.stringify([entry.line_id,entry.source_id,entry.snapshot_id,entry.snapshot_revision??null,
+      entry.owner_uid||null,entry.key||entry.hash||entry.content_hash||null]);
     if(!versions.has(key))versions.set(key,entry);
   }
-  const origins=new Map(),days=new Map();
+  const origins=new Map(),days=new Map(),installationOwners=new Map(),dated=[];
   for(const entry of versions.values()){
     const source_id=String(entry.source_id);
     const origin=origins.get(source_id)||{source_id,revisions:0,last_collected_at:null};
@@ -27,13 +30,30 @@ export function summarizeHistoryPublishers(entries=[],line){
     if(entry.collected_at&&(!origin.last_collected_at||Date.parse(entry.collected_at)>Date.parse(origin.last_collected_at)))
       origin.last_collected_at=entry.collected_at;
     origins.set(source_id,origin);
+    if(entry.owner_uid){
+      if(!installationOwners.has(source_id))installationOwners.set(source_id,new Set());
+      installationOwners.get(source_id).add(entry.owner_uid);
+    }
     const day=factoryWallMinute(entry.period_start)?.slice(0,10);
-    if(day){if(!days.has(day))days.set(day,new Set());days.get(day).add(source_id);}
+    if(day)dated.push({entry,day,source_id});
   }
+  for(const {entry,day,source_id} of dated){
+    const knownOwners=installationOwners.get(source_id);
+    // An on-machine revision without UID may still be the same publisher as
+    // the only indexed owner for that source. Do not invent a second PC.
+    const owner=entry.owner_uid||(knownOwners?.size===1?[...knownOwners][0]:'unverified');
+    if(!days.has(day))days.set(day,new Map());
+    days.get(day).set(JSON.stringify([source_id,owner]),source_id);
+  }
+  const identity_collisions=[...installationOwners.entries()]
+    .filter(([,owners])=>owners.size>1)
+    .map(([source_id,owners])=>({source_id,installations:owners.size}));
   return {
     origins:[...origins.values()].sort((a,b)=>a.source_id.localeCompare(b.source_id)),
+    identity_collisions,
+    installation_count:[...origins.keys()].reduce((n,id)=>n+Math.max(installationOwners.get(id)?.size||0,1),0),
     overlapping_days:[...days.entries()].filter(([,sources])=>sources.size>1)
-      .map(([day,sources])=>({day,source_ids:[...sources].sort()})).sort((a,b)=>b.day.localeCompare(a.day))
+      .map(([day,sources])=>({day,source_ids:[...sources.values()].sort()})).sort((a,b)=>b.day.localeCompare(a.day))
   };
 }
 
@@ -49,28 +69,32 @@ export function createMesHistorySource(sync,client,store){
         sync.listHistory(line),
         localReady?client.localHistoryList(line):Promise.resolve([])
       ]);
-      const rows=new Map();
+      const remoteRows=new Map(),localRows=[];
+      const visibleId=h=>JSON.stringify([h.line_id,h.source_id,h.snapshot_id,h.snapshot_revision??null]);
       if(cloud.status==='fulfilled'){
         for(const h of cloud.value){
-          const key=[h.line_id,h.source_id,h.snapshot_id,h.snapshot_revision].join(':');
-          rows.set(key,{...h,history_source:'shared'});
+          // Each cloud document has its own owner+content key. Colliding
+          // visible IDs must not overwrite the other publisher's evidence.
+          const key=JSON.stringify([visibleId(h),h.owner_uid||null,h.key||null,h.hash||h.content_hash||null]);
+          remoteRows.set(key,{...h,history_source:'shared'});
         }
       }
       if(local.status==='fulfilled'){
         for(const h of local.value){
-          const key=[h.line_id,h.source_id,h.snapshot_id,h.snapshot_revision].join(':');
-          const shared=rows.get(key);
-          if(shared){
+          const matches=[...remoteRows.entries()].filter(([,remote])=>visibleId(remote)===visibleId(h));
+          if(matches.length===1){
+            const [key,shared]=matches[0];
             // Same immutable revision may be available through both transports.
             // Prefer the actual local read only when the content and period agree;
             // never mistake a cloud copy for proof of an on-machine SQLite row.
             const fields=['content_hash','period_start','period_end'];
             if(fields.some(field=>shared[field]&&h[field]&&shared[field]!==h[field]))
               throw Error('Conflito de integridade entre revisão local e compartilhada para '+line);
-            rows.set(key,{...h,history_source:'local',shared_available:true,
+            remoteRows.delete(key);
+            localRows.push({...h,owner_uid:shared.owner_uid||undefined,history_source:'local',shared_available:true,
               revision_pending:h.snapshot_revision==null});
-          }else rows.set(key,{...h,history_source:'local',
-            revision_pending:h.snapshot_revision==null});
+          }else localRows.push({...h,history_source:'local',
+            revision_pending:h.snapshot_revision==null,shared_ambiguous:matches.length>1});
         }
       }
       if(cloud.status==='rejected'&&local.status==='rejected')throw Error('Histórico remoto e local indisponíveis');
@@ -83,7 +107,7 @@ export function createMesHistorySource(sync,client,store){
         throw Error('Histórico compartilhado indisponível e nenhuma revisão local identificada; não confirmar ausência de coleta');
       if(!localReady&&cloud.status==='rejected')throw Error('Histórico compartilhado indisponível');
       // No local-only version is evidence that Firebase actually synchronized.
-      return [...rows.values()].sort((a,b)=>Date.parse(b.collected_at||'')-Date.parse(a.collected_at||'')||
+      return [...remoteRows.values(),...localRows].sort((a,b)=>Date.parse(b.collected_at||'')-Date.parse(a.collected_at||'')||
         Number(b.snapshot_id||0)-Number(a.snapshot_id||0)||
         Number(b.revision_pending===true)-Number(a.revision_pending===true)||
         Number(b.snapshot_revision||0)-Number(a.snapshot_revision||0));
