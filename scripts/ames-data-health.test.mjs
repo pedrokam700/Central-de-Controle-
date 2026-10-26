@@ -113,6 +113,18 @@ test('shared sync health exposes team-latest provenance without account identity
   assert.equal(JSON.stringify(model).includes('must-not-leak'),false);
 });
 
+test('receiver with historical access but no current heads does not misreport history as missing',()=>{
+  const model=buildSyncHealth({sync:{read_status:'ready',remote_scope:'operational_day_history',remote_heads:[]}});
+  assert.equal(model.tone,'unknown');
+  assert.equal(model.count,0);
+  assert.equal(model.authority,'operational_day_history');
+  assert.match(model.label,/snapshot compartilhado atual|current shared snapshot/i);
+  assert.match(model.detail,/histórico de dias anteriores|history from previous days/i);
+  const code=fs.readFileSync(new URL('../ames/console-view.mjs',import.meta.url),'utf8');
+  assert.match(code,/Dados atuais da equipe não confirmados/);
+  assert.match(code,/Current team data not confirmed/);
+});
+
 test('shared sync read error preserves last valid provenance instead of erasing it',()=>{
   const model=buildSyncHealth({sync:{read_status:'error',read_error:'technical details',remote_scope:'team_latest',remote_heads:[{line_id:'TAN10102',source_id:'posto-2',snapshot_id:'9',snapshot_revision:1,collected_at:'2026-10-14T10:00:00Z',authority:'team_latest'}]}});
   assert.equal(model.tone,'partial');

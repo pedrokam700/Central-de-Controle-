@@ -221,8 +221,8 @@ export function buildSyncHealth(agent={}){
   if(!heads.length){
     return {
       tone:'unknown',
-      label:t('Sem leitura compartilhada','No shared read'),
-      detail:t('Nenhum snapshot remoto está ativo neste momento. Isso não altera nem invalida a base local.','No remote snapshot is active right now. This does not change or invalidate the local database.'),
+      label:t('Sem snapshot compartilhado atual','No current shared snapshot'),
+      detail:t('Nenhum snapshot remoto está ativo no período atual. O histórico de dias anteriores pode continuar acessível; isso não altera nem invalida a base local.','No remote snapshot is active for the current period. History from previous days may still be accessible; this does not change or invalidate the local database.'),
       heads,count:0,latest:null,authority,read_status:readStatus||'idle',has_error:false
     };
   }
