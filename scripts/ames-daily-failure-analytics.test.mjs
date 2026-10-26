@@ -211,3 +211,46 @@ test('daily dashboard refreshes same snapshot number on new revision or collecto
     view.render();assert.equal(writes,4,'verified content identity participates in refresh');
   }finally{globalThis.document=previousDocument;}
 });
+
+
+test('3012 contradicted and exact-identity candidates never become the current occurrence AT',()=>{
+  const candidate={pcba_sn:'P1',defect_code:'OTHER',defect_time:'2026-10-21T09:00:00-03:00',
+    repair_user:'OLD-AT',repair_comment:'Older unrelated analysis',
+    association:'distinct_occurrence_candidate',occurrence_match:'contradicted',
+    candidate_for_occurrence:false,repair_confirmed:false};
+  const snapshot={line_id:'TAN10101',snapshot_id:14,summary:{},
+    occurrences:[{pcba_sn:'P1',defect_key:'NOW',defect_code:'CAM',defect_time:'2026-10-22T10:00:00-03:00',repair_evidence_3012:[candidate]}],
+    material_trace:{records:[]},pcba_history:{records:[]},process_timeline:{contexts:[]},insights:{drilldowns:{}}};
+  const read=()=>buildDailyFailureRows({read:line=>({snapshot:line==='TAN10101'?snapshot:null})})[0];
+  let row=read();
+  assert.equal(row.repair_user,null);assert.equal(row.repair_comment,null);
+  assert.notEqual(row.repair_source,'3012');
+  assert.equal(row.repair_candidates[0].repair_comment,candidate.repair_comment);
+  snapshot.occurrences[0].repair_evidence_3012=[{...candidate,defect_code:'CAM',
+    defect_time:'2026-10-22T10:00:00-03:00',association:'exact_identity_candidate',
+    occurrence_match:'candidate',candidate_for_occurrence:true}];
+  row=read();assert.equal(row.repair_user,null,'exact identity is still not proof of performed repair');
+  assert.equal(row.repair_candidates.length,1);
+  snapshot.occurrences[0].repair_user='DIRECT-3028-AT';
+  snapshot.occurrences[0].repair_comment='Original occurrence comment';
+  row=read();assert.equal(row.repair_user,'DIRECT-3028-AT');
+  assert.equal(row.repair_comment,'Original occurrence comment');
+  assert.equal(row.repair_candidates.length,1,'keep candidate separate from original occurrence evidence');
+  const previousDocument=globalThis.document;
+  globalThis.document={documentElement:{lang:'pt-BR'}};
+  const mode={dataset:{dfaMode:'occurrences'}};
+  const root={classList:{add(){}},querySelectorAll:q=>q==='[data-dfa-mode]'?[mode]:[],querySelector:()=>null,innerHTML:''};
+  const store={read:line=>({snapshot:line==='TAN10101'?snapshot:null}),occurrences:()=>({rows:snapshot.occurrences,coverage:{status:'partial'}})};
+  snapshot.occurrences[0].repair_evidence_3012[0].repair_comment='Preserve full <script>candidate</script>';
+  try{
+    const view=createDailyFailureAnalytics(root,store);view.render();mode.onclick();
+    assert.match(root.innerHTML,/Histórico 3012 · associação não comprovada/);
+    assert.match(root.innerHTML,/Candidato não confirmado/);
+    assert.match(root.innerHTML,/Preserve full &lt;script&gt;candidate&lt;\/script&gt;/);
+    assert.doesNotMatch(root.innerHTML,/<script>candidate/);
+    assert.match(root.innerHTML,/Original occurrence comment/);
+    globalThis.document.documentElement.lang='en-US';view.render();
+    assert.match(root.innerHTML,/3012 history · unproven association/);
+    assert.doesNotMatch(root.innerHTML,/Candidato não confirmado/);
+  }finally{globalThis.document=previousDocument;}
+});

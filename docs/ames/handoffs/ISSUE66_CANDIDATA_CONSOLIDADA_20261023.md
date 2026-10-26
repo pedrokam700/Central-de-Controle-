@@ -413,3 +413,18 @@ A conferência do LEIA_PRIMEIRO gerado encontrou frase antiga mandando voltar à
 Arquivos: scripts/build-integrated-candidate.py, scripts/ames-candidate-legacy-port-guard.test.mjs e este handoff. Teste da instrução obsoleta reproduziu RED antes da correção; após ajuste contrato do pacote/porta **2/2 PASS**, syntax/diff PASS. O build/verificação integral do ZIP e os três jobs precisam de CI do próximo SHA; consultar checkpoint final da PR. Nenhum código do updater, launcher, guardian ou coletores modificado neste incremento.
 
 **Ponto final de retomada:** revalidar HEAD e o comentário CI/artefato associado; começar pelos itens1–6 de Prontidão acima. As três correções funcionais anteriores já estão integradas, não refazer. Não instalar este CLEAN no posto existente; pendências de autoridade multiwriter, paginação integral, FULL real e guardian permanecem abertas, além da homologação física. PR68 DRAFT; main/PR64/PR67/Firebase produção/fábrica intocados.
+
+
+### Gate e pacote da preparação confirmados (substituídos pelo incremento seguinte)
+
+SHA `1a0f43dae400b6f4f6f691f2636237986f643183`: Central Quality Gate **#40364818581 COMPLETED SUCCESS 3/3**. Segundo run automático40364819006 ainda aguardava navegador na última consulta; não duplicar manualmente. Pacote integrado do run40364818581 teve296 entradas/295 hashes verificados; seu hash interno9be088686a7a49bb9803a52f67c01e9f85a8b20a1b7e3db6529c258f5a73b74a pertence SOMENTE a esseSHA, não ao novoHEAD.
+
+## Continuidade P1 — candidato3012 não pode virar AT da ocorrência no dashboard
+
+**RED reproduzido:** buildDailyFailureRows escolhia repair_evidence_3012 por score de código/data/comentário, inclusive quando o contrato existente dizia occurrence_match=contradicted, candidate_for_occurrence=false e repair_confirmed=false. Uma fixture de outra falha anterior da mesmaPCBA colocava seu AT antigo no campo principal da falha atual, como fonte3012. Mesmo exact_identity_candidate continua candidato no contrato canônico; coincidência temporal não comprova intervenção.
+
+**Correção:** a projeção respeita os flags da associação existente, sem reimplementar o matcher. Só confirmação explícita da ocorrência pode alimentar best; candidatos e registros contraditos ficam preservados em repair_candidates/repair_rows. Campos originais da3028 não são substituídos por candidatos. Em Ocorrências detalhadas, um details discreto PT/EN mostra associação não comprovada/outra ocorrência, código, instante MES, autor informado, horário e comentário integral escapado. Não declara que esse AT atendeu a falha atual nem confirma causa por comentário candidato. Sem alterações no coletor3012/SQLite/matcher/9views.
+
+**Arquivos:** ames/daily-failure-analytics.mjs, scripts/ames-daily-failure-analytics.test.mjs, estehandoff. **39/39 Node PASS** (analytics/dashboard66/stage3/FULL/tendências), incluindo contradito, identidade exata ainda candidata, preservação3028, detalhePT/EN e HTML escapado; syntax/diff PASS. CI/ZIP do próximoSHA PENDING até publicação/verificação.
+
+**Retomada atualizada:** consultar primeiro HEAD e último comentário CI/artefato da PR68/Issue66. Não usar ZIP/hash de SHA anterior como entrega atual. Os cinco incrementos desta execução estão salvos; não refazer. Continuam os itens1–6 de Prontidão acima: autoridade compartilhada dos doiswriters, coleta integral paginada, FULL real/deduplicação entre novascoletas e desempenho; teste físico3074 e snapshot14/L3 e migração supervisionada dependem de ambiente/autorização. PR68 DRAFT; sem main/PR64/PR67/produção/fábrica.
