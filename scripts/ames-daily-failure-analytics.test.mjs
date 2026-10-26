@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildDailyFailureRows,filterDailyFailureRows,productionMetrics,rankDailyFailures} from '../ames/daily-failure-analytics.mjs';
+import {buildDailyFailureRows,filterDailyFailureRows,productionMetrics,rankDailyFailures,createDailyFailureAnalytics} from '../ames/daily-failure-analytics.mjs';
 import {aggregatePcbas,componentGroup,reuseKpis,reuseLinks} from '../ames/data/reuse-analysis.mjs';
 import {pcbaReuseCategoryMap} from '../ames/reuse-table-view.mjs';
 import {reuseGroup,reuseCriteriaEvidence} from '../ames/data/daily-reuse-evidence.mjs';
@@ -184,4 +184,30 @@ test('material reuse preserves exact prior-PCBA to prior-failure evidence',()=>{
   assert.equal(old2.relation,'MESMA FAMÍLIA');
   assert.match(links[0].history_desc,/OLD1: Camera fail/);
   assert.match(links[0].history_desc,/OLD2: Connector fail/);
+});
+
+
+test('daily dashboard refreshes same snapshot number on new revision or collector',()=>{
+  const previousDocument=globalThis.document;
+  globalThis.document={documentElement:{lang:'pt-BR'}};
+  let snapshot={line_id:'TAN10101',source_id:'POST-A',snapshot_id:14,snapshot_revision:1,content_hash:'a'.repeat(64),
+    summary:{quantity:100,check_fpy:97},
+    occurrences:[{pcba_sn:'P1',defect_key:'K1',defect_code:'CAM',defect_desc:'Camera scratched',defect_time:'2026-10-22T10:00:00-03:00'}],
+    process_timeline:{contexts:[]},pcba_history:{records:[]},insights:{drilldowns:{}},material_trace:{records:[]}};
+  let writes=0,html='';
+  const root={classList:{add(){}},querySelectorAll:()=>[],querySelector:()=>null,
+    set innerHTML(value){writes++;html=value;},get innerHTML(){return html;}};
+  const store={read:line=>({snapshot:line==='TAN10101'?snapshot:null}),
+    occurrences:()=>({rows:snapshot.occurrences,coverage:{status:'partial'}})};
+  try{
+    const view=createDailyFailureAnalytics(root,store);
+    view.render();view.render();assert.equal(writes,1,'unchanged polling must not render again');
+    snapshot={...snapshot,snapshot_revision:2,occurrences:[{...snapshot.occurrences[0],defect_desc:'Screen black spot'}]};
+    view.render();assert.equal(writes,2,'new immutable revision must replace old evidence');
+    assert.match(html,/Screen black spot/);assert.doesNotMatch(html,/Camera scratched/);
+    snapshot={...snapshot,source_id:'POST-B'};
+    view.render();assert.equal(writes,3,'same snapshot/revision number on another collector is distinct');
+    snapshot={...snapshot,content_hash:'b'.repeat(64)};
+    view.render();assert.equal(writes,4,'verified content identity participates in refresh');
+  }finally{globalThis.document=previousDocument;}
 });

@@ -376,3 +376,27 @@ SHA `7460eb4bb4d8c8be1a6c2cdfb8b1a18efd1c21a6`: Central Quality Gate **#40362763
 **Local:** lifecycle ExtJS **14/14**, individual **14/14**, escopo temporal **6/6**, scheduler **12/12**, seleção histórica/worker **7/7**, CLEAN Python **3/3**, contrato paginação PASS; Node CLEAN/P0/proveniência/Material **28/28**, gate oficial **2/2**; git diff --check PASS. CI exata PENDING até publicar/consultar SHA no próximo checkpoint da PR.
 
 **Retomada:** consultar HEAD e CI deste incremento. Próximos pontos seguros da Issue66: cobertura/escopo dos indicadores configuráveis e deduplicação de fechamento FULL, após confrontar testes existentes; política multiwriter compartilhada continua bloqueio distinto (não inventar autoridade). A paginação incompleta agora é diagnosticada, mas não foi implementado avanço automático de páginas sem validar seu contrato MES. Fábrica3074/último dia snapshot14L3/candidata/guardian continuam PENDING. Sem pedido de novos dados do PC de terceiro; PR68 DRAFT, PR64/67/main/oficial0.5.39/Firebase/postos intocados.
+
+
+### Gate paginação3074 confirmado
+
+SHA `5f06b267d5cd0e430cc93b6b0c22b967dbd145d9`: Central Quality Gate **#40363602776 COMPLETED SUCCESS 3/3** (Console/nove views, Firestore Rules E2E, Static incluindo paginação e escopo3074). Artefato integrado gerado no workflow, ainda sem homologação física.
+
+## Continuidade P1/P2 — dashboard precisa atualizar na nova revisão recebida
+
+**RED reproduzido:** createDailyFailureAnalytics.render ignorava nova revisão do mesmo snapshot quando PCBA/defect_key/comentário/turno/quantidade de vínculos permaneciam iguais. Um teste carregou a revisão1, depois revisão2 com descrição enriquecida e o DOM continuou mostrando a descrição antiga (1 render, esperados2). A mesma chave também não distinguia outro coletor com o mesmo número de snapshot.
+
+**Correção mínima:** chave de renderização inclui por linha source_id, snapshot_id, snapshot_revision/revision e content_hash (fallback canonical), além dos indicadores calculados. A proteção contra render repetido sem alteração permanece; não faz leitura de rede, coleta ou nova store. Filtros e seleção temporal preservados.
+
+**Arquivos:** ames/daily-failure-analytics.mjs; scripts/ames-daily-failure-analytics.test.mjs; este handoff. Regressão verifica revisão enriquecida, troca de coletor, hash novo e ausência de render redundante. **38/38 Node GREEN** nas cinco suítes analytics/dashboard66/stage3/fechamentoFULL/tendências; node --check e git diff --check PASS. CI do próximo SHA PENDING até consulta do checkpoint da PR.
+
+### Prontidão e próxima ação exata
+
+1. Revalidar HEAD e a CI do SHA deste incremento; artefato central-ames-integrated-SHA no job Static contém manifesto do mesmo SHA e hashes internos verificados. ZIP CLEAN de candidata NÃO é atualizador de instalação existente; não executar no posto0.5.39. Não publicar release/Pages.
+2. Antes de qualquer instalação, coordenação com o responsável da PR64: inventário/inscrição do guardian existente, preservação de SQLite/WAL/config/token/source_id/filas, backup com ensaio de restauração e rollback supervisionado. Nenhum desses atos físicos foi executado aqui.
+3. Aceite físico P0 pendente, somente após liberação: Consulta PCBA e MaterialSN na AWIP3074 conferindo vínculos, página parcial e retry; consulta anterior ainda carregando não pode validar novo SN; 2114/3022/3012 independentes continuam visíveis; N atual não elimina vínculo histórico comprovado.
+4. Aceite último dia: L3 snapshot14, 22/10 07:00→23/10 07:00, mesma origem/revisão; revisão recuperada é leitura degradada, nunca coleta automática ou FULL. Depois validar indicadores/drilldowns/enriquecimento por revisão e PT/EN/mobile.
+5. A/B quando disponível em homologação: comparar source_id/snapshot/revisão/hash/período exatos, offline/reload/reconexão; dois coletores nas mesmas linhas permanecem origin_conflict, sem soma/eleição arbitrária. Não pedir novamente PC de terceiro para avançar desenvolvimento. A leitura histórica no PC sem agente foi comprovada na versão pública anterior, não certifica a candidata atual.
+6. Pendências reais ainda abertas: autoridade/política persistente compartilhada dos dois writers, coleta completa quando houver paginação, fechamentoFULL real/deduplicação entre novas coletas integrais, desempenho e integração operacional de instalação com PR64. Não declarar Issue66 inteira concluída. Prossiga somente com defeito reproduzido no escopo existente, sem repetir os três incrementos acima.
+
+PR68 permanece DRAFT; oficial0.5.39/main/PR64/PR67/Firebase produção/porta8765/SQLite e postos intactos. Implementação automatizada não é homologação física; estado físico da candidata PENDING.
