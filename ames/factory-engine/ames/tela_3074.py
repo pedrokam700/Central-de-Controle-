@@ -80,7 +80,8 @@ class Tela3074:
             const s = g && g.getStore && g.getStore();
             if (!s || !s.on || !s.un) throw new Error('3074 store nao observavel');
             const st = {store:s, id:args.id, beforeloads:0, loads:0, changes:0,
-                        success:null, listeners:[]};
+                        success:null, listeners:[],
+                        pending_before_view:!!((s.isLoading && s.isLoading()) || s.loading === true)};
             const on = (name, fn) => { s.on(name, fn); st.listeners.push([name, fn]); };
             on('beforeload', () => { st.beforeloads++; });
             on('load', (_store, _records, success) => {
@@ -93,7 +94,8 @@ class Tela3074:
           if (!st) return null;
           const g = window.Ext && Ext.getCmp && Ext.getCmp(st.id);
           const current = g && g.getStore && g.getStore();
-          return {beforeloads:st.beforeloads, loads:st.loads,
+          return {pending_before_view:st.pending_before_view,
+                  beforeloads:st.beforeloads, loads:st.loads,
                   changes:st.changes, success:st.success,
                   store_rebound:!!current && current !== st.store,
                   grid_disappeared:!g};
@@ -135,7 +137,7 @@ class Tela3074:
                 try:
                     before = extract_extjs_store_grid(page, EXPECTED, frame=frame, visible_only=True)
                     armed_grid_id = before["grid_id"]
-                    self._store_response(frame, armed_grid_id, "arm", response_token)
+                    response_proof = self._store_response(frame, armed_grid_id, "arm", response_token)
                     response_armed = True
                 except Exception:
                     # Fallback legado apenas para linha que contém o SN exato.
@@ -146,6 +148,11 @@ class Tela3074:
                     except Exception:
                         pass
                     armed_grid_id = None
+                # A previous remote load can finish after the next View and
+                # impersonate its refresh. Do not submit until the old store
+                # request has ended; existing retries may then try again.
+                if response_armed and response_proof.get("pending_before_view"):
+                    raise RuntimeError("3074_PREVIOUS_QUERY_PENDING")
                 view.click(timeout=6000)
             except Exception as exc:
                 last_error = exc

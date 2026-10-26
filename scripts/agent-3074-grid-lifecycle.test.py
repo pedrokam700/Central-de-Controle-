@@ -54,7 +54,7 @@ function complete(){
   else {current.emit('load',current,current.rows,true);current.emit('datachanged',current);}
 }
 function handle(r){
-  if(r.op==='setup'){plans=r.plans;current.rows=r.rows||[];return true;}
+  if(r.op==='setup'){plans=r.plans;current.rows=r.rows||[];if(r.previous){current.loading=true;pending={...r.previous,at:r.previous.delay};}return true;}
   if(r.op==='eval')return vm.runInContext('('+r.code+')',ctx)(r.arg);
   if(r.op==='fill'){input=r.value;return true;}
   if(r.op==='value')return input;
@@ -108,7 +108,7 @@ class Locator:
 class Fixture:
     url = "http://fixture/AWIP3074"
 
-    def __init__(self, plans, initial=()):
+    def __init__(self, plans, initial=(), previous=None):
         self.clock = 0
         self.frames = [self]
         self.tmp = tempfile.TemporaryDirectory()
@@ -116,7 +116,7 @@ class Fixture:
         path.write_text(NODE, encoding="utf-8")
         self.process = subprocess.Popen(["node", str(path)], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, text=True, encoding="utf-8")
-        self.call(op="setup", plans=plans, rows=list(initial))
+        self.call(op="setup", plans=plans, rows=list(initial), previous=previous)
         self.tela = collector.Tela3074(self, ENGINE)
 
     def call(self, **kwargs):
@@ -214,6 +214,25 @@ class RefreshProofTests(unittest.TestCase):
             result = f.tela.consultar("CAMERA-1", timeout_s=.7, retries=1)
             self.assertEqual(collector.pcbas_historicas(result["rows"]), ["PCBA-OLD", "PCBA-NOW"])
             self.assertEqual(result["query_confirmation"], "STORE_REFRESH_AFTER_VIEW")
+
+    def test_previous_inflight_response_cannot_confirm_next_query(self):
+        # View can be ignored by the MES while its previous request is pending.
+        # A subsequent successful load then belongs to the OLD query.
+        with Fixture([{"mode": "stale"}], initial=rows("OLD-CAMERA"),
+                     previous={"rows": rows("OLD-CAMERA"), "delay": 100}) as f:
+            with self.assertRaisesRegex(RuntimeError, "3074_PREVIOUS_QUERY_PENDING"):
+                f.tela.consultar("PCBA-NEW", timeout_s=.45, retries=1)
+            self.assertEqual(f.call(op="state")["submitted"], [])
+            self.assertEqual(f.call(op="state")["listeners"], 0)
+
+    def test_retry_after_previous_load_ends_requires_its_own_view(self):
+        with Fixture([{"rows": rows("NEW-CAMERA"), "delay": 100}],
+                     previous={"rows": rows("OLD-CAMERA"), "delay": 100}) as f:
+            result = f.tela.consultar("PCBA-NEW", timeout_s=.45, retries=2)
+            self.assertEqual(result["attempt"], 2)
+            self.assertEqual(result["rows"][0]["Barcode"], "NEW-CAMERA")
+            self.assertEqual(f.call(op="state")["submitted"], ["PCBA-NEW"])
+            self.assertEqual(f.call(op="state")["listeners"], 0)
 
     def test_failed_load_must_not_confirm_stale_components(self):
         with Fixture([{"mode": "failed", "rows": rows("CAMERA-2"), "delay": 100}]) as f:
