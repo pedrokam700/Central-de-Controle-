@@ -35,9 +35,10 @@ def _source_stage(value):
     raw=str(value or "").strip().lower()
     if raw in {"complete","completed","done","ok","collected"}:return "done"
     if raw in {"partial","partially_complete"}:return "partial"
-    if raw in {"error","failed","unavailable"}:return "error"
-    if raw in {"not_run","pending",""}:return "not_run"
-    return raw
+    if raw in {"error","failed","unavailable","timeout","timed_out"}:return "error"
+    if raw in {"not_run","not_collected","pending",""}:return "not_run"
+    # Unknown source statuses are not a certificate of complete extraction.
+    return "partial"
 
 def _aggregate_stage(results, source):
     states=[]
@@ -47,10 +48,10 @@ def _aggregate_stage(results, source):
         if source=="2114":raw=payload.get("source_status") or payload.get("status")
         else:raw=payload.get("status")
         state=_source_stage(raw)
-        if state!="not_run":states.append(state)
+        states.append(state)
     if not states:return "not_run"
     if all(x=="error" for x in states):return "error"
-    if any(x in {"error","partial"} for x in states):return "partial"
+    if any(x in {"error","partial","not_run"} for x in states):return "partial"
     return "done"
 
 
@@ -207,8 +208,9 @@ def _run_deep_trace_job(job_id, cfg):
                 "2114":_aggregate_stage(results,"2114") if mode in {"full","reuse_only"} else "not_run",
                 "3022":_aggregate_stage(results,"3022") if mode in {"full","process_only"} else "not_run"}
         base_message={"full":"Rastreabilidade 3074/2114/3022 concluída","process_only":"Processo 3022 concluído","reuse_only":"Reuso 3074/2114 concluído"}[mode]
-        degraded=[name for name in ("3074","2114","3022") if stages.get(name) in {"partial","error"}]
-        message=base_message+(" · fontes com cobertura parcial/erro: "+", ".join(degraded) if degraded else "")
+        expected=("3074","2114","3022") if mode=="full" else (("3022",) if mode=="process_only" else ("3074","2114"))
+        degraded=[name for name in expected if stages.get(name)!="done"]
+        message=("Execução finalizada sem cobertura completa: "+", ".join(degraded)) if degraded else base_message
         job=a._job_update(job_id,status="done",stage="done",progress=100,finished_at=a.utc_now(),
                           message=message,
                           result={"snapshot_ids":ids,"lines":active,"deep_trace":results,"scope":{"trace_mode":mode,"defect_codes":codes,"max_failures":max_failures,"max_pcbas":max_pcbas,"performance":performance},"stages":stages})
