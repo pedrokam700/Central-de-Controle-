@@ -129,3 +129,15 @@ Só após o piloto de B, o coordenador transacional da PR #64 pode ser elegível
 - Em **Base local → Histórico por data**, há aviso acessível de colisão, explicando que o filtro pelo mesmo ID de origem não separa essas instalações. O UID não é exibido/copiado; a UI continua apenas leitura e não combina métricas, datas ou falhas.
 - Testes sintéticos: dois proprietários/revisões com mesmo ID visível, abertura independente das revisões, local ambíguo preservado, ausência de falso segundo posto e aviso de UI. `node --test scripts/ames-history-source.test.mjs scripts/ames-history-origin-choice.test.mjs scripts/ames-history-revisions.test.mjs scripts/ames-sync.test.mjs scripts/ames-data-health.test.mjs` **5/5 arquivos PASS local**; `git diff --check` PASS. **CI do próximo SHA PENDING** até publicação.
 - Sem alterações em writers/Firestore Rules/atualizador, agentes reais, guardian, `main`, release ou PR #64. A homologação multiwriter e confirmação de origem operativa continuam PENDING.
+
+### Checkpoint GitHub confirmado — preservação por proprietário
+
+- SHA `88a6118b7e63f464c255379768ae049c8e1b2ccd` na PR #68 DRAFT, Central Quality Gate **#40317992640 SUCCESS**. A homologação física de colisões permanece pendente.
+
+## Incremento 26/10 — não confundir revisão visível com identidade de conteúdo
+
+- Ao aprofundar a auditoria, verificou-se que o índice Firestore original carrega `hash` do payload transportado, enquanto o SQLite local expõe `content_hash` da revisão canônica. Esses campos **não são intercambiáveis**, e as regras atuais do índice nem admitem `content_hash` como coluna. Portanto, duas revisões com mesmo `source_id`, número e janela **não comprovam** o mesmo conteúdo apenas por metadados.
+- `createMesHistorySource` agora só prefere a versão local e remove a duplicata remota da lista quando **ambos** os lados fornecem o mesmo `content_hash` canônico explícito e os períodos não divergem. Se a prova falta, preserva **as duas** entradas e marca a local como `shared_candidate` (índice semelhante, conteúdo não comprovado). Uma divergência comprovada de hash/período continua sendo erro de integridade, sem substituição.
+- A coluna Compartilhamento distingue `Local · índice semelhante, conteúdo não comprovado`; o usuário ainda pode abrir ambas as revisões isoladamente. A candidata remota não é instalada no SQLite nem promovida a Hoje.
+- Testes locais ampliados para proveniência ambígua, hashes incomparáveis e acesso independente: `node --test scripts/ames-history-source.test.mjs scripts/ames-history-origin-choice.test.mjs scripts/ames-history-revisions.test.mjs scripts/ames-history-usability-20261020.test.mjs scripts/ames-sync.test.mjs scripts/ames-data-health.test.mjs` **6/6 arquivos PASS**, `git diff --check` PASS. CI GitHub do novo SHA ainda **PENDING**.
+- Nenhuma alteração em regras Firestore, writers, contas, postos, instalador ou atualização transacional. Investigar uma comparação de conteúdo provada/eficiente somente em trabalho futuro separado, sem fingir equivalência de dois hashes de natureza distinta.

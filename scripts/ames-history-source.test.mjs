@@ -42,9 +42,10 @@ test('unversioned local update stays distinct from a shared revision and opens e
  assert.equal(rows[1].history_source,'shared');assert.equal((await source.open(rows[0])).snapshot_revision,2);
 });
 test('do not claim unconfirmed local version is shared; de-duplicate versions with same owner and revision',async()=>{
+ const matching={...local,content_hash:'same-canonical-content'};
  const source=createMesHistorySource({
-  listHistory:async()=>[{...local}],openHistory:async()=>({from:'cloud'})
- },{localHistoryList:async()=>[{...local}],historicalPayload:async()=>({from:'local'})},
+  listHistory:async()=>[{...matching}],openHistory:async()=>({from:'cloud'})
+ },{localHistoryList:async()=>[{...matching}],historicalPayload:async()=>({from:'local'})},
  {agent:()=>({status:'connected'})});
  const rows=await source.list('TAN10103');
  assert.equal(rows.length,1);assert.equal(rows[0].history_source,'local');
@@ -52,9 +53,26 @@ test('do not claim unconfirmed local version is shared; de-duplicate versions wi
  assert.equal(historySharingState(rows[0]),'local_and_shared','a locally preferred opening does not negate a matching remote index');
  assert.equal((await source.open(rows[0])).from,'local');
 });
+test('visible revision match without canonical content proof retains local and remote separately',async()=>{
+ const withLocalHash={...local,content_hash:'local-only-canonical-hash'};
+ const source=createMesHistorySource({listHistory:async()=>[{...local,owner_uid:'remote-owner',hash:'transport-SHA'}],
+   openHistory:async()=>({from:'cloud'})},
+   {localHistoryList:async()=>[withLocalHash],historicalPayload:async()=>({from:'local'})},
+   {agent:()=>({status:'connected'})});
+ const rows=await source.list('TAN10103');
+ assert.equal(rows.length,2,'same version number alone cannot swallow remote history');
+ const localRow=rows.find(x=>x.history_source==='local');
+ const cloudRow=rows.find(x=>x.history_source==='shared');
+ assert.equal(localRow.shared_available,undefined);
+ assert.equal(localRow.shared_candidate,true);
+ assert.equal(historySharingState(localRow),'local_candidate');
+ assert.equal((await source.open(localRow)).from,'local');
+ assert.equal((await source.open(cloudRow)).from,'cloud');
+});
 test('sharing state never treats an unverified local revision as synchronized',()=>{
  assert.equal(historySharingState({history_source:'local'}),'local_only');
  assert.equal(historySharingState({history_source:'local',shared_available:false}),'local_only');
+ assert.equal(historySharingState({history_source:'local',shared_candidate:true}),'local_candidate');
  assert.equal(historySharingState({history_source:'shared'}),'shared');
  assert.equal(historySharingState({}),'unverified');
 });

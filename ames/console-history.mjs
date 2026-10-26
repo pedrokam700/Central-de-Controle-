@@ -15,6 +15,7 @@ const revisionLabel=entry=>`${entry.snapshot_id??'—'} · r${Number(entry.snaps
 const sharingLabel=entry=>{
   switch(historySharingState(entry)){
     case 'local_and_shared':return t('Local + índice no Firebase','Local + indexed on Firebase');
+    case 'local_candidate':return t('Local · índice semelhante, conteúdo não comprovado','Local · similar index, content unverified');
     case 'local_only':return t('Somente local · compartilhamento não comprovado','Local only · sharing unverified');
     case 'shared':return t('Compartilhado','Shared');
     default:return t('Compartilhamento não comprovado','Sharing unverified');

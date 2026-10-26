@@ -5,7 +5,8 @@ import {factoryWallMinute} from './data/history.mjs';
 // the immutable Firebase history index. Keep transport and sharing separate.
 export function historySharingState(entry){
   if(entry?.history_source==='shared')return 'shared';
-  if(entry?.history_source==='local')return entry.shared_available===true?'local_and_shared':'local_only';
+  if(entry?.history_source==='local')return entry.shared_available===true?'local_and_shared':
+    entry.shared_candidate===true?'local_candidate':'local_only';
   return 'unverified';
 }
 
@@ -90,8 +91,18 @@ export function createMesHistorySource(sync,client,store){
             const fields=['content_hash','period_start','period_end'];
             if(fields.some(field=>shared[field]&&h[field]&&shared[field]!==h[field]))
               throw Error('Conflito de integridade entre revisão local e compartilhada para '+line);
-            remoteRows.delete(key);
-            localRows.push({...h,owner_uid:shared.owner_uid||undefined,history_source:'local',shared_available:true,
+            // A matching visible revision is insufficient proof of the same
+            // content. Existing immutable Firebase heads have a transport
+            // SHA-256, not necessarily the local canonical content_hash.
+            // If no matching canonical hash is available on both sides,
+            // preserve both rows rather than silently remove the cloud copy.
+            const identicalContent=typeof h.content_hash==='string'&&h.content_hash.length>0&&
+              typeof shared.content_hash==='string'&&h.content_hash===shared.content_hash;
+            if(identicalContent){
+              remoteRows.delete(key);
+              localRows.push({...h,owner_uid:shared.owner_uid||undefined,history_source:'local',shared_available:true,
+                revision_pending:h.snapshot_revision==null});
+            }else localRows.push({...h,history_source:'local',shared_candidate:true,
               revision_pending:h.snapshot_revision==null});
           }else localRows.push({...h,history_source:'local',
             revision_pending:h.snapshot_revision==null,shared_ambiguous:matches.length>1});
