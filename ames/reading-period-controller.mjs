@@ -4,12 +4,16 @@ import {matchesReadingPeriod,matchesSavedTodayCapture} from './data/reading-peri
 import {resolveHistorySource} from './data/history-source-choice.mjs';
 
 // History is read-only. Selection is per line and source, never a global MES job.
-const PREF_PREFIX='ames-history-source-preference-v1:';
-const safeRead=line=>{
-  try{return globalThis.localStorage?.getItem(PREF_PREFIX+line)||null;}catch{return null;}
+// Unscoped v1 keys are intentionally neither read nor migrated: they cannot
+// prove that the currently authenticated person made that source choice.
+const PREF_PREFIX='ames-history-source-preference-v2:';
+const safeRead=(line,scope)=>{
+  if(!scope)return null;
+  try{return globalThis.localStorage?.getItem(PREF_PREFIX+JSON.stringify([scope,line]))||null;}catch{return null;}
 };
-const safeWrite=(line,value)=>{
-  try{globalThis.localStorage?.setItem(PREF_PREFIX+line,value);}catch{}
+const safeWrite=(line,value,scope)=>{
+  if(!scope)return;
+  try{globalThis.localStorage?.setItem(PREF_PREFIX+JSON.stringify([scope,line]),value);}catch{}
 };
 const orderEntries=(a,b)=>{
   const clock=x=>Number.isFinite(Date.parse(x?.collected_at))?Date.parse(x.collected_at):0;
@@ -17,21 +21,35 @@ const orderEntries=(a,b)=>{
     String(b.snapshot_id||'').localeCompare(String(a.snapshot_id||''));
 };
 
-export function createReadingPeriodController(store,history,{changed=()=>{}}={}){
+export function createReadingPeriodController(store,history,{changed=()=>{},preferenceScope=null}={}){
   let request=0,disposed=false;
   const sourceOverrides=new Map(),preferredByLine=new Map();
   const scopeKey=(period,line)=>JSON.stringify([period.mode,period.start,period.end,line]);
-  const preferredSource=line=>preferredByLine.get(line)||safeRead(line);
+  const authenticatedScope=()=>{
+    try{const value=typeof preferenceScope==='function'?preferenceScope():preferenceScope;
+      return typeof value==='string'&&value.trim()?value:null;}catch{return null;}
+  };
+  const sessionKey=()=>JSON.stringify([store.sessionGeneration?.()??0,authenticatedScope()]);
+  let activeSession=sessionKey();
+  function reconcileSession(){
+    const next=sessionKey();
+    if(next!==activeSession){request++;sourceOverrides.clear();preferredByLine.clear();activeSession=next;}
+  }
+  const preferredSource=line=>{reconcileSession();return preferredByLine.get(line)||safeRead(line,authenticatedScope());};
   function rememberSource(line,source_id,allowed){
+    if(disposed)throw Error('reading_controller_disposed');
+    reconcileSession();
     if(!LINE_IDS.includes(line)||!source_id||!Array.isArray(allowed)||!allowed.includes(source_id))
       throw Error('invalid_history_source_choice');
     preferredByLine.set(line,source_id);
-    safeWrite(line,source_id);
+    safeWrite(line,source_id,authenticatedScope());
   }
   async function select(mode,options={}){
+    if(disposed)throw Error('reading_controller_disposed');
+    reconcileSession();const selectedSession=activeSession;
     const generation=store.selectReadingPeriod(mode,options),serial=++request;
     const selected=store.readingPeriod();
-    const alive=()=>!disposed&&request===serial&&store.periodGeneration()===generation;
+    const alive=()=>!disposed&&request===serial&&store.periodGeneration()===generation&&sessionKey()===selectedSession;
     store.updateAgent({period_read:{status:'loading',errors:[]}});changed();
     const errors=[],source_choices=[],unresolved=[],recovered=[];
     const results=await Promise.allSettled(LINE_IDS.map(async line=>{

@@ -477,3 +477,28 @@ SHA `a515850726daaf26062d732b7ece82097120ebce`: Quality **40370218739 SUCCESS3/3
 ### Navegação real dos detalhes aninhados no browser
 
 SHA `a8b85e4f859c892119e4a5879377d3baba96c243`: Quality40370778941 SUCCESS3/3; OperationalHistory40370766211 RED3/4 (contratos/Windows/Firestore SUCCESS). Os asserts de sete colunas/1,1,— passaram. O caso novo3012 expirou ao tentar clicar no summary de candidato dentro de uma ocorrência ainda fechada. Corrigido o teste para abrir PRIMEIRO o summary da ocorrência pai, depois o candidato, por cliques reais; sem force, sleeps extras, bypass de visibilidade ou mudança de produto. Syntax/diff PASS; novoCI pendente no próximo checkpoint.
+
+
+## Continuidade P1 — escolha de origem isolada por conta e sessão
+
+**REDs reproduzidos:** a preferência reading-period-controller era persistida com chave por linha apenas. Uma preferênciav1 de outro usuário fazia o novo leitor escolher automaticamente um dos doispostos; mapas de override também sobreviviam à troca de sessão no mesmo controller. Dois testes novos falharam antes da correção. Isso não era autorização de acessoFirebase, mas era herança indevida de decisão de origem.
+
+**Correção:** persistênciav2 restrita a conta autenticada+linha; app.js passa getter do UID atual pelo console existente. Chavesv1 não são lidas, migradas ou apagadas. Sem identidade autenticada, a preferência fica só na instância/sessão. Troca de conta ou geração da sessão invalida mapas; uma resposta assíncrona do escopo anterior não conclui a leitura. A mesma conta conserva sua escolha válida após abrir nova instância, sempre confrontada com as origens efetivamente disponíveis. Nenhum UID/SN é enviado ao diagnóstico, Firestore ou log por essa opção. Não altera source_id nem cria política de eleição de HEAD global entrePCs.
+
+**Arquivos:** ames/reading-period-controller.mjs, ames/console-view.mjs, app.js, scripts/ames-reading-period.test.mjs e estehandoff. **64/64 Node PASS** (24período, escolha deorigem, console, períodoexato e históriodafonte); syntax/diff PASS. Checkpoint terá2commits separados: navegação correta do teste de detalhes aninhados e esta correção funcional de conta. Ambos serão publicados juntos; CI exata PENDING até oHEAD final.
+
+### Matriz curta do que está implementado versus prova externa
+
+| Escopo original | Implementação / evidência automatizada | Prova externa ainda necessária |
+|---|---|---|
+| 3074 PCBA/Material e páginas | View/store/alvo/paginação limitados e auditáveis;20testes ciclo,14individual,6escopo | Confirmar contrato/retorno real no MES OPPO |
+| Último dia / snapshot14L3 | Revisão exata, recuperação somente leitura, sem coleta ao navegar | Caso real22→23/10 e9views na candidata |
+| Novo ciclo / N histórico / kits | Seleção conservadora e contagens físicas separadas; preservar itens/ciclos | Conferência física dos vínculos/horários |
+| Reuso/alertas/dashboard | Matcher genérico, OU/E sem soma duplicada, desconhecido≠zero, candidato3012 separado;39testes analíticos | Homologar interpretação dos exemplos reais |
+| Histórico/retry | Imutabilidade e idempotência do MESMO job;7testes captura + restore/worker/manifests | Reinício/offline/AT tardio no posto sob supervisão |
+| Multi-PC | Históricos separados, conflitos bloqueiam promoção, escolha por usuário/linha explícita e agora isolada por conta | Se precisar HEAD único, definir autoridade operacional com evidência; não eleger arbitrariamente |
+| FULL | Validador exige escopo/completude real3028/3074/2114/3022; parcial não rebaixa FULL comprovado | Agente legado emite source_complete=false; SEM certificado real não existe FULL industrial. Não fabricar prova nem colapsar snapshots/PCs independentes |
+| Desempenho | Benchmark sintético reproduzível e p50/p95 nos logsCI | Windows/fábrica/rede/MES/Firestore reais não medidos |
+| Instalação/rollback | Pacote limpo com manifestos, aviso e baseline0.5.39 preservado | PR64/guardian/inventário/backup/restore/consentimento, sem executar nestaPR |
+
+**Retomada exata:** verificar Quality3/3 e OperationalHistory4/4 no próximoHEAD; corrigir somenteRED demonstrado. Depois entregar artefato desseSHA e distinguir os gates externos da implementação. Não expandir para conciliação de identidadeMES inexistente, não declararFULL por jobdone ou porbenchmark e não instalar candidata sobre0.5.39. PR68 DRAFT; PR64/67/main/Firebase/postos intocados.

@@ -67,7 +67,7 @@ const OPERATOR_PARITY_STYLE_HREF = new URL('./console-operator-parity.css', impo
 const WORKSTATION_SETUP_STYLE_HREF = new URL('./console-workstation-setup.css', import.meta.url).href;
 const MONITOR_MODERN_STYLE_HREF = new URL('./console-monitor-modern.css', import.meta.url).href;
 
-export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {}, history, agentClient, verify } = {}) {
+export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {}, history, agentClient, verify, historyPreferenceScope } = {}) {
   let active='monitor', mounted=false, disposed=false;let preparation, translator, evidenceDrawer;const views=new Map();
   const client=agentClient||createAgentClient(store,{...transport,changed(){if(disposed)return;renderActive();paintHeader();onChange();}});
   const meta=()=>VIEWS.find(([id])=>id===active)||VIEWS[0];
@@ -86,7 +86,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     });root.querySelector('[data-console-open-ames]')?.addEventListener('click',async()=>{try{if(store.agent().status!=='connected')await client.connect();await client.auxiliary('chrome');}catch(error){store.updateAgent({error:error.message});paintHeader();}});root.querySelector('[data-console-setup]')?.addEventListener('click',openWorkstationSetup);root.querySelector('[data-console-check]')?.addEventListener('click',async()=>{try{if(verify)await verify();else if(store.agent().status==='connected')await client.refresh();else await client.connect();}catch(error){store.updateAgent({error:error.message});}finally{renderActive();}});
     const theme=document.createElement('link');theme.rel='stylesheet';theme.href=new URL('./console-theme.css',import.meta.url).href;root.append(theme);evidenceDrawer=createEvidenceDrawer(root);mounted=true;translator=createConsoleTranslator(root,locale);preparation=createPreparationView(root.querySelector('[data-console-preparation]'),store,client,{verify});preparation.render();paintHeader();
   }
-  const periodController=createReadingPeriodController(store,history,{changed(){if(!disposed){renderActive();onChange();}}});
+  const periodController=createReadingPeriodController(store,history,{preferenceScope:historyPreferenceScope,changed(){if(!disposed){renderActive();onChange();}}});
   let renderedPeriod=store.periodGeneration?.();
   let renderedSession=store.sessionGeneration?.();
   let lastCompletedJobRead='';

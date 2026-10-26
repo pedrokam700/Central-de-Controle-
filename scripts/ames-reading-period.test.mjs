@@ -271,3 +271,44 @@ test('Today does not import a saved observation from yesterday or a shifted/cust
  assert.equal(s.read(line).saved_today,false);
  ctl.clear();
 });
+
+
+test('history source preference is authenticated-account scoped and ignores unscoped legacy keys',async()=>{
+ const previous=globalThis.localStorage,values=new Map();
+ globalThis.localStorage={getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value)};
+ const p=snapshot('p','2026-10-16','previous_day'),q={...snapshot('q','2026-10-16','previous_day'),source_id:'OTHER-POST'};
+ const history={list:async l=>l===line?[entry(p),entry(q)]:[],open:async e=>e.source_id===q.source_id?q:p};
+ values.set('ames-history-source-preference-v1:'+line,q.source_id);
+ const make=account=>{const store=createAmesStore({now:()=>now.getTime()});return {store,ctl:createReadingPeriodController(store,history,{preferenceScope:account})};};
+ try{
+  const a=make('SYNTHETIC-ACCOUNT-A');await a.ctl.select('previous');
+  assert.equal(a.store.read(line).snapshot,null,'legacy browser-wide preference is not account consent');
+  await a.ctl.chooseSource(line,q.source_id);
+  const b=make('SYNTHETIC-ACCOUNT-B');await b.ctl.select('previous');
+  assert.equal(b.store.read(line).snapshot,null,'account B cannot inherit account A source choice');
+  const again=make('SYNTHETIC-ACCOUNT-A');await again.ctl.select('previous');
+  assert.equal(again.store.read(line).snapshot?.source_id,q.source_id,'the same account keeps its own valid preference');
+  assert.equal(values.get('ames-history-source-preference-v1:'+line),q.source_id,'do not delete or migrate legacy data');
+  a.ctl.clear();b.ctl.clear();again.ctl.clear();
+ }finally{globalThis.localStorage=previous;}
+});
+
+test('changing account or resetting session invalidates source overrides and stale reads',async()=>{
+ let account='SYNTHETIC-A',release;
+ const p=snapshot('p','2026-10-16','previous_day'),q={...snapshot('q','2026-10-16','previous_day'),source_id:'OTHER-POST'};
+ const store=createAmesStore({now:()=>now.getTime()});
+ const history={list:async l=>l===line?[entry(p),entry(q)]:[],open:async e=>e.source_id===q.source_id?q:p};
+ const ctl=createReadingPeriodController(store,history,{preferenceScope:()=>account});
+ await ctl.select('previous');await ctl.chooseSource(line,q.source_id);
+ account='SYNTHETIC-B';store.clear();
+ await ctl.select('previous');assert.equal(store.read(line).snapshot,null);
+ assert.equal(ctl.preferredSource(line),null);
+ await ctl.chooseSource(line,p.source_id);
+ history.open=()=>new Promise(resolve=>{release=resolve;});
+ const pending=ctl.select('previous');
+ for(let i=0;i<10&&!release;i++)await Promise.resolve();
+ assert.equal(typeof release,'function');
+ account='SYNTHETIC-C';release(p);await pending;
+ assert.equal(store.agent().period_read.status,'loading','response from prior account must not complete the new account read');
+ ctl.clear();
+});

@@ -2379,6 +2379,7 @@ import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
       if (!currentAuthUser || activeView !== 'mesConsole') return;
       consoleMesView ||= createConsoleView(document.querySelector('#mesConsole'), state.ames, {
         locale: () => currentLanguage, agentClient:mesIntegration.client, verify:()=>mesIntegration.verify(),
+        historyPreferenceScope:()=>currentAuthUser?.uid||null,
         history:createMesHistorySource(mesSync,mesIntegration.client,state.ames)
       });
       consoleMesView.render();
