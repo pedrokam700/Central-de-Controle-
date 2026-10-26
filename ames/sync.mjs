@@ -293,6 +293,13 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         const key=JSON.stringify([heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort(),!!meta.from_cache]);
         if(key===headsKey)return;
         headsKey=key;
+        // A partial offline Firestore cache is not proof that a competing
+        // publisher disappeared. Never collapse a server-verified conflict
+        // into one selected team head because a cache omitted a source.
+        if(meta.from_cache&&(store.agent().sync?.origin_conflict_lines||[]).length){
+          status({read_status:'origin_conflict'});
+          return;
+        }
         // An empty local Firestore cache cannot revoke previously verified data.
         if(meta.from_cache&&!heads.length&&lastHeads.length){status({read_status:'cached'});return;}
         hasHeads=true;lastHeads=heads;lastReadMeta={...meta,received_at:new Date().toISOString()};void receive(heads,lastReadMeta);

@@ -165,3 +165,14 @@ Só após o piloto de B, o coordenador transacional da PR #64 pode ser elegível
 - O botão **Ver revisões isoladas de hoje** continua levando ao histórico com início fixado e fim omitido. A tabela do Hoje não altera a store, não faz coleta e não transfere dados entre agentes.
 - Testes locais Node: `node --test scripts/ames-history-source.test.mjs scripts/ames-history-origin-choice.test.mjs scripts/ames-sync.test.mjs scripts/ames-data-health.test.mjs` → **4/4 PASS**. Tentativa separada de `ames-reading-period.browser.mjs` **NÃO EXECUTOU** por ausência do pacote Playwright no ambiente local; não confundir com aprovação do teste de navegador. `git diff --check` PASS. CI do SHA novo ainda PENDING.
 - O painel novo **não foi instalado na fábrica**; a prova física de 26/10 confirma a leitura histórica da versão pública anterior, não a interface desta PR.
+
+### Checkpoint GitHub — métricas separadas no Hoje
+
+- SHA `e3bcb5670e86b1579a7e2761468a40438c426d96` na PR #68 DRAFT, Central Quality Gate **#40320257663 SUCCESS, 3/3 jobs**. A tabela por origem permanece sem homologação física.
+
+## Incremento seguinte — cache Firestore incompleto não desfaz conflito verificado
+
+- **Risco identificado:** após um `origin_conflict` verificado no servidor para duas instalações da mesma linha, um evento `from_cache` parcial poderia conter apenas uma instalação (ou nenhuma). Antes, o callback substituía o índice conhecido por essa visão incompleta e podia selecionar falsamente um único HEAD compartilhado.
+- `ames/sync.mjs` mantém o conflito e as evidências de origem já verificadas quando um evento `from_cache` chega durante `origin_conflict`. O cache local não prova que um segundo coletor deixou de existir; só uma nova resposta do servidor pode atualizar essa decisão. O guard de cache vazio continua para cenários sem conflito.
+- Regressão sintética `scripts/ames-sync.test.mjs`: servidor confirma duas origens → conflito, cache com uma origem → conflito preservado, cache vazio → conflito preservado, nenhum snapshot promovido ao Hoje. `node --test scripts/ames-sync.test.mjs scripts/ames-data-health.test.mjs scripts/ames-history-source.test.mjs` **3/3 arquivos PASS local**, `git diff --check` PASS.
+- **Ainda pendente:** validação CI do novo SHA, homologação de comportamento em rede real, política formal de múltiplos coletores e conciliação de HEAD atual. Não alterar agentes, Firestore, `main`, PR #64 ou postos da fábrica.

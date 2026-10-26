@@ -199,6 +199,31 @@ test('different current installations cannot silently replace one another on PC 
   assert.deepEqual(store.agent().sync.origin_conflict_candidates,[],'logout removes reviewer metadata');
 });
 
+test('an incomplete Firestore cache cannot revoke a server-verified multiwriter conflict',async()=>{
+  const a=canonicalFixture('TAN10102'),b=canonicalFixture('TAN10102');b.source_id='second-live-source';
+  const pa=await publication('owner-A',a,{now:FACTORY_NOW}),pb=await publication('owner-B',b,{now:FACTORY_NOW});
+  const parts=new Map();for(const p of [pa,pb])p.parts.forEach((v,i)=>parts.set(p.head.key+':'+i,v));
+  let notify;
+  const remote={getPart:async(_u,h,i)=>parts.get(h.key+':'+i),
+    watch:(_u,cb)=>{notify=cb;cb([{...pa.head,...pa.history},{...pb.head,...pb.history}],{day_index_available:true,from_cache:false});return()=>{};}};
+  const queue={put:async()=>{},remove:async()=>{},list:async()=>[]},store=createAmesStore();
+  const sync=createMesSync(store,remote,{queue,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
+  sync.start('reader');await new Promise(r=>setTimeout(r,40));
+  assert.equal(store.agent().sync.read_status,'origin_conflict');
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
+  notify([{...pa.head,...pa.history}],{day_index_available:true,from_cache:true});
+  await new Promise(r=>setTimeout(r,40));
+  assert.equal(store.agent().sync.read_status,'origin_conflict');
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
+  assert.equal(store.agent().sync.remote_line_count,0);
+  assert.equal(store.read('TAN10102').snapshot,null,'cache may not promote a single source');
+  notify([],{day_index_available:true,from_cache:true});
+  await new Promise(r=>setTimeout(r,20));
+  assert.equal(store.agent().sync.read_status,'origin_conflict','empty cached index cannot clear prior conflict');
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
+  sync.stop();
+});
+
 test('same source ID reused under different owners stays in conflict without exposing owner UID',async()=>{
   const payload=canonicalFixture('TAN10102');
   const a=await publication('installation-owner-A',payload,{now:FACTORY_NOW});
