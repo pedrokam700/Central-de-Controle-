@@ -18,6 +18,11 @@ const local=fixture(17,'2026-10-15','custom');
 local.content_hash='b'.repeat(64);
 // Serialized insights survive the same sanitization used by shared snapshots.
 const oldDefect=old.datasets.defects[0];
+oldDefect.repair_evidence_3012=[{pcba_sn:oldDefect.pcba_sn,defect_code:'OTHER-CODE',
+ defect_time:'2026-10-07T10:00:00-03:00',repair_time:'2026-10-07T11:00:00-03:00',
+ repair_user:'SYNTHETIC-OLD-AT',repair_comment:'Preserved history <script>candidate</script>',
+ association:'distinct_occurrence_candidate',occurrence_match:'contradicted',
+ candidate_for_occurrence:false,repair_confirmed:false}];
 old.insights={schema:'ames-insights-v1',ready:true,line:old.line_id,snapshot_id:old.snapshot_id,
  drilldowns:{pcba_analysis:[{PCBA:oldDefect.pcba_sn,'Defect Code':oldDefect.defect_code,
  'Defect Time':oldDefect.defect_time,'Uso da PCBA na falha':'2º uso','Modelo':oldDefect.product_model}],
@@ -131,8 +136,16 @@ try{
  assert.equal(await evidenceCells.locator('img, script').count(),0,'untrusted SN cannot create markup');
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening evidence cannot query MES');
  const groupTable=page.locator('[data-console-pane=failures] [data-failure-groups] table');
- assert.equal(await groupTable.locator('thead th').count(),6,'three reuse-evidence columns remain in grouped Failures');
- assert.match(await groupTable.locator('tbody').innerText(),/≥\s*1/,'2nd+ use is a minimum observed, never an invented exact denominator');
+ assert.deepEqual(await groupTable.locator('thead th').allTextContents(),
+   ['Falha','Ocorrências','PCBAs 2º+*','C/ item 2º+*','Materiais 2º+*','Mesma falha/fam.*','Última ocorrência'],
+   'grouped failures retain all four distinct reuse/correlation evidence columns');
+ const groupedCells=await groupTable.locator('tbody tr').evaluateAll(rows=>rows.map(row=>[...row.querySelectorAll('td')].map(td=>td.textContent.trim())));
+ assert.equal(groupedCells.reduce((sum,cells)=>sum+Number(cells[1]),0),old.datasets.defects.length,'grouping cannot duplicate observed 3028 occurrences');
+ assert(groupedCells.some(cells=>cells[2]==='1'&&cells[3]==='1'&&cells[4]==='1'),
+   'observed board, component-context and unique physical SN counts remain exact and separate');
+ assert(groupedCells.some(cells=>cells[5]==='—'),'unproven correlation remains unknown rather than zero');
+ assert.doesNotMatch(await groupTable.locator('tbody').innerText(),/≥/,'exact observed counts must not be confused with population coverage');
+ assert.match(await page.locator('[data-failure-groups]').innerText(),/cobertura pode estar incompleta/i,'incomplete population coverage stays explicit');
  assert.equal(await page.locator('[data-failure-sort]').inputValue(),'count_desc');
  await page.locator('[data-failure-sort]').selectOption('failure_asc');
  assert.equal(await page.locator('[data-failure-sort]').inputValue(),'failure_asc');
@@ -145,6 +158,18 @@ try{
  await page.waitForFunction(()=>!!document.querySelector('[data-console-pane=top3] [data-top3-analytics] .ames-dfa-rank-item[open]'));
  assert.equal(await page.evaluate(()=>qa.store.context()?.defect??null),beforeDefect,'Top 3 drilldown may not overwrite shared defect scope');
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ // Issue66: a contradicted 3012 candidate stays auditable, never the current AT.
+ const analytics=page.locator('[data-console-pane=top3] [data-top3-analytics]');
+ await analytics.locator('[data-dfa-clear]').click();
+ await analytics.locator('[data-dfa-mode=occurrences]').click();
+ const repairCandidates=analytics.locator('[data-dfa-repair-candidates]');
+ assert.equal(await repairCandidates.count(),1);
+ await repairCandidates.locator('summary').click();
+ assert.match(await repairCandidates.innerText(),/Outra ocorrência \/ não associado/);
+ assert.match(await repairCandidates.innerText(),/Preserved history <script>candidate<\/script>/);
+ assert.equal(await repairCandidates.locator('img, script').count(),0);
+ assert.doesNotMatch(await analytics.locator('.ames-dfa-occ-grid').allTextContents().then(v=>v.join(' ')),/SYNTHETIC-OLD-AT/);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening preserved repair candidates cannot query MES');
  await page.locator('[data-console-view=reuse]').click();
  const matrix=page.locator('[data-component-matrix]');
  assert.equal(await matrix.locator('[data-component-cell=total] > summary').innerText(),'1');
