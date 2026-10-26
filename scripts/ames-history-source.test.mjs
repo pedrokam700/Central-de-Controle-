@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {createMesHistorySource} from '../ames/history-source.mjs';
+import {createMesHistorySource,historySharingState,summarizeHistoryPublishers} from '../ames/history-source.mjs';
+import {isolatedCurrentPublisherCards} from '../ames/console-history.mjs';
 const local={
   line_id:'TAN10103',snapshot_id:'2',snapshot_revision:1,source_id:'local-original',
   period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00',
@@ -42,14 +43,138 @@ test('unversioned local update stays distinct from a shared revision and opens e
  assert.equal(rows[1].history_source,'shared');assert.equal((await source.open(rows[0])).snapshot_revision,2);
 });
 test('do not claim unconfirmed local version is shared; de-duplicate versions with same owner and revision',async()=>{
+ const matching={...local,content_hash:'same-canonical-content'};
  const source=createMesHistorySource({
-  listHistory:async()=>[{...local}],openHistory:async()=>({from:'cloud'})
- },{localHistoryList:async()=>[{...local}],historicalPayload:async()=>({from:'local'})},
+  listHistory:async()=>[{...matching}],openHistory:async()=>({from:'cloud'})
+ },{localHistoryList:async()=>[{...matching}],historicalPayload:async()=>({from:'local'})},
  {agent:()=>({status:'connected'})});
  const rows=await source.list('TAN10103');
  assert.equal(rows.length,1);assert.equal(rows[0].history_source,'local');
  assert.equal(rows[0].shared_available,true);
+ assert.equal(historySharingState(rows[0]),'local_and_shared','a locally preferred opening does not negate a matching remote index');
  assert.equal((await source.open(rows[0])).from,'local');
+});
+test('visible revision match without canonical content proof retains local and remote separately',async()=>{
+ const withLocalHash={...local,content_hash:'local-only-canonical-hash'};
+ const source=createMesHistorySource({listHistory:async()=>[{...local,owner_uid:'remote-owner',hash:'transport-SHA'}],
+   openHistory:async()=>({from:'cloud'})},
+   {localHistoryList:async()=>[withLocalHash],historicalPayload:async()=>({from:'local'})},
+   {agent:()=>({status:'connected'})});
+ const rows=await source.list('TAN10103');
+ assert.equal(rows.length,2,'same version number alone cannot swallow remote history');
+ const localRow=rows.find(x=>x.history_source==='local');
+ const cloudRow=rows.find(x=>x.history_source==='shared');
+ assert.equal(localRow.shared_available,undefined);
+ assert.equal(localRow.shared_candidate,true);
+ assert.equal(historySharingState(localRow),'local_candidate');
+ assert.equal((await source.open(localRow)).from,'local');
+ assert.equal((await source.open(cloudRow)).from,'cloud');
+});
+test('sharing state never treats an unverified local revision as synchronized',()=>{
+ assert.equal(historySharingState({history_source:'local'}),'local_only');
+ assert.equal(historySharingState({history_source:'local',shared_available:false}),'local_only');
+ assert.equal(historySharingState({history_source:'local',shared_candidate:true}),'local_candidate');
+ assert.equal(historySharingState({history_source:'shared'}),'shared');
+ assert.equal(historySharingState({}),'unverified');
+});
+test('two legitimate publishers on the same line/day remain separate observations',()=>{
+ const a={...local,line_id:'TAN10102',source_id:'workstation-A',snapshot_id:'11',snapshot_revision:1,
+  period_start:'2026-10-23T07:00:00-03:00',period_end:'2026-10-23T12:00:00-03:00'};
+ const b={...a,source_id:'workstation-B',snapshot_id:'20',period_end:'2026-10-23T14:00:00-03:00'};
+ const summary=summarizeHistoryPublishers([a,a,{...a,snapshot_revision:2},b], 'TAN10102');
+ assert.deepEqual(summary.origins.map(o=>[o.source_id,o.revisions]),[['workstation-A',2],['workstation-B',1]]);
+ assert.deepEqual(summary.overlapping_days,[{day:'2026-10-23',source_ids:['workstation-A','workstation-B']}]);
+ assert.equal(summarizeHistoryPublishers([a,{...b,line_id:'TAN10103'}],'TAN10102').overlapping_days.length,0);
+});
+test('two remote owners reusing the same source ID and revision cannot erase each other',async()=>{
+ const base={...local,line_id:'TAN10102',source_id:'collision-source',snapshot_id:'9',snapshot_revision:3,
+   period_start:'2026-10-23T07:00:00-03:00',period_end:'2026-10-23T14:00:00-03:00'};
+ const a={...base,owner_uid:'private-owner-A',key:'immutable-A',hash:'hash-A'};
+ const b={...base,owner_uid:'private-owner-B',key:'immutable-B',hash:'hash-B'};
+ const source=createMesHistorySource({listHistory:async()=>[a,b],openHistory:async h=>({key:h.key})},
+   {localHistoryList:async()=>{throw Error('must not query an unpaired PC');}},
+   {agent:()=>({status:'disconnected'})});
+ const rows=await source.list('TAN10102');
+ assert.equal(rows.length,2,'two immutable cloud documents with identical visible IDs are distinct');
+ assert.deepEqual(new Set(rows.map(x=>x.key)),new Set(['immutable-A','immutable-B']));
+ for(const row of rows)assert.equal((await source.open(row)).key,row.key);
+ const summary=summarizeHistoryPublishers(rows,'TAN10102');
+ assert.deepEqual(summary.identity_collisions,[{source_id:'collision-source',installations:2}]);
+ assert.equal(summary.installation_count,2);
+ assert.deepEqual(summary.overlapping_days,[{day:'2026-10-23',source_ids:['collision-source','collision-source']}]);
+ assert.equal(JSON.stringify(summary).includes('private-owner-'),false,'UI summary never copies owner UID');
+});
+test('ambiguous remote counterpart never makes a local SQLite revision falsely shared',async()=>{
+ const a={...local,owner_uid:'owner-A',key:'key-A'},b={...local,owner_uid:'owner-B',key:'key-B'};
+ const source=createMesHistorySource({listHistory:async()=>[a,b]},
+   {localHistoryList:async()=>[local],historicalPayload:async()=>({opened:'local'})},
+   {agent:()=>({status:'connected'})});
+ const rows=await source.list('TAN10103');
+ assert.equal(rows.length,3,'both remote revisions and local row preserved');
+ const localRow=rows.find(row=>row.history_source==='local');
+ assert.equal(localRow.shared_available,undefined);
+ assert.equal(localRow.shared_ambiguous,true);
+ assert.equal(historySharingState(localRow),'local_only');
+ assert.equal((await source.open(localRow)).opened,'local');
+});
+test('a local unknown-UID revision and one verified owner do not invent another installation',()=>{
+ const a={...local,owner_uid:'private-one'};
+ const result=summarizeHistoryPublishers([a,{...a,owner_uid:undefined,snapshot_id:'3'}],'TAN10103');
+ assert.equal(result.installation_count,1);
+ assert.deepEqual(result.identity_collisions,[]);
+ assert.deepEqual(result.overlapping_days,[]);
+});
+test('multiple origins on separate days are not falsely labeled as simultaneous publishers',()=>{
+ const a={...local,source_id:'PC-A',snapshot_id:'1'};
+ const b={...a,source_id:'PC-B',snapshot_id:'2',period_start:'2026-10-17T07:00',period_end:'2026-10-18T07:00'};
+ const result=summarizeHistoryPublishers([a,b],'TAN10103');
+ assert.equal(result.origins.length,2);
+ assert.deepEqual(result.overlapping_days,[]);
+});
+test('multi-publisher historical UI is explicitly read-only and keeps source filtering local',()=>{
+ const view=fs.readFileSync(new URL('../ames/console-history.mjs',import.meta.url),'utf8');
+ assert.match(view,/data-history-multi-publisher/);
+ assert.match(view,/data-history-origin-filter/);
+ assert.match(view,/Não somar ocorrências de coletas sobrepostas/);
+ assert.match(view,/originFilter=event\.target\.value/);
+  assert.match(view,/dataset\.historyIdentityCollision/);
+});
+test('Today with competing publishers links directly to a read-only history query without a mutable end time',()=>{
+ const view=fs.readFileSync(new URL('../ames/console-history.mjs',import.meta.url),'utf8');
+ assert.match(view,/data-history-today-conflict/);
+ assert.match(view,/data-history-compare-today/);
+ assert.match(view,/Ver revisões isoladas de hoje/);
+ assert.match(view,/chooseTab\('history',\{start:range\.start,end:''\}\)/);
+ assert.match(view,/Nenhuma origem remota foi promovida ao Hoje/);
+ assert.doesNotMatch(view,/replaceSyncedSnapshots\(/,'history UI must never adopt a competing live head');
+});
+test('Today exposes isolated verified-source metrics without leaking identity or inventing full totals',()=>{
+ const sync={origin_conflict_lines:['TAN10102'],origin_conflict_candidates:[{
+   line_id:'TAN10102',owner_uid:'SECRET_UID',candidates:[
+     {source_id:'<img onerror=alert(1)>',snapshot_id:'19',snapshot_revision:2,
+       period_start:'2026-10-23T07:00',period_end:'2026-10-23T14:48',
+       isolated_metrics:{fpy:97.69,check_fpy:97.86,quantity:1124,observed_defects:26,defects_source_complete:false,pcba_sn:'SECRET_PCBA'},owner_uid:'SECRET_OWNER'},
+     {source_id:'origin-B',snapshot_id:'20',snapshot_revision:3,
+       isolated_metrics:{fpy:Infinity,check_fpy:150,quantity:-1,observed_defects:-4,defects_source_complete:false}}
+   ]}]};
+ const result=isolatedCurrentPublisherCards(sync,'TAN10102');
+ assert.equal(result.length,2);
+ assert.equal(result[0].fpy,97.69);
+ assert.equal(result[0].quantity,1124);
+ assert.equal(result[0].observed_defects,26);
+ assert.equal(result[0].defects_source_complete,false);
+ assert.deepEqual([result[1].fpy,result[1].check_fpy,result[1].quantity,result[1].observed_defects],[null,null,null,null]);
+ assert.equal(JSON.stringify(result).includes('SECRET'),false);
+ assert.deepEqual(isolatedCurrentPublisherCards(sync,'TAN10103'),[]);
+ const view=fs.readFileSync(new URL('../ames/console-history.mjs',import.meta.url),'utf8');
+ assert.match(view,/data-history-isolated-current/);
+ assert.match(view,/data-history-retained-conflict/);
+ assert.match(view,/data-history-persisted-conflict/);
+ assert.match(view,/data-history-unsaved-conflict/);
+ assert.match(view,/A memória local não contém origens nem números/);
+ assert.match(view,/valores abaixo são das últimas revisões verificadas/);
+ assert.match(view,/esc\(c\.source_id\|\|'—'\)/,'source IDs are escaped before HTML rendering');
+ assert.match(view,/não um fechamento FULL ou indicador consolidado/);
 });
 test('Firebase listener failure must not hide preserved local history',async()=>{
  const source=createMesHistorySource({

@@ -4,12 +4,16 @@ import {matchesReadingPeriod,matchesSavedTodayCapture} from './data/reading-peri
 import {resolveHistorySource} from './data/history-source-choice.mjs';
 
 // History is read-only. Selection is per line and source, never a global MES job.
-const PREF_PREFIX='ames-history-source-preference-v1:';
-const safeRead=line=>{
-  try{return globalThis.localStorage?.getItem(PREF_PREFIX+line)||null;}catch{return null;}
+// Unscoped v1 keys are intentionally neither read nor migrated: they cannot
+// prove that the currently authenticated person made that source choice.
+const PREF_PREFIX='ames-history-source-preference-v2:';
+const safeRead=(line,scope)=>{
+  if(!scope)return null;
+  try{return globalThis.localStorage?.getItem(PREF_PREFIX+JSON.stringify([scope,line]))||null;}catch{return null;}
 };
-const safeWrite=(line,value)=>{
-  try{globalThis.localStorage?.setItem(PREF_PREFIX+line,value);}catch{}
+const safeWrite=(line,value,scope)=>{
+  if(!scope)return;
+  try{globalThis.localStorage?.setItem(PREF_PREFIX+JSON.stringify([scope,line]),value);}catch{}
 };
 const orderEntries=(a,b)=>{
   const clock=x=>Number.isFinite(Date.parse(x?.collected_at))?Date.parse(x.collected_at):0;
@@ -17,23 +21,37 @@ const orderEntries=(a,b)=>{
     String(b.snapshot_id||'').localeCompare(String(a.snapshot_id||''));
 };
 
-export function createReadingPeriodController(store,history,{changed=()=>{}}={}){
+export function createReadingPeriodController(store,history,{changed=()=>{},preferenceScope=null}={}){
   let request=0,disposed=false;
   const sourceOverrides=new Map(),preferredByLine=new Map();
   const scopeKey=(period,line)=>JSON.stringify([period.mode,period.start,period.end,line]);
-  const preferredSource=line=>preferredByLine.get(line)||safeRead(line);
+  const authenticatedScope=()=>{
+    try{const value=typeof preferenceScope==='function'?preferenceScope():preferenceScope;
+      return typeof value==='string'&&value.trim()?value:null;}catch{return null;}
+  };
+  const sessionKey=()=>JSON.stringify([store.sessionGeneration?.()??0,authenticatedScope()]);
+  let activeSession=sessionKey();
+  function reconcileSession(){
+    const next=sessionKey();
+    if(next!==activeSession){request++;sourceOverrides.clear();preferredByLine.clear();activeSession=next;}
+  }
+  const preferredSource=line=>{reconcileSession();return preferredByLine.get(line)||safeRead(line,authenticatedScope());};
   function rememberSource(line,source_id,allowed){
+    if(disposed)throw Error('reading_controller_disposed');
+    reconcileSession();
     if(!LINE_IDS.includes(line)||!source_id||!Array.isArray(allowed)||!allowed.includes(source_id))
       throw Error('invalid_history_source_choice');
     preferredByLine.set(line,source_id);
-    safeWrite(line,source_id);
+    safeWrite(line,source_id,authenticatedScope());
   }
   async function select(mode,options={}){
+    if(disposed)throw Error('reading_controller_disposed');
+    reconcileSession();const selectedSession=activeSession;
     const generation=store.selectReadingPeriod(mode,options),serial=++request;
     const selected=store.readingPeriod();
-    const alive=()=>!disposed&&request===serial&&store.periodGeneration()===generation;
+    const alive=()=>!disposed&&request===serial&&store.periodGeneration()===generation&&sessionKey()===selectedSession;
     store.updateAgent({period_read:{status:'loading',errors:[]}});changed();
-    const errors=[],source_choices=[],unresolved=[];
+    const errors=[],source_choices=[],unresolved=[],recovered=[];
     const results=await Promise.allSettled(LINE_IDS.map(async line=>{
       if(!history)return;
       let entries=(await history.list(line)).filter(e=>{
@@ -78,31 +96,47 @@ export function createReadingPeriodController(store,history,{changed=()=>{}}={})
         }
         entries=entries.filter(e=>e.source_id===resolved);
       }
+      let unreadable=0,lastFailure=null;
       for(const entry of entries){
-        const payload=await history.open(entry);if(!alive())return;
-        const materialized=entry.history_source==='local'&&entry.revision_pending===true&&
-          entry.snapshot_revision==null&&Number.isSafeInteger(payload.snapshot_revision)&&payload.snapshot_revision>0;
-        if(payload.line_id!==line||payload.source_id!==entry.source_id||
-          String(payload.snapshot_id)!==String(entry.snapshot_id)||
-          (!materialized&&payload.snapshot_revision!==entry.snapshot_revision))
-          throw Error('historical_identity_mismatch:'+line);
-        const exact=matchesReadingPeriod(payload,selected);
-        const savedSameDay=mode==='today'&&matchesSavedTodayCapture(payload,selected);
-        if(!exact&&!savedSameDay)continue;
-        // A live snapshot takes precedence over any saved read. Saved same-day
-        // partial observations remain read-only with their exact scope.
-        if(mode==='today'&&store.read(line).snapshot&&!store.read(line).saved_today)return;
-        store.installHistoricalSnapshot(payload,{generation,source:entry.history_source==='local'?'local':'remote'});
-        return;
+        try{
+          const payload=await history.open(entry);if(!alive())return;
+          const materialized=entry.history_source==='local'&&entry.revision_pending===true&&
+            entry.snapshot_revision==null&&Number.isSafeInteger(payload.snapshot_revision)&&payload.snapshot_revision>0;
+          if(payload.line_id!==line||payload.source_id!==entry.source_id||
+            String(payload.snapshot_id)!==String(entry.snapshot_id)||
+            (!materialized&&payload.snapshot_revision!==entry.snapshot_revision))
+            throw Error('historical_identity_mismatch:'+line);
+          const exact=matchesReadingPeriod(payload,selected);
+          const savedSameDay=mode==='today'&&matchesSavedTodayCapture(payload,selected);
+          // The immutable payload must match the period advertised by its
+          // index. Never silently skip a mismatched newest record and label
+          // an older one as the latest verified historical reading.
+          if(!exact&&!savedSameDay)throw Error('historical_period_mismatch:'+line);
+          // A live snapshot takes precedence over any saved read. Saved same-day
+          // partial observations remain read-only with their exact scope.
+          if(mode==='today'&&store.read(line).snapshot&&!store.read(line).saved_today)return;
+          store.installHistoricalSnapshot(payload,{generation,source:entry.history_source==='local'?'local':'remote'});
+          // A missing/corrupt newer revision cannot make an older immutable
+          // revision disappear. Never claim it is the latest FULL or current
+          // MES state: surface the degraded read with its exact identity.
+          if(unreadable)recovered.push({line_id:line,unreadable_revisions:unreadable,
+            source_id:entry.source_id,snapshot_id:payload.snapshot_id,
+            snapshot_revision:payload.snapshot_revision});
+          return;
+        }catch(error){
+          if(!alive())return;
+          unreadable++;lastFailure=error;
+        }
       }
+      if(unreadable)throw lastFailure||Error('history_unavailable:'+line);
       store.clearHistoricalSnapshot?.(line,{generation});
     }));
     if(!alive())return;
     results.forEach((r,i)=>{if(r.status==='rejected')errors.push({line_id:LINE_IDS[i],error:r.reason?.message||'history_unavailable'});});
     const loaded_lines=LINE_IDS.filter(line=>!!store.read(line).snapshot);
     source_choices.sort((a,b)=>LINE_IDS.indexOf(a.line_id)-LINE_IDS.indexOf(b.line_id));
-    store.updateAgent({period_read:{status:errors.length||unresolved.length?'partial':'ready',
-      errors,source_choices,loaded_lines,unresolved_lines:unresolved}});
+    store.updateAgent({period_read:{status:errors.length||unresolved.length||recovered.length?'partial':'ready',
+      errors,source_choices,loaded_lines,unresolved_lines:unresolved,recovered_lines:recovered}});
     changed();
   }
   async function chooseSource(line,source_id){

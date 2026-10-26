@@ -117,4 +117,30 @@ class TraceTargetTests(unittest.TestCase):
         self.assertEqual(response[0][0],202)
         self.assertEqual(self.admissions[0]['snapshot_targets'],self.cfg['snapshot_targets'])
 
+    def test_source_status_unknown_timeout_and_uncollected_never_certify_complete(self):
+        stage=self.env['_source_stage'];aggregate=self.env['_aggregate_stage']
+        for raw in ('timeout','TIMED_OUT','failed','error'):
+            self.assertEqual(stage(raw),'error')
+        for raw in (None,'','pending','not_collected'):
+            self.assertEqual(stage(raw),'not_run')
+        self.assertEqual(stage('new_mes_status_not_mapped'),'partial')
+        one={'3074':{'status':'complete'}}
+        self.assertEqual(aggregate({LINE:one},'3074'),'done')
+        self.assertEqual(aggregate({LINE:one,OTHER:{'3074':{'status':'pending'}}},'3074'),'partial')
+        self.assertEqual(aggregate({LINE:one,OTHER:{'3074':{'status':'custom_unmapped'}}},'3074'),'partial')
+        self.assertEqual(aggregate({LINE:{'3074':{'status':'timeout'}}},'3074'),'error')
+        self.assertEqual(aggregate({LINE:{'skipped':True}},'3074'),'not_run')
+
+    def test_finished_worker_reports_incomplete_3074_without_claiming_full_coverage(self):
+        self.env['a'].run_deep_v016_records=lambda engine,records,**kw:{
+            'trace_3074':{'status':'timeout'},'trace_2114':{'status':'complete'}}
+        self.env['_run_deep_trace_job']('J_TIMEOUT',self.cfg)
+        job=self.jobs[-1]
+        self.assertEqual(job['status'],'done','scheduler completion is not a coverage certificate')
+        self.assertEqual(job['result']['stages']['3074'],'error')
+        self.assertEqual(job['result']['stages']['2114'],'done')
+        self.assertIn('sem cobertura completa: 3074',job['message'])
+        rows=source_capture.capture_index(self.store,self.sid,LINE)
+        self.assertEqual({row['source_status'] for row in rows},{'error','done'})
+
 if __name__=='__main__':unittest.main()

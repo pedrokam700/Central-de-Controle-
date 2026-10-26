@@ -1,6 +1,15 @@
 import {escapeHtml as esc} from './evidence-view.mjs';
 
 const sourceState=value=>String(value||'').trim().toUpperCase();
+const t=(pt,en)=>typeof document!=='undefined'&&document.documentElement?.lang?.startsWith('en')?en:pt;
+const SOURCE_PROOF=Object.freeze({
+  done:['Completa','Complete'],partial:['Parcial','Partial'],
+  error:['Falhou','Failed'],not_run:['Não coletada','Not collected'],
+});
+const sourceProofLabel=value=>{
+  const pair=SOURCE_PROOF[String(value||'').toLowerCase()];
+  return pair?t(...pair):t('Não comprovada','Unverified');
+};
 
 const stageLabel=x=>({'3074':'3074 · Vínculos físicos','2114':'2114 · Histórico PCBA','3022':'3022 · Processo'})[x]||x;
 const friendlyLine=id=>({'TAN10101':'Linha 1','TAN10102':'Linha 2','TAN10103':'Linha 3'})[id]||id||'Linha não informada';
@@ -70,9 +79,14 @@ export function collectionStatus(state){
   const stages=job.kind!=='deep_trace'?Object.keys(job.stage_progress||{}):mode==='process_only'?['3022']:mode==='reuse_only'?['3074','2114']:['3074','2114','3022'];
   const progress=job.stage_progress||{};
   const result=job.result?.deep_trace;
+  const completedTrace=job.kind==='deep_trace'&&job.status==='done';
+  const sourceStages=job.result?.stages||{};
+  const unverified=completedTrace?stages.filter(stage=>sourceStages[stage]!=='done'):[];
+  const sourceWarning=unverified.length?`<div class="notice warn" data-trace-source-coverage role="status"><b>${t('Cobertura não comprovada','Coverage not verified')}</b> · ${unverified.map(stage=>`${esc(stage)}: ${esc(sourceProofLabel(sourceStages[stage]))}`).join(' · ')}. ${t('Job finalizado não significa fontes completas.','Finished job does not mean complete sources.')}</div>`:'';
   return `${error}<div class="ames-job-head"><b>Job ${esc(job.id)}</b><span>${esc(job.status)}</span></div><p>${esc(job.message||job.error||'Aguardando execução.')}</p>
+    ${sourceWarning}
     ${job.kind==='deep_trace'?`<p>${stages.join(' → ')}</p>`:''}
-    <div class="ames-progress-list">${stages.map(stage=>{const p=progress[stage];return `<article><b>${stage}</b> · <span>${esc(p?.line||'Linha aguardando informação')}</span>${p?`<progress max="100" value="${Math.max(0,Math.min(100,Number(p.line_percent)||0))}"></progress><small>${esc(stageDetail(stage,p))}</small>`:` · ${esc(job.stage===stage?'Em execução':job.result?.stages?.[stage]||'Aguardando')}`}</article>`;}).join('')}</div>
+    <div class="ames-progress-list">${stages.map(stage=>{const p=progress[stage];return `<article><b>${stage}</b> · <span>${esc(p?.line||'Linha aguardando informação')}</span>${p?`<progress max="100" value="${Math.max(0,Math.min(100,Number(p.line_percent)||0))}"></progress><small>${esc(stageDetail(stage,p))}</small>`:` · ${esc(job.stage===stage?'Em execução':'Aguardando')}`}${completedTrace?`<small data-trace-source-stage="${esc(stage)}"> · ${t('Cobertura','Coverage')}: ${esc(sourceProofLabel(sourceStages[stage]))}</small>`:''}</article>`;}).join('')}</div>
     ${liveTraceFeed(job)}
     ${job.status==='done'&&result?`<section data-trace-result><h4>Resultado da coleta</h4><p>Valores informados pelo job; erro/indisponibilidade de uma fonte nunca é convertido em zero.</p>${Object.entries(result).map(([line,r])=>`<article><b>${esc(line)}</b>${r.skipped?`<p>${esc(r.reason||'Linha sem ocorrências no escopo.')}</p>`:`<p>Escopo consultado: ${esc(r.scope?.records??'—')} ocorrências · ${esc(r.scope?.unique_pcbas??'—')} PCBAs</p><p>3074 · materiais no snapshot: ${esc(r.enrichment?.material_rows??'—')}<br>${trace2114Summary(r)}<br>${trace3022Summary(r)}</p>${(r['3022']?.warnings||[]).map(w=>`<p class="notice warn">${esc(w)}</p>`).join('')}`}</article>`).join('')}</section>`:''}`;
 }

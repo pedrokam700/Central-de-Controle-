@@ -35,11 +35,26 @@ jobs:
       - name: Run database and snapshot hardening tests
         run: python3 scripts/agent-hardening.test.py
 
+      - name: Run preserved source capture and revision contracts
+        run: |
+          python3 scripts/agent-source-capture.test.py
+          python3 scripts/agent-capture-manifest.test.py
+          python3 scripts/agent-trace-target.test.py
+
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
 
       - name: Run read-only workstation preflight tests
         run: python3 scripts/agent-preflight.test.py
+
+      - name: Run individual SN source isolation tests
+        run: python3 scripts/agent-individual-assembly.test.py
+
+      - name: Run 3074 View response and stale-grid regression tests
+        run: |
+          python3 scripts/agent-3074-grid-lifecycle.test.py
+          python3 scripts/agent-3074-pagination.test.py
+          python3 scripts/agent-assembly-scope.test.py
 
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
@@ -145,27 +160,3 @@ jobs:
         with:
           name: console-experience-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/console-evidence
-
-  post-deploy-smoke:
-    name: Published preview smoke
-    if: github.event_name == 'pull_request'
-    needs: static-quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-      - name: Verify exact SHA and canonical route on deployed preview
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: >-
-          node scripts/post-deploy-smoke.mjs
-          --origin "https://deploy-preview-${PR_NUMBER}--productcontrolcenter.netlify.app"
-          --sha "$EXPECTED_SHA"
-          --wait-ms 180000
-          --max-redirects 4

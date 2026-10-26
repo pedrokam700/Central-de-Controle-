@@ -3,14 +3,30 @@ import {filterRows,orderRows,csv} from '../ames/advanced-table.mjs';import {reus
 const sha256=path=>crypto.createHash('sha256').update(fs.readFileSync(path)).digest('hex');
 const shiftSelector=()=>{const py=spawnSync('python',['-c',"import sys;sys.path.insert(0,'ames/factory-engine');from ames.shift_2114 import SELECT_SHIFT_JS;print(SELECT_SHIFT_JS)"],{encoding:'utf8'});assert.equal(py.status,0,py.stderr);return eval('('+py.stdout+')');};
 test('frozen 3028 matches physical CLEAN V3 hashes',()=>{for(const [name,sha] of Object.entries({ames_3028:'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1',ames_3028_live:'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}))assert.equal(sha256('ames/agent/'+name+'.py'),sha);});
-test('unrelated essential engine remains byte-for-byte CLEAN V3',()=>{const manifest=JSON.parse(fs.readFileSync('docs/ames/clean-v3-source-manifest.json'));for(const name of ['ames/browser.py','ames/tela_3074.py','core/fluxo_3028_3074.py'])assert.equal(sha256('ames/factory-engine/'+name),manifest[name],name);});
+test('unrelated essential engine remains byte-for-byte CLEAN V3',()=>{const manifest=JSON.parse(fs.readFileSync('docs/ames/clean-v3-source-manifest.json'));for(const name of ['ames/browser.py','core/fluxo_3028_3074.py'])assert.equal(sha256('ames/factory-engine/'+name),manifest[name],name);});
+test('Issue #66 3074 View-response correction is explicit and source-pinned',()=>{
+  const manifest=JSON.parse(fs.readFileSync('docs/ames/clean-v3-source-manifest.json'));
+  const path='ames/factory-engine/ames/tela_3074.py';
+  assert.notEqual(sha256(path),manifest['ames/tela_3074.py']);
+  // Baseline manifesto is immutable; only this Issue #66 revision has a new
+  // pinned source hash. All unchanged CLEAN V3 source gates remain active.
+  assert.equal(sha256(path),'3bf9cb415b9fe69fe6dbc1305ac2c54a92685741e6eff9ccec465db121d0f4d4');
+  const src=fs.readFileSync(path,'utf8');
+  assert.match(src,/STORE_REFRESH_AFTER_VIEW/);
+  assert.match(src,/visible_only=True/);
+  assert.match(src,/self\._store_response\(frame, armed_grid_id, "arm", response_token\)/);
+  assert.match(src,/not rows and loading is not True and fresh/);
+});
 test('approved temporal 3074 policy is explicitly pinned rather than mistaken for unchanged CLEAN V3',()=>{
   const original=JSON.parse(fs.readFileSync('docs/ames/clean-v3-source-manifest.json'));
   const path='ames/factory-engine/core/temporal_3074.py';
   // This file was intentionally changed after CLEAN V3; other frozen sources
   // still have to match that original baseline byte-for-byte.
   assert.notEqual(sha256(path),original['core/temporal_3074.py']);
-  assert.equal(sha256(path),'faf527dc28710d29db6569fb4182f0909bd660b48545f39cf7c50c5d80123a7e');
+  // Issue #66 extends ONLY the individual SN/material temporal policy with
+  // conservative mounting-cycle selection. CLEAN V3 and frozen 3028 are not
+  // modified. Pin the approved reviewable source exactly on this draft PR.
+  assert.equal(sha256(path),'fe631c7ca53375910626e4295ead462101a34c0ec6c8c376c7d9cad4dfa85869');
 });
 test('targeted 3022 physical fix is explicit and rejects hidden stale Ext inputs',()=>{const manifest=JSON.parse(fs.readFileSync('docs/ames/clean-v3-source-manifest.json'));const name='ames/tela_3022.py',path='ames/factory-engine/'+name;assert.notEqual(sha256(path),manifest[name],name+' must be an explicit physical-gate delta');const src=fs.readFileSync(path,'utf8');assert.match(src,/c\.isVisible\s*&&\s*!c\.isVisible\(true\)/);assert.match(src,/getBoundingClientRect\(\)/);assert.match(src,/#\{meta\['inputId'\]\}:visible/);assert.match(src,/input_ready_timeout_s/);assert.match(src,/while time\.time\(\) < input_deadline:/);assert.match(src,/if saw_ext:\s*\n\s*return None/);assert.match(src,/mark\("view_located"\)/);assert.doesNotMatch(src,/campo\.click\(timeout=3000\)/);assert.match(src,/3022 não encontrou um campo SN\/IMEI visível e estável/);});
 test('targeted 2114 physical fix is explicit and preserves fail-closed source boundaries',()=>{const manifest=JSON.parse(fs.readFileSync('docs/ames/clean-v3-source-manifest.json'));for(const name of ['ames/navigation.py','ames/tela_2114.py','core/fluxo_2114.py'])assert.notEqual(sha256('ames/factory-engine/'+name),manifest[name],name+' must be an explicit physical-gate delta');const nav=fs.readFileSync('ames/factory-engine/ames/navigation.py','utf8'),tela=fs.readFileSync('ames/factory-engine/ames/tela_2114.py','utf8'),flow=fs.readFileSync('ames/factory-engine/core/fluxo_2114.py','utf8'),shift=fs.readFileSync('ames/factory-engine/ames/shift_2114.py','utf8');assert.match(nav,/strict:\s*bool\s*=\s*False/);assert.match(nav,/if strict:\s*\n\s*raise/);assert.match(tela,/SHIFT_UNCONFIRMED/);assert.match(tela,/ensure_shift\(page/);assert.match(flow,/_unavailable_result/);assert.match(flow,/3074\/3022 podem continuar/);assert.match(flow,/"status": "partial"/);assert.match(shift,/lookup_grid/);assert.match(shift,/gridpanel/);assert.match(shift,/getSubmitValue/);assert.match(shift,/findRecordByValue/);});

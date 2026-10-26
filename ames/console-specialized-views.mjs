@@ -7,8 +7,18 @@ import { LINE_IDS } from './data/contract.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 import { createAgentEvidenceView } from './agent-evidence-view.mjs';
 import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
+import {traceTargetForLine} from './data/trace-targets.mjs';
 
 const lineOptions=(selected)=>LINE_IDS.map((line,i)=>`<option value="${line}"${selected===line?' selected':''}>Linha ${i+1} · ${line}</option>`).join('');
+const traceText=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
+const traceReasonEnglish=Object.freeze({
+  'Linha inválida':'Invalid line',
+  'Sem revisão 3028 neste período':'No 3028 revision for this period',
+  'Revisão não pertence ao agente local conectado':'Revision does not belong to the connected local agent',
+  'Período operacional não comprovado':'Operational period not proven',
+  'Identidade da revisão incompleta':'Incomplete revision identity',
+  'Revisão mais recente indisponível; atualize a leitura antes de coletar':'Latest revision unavailable; refresh the saved reading before collecting',
+});
 const fmt=value=>value===null||value===undefined||value===''?'—':String(value);
 const relationLabel=value=>({MESMA_FALHA:'MESMA FALHA',FALHA_SIMILAR:'MESMA FAMÍLIA / SIMILAR',FALHA_DIFERENTE:'OUTRA FALHA',SEM_HISTORICO:'SEM HISTÓRICO',SEM_FALHA_ATUAL:'SEM FALHA ATUAL'})[value]||fmt(value);
 const kv=(label,value,note='')=>`<div class="ames-kv"><small>${esc(label)}</small><b>${esc(fmt(value))}</b>${note?`<span>${esc(note)}</span>`:''}</div>`;
@@ -96,10 +106,21 @@ export function createSnConsoleView(root,store,client){
     else status.innerHTML='<b>Pronto para consulta</b><span>Sem job de SN em execução.</span>';
     if(!result){root.querySelector('[data-sn-result]').innerHTML=`<div class="ames-empty ames-empty-large"><span>⌕</span><h3>Consulte uma SN para abrir a investigação completa</h3><p>O resultado reunirá falha atual, falhas anteriores, materiais em 2º+ uso, PCBAs anteriores/desvinculadas e evidência temporal 3022 quando retornadas pela fonte.</p></div>`;return;}
     const trace2114=result.trace_2114,trace3074=result.trace_3074,trace3022=result.trace_3022;
-    const has2114=!!trace2114&&Array.isArray(trace2114.previous_failures),has3074=!!trace3074&&Array.isArray(trace3074.reused_components),has3022=!!trace3022&&(Array.isArray(trace3022.process_passages)||Number.isFinite(result.summary?.['3022_events']));
+    const has2114=!!trace2114&&Array.isArray(trace2114.previous_failures),
+      state3074=String(trace3074?.status||'').toLowerCase(),
+      grid3074=trace3074?.query?.rows,
+      queryConfirmed3074=Array.isArray(grid3074)&&(grid3074.length>0||trace3074?.query?.no_data===true),
+      has3074=!!trace3074&&!trace3074.error&&['complete','partial','ok'].includes(state3074)&&Array.isArray(trace3074.reused_components)&&
+        (queryConfirmed3074||trace3074.reused_components.length>0),
+      fullyCollected3074=has3074&&state3074!=='partial'&&queryConfirmed3074,
+      has3022=!!trace3022&&(Array.isArray(trace3022.process_passages)||Number.isFinite(result.summary?.['3022_events']));
+    const reuseCountVerified=fullyCollected3074&&['selected_at_latest_2114_candidate','current_mounting_new_cycle'].includes(trace3074?.material_selection?.status)&&
+      trace3074?.material_selection?.temporal_unknown===0&&
+      !(trace3074?.component_usage||[]).some(item=>item.error||item.current_pcba_confirmed!==true)&&
+      (Array.isArray(trace3074?.query?.rows)||trace3074?.status==='complete');
     const current=has2114?trace2114.current_failure||null:null,previous=has2114?trace2114.previous_failures:[],reused=has3074?trace3074.reused_components:[],local=result.local_snapshot||{},process=trace3022||{},contexts=(local.process_contexts||[]).map(safeProcessContext),passages=Array.isArray(process.process_passages)?process.process_passages:[];
     const processCount=has3022?(Number.isFinite(result.summary?.['3022_events'])?result.summary['3022_events']:passages.length):'indisponível';
-    root.querySelector('[data-sn-result]').innerHTML=`<div class="ames-summary-grid ames-sn-summary">${kv('SN consultada',result.sn||lastSn,'entrada exata')}${kv('Tipo detectado',result.detected_type,'retorno da fonte')}${kv('Linha',result.line,'detectada pela fonte')}${kv('CPH / modelo',result.product_model,'CPH exato retornado')}${kv('Shift 2114',result.shift_2114,'retornado pela fonte; seleção automática é validada no gate físico')}${kv('Materiais 2º+ uso',has3074?reused.length:'indisponível',has3074?'3074 consultada':'3074 ausente na resposta')}${kv('Eventos 3022',processCount,has3022?'3022 consultada':'3022 ausente na resposta')}${kv('Falhas anteriores',has2114?previous.length:'indisponível',has2114?'2114 consultada':'2114 ausente na resposta')}</div>
+    root.querySelector('[data-sn-result]').innerHTML=`<div class="ames-summary-grid ames-sn-summary">${kv('SN consultada',result.sn||lastSn,'entrada exata')}${kv('Tipo detectado',result.detected_type,'retorno da fonte')}${kv('Linha',result.line,'detectada pela fonte')}${kv('CPH / modelo',result.product_model,'CPH exato retornado')}${kv('Shift 2114',result.shift_2114,'retornado pela fonte; seleção automática é validada no gate físico')}${kv('Materiais 2º+ uso',reuseCountVerified?reused.length:'indisponível',reuseCountVerified?'contagem observada 3074 com vínculo temporal':'3074 ausente ou classificação temporal incompleta')}${kv('Eventos 3022',processCount,has3022?'3022 consultada':'3022 ausente na resposta')}${kv('Falhas anteriores',has2114?previous.length:'indisponível',has2114?'2114 consultada':'2114 ausente na resposta')}</div>
       <div class="ames-investigation-grid"><section class="mes-context-panel ames-priority-panel">${sectionHead('Falha atual da PCBA','Registro 2114 associado à ocorrência atual.')}${!has2114?'<div class="ames-empty"><span>—</span><p>2114 indisponível nesta resposta; ausência não equivale a zero ou a inexistência de histórico.</p></div>':current?rowsTable([current],[['Defect Description','Descrição da falha'],['Defect Type','Tipo de análise 2114'],['Defect Hist Seq','Sequência 2114'],['Defect Time','Registro da falha (MES)'],['Manual/Automatic','Registro'],['Repair Status','Vínculo Y/N']]):'<div class="ames-empty"><span>—</span><p>A 2114 foi consultada, mas não confirmou falha atual para esta SN.</p></div>'}</section>
       <section class="mes-context-panel">${sectionHead('Falhas antigas da PCBA','Histórico da própria PCBA, separado da falha atual.')}<p class="ames-2114-table-note">2114 identifica a falha e a sequência. Os nomes dos ATs aparecem nos registros 3012 do alerta, sem atribuição a um Hist Seq quando não há vínculo comprovado. Y/N indica vínculo, não reparo realizado.</p>${has2114?rowsTable(previous,[['Defect Description','Descrição da falha'],['Defect Type','Tipo de análise 2114'],['Defect Hist Seq','Sequência 2114'],['Defect Time','Registro da falha (MES)'],['Manual/Automatic','Registro'],['Repair Status','Vínculo Y/N'],['relation','Relação histórica']],{empty:'A 2114 foi consultada e não retornou falhas anteriores para esta SN.'}):'<div class="ames-empty"><span>—</span><p>Histórico 2114 indisponível nesta resposta.</p></div>'}</section></div>
       <section class="mes-context-panel">${sectionHead('Materiais em 2º uso ou mais','Segundo uso de Material SN é separado de segundo uso da própria PCBA.')}${!has3074?'<div class="ames-empty"><span>—</span><p>3074 indisponível nesta resposta; não converter ausência de fonte em zero de reuso.</p></div>':reused.length?`<div class="ames-reuse-list">${reused.map(item=>`<article class="ames-evidence-card"><div class="ames-evidence-card-head"><div><b>${esc(componentFamily(item.item_type)||item.item_type||'Material')}</b><span>${esc(item.item_sn||'')}</span></div><span class="status">${esc(relationLabel(item.relation_to_current_failure))}</span></div><div class="ames-inline-facts"><span>Usos conhecidos <b>${esc(fmt(item.known_use_count))}</b></span><span>Reusos <b>${esc(fmt(item.reuse_count))}</b></span></div><p>PCBAs anteriores/desvinculadas: ${esc((item.previous_pcbas||[]).join(', ')||'nenhuma confirmada')}</p>${(item.previous_pcba_evidence||[]).map(ev=>`<div class="ames-prior-pcba"><b>${esc(ev.pcba_sn||'')}</b> · ${esc(relationLabel(ev.relation))}<br><small>${esc(ev.reason||'')}</small>${ev.history?rowsTable([ev.history],[['Defect Code','Defect Code antigo'],['Defect Description','Defect Description antigo'],['Defect Time','Registro antigo (MES)'],['Manual/Automatic','Manual/Automatic'],['Repair Status','Repair Status']]):''}${ev.repair_evidence_3012?.length?'<p>3012 · candidatos da mesma PCBA</p>'+rowsTable(ev.repair_evidence_3012,[['defect_code','Defect Code'],['defect_time','Registro da falha (MES)'],['repair_user','Repair User'],['repair_time','Repair Time'],['repair_code','Repair Code'],['repair_comment','Repair Comment']]):''}</div>`).join('')}</article>`).join('')}</div>`:'<div class="ames-empty"><span>—</span><p>A 3074 foi consultada e nenhum Material SN em 2º+ uso foi confirmado nesta resposta.</p></div>'}</section>
@@ -111,7 +132,7 @@ export function createSnConsoleView(root,store,client){
 }
 
 export function createTraceConsoleView(root,store,client){
-  let mounted=false,line=store.context?.()?.line_id||store.preferredLine?.()||LINE_IDS[0],evidence,captures;
+  let mounted=false,line=store.context?.()?.line_id||store.preferredLine?.()||LINE_IDS[0],evidence,captures,periodKey=null;
   function render(){
     const contextLine=store.context?.()?.line_id||store.preferredLine?.();
     if(contextLine&&LINE_IDS.includes(contextLine)&&contextLine!==line){
@@ -122,7 +143,8 @@ export function createTraceConsoleView(root,store,client){
     if(!mounted){
       root.innerHTML=`<div class="ames-trace-layout"><form class="ames-console-form ames-trace-config" data-trace-form>
         ${sectionHead('Escopo desta coleta','A coleta selecionada nunca mistura linhas e um modo não apaga evidência já existente dos outros modos.')}
-        <fieldset><legend>Linhas desta execução</legend>${LINE_IDS.map((id,i)=>`<label class="mes-opt-in"><input type="checkbox" name="lines" value="${id}" checked>Linha ${i+1} · ${id}</label>`).join('')}</fieldset>
+        <fieldset><legend>Linhas desta execução</legend>${LINE_IDS.map((id,i)=>`<label class="mes-opt-in"><input type="checkbox" name="lines" value="${id}"${id===line?' checked':''}>Linha ${i+1} · ${id} <small data-trace-line-state="${id}"></small></label>`).join('')}</fieldset>
+        <p class="mes-context" data-trace-context></p>
         <div class="ames-mode-grid"><label class="ames-mode-card"><input type="radio" name="trace_mode" value="full" checked><span><b>Completo</b><small>3074 + 2114 + 3022</small></span></label><label class="ames-mode-card"><input type="radio" name="trace_mode" value="process_only"><span><b>Processo</b><small>Somente horários 3022</small></span></label><label class="ames-mode-card"><input type="radio" name="trace_mode" value="reuse_only"><span><b>Reuso</b><small>3074 + 2114</small></span></label></div>
         <div class="mes-filters"><label>Perfil<select name="performance"><option value="fast">Rápido</option><option value="balanced" selected>Equilibrado</option><option value="safe">Seguro</option></select></label></div><details data-trace-limits><summary>Limites avançados</summary><p>Sem limite por padrão. Preencha somente para limitar esta execução.</p><div class="mes-filters"><label>Ocorrências máximas / linha<input type="number" name="max_failures" min="1" placeholder="Sem limite"></label><label>PCBAs máximas / linha<input type="number" name="max_pcbas" min="1" placeholder="Sem limite"></label></div></details><details><summary>Códigos manuais (avançado)</summary><label>Códigos exatos de falha<input name="codes" placeholder="Separados por vírgula"></label></details><div class="mes-pagination"><button type="button" class="button primary" data-trace-run>Iniciar coleta</button><button type="button" class="button secondary" data-trace-cancel>Cancelar</button></div>
       </form><aside class="mes-context-panel ames-trace-progress"><h3>Progresso da rastreabilidade</h3><div data-trace-status></div></aside></div>
@@ -143,11 +165,30 @@ export function createTraceConsoleView(root,store,client){
       });
       root.querySelector('[data-trace-cancel]').addEventListener('click',()=>client.cancel().catch(error=>root.querySelector('[data-trace-status]').innerHTML=`<div class="notice warn">${esc(error.message)}</div>`));
     }
+    const currentPeriod=store.readingPeriod?.(),nextPeriodKey=JSON.stringify(currentPeriod);
+    // Changing Hoje/Último dia produtivo never retains a hidden multi-line
+    // selection from another period. The operator can opt in to other lines.
+    if(nextPeriodKey!==periodKey){
+      periodKey=nextPeriodKey;
+      for(const check of root.querySelectorAll('[name=lines]'))check.checked=check.value===line;
+    }
+    for(const id of LINE_IDS){
+      const eligibility=traceTargetForLine(store,id),target=root.querySelector(`[data-trace-line-state="${id}"]`);
+      if(target){const reason=traceText(eligibility.reason,traceReasonEnglish[eligibility.reason]||eligibility.reason);
+        target.textContent=eligibility.available?`snapshot ${eligibility.snapshot_id} · r${eligibility.revision}`:reason;
+        target.title=eligibility.available?traceText('Revisão local deste período disponível','Local revision for this period available'):reason;}
+    }
+    const contextNote=root.querySelector('[data-trace-context]');
+    if(contextNote)contextNote.textContent=currentPeriod?.mode==='today'
+      ?traceText('Coleta explícita da revisão 3028 selecionada. Nenhuma consulta ao A-MES é iniciada ao navegar.',
+        'Explicit collection for the selected 3028 revision. Navigation never starts an A-MES query.')
+      :traceText('Período histórico somente leitura · Para completar 3074/2114/3022, marque as linhas com revisão local comprovada. Linhas sem revisão não bloqueiam as demais.',
+        'Read-only historical period · To complete 3074/2114/3022, select lines with a proven local revision. Missing lines do not block the rest.');
     const a=store.agent(),status=root.querySelector('[data-trace-status]');
     root.querySelector('[data-trace-run]').disabled=!!a.submitting;
     status.setAttribute('aria-live','polite');status.innerHTML=collectionStatus(a);
     evidence?.render(line);
-    const selected=store.readingPeriod?.(),read=store.read(line),payload=read.snapshot?.canonical;
+    const selected=currentPeriod,read=store.read(line),payload=read.snapshot?.canonical;
     const box=root.querySelector('[data-trace-capture-index]');
     if(box)box.hidden=selected?.mode==='today';
     if(selected?.mode!=='today'){

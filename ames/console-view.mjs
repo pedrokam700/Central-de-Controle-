@@ -67,7 +67,7 @@ const OPERATOR_PARITY_STYLE_HREF = new URL('./console-operator-parity.css', impo
 const WORKSTATION_SETUP_STYLE_HREF = new URL('./console-workstation-setup.css', import.meta.url).href;
 const MONITOR_MODERN_STYLE_HREF = new URL('./console-monitor-modern.css', import.meta.url).href;
 
-export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {}, history, agentClient, verify } = {}) {
+export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {}, history, agentClient, verify, historyPreferenceScope } = {}) {
   let active='monitor', mounted=false, disposed=false;let preparation, translator, evidenceDrawer;const views=new Map();
   const client=agentClient||createAgentClient(store,{...transport,changed(){if(disposed)return;renderActive();paintHeader();onChange();}});
   const meta=()=>VIEWS.find(([id])=>id===active)||VIEWS[0];
@@ -86,7 +86,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     });root.querySelector('[data-console-open-ames]')?.addEventListener('click',async()=>{try{if(store.agent().status!=='connected')await client.connect();await client.auxiliary('chrome');}catch(error){store.updateAgent({error:error.message});paintHeader();}});root.querySelector('[data-console-setup]')?.addEventListener('click',openWorkstationSetup);root.querySelector('[data-console-check]')?.addEventListener('click',async()=>{try{if(verify)await verify();else if(store.agent().status==='connected')await client.refresh();else await client.connect();}catch(error){store.updateAgent({error:error.message});}finally{renderActive();}});
     const theme=document.createElement('link');theme.rel='stylesheet';theme.href=new URL('./console-theme.css',import.meta.url).href;root.append(theme);evidenceDrawer=createEvidenceDrawer(root);mounted=true;translator=createConsoleTranslator(root,locale);preparation=createPreparationView(root.querySelector('[data-console-preparation]'),store,client,{verify});preparation.render();paintHeader();
   }
-  const periodController=createReadingPeriodController(store,history,{changed(){if(!disposed){renderActive();onChange();}}});
+  const periodController=createReadingPeriodController(store,history,{preferenceScope:historyPreferenceScope,changed(){if(!disposed){renderActive();onChange();}}});
   let renderedPeriod=store.periodGeneration?.();
   let renderedSession=store.sessionGeneration?.();
   let lastCompletedJobRead='';
@@ -150,11 +150,33 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     }
     else if(id==='process'){pane.innerHTML='<section data-process-main></section><section data-process-3012></section>';const processRoot=pane.querySelector('[data-process-main]'),processBase=withProcessOperatorLayout(withProcessCapability(createProcessConsoleView(processRoot,store),processRoot,store,'process'),processRoot),base=withAgentRefresh(processBase,processRoot,store,client,{label:'Atualizar'}),repair3012=historical?createStoredPeriodRecords(pane.querySelector('[data-process-3012]'),store,{kind:'repairs'}):create3012FastlaneView(pane.querySelector('[data-process-3012]'),store);view={render(){base.render();repair3012.render();},clear(){base.clear?.();repair3012.clear?.();pane.replaceChildren();}};}
     else if(id==='base'){pane.innerHTML='<section data-base-history></section><section data-base-local></section>';const local=pane.querySelector('[data-base-local]'),base=withBaseCatalog(createBaseConsoleView(local,store,client),local,store,client),periods=createHistoryView(pane.querySelector('[data-base-history]'),store,client,history);view={render(){periods.render();base.render();},clear(){periods.clear();base.clear();}};}
-    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);views.set(id,view);return view;
+    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);
+    if(id==='monitor'){
+      // Visible even while the technical accordion is closed: operators must
+      // not have to guess where the cross-workstation conflict is reported.
+      const details=pane.querySelector('[data-monitor-technical]');
+      if(details){
+        const shortcut=pane.ownerDocument.createElement('button');
+        shortcut.type='button';shortcut.className='button secondary';
+        shortcut.dataset.openSyncHealth='';
+        const shortcutLabel=()=>document.documentElement.lang.startsWith('en')
+          ?'Cross-workstation sync · view diagnostics'
+          :'Sincronização entre postos · ver diagnóstico';
+        shortcut.textContent=shortcutLabel();
+        const previousRender=view.render;
+        view.render=function(...args){shortcut.textContent=shortcutLabel();return previousRender.apply(this,args);};
+        details.before(shortcut);
+        shortcut.addEventListener('click',()=>{
+          details.open=true;
+          pane.querySelector('[data-sync-health]')?.scrollIntoView?.({block:'nearest'});
+        });
+      }
+    }
+    views.set(id,view);return view;
   }
   function paintHeader(){if(!mounted)return;const a=store.agent(),m=meta(),title=root.querySelector('[data-console-title]'),sub=root.querySelector('[data-console-sub]'),status=root.querySelector('[data-console-status]'),foot=root.querySelector('[data-console-build-foot]'),dot=root.querySelector('[data-console-dot]'),top3Nav=root.querySelector('[data-console-nav-label="top3"]'),en=document.documentElement.lang.startsWith('en');if(top3Nav)top3Nav.textContent=en?'Daily failures & FPY':'Falhas do dia & FPY';for(const group of VIEW_GROUPS){const el=root.querySelector(`[data-console-group-label="${group.id}"]`);if(el)el.textContent=en?group.en:group.pt;}if(title)title.textContent=en&&active==='top3'?'Daily failures & FPY':m[3];if(sub)sub.textContent=en&&active==='top3'?'Top 3 summary, full ranking, occurrences, shift and reuse context in one scope.':m[4];const connected=a.status==='connected';const connect=root.querySelector('[data-console-pair]');
     if(connect){connect.hidden=connected||!client.canPairFromOfficial?.();connect.textContent=client.paired?.()?'Refazer conexão deste PC':'Conectar agente deste PC';}
-    if(status)status.textContent=connected?`Agente local conectado${a.agent_build?' · '+a.agent_build:''}`:(a.workstation_probe?.state==='outdated'?'Agente local desatualizado · instalar CLEAN oficial':a.workstation_probe?.state==='detected'||a.connection_error?.code==='agent-unauthorized'?'Agente local detectado · conectar':'MES local não confirmado neste computador');dot?.classList.toggle('ok',connected);const shared=root.querySelector('[data-console-sync-status]'),sync=a.sync||{};if(shared)shared.textContent=sync.read_status==='error'?(en?'Shared data: error':'Dados da equipe: erro'):sync.read_status==='cached'?(en?'Shared data: cache':'Dados da equipe: cache'):sync.read_status==='ready'&&sync.remote_line_count?(en?'Team data synchronized':'Dados da equipe sincronizados'):(en?'Team data not confirmed':'Dados da equipe não confirmados');if(foot)foot.textContent=`${a.agent_build||a.capabilities?.agent_build||'MES local'} · 9 views`;}
+    if(status)status.textContent=connected?`Agente local conectado${a.agent_build?' · '+a.agent_build:''}`:(a.workstation_probe?.state==='outdated'?'Agente local desatualizado · instalar CLEAN oficial':a.workstation_probe?.state==='detected'||a.connection_error?.code==='agent-unauthorized'?'Agente local detectado · conectar':'MES local não confirmado neste computador');dot?.classList.toggle('ok',connected);const shared=root.querySelector('[data-console-sync-status]'),sync=a.sync||{};if(shared)shared.textContent=sync.read_status==='error'?(en?'Current team data: error':'Dados atuais da equipe: erro'):sync.read_status==='cached'?(en?'Current team data: cache':'Dados atuais da equipe: cache'):sync.read_status==='ready'&&sync.remote_line_count?(en?'Current team data synchronized':'Dados atuais da equipe sincronizados'):(en?'Current team data not confirmed':'Dados atuais da equipe não confirmados');if(foot)foot.textContent=`${a.agent_build||a.capabilities?.agent_build||'MES local'} · 9 views`;}
   function switchView(id){if(!VIEWS.some(([key])=>key===id))return;active=id;setMenu(false);if(id!=='monitor')preparation?.collapse();for(const button of root.querySelectorAll('[data-console-view]'))button.classList.toggle('active',button.dataset.consoleView===id);for(const pane of root.querySelectorAll('[data-console-pane]'))pane.hidden=pane.dataset.consolePane!==id;renderActive();}
   function renderActive(){
     if(!mounted)mount();

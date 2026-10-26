@@ -135,7 +135,7 @@ class SchedulerTests(unittest.TestCase):
             def turno_atual(self):touched('turno');return 'A'
             def consultar(self,sn):touched('query');return {'rows':[]}
         def flow(source,parsed,view,**kw):
-            self.assertFalse(MES.snapshot()['busy']);view.consultar('P');self.assertFalse(MES.snapshot()['busy']);pauses.append(kw['pause_s']);return {'source_sha256':'hash'}
+            self.assertFalse(MES.snapshot()['busy']);view.consultar('P');self.assertFalse(MES.snapshot()['busy']);pauses.append(kw['pause_s']);return {'source_sha256':'hash','items':[{'defect_traces':[{'trace_3074':{'results':[{'coverage':{'status':'incomplete_page','returned':1,'reported_total':5}}]}}]}]}
         def history(result,view,**kw):
             self.assertFalse(MES.snapshot()['busy']);view.consultar('P');self.assertFalse(MES.snapshot()['busy']);pauses.append(kw['pause_s']);return {'pcbas':[]}
         modules={'ames.browser':SimpleNamespace(AmesBrowser=Browser),'ames.navigation':SimpleNamespace(AmesNavigation=Navigation),'ames.tela_3074':SimpleNamespace(Tela3074=View),'ames.tela_2114':SimpleNamespace(Tela2114=View),'core.fluxo_3028_3074':SimpleNamespace(executar_fluxo=flow),'core.fluxo_2114':SimpleNamespace(executar_fluxo_2114=history)}
@@ -143,6 +143,7 @@ class SchedulerTests(unittest.TestCase):
             for profile in ['fast','balanced','safe']:
                 result=engine_bridge.run_deep_v016_records(pathlib.Path(tmp),[{'pcba_sn':'P'}],'test',tmp,performance=profile)
                 self.assertEqual(result['version'],'0.16-live')
+                self.assertEqual(result['trace_3074']['source_status'],'PARTIAL')
         self.assertEqual(pauses,[0,0,.03,.03,.12,.12]);self.assertEqual(seen.count('disconnect'),3)
         self.assertFalse(MES.snapshot()['busy'])
 
