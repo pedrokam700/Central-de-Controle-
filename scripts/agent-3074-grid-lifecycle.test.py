@@ -28,7 +28,7 @@ function store(rows){
     emit(n,...args){for(const f of [...(handlers.get(n)||[])])f(...args);},
     each(fn){this.rows.forEach(data=>fn({data}));},
     isLoading(){return this.loading;},getCount(){return this.rows.length;},
-    getTotalCount(){return this.rows.length;},
+    getTotalCount(){return this.total??this.rows.length;},
     listenerCount(){return [...handlers.values()].reduce((n,v)=>n+v.length,0);}
   }; stores.push(s);return s;
 }
@@ -48,7 +48,7 @@ function complete(){
   if(p.mode==='rebind'){
     current=store(p.rows||[]);grids=[grid('3074-grid-1',current)];return;
   }
-  current.rows=p.rows||[];current.loading=false;
+  current.rows=p.rows||[];current.total=p.total;current.loading=false;
   if(p.mode==='failed')current.emit('load',current,current.rows,false);
   else if(p.mode==='loadData')current.emit('datachanged',current);
   else {current.emit('load',current,current.rows,true);current.emit('datachanged',current);}
@@ -214,6 +214,21 @@ class RefreshProofTests(unittest.TestCase):
             result = f.tela.consultar("CAMERA-1", timeout_s=.7, retries=1)
             self.assertEqual(collector.pcbas_historicas(result["rows"]), ["PCBA-OLD", "PCBA-NOW"])
             self.assertEqual(result["query_confirmation"], "STORE_REFRESH_AFTER_VIEW")
+
+    def test_reported_pagination_total_survives_query_result(self):
+        with Fixture([{"rows": rows("CAMERA-1"), "total": 4}]) as f:
+            result = f.tela.consultar("PCBA-1", timeout_s=.7, retries=1)
+            self.assertEqual(result.get("store_total_count"), 4)
+            self.assertEqual(result["coverage"]["status"], "incomplete_page")
+            self.assertEqual(result["coverage"]["returned"], 1)
+            self.assertEqual(len(result["rows"]), 1, "keep observed rows")
+
+    def test_empty_page_with_positive_total_is_partial_not_no_data(self):
+        with Fixture([{"rows": [], "total": 4}]) as f:
+            result = f.tela.consultar("PCBA-1", timeout_s=.7, retries=1,
+                                      empty_confirm_s=.05, empty_fallback_s=.12)
+            self.assertFalse(result["no_data"])
+            self.assertEqual(result["coverage"]["status"], "incomplete_page")
 
     def test_previous_inflight_response_cannot_confirm_next_query(self):
         # View can be ignored by the MES while its previous request is pending.

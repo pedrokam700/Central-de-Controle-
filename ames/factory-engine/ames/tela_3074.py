@@ -2,6 +2,7 @@ import json
 import time
 from pathlib import Path
 from ames.ui_helpers import extract_best_grid, extract_extjs_store_grid
+from ames.coverage_3074 import classify_3074_page
 from core.normalizacao import normalizar_sn, normalizar_texto
 
 EXPECTED = [
@@ -188,6 +189,11 @@ class Tela3074:
                     last_grid = grid
                     rows = grid.get("rows", [])
                     loading = grid.get("store_loading")
+                    page_coverage = classify_3074_page(grid)
+                    page_partial = page_coverage["status"] == "incomplete_page"
+                    page_metadata = {"store_count": grid.get("store_count"),
+                                     "store_total_count": grid.get("store_total_count"),
+                                     "coverage": page_coverage}
 
                     query_row = bool(rows and any(_row_contains_query(r, sn) for r in rows))
                     if rows and loading is not True and (fresh or (not response_armed and query_row)):
@@ -197,6 +203,7 @@ class Tela3074:
                             "grid_id": grid.get("grid_id"),
                             "headers": grid["headers"],
                             "rows": rows,
+                            **page_metadata,
                             "attempt": attempt,
                             "no_data": False,
                             "query_confirmation": "STORE_REFRESH_AFTER_VIEW" if fresh else "EXACT_QUERY_ROW",
@@ -223,9 +230,10 @@ class Tela3074:
                                 "grid_id": grid.get("grid_id"),
                                 "headers": grid["headers"],
                                 "rows": [],
+                                **page_metadata,
                                 "attempt": attempt,
-                                "no_data": True,
-                                "no_data_reason": "3074_SEM_VINCULOS",
+                                "no_data": not page_partial,
+                                "no_data_reason": "3074_PAGINA_INCOMPLETA" if page_partial else "3074_SEM_VINCULOS",
                                 "query_confirmation": "STORE_REFRESH_AFTER_VIEW",
                             }
                     else:

@@ -45,7 +45,10 @@ jobs:
         run: python3 scripts/agent-individual-assembly.test.py
 
       - name: Run 3074 View response and stale-grid regression tests
-        run: python3 scripts/agent-3074-grid-lifecycle.test.py
+        run: |
+          python3 scripts/agent-3074-grid-lifecycle.test.py
+          python3 scripts/agent-3074-pagination.test.py
+          python3 scripts/agent-assembly-scope.test.py
 
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs

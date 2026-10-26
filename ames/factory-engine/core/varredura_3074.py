@@ -1,6 +1,7 @@
 from datetime import datetime
 import time
 from core.normalizacao import normalizar_sn
+from ames.coverage_3074 import classify_3074_page
 from core.temporal_3074 import (
     componentes_no_momento_da_falha,
     pcbas_do_item_ate_a_falha,
@@ -140,8 +141,12 @@ def executar_varredura(
                 defect_local_offset_hours=defect_local_offset_hours,
                 grid_naive_offset_hours=grid_naive_offset_hours,
             )
+            page_coverage = classify_3074_page(hist)
+            history_partial = page_coverage["status"] == "incomplete_page"
             previous_count = hist_temporal["previous_pcba_count"]
             status = classificar_reuso_anterior(previous_count) if hist_temporal["current_pcba_confirmed"] else "VINCULO_PCBA_ITEM_NAO_CONFIRMADO"
+            if history_partial and not previous_count:
+                status = "HISTORICO_3074_PARCIAL"
             full_history = historico_completo_pcbas_do_item(
                 hist.get("rows", []),
                 grid_naive_offset_hours=grid_naive_offset_hours,
@@ -157,7 +162,8 @@ def executar_varredura(
                 "bind_time_utc": item.get("bind_time_utc"),
                 "unbind_time_utc": item.get("unbind_time_utc"),
                 "iss_status_now": item.get("iss_status_now"),
-                "previous_pcba_count": previous_count if hist_temporal["current_pcba_confirmed"] else None,
+                "previous_pcba_count": previous_count if hist_temporal["current_pcba_confirmed"] and (previous_count or not history_partial) else None,
+                "coverage": page_coverage,
                 "previous_pcbas": [x["pcba_sn"] for x in hist_temporal["previous_pcbas"]] if hist_temporal["current_pcba_confirmed"] else [],
                 "unverified_previous_pcbas": [x["pcba_sn"] for x in hist_temporal["previous_pcbas"]] if not hist_temporal["current_pcba_confirmed"] else [],
                 "pcbas_until_defect": [x["pcba_sn"] for x in hist_temporal["associations_until_defect"]],

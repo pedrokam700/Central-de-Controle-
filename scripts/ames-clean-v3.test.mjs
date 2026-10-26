@@ -10,7 +10,7 @@ test('Issue #66 3074 View-response correction is explicit and source-pinned',()=
   assert.notEqual(sha256(path),manifest['ames/tela_3074.py']);
   // Baseline manifesto is immutable; only this Issue #66 revision has a new
   // pinned source hash. All unchanged CLEAN V3 source gates remain active.
-  assert.equal(sha256(path),'9a1f51070ecc77a938906b5a81a62014af70c5fb23e76d0cf177cd11daa58ceb');
+  assert.equal(sha256(path),'87874330885f89fa5991777069cf5dd26f121942318127bd62f2794965774e47');
   const src=fs.readFileSync(path,'utf8');
   assert.match(src,/STORE_REFRESH_AFTER_VIEW/);
   assert.match(src,/visible_only=True/);

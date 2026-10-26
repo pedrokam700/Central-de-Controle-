@@ -359,3 +359,20 @@ Só após o piloto de B, o coordenador transacional da PR #64 pode ser elegível
 **Arquivos:** ames/factory-engine/ames/tela_3074.py; scripts/agent-3074-grid-lifecycle.test.py; scripts/ames-clean-v3.test.mjs (hash da alteração intencional 3074 atualizado, manifesto histórico CLEAN V3 intacto); este handoff. Local: **12/12** ciclo de grid, **11/11** consulta individual, **17/17** contratos Node CLEAN/P0; git diff --check PASS. SHA publicado e CI exata no próximo comentário da PR; CI PENDING no momento deste commit.
 
 **Limites/retomada:** esta prova é simulada, não homologa a tela OPPO nem todas as formas de concorrência de rede. 3074 e snapshot14/L3 físicos continuam PENDING. Próxima lacuna comprovável localizada: extract_extjs_store_grid fornece store_total_count, mas Tela3074.consultar descarta esse campo e coverage_3074.classify_3074_page não está integrado ao fluxo; conferir paginação parcial antes de certificar cobertura/zero. Prosseguir somente após CI deste incremento. Não tocar main, PR #64/#67, Firebase de produção, release, guardian ou postos. Sem merge/instalação/deploy.
+
+
+### Gate do incremento de resposta atrasada confirmado
+
+SHA `7460eb4bb4d8c8be1a6c2cdfb8b1a18efd1c21a6`: Central Quality Gate **#40362763071 COMPLETED SUCCESS 3/3**, Console/nove views, Agent/sync E2E Firestore Rules e Static quality. Não é homologação física da 3074.
+
+## Continuidade P0 — paginação 3074 não pode virar cobertura completa
+
+**Dois REDs reproduzidos:** a extração ExtJS retornava store_total_count=4 com uma linha, mas Tela3074.consultar removia esse total; uma página vazia com total positivo virava no_data=true. O classificador coverage_3074 existente estava isolado, sem receber esses dados na cadeia real.
+
+**Implementado:** coletor preserva store_count/store_total_count e anexa o resultado do classificador existente; página vazia com total positivo fica incompleta, nunca sem vínculos. engine_bridge propaga essa prova ao status parcial da Consulta por PCBA/Material SN e ao source_status PARTIAL do resultado 3074 nos fluxos integrado/manual existentes. A varredura temporal conserva PCBAs anteriores observadas e usa HISTORICO_3074_PARCIAL/previous_pcba_count=null quando a página truncada não prova ausência de reuso. A consulta individual usa is_reused/reuse_count=null nessa mesma situação, conservando linhas e vínculos confirmados. Material SN mantém ciclos com cobertura parcial. Nenhum segundo algoritmo de classificação, alteração da âncora3028, navegação automática de páginas ou promessa de coleção integral.
+
+**Arquivos:** ames/factory-engine/ames/tela_3074.py; ames/factory-engine/core/varredura_3074.py; ames/agent/engine_bridge.py; scripts/agent-3074-grid-lifecycle.test.py, agent-individual-assembly.test.py, agent-assembly-scope.test.py, agent-scheduler.test.py, ames-clean-v3.test.mjs; .github/workflows/quality-gate.yml (executa também paginação/escopo na etapa3074); este handoff. Manifesto original CLEAN V3 e core/fluxo_3028_3074.py congelado intactos; hash do delta intencional3074 atualizado.
+
+**Local:** lifecycle ExtJS **14/14**, individual **14/14**, escopo temporal **6/6**, scheduler **12/12**, seleção histórica/worker **7/7**, CLEAN Python **3/3**, contrato paginação PASS; Node CLEAN/P0/proveniência/Material **28/28**, gate oficial **2/2**; git diff --check PASS. CI exata PENDING até publicar/consultar SHA no próximo checkpoint da PR.
+
+**Retomada:** consultar HEAD e CI deste incremento. Próximos pontos seguros da Issue66: cobertura/escopo dos indicadores configuráveis e deduplicação de fechamento FULL, após confrontar testes existentes; política multiwriter compartilhada continua bloqueio distinto (não inventar autoridade). A paginação incompleta agora é diagnosticada, mas não foi implementado avanço automático de páginas sem validar seu contrato MES. Fábrica3074/último dia snapshot14L3/candidata/guardian continuam PENDING. Sem pedido de novos dados do PC de terceiro; PR68 DRAFT, PR64/67/main/oficial0.5.39/Firebase/postos intocados.

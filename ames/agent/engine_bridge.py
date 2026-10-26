@@ -12,6 +12,21 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 
+def _has_partial_3074_page(value):
+    """Propagate collector pagination proof through the existing result tree."""
+    if not isinstance(value, dict):
+        return False
+    coverage = value.get("coverage")
+    if isinstance(coverage, dict) and coverage.get("status") == "incomplete_page":
+        return True
+    for key in ("base_query", "query", "trace_3074"):
+        if _has_partial_3074_page(value.get(key)):
+            return True
+    return any(_has_partial_3074_page(child)
+               for key in ("items", "defect_traces", "results", "component_usage")
+               for child in (value.get(key) or []))
+
+
 def discover_engine(config: Dict[str, Any], agent_dir: Path) -> Optional[Path]:
     candidates = []
     env = os.environ.get("AMES_ENGINE_DIR")
@@ -135,6 +150,8 @@ def run_full_v016(engine_dir: Path, export_path: str | Path, line_callback=None)
             checkpoint_path=output / f"V010_3074_CHECKPOINT_{fingerprint}.json",
             defect_local_offset_hours=float(times.get("defect_local_utc_offset_hours", -3)),
             grid_naive_offset_hours=float(times.get("grid_naive_utc_offset_hours", 0)))
+        if _has_partial_3074_page(result_3074):
+            result_3074["source_status"] = "PARTIAL"
         if line_callback: line_callback("2114 FASE 2114")
         result_2114 = history_flow.executar_fluxo_2114(result_3074, history,
             source_sha256=result_3074.get("source_sha256", fingerprint),
@@ -263,9 +280,11 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
             checkpoint_path=checkpoint_3074, query_memo=shared_query_memo, pause_s=pause_3074,
             defect_local_offset_hours=defect_offset, grid_naive_offset_hours=grid_offset,
         )
+        if _has_partial_3074_page(result_3074):
+            result_3074["source_status"] = "PARTIAL"
         if event_callback:
             done_3074 = int(result_3074.get("requested_pcba_count") or parser_result.get("unique_pcba_count") or 0)
-            event_callback({"stage":"3074","kind":"result","current":done_3074,"total":done_3074,"status":str(result_3074.get("status") or "done"),"result":result_3074})
+            event_callback({"stage":"3074","kind":"result","current":done_3074,"total":done_3074,"status":str(result_3074.get("source_status") or result_3074.get("status") or "done"),"result":result_3074})
 
         def hist_progress(i, total, pcba, status, state):
             if line_callback:
@@ -365,7 +384,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             r3074 = tela3074.consultar(query)
             if not isinstance(r3074, dict) or not isinstance(r3074.get("rows"), list):
                 raise RuntimeError("3074_GRID_NOT_CONFIRMED")
-            if not r3074["rows"] and r3074.get("no_data") is not True:
+            if not r3074["rows"] and r3074.get("no_data") is not True and not _has_partial_3074_page(r3074):
                 raise RuntimeError("3074_ZERO_NOT_CONFIRMED")
             if r3074["rows"] and r3074.get("no_data") is True:
                 raise RuntimeError("3074_GRID_CONTRADICTORY")
@@ -538,12 +557,14 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                         item_query.get("rows") or [], anchor_time, current_pcba_sn=query,
                     )
                 previous = [r["pcba_sn"] for r in scoped["previous_pcbas"]]
+                incomplete_history = _has_partial_3074_page(item_query)
+                reuse_proven = scoped["current_pcba_confirmed"] and (bool(previous) or not incomplete_history)
                 component_usage.append({
                     "item_sn": item_sn, "item_type": comp.get("item_type") or "",
                     "known_pcbas": [r["pcba_sn"] for r in scoped["associations_until_defect"]],
                     "known_use_count": len(scoped["associations_until_defect"]) if scoped["current_pcba_confirmed"] else None,
-                    "reuse_count": len(previous) if scoped["current_pcba_confirmed"] else None,
-                    "is_reused": bool(previous) if scoped["current_pcba_confirmed"] else None,
+                    "reuse_count": len(previous) if reuse_proven else None,
+                    "is_reused": bool(previous) if reuse_proven else None,
                     "previous_pcbas": previous if scoped["current_pcba_confirmed"] else [],
                     "current_pcba_confirmed": scoped["current_pcba_confirmed"],
                     "binding_operation": comp.get("binding_operation"),
@@ -624,7 +645,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                     if c["iss_status_now"] == "Y" and c["bind_time_utc"] and not c["unbind_time_utc"])),
                 "failure_links": temporal,
                 "recurrences": recurrence,
-                "coverage": "partial" if related_pcbas_total > len(historical_pcbas) or
+                "coverage": "partial" if _has_partial_3074_page(r3074) or related_pcbas_total > len(historical_pcbas) or
                     temporal["candidates"] or any(h.get("status") != "COMPLETE" for h in histories[1:]) else "observed",
             }
         reused_components = []
@@ -730,7 +751,8 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 # Query success is independent of whether temporal forensics
                 # could classify a reused material. Without this, a successful
                 # grid with zero proven reuse was displayed as "not collected".
-                "status": "error" if source3074_error else "complete",
+                "status": "error" if source3074_error else ("partial" if _has_partial_3074_page(r3074) or
+                    any(_has_partial_3074_page(c.get("query")) for c in component_usage) else "complete"),
                 "error": source3074_error,
                 "query_stage": source3074_stage if source3074_error else None,
                 "query_row_count": len(rows3074) if r3074 is not None else None,

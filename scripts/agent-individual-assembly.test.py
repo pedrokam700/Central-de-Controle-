@@ -120,6 +120,49 @@ class IndividualAssemblyTests(unittest.TestCase):
         self.assertEqual(out["detected_type"],"SN_INDETERMINADO")
         self.assertEqual(out["detected_type_basis"],"3074_MIXED_ROW_TYPES")
         self.assertEqual(out["trace_3074"]["components"],[])
+    def test_partial_pcba_page_preserves_rows_without_complete_status(self):
+        original = Screen3074.consultar
+        def truncated(view, sn):
+            result = original(view, sn)
+            if sn == "CUR":
+                result.update(store_total_count=20, coverage={"status": "incomplete_page", "returned": len(result["rows"]), "reported_total": 20})
+            return result
+        with patch.object(Screen3074, "consultar", new=truncated):
+            out = self.lookup()
+        self.assertEqual(out["trace_3074"]["status"], "partial")
+        self.assertEqual(out["trace_3074"]["query_row_count"], 4)
+        self.assertEqual([c["item_sn"] for c in out["trace_3074"]["components"]], ["M2"])
+        self.assertIsNotNone(out["trace_2114"]["current_failure"])
+
+    def test_partial_component_history_cannot_prove_no_reuse(self):
+        original = Screen3074.consultar
+        def truncated(view, sn):
+            result = original(view, sn)
+            if sn == "M2":
+                result.update(store_total_count=4, coverage={"status": "incomplete_page", "returned": 1, "reported_total": 4})
+            return result
+        with patch.object(Screen3074, "consultar", new=truncated):
+            out = self.lookup()
+        self.assertEqual(out["trace_3074"]["status"], "partial")
+        item = out["trace_3074"]["component_usage"][0]
+        self.assertTrue(item["current_pcba_confirmed"])
+        self.assertIsNone(item["is_reused"])
+        self.assertIsNone(item["reuse_count"])
+        self.assertEqual(len(item["query"]["rows"]), 1)
+
+    def test_partial_material_entry_retains_cycles_and_declares_partial(self):
+        Screen2114.no_history = True
+        original = Screen3074.consultar
+        def truncated(view, sn):
+            result = original(view, sn)
+            result["coverage"] = {"status": "incomplete_page", "returned": len(result["rows"]), "reported_total": 5}
+            return result
+        with patch.object(Screen3074, "consultar", new=truncated):
+            out = self.lookup(sn="M1")
+        self.assertEqual(out["detected_type"], "MATERIAL_SN")
+        self.assertEqual(out["material_investigation"]["coverage"], "partial")
+        self.assertEqual(len(out["material_investigation"]["observed_cycles"]), 2)
+
     def test_current_new_mounting_supersedes_old_failure_materials(self):
         output=self.lookup()
         self.assertEqual(Screen3074.calls,["CUR","M2"])
