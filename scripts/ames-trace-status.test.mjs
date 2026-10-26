@@ -46,3 +46,41 @@ test('confirmed complete 2114 may report a real zero only with completed source 
   assert.match(html,/PCBAs consultadas: 2\/2/);
   assert.match(html,/sem dados confirmados: 2/);
 });
+
+test('job done never hides missing 3074 when stage progress still says 100%',()=>{
+  const state=doneState({status:'complete',source_status:'COMPLETE'});
+  state.job.result.stages={'3074':'error','2114':'done','3022':'partial'};
+  const html=collectionStatus(state);
+  assert.match(html,/data-trace-source-coverage/);
+  assert.match(html,/3074: Falhou/);
+  assert.match(html,/3022: Parcial/);
+  assert.match(html,/data-trace-source-stage="3074"/);
+  assert.match(html,/value="100"/,'progress alone is not completeness');
+  assert.doesNotMatch(html,/3074: Completa/);
+});
+
+test('a source stage missing from an older job stays unverified, never implicitly complete',()=>{
+  const state=doneState({status:'complete',source_status:'COMPLETE'});
+  state.job.result.stages={'2114':'done','3022':'done'};
+  const html=collectionStatus(state);
+  assert.match(html,/3074: Não comprovada/);
+  assert.match(html,/Job finalizado não significa fontes completas/);
+});
+
+test('complete source coverage has no warning and degraded source is translated to English',()=>{
+  const state=doneState({status:'complete',source_status:'COMPLETE'});
+  state.job.result.stages={'3074':'done','2114':'done','3022':'done'};
+  assert.doesNotMatch(collectionStatus(state),/data-trace-source-coverage/);
+  const prior=globalThis.document;
+  try{
+    globalThis.document={documentElement:{lang:'en-US'}};
+    state.job.result.stages['3074']='not_run';
+    const html=collectionStatus(state);
+    assert.match(html,/Coverage not verified/);
+    assert.match(html,/3074: Not collected/);
+    assert.match(html,/Finished job does not mean complete sources/);
+  }finally{
+    if(prior===undefined)delete globalThis.document;
+    else globalThis.document=prior;
+  }
+});
