@@ -59,6 +59,7 @@ test('wrong line stays absent; mismatched period fails closed; no metrics invent
 });
 
 import {createReadingPeriodController} from '../ames/reading-period-controller.mjs';
+import {traceTargetForLine} from '../ames/data/trace-targets.mjs';
 const entry=p=>({line_id:p.line_id,source_id:p.source_id,snapshot_id:p.snapshot_id,snapshot_revision:p.snapshot_revision,collected_at:p.collected_at,period_start:p.summary.period.start_at,period_end:p.summary.period.end_at,history_source:'shared'});
 test('loader uses immutable history, excludes custom and preserves selected line',async()=>{
  const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day');s.updateContext({line_id:'TAN10102'});
@@ -104,6 +105,56 @@ test('chosen source cannot admit another source payload even with a matching lin
  assert.equal(s.read(line).snapshot,null);
  assert.match(s.agent().period_read.errors[0].error,/historical_identity_mismatch/);
  c.clear();
+});
+test('unreadable newest historical revision recovers an older revision without claiming latest or starting MES',async()=>{
+ const l3='TAN10103',base=snapshot('14','2026-10-16','previous_day');
+ const old={...base,line_id:l3,content_hash:'a'.repeat(64),source_id:'factory-A'};
+ old.summary={...base.summary,line:l3};
+ const newest={...old,snapshot_revision:2,content_hash:'b'.repeat(64),collected_at:'2026-10-17T21:00:00Z'};
+ const store=createAmesStore({now:()=>now.getTime()}),opened=[];
+ store.setLocalConnected(true);
+ store.updateAgent({status:'connected',capabilities:{source_id:'factory-A',exact_trace_targets:true}});
+ const ctl=createReadingPeriodController(store,{list:async line=>line===l3?[entry(newest),entry(old)]:[],
+   open:async e=>{opened.push(e.snapshot_revision);if(e.snapshot_revision===2)throw Error('corrupted_saved_revision');return old;}});
+ await ctl.select('previous');
+ assert.deepEqual(opened,[2,1]);
+ assert.equal(store.read(l3).snapshot?.snapshot_id,'14');
+ assert.equal(store.read(l3).snapshot?.revision,1);
+ assert.equal(store.agent().period_read.status,'partial');
+ assert.deepEqual(store.agent().period_read.recovered_lines,[{
+   line_id:l3,unreadable_revisions:1,source_id:'factory-A',snapshot_id:'14',snapshot_revision:1}]);
+ assert.equal(traceTargetForLine(store,l3).available,false,'recovered older revision must not be sent to MES');
+ ctl.clear();
+});
+test('historical fallback never crosses a second collector and fails closed if all entries from selected origin are corrupt',async()=>{
+ const p=snapshot('old','2026-10-16','previous_day'),newer={...p,snapshot_revision:2,
+   collected_at:'2026-10-18T19:00:00Z'};
+ const foreign={...snapshot('foreign','2026-10-16','previous_day'),source_id:'foreign-pc'};
+ const opened=[],store=createAmesStore({now:()=>now.getTime()});
+ store.updateAgent({status:'connected',capabilities:{source_id:p.source_id}});
+ const ctl=createReadingPeriodController(store,{list:async l=>l===line?[{...entry(newer),history_source:'local'},{...entry(p),history_source:'local'},entry(foreign)]:[],
+   open:async e=>{opened.push(e.source_id);throw Error('all_selected_origin_unreadable');}});
+ await ctl.select('previous');
+ assert.deepEqual(opened,[p.source_id,p.source_id]);
+ assert.equal(store.read(line).snapshot,null);
+ assert.equal(store.agent().period_read.status,'partial');
+ assert.equal(store.agent().period_read.recovered_lines.length,0);
+ assert.match(store.agent().period_read.errors[0].error,/all_selected_origin_unreadable/);
+ ctl.clear();
+});
+test('newest revision with a false period index is not silently skipped',async()=>{
+ const old=snapshot('14','2026-10-16','previous_day'),incorrect={...old,snapshot_revision:2,
+   collected_at:'2026-10-17T21:00:00Z',summary:{...old.summary,period:{
+     ...old.summary.period,start_at:'2026-10-15T07:00'}}};
+ const store=createAmesStore({now:()=>now.getTime()});
+ const ctl=createReadingPeriodController(store,{list:async l=>l===line?[{...entry(incorrect),
+   period_start:old.summary.period.start_at},entry(old)]:[],
+   open:async e=>e.snapshot_revision===2?incorrect:old});
+ await ctl.select('previous');
+ assert.equal(store.read(line).snapshot?.snapshot_id,'14');
+ assert.equal(store.agent().period_read.status,'partial');
+ assert.equal(store.agent().period_read.recovered_lines[0].unreadable_revisions,1);
+ ctl.clear();
 });
 test('loader does not mix late historical reads after switching back Today',async()=>{
  const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day');let release;

@@ -7,6 +7,12 @@ export function traceTargetForLine(store,line){
   if(!LINE_IDS.includes(line))return {available:false,reason:'Linha inválida'};
   const read=store.read(line),p=read.snapshot?.canonical,period=p?.summary?.period;
   if(!p)return {available:false,reason:'Sem revisão 3028 neste período'};
+  // A previous revision opened as read-only recovery is not proof that the
+  // agent still considers it the latest revision for this snapshot. Do not
+  // start a MES job that would fail the immutable-current queue check.
+  if(store.readingPeriod?.()?.mode!=='today'&&
+    store.agent()?.period_read?.recovered_lines?.some(x=>x.line_id===line))
+    return {available:false,reason:'Revisão mais recente indisponível; atualize a leitura antes de coletar'};
   if(read.source!=='local'||p.source_id!==store.agent().capabilities?.source_id)
     return {available:false,reason:'Revisão não pertence ao agente local conectado'};
   if(!period?.start_at||!period?.end_at)

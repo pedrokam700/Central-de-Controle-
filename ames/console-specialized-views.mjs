@@ -17,6 +17,7 @@ const traceReasonEnglish=Object.freeze({
   'Revisão não pertence ao agente local conectado':'Revision does not belong to the connected local agent',
   'Período operacional não comprovado':'Operational period not proven',
   'Identidade da revisão incompleta':'Incomplete revision identity',
+  'Revisão mais recente indisponível; atualize a leitura antes de coletar':'Latest revision unavailable; refresh the saved reading before collecting',
 });
 const fmt=value=>value===null||value===undefined||value===''?'—':String(value);
 const relationLabel=value=>({MESMA_FALHA:'MESMA FALHA',FALHA_SIMILAR:'MESMA FAMÍLIA / SIMILAR',FALHA_DIFERENTE:'OUTRA FALHA',SEM_HISTORICO:'SEM HISTÓRICO',SEM_FALHA_ATUAL:'SEM FALHA ATUAL'})[value]||fmt(value);
