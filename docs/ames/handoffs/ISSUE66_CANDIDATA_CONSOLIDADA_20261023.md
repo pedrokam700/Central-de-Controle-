@@ -472,3 +472,8 @@ SHA `30bd5143542d109e52ec6195a0c058037613e584`, OperationalHistory **#4036931516
 ### Refinamento da expectativa de MaterialSN no browser ampliado
 
 SHA `a515850726daaf26062d732b7ece82097120ebce`: Quality **40370218739 SUCCESS3/3**. OperationalHistory **40370207422 RED3/4**: contratos/Firestore/Windows SUCCESS, browser falhou na NOVA expectativa de contagem física1. Reprodução Node com a mesma fixture normalizada comprovou que reuseLinks retorna[]: há ordinais de reuso daPCBA/contextoitem, mas NÃO existe vínculo de MaterialSN para a ocorrência exata. Interface corretamente mostra1/1/—; o teste deveria exigir isso. Corrigida só essa expectativa, sem mudar UI ou fabricar vínculo. A prova positiva de SN físico distinto/kit permanece nas suítes Node e matriz. Syntax/diff PASS; CI do próximoSHA PENDING. Caso3012 adicionado ainda não executou nesse browser, não declarar sua provaDOM antes de conclusão.
+
+
+### Navegação real dos detalhes aninhados no browser
+
+SHA `a8b85e4f859c892119e4a5879377d3baba96c243`: Quality40370778941 SUCCESS3/3; OperationalHistory40370766211 RED3/4 (contratos/Windows/Firestore SUCCESS). Os asserts de sete colunas/1,1,— passaram. O caso novo3012 expirou ao tentar clicar no summary de candidato dentro de uma ocorrência ainda fechada. Corrigido o teste para abrir PRIMEIRO o summary da ocorrência pai, depois o candidato, por cliques reais; sem force, sleeps extras, bypass de visibilidade ou mudança de produto. Syntax/diff PASS; novoCI pendente no próximo checkpoint.

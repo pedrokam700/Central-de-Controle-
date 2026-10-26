@@ -164,6 +164,8 @@ try{
  await analytics.locator('[data-dfa-mode=occurrences]').click();
  const repairCandidates=analytics.locator('[data-dfa-repair-candidates]');
  assert.equal(await repairCandidates.count(),1);
+ const candidateOccurrence=analytics.locator('.ames-dfa-occurrence').filter({has:page.locator('[data-dfa-repair-candidates]')});
+ await candidateOccurrence.locator('summary').first().click();
  await repairCandidates.locator('summary').click();
  assert.match(await repairCandidates.innerText(),/Outra ocorrência \/ não associado/);
  assert.match(await repairCandidates.innerText(),/Preserved history <script>candidate<\/script>/);
