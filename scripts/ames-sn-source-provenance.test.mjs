@@ -131,6 +131,12 @@ test('SN operator summary never presents missing or failed 3074/3022/3012 as con
     assert.equal(metric(failed2114,'Histórias 2114'),'—');
     const mixed=cards({...base,trace_3022:{status:'partial',process_passages:[],rows:[{pcba_sn:'PCB-QUERY',station:'A5100'}]}});
     assert.equal(metric(mixed,'Eventos 3022'),'1','non-empty 3022 rows are not hidden behind an empty passage placeholder');
+    const noRows=cards({...base,trace_2114:{status:'complete'},trace_3022:{status:'complete'},summary:{'3022_events':0}});
+    assert.equal(metric(noRows,'Falha atual'),'—','completed response without 2114 rows cannot prove absence of a failure');
+    assert.equal(metric(noRows,'Eventos 3022'),'—','summary zero alone cannot prove an empty 3022 extraction');
+    const embedded=cards({...base,trace_2114:{status:'complete',previous_failures:[],
+      current_failure:{pcba_sn:'PCB-QUERY',defect_code:'TEST',defect_time:'2026-10-22 09:00:00',repair_evidence_3012:[{repair_comment:'observed nested'}]}}});
+    assert.equal(metric(embedded,'Reparos 3012'),'—','nested 3012 evidence is not a proven zero top-level 3012 count');
     const complete=cards({...base,trace_3074:{status:'complete',query:{rows:[],no_data:true},reused_components:[]},
       trace_3022:{status:'complete',process_passages:[]},trace_3012:{status:'complete',rows:[]}});
     assert.match(complete,/Nenhum material 2º\+ uso observado nesta consulta 3074 confirmada; não é zero global/);

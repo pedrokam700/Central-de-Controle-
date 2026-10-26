@@ -64,10 +64,10 @@ export function operatorSummary(result,rows){
   const buckets=[trace3022?.process_passages,trace3022?.rows,trace3022?.operator_evidence].filter(Array.isArray);
   const events=buckets.find(list=>list.length>0)||buckets[0];
   const reported3022=result.summary?.['3022_events'];
-  const processCount=events?.length?events.length:confirmed(model.source_states['3022'])?
-    (Number.isSafeInteger(reported3022)&&reported3022>=0?reported3022:events?.length??'—'):'—';
-  const repairCount=rows.length?rows.length:confirmed(model.source_states['3012'])?0:'—';
-  const count2114Known=confirmed(model.source_states['2114']);
+  const processCount=events?.length?events.length:model.source_states['3022']==='zero'?0:
+    confirmed(model.source_states['3022'])&&Number.isSafeInteger(reported3022)&&reported3022>0?reported3022:'—';
+  const repairCount=rows.length?rows.length:model.source_states['3012']==='zero'?0:'—';
+  const count2114Known=confirmed(model.source_states['2114'])&&Array.isArray(trace2114?.previous_failures);
   const currentCount=current?1:count2114Known?0:'—';
   const previousCount=previous.length?previous.length:count2114Known?0:'—';
   const historyCount=previous.length+(current?1:0);
