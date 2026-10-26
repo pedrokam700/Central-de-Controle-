@@ -502,3 +502,10 @@ SHA `a8b85e4f859c892119e4a5879377d3baba96c243`: Quality40370778941 SUCCESS3/3; O
 | Instalação/rollback | Pacote limpo com manifestos, aviso e baseline0.5.39 preservado | PR64/guardian/inventário/backup/restore/consentimento, sem executar nestaPR |
 
 **Retomada exata:** verificar Quality3/3 e OperationalHistory4/4 no próximoHEAD; corrigir somenteRED demonstrado. Depois entregar artefato desseSHA e distinguir os gates externos da implementação. Não expandir para conciliação de identidadeMES inexistente, não declararFULL por jobdone ou porbenchmark e não instalar candidata sobre0.5.39. PR68 DRAFT; PR64/67/main/Firebase/postos intocados.
+
+
+### Incremento de continuidade 26/10 — inconsistência de total ExtJS 3074
+
+- Após o Work fechar o SHA `cedc88c31d5bbf3d9d62a41cf290d71c11f11685` com Quality 3/3 + Histórico 4/4 GREEN, auditoria adicional identificou que `coverage_3074.classify_3074_page` aceitava como normal uma grade com mais linhas do que o `store_total_count` anunciado (inclusive total 0 ou negativo). Esse resultado incongruente não pode certificar consulta completa nem zero.
+- A correção classifica totais explicitamente menores que as linhas observadas ou negativos como `incomplete_page`, retendo todas as linhas observadas e degradando a cobertura. Totais ausentes/desconhecidos preservam o tratamento legado anterior, sem fingir validação física. Regressões unitárias e integração simulada ExtJS asseguram que linhas continuam visíveis e a paginação/status não viram FULL. A coleta 3028, Firebase, agente real, installer, PR #64 e `main` não foram alterados.
+- **Status inicial deste incremento:** publicação e CI do próximo SHA pendentes; somente após consultar os workflows do SHA exato declarar GREEN. Homologação MES real 3074, L3 snapshot14, full real e migração guardian com backup/rollback permanecem pendentes.

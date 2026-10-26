@@ -241,6 +241,16 @@ class RefreshProofTests(unittest.TestCase):
             self.assertEqual(result["coverage"]["returned"], 1)
             self.assertEqual(len(result["rows"]), 1, "keep observed rows")
 
+    def test_reported_total_smaller_than_visible_grid_keeps_rows_but_not_completion(self):
+        with Fixture([{"rows": rows("CAMERA-1", "LCD-2"), "total": 1}]) as f:
+            result = f.tela.consultar("PCBA-1", timeout_s=.7, retries=1)
+            self.assertEqual(len(result["rows"]), 2)
+            self.assertFalse(result["no_data"])
+            self.assertEqual(result["coverage"]["status"], "incomplete_page")
+            self.assertEqual(result["coverage"]["reason"], "extjs_store_total_below_loaded_rows")
+            self.assertEqual(result["pagination"]["status"], "partial")
+            self.assertEqual(f.call(op="state")["listeners"], 0)
+
     def test_empty_page_with_positive_total_is_partial_not_no_data(self):
         with Fixture([{"rows": [], "total": 4}]) as f:
             result = f.tela.consultar("PCBA-1", timeout_s=.7, retries=1,
