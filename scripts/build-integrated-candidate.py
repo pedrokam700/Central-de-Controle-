@@ -133,7 +133,15 @@ VALIDACAO FISICA AINDA NECESSARIA:
 - Guardian TAXXX_5G / rota 172.29.185.215/32 em queda real.
 - Reboot/bootstrap, performance e 9/9 desktop/mobile.
 
-Se este candidato falhar, feche a pasta nova e volte a usar a CLEAN V3 intacta.
+SE O ENSAIO FALHAR:
+- Interrompa o ensaio e acione o responsavel pelo procedimento supervisionado.
+- Retorne somente a instalacao oficial anterior comprovada (0.5.39 neste baseline),
+  com sua identidade e dados preservados, conforme o rollback previamente ensaiado.
+- Este ZIP nao restaura backups nem desativa/reinscreve guardians.
+- Nao inicie dois agentes/guardians; nao copie nem substitua SQLite, WAL, token, configuracao, source_id ou filas
+  para contornar uma falha. Nao reinstale CLEAN sobre a instalacao existente.
+- Se o backup/restauracao ou a identidade anterior nao puderem ser comprovados,
+  mantenha a migracao bloqueada e preserve as duas pastas para investigacao.
 ''').encode()
  assert_clean_payload(payload)
  manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}

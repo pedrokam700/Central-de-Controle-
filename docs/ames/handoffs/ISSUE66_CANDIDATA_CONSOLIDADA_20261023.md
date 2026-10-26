@@ -400,3 +400,16 @@ SHA `5f06b267d5cd0e430cc93b6b0c22b967dbd145d9`: Central Quality Gate **#40363602
 6. Pendências reais ainda abertas: autoridade/política persistente compartilhada dos dois writers, coleta completa quando houver paginação, fechamentoFULL real/deduplicação entre novas coletas integrais, desempenho e integração operacional de instalação com PR64. Não declarar Issue66 inteira concluída. Prossiga somente com defeito reproduzido no escopo existente, sem repetir os três incrementos acima.
 
 PR68 permanece DRAFT; oficial0.5.39/main/PR64/PR67/Firebase produção/porta8765/SQLite e postos intactos. Implementação automatizada não é homologação física; estado físico da candidata PENDING.
+
+
+### Gate dashboard confirmado
+
+SHA `5b1d6acacce2592de7f839e32cdefe765e591fde`: Central Quality Gate **#40364303200 COMPLETED SUCCESS 3/3**, com nove views, Firestore E2E/Rules e Static.
+
+## Preparação final do pacote — rollback aponta à instalação oficial preservada
+
+A conferência do LEIA_PRIMEIRO gerado encontrou frase antiga mandando voltar à CLEAN V3. Isso contrariava o baseline oficial0.5.39 e o próprio aviso de preservar a instalação existente. Corrigida SOMENTE a orientação: falha do ensaio exige retorno supervisionado à instalação oficial anterior comprovada, com dados/identidade preservados e rollback ensaiado; ZIP não restaura backups nem reinscreve guardians. Sem cópia/substituição de SQLite/WAL/token/config/source_id/filas, sem CLEAN sobre instalação ativa ou dois agentes/guardians. Backup/identidade sem prova mantém migração bloqueada.
+
+Arquivos: scripts/build-integrated-candidate.py, scripts/ames-candidate-legacy-port-guard.test.mjs e este handoff. Teste da instrução obsoleta reproduziu RED antes da correção; após ajuste contrato do pacote/porta **2/2 PASS**, syntax/diff PASS. O build/verificação integral do ZIP e os três jobs precisam de CI do próximo SHA; consultar checkpoint final da PR. Nenhum código do updater, launcher, guardian ou coletores modificado neste incremento.
+
+**Ponto final de retomada:** revalidar HEAD e o comentário CI/artefato associado; começar pelos itens1–6 de Prontidão acima. As três correções funcionais anteriores já estão integradas, não refazer. Não instalar este CLEAN no posto existente; pendências de autoridade multiwriter, paginação integral, FULL real e guardian permanecem abertas, além da homologação física. PR68 DRAFT; main/PR64/PR67/Firebase produção/fábrica intocados.

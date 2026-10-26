@@ -19,4 +19,7 @@ test('o pacote exige migracao supervisionada quando existe guardian anterior',()
   assert.match(builder,/PC COM 0\.5\.39 OU OUTRO GUARDIAN/);
   assert.match(builder,/NAO EXECUTE 00_INICIAR_AQUI\.bat/);
   assert.match(builder,/ESTE PACOTE NAO E UM UPDATER NEM UMA MIGRACAO AUTOMATICA/);
+  assert.doesNotMatch(builder,/volte a usar a CLEAN V3 intacta/);
+  assert.match(builder,/instalacao oficial anterior comprovada \(0\.5\.39/);
+  assert.match(builder,/nao copie nem substitua SQLite, WAL, token, configuracao, source_id ou filas/);
 });
