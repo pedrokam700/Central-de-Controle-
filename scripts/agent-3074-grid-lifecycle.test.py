@@ -19,10 +19,25 @@ from ames import tela_3074 as collector  # noqa: E402
 NODE = r"""
 const vm=require('node:vm'),readline=require('node:readline');
 let now=0,plans=[],pending=null,input='',submitted=[],revision=0;
-const stores=[];
+const stores=[],pageCalls=[];
 function store(rows){
   const handlers=new Map();
   const s={rows,loading:false,
+    getProxy(){return {extraParams:this.extraParams||{}};},
+    loadPage(n,options){
+      pageCalls.push({page:n,params:options.params});
+      const p=(this.pagePlans||[])[n-2]||{mode:'failed'};
+      this.loading=true;this.emit('beforeload',this,{page:n});
+      if(p.mode==='timeout')return;
+      if(p.mode==='input_changed')input='OTHER-QUERY';
+      if(p.mode==='params_changed')this.lastOptions.params.custom='changed';
+      if(p.mode==='store_changed')grids=[grid('3074-grid-1',store([]))];
+      this.currentPage=n;this.rows=p.rows||[];
+      if(p.total!==undefined)this.total=p.total;
+      this.loading=false;const success=p.mode!=='failed';
+      this.emit('load',this,this.rows,success);
+      options.callback(this.rows.map(data=>({data})),{page:p.wrongPage||n,params:options.params},success);
+    },
     on(n,f){handlers.set(n,[...(handlers.get(n)||[]),f]);},
     un(n,f){handlers.set(n,(handlers.get(n)||[]).filter(v=>v!==f));},
     emit(n,...args){for(const f of [...(handlers.get(n)||[])])f(...args);},
@@ -32,13 +47,13 @@ function store(rows){
     listenerCount(){return [...handlers.values()].reduce((n,v)=>n+v.length,0);}
   }; stores.push(s);return s;
 }
-const columns=['Barcode','Sn Type','Batch Id','Line Id','Whether to use','Create Time'].map(t=>({text:t,dataIndex:t}));
+const columns=['Barcode','Sn Type','Batch Id','Line Id','Whether to use','Create Time','Operation'].map(t=>({text:t,dataIndex:t}));
 let current=store([]);
 const rectangle={getBoundingClientRect:()=>({width:600,height:300})};
 const grid=(id,s)=>({id,columns,getStore:()=>s,el:{dom:rectangle},isVisible:()=>true});
 let grids=[grid('3074-grid-1',current)];
 const ctx=vm.createContext({});
-Object.assign(ctx,{window:ctx,Ext:{ComponentQuery:{query:t=>t==='gridpanel'?grids:[]},getCmp:id=>grids.find(g=>g.id===id)},getComputedStyle:()=>({display:'block',visibility:'visible'})});
+Object.assign(ctx,{window:ctx,Ext:{ComponentQuery:{query:t=>t==='gridpanel'?grids:[]},getCmp:id=>grids.find(g=>g.id===id)},setTimeout,clearTimeout,document:{querySelector:()=>({get value(){return input;}})},getComputedStyle:()=>({display:'block',visibility:'visible'})});
 function complete(){
   if(!pending)return;
   const p=pending;pending=null;
@@ -49,6 +64,9 @@ function complete(){
     current=store(p.rows||[]);grids=[grid('3074-grid-1',current)];return;
   }
   current.rows=p.rows||[];current.total=p.total;current.loading=false;
+  if(p.paging){current.pageSize=p.pageSize||1;current.currentPage=p.currentPage||1;
+    current.lastOptions={params:{sn:p.query||input,start:0,limit:current.pageSize,custom:'keep'}};
+    current.pagePlans=p.pages||[];current.buffered=p.buffered||false;}
   if(p.mode==='failed')current.emit('load',current,current.rows,false);
   else if(p.mode==='loadData')current.emit('datachanged',current);
   else {current.emit('load',current,current.rows,true);current.emit('datachanged',current);}
@@ -69,12 +87,12 @@ function handle(r){
     return true;
   }
   if(r.op==='advance'){now+=r.ms;if(pending&&now>=pending.at)complete();return now;}
-  if(r.op==='state')return {submitted,listeners:stores.reduce((n,s)=>n+s.listenerCount(),0)};
+  if(r.op==='state')return {submitted,pageCalls,listeners:stores.reduce((n,s)=>n+s.listenerCount(),0)};
   if(r.op==='empty')return current.rows.length===0;
   throw new Error('unsupported '+r.op);
 }
-readline.createInterface({input:process.stdin}).on('line',l=>{
-  try{process.stdout.write(JSON.stringify({result:handle(JSON.parse(l))??null})+'\n');}
+readline.createInterface({input:process.stdin}).on('line',async l=>{
+  try{process.stdout.write(JSON.stringify({result:(await handle(JSON.parse(l)))??null})+'\n');}
   catch(e){process.stdout.write(JSON.stringify({error:String(e.stack||e)})+'\n');}
 });
 """
@@ -229,6 +247,70 @@ class RefreshProofTests(unittest.TestCase):
                                       empty_confirm_s=.05, empty_fallback_s=.12)
             self.assertFalse(result["no_data"])
             self.assertEqual(result["coverage"]["status"], "incomplete_page")
+
+    def test_collects_supported_pages_without_losing_query_parameters(self):
+        plan={"rows":rows("M1"),"total":3,"paging":True,
+              "pages":[{"rows":rows("M2")},{"rows":rows("M3")}]}
+        with Fixture([plan]) as f:
+            result=f.tela.consultar("PCBA-1",timeout_s=.7,retries=1)
+            self.assertEqual([r["Barcode"] for r in result["rows"]],["M1","M2","M3"])
+            self.assertEqual(result["coverage"]["status"],"returned")
+            self.assertEqual(result["pagination"]["completed_pages"],[1,2,3])
+            self.assertEqual([v["page"] for v in f.call(op="state")["pageCalls"]],[2,3])
+            self.assertTrue(all(v["params"]=={"sn":"PCBA-1","custom":"keep"} for v in f.call(op="state")["pageCalls"]))
+            self.assertEqual(f.call(op="state")["listeners"],0)
+
+    def test_kit_rows_keep_same_physical_sn_at_different_operations(self):
+        first=[{**rows("KIT-SN")[0],"Operation":"A1"}]
+        second=[{**rows("KIT-SN")[0],"Operation":"A2"}]
+        with Fixture([{"rows":first,"total":2,"paging":True,"pages":[{"rows":second}]}]) as f:
+            result=f.tela.consultar("PCBA-1",timeout_s=.7,retries=1)
+            self.assertEqual(len(result["rows"]),2)
+            self.assertEqual(len(collector.componentes_serializados(result["rows"],"PCBA-1")),1)
+            self.assertEqual(result["coverage"]["status"],"returned")
+
+    def test_page_failure_preserves_confirmed_previous_pages(self):
+        plan={"rows":rows("M1"),"total":3,"paging":True,
+              "pages":[{"rows":rows("M2")},{"mode":"failed"}]}
+        with Fixture([plan]) as f:
+            result=f.tela.consultar("PCBA-1",timeout_s=.7,retries=1)
+            self.assertEqual([r["Barcode"] for r in result["rows"]],["M1","M2"])
+            self.assertEqual(result["coverage"]["status"],"incomplete_page")
+            self.assertEqual(result["pagination"]["reason"],"page_load_failed")
+            self.assertFalse(result["no_data"])
+
+    def test_unconfirmed_query_or_page_never_advances(self):
+        for patch,reason in [({"query":"OTHER"},"query_parameters_unconfirmed"),
+                             ({"currentPage":2},"first_page_unconfirmed"),
+                             ({"buffered":True},"unsupported_store"),
+                             ({"total":1001},"pagination_limit")]:
+            with self.subTest(reason=reason),Fixture([{"rows":rows("M1"),"total":3,"paging":True,**patch}]) as f:
+                result=f.tela.consultar("PCBA-1",timeout_s=.7,retries=1)
+                self.assertEqual(result["pagination"]["reason"],reason)
+                self.assertEqual(f.call(op="state")["pageCalls"],[])
+                self.assertEqual(result["coverage"]["status"],"incomplete_page")
+
+    def test_changed_total_input_or_repeated_page_never_becomes_complete(self):
+        for page,reason in [({"rows":rows("M1")},"repeated_page"),
+                            ({"rows":rows("M2"),"total":4},"total_changed"),
+                            ({"rows":rows("M2"),"mode":"input_changed"},"query_changed"),
+                            ({"rows":rows("M2"),"mode":"params_changed"},"query_changed"),
+                            ({"rows":rows("M2"),"mode":"store_changed"},"store_changed"),
+                            ({"rows":rows("M2"),"wrongPage":4},"page_identity_unconfirmed"),
+                            ({"rows":[]},"page_count_mismatch")]:
+            with self.subTest(reason=reason),Fixture([{"rows":rows("M1"),"total":2,"paging":True,"pages":[page]}]) as f:
+                result=f.tela.consultar("PCBA-1",timeout_s=.7,retries=1)
+                self.assertEqual(result["coverage"]["status"],"incomplete_page")
+                self.assertEqual(result["pagination"]["reason"],reason)
+                self.assertEqual([r["Barcode"] for r in result["rows"]],["M1"])
+
+    def test_page_timeout_retains_partial_rows_and_pending_store_barrier(self):
+        with Fixture([{"rows":rows("M1"),"total":2,"paging":True,"pages":[{"mode":"timeout"}]}]) as f:
+            result=f.tela.consultar("PCBA-1",timeout_s=.05,retries=1)
+            self.assertEqual(result["pagination"]["reason"],"page_timeout")
+            self.assertEqual(result["coverage"]["status"],"incomplete_page")
+            with self.assertRaisesRegex(RuntimeError,"3074_PREVIOUS_QUERY_PENDING"):
+                f.tela.consultar("PCBA-2",timeout_s=.05,retries=1)
 
     def test_previous_inflight_response_cannot_confirm_next_query(self):
         # View can be ignored by the MES while its previous request is pending.

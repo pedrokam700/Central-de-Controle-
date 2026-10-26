@@ -102,6 +102,96 @@ class Tela3074:
                   grid_disappeared:!g};
         }""", {"id": grid_id, "action": action, "token": token})
 
+    def _collect_remaining_pages(self, frame, grid, sn, remaining_s):
+        """Bounded ExtJS paging of the SAME confirmed View/query/store.
+
+        Unsupported/ambiguous paging leaves observed rows intact and partial.
+        Never guess server endpoints, reset a query or issue parallel loads.
+        """
+        try:
+            result = frame.evaluate(r"""async args => {
+              const rows=[...args.rows], completed=[];
+              const meta={status:'partial',completed_pages:completed,reason:null};
+              const finish=reason=>({rows,pagination:{...meta,reason}});
+              const g=window.Ext && Ext.getCmp && Ext.getCmp(args.id);
+              const s=g && g.getStore && g.getStore();
+              if(!s || typeof s.loadPage!=='function' || s.buffered)return finish('unsupported_store');
+              const size=Number(s.pageSize),total=Number(args.total);
+              if(!Number.isSafeInteger(size)||size<1||Number(s.currentPage)!==1||
+                 rows.length!==Math.min(size,total))return finish('first_page_unconfirmed');
+              completed.push(1);
+              if(!Number.isSafeInteger(total)||total<1)return finish('total_unconfirmed');
+              const pages=Math.ceil(total/size);
+              if(!Number.isSafeInteger(pages)||pages>50||total>5000)return finish('pagination_limit');
+              const normal=v=>String(v??'').trim().toUpperCase();
+              const extra=s.getProxy && s.getProxy()?.extraParams || {};
+              const last=s.lastOptions?.params || {};
+              const params={...extra,...last};
+              if(normal(params.sn)!==args.sn)return finish('query_parameters_unconfirmed');
+              // ExtJS loadPage supplies these from the requested page number.
+              for(const key of ['page','start','limit'])delete params[key];
+              const queryKey=value=>JSON.stringify(Object.keys(value).filter(k=>!['page','start','limit'].includes(k)).sort().map(k=>[k,value[k]]));
+              const confirmedQuery=queryKey(params);
+              const columns=()=>g.headerCt?.getGridColumns?g.headerCt.getGridColumns():(g.columns||[]);
+              const columnIds=columns().map(c=>c.dataIndex||'');
+              if(columnIds.length!==args.headers.length||columnIds.some(v=>!v))return finish('columns_changed');
+              const proxyNames=s.getProxy && s.getProxy();
+              if(proxyNames && ['pageParam','startParam','limitParam'].some(k=>proxyNames[k] &&
+                 !['page','start','limit'].includes(proxyNames[k])))return finish('unsupported_paging_parameters');
+              const valid=()=>{
+                const current=Ext.getCmp(args.id);
+                if(current!==g||g.getStore()!==s||g.isVisible&&!g.isVisible(true))return 'store_changed';
+                const input=document.querySelector('input[name="sn"]');
+                if(!input||normal(input.value)!==args.sn)return 'query_changed';
+                const latest={...(s.getProxy && s.getProxy()?.extraParams||{}),...(s.lastOptions?.params||{})};
+                if(normal(latest.sn)!==args.sn||queryKey(latest)!==confirmedQuery)return 'query_changed';
+                if(Number(s.getTotalCount())!==total)return 'total_changed';
+                if(JSON.stringify(columns().map(c=>c.dataIndex||''))!==JSON.stringify(columnIds))return 'columns_changed';
+                return null;
+              };
+              const signatures=new Set([JSON.stringify(rows)]),deadline=Date.now()+Math.max(0,args.remaining_ms);
+              try { for(let page=2;page<=pages;page++){
+                const changed=valid();if(changed)return finish(changed);
+                if(s.isLoading && s.isLoading())return finish('store_busy');
+                const budget=deadline-Date.now();if(budget<=0)return finish('page_timeout');
+                const reply=await new Promise(resolve=>{
+                  let settled=false;
+                  const done=value=>{if(settled)return;settled=true;clearTimeout(timer);resolve(value);};
+                  const timer=setTimeout(()=>done({error:'page_timeout'}),budget);
+                  try{s.loadPage(page,{params:{...params},callback:(records,operation,success)=>{
+                    if(settled)return;
+                    if(success!==true)return done({error:'page_load_failed'});
+                    if(Number(operation?.page)!==page||normal(operation?.params?.sn)!==args.sn)return done({error:'page_identity_unconfirmed'});
+                    const why=valid();if(why)return done({error:why});
+                    const next=(records||[]).map(record=>{
+                      const data=record.data||record;
+                      return Object.fromEntries(args.headers.map((header,i)=>[header,data[columnIds[i]]??null]));
+                    });
+                    done({rows:next});
+                  }});}catch(e){done({error:'page_load_failed'});}
+                });
+                if(reply.error)return finish(reply.error);
+                const next=reply.rows;
+                if(next.length!==Math.min(size,total-(page-1)*size))return finish('page_count_mismatch');
+                const signature=JSON.stringify(next);
+                if(signatures.has(signature))return finish('repeated_page');
+                signatures.add(signature);rows.push(...next);completed.push(page);
+              }
+              } catch(e) {return finish('pagination_observer_failed');}
+              meta.status='complete';return finish(null);
+            }""", {"id": grid.get("grid_id"), "headers": grid["headers"],
+                      "rows": grid["rows"], "total": grid.get("store_total_count"),
+                      "sn": sn, "remaining_ms": max(0, int(remaining_s * 1000))})
+            combined = {**grid, "rows": result["rows"], "pagination": result["pagination"]}
+            combined["coverage"] = classify_3074_page(combined)
+            return combined
+        except Exception:
+            # Retain the already confirmed first page. An observer error does
+            # not turn the query into zero or authorize a different target.
+            return {**grid, "coverage": classify_3074_page(grid),
+                    "pagination": {"status": "partial", "completed_pages": [],
+                                   "reason": "pagination_observer_failed"}}
+
     def consultar(
         self,
         sn: str,
@@ -197,6 +287,11 @@ class Tela3074:
 
                     query_row = bool(rows and any(_row_contains_query(r, sn) for r in rows))
                     if rows and loading is not True and (fresh or (not response_armed and query_row)):
+                        if page_partial and fresh:
+                            grid = self._collect_remaining_pages(frame, grid, sn,
+                                timeout_s - (time.time() - start))
+                            rows = grid["rows"]
+                            page_metadata.update(coverage=grid["coverage"], pagination=grid["pagination"])
                         return {
                             "query_sn": sn,
                             "grid_kind": grid["kind"],
