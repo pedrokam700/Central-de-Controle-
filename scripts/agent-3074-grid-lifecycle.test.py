@@ -50,6 +50,7 @@ function complete(){
   }
   current.rows=p.rows||[];current.loading=false;
   if(p.mode==='failed')current.emit('load',current,current.rows,false);
+  else if(p.mode==='loadData')current.emit('datachanged',current);
   else {current.emit('load',current,current.rows,true);current.emit('datachanged',current);}
 }
 function handle(r){
@@ -60,7 +61,7 @@ function handle(r){
   if(r.op==='click'){
     const p=plans.shift();submitted.push(input);
     if(p&&p.mode!=='stale'){
-      if(p.mode!=='replace'&&p.mode!=='rebind'){
+      if(p.mode!=='replace'&&p.mode!=='rebind'&&p.mode!=='loadData'){
         current.loading=true;current.emit('beforeload',current,{});
       }
       pending={...p,at:now+(p.delay||0)};if(pending.at<=now)complete();
@@ -170,6 +171,16 @@ class RefreshProofTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "nao confirmou atualizacao"):
                 f.tela.consultar("PCBA-1", timeout_s=.45, retries=1)
             self.assertEqual(f.call(op="state")["listeners"], 0)
+
+    def test_stale_rows_with_same_query_sn_still_require_refresh(self):
+        with Fixture([{"mode": "stale"}], initial=rows("PCBA-1")) as f:
+            with self.assertRaises(RuntimeError):
+                f.tela.consultar("PCBA-1", timeout_s=.45, retries=1)
+
+    def test_local_store_datachanged_after_view_can_prove_fresh_rows(self):
+        with Fixture([{"mode": "loadData", "rows": rows("CAMERA-LOCAL"), "delay": 110}]) as f:
+            result = f.tela.consultar("PCBA-1", timeout_s=.7, retries=1)
+            self.assertEqual(result["rows"][0]["Barcode"], "CAMERA-LOCAL")
 
     def test_fresh_empty_grid_is_confirmed_zero_only_after_store_load(self):
         with Fixture([{"rows": [], "delay": 100}], initial=rows("STALE")) as f:

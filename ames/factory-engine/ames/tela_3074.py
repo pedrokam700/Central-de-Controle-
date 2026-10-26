@@ -141,6 +141,10 @@ class Tela3074:
                     # Fallback legado apenas para linha que contém o SN exato.
                     # Sem refresh comprovado não pode concluir retorno de
                     # componentes nem zero de vínculos.
+                    try:
+                        self._store_response(frame, armed_grid_id, "dispose", response_token)
+                    except Exception:
+                        pass
                     armed_grid_id = None
                 view.click(timeout=6000)
             except Exception as exc:
@@ -166,7 +170,11 @@ class Tela3074:
                         proof = self._store_response(frame, armed_grid_id, "status", response_token) or {}
                         fresh = grid.get("grid_id") != armed_grid_id or proof.get("store_rebound")
                         fresh = fresh or (proof.get("loads", 0) > 0 and proof.get("success") is True)
-                        fresh = fresh or (proof.get("changes", 0) > 0 and proof.get("success") is not False)
+                        # Com requisicao remota pendente, uma alteracao parcial
+                        # de dados anterior ao evento load nao comprova sucesso.
+                        fresh = fresh or (proof.get("changes", 0) > 0
+                                          and proof.get("beforeloads", 0) == 0
+                                          and proof.get("success") is not False)
                     else:
                         grid = extract_best_grid(page, EXPECTED, ("3074", "Barcode", "Sn Query"))
                         fresh = False
@@ -175,7 +183,7 @@ class Tela3074:
                     loading = grid.get("store_loading")
 
                     query_row = bool(rows and any(_row_contains_query(r, sn) for r in rows))
-                    if rows and loading is not True and (fresh or query_row):
+                    if rows and loading is not True and (fresh or (not response_armed and query_row)):
                         return {
                             "query_sn": sn,
                             "grid_kind": grid["kind"],
