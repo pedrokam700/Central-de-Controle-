@@ -294,6 +294,37 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
         browser.disconnect()
 
 
+def classify_individual_sn_target(query: str, rows_3074: list, has_2114_history: bool) -> dict:
+    """Infer only a source-proven PCBA/material target; mixed grids stay unknown.
+
+    The scanned SN need not appear in the 3074 Barcode column. A PCBA
+    returns component barcodes; a material returns PCBA barcodes. 2114 history
+    remains strongest evidence of a board. Never infer from SN prefixes.
+    """
+    if has_2114_history:
+        return {"type": "PCBA", "basis": "2114_HISTORY"}
+    query = str(query or "").strip().upper()
+    kinds = []
+    for row in rows_3074 or []:
+        if not isinstance(row, dict):
+            return {"type": "SN_INDETERMINADO", "basis": "3074_INVALID_ROW"}
+        barcode = str(row.get("Barcode") or "").strip().upper()
+        raw_kind = str(row.get("Sn Type") or "").strip().casefold().replace(" ", "")
+        if not barcode or not raw_kind:
+            return {"type": "SN_INDETERMINADO", "basis": "3074_MISSING_BARCODE_OR_KIND"}
+        is_board = "pcba" in raw_kind
+        if barcode == query and is_board:
+            return {"type": "PCBA", "basis": "3074_EXPLICIT_PCBA_ROW"}
+        kinds.append(is_board)
+    if not kinds:
+        return {"type": "SN_INDETERMINADO", "basis": "NO_TYPE_EVIDENCE"}
+    if all(kinds):
+        return {"type": "MATERIAL_SN", "basis": "3074_ONLY_RELATED_PCBAS"}
+    if not any(kinds):
+        return {"type": "PCBA", "basis": "3074_ONLY_LINKED_COMPONENTS"}
+    return {"type": "SN_INDETERMINADO", "basis": "3074_MIXED_ROW_TYPES"}
+
+
 def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, line_callback=None) -> Dict[str, Any]:
     """Read one scanned SN/PCBA across 3074 + 2114 and, when possible, 3022.
 
@@ -393,10 +424,13 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             except Exception as exc:
                 histories.append({"pcba_sn": pcba, "status": "ERROR", "result": None, "error": f"{type(exc).__name__}: {exc}"})
 
-        # Detect likely current/query PCBA from 2114 evidence; if scanned SN has no
-        # 2114 history and 3074 returned PCBA rows, treat it as a material query.
-        query_hist = next((h for h in histories if h["pcba_sn"] == query and h.get("result") and not h["result"].get("no_data")), None)
-        detected_type = "PCBA" if query_hist else ("MATERIAL_SN" if historical_pcbas else "SN_INDETERMINADO")
+        # 2114 history proves PCBA; without 2114, rows must support exactly one
+        # interpretation. A mixed 3074 grid must NOT reclassify a PCBA as a
+        # material (nor a material as a board) merely because it contains PCBAs.
+        query_hist = next((h for h in histories if h["pcba_sn"] == query and h.get("result")
+                           and not h["result"].get("no_data") and h["result"].get("rows")), None)
+        target_classification = classify_individual_sn_target(query, rows3074, bool(query_hist))
+        detected_type = target_classification["type"]
         material_cycles = []
         related_pcbas_total = len(historical_pcbas)
         if detected_type == "PCBA" and r3074 is not None:
@@ -672,6 +706,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "query_sn": query, "sn": query,
             "detected_type": detected_type,
+            "detected_type_basis": target_classification["basis"],
             "line": line,
             "product_model": model,
             "shift_2114": shift,

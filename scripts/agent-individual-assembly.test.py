@@ -39,6 +39,8 @@ class Screen3074:
         if self.response_mode=="invalid":return {"unexpected":"not a grid"}
         if self.response_mode=="unproven_empty":return {"rows":[]}
         if self.response_mode=="confirmed_empty":return {"rows":[],"no_data":True}
+        if self.response_mode=="components_only" and sn=="CUR":
+            return {"rows":[r("M2","2026-10-19T16:00:00Z","","Y")]}
         if sn=="CUR":return {"rows":[
           r("M1","2026-10-19T12:00:00Z","2026-10-19T14:00:00Z","N"),
           r("M2","2026-10-19T16:00:00Z","","Y"),
@@ -50,10 +52,12 @@ class Screen3074:
         raise AssertionError("unexpected 3074 query "+sn)
 class Screen2114:
     anchor=True
+    no_history=False
     calls=[]
     def __init__(self,*args):pass
     def consultar(self,sn):
         Screen2114.calls.append(sn)
+        if self.no_history:return {"rows":[],"no_data":True,"model":"CPH2817"}
         row={"Defect Hist Seq":"0","Defect Code":"D1",
              "Defect Description":"Camera: Offset","Repair Status":"N",
              "Defect Time":DEFECT if Screen2114.anchor else ""}
@@ -80,10 +84,42 @@ class IndividualAssemblyTests(unittest.TestCase):
         Navigation.fail_3074=False
         Screen2114.calls=[]
         Screen2114.anchor=True
+        Screen2114.no_history=False
         Screen3022.calls=[]
-    def lookup(self,include_3022=False):
+    def lookup(self,include_3022=False,sn="CUR"):
         with patch.object(engine_bridge.importlib,"import_module",side_effect=fake_module),patch.object(engine_bridge,"session_object",side_effect=lambda x:x):
-            return engine_bridge.run_individual_lookup(ROOT/"ames"/"factory-engine","CUR",include_3022=include_3022)
+            return engine_bridge.run_individual_lookup(ROOT/"ames"/"factory-engine",sn,include_3022=include_3022)
+    def test_type_classifier_requires_consistent_evidence_without_2114(self):
+        classify=engine_bridge.classify_individual_sn_target
+        related=[r("OLD","2026-10-19T12:00:00Z",typ="PCBA"),r("NEW","2026-10-19T14:00:00Z",typ="PCBA")]
+        materials=[r("M2","2026-10-19T12:00:00Z",typ="Rear Camera")]
+        self.assertEqual(classify("CUR",related,False)["type"],"MATERIAL_SN")
+        self.assertEqual(classify("CUR",materials,False)["type"],"PCBA")
+        self.assertEqual(classify("CUR",materials+related,False)["type"],"SN_INDETERMINADO")
+        self.assertEqual(classify("CUR",[],False)["type"],"SN_INDETERMINADO")
+        self.assertEqual(classify("CUR",[{"Barcode":"CUR","Sn Type":"PCBA"}],False)["type"],"PCBA")
+        self.assertEqual(classify("CUR",materials+related,True)["type"],"PCBA")
+        self.assertEqual(classify("CUR",[{"Barcode":"OLD"}],False)["type"],"SN_INDETERMINADO")
+    def test_without_2114_component_only_3074_still_identifies_pcba(self):
+        Screen2114.no_history=True
+        Screen3074.response_mode="components_only"
+        out=self.lookup()
+        self.assertEqual(out["detected_type"],"PCBA")
+        self.assertEqual(out["detected_type_basis"],"3074_ONLY_LINKED_COMPONENTS")
+        self.assertEqual([c["item_sn"] for c in out["trace_3074"]["components"]],["M2"])
+        self.assertIsNone(out["trace_2114"]["current_failure"])
+    def test_without_2114_material_lookup_still_identifies_material(self):
+        Screen2114.no_history=True
+        out=self.lookup(sn="M1")
+        self.assertEqual(out["detected_type"],"MATERIAL_SN")
+        self.assertEqual(out["detected_type_basis"],"3074_ONLY_RELATED_PCBAS")
+        self.assertIsNotNone(out["material_investigation"])
+    def test_without_2114_mixed_grid_keeps_type_unproven(self):
+        Screen2114.no_history=True
+        out=self.lookup()
+        self.assertEqual(out["detected_type"],"SN_INDETERMINADO")
+        self.assertEqual(out["detected_type_basis"],"3074_MIXED_ROW_TYPES")
+        self.assertEqual(out["trace_3074"]["components"],[])
     def test_current_new_mounting_supersedes_old_failure_materials(self):
         output=self.lookup()
         self.assertEqual(Screen3074.calls,["CUR","M2"])
