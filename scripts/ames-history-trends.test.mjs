@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {canonicalAgentFixture,productFixture} from './ames-fixtures.mjs';
 import {createHistoryTrendReader,planHistoryDays,compareHistoryDays,historyWeekSummary} from '../ames/data/history-trends.mjs';
+import {withHistoricalTrends} from '../ames/console-history-trends.mjs';
+
+test('historical trend UI module parses before its browser initializer runs',()=>{
+ assert.equal(typeof withHistoricalTrends,'function');
+});
 function fixture(date,{id=date,source='A',revision=1,mode='previous_day',end='12:00',fpy=98,complete=false}={}){
  const p=canonicalAgentFixture(productFixture('TAN10101',2));p.snapshot_id=id;p.summary.snapshot_id=id;p.source_id=source;p.snapshot_revision=revision;
  p.summary.period={start_at:date+'T07:00-03:00',end_at:date+'T'+end+'-03:00',mode};p.summary.fpy=fpy;
