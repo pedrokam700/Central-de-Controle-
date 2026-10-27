@@ -303,5 +303,12 @@ class SourceAndMountingInvariants(unittest.TestCase):
         raw={'lotId':'PCBA-EXACT','repairComment':'LCD observado na 3028'}
         result=_detail_to_record(raw,'TAN10103')
         self.assertEqual(result['repair_comment'],'LCD observado na 3028')
+        from comment_provenance_3028 import preserve_3028_comment
+        repaired=preserve_3028_comment({'repair_comment':'','raw':{'Repair Comment':'LCD na 3028'}})
+        self.assertEqual(repaired['repair_comment'],'LCD na 3028')
+        unknown=preserve_3028_comment({'repair_comment':'','raw':{'3012 Comment':'nao misturar'}})
+        self.assertEqual(unknown['repair_comment'],'')
+        kept=preserve_3028_comment({'repair_comment':'ja comprovado','raw':{'Repair Comment':'outro'}})
+        self.assertEqual(kept['repair_comment'],'ja comprovado')
 
 if __name__=="__main__":unittest.main()
