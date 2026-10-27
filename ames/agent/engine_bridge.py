@@ -532,6 +532,10 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         if detected_type == "PCBA" and r3074 is not None:
             selection = temporal3074.montagem_principal_da_consulta(rows3074, query, anchor_time)
             mounting_views = temporal3074.montagens_atual_e_ultima_falha(rows3074, query, anchor_time)
+            # Preserve N/unbound 3074 history as audit evidence even when
+            # neither a current Y nor a 2114 time anchor can be proven.
+            # This never contributes to either mounting's reuse KPI.
+            mounting_views['history_audit'] = selection.get('history') or []
             failure_components = mounting_views["last_failure"]["components"]
             components = [
                 {"item_sn": c["item_sn"], "item_type": c["item_type"],
