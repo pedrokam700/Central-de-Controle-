@@ -3016,10 +3016,52 @@ const aiPilot = {
     }
     offlineOutbox.legacyPendingCount().then(count=>{window.__centralOfflineLegacyPending=count;if(count)console.warn(`[Central] ${count} item(ns) offline V1 em quarentena aguardam recuperacao explicita.`);}).catch(error=>console.warn('Diagnostico da fila offline legada indisponivel:',error.message));
     let offlineSupportRegistered=false;
+function offerCentralWebUpdate(cacheRevision,registration=null){
+  // Versioned PWA shell is already fully staged. Never reload a live MES task.
+  const revision=String(cacheRevision||'available');
+  if(revision===localStorage.getItem('cora.sw.loaded'))return;
+  if(document.querySelector('[data-central-update-ready]'))return;
+  const panel=document.createElement('aside');
+  panel.dataset.centralUpdateReady='';
+  panel.setAttribute('role','status');
+  panel.setAttribute('aria-live','polite');
+  panel.style.cssText='position:fixed;right:16px;bottom:18px;z-index:6000;max-width:min(360px,calc(100vw - 32px));padding:14px;border:1px solid #9aadc5;border-radius:12px;background:#fff;color:#172030;box-shadow:0 7px 24px #0002;font:13px system-ui';
+  const heading=document.createElement('strong');heading.textContent='Nova versão da Central disponível';
+  const copy=document.createElement('p');copy.textContent='A atualização está pronta. Salve o que estiver fazendo e atualize quando quiser. Nenhum dado MES será apagado.';copy.style.cssText='line-height:1.4;margin:8px 0';
+  const action=document.createElement('button');action.type='button';action.textContent='Atualizar página';
+  action.style.cssText='padding:9px 13px;background:#172030;color:white;border:0;border-radius:8px;cursor:pointer';
+  const defer=document.createElement('button');defer.type='button';defer.textContent='Depois';
+  defer.style.cssText='margin-left:10px;padding:9px;background:transparent;color:#172030;border:0;cursor:pointer';
+  defer.addEventListener('click',()=>panel.remove());
+  action.addEventListener('click',()=>{
+    const worker=registration?.waiting;
+    if(worker && navigator.serviceWorker?.controller){
+      navigator.serviceWorker.addEventListener('controllerchange',()=>{
+        localStorage.setItem('cora.sw.loaded',revision);location.reload();
+      },{once:true});
+      worker.postMessage({type:'cora-activate-update'});
+    }else{
+      localStorage.setItem('cora.sw.loaded',revision);location.reload();
+    }
+  });
+  panel.append(heading,copy,action,defer);
+  document.body.append(panel);
+}
 function registerOfflineSupport(){
   if(offlineSupportRegistered) return;
   offlineSupportRegistered=true;
-  window.addEventListener('online',()=>{mesSync?.retry();syncOfflineQueue().catch(()=>{});});window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data?.version==='15.1.13.49'&&localStorage.getItem('cora.sw.loaded')!==(e.data.cache_revision||e.data.version)){localStorage.setItem('cora.sw.loaded',e.data.cache_revision||e.data.version);location.reload();}if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
+  window.addEventListener('online',()=>{mesSync?.retry();syncOfflineQueue().catch(()=>{});});window.addEventListener('offline',()=>{const el=document.querySelector('#aiDataState');if(el)el.textContent='Offline: novas evidências serão salvas no dispositivo';});if('serviceWorker' in navigator){navigator.serviceWorker.register('/Central-de-Controle-/sw.js',{updateViaCache:'none'}).then(reg=>{reg.update().catch(()=>{});
+  const checkWaiting=()=>{if(reg.waiting&&navigator.serviceWorker.controller)offerCentralWebUpdate('pending',reg);};
+  checkWaiting();
+  reg.addEventListener('updatefound',()=>{
+    const worker=reg.installing;
+    worker?.addEventListener('statechange',()=>{
+      if(worker.state==='installed')checkWaiting();
+    });
+  });
+  const updateInterval=setInterval(()=>{if(navigator.onLine&&document.visibilityState!=='hidden')reg.update().catch(()=>{});},60*60*1000);
+  window.addEventListener('pagehide',()=>clearInterval(updateInterval),{once:true});
+  if(reg.sync)reg.sync.register('cora-sync').catch(()=>{});}).catch(e=>console.warn('SW:',e.message));navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='cora-cache-updated'&&e.data.version==='15.1.13.49')offerCentralWebUpdate(e.data.cache_revision);if(e.data?.type==='cora-sync')syncOfflineQueue().catch(()=>{});if(e.data?.type==='central-notification-click')openCentralAlert(e.data.data||{});});}syncOfflineQueue().catch(()=>{});if(navigator.onLine){const el=document.querySelector('#aiDataState');if(el)el.textContent='Conversa · Central · memória · evidências · online';}}
     function auditLocal(event,meta={}){try{const k='centralAI.audit.local.v1';const arr=JSON.parse(localStorage.getItem(k)||'[]');arr.push({event,meta,at:now(),userId:currentAuthUser?.uid||'dev'});localStorage.setItem(k,JSON.stringify(arr.slice(-200)));}catch{}}
     async function auditAI(event,meta={}){auditLocal(event,meta);try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={'Content-Type':'application/json'};if(token)headers.Authorization=`Bearer ${token}`;await fetch('/api/ai-audit',{method:'POST',headers,body:JSON.stringify({event,meta,userId:currentAuthUser?.uid||'dev',conversationId:aiPilot.conversationId||null})});}catch(e){console.warn('Audit IA indisponível:',e.message);}}
     async function renderAIMetricsPanel(){const box=document.querySelector('#aiMetricsPanel');if(!box)return;box.innerHTML='<div class="ai-metrics-grid"><div><strong>Carregando…</strong><span>Saúde da IA</span></div></div>';try{const token=auth?.currentUser?await auth.currentUser.getIdToken():null;const headers={};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch('/api/ai-metrics',{headers});const data=await r.json();if(!r.ok)throw new Error(data.error||'Falha ao carregar métricas');const m=data.metrics||{};box.innerHTML=`<div class="ai-metrics-header"><div><strong>Saúde da IA</strong><p>Telemetria técnica da CORA. Sem conteúdo de conversa.</p></div><span class="ai-metrics-badge">${data.providers?.gemini?'Gemini':''}${data.providers?.openai?' + OpenAI':''}</span></div><div class="ai-metrics-grid"><div><strong>${m.requests||0}</strong><span>Consultas</span></div><div><strong>${m.avgLatencyMs?Math.round(m.avgLatencyMs):0} ms</strong><span>Latência média</span></div><div><strong>${m.fallbackRate?Math.round(m.fallbackRate*100):0}%</strong><span>Fallback</span></div><div><strong>${m.totalTokens||0}</strong><span>Tokens registrados</span></div><div><strong>${m.estimatedCostUsd?m.estimatedCostUsd.toFixed(4):'0.0000'}</strong><span>USD estimado</span></div><div><strong>${m.hypothesesAccepted||0}/${m.hypothesesTracked||0}</strong><span>Hipóteses aceitas</span></div></div>`;}catch(e){box.innerHTML=`<div class="ai-empty-state"><strong>Saúde da IA indisponível.</strong><p>${aiEsc(e.message)}</p></div>`;}}
@@ -7561,5 +7603,5 @@ document.querySelectorAll('.product-tab').forEach(btn => {
     try{installMobileCentralShell();}catch(e){console.warn('Navegação mobile indisponível:',e);}
     try{initV1413Theme();}catch(e){console.warn('Tema V14.13 indisponível:',e);}
 // Mantém a atualização de cache desacoplada de versões anteriores do listener PWA.
-navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data?.version==='15.1.13.49'&&localStorage.getItem('cora.sw.loaded')!==(event.data.cache_revision||event.data.version)){localStorage.setItem('cora.sw.loaded',event.data.cache_revision||event.data.version);location.reload();}});
+navigator.serviceWorker?.addEventListener?.('message',event=>{if(event.data?.type==='cora-cache-updated'&&event.data.version==='15.1.13.49')offerCentralWebUpdate(event.data.cache_revision);});
 try{registerOfflineSupport();}catch(e){console.warn('Offline support indisponível:',e);}
