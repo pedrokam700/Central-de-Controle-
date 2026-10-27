@@ -44,13 +44,33 @@ export function renderHistorical3074ReuseAudit(scopes={},locale='pt-BR'){
     :x.is_reused===false
       ?c('Nenhuma outra PCBA na cobertura confirmada','No other PCBA in verified coverage')
       :c('Investigação parcial/indeterminada','Partial/unverified investigation');
-  const items=found.map(x=>`<li><b>${esc(display(x.item_type))}</b> ·
+  const items=found.map(x=>{
+    const history=(x.previous_pcba_failures_2114||[]);
+    const correlated=history.flatMap(older=>(older.failures||[]).map(f=>({older,f})))
+      .filter(x=>['MESMA_FALHA','FALHA_SIMILAR'].includes(x.f.relation_to_board_reference));
+    const historyHtml=history.length?`<details data-sn-historical-material-failures>
+      <summary>${c('Falhas das PCBAs anteriores · 2114','Previous PCBAs failures · 2114')} · ${history.reduce((sum,p)=>sum+(p.failures||[]).length,0)}</summary>
+      <small>${c('Comparação com a última falha conhecida da placa consultada. Sem prova de vínculo do componente naquele instante, não atribuímos falha à peça nem emitimos alerta causal.','Comparison with the last known board failure. Without proof the component was bound at the defect instant, no defect is assigned to the part and no causal alert is raised.')}</small>
+      <ul class="ames-mounting-materials">${history.flatMap(older=>
+        older.status!=='COMPLETE'?
+          [`<li>${esc(display(older.pcba_sn))} · ${c('2114 não coletada','2114 not collected')}</li>`]:
+          (older.failures||[]).map(f=>`<li><b>${esc(display(older.pcba_sn))}</b> ·
+          ${esc(display(f.defect_code))} · ${esc(display(f.defect_desc))}
+          <small>Hist Seq: ${esc(display(f.hist_seq))} · 2114: ${esc(display(f.defect_time))}
+          · ${c('Tipo de análise','Analysis type')}: ${esc(display(f.defect_type))}
+          · ${c('Comparação','Comparison')}: ${esc(display(f.relation_to_board_reference))}</small></li>`))
+        ).join('')}</ul>
+      </details>`:'';
+    return `<li><b>${esc(display(x.item_type))}</b> ·
     <strong>${esc(display(x.item_sn))}</strong> · ${esc(status(x))}
-    <small>${c('PCBAs conhecidas','Known PCBAs')}: ${esc(display(x.known_use_count_min))}+
+    <small>${c('PCBAs conhecidas','Known PCBAs')}: ${esc(display(x.known_use_count_min))}
     · ${c('Outras PCBAs','Other PCBAs')}: ${esc((x.other_pcbas||[]).join(', ')||'—')}
     ${x.source_partial?c(' · Cobertura parcial',' · Partial coverage'):''}
     ${x.error_kind?` · ${esc(x.error_kind)}`:''}</small>
-    <button type="button" class="button secondary" data-sn-open-material="${esc(x.item_sn)}">${c('Investigar este material','Investigate this material')}</button></li>`).join('');
+    ${correlated.length?`<small>${correlated.length} ${c('comparações de mesma falha/família nas PCBAs anteriores; atribuição temporal não comprovada','same-fault/family comparisons on prior PCBAs; temporal attribution unproven')}</small>`:''}
+    ${historyHtml}
+    <button type="button" class="button secondary" data-sn-open-material="${esc(x.item_sn)}">${c('Investigar este material','Investigate this material')}</button></li>`;
+  }).join('');
   return `<details data-sn-3074-historical-reuse-audit>
     <summary>${c('Segundo uso no histórico 3074 — sem atribuição à falha','Historical 3074 reuse — not attributed to failure')}
       · ${knownReused} ${c('confirmados entre','proven among')} ${found.length}
