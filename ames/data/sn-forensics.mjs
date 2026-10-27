@@ -374,11 +374,35 @@ export function buildLiveSnForensics(result={}){
     '3012':live3012State(result,trace3012),
     '3028':result.local_snapshot?SOURCE_STATE.CACHED:SOURCE_STATE.NOT_COLLECTED,
   };
-  const model={material_selection:trace3074?.material_selection||null,
+  const model={board_failure_reference:currentCycleUnfailed?lastKnown:null,
+    board_reference_is_historical:currentCycleUnfailed,
+    material_selection:trace3074?.material_selection||null,
     candidate_materials:(trace3074?.candidate_components||[]).map(row=>({item_sn:row.item_sn,item_type:row.item_type,
       temporal_reason:row.temporal_reason||'insufficient_binding_evidence',source:'3074'})),
     process_contexts:result.local_snapshot?.process_contexts||[],query_sn:result.sn||null,detected_type:result.detected_type||null,current_pcba:queryPcba,current,own_history:ownHistory,uncertain_previous_count:classified.uncertain,materials,repairs:repairs.map(normalizeRepair).filter(Boolean),analysis_event:preferredAnalysisEvent(process,queryPcba),process:processFor(process,queryPcba),operator_source_3022:trace3022||null,source_states:sourceStates,coverage:{'2114':sourceStateHasEvidence(sourceStates['2114']),'3074':sourceStateHasEvidence(sourceStates['3074']),'3022':sourceStateHasEvidence(sourceStates['3022']),'3012':sourceStateHasEvidence(sourceStates['3012']),'3028':sourceStateHasEvidence(sourceStates['3028'])}};
-  enrichFamilies(model);model.alerts=[...buildCorrelationAlerts(model),...compatibleComponentReuseAlerts(model)];return model;
+  enrichFamilies(model);
+  const primaryAlerts=buildCorrelationAlerts(model);
+  // New Y mounting after the 2114 event does not erase the PCBA's own earlier
+  // 2114 recurrence. It ONLY prevents attributing that old fault to new parts.
+  // Evaluate historical recurrence against the latest 2114 reference, but
+  // never feed the older mounting into CURRENT material/repair correlations.
+  if(currentCycleUnfailed&&lastKnown){
+    const distinctOld=model.own_history.filter(row=>{
+      if(row===lastKnown)return false;
+      return failureOrder(row,lastKnown).prior;
+    });
+    const boardModel={...model,current:lastKnown,own_history:distinctOld,materials:[]};
+    const boardHistoryAlerts=buildCorrelationAlerts(boardModel)
+      .filter(alert=>['PCBA_SAME_FAILURE','PCBA_SAME_FAMILY'].includes(alert.kind))
+      .map(alert=>({...alert,board_reference_is_historical:true}));
+    const keys=new Set(primaryAlerts.map(alert=>JSON.stringify([alert.kind,alert.pcba_sn,alert.prior_hist_seq])));
+    for(const alert of boardHistoryAlerts){
+      const key=JSON.stringify([alert.kind,alert.pcba_sn,alert.prior_hist_seq]);
+      if(!keys.has(key)){keys.add(key);primaryAlerts.push(alert);}
+    }
+  }
+  model.alerts=[...primaryAlerts,...compatibleComponentReuseAlerts(model)];
+  return model;
 }
 
 export function buildLocalSnForensics(result={}){
