@@ -271,9 +271,9 @@ function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,r
   // 2114/3012/3022, timestamps and candidate limits open under one control.
   return '<article class="ames-sn-smart-alert" data-smart-alert="'+esc(id)+'" style="border:1px solid color-mix(in srgb,'+
     tone+' 35%,transparent);border-left:6px solid '+tone+';background:'+background+';border-radius:10px;padding:13px 14px">'+
-    header+
+    header+technicians+
     '<details style="margin-top:8px"><summary>'+esc(t(locale,'Ver evidências ('+alerts.length+')','View evidence ('+alerts.length+')'))+
-    '</summary>'+historicalNote+production+technicians+
+    '</summary>'+historicalNote+production+
     '<div class="ames-sn-alert-proof-body">'+proof+'</div>'+
     '<small class="ames-sn-alert-final-warning">'+esc(t(locale,
     'Correlação técnica — não confirma causa raiz.','Technical correlation — does not confirm root cause.'))+
