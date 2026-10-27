@@ -369,6 +369,27 @@ def attach_independent_mounting_evidence(views, selection_state, selected_usage,
     return views
 
 
+def select_unexamined_3074_materials(raw_components, examined, limit=8):
+    """Bounded, audit-only probes, including historical N and replaced LCDs.
+
+    Never changes the primary mounting nor asserts that a historical material
+    belonged to a 2114 failure. The original MES ordering is preserved within
+    each priority: displays first, other components next.
+    """
+    examined = {str(v).strip().upper() for v in (examined or [])}
+    seen, ranked = set(), []
+    for item in raw_components or []:
+        sn = str(item.get('item_sn') or '').strip()
+        if not sn or sn.upper() in examined or sn.upper() in seen:
+            continue
+        seen.add(sn.upper())
+        kind = str(item.get('item_type') or '').upper()
+        rank = 0 if ('LCD' in kind or 'DISPLAY' in kind or 'SCREEN' in kind) else 1
+        ranked.append((rank, len(ranked), item))
+    ranked.sort(key=lambda entry: (entry[0], entry[1]))
+    return [entry[2] for entry in ranked[:max(0, int(limit))]], len(ranked)
+
+
 def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, line_callback=None) -> Dict[str, Any]:
     """Read one scanned SN/PCBA across 3074 + 2114 and, when possible, 3022.
 
@@ -669,6 +690,68 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                     'error': f'{type(exc).__name__}: {exc}',
                 })
                 warnings.append(f'3074 material na ultima falha {item_sn}: {type(exc).__name__}: {exc}')
+        # Material SNs with historical N/ambiguous bindings must not disappear
+        # merely because latest 2114 has no Defect Time or the PCBA has no Y.
+        # Probe a bounded subset in its OWN audit category; never claim a
+        # historical component caused the last failure.
+        if mounting_views is not None:
+            audit_candidates, audit_total = select_unexamined_3074_materials(
+                raw_components, component_query_cache.keys(), limit=8)
+            audit_results = []
+            for index, comp in enumerate(audit_candidates, 1):
+                material_sn = str(comp.get('item_sn') or '').strip()
+                result = {
+                    'item_sn': material_sn,
+                    'item_type': str(comp.get('item_type') or ''),
+                    'scope': '3074_HISTORY_NOT_ASSIGNED_TO_FAILURE',
+                    'status': 'UNVERIFIED',
+                    'is_reused': None,
+                    'known_pcbas': [],
+                    'other_pcbas': [],
+                    'known_use_count_min': None,
+                }
+                try:
+                    if line_callback:
+                        line_callback('3074', min(74, 55 + int(15*index/max(1, len(audit_candidates)))),
+                                      f'Historico 3074 {index}/{len(audit_candidates)} · {material_sn}')
+                    tela3074.target_page = nav.ensure_3074()
+                    item_query = tela3074.consultar(material_sn)
+                    component_query_cache[material_sn] = item_query
+                    timeline = temporal3074.historico_completo_pcbas_do_item(
+                        item_query.get('rows') or [])
+                    all_links = timeline.get('associations') or []
+                    known = list(dict.fromkeys(
+                        str(row.get('pcba_sn') or '').strip()
+                        for row in all_links if row.get('pcba_sn')))
+                    current_link = query in known
+                    others = [pcba for pcba in known if pcba != query]
+                    partial = _has_partial_3074_page(item_query)
+                    result.update(
+                        known_pcbas=known, other_pcbas=others,
+                        known_use_count_min=len(known),
+                        source_partial=partial,
+                        current_pcba_link_proven=current_link,
+                    )
+                    if current_link and others:
+                        result.update(status='REUSE_PROVEN_OTHER_PCBA',
+                                      is_reused=True)
+                    elif current_link and not partial:
+                        result.update(status='NO_OTHER_PCBA_IN_COMPLETE_COVERAGE',
+                                      is_reused=False)
+                    else:
+                        result['status'] = ('PARTIAL_MATERIAL_QUERY' if partial
+                                            else 'CURRENT_PCBA_NOT_CONFIRMED')
+                except Exception as exc:
+                    result['status'] = 'MATERIAL_QUERY_ERROR'
+                    result['error_kind'] = type(exc).__name__
+                    warnings.append(
+                        f'3074 historical Material SN {material_sn}: {type(exc).__name__}')
+                audit_results.append(result)
+            mounting_views['historical_material_reuse'] = audit_results
+            mounting_views['historical_probe_total'] = audit_total
+            mounting_views['historical_probe_remaining'] = max(
+                0, audit_total-len(audit_results))
+
         # First query 2114 once per PCBA: current board and historical boards
         # reached through ONLY the selected material subset.
         for pc in historical_pcbas:
