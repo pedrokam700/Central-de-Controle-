@@ -117,3 +117,34 @@ test('explicit confirmed empty 3074 is not conflated with unavailable data',()=>
   data.trace_3074.query={rows:[],no_data:false};
   assert.match(renderSnMountingViews(data),/3074 não comprovou linhas utilizáveis/);
 });
+
+test('only a proven post-failure Y mounting enables a two-cycle comparison',()=>{
+ const old=structuredClone(sample);
+ old.trace_3074.mounting_views.current.status='current_same_cycle';
+ let html=renderSnMountingViews(old);
+ assert.match(html,/3074 · Montagem de referência da PCBA/);
+ assert.doesNotMatch(html,/data-sn-mounting-mode="failure"/);
+ assert.doesNotMatch(html,/Somente da última falha/);
+ assert.match(html,/Montagem do ciclo investigado/);
+ const proven=structuredClone(sample);
+ html=renderSnMountingViews(proven);
+ assert.match(html,/Novo ciclo após a última falha/);
+ assert.match(html,/data-sn-mounting-mode="failure"/);
+ assert.match(html,/LCD-OLD/);
+ assert.match(html,/LCD-NEW/);
+});
+
+test('older N with no later Y is one investigative reference, not a current-Y proof',()=>{
+ const data=structuredClone(sample);
+ data.trace_3074.mounting_views.current={status:'not_proven',components:[],candidates:[],reused_count:null};
+ data.trace_3074.mounting_views.last_failure={status:'no_2114_anchor',components:[],candidates:[],reused_count:null};
+ data.trace_3074.mounting_views.history_audit=[{
+   item_sn:'LAST-KNOWN-LCD',item_type:'LCD',iss_status_now:'N',
+   bind_time_utc:'2026-10-26T11:00:00Z',unbind_time_utc:'2026-10-26T17:00:00Z',
+ }];
+ const html=renderSnMountingViews(data);
+ assert.match(html,/data-sn-3074-last-known/);
+ assert.match(html,/LAST-KNOWN-LCD/);
+ assert.match(html,/não contagem de reuso/);
+ assert.doesNotMatch(html,/data-sn-mounting-mode="compare"/);
+});
