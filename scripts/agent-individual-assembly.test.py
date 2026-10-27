@@ -289,6 +289,23 @@ class SourceAndMountingInvariants(unittest.TestCase):
         self.assertIsNone(out['current']['reused_count'])
         self.assertIsNone(out['last_failure']['reused_count'])
 
+    def test_unanchored_historical_3074_lcd_is_scanned_without_becoming_a_current_mount(self):
+        items=[{'item_sn':'OTHER1','item_type':'Battery','iss_status_now':'N'},
+               {'item_sn':'LCD-PREVIOUS','item_type':'LCD','iss_status_now':'N'},
+               {'item_sn':'LCD-ACTIVE','item_type':'LCD','iss_status_now':'Y'},
+               {'item_sn':'OTHER2','item_type':'Speaker','iss_status_now':'N'}]
+        selected,total=engine_bridge.select_unexamined_3074_materials(
+            items,{'LCD-ACTIVE'},limit=2)
+        self.assertEqual(total,3)
+        self.assertEqual([x['item_sn'] for x in selected],
+                         ['LCD-PREVIOUS','OTHER1'])
+        # The other mounting KPI remains unknown when no Y/2114 clock exists.
+        views={'current':{'status':'not_proven'},'last_failure':{'status':'no_2114_anchor'}}
+        result=engine_bridge.attach_independent_mounting_evidence(
+            views,'last_failure_assembly',[],[],[],[])
+        self.assertIsNone(result['current']['reused_count'])
+        self.assertIsNone(result['last_failure']['reused_count'])
+
     def test_canonical_3074_page_bound_even_if_other_tab_is_active(self):
         class LastPageIsOpc:
             def choose_active_page(self,*args):
