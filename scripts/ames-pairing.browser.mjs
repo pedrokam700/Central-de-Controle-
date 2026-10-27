@@ -25,7 +25,8 @@ try{
   const context=await browser.newContext();
   const page=await context.newPage();
   const origin='http://127.0.0.1:'+port;
-  const requests=[],responses=[];
+  const requests=[],responses=[],failedRequests=[];
+  page.on('requestfailed',r=>failedRequests.push({url:new URL(r.url()).origin,error:r.failure()?.errorText||'network error'}));
   page.on('request',r=>{if(r.url().startsWith(origin))requests.push({
     method:r.method(),url:r.url(),
     origin:r.headers()['origin']||'',
@@ -53,6 +54,8 @@ try{
       browserRequestMetadata:requests.map(x=>({method:x.method,origin:x.origin,
         site:x.site,mode:x.mode,cookiePresent:x.cookiePresent})),
       stillLocal:page.url().startsWith(origin),
+      failedRequests,
+      fixtureStderr:errors.replace(/ames_agent_token=[^\\s]+/g,'[redacted]').slice(-1800),
     }));
     throw error;
   });
