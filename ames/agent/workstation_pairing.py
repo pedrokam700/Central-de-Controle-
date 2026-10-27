@@ -156,7 +156,7 @@ h1{font-size:22px}p{line-height:1.55}a{display:inline-block;padding:12px 16px;ba
 def secure_headers():
     return {
         "Cache-Control":"no-store, max-age=0",
-        "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+        "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://pedrokam700.github.io; frame-ancestors 'none'; base-uri 'none'",
         "X-Frame-Options":"DENY",
         "X-Content-Type-Options":"nosniff",
         "Referrer-Policy":"no-referrer",
