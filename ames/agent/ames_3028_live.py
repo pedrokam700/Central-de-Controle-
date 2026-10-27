@@ -353,7 +353,7 @@ def _detail_to_record(row: Dict[str, Any], fallback_line: str) -> Dict[str, Any]
         "repair_user": _clean(row.get("repairUser")),
         "defect_material": _clean(row.get("defectMaterialId")),
         "defect_material_desc": _clean(row.get("defectMaterialDesc")),
-        "repair_comment": _clean(row.get("repairComment") or row.get("Repair Comment") or row.get("repair_comment")),
+        "repair_comment": _clean(row.get("repairComment")),
         "defect_category": _clean(row.get("defectCategory")),
         "defect_source": _clean(row.get("defectSource")),
         "product_model": _clean(row.get("productModel") or row.get("prodModel")),
