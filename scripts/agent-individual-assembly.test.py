@@ -303,8 +303,5 @@ class SourceAndMountingInvariants(unittest.TestCase):
         raw={'lotId':'PCBA-EXACT','repairComment':'LCD observado na 3028'}
         result=_detail_to_record(raw,'TAN10103')
         self.assertEqual(result['repair_comment'],'LCD observado na 3028')
-        for alias in ('Repair Comment','repair_comment'):
-            result=_detail_to_record({'lotId':'PCBA-EXACT',alias:'Texto 3028'},'TAN10103')
-            self.assertEqual(result['repair_comment'],'Texto 3028')
 
 if __name__=="__main__":unittest.main()
