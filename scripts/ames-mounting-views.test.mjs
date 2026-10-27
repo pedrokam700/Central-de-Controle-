@@ -55,7 +55,7 @@ test('N-only 3074 history remains inspectable without claiming current mounting 
   const html=renderSnMountingViews(data);
   assert.match(html,/data-sn-3074-history-audit/);
   assert.match(html,/LCD-N-HIST/);
-  assert.match(html,/não comprova ausência/);
+  assert.match(html,/vínculo N atual não prova/);
   assert.match(html,/montagem histórica indeterminada/);
   assert.doesNotMatch(html,/Reuso identificado na montagem da última falha/);
   assert.doesNotMatch(html,/0 materiais de 2º\+ uso comprovados/);
