@@ -74,3 +74,26 @@ test('no correlation stays explicit unknown rather than zero alerts',()=>{
   assert.match(html,/não prova ausência de histórico/);
   assert.doesNotMatch(html,/>0 alert/);
 });
+
+test('empty unproven technical evidence does not render an alert panel',()=>{
+  assert.equal(renderSmartSnAlerts({current_pcba:'PCB-A',alerts:[],own_history:[],materials:[]}), '');
+});
+
+test('historical 2114 same-failure alert clearly separates new mounting',()=>{
+  const m=model();
+  m.current=null;
+  m.board_reference_is_historical=true;
+  m.board_failure_reference={...failure('PCB-A'),hist_seq:1};
+  m.own_history=[{...failure('PCB-A'),hist_seq:0}];
+  m.alerts=[{kind:'PCBA_SAME_FAILURE',severity:'high',
+    board_reference_is_historical:true,pcba_sn:'PCB-A',
+    prior_defect_code:'F1',prior_hist_seq:0,evidence:{
+      ...proof('PCB-A'),failure:{...failure('PCB-A'),hist_seq:0},
+      current_failure:{...failure('PCB-A'),hist_seq:1},
+    }}];
+  const html=renderSmartSnAlerts(m);
+  assert.match(html,/Recorrência histórica desta PCBA/);
+  assert.match(html,/componentes do novo ciclo/);
+  assert.match(html,/Hist Seq 0/);
+  assert.match(html,/Hist Seq 1/);
+});
