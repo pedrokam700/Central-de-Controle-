@@ -58,7 +58,7 @@ export function renderHistorical3074ReuseAudit(scopes={},locale='pt-BR'){
           ${esc(display(f.defect_code))} · ${esc(display(f.defect_desc))}
           <small>Hist Seq: ${esc(display(f.hist_seq))} · 2114: ${esc(display(f.defect_time))}
           · ${c('Tipo de análise','Analysis type')}: ${esc(display(f.defect_type))}
-          · ${c('Comparação','Comparison')}: ${esc(display(f.relation_to_board_reference))}</small></li>`))
+          · ${c('Comparação','Comparison')}: ${esc(display(f.relation_to_board_reference))}</small></li>`)
         ).join('')}</ul>
       </details>`:'';
     return `<li><b>${esc(display(x.item_type))}</b> ·
