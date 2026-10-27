@@ -38,6 +38,18 @@ export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
   const en=String(locale).startsWith('en');
   const c=choose.bind(null,en);
   const current=scopes.current||{},failure=scopes.last_failure||{},diff=scopes.comparison||{};
+  // Raw N/unbound evidence is inspectable even when current Y and 2114 time
+  // cannot be confirmed. It must never count toward either reuse KPI.
+  const history=Array.isArray(scopes.history_audit)?scopes.history_audit:[];
+  const historyItems=history.slice(0,80).map(item=>`<li><b>${esc(display(item.item_type))}</b> · ${esc(display(item.item_sn))}
+    <small>${c('Status na consulta','Status at query')}: ${esc(display(item.iss_status_now))} ·
+    Bind: ${esc(display(item.bind_time_utc))} · Unbind: ${esc(display(item.unbind_time_utc))} ·
+    ${c('Posto','Station')}: ${esc(display(item.binding_operation))}</small></li>`).join('');
+  const historyAudit=history.length?`<details data-sn-3074-history-audit><summary>${c('Histórico de vínculos 3074 (auditoria, sem atribuição à falha)','3074 binding history (audit, not attributed to failure)')} · ${history.length}</summary>
+    <p class="mes-context">${c('Registros atualmente desvinculados/N. Não demonstram por si só montagem na falha nem reuso em PCBA anterior.','Currently unbound/N records. Not proof of mounting at defect or reuse on another PCBA.')}</p>
+    <ul class="ames-mounting-materials">${historyItems}</ul>
+    ${history.length>80?`<small>${c('Prévia de 80 vínculos; histórico bruto completo permanece na fonte 3074.','Preview of 80 bindings; full raw history remains in source 3074.')} (${history.length})</small>`:''}
+    </details>`:'';
   const reusedFailure=(failure.reused_components||[]).length;
   const historicalAlarm=reusedFailure?`<div class="notice warn"><b>${c('Reuso identificado na montagem da última falha','Reuse identified in the last-failure mounting')}: ${reusedFailure}</b>
     <p>${c('Não confundir com os materiais da montagem atual. Histórico de vínculos não demonstra causa da falha.','Do not mix with the current mounting. Binding history does not prove failure causation.')}</p></div>`:'';
@@ -57,6 +69,6 @@ export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
     <p>${c('Duas fotografias temporais da MES; nenhum indicador mistura as montagens.','Two temporal MES views; no metric mixes assemblies.')}
     ${failure.defect_time?` · 2114: ${esc(formatFactoryDateTime(failure.defect_time))}`:''}</p></div></div>
     <div class="mes-pagination">${option('compare',c('Comparar ambas','Compare both'))}${option('current',c('Somente atual','Current only'))}${option('failure',c('Última falha','Last failure'))}</div>
-    ${historicalAlarm}${confidence}<div data-sn-mounting-content>${inner}</div>
+    ${historicalAlarm}${confidence}<div data-sn-mounting-content>${inner}</div>${historyAudit}
   </section>`;
 }
