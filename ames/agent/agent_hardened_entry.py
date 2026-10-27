@@ -124,8 +124,12 @@ class HardenedHandler(entry.Handler):
             if not workstation_pairing.local_address(self.headers, self.client_address[0], self._active_port()):
                 self._pair_response(403)
                 return
-            body = workstation_pairing.page(workstation_pairing.GATE.issue())
-            self._pair_response(200, body, {"Content-Type": "text/html; charset=utf-8"})
+            nonce = workstation_pairing.GATE.issue()
+            body = workstation_pairing.page(nonce)
+            self._pair_response(200, body, {
+                "Content-Type": "text/html; charset=utf-8",
+                "Set-Cookie": workstation_pairing.confirmation_cookie(nonce),
+            })
             return
         static_root = (entry.a.BASE_DIR.parent / "frontend").resolve()
         if path == "/" and static_root.is_dir():
@@ -346,7 +350,8 @@ class HardenedHandler(entry.Handler):
                 return
             # Fixed official HTTPS destination; never available as JSON.
             self._pair_response(303, headers={
-                "Location": workstation_pairing.destination(AGENT_TOKEN)
+                "Location": workstation_pairing.destination(AGENT_TOKEN),
+                "Set-Cookie": workstation_pairing.expired_cookie(),
             })
             return
         if not self._authorized(path):
