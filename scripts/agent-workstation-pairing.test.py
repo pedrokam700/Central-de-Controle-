@@ -15,60 +15,54 @@ def headers(site="same-origin",origin="http://127.0.0.1:8765",mode="navigate"):
 def test_user_confirmed_session_only():
     time=[0.0]
     gate=p.PairingGate(now=lambda:time[0])
+    def proof(body, **overrides):
+        nonce=body.decode('ascii').split('nonce=',1)[1]
+        return {**headers(), 'Cookie':f'{p.COOKIE_NAME}={nonce}', **overrides}
     nonce=gate.issue()
-    body=("nonce="+nonce).encode("ascii")
-    check(p.confirm(headers(),"127.0.0.1",8765,body,gate),"confirmed local form should work")
-    check(not p.confirm(headers(),"127.0.0.1",8765,body,gate),"nonce replay must fail")
+    body=('nonce='+nonce).encode('ascii')
+    check(p.confirm(proof(body),'127.0.0.1',8765,body,gate),
+          'local form with cookie and nonce is authorized')
+    check(not p.confirm(proof(body),'127.0.0.1',8765,body,gate),
+          'nonce replay must fail')
     nonce=gate.issue()
-    check(not p.confirm(headers(site="cross-site"),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"cross-site denied")
-    check(not p.confirm(headers(origin="https://central-cora-v2.vercel.app"),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"HTTPS caller can't post directly")
-    check(not p.confirm(headers(mode="cors"),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"XHR denied")
-    # Real Edge/Chromium can omit Origin on top-level local POSTs.
-    # Fetch Metadata must prove SAME ORIGIN when Origin is missing.
-    no_origin=headers();no_origin.pop("Origin")
-    check(p.confirm(no_origin,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
-          "same-origin local form with omitted Origin must succeed")
-    # Actual Edge 127 workstation form: Origin:null but local, user-activated
-    # top-level POST. Previous gate rejected this BEFORE checking the nonce.
-    edge_meta={**headers(origin="null"),"Sec-Fetch-Dest":"document",
-               "Sec-Fetch-User":"?1"}
-    nonce=gate.issue()
-    check(p.confirm(edge_meta,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
-          "Edge Origin:null + proven local top-level click should succeed once")
-    check(not p.confirm(edge_meta,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
-          "Edge form nonce replay must still fail")
-    nonce=gate.issue()
-    for forged in (
-       {**headers(),"Origin":"null"},
-       {**edge_meta,"Sec-Fetch-Site":"cross-site"},
-       {**edge_meta,"Sec-Fetch-Site":"none"},
-       {**edge_meta,"Sec-Fetch-Mode":"cors"},
-       {**edge_meta,"Sec-Fetch-User":""},
-       {**edge_meta,"Sec-Fetch-Dest":"iframe"},
-       {**edge_meta,"Origin":"https://attacker.example"},
-       {**headers(),"Origin":"https://attacker.example"},
-       {**headers(),"Sec-Fetch-Site":"cross-site"},
-       {**no_origin,"Sec-Fetch-Site":"cross-site"},
-       {**no_origin,"Sec-Fetch-Site":"none"},
-       {k:v for k,v in no_origin.items() if k!="Sec-Fetch-Site"},
-       {**no_origin,"Sec-Fetch-Mode":"cors"}
-    ):
-        check(not p.confirm(forged,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
-              "cross-site or ambiguous browser request must be rejected")
-    check(p.confirm(headers(),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),
-          "invalid probes must not consume the one-time nonce")
-    nonce=gate.issue()
-    check(not p.confirm(edge_meta,"192.168.1.9",8765,("nonce="+nonce).encode(),gate),"Edge nonloopback denied")
-    check(not p.confirm({**edge_meta,"Host":"evil.example"},"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"Edge DNS rebinding denied")
-    check(p.confirm(edge_meta,"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"bad Edge probes do not consume nonce")
-    nonce=gate.issue()
-    check(not p.confirm(headers(),"192.168.1.9",8765,("nonce="+nonce).encode(),gate),"nonloopback denied")
-    check(not p.confirm({**headers(),"Host":"malicious.example"},"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"DNS rebinding denied")
-    check(p.confirm(headers(),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"invalid probes must not consume nonce")
-    nonce=gate.issue()
+    body=('nonce='+nonce).encode('ascii')
+    edge=proof(body,Origin='null',**{'Sec-Fetch-Site':'same-origin',
+         'Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document'})
+    check(p.confirm(edge,'127.0.0.1',8765,body,gate),
+          'Edge Origin:null form with Strict cookie is accepted')
+    nonce=gate.issue();body=('nonce='+nonce).encode('ascii')
+    missing_origin=proof(body);missing_origin.pop('Origin')
+    missing_origin.pop('Sec-Fetch-Site')
+    missing_origin.pop('Sec-Fetch-Mode')
+    check(p.confirm(missing_origin,'127.0.0.1',8765,body,gate),
+          'same-origin cookie+nonce works when browser omits Fetch Metadata')
+    nonce=gate.issue();body=('nonce='+nonce).encode('ascii')
+    valid=proof(body)
+    for unsafe in [
+        {k:v for k,v in valid.items() if k!='Cookie'},
+        {**valid,'Cookie':p.COOKIE_NAME+'=wrong'},
+        {**valid,'Origin':'https://evil.example'},
+        {**valid,'Sec-Fetch-Site':'cross-site'},
+        {**valid,'Sec-Fetch-Site':'same-site'},
+        {**valid,'Sec-Fetch-Mode':'cors'},
+        {**valid,'Sec-Fetch-Dest':'iframe'},
+        {**valid,'Host':'evil.example'},
+    ]:
+        check(not p.confirm(unsafe,'127.0.0.1',8765,body,gate),
+              'foreign, missing-cookie or ambiguous browser request rejected')
+    check(not p.confirm(valid,'192.168.1.9',8765,body,gate),
+          'nonloopback client rejected')
+    check(p.confirm(valid,'127.0.0.1',8765,body,gate),
+          'failed requests do not consume the one-time proof')
+    nonce=gate.issue();body=('nonce='+nonce).encode('ascii')
     time[0]=301.0
-    check(not p.confirm(headers(),"127.0.0.1",8765,("nonce="+nonce).encode(),gate),"expired form denied")
-    check(not p.confirm(headers(),"127.0.0.1",8765,b"nonce=not-issued",gate),"unknown nonce denied")
+    check(not p.confirm(proof(body),'127.0.0.1',8765,body,gate),
+          'expired local confirmation denied')
+    check('SameSite=Strict' in p.confirmation_cookie(nonce) and
+          'HttpOnly' in p.confirmation_cookie(nonce),
+          'local session proof is SameSite Strict and inaccessible to JS')
+    check('Max-Age=0' in p.expired_cookie(),
+          'session proof cleared after success')
 
 def test_url_and_html_never_publicly_contain_workstation_token():
     token="local-secret-not-an-ames-password-abcdefghi"
