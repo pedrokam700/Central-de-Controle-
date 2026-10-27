@@ -35,8 +35,13 @@ class Tela3074:
     def __init__(self, browser, base_dir: Path):
         self.browser = browser
         self.base_dir = Path(base_dir)
+        self.target_page = None  # Set by navigation when Home + 3074 are proven.
 
     def _page(self):
+        if self.target_page is not None:
+            return self.target_page
+        # Legacy direct callers retain prior behavior. Composite lookup pins
+        # a verified Home page so the last OPC/2114 tab cannot be selected.
         return self.browser.choose_active_page("3074")
 
     def _controls(self, page):
