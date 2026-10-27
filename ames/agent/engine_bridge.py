@@ -735,6 +735,14 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                     if current_link and others:
                         result.update(status='REUSE_PROVEN_OTHER_PCBA',
                                       is_reused=True)
+                        # Bound any historical 2114 context to PCBAs proven by
+                        # THIS material query. Never traverse an unrelated PCBA
+                        # merely because it appeared on the board's raw grid.
+                        for previous in others:
+                            if previous not in historical_pcbas and len(historical_pcbas) < 25:
+                                historical_pcbas.append(previous)
+                            elif previous not in historical_pcbas:
+                                result['history_2114_coverage'] = 'partial_limit_25'
                     elif current_link and not partial:
                         result.update(status='NO_OTHER_PCBA_IN_COMPLETE_COVERAGE',
                                       is_reused=False)
@@ -785,6 +793,45 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         for h in histories:
             if h.get("status") == "COMPLETE":
                 history_by_pcba[h.get("pcba_sn")] = list(((h.get("result") or {}).get("rows") or []))
+        # Attach facts about the previous PCBAs of audited historical
+        # components WITHOUT merging them into the mounting-specific alert
+        # model. Missing 2114 time cannot establish causality or exact order.
+        if mounting_views is not None:
+            for audit in mounting_views.get('historical_material_reuse') or []:
+                candidate_rows = []
+                for previous in audit.get('other_pcbas') or []:
+                    source_rows = history_by_pcba.get(previous)
+                    if source_rows is None:
+                        candidate_rows.append({
+                            'pcba_sn': previous, 'status': 'NOT_COLLECTED',
+                            'failures': [],
+                        })
+                        continue
+                    failures = []
+                    for record in source_rows:
+                        comparison = correlacao_mod.comparar_falhas(
+                            (current_failure_2114 or {}).get('Defect Code', ''),
+                            (current_failure_2114 or {}).get('Defect Description', ''),
+                            record.get('Defect Code', ''),
+                            record.get('Defect Description', ''))
+                        failures.append({
+                            'defect_code': record.get('Defect Code'),
+                            'defect_desc': record.get('Defect Description'),
+                            'defect_time': record.get('Defect Time'),
+                            'hist_seq': record.get('Defect Hist Seq'),
+                            'defect_type': record.get('Defect Type'),
+                            'repair_status': record.get('Repair Status'),
+                            'relation_to_board_reference': comparison.get('relation'),
+                            # This is only a comparison of known records,
+                            # not proof of the material's presence at failure.
+                            'proof_level': 'SOURCE_COMPARISON_NO_TEMPORAL_ATTRIBUTION',
+                        })
+                    candidate_rows.append({
+                        'pcba_sn': previous, 'status': 'COMPLETE',
+                        'failures': failures,
+                    })
+                audit['previous_pcba_failures_2114'] = candidate_rows
+
         material_investigation = None
         if detected_type == "MATERIAL_SN":
             temporal = temporal3074.falhas_durante_vinculos_do_material(
