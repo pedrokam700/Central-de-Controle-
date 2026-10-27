@@ -174,7 +174,7 @@ class IndividualAssemblyTests(unittest.TestCase):
 
     def test_new_mounting_and_old_failure_materials_stay_separate(self):
         output=self.lookup()
-        self.assertEqual(Screen3074.calls,["CUR","M2","M1"])
+        self.assertEqual(Screen3074.calls,["CUR","M2","M1","M3"])
         self.assertEqual(Screen2114.calls,["CUR","OLD"],"only 2114 PCBAs actually linked to examined materials")
         self.assertEqual(output["trace_3074"]["material_selection"]["status"],"current_mounting_new_cycle")
         self.assertEqual([c["item_sn"] for c in output["trace_3074"]["components"]],["M2"])
@@ -185,13 +185,15 @@ class IndividualAssemblyTests(unittest.TestCase):
         self.assertEqual(comparison['last_failure']['reused_count'], 1)
         self.assertEqual(comparison['last_failure']['component_usage'][0]['previous_pcbas'], ['OLD'])
         self.assertEqual(comparison['current']['reused_count'], 0)
+        self.assertEqual(comparison['historical_probe_total'],1)
+        self.assertEqual(len(comparison['historical_material_reuse']),1)
         self.assertEqual(output["trace_3074"]["component_usage"][0]["station_3022_evidence"]["status"],"unavailable")
         self.assertEqual(output["summary"]["raw_historical_component_candidates"],3)
         self.assertEqual(output["summary"]["serialized_components"],1)
     def test_component_3074_query_returns_after_3022_navigation(self):
         out=self.lookup(include_3022=True)
         self.assertEqual(Screen3022.calls,['CUR'])
-        self.assertEqual(Screen3074.calls,['CUR','M2','M1'])
+        self.assertEqual(Screen3074.calls,['CUR','M2','M1','M3'])
         self.assertEqual(out['trace_3074']['mounting_views']['last_failure']['reused_count'],1)
     def test_old_lcd_query_error_never_turns_into_zero_second_use(self):
         actual=Screen3074.consultar
@@ -205,13 +207,20 @@ class IndividualAssemblyTests(unittest.TestCase):
         self.assertEqual(view['incomplete_count'],1)
         self.assertEqual(out['trace_3074']['status'],'partial')
         self.assertEqual(out['trace_3074']['mounting_views']['current']['reused_count'],0)
-    def test_without_valid_2114_defect_clock_only_current_mounting_is_queried(self):
+    def test_without_valid_2114_defect_clock_historical_materials_are_audited_separately(self):
         Screen2114.anchor=False
         out=self.lookup()
-        self.assertEqual(Screen3074.calls,["CUR","M2"])
+        self.assertEqual(Screen3074.calls,["CUR","M2","M1","M3"])
         self.assertEqual([c["item_sn"] for c in out["trace_3074"]["components"]],["M2"])
         self.assertEqual(out["trace_3074"]["component_usage"][0]["previous_pcbas"],[])
         self.assertEqual(out["trace_3074"]["material_selection"]["status"],"current_mounting_unanchored")
+        audit=out['trace_3074']['mounting_views']
+        self.assertEqual(audit['last_failure']['status'],'no_2114_anchor')
+        self.assertIsNone(audit['last_failure']['reused_count'])
+        self.assertGreaterEqual(audit['historical_probe_total'],1)
+        self.assertTrue(audit['historical_material_reuse'])
+        self.assertTrue(all(entry['scope']=='3074_HISTORY_NOT_ASSIGNED_TO_FAILURE'
+                            for entry in audit['historical_material_reuse']))
     def test_timeout_3074_does_not_abort_2114_or_3022_or_claim_zero_materials(self):
         Screen3074.response_mode="timeout"
         out=self.lookup(include_3022=True)
