@@ -344,6 +344,31 @@ def classify_individual_sn_target(query: str, rows_3074: list, has_2114_history:
     return {"type": "SN_INDETERMINADO", "basis": "3074_MIXED_ROW_TYPES"}
 
 
+def attach_independent_mounting_evidence(views, selection_state, selected_usage,
+                                         selected_reused, failure_usage, failure_reused):
+    """Project 3074 clocks without changing existing 2114/3012 alert evidence.
+
+    The legacy lookup falls back to the last failure when no current Y is
+    verified. That fallback must not become a current mounting KPI.
+    Missing or incomplete material coverage remains unknown, never zero.
+    """
+    if views is None:
+        return None
+    current_is_proven = selection_state in (
+        'current_new_cycle', 'current_same_cycle', 'current_cycle_unanchored')
+    views['current']['component_usage'] = list(selected_usage) if current_is_proven else []
+    views['current']['reused_components'] = list(selected_reused) if current_is_proven else []
+    views['last_failure']['component_usage'] = list(failure_usage)
+    views['last_failure']['reused_components'] = list(failure_reused)
+    for scope in ('current', 'last_failure'):
+        view = views[scope]
+        items = view['component_usage']
+        complete = bool(items) and all(item.get('is_reused') is not None for item in items)
+        view['reused_count'] = len(view['reused_components']) if complete else None
+        view['incomplete_count'] = sum(item.get('is_reused') is None for item in items)
+    return views
+
+
 def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, line_callback=None) -> Dict[str, Any]:
     """Read one scanned SN/PCBA across 3074 + 2114 and, when possible, 3022.
 
@@ -378,9 +403,11 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         source3074_error = None
         source3074_stage = "navigation"
         try:
-            nav.ensure_3074()
+            page3074 = nav.ensure_3074()
             source3074_stage = "query"
             tela3074 = session_object(tela3074_mod.Tela3074(browser._target, engine_dir))
+            # Pin the navigation-verified 3074 Home page, never OPC/2114.
+            tela3074.target_page = page3074
             r3074 = tela3074.consultar(query)
             if not isinstance(r3074, dict) or not isinstance(r3074.get("rows"), list):
                 raise RuntimeError("3074_GRID_NOT_CONFIRMED")
@@ -548,7 +575,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 # or process tab active. Resolve the actual 3074 view again
                 # before reading each Material SN; otherwise _page() can pick
                 # a view without input[name=sn] and silently lose reuse.
-                nav.ensure_3074()
+                tela3074.target_page = nav.ensure_3074()
                 if line_callback:
                     line_callback("3074", min(72, 35 + int(25 * idx / max(1, len(components)))),
                                   f"Material da montagem {idx}/{len(components)} · {item_sn}")
@@ -608,7 +635,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 if item_sn in component_query_cache:
                     item_query = component_query_cache[item_sn]
                 else:
-                    nav.ensure_3074()
+                    tela3074.target_page = nav.ensure_3074()
                     item_query = tela3074.consultar(item_sn)
                     component_query_cache[item_sn] = item_query
                 scoped = temporal3074.pcbas_do_item_ate_a_falha(
@@ -645,6 +672,8 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 continue
             seen.add(pc)
             try:
+                # Switch back to OPC: the previous material query used Home/3074.
+                nav.ensure_2114()
                 rr = tela2114.consultar(pc)
                 histories.append({"pcba_sn": pc, "status": "COMPLETE", "result": rr, "error": None})
             except Exception as exc:
@@ -754,16 +783,11 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 'previous_pcbas': comp['previous_pcbas'],
                 'previous_pcba_evidence': proof,
             })
-        if mounting_views is not None:
-            mounting_views['current']['component_usage'] = component_usage
-            mounting_views['current']['reused_components'] = reused_components
-            mounting_views['last_failure']['component_usage'] = failure_component_usage
-            mounting_views['last_failure']['reused_components'] = failure_reused_components
-            for view in ('current', 'last_failure'):
-                items = mounting_views[view]['component_usage']
-                complete = bool(items) and all(item.get('is_reused') is not None for item in items)
-                mounting_views[view]['reused_count'] = len(mounting_views[view]['reused_components']) if complete else None
-                mounting_views[view]['incomplete_count'] = sum(item.get('is_reused') is None for item in items)
+        mounting_views = attach_independent_mounting_evidence(
+            mounting_views,
+            selection['state'] if mounting_views is not None else None,
+            component_usage, reused_components,
+            failure_component_usage, failure_reused_components)
 
         process_rows = []
         process_focus_rows = []
