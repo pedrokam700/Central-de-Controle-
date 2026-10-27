@@ -31,6 +31,37 @@ export function mountingScopeDetails(scope={},locale='pt-BR'){
   return `<p><b>${esc(summary)}</b> · ${items.length} ${choose(en,'materiais examinados','materials checked')}</p>${note}${rows}`;
 }
 
+export function renderHistorical3074ReuseAudit(scopes={},locale='pt-BR'){
+  const en=String(locale).startsWith('en'),c=choose.bind(null,en);
+  const found=Array.isArray(scopes.historical_material_reuse)?scopes.historical_material_reuse:[];
+  const total=Number(scopes.historical_probe_total)||0;
+  const remaining=Number(scopes.historical_probe_remaining)||0;
+  if(!found.length&&!total)return '';
+  const knownReused=found.filter(x=>x.is_reused===true).length;
+  const unknown=found.filter(x=>x.is_reused==null).length;
+  const status=x=>x.is_reused===true
+    ?c('Vinculado a outra PCBA comprovada (histórico geral)','Linked to another proven PCBA (full history)')
+    :x.is_reused===false
+      ?c('Nenhuma outra PCBA na cobertura confirmada','No other PCBA in verified coverage')
+      :c('Investigação parcial/indeterminada','Partial/unverified investigation');
+  const items=found.map(x=>`<li><b>${esc(display(x.item_type))}</b> ·
+    <strong>${esc(display(x.item_sn))}</strong> · ${esc(status(x))}
+    <small>${c('PCBAs conhecidas','Known PCBAs')}: ${esc(display(x.known_use_count_min))}+
+    · ${c('Outras PCBAs','Other PCBAs')}: ${esc((x.other_pcbas||[]).join(', ')||'—')}
+    ${x.source_partial?c(' · Cobertura parcial',' · Partial coverage'):''}
+    ${x.error_kind?` · ${esc(x.error_kind)}`:''}</small>
+    <button type="button" class="button secondary" data-sn-open-material="${esc(x.item_sn)}">${c('Investigar este material','Investigate this material')}</button></li>`).join('');
+  return `<details data-sn-3074-historical-reuse-audit>
+    <summary>${c('Segundo uso no histórico 3074 — sem atribuição à falha','Historical 3074 reuse — not attributed to failure')}
+      · ${knownReused} ${c('confirmados entre','proven among')} ${found.length}
+      ${unknown?` · ${unknown} ${c('indeterminados','unknown')}`:''}</summary>
+    <p class="mes-context">${c('Estas peças tiveram vínculo registrado em algum momento com a PCBA consultada. O histórico de outra PCBA não prova que a peça estava montada na última falha nem que causou a falha. Não somar às contagens atual/última falha.','These parts were linked at some time to the queried board. Another PCBA does not prove mounting at last failure or its cause. Do not add these to current/last-failure counts.')}</p>
+    <p class="mes-context">${c('Consultas históricas nesta coleta','Historical probes this run')}: ${found.length} ·
+    ${c('Outros materiais não consultados automaticamente','Other materials not automatically scanned')}: ${remaining}.
+    ${c('Para os demais, use o histórico de vínculos abaixo.','For others, use the binding history below.')}</p>
+    <ul class="ames-mounting-materials">${items}</ul></details>`;
+}
+
 export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
   if(result.detected_type!=='PCBA')return '';
   const scopes=result.trace_3074?.mounting_views;
@@ -90,6 +121,6 @@ export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
     ${failure.defect_time?` · 2114: ${esc(formatFactoryDateTime(failure.defect_time))}`:''}</p></div></div>
     <div class="mes-pagination">${option('compare',c('Comparar ambas','Compare both'))}${option('current',c('Somente atual','Current only'))}${option('failure',c('Última falha','Last failure'))}</div>
     <p class="mes-context" data-sn-3074-coverage>${esc(coverage)}</p>
-    ${historicalAlarm}${confidence}<div data-sn-mounting-content>${inner}</div>${historyAudit}
+    ${historicalAlarm}${confidence}<div data-sn-mounting-content>${inner}</div>${renderHistorical3074ReuseAudit(scopes,locale)}${historyAudit}
   </section>`;
 }
