@@ -45,3 +45,25 @@ test('incomplete 3074 material lookup does not display zero as proven',()=>{
 test('material SN queries cannot borrow the PCBA mounting widget',()=>{
   assert.equal(renderSnMountingViews({...sample,detected_type:'MATERIAL_SN'}),'');
 });
+
+test('N-only 3074 history remains inspectable without claiming current mounting or last-failure reuse',()=>{
+  const data=structuredClone(sample);
+  const scope=data.trace_3074.mounting_views;
+  scope.current={status:'not_proven',component_usage:[],reused_components:[],reused_count:null};
+  scope.last_failure={status:'no_2114_anchor',component_usage:[],reused_components:[],reused_count:null};
+  scope.history_audit=[{item_sn:'LCD-N-HIST',item_type:'LCD',iss_status_now:'N',bind_time_utc:'2026-10-20T12:00:00Z',unbind_time_utc:'2026-10-26T12:00:00Z',binding_operation:'A5150'}];
+  const html=renderSnMountingViews(data);
+  assert.match(html,/data-sn-3074-history-audit/);
+  assert.match(html,/LCD-N-HIST/);
+  assert.match(html,/não comprova ausência/);
+  assert.match(html,/montagem histórica indeterminada/);
+  assert.doesNotMatch(html,/Reuso identificado na montagem da última falha/);
+  assert.doesNotMatch(html,/0 materiais de 2º\+ uso comprovados/);
+});
+
+test('historical audit must coexist with the preexisting smart alert renderer',()=>{
+  const live=readFileSync(new URL('../ames/console-sn-live-context.mjs',import.meta.url),'utf8');
+  assert.match(live,/renderSnMountingViews\(result,lang\(\),mountingMode\)/);
+  assert.match(live,/decorateSmartSnAlerts\(root,evidence.model,result\)/);
+  assert.match(live,/decorateSnHistoryDetail\(root,evidence.model,result\)/);
+});
