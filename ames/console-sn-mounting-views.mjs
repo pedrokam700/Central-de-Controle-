@@ -106,20 +106,42 @@ export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
     <p>${c('Não confundir com os materiais da montagem atual. Histórico de vínculos não demonstra causa da falha.','Do not mix with the current mounting. Binding history does not prove failure causation.')}</p></div>`:'';
   const confidence=failure.status==='no_2114_anchor'
     ?`<div class="notice warn">${c('Última falha 2114 sem horário comprovado; montagem histórica indeterminada.','Last 2114 failure time unavailable; historical mounting unverified.')}</div>`:'';
+  // Comparison is meaningful only if a post-2114 Y mounting PROVES a
+  // distinct cycle. Otherwise both cards describe one investigative cycle.
+  const hasNewCycle=current.status==='current_new_cycle';
+  const hasProvenCurrent=['current_new_cycle','current_same_cycle','current_cycle_unanchored'].includes(current.status);
+  const hasFailureMounting=Array.isArray(failure.components)&&failure.components.length>0;
   const option=(id,label)=>`<button type="button" class="button ${mode===id?'primary':'secondary'}" data-sn-mounting-mode="${id}" aria-pressed="${mode===id}">${label}</button>`;
   const scopeCard=(title,info)=>`<section class="mes-context-panel ames-mounting-scope"><h4>${title}</h4>${mountingScopeDetails(info,locale)}</section>`;
-  const currentCard=scopeCard(c('Montagem atual (3074 · Y aberto)','Current mounting (3074 · open Y)'),current);
-  const failureCard=scopeCard(c('Montagem no instante da última falha (3074 + 2114)','Mounting at last failure (3074 + 2114)'),failure);
+  const currentCard=scopeCard(c('Montagem atual comprovada (3074 · Y)','Verified current mounting (3074 · Y)'),current);
+  const failureCard=scopeCard(c('Montagem comprovada na última falha (3074 + 2114)','Verified last-failure mounting (3074 + 2114)'),failure);
   const compare=`<p class="mes-context">${c('Somente atuais','Current only')}: ${(diff.only_current||[]).length} ·
     ${c('Somente da última falha','Last failure only')}: ${(diff.only_last_failure||[]).length} ·
     ${c('Nas duas montagens','In both mountings')}: ${(diff.in_both||[]).length}</p>
     <div class="ames-mounting-columns">${currentCard}${failureCard}</div>`;
-  const inner=mode==='current'?currentCard:mode==='failure'?failureCard:compare;
+  const recent=[...history].sort((a,b)=>text(b.bind_time_utc).localeCompare(text(a.bind_time_utc))).slice(0,5);
+  const recentReference=recent.length?`<section class="mes-context-panel" data-sn-3074-last-known>
+    <h4>${c('Últimos vínculos conhecidos · referência investigativa','Latest known bindings · investigation reference')}</h4>
+    <p class="mes-context">${c('Sem montagem Y posterior comprovada. A última montagem conhecida é a referência da investigação; vínculo N atual não prova que a peça continua instalada ou que estava presente na falha sem horário 2114.','No proven later Y assembly. The last known mounting is the investigation reference; an N status today does not prove current physical presence or mounting at a 2114 failure without timestamp.')}</p>
+    <ul class="ames-mounting-materials">${recent.map(x=>`<li><b>${esc(display(x.item_type))}</b> ·
+      <strong>${esc(display(x.item_sn))}</strong> · ${c('Vínculo iniciado','Bound at')}: ${esc(display(x.bind_time_utc))}
+      · ${c('Desvinculado','Unbound at')}: ${esc(display(x.unbind_time_utc))}</li>`).join('')}</ul>
+    <small>${c('Exibição de referência, não contagem de reuso; o restante está no histórico 3074 abaixo.','Reference only, not a reuse count; other links remain in the 3074 audit below.')}</small>
+    </section>`:'';
+  const reference=hasProvenCurrent?
+    scopeCard(c('Montagem do ciclo investigado (3074 · Y)','Investigated cycle mounting (3074 · Y)'),current):
+    hasFailureMounting?scopeCard(c('Última montagem da falha comprovada (3074 + 2114)','Last proven failure mounting (3074 + 2114)'),failure):
+    recentReference||`<p class="mes-context">${c('Nenhuma montagem temporalmente comprovada; consulte vínculos da 3074.','No temporally proven mounting; inspect 3074 binding history.')}</p>`;
+  const inner=hasNewCycle?(mode==='current'?currentCard:mode==='failure'?failureCard:compare):reference;
   return `<section class="mes-context-panel ames-sn-mounting-compare" data-sn-mounting-views data-active-scope="${esc(mode)}" data-no-i18n>
-    <div class="section-head"><div><h3>${c('3074 · Montagem atual × última falha','3074 · Current mounting × last failure')}</h3>
-    <p>${c('Duas fotografias temporais da MES; nenhum indicador mistura as montagens.','Two temporal MES views; no metric mixes assemblies.')}
+    <div class="section-head"><div><h3>${hasNewCycle?
+      c('3074 · Novo ciclo após a última falha','3074 · New cycle after last failure'):
+      c('3074 · Montagem de referência da PCBA','3074 · Board reference mounting')}</h3>
+    <p>${hasNewCycle?
+      c('Um vínculo Y posterior à 2114 comprova ciclos distintos; as contagens ficam separadas.','A Y binding after 2114 proves distinct cycles; counts stay separate.'):
+      c('Sem novo ciclo comprovado, existe somente uma referência principal; histórico e incertezas ficam abaixo.','With no proven new cycle, one primary reference is shown; history and uncertainty remain below.')}
     ${failure.defect_time?` · 2114: ${esc(formatFactoryDateTime(failure.defect_time))}`:''}</p></div></div>
-    <div class="mes-pagination">${option('compare',c('Comparar ambas','Compare both'))}${option('current',c('Somente atual','Current only'))}${option('failure',c('Última falha','Last failure'))}</div>
+    ${hasNewCycle?`<div class="mes-pagination">${option('compare',c('Comparar ambas','Compare both'))}${option('current',c('Somente atual','Current only'))}${option('failure',c('Última falha','Last failure'))}</div>`:''}
     <p class="mes-context" data-sn-3074-coverage>${esc(coverage)}</p>
     ${historicalAlarm}${confidence}<div data-sn-mounting-content>${inner}</div>${renderHistorical3074ReuseAudit(scopes,locale)}${historyAudit}
   </section>`;
