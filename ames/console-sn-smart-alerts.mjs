@@ -245,7 +245,9 @@ function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,r
   const usageLine=usage?.proven?'<span>'+esc(t(locale,'Uso da PCBA','PCBA use'))+': <b>'+
     esc(usage.use_index?String(usage.use_index)+'º':fmt(usage.known_uses))+'</b>'+
     (usage.previous_uses!==null?' · '+esc(t(locale,'reusos anteriores','previous reuses'))+': '+esc(fmt(usage.previous_uses)):'')+'</span>':'';
-  const boardRows=boardAlert?sameBoardHistory(alerts,model,currentPcba):[];
+  const boardRows=boardAlert?sameBoardHistory(alerts,
+    model.board_reference_is_historical?{...model,current:model.board_failure_reference}:model,
+    currentPcba):[];
   const analysisKinds=boardAlert
     ? [...new Set(boardRows.map(entry=>text(entry.failure.defect_type).replace(/_/g,' ')).filter(Boolean))].join(' → ')
     : [...new Set(alerts.flatMap(a=>evidenceList(a).map(p=>
@@ -260,7 +262,12 @@ function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,r
     '<span class="ames-sn-alert-priority" style="color:'+tone+'">'+esc(badge)+'</span></div>';
   return '<article class="ames-sn-smart-alert" data-smart-alert="'+esc(id)+'" style="border:1px solid color-mix(in srgb,'+
     tone+' 35%,transparent);border-left:6px solid '+tone+';background:'+background+';border-radius:10px;padding:13px 14px">'+
-    header+(boardAlert?productionSnapshot(model,result,locale,currentPcba):'')+
+    header+(boardAlert&&!model.board_reference_is_historical?
+      productionSnapshot(model,result,locale,currentPcba):'')+
+    (boardAlert&&model.board_reference_is_historical?
+      '<p class="ames-sn-alert-rule-note">'+esc(t(locale,
+        'Recorrência histórica desta PCBA na 2114. Existe uma montagem posterior: estes registros NÃO são falhas comprovadas dos componentes do novo ciclo.',
+        'Historical recurrence of this board in 2114. A later mounting exists: these records are NOT proven faults of parts installed in the newer cycle.'))+'</p>':'')+
     shortTechnicianEvidence(alerts,locale,result,currentPcba)+
     '<details style="margin-top:8px"><summary>'+esc(t(locale,'Ver evidências ('+alerts.length+')','View evidence ('+alerts.length+')'))+
     '</summary><div class="ames-sn-alert-proof-body">'+proof+'</div>'+
@@ -371,7 +378,7 @@ function translateAlert(alert,locale){
 
 export function renderSmartSnAlerts(model={},result={},locale='pt-BR'){
   const alerts=buildSmartSnAlerts(model,result).map(alert=>translateAlert(alert,locale));
-  if(!alerts.length)return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="false"><h3>${esc(t(locale,'Alertas inteligentes da consulta','Smart lookup alerts'))}</h3><p>${esc(t(locale,'Nenhum alerta técnico comprovado com as evidências atuais. Isso não prova ausência de histórico.','No technical alert is proven from current evidence. This does not prove absence of history.'))}</p></section>`;
+  if(!alerts.length)return '';
   const high=alerts.filter(alert=>alert.severity==='high').length;
   return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${high?` · ${high} ${t(locale,'alta','high')}`:''}`)}</span></div>${alerts.map(alert=>card(alert,locale,result,model.current_pcba,model)).join('')}</section>`;
 }
