@@ -259,4 +259,52 @@ class IndividualAssemblyTests(unittest.TestCase):
         self.assertTrue(out["trace_3074"]["query_no_data_confirmed"])
         self.assertEqual(out["summary"]["2114_histories"],1)
 
+
+class SourceAndMountingInvariants(unittest.TestCase):
+    def test_last_failure_fallback_never_becomes_current_y_kpi(self):
+        views={'current':{'status':'not_proven','components':[]},
+               'last_failure':{'status':'observed','components':[{'item_sn':'LCD-OLD'}]}}
+        old=[{'item_sn':'LCD-OLD','is_reused':True}]
+        out=engine_bridge.attach_independent_mounting_evidence(
+            views,'last_failure_assembly',old,old,old,old)
+        self.assertEqual(out['current']['component_usage'],[])
+        self.assertIsNone(out['current']['reused_count'])
+        self.assertEqual(out['last_failure']['reused_count'],1)
+
+    def test_current_y_and_prior_lcd_have_separate_counts(self):
+        views={'current':{'status':'current_new_cycle','components':[{'item_sn':'LCD-NEW'}]},
+               'last_failure':{'status':'observed','components':[{'item_sn':'LCD-OLD'}]}}
+        cur=[{'item_sn':'LCD-NEW','is_reused':False}]
+        old=[{'item_sn':'LCD-OLD','is_reused':True}]
+        out=engine_bridge.attach_independent_mounting_evidence(
+            views,'current_new_cycle',cur,[],old,old)
+        self.assertEqual(out['current']['reused_count'],0)
+        self.assertEqual(out['last_failure']['reused_count'],1)
+
+    def test_missing_source_evidence_never_becomes_zero(self):
+        views={'current':{'status':'current_same_cycle','components':[1]},
+               'last_failure':{'status':'no_2114_anchor','components':[]}}
+        out=engine_bridge.attach_independent_mounting_evidence(
+            views,'current_same_cycle',[{'is_reused':None}],[],[],[])
+        self.assertIsNone(out['current']['reused_count'])
+        self.assertIsNone(out['last_failure']['reused_count'])
+
+    def test_canonical_3074_page_bound_even_if_other_tab_is_active(self):
+        class LastPageIsOpc:
+            def choose_active_page(self,*args):
+                raise AssertionError('OPC/2114 must not be selected')
+        page=object()
+        collector=original_3074.Tela3074(LastPageIsOpc(),ROOT)
+        collector.target_page=page
+        self.assertIs(collector._page(),page)
+
+    def test_repair_comment_remains_from_3028_not_from_3012(self):
+        from ames_3028_live import _detail_to_record
+        raw={'lotId':'PCBA-EXACT','repairComment':'LCD observado na 3028'}
+        result=_detail_to_record(raw,'TAN10103')
+        self.assertEqual(result['repair_comment'],'LCD observado na 3028')
+        for alias in ('Repair Comment','repair_comment'):
+            result=_detail_to_record({'lotId':'PCBA-EXACT',alias:'Texto 3028'},'TAN10103')
+            self.assertEqual(result['repair_comment'],'Texto 3028')
+
 if __name__=="__main__":unittest.main()
