@@ -248,6 +248,43 @@ def montagem_principal_da_consulta(rows, pcba_sn, defect_time):
             "failure_time_utc": _iso(failure_at), "temporal_summary": selected["summary"]}
 
 
+def montagens_atual_e_ultima_falha(rows, pcba_sn, defect_time):
+    """Independent 3074 mounting scopes for an individual PCBA investigation.
+
+    Current Y/open intervals and the last 2114 failure interval are never
+    combined into one reuse count. In particular, a later LCD installation
+    cannot erase the materials present when the board failed. The raw grid is
+    evidence of binding, not proof that a material was used on other PCBAs.
+    """
+    current = montagem_principal_da_consulta(rows, pcba_sn, defect_time)
+    # `components` may be the last failure set when no current Y exists;
+    # only a verified CURRENT state can populate the current mounting.
+    live_state = current['state'] in {
+        'current_new_cycle', 'current_same_cycle', 'current_cycle_unanchored'}
+    live = list(current['components']) if live_state else []
+    if defect_time_to_utc(defect_time) is not None:
+        failure = componentes_no_momento_da_falha(rows, pcba_sn, defect_time)
+        at_failure = failure['active']
+        uncertain = failure['time_unknown'] + failure['boundary_ambiguous']
+        failure_status = 'observed' if not uncertain else 'partial'
+    else:
+        at_failure, uncertain, failure_status = [], [], 'no_2114_anchor'
+    live_ids = {item['item_sn'] for item in live}
+    failure_ids = {item['item_sn'] for item in at_failure}
+    return {
+        'current': {'status': current['state'] if live_state else 'not_proven',
+                    'components': live,
+                    'candidates': current['candidates']},
+        'last_failure': {'status': failure_status,
+                         'defect_time': defect_time,
+                         'components': at_failure,
+                         'candidates': uncertain},
+        'comparison': {'only_current': sorted(live_ids - failure_ids),
+                       'only_last_failure': sorted(failure_ids - live_ids),
+                       'in_both': sorted(live_ids & failure_ids)},
+    }
+
+
 def pcbas_do_item_ate_a_falha(
     rows,
     defect_time,

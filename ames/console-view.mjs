@@ -217,9 +217,13 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
           savedToday?(en?' · Latest saved partial capture · read-only':' · Última coleta salva hoje · janela parcial · somente leitura'):'');
     }
     if(period?.mode!=='today'){
-      // Live execution controls and last-job results describe another scope. Keep
-      // historical evidence visible; mutation awaits the exact-snapshot contract.
-      for(const el of pane?.querySelectorAll('[data-trace-form],.ames-trace-progress,[data-top3-trend]')||[])el.hidden=true;
+      // Historical 3028 revisions CAN be enriched: deep_trace is bound to an
+      // exact local snapshot/revision/period on both client and agent. Hiding
+      // the entire trace form made "Último dia" impossible to investigate.
+      // Keep only unrelated live trend controls out of historical readings.
+      for(const el of pane?.querySelectorAll('[data-top3-trend]')||[])el.hidden=true;
+    }else{
+      for(const el of pane?.querySelectorAll('[data-top3-trend]')||[])el.hidden=false;
     }
     // A recovered observation from a partial custom window is not a live
     // head and must never unlock a repair mutation simply because tab=Hoje.

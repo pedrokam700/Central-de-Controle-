@@ -8,6 +8,7 @@ import {decorateSnHistoryDetail} from './console-sn-history-detail.mjs';
 import {decorateSnTemporalProof} from './console-sn-temporal-proof.mjs';
 import {decorateSmartSnAlerts} from './console-sn-smart-alerts.mjs';
 import {renderMaterialSnInvestigation} from './console-sn-material-investigation.mjs';
+import {renderSnMountingViews} from './console-sn-mounting-views.mjs';
 
 const lang=()=>globalThis.document?.documentElement?.lang||'pt-BR';
 const t=(pt,en)=>lang().startsWith('en')?en:pt;
@@ -89,8 +90,11 @@ export function renderSnCompactContext(model={},result={},locale='pt-BR'){
    '</div></section>';
 }
 
-function decorate(root,result){
+function decorate(root,result,mountingMode='compare'){
   const evidence=snLiveSummaryEvidence(result);
+  root.querySelector('[data-sn-mounting-views]')?.remove();
+  const mountingMarkup=renderSnMountingViews(result,lang(),mountingMode);
+  if(mountingMarkup)root.querySelector('[data-sn-result]')?.insertAdjacentHTML('afterbegin',mountingMarkup);
   root.querySelector('[data-material-sn-investigation]')?.remove();
   const investigation=renderMaterialSnInvestigation(result,lang());
   if(investigation)root.querySelector('[data-sn-result]')?.insertAdjacentHTML('afterbegin',investigation);
@@ -103,8 +107,8 @@ function decorate(root,result){
     const excluded=Number(scope.historical_components_ignored||0);
     const unknown=Number(scope.temporal_unknown||0);
     const message=scope.cycle_state==='current_new_cycle'
-      ?t('Novo ciclo comprovado por vínculo Y posterior à última falha 2114. Somente a montagem atual é investigada; a última falha pertence ao histórico.',
-         'New assembly proven by a Y binding after the last 2114 failure. Only current assembly is investigated; the previous failure is historical.')
+      ?t('Novo ciclo comprovado por vínculo Y posterior à última falha 2114. O indicador principal permanece na montagem atual; o recorte da última falha é mostrado separadamente na comparação 3074.',
+         'New assembly proven by Y binding after the last 2114 failure. The primary KPI uses the current assembly; the last-failure mounting is shown separately in the 3074 comparison.')
       :scope.cycle_state==='current_same_cycle'
         ?t('Montagem atual Y pertence ao mesmo ciclo da última falha 2114; não duplicamos conjuntos.',
            'Current Y assembly belongs to the last 2114 failure cycle; no duplicated assemblies.')
@@ -159,8 +163,15 @@ export function withSnLiveContext(base,root,store){
   // Polling a running job should never close the operator's expanded evidence.
   // Capture before base rerenders, restore only for the same SN; no manual
   // navigation/collection should be triggered from a UI refresh.
-  let openBySn=new Map(),lastSn='',linked=false;
+  let openBySn=new Map(),lastSn='',linked=false,mountingMode='compare';
   const openRelatedPcba=event=>{
+    const modeButton=event.target.closest('[data-sn-mounting-mode]');
+    if(modeButton){
+      const panel=modeButton.closest('[data-sn-mounting-views]');
+      const raw=store.agent().job?.result;
+      if(panel&&raw){mountingMode=modeButton.dataset.snMountingMode;panel.outerHTML=renderSnMountingViews(raw,lang(),mountingMode);}
+      return;
+    }
     const trigger=event.target.closest('[data-sn-open-pcba],[data-sn-open-material]');
     if(!trigger)return;
     const sn=String(trigger.dataset.snOpenPcba||trigger.dataset.snOpenMaterial||'').trim();
@@ -176,17 +187,17 @@ export function withSnLiveContext(base,root,store){
       if(!linked){root.addEventListener('click',openRelatedPcba);linked=true;}
       const incoming=store.agent().resultSource==='sn'?store.agent().job?.result:null;
       const nextSn=String(incoming?.sn||'');
-      if(nextSn!==lastSn){openBySn.clear();lastSn=nextSn;}
+      if(nextSn!==lastSn){openBySn.clear();mountingMode='compare';lastSn=nextSn;}
       for(const [index,node] of [...root.querySelectorAll('[data-sn-correlation-alerts] [data-correlation-evidence]')].entries()){
         openBySn.set(index,node.open);
       }
       base.render();
       const agent=store.agent(),result=agent.resultSource==='sn'?agent.job?.result:null;
-      if(result)decorate(root,result);
+      if(result)decorate(root,result,mountingMode);
       for(const [index,node] of [...root.querySelectorAll('[data-sn-correlation-alerts] [data-correlation-evidence]')].entries()){
         if(openBySn.has(index))node.open=openBySn.get(index);
       }
     },
-    clear(){openBySn.clear();lastSn='';if(linked)root.removeEventListener('click',openRelatedPcba);linked=false;base.clear?.();}
+    clear(){openBySn.clear();lastSn='';mountingMode='compare';if(linked)root.removeEventListener('click',openRelatedPcba);linked=false;base.clear?.();}
   };
 }

@@ -23,17 +23,25 @@ class Browser:
     def disconnect(self):pass
 class Navigation:
     fail_3074=False
+    active_view=None
     def __init__(self,*args):pass
     def ensure_3074(self):
         if self.fail_3074:raise RuntimeError("3074 view unavailable")
-    def ensure_2114(self):return object()
+        Navigation.active_view='3074'
+    def ensure_2114(self):
+        Navigation.active_view='2114'
+        return object()
     def ensure_current_shift_2114(self,*args):return "1st Shift"
-    def ensure_3022(self):return object()
+    def ensure_3022(self):
+        Navigation.active_view='3022'
+        return object()
 class Screen3074:
     calls=[]
     response_mode="normal"
     def __init__(self,*args):pass
     def consultar(self,sn):
+        if Navigation.active_view!='3074':
+            raise RuntimeError('3074 read attempted from a different MES view')
         Screen3074.calls.append(sn)
         if self.response_mode=="timeout":raise TimeoutError("3074 query timed out")
         if self.response_mode=="invalid":return {"unexpected":"not a grid"}
@@ -82,6 +90,7 @@ class IndividualAssemblyTests(unittest.TestCase):
         Screen3074.calls=[]
         Screen3074.response_mode="normal"
         Navigation.fail_3074=False
+        Navigation.active_view=None
         Screen2114.calls=[]
         Screen2114.anchor=True
         Screen2114.no_history=False
@@ -163,16 +172,39 @@ class IndividualAssemblyTests(unittest.TestCase):
         self.assertEqual(out["material_investigation"]["coverage"], "partial")
         self.assertEqual(len(out["material_investigation"]["observed_cycles"]), 2)
 
-    def test_current_new_mounting_supersedes_old_failure_materials(self):
+    def test_new_mounting_and_old_failure_materials_stay_separate(self):
         output=self.lookup()
-        self.assertEqual(Screen3074.calls,["CUR","M2"])
-        self.assertEqual(Screen2114.calls,["CUR"],"old failure material must not be traversed in new cycle")
+        self.assertEqual(Screen3074.calls,["CUR","M2","M1"])
+        self.assertEqual(Screen2114.calls,["CUR","OLD"],"only 2114 PCBAs actually linked to examined materials")
         self.assertEqual(output["trace_3074"]["material_selection"]["status"],"current_mounting_new_cycle")
         self.assertEqual([c["item_sn"] for c in output["trace_3074"]["components"]],["M2"])
         self.assertEqual(output["trace_3074"]["component_usage"][0]["previous_pcbas"],[])
+        comparison=output['trace_3074']['mounting_views']
+        self.assertEqual([c['item_sn'] for c in comparison['current']['components']], ['M2'])
+        self.assertEqual([c['item_sn'] for c in comparison['last_failure']['components']], ['M1'])
+        self.assertEqual(comparison['last_failure']['reused_count'], 1)
+        self.assertEqual(comparison['last_failure']['component_usage'][0]['previous_pcbas'], ['OLD'])
+        self.assertEqual(comparison['current']['reused_count'], 0)
         self.assertEqual(output["trace_3074"]["component_usage"][0]["station_3022_evidence"]["status"],"unavailable")
         self.assertEqual(output["summary"]["raw_historical_component_candidates"],3)
         self.assertEqual(output["summary"]["serialized_components"],1)
+    def test_component_3074_query_returns_after_3022_navigation(self):
+        out=self.lookup(include_3022=True)
+        self.assertEqual(Screen3022.calls,['CUR'])
+        self.assertEqual(Screen3074.calls,['CUR','M2','M1'])
+        self.assertEqual(out['trace_3074']['mounting_views']['last_failure']['reused_count'],1)
+    def test_old_lcd_query_error_never_turns_into_zero_second_use(self):
+        actual=Screen3074.consultar
+        def fails_old_item(screen,sn):
+            if sn=='M1':raise RuntimeError('input[name=sn] not found')
+            return actual(screen,sn)
+        with patch.object(Screen3074,'consultar',new=fails_old_item):
+            out=self.lookup()
+        view=out['trace_3074']['mounting_views']['last_failure']
+        self.assertIsNone(view['reused_count'])
+        self.assertEqual(view['incomplete_count'],1)
+        self.assertEqual(out['trace_3074']['status'],'partial')
+        self.assertEqual(out['trace_3074']['mounting_views']['current']['reused_count'],0)
     def test_without_valid_2114_defect_clock_only_current_mounting_is_queried(self):
         Screen2114.anchor=False
         out=self.lookup()

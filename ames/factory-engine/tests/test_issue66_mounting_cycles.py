@@ -4,7 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.temporal_3074 import (montagem_principal_da_consulta,
-    ciclos_fisicos_do_material, falhas_durante_vinculos_do_material)
+    ciclos_fisicos_do_material, falhas_durante_vinculos_do_material,
+    montagens_atual_e_ultima_falha)
 
 
 DEFECT = "2026-10-22 10:00:00"  # factory -03:00 -> 13:00 UTC
@@ -29,6 +30,21 @@ class MountingCycles(unittest.TestCase):
         self.assertEqual(result["state"], "current_new_cycle")
         self.assertEqual([v["item_sn"] for v in result["components"]], ["CAM-NEW"])
         self.assertEqual([v["item_sn"] for v in result["history"]], ["CAM-OLD"])
+
+    def test_compare_keeps_old_lcd_at_last_failure_and_new_lcd_current(self):
+        old = component("LCD-OLD", "2026-10-22 09:00:00", "2026-10-22 15:00:00")
+        new = component("LCD-NEW", "2026-10-23 09:00:00", status="Y")
+        scopes = montagens_atual_e_ultima_falha([old, new], "BOARD", DEFECT)
+        self.assertEqual([x['item_sn'] for x in scopes['current']['components']], ['LCD-NEW'])
+        self.assertEqual([x['item_sn'] for x in scopes['last_failure']['components']], ['LCD-OLD'])
+        self.assertEqual(scopes['comparison']['only_last_failure'], ['LCD-OLD'])
+        self.assertEqual(scopes['comparison']['only_current'], ['LCD-NEW'])
+
+    def test_compare_does_not_invent_current_when_only_historical_exists(self):
+        old = component('LCD-OLD', '2026-10-22 09:00:00', '2026-10-22 15:00:00')
+        scopes = montagens_atual_e_ultima_falha([old], 'BOARD', DEFECT)
+        self.assertEqual(scopes['current']['components'], [])
+        self.assertEqual([x['item_sn'] for x in scopes['last_failure']['components']], ['LCD-OLD'])
 
     def test_current_same_cycle_has_no_duplicate_old_assembly(self):
         live = component("CAM-LIVE", "2026-10-22 09:00:00", status="Y")
