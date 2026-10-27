@@ -38,15 +38,35 @@ export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
   const en=String(locale).startsWith('en');
   const c=choose.bind(null,en);
   const current=scopes.current||{},failure=scopes.last_failure||{},diff=scopes.comparison||{};
-  // Raw N/unbound evidence is inspectable even when current Y and 2114 time
-  // cannot be confirmed. It must never count toward either reuse KPI.
-  const history=Array.isArray(scopes.history_audit)?scopes.history_audit:[];
+  const query=result.trace_3074?.query||{};
+  const rawRows=Array.isArray(query.rows)?query.rows:[];
+  const counts={Y:0,N:0,other:0};
+  for(const item of rawRows){
+    const value=text(item?.['Iss Status']).toUpperCase();
+    counts[value==='Y'?'Y':value==='N'?'N':'other']++;
+  }
+  const coverage=rawRows.length
+    ?`${c('3074 retornou','3074 returned')} ${rawRows.length} ${c('linhas','rows')} ·
+       Y: ${counts.Y} · N: ${counts.N} · ${c('sem status','unknown status')}: ${counts.other}`
+    :query.no_data===true
+      ?c('3074 confirmou grade vazia nesta consulta; isso não comprova ausência em outras montagens.','3074 confirmed an empty grid for this query; other mounts are not ruled out.')
+      :c('3074 não comprovou linhas utilizáveis nesta consulta; investigar a fonte antes de classificar reuso.','3074 has not proven usable rows in this query; check the source before classifying reuse.');
+  // Both historical N and ambiguous current Y are evidence worth inspecting,
+  // not proof that a material was installed at the most recent 2114 failure.
+  const originalHistory=Array.isArray(scopes.history_audit)?scopes.history_audit:[];
+  const uncertain=[...(current.candidates||[]),...(failure.candidates||[])];
+  const key=item=>[text(item.item_sn),text(item.bind_time_utc),text(item.unbind_time_utc),text(item.iss_status_now)].join('|');
+  const seen=new Set();
+  const history=[...originalHistory,...uncertain].filter(item=>{
+    const k=key(item);if(seen.has(k))return false;seen.add(k);return true;
+  });
   const historyItems=history.slice(0,80).map(item=>`<li><b>${esc(display(item.item_type))}</b> · ${esc(display(item.item_sn))}
     <small>${c('Status na consulta','Status at query')}: ${esc(display(item.iss_status_now))} ·
     Bind: ${esc(display(item.bind_time_utc))} · Unbind: ${esc(display(item.unbind_time_utc))} ·
-    ${c('Posto','Station')}: ${esc(display(item.binding_operation))}</small></li>`).join('');
-  const historyAudit=history.length?`<details data-sn-3074-history-audit><summary>${c('Histórico de vínculos 3074 (auditoria, sem atribuição à falha)','3074 binding history (audit, not attributed to failure)')} · ${history.length}</summary>
-    <p class="mes-context">${c('Registros atualmente desvinculados/N. Não demonstram por si só montagem na falha nem reuso em PCBA anterior.','Currently unbound/N records. Not proof of mounting at defect or reuse on another PCBA.')}</p>
+    ${c('Posto','Station')}: ${esc(display(item.binding_operation))}</small>
+    ${item.item_sn?`<button class="button secondary" type="button" data-sn-open-material="${esc(item.item_sn)}">${c('Investigar este material','Investigate this material')}</button>`:''}</li>`).join('');
+  const historyAudit=history.length?`<details data-sn-3074-history-audit><summary>${c('Vínculos históricos ou temporais incertos (somente auditoria)','Historical or time-uncertain bindings (audit only)')} · ${history.length}</summary>
+    <p class="mes-context">${c('Vínculos N, Y incertos ou temporais ambíguos. Não demonstram por si só montagem na falha nem uso em outra PCBA. Para investigar reuso, selecione individualmente a Material SN.','N, uncertain Y or time-ambiguous links. Not proof of mounting at failure or another PCBA use. Investigate each material SN independently.')}</p>
     <ul class="ames-mounting-materials">${historyItems}</ul>
     ${history.length>80?`<small>${c('Prévia de 80 vínculos; histórico bruto completo permanece na fonte 3074.','Preview of 80 bindings; full raw history remains in source 3074.')} (${history.length})</small>`:''}
     </details>`:'';
@@ -69,6 +89,7 @@ export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
     <p>${c('Duas fotografias temporais da MES; nenhum indicador mistura as montagens.','Two temporal MES views; no metric mixes assemblies.')}
     ${failure.defect_time?` · 2114: ${esc(formatFactoryDateTime(failure.defect_time))}`:''}</p></div></div>
     <div class="mes-pagination">${option('compare',c('Comparar ambas','Compare both'))}${option('current',c('Somente atual','Current only'))}${option('failure',c('Última falha','Last failure'))}</div>
+    <p class="mes-context" data-sn-3074-coverage>${esc(coverage)}</p>
     ${historicalAlarm}${confidence}<div data-sn-mounting-content>${inner}</div>${historyAudit}
   </section>`;
 }
