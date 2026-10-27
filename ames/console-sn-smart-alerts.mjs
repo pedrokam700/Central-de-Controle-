@@ -260,17 +260,21 @@ function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,r
     '<div class="ames-sn-alert-intro"><b class="ames-sn-alert-title">'+esc(title)+'</b><p>'+esc(summary)+'</p>'+
     usageLine+countLine+(analysisKinds?'<small>'+esc(analysisKinds)+'</small>':'')+'</div>'+
     '<span class="ames-sn-alert-priority" style="color:'+tone+'">'+esc(badge)+'</span></div>';
+  const historicalNote=boardAlert&&model.board_reference_is_historical?
+    '<p class="ames-sn-alert-rule-note">'+esc(t(locale,
+      'Recorrência histórica desta PCBA na 2114. Existe uma montagem posterior: estes registros NÃO são falhas comprovadas dos componentes do novo ciclo.',
+      'Historical recurrence of this board in 2114. A later mounting exists: these records are NOT proven faults of parts installed in the newer cycle.'))+'</p>':'';
+  const production=boardAlert&&!model.board_reference_is_historical?
+    productionSnapshot(model,result,locale,currentPcba):'';
+  const technicians=shortTechnicianEvidence(alerts,locale,result,currentPcba);
+  // Restore the compact alert agreed by the operator. No evidence is dropped:
+  // 2114/3012/3022, timestamps and candidate limits open under one control.
   return '<article class="ames-sn-smart-alert" data-smart-alert="'+esc(id)+'" style="border:1px solid color-mix(in srgb,'+
     tone+' 35%,transparent);border-left:6px solid '+tone+';background:'+background+';border-radius:10px;padding:13px 14px">'+
-    header+(boardAlert&&!model.board_reference_is_historical?
-      productionSnapshot(model,result,locale,currentPcba):'')+
-    (boardAlert&&model.board_reference_is_historical?
-      '<p class="ames-sn-alert-rule-note">'+esc(t(locale,
-        'Recorrência histórica desta PCBA na 2114. Existe uma montagem posterior: estes registros NÃO são falhas comprovadas dos componentes do novo ciclo.',
-        'Historical recurrence of this board in 2114. A later mounting exists: these records are NOT proven faults of parts installed in the newer cycle.'))+'</p>':'')+
-    shortTechnicianEvidence(alerts,locale,result,currentPcba)+
+    header+
     '<details style="margin-top:8px"><summary>'+esc(t(locale,'Ver evidências ('+alerts.length+')','View evidence ('+alerts.length+')'))+
-    '</summary><div class="ames-sn-alert-proof-body">'+proof+'</div>'+
+    '</summary>'+historicalNote+production+technicians+
+    '<div class="ames-sn-alert-proof-body">'+proof+'</div>'+
     '<small class="ames-sn-alert-final-warning">'+esc(t(locale,
     'Correlação técnica — não confirma causa raiz.','Technical correlation — does not confirm root cause.'))+
     '</small></details></article>';
@@ -281,7 +285,7 @@ export function buildSmartSnAlerts(model={},result={}){
   // 2114 Hist Seq can distinguish records with the same timestamp but cannot
   // prove which 3012 repair row belongs to which AT cycle. Display every
   // PCBA+Defect Code row (including its full comment), without inventing links.
-  const board=text(model.current_pcba),code=text(model.current?.defect_code);
+  const board=text(model.current_pcba),code=text((model.current||model.board_failure_reference)?.defect_code);
   const candidateRows=(model.repairs||[]).filter(r=>text(r.pcba_sn)===board&&text(r.defect_code)===code);
   const distinctCandidates=[...new Map(candidateRows.map(r=>[
     JSON.stringify([r.row_key,r.repair_time,r.repair_user,r.repair_comment]),r])).values()]
