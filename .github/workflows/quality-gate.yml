@@ -60,7 +60,9 @@ jobs:
         run: node --test scripts/ames-auth-hardening.test.mjs
 
       - name: Run local agent pairing contract
-        run: node --test scripts/ames-agent-pairing.test.mjs
+        run: |
+          node --test scripts/ames-agent-pairing.test.mjs
+          python3 scripts/agent-loopback-origin.test.py
 
       - name: Run A-MES Node contract suites
         run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
