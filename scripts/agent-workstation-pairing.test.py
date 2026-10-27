@@ -76,6 +76,11 @@ def test_url_and_html_never_publicly_contain_workstation_token():
     check(token.encode() not in retry and b"ames_agent_token" not in retry,"retry never contains secret")
     sec=p.secure_headers()
     check("frame-ancestors 'none'" in sec["Content-Security-Policy"],"anti clickjack")
+    check("form-action 'self' https://pedrokam700.github.io" in sec["Content-Security-Policy"],
+          "CSP explicitly permits the fixed HTTPS official redirect")
+    check("evil.example" not in sec["Content-Security-Policy"] and
+          "form-action *" not in sec["Content-Security-Policy"],
+          "no wildcard or foreign form redirects")
     check(sec["Referrer-Policy"]=="no-referrer" and "no-store" in sec["Cache-Control"],"non-cacheable secret")
     for invalid in ["", "short"]:
         try: p.destination(invalid)
