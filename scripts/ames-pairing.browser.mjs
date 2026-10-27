@@ -43,7 +43,19 @@ try{
   assert.match(await page.content(),/Conectar este computador/);
   assert.doesNotMatch(await page.content(),/synthetic-only-workstation-token/);
   await page.getByRole('button',{name:'Autorizar e abrir a Central'}).click();
-  await page.waitForURL(/pedrokam700\.github\.io\/Central-de-Controle-/);
+  await page.waitForURL(/pedrokam700\.github\.io\/Central-de-Controle-/, {
+    waitUntil:'domcontentloaded',timeout:8000
+  }).catch(error=>{
+    // Print ONLY request metadata, never fragment/token/nonce/cookie values.
+    console.error('PAIRING_BROWSER_DIAGNOSTIC',JSON.stringify({
+      localResponses:responses.map(x=>({status:x.status,path:new URL(x.url).pathname,
+        redirectOrigin:x.location?new URL(x.location).origin:null})),
+      browserRequestMetadata:requests.map(x=>({method:x.method,origin:x.origin,
+        site:x.site,mode:x.mode,cookiePresent:x.cookiePresent})),
+      stillLocal:page.url().startsWith(origin),
+    }));
+    throw error;
+  });
   assert.match(page.url(),/#ames_agent_token=synthetic-only-workstation-token/);
   assert(responses.some(r=>r.status===303),'Real browser click must complete local HTTP 303');
   assert(requests.some(r=>r.method==='POST'),'Actual Chromium POST must occur');
