@@ -32,6 +32,12 @@ const boundedOffset=(value,max=100000)=>{const n=Number(value);return Number.isI
 export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
   let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false, lastPartial=-1,lastRefresh=0,pendingSubmission=null;
   const workstationToken=bootstrapAgentToken(agentToken);
+  // Keep API requests same-origin when a user pastes the local Central URL into
+  // another tab. Fetch Metadata proves same-origin even when Origin is omitted
+  // by normal browser GETs; the official HTTPS site still uses fixed loopback.
+  const localOrigin=globalThis.location?.origin;
+  const agentBase=['http://127.0.0.1:8765','http://localhost:8765'].includes(localOrigin)
+    ?localOrigin+'/api/v1':AGENT_URL;
   const canOpenOfficial=()=>!!workstationToken&&globalThis.location?.protocol==='http:'&&['127.0.0.1','localhost'].includes(globalThis.location?.hostname)&&globalThis.location?.port==='8765';
   const canPairFromOfficial=()=>globalThis.location?.origin==='https://pedrokam700.github.io' && globalThis.location?.pathname.startsWith('/Central-de-Controle-/');
 
@@ -41,7 +47,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     const headers={};
     if(body!==undefined)headers['Content-Type']='application/json';
     if(workstationToken)headers['X-Central-Agent-Token']=workstationToken;
-    let response;try{response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(requestTimeout(path))]),cache:'no-store',credentials:'omit'});}catch(error){error.code ||= 'agent-network';throw error;}
+    let response;try{response=await fetcher(agentBase+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(requestTimeout(path))]),cache:'no-store',credentials:'omit'});}catch(error){error.code ||= 'agent-network';throw error;}
     if(response.status===401)throw Object.assign(new Error('Agente local não autorizado nesta aba. Abra pelo launcher ou use o pareamento HTTPS no posto local.'),{code:'agent-unauthorized'});
     if(!response.ok)throw new Error(`Agente: HTTP ${response.status}`);
     const data=blob?await response.blob():await response.json();
@@ -152,7 +158,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const lease=generation;
       let probe={state:'unknown'};
       try{
-        const response=await fetcher(AGENT_URL+'/ready',{
+        const response=await fetcher(agentBase+'/ready',{
           method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
           signal:AbortSignal.any([controller.signal,AbortSignal.timeout(2500)])
         });
