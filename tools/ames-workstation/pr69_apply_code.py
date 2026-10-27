@@ -7,6 +7,7 @@ guardian; it is NOT the general Issue57 transactional updater.
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -23,6 +24,43 @@ DENY_PARTS = {'data', 'config.json', '.venv', 'tokens', 'secrets', 'cookies', 's
 
 class PatchBlocked(RuntimeError):
     pass
+
+
+@contextmanager
+def hold_transaction_gate():
+    """Hold the same Global mutex the running Windows guardian checks.
+
+    Disabling HKCU autostart does not terminate an ALREADY running guardian.
+    This mutex prevents that process from relaunching the agent mid-copy.
+    An unavailable/abandoned mutex is never silently ignored.
+    """
+    if os.name != 'nt':
+        yield
+        return
+    import ctypes
+    from ctypes import wintypes
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    create=kernel.CreateMutexW
+    create.argtypes=(wintypes.LPVOID,wintypes.BOOL,wintypes.LPCWSTR)
+    create.restype=wintypes.HANDLE
+    wait=kernel.WaitForSingleObject
+    wait.argtypes=(wintypes.HANDLE,wintypes.DWORD)
+    wait.restype=wintypes.DWORD
+    release=kernel.ReleaseMutex
+    release.argtypes=(wintypes.HANDLE,)
+    close=kernel.CloseHandle
+    close.argtypes=(wintypes.HANDLE,)
+    handle=create(None,False,r'Global\CentralAMES.UpdateTransaction.8765')
+    if not handle:raise PatchBlocked('UPDATE_MUTEX_UNAVAILABLE')
+    acquired=False
+    try:
+        outcome=wait(handle,0)
+        if outcome!=0:raise PatchBlocked('UPDATE_MUTEX_BUSY_OR_ABANDONED')
+        acquired=True
+        yield
+    finally:
+        if acquired:release(handle)
+        close(handle)
 
 
 def digest(payload):
@@ -90,8 +128,8 @@ def _atomic_write(target, contents):
             os.unlink(temp)
 
 
-def apply(install_root: Path, patch_dir: Path, *, listener_check=agent_is_listening,
-          guardian_check=guardian_is_enrolled):
+def _apply_checked(install_root: Path, patch_dir: Path, *, listener_check,
+                   guardian_check):
     root=Path(install_root).resolve(strict=True)
     patch_dir=Path(patch_dir).resolve(strict=True)
     spec=json.loads((patch_dir/MANIFEST_NAME).read_text('utf-8'))
@@ -158,6 +196,13 @@ def apply(install_root: Path, patch_dir: Path, *, listener_check=agent_is_listen
         raise
     return {'sha':target_sha,'files_checked':len(changes),
             'files_changed':len(original),'sqlite_touched':False}
+
+
+def apply(install_root: Path, patch_dir: Path, *, listener_check=agent_is_listening,
+          guardian_check=guardian_is_enrolled):
+    with hold_transaction_gate():
+        return _apply_checked(install_root, patch_dir,
+                              listener_check=listener_check,guardian_check=guardian_check)
 
 
 if __name__ == '__main__':

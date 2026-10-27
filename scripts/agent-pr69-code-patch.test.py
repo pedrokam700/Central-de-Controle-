@@ -76,6 +76,20 @@ class CodePatch(unittest.TestCase):
                      '../another-install/file','C:/Windows/system.ini'):
             with self.assertRaises(PatchBlocked):safe_relative(name)
 
+    def test_patch_uses_shared_guardian_transaction_gate(self):
+        from unittest.mock import patch
+        from contextlib import contextmanager
+        import pr69_apply_code
+        entered=[]
+        @contextmanager
+        def gate():
+            entered.append('entered')
+            yield
+            entered.append('released')
+        with patch.object(pr69_apply_code,'hold_transaction_gate',gate):
+            self.run_patch()
+        self.assertEqual(entered,['entered','released'])
+
 
 if __name__=='__main__':
     unittest.main()
