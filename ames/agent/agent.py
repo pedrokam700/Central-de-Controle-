@@ -1,6 +1,42 @@
 from __future__ import annotations
 
+# Issue #57: reject a direct Python launch during a pending update/recovery,
+# before importing MES, opening the store or loading any workstation settings.
+# This is only defense in depth; it does NOT attest exclusive maintenance idle.
+import os as _issue57_os
+import stat as _issue57_stat
+from pathlib import Path as _Issue57Path
+
+
+def _issue57_refuse_pending_recovery():
+    try:
+        install_root = _Issue57Path(__file__).resolve().parent.parent
+        metadata_dir = install_root / '.ames-update'
+    except (OSError, RuntimeError, ValueError):
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED') from None
+    try:
+        metadata = metadata_dir.lstat()
+    except FileNotFoundError:
+        return  # The existing installation has never started an update.
+    except OSError:
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED') from None
+    reparse = (getattr(metadata, 'st_file_attributes', 0)
+               & getattr(_issue57_stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))
+    if not _issue57_stat.S_ISDIR(metadata.st_mode) or reparse:
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED')
+    try:
+        with _issue57_os.scandir(metadata_dir) as entries:
+            if next(entries, None) is not None:
+                # claim.lock alone, journal, unexpected files: manual recovery.
+                raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED')
+    except OSError:
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED') from None
+
+
+_issue57_refuse_pending_recovery()
+
 from mes_scheduler import MES, mes_call, Cancelled, MonitorSkipped
+from maintenance_admission import MAINTENANCE, MaintenanceBlocked
 
 import argparse
 import base64
@@ -550,6 +586,18 @@ def _launch_mes_job(kind, cfg, worker, monitor=False):
 
 
 def _launch_new_mes_job(kind, cfg, worker, monitor=False, admission=None):
+    try:
+        # Include the SQLite queued-row write and monitor reservation in a
+        # single admission. An idle observation alone does not close this race.
+        with MAINTENANCE.mutation():
+            return _launch_new_admitted_mes_job(kind, cfg, worker, monitor, admission)
+    except MaintenanceBlocked:
+        if monitor:
+            return None  # Internal timer tick is skipped during a drain.
+        raise
+
+
+def _launch_new_admitted_mes_job(kind, cfg, worker, monitor=False, admission=None):
     reservation = MES.reserve_monitor() if monitor else None
     if monitor and reservation is None:
         return None  # No job/status row or queued thread for a skipped tick.
@@ -569,10 +617,21 @@ def _launch_new_mes_job(kind, cfg, worker, monitor=False, admission=None):
             except Exception as exc:
                 _persist_job(_job_update(job['id'],status='error',stage='error',finished_at=utc_now(),message=str(exc),error=type(exc).__name__))
             finally:
-                _job_update(job["id"], mes_state="idle")
-                with JOBS_LOCK:
-                    JOB_CANCEL.pop(job["id"], None)
-        threading.Thread(target=run, daemon=True).start()
+                try:
+                    _job_update(job["id"], mes_state="idle")
+                    with JOBS_LOCK:
+                        JOB_CANCEL.pop(job["id"], None)
+                finally:
+                    # The ticket bridges the short HTTP/scheduler admission
+                    # and the actual MES thread, including its final writes.
+                    background_work.finish()
+        background_work = MAINTENANCE.reserve_background_work()
+        try:
+            threading.Thread(target=run, daemon=True).start()
+        except BaseException:
+            # Thread.start may fail before ownership reaches the worker.
+            background_work.finish()
+            raise
         return job
     except BaseException:
         if reservation is not None:
@@ -1116,32 +1175,40 @@ def today_window():
 
 def monitor_loop():
     while not MONITOR_STOP.wait(5):
-        with STORE.connect() as con:
-            row = con.execute("SELECT * FROM monitor_profiles WHERE id=1").fetchone()
-        if not row or not row["enabled"]:
-            continue
-        cfg = json.loads(row["config_json"] or "{}")
-        interval = max(5, int(row["interval_minutes"] or 30))
-        next_run = row["next_run_at"]
-        due = True
-        if next_run:
-            try:
-                due = datetime.fromisoformat(next_run) <= datetime.now()
-            except ValueError:
-                due = True
-        if not due:
-            continue
-        if cfg.get("mode") == "today":
-            start_at, end_at = today_window()
-        else:
-            start_at, end_at = previous_day_window()
-        run_cfg = dict(cfg)
-        run_cfg.update({"start_at": start_at, "end_at": end_at, "mode": cfg.get("mode", "today")})
-        start_job(run_cfg, monitor=True)
-        nxt = datetime.now() + timedelta(minutes=interval)
-        with STORE.connect() as con:
-            con.execute("UPDATE monitor_profiles SET next_run_at=?,updated_at=? WHERE id=1",
-                        (nxt.isoformat(timespec="seconds"), utc_now()))
+        try:
+            with MAINTENANCE.mutation():
+                _monitor_tick()
+        except MaintenanceBlocked:
+            continue  # No scheduling metadata writes while draining.
+
+
+def _monitor_tick():
+    with STORE.connect() as con:
+        row = con.execute("SELECT * FROM monitor_profiles WHERE id=1").fetchone()
+    if not row or not row["enabled"]:
+        return
+    cfg = json.loads(row["config_json"] or "{}")
+    interval = max(5, int(row["interval_minutes"] or 30))
+    next_run = row["next_run_at"]
+    due = True
+    if next_run:
+        try:
+            due = datetime.fromisoformat(next_run) <= datetime.now()
+        except ValueError:
+            due = True
+    if not due:
+        return
+    if cfg.get("mode") == "today":
+        start_at, end_at = today_window()
+    else:
+        start_at, end_at = previous_day_window()
+    run_cfg = dict(cfg)
+    run_cfg.update({"start_at": start_at, "end_at": end_at, "mode": cfg.get("mode", "today")})
+    start_job(run_cfg, monitor=True)
+    nxt = datetime.now() + timedelta(minutes=interval)
+    with STORE.connect() as con:
+        con.execute("UPDATE monitor_profiles SET next_run_at=?,updated_at=? WHERE id=1",
+                    (nxt.isoformat(timespec="seconds"), utc_now()))
 
 
 def ensure_monitor_thread():

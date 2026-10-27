@@ -31,6 +31,7 @@ ROOT_FILES={
     'suporte/ames-workstation/ROTA_AMES_APLICAR.bat':WORKSTATION/'ROTA_AMES_APLICAR.bat',
     'suporte/ames-workstation/ROTA_AMES_REMOVER.bat':WORKSTATION/'ROTA_AMES_REMOVER.bat',
     'suporte/ames-workstation/START_AGENT_CANONICAL.ps1':WORKSTATION/'START_AGENT_CANONICAL.ps1',
+    'suporte/ames-workstation/ISSUE57_RELAUNCH_ENROLLMENT.ps1':WORKSTATION/'ISSUE57_RELAUNCH_ENROLLMENT.ps1',
     'suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1':WORKSTATION/'DIAGNOSTICO_POSTO.ps1',
     'suporte/ames-workstation/CAPTURAR_MOTOR_R12_SEGURO.bat':WORKSTATION/'CAPTURAR_MOTOR_R12_SEGURO.bat',
     'suporte/ames-workstation/capture-r12-engine.py':WORKSTATION/'capture-r12-engine.py',

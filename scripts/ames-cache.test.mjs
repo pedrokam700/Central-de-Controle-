@@ -34,12 +34,12 @@ function harness({offline=false,installFails=false,status=200,type='text/javascr
       const res=new Response('network',{status,headers:{'content-type':type}});Object.defineProperty(res,'redirected',{value:redirected});return res;
     }
   });
-  return {entries,puts,deleted,activated:()=>activated,async lifecycle(name){let work;events[name]({waitUntil(p){work=p;}});return work;},async request(path,method='GET'){let result;events.fetch({request:{url:new URL(path,origin).href,method},respondWith(p){result=p;}});return result;}};
+  return {entries,puts,deleted,activated:()=>activated,async lifecycle(name,extra={}){let work;events[name]({...extra,waitUntil(p){work=p;}});return work;},async request(path,method='GET'){let result;events.fetch({request:{url:new URL(path,origin).href,method},respondWith(p){result=p;}});return result;}};
 }
 test('offline native imports and versioned CSS resolve canonical static precache',async()=>{
   // Primeiro install válido é online para permitir o cache dos SDKs Firebase exatos;
   // a opção offline abaixo representa a perda de internet depois desse bootstrap.
-  const h=harness({offline:true});await h.lifecycle('install');assert(h.activated());
+  const h=harness({offline:true});await h.lifecycle('install');assert.equal(h.activated(),false,'new shell waits for operator approval');
   for(const path of ['', 'app.js?v=15.1.13.49','ames/console-view.mjs','ames/data/capabilities.mjs','mobile.css?v=15.1.13.49','ames/releases/latest/release.json']){
     const res=await h.request(base+path);assert.equal(res.status,200);assert.match(await res.text(),/^cached/);
   }
@@ -84,15 +84,19 @@ test('an installed shell does not mix modules from a newer deployment',async()=>
   const response=await h.request(base+'app.js?v=15.1.13.49');assert.match(await response.text(),/^cached/);assert.deepEqual(h.puts,[]);
 });
 
-test('both application cache-update listeners accept the exact SHA and reload only once',()=>{
-  const app=fs.readFileSync('app.js','utf8'),listeners=[],values=new Map();let reloads=0;
-  // Extract the two actual listener expressions, not a reimplementation of the callback.
-  const starts=[app.indexOf("navigator.serviceWorker.addEventListener('message'"),app.indexOf("navigator.serviceWorker?.addEventListener?.('message'")];
-  assert(starts.every(i=>i>=0));
-  for(const start of starts){const match=app.slice(start).match(/^([^\n]+?location\.reload\(\);\})(?:if[\s\S]+?openCentralAlert\(e\.data\.data\|\|\{\}\);)?\}\);/);assert(match);const code=match[0];
-    vm.runInNewContext(code,{navigator:{serviceWorker:{addEventListener:(_name,fn)=>listeners.push(fn)}},localStorage:{getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v)},location:{reload:()=>reloads++},syncOfflineQueue:async()=>{},openCentralAlert:()=>{}});
-  }
-  assert.equal(listeners.length,2);
-  for(const fn of listeners)fn({data:{type:'cora-cache-updated',version:'15.1.13.49',cache_revision:'a'.repeat(40)}});
-  assert.equal(reloads,1);assert.equal(values.get('cora.sw.loaded'),'a'.repeat(40));
+test('web update is notified but never reloads while MES is operating',async()=>{
+  const app=fs.readFileSync('app.js','utf8'),sw=fs.readFileSync('sw.js','utf8');
+  assert.match(app,/Nova versão da Central disponível/);
+  assert.match(app,/Atualizar página/);
+  assert.match(app,/offerCentralWebUpdate\(e\.data\.cache_revision\)/);
+  assert.match(app,/offerCentralWebUpdate\(event\.data\.cache_revision\)/);
+  assert.match(app,/reg\.addEventListener\('updatefound'/);
+  assert.match(app,/worker\.postMessage\(\{type:'cora-activate-update'\}\)/);
+  assert.match(sw,/self\.addEventListener\('message'/);
+  assert.doesNotMatch(sw,/precache\(\)\.then\(\(\)=>self\.skipWaiting\(\)\)/);
+  const h=harness();
+  await h.lifecycle('install');
+  assert.equal(h.activated(),false,'valid candidate must wait');
+  await h.lifecycle('message',{data:{type:'cora-activate-update'}});
+  assert.equal(h.activated(),true,'only an explicit command activates');
 });
