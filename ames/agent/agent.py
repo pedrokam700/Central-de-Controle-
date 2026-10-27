@@ -61,6 +61,7 @@ from urllib.request import Request, urlopen
 
 from ames_3028 import parse_export
 from ames_3028_live import collect_live_3028 as _collect_live_3028
+from comment_provenance_3028 import preserve_3028_comment
 collect_live_3028 = mes_call(_collect_live_3028)
 from engine_bridge import (choose_current_history, discover_engine, refresh_2114, repair_state,
                            run_full_v016, run_deep_v016_records, run_individual_lookup, regenerate_v016_excel, build_trace_insights)
@@ -327,7 +328,7 @@ def _persist_3028_live(live, *, mode="today", start_at=None, end_at=None, shift=
     validations = live.get("validations") or []
     for line in actual_lines:
         line_metrics = [m for m in (live.get("line_metrics") or []) if normalize_line_id(m.get("line")) == line]
-        line_records = [r for r in (live.get("records") or []) if normalize_line_id(r.get("line")) == line]
+        line_records = [preserve_3028_comment(r) for r in (live.get("records") or []) if normalize_line_id(r.get("line")) == line]
         line_caps = [c for c in captures if normalize_line_id(c.get("lineId")) == line]
         line_valid = [v for v in validations if normalize_line_id(v.get("line")) == line]
         line_live = {
