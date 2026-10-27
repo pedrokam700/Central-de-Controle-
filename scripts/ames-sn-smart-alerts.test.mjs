@@ -70,7 +70,7 @@ test('smart alert surface is bilingual while technical IDs and evidence remain e
 test('no correlation stays explicit unknown rather than zero alerts',()=>{
   const m={current_pcba:'PCB-A',current:{...failure(),raw:{}},own_history:[],materials:[],alerts:[],correlation_limits:[]};
   const html=renderSmartSnAlerts(m,{},'pt-BR');
-  assert.match(html,/Nenhum alerta técnico comprovado/);
+  assert.equal(html,'','No provable alert must produce no alert box');
   assert.match(html,/não prova ausência de histórico/);
   assert.doesNotMatch(html,/>0 alert/);
 });
