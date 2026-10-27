@@ -148,3 +148,27 @@ test('older N with no later Y is one investigative reference, not a current-Y pr
  assert.match(html,/não contagem de reuso/);
  assert.doesNotMatch(html,/data-sn-mounting-mode="compare"/);
 });
+
+test('historical material 2nd-use shows previous PCBA 2114 failures as context, not a causal alert',()=>{
+ const data=structuredClone(sample);
+ data.trace_3074.mounting_views.historical_material_reuse=[{
+   item_sn:'LCD-OLD',item_type:'LCD',is_reused:true,known_use_count_min:2,
+   other_pcbas:['PCB-BEFORE'],
+   previous_pcba_failures_2114:[{pcba_sn:'PCB-BEFORE',status:'COMPLETE',failures:[{
+     defect_code:'GN11-CN05',defect_desc:'USB charging test failed',
+     defect_time:'2026-10-20 09:45:00',hist_seq:2,defect_type:'MainBoard',
+     relation_to_board_reference:'MESMA_FALHA',
+     proof_level:'SOURCE_COMPARISON_NO_TEMPORAL_ATTRIBUTION'
+   }]}]
+ }];
+ data.trace_3074.mounting_views.historical_probe_total=1;
+ data.trace_3074.mounting_views.historical_probe_remaining=0;
+ const html=renderSnMountingViews(data);
+ assert.match(html,/PCB-BEFORE/);
+ assert.match(html,/GN11-CN05/);
+ assert.match(html,/2026-10-20 09:45:00/);
+ assert.match(html,/MainBoard/);
+ assert.match(html,/atribuição temporal não comprovada/);
+ assert.match(html,/não atribuímos falha à peça/);
+ assert.match(html,/data-sn-historical-material-failures/);
+});
