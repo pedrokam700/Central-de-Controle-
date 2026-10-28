@@ -78,10 +78,9 @@ function compactEvidence(alert,locale,result={},currentPcba=''){
         'Correspondência física entre o tipo de componente reutilizado e o subsistema da falha; não comprova que a peça falhou ou causou o defeito.',
         'Physical compatibility between reused component type and failure subsystem; does not prove the part failed or caused the defect.'))} · ${esc(fmt(match.classification))} · ${esc(fmt(match.reason))} · ${esc(fmt(match.version))}</p>`);
     }
-    for(const repair of proof.repairs||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro anterior associado','3012 · associated prior record'),result,currentPcba));
-    for(const repair of proof.current_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro atual candidato','3012 · candidate current record'),result,currentPcba));
-    for(const repair of proof.ambiguous_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · não atribuído à sequência 2114','3012 · unassigned to 2114 sequence'),result,currentPcba));
-    for(const repair of proof.candidates_3012||[])rows.push(proof3012(repair,locale,t(locale,'3012 · registro candidato, sem ciclo comprovado','3012 · candidate, cycle unproven'),result,currentPcba));
+    // A single chronological 3012 section above all cards retains every
+    // distinct repair record; repeating them per board/component proof was
+    // visually noisy and could suggest duplicated technician interventions.
     if(alert.kind?.startsWith('PCBA_')&&!(proof.current_3012||[]).length&&!(proof.ambiguous_3012||[]).length&&!(proof.candidates_3012||[]).length)
       rows.push(`<p class="mes-context">${esc(t(locale,'Análise atual do AT não comprovada nesta consulta 3012; isso não indica que não foi realizada.','Current technician analysis not proven by this 3012 query; this does not mean it never occurred.'))}</p>`);
     if(ret)rows.push(`<div class="ames-sn-smart-proof"><small>3022 · ${esc(t(locale,'Retorno comprovado','Proven return'))}</small><b>${esc([ret.station,ret.operation].filter(Boolean).join(' · ')||'—')}</b><span>${esc(ret.time?time(ret.time):'—')}</span></div>`);
