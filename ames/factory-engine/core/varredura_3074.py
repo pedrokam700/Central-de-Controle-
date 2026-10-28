@@ -38,6 +38,63 @@ def resumir_resultados(resultados, temporal_summary=None):
     return out
 
 
+
+def auditar_materiais_temporais_incertos(
+    tela3074, temporal, defect_time, query_memo, pause_s=0, max_queries=20,
+    defect_local_offset_hours=-3, grid_naive_offset_hours=0,
+):
+    """Read-only investigation of uncertain 3074 bindings.
+
+    These Material SNs are NOT attributed to the 3028 defect and do not enter
+    second-use KPIs. Reverse 3074 lookup can still expose previous PCBAs for
+    an operator to examine instead of silently presenting zero candidates.
+    """
+    pending = temporal["time_unknown"] + temporal["boundary_ambiguous"]
+    unique = {}
+    for row in pending:
+        unique.setdefault(row.get("item_sn"), row)
+    audited = []
+    for i, (sn, row) in enumerate(unique.items()):
+        result = {
+            "item_sn": sn, "item_type": row.get("item_type"),
+            "temporal_reason": row.get("temporal_reason"),
+            "bind_time_utc": row.get("bind_time_utc"),
+            "unbind_time_utc": row.get("unbind_time_utc"),
+            "binding_operation": row.get("binding_operation"),
+            "iss_status_now": row.get("iss_status_now"),
+            "proven_at_defect": False,
+            "previous_pcba_count": None,
+            "historical_pcbas": [],
+            "status": "CANDIDATE_UNVERIFIED",
+        }
+        if i >= max_queries:
+            result["status"] = "CANDIDATE_QUERY_DEFERRED"
+        else:
+            try:
+                if sn in query_memo:
+                    q = query_memo[sn]
+                else:
+                    q = tela3074.consultar(sn)
+                    query_memo[sn] = q
+                    if pause_s:
+                        time.sleep(pause_s)
+                coverage = classify_3074_page(q)
+                full = historico_completo_pcbas_do_item(
+                    q.get("rows", []), grid_naive_offset_hours=grid_naive_offset_hours)
+                result["historical_pcbas"] = [
+                    v.get("pcba_sn") for v in full["associations"] if v.get("pcba_sn")]
+                result["historical_pcba_count"] = full["distinct_pcba_count"]
+                result["coverage"] = coverage
+                result["status"] = ("CANDIDATE_SOURCE_PARTIAL"
+                                    if coverage["status"] == "incomplete_page"
+                                    else "CANDIDATE_HISTORY_AVAILABLE")
+            except Exception as exc:
+                result["status"] = "CANDIDATE_QUERY_ERROR"
+                result["error"] = f"{type(exc).__name__}: {exc}"
+        audited.append(result)
+    return audited
+
+
 def executar_varredura(
     tela3074,
     pcba_sn,
@@ -75,12 +132,21 @@ def executar_varredura(
     )
     componentes = temporal["active"]
     existing["temporal_filter"] = temporal
+    base_coverage = classify_3074_page(base)
+    existing["base_coverage"] = base_coverage
+    candidates = auditar_materiais_temporais_incertos(
+        tela3074, temporal, defect_time, query_memo, pause_s,
+        defect_local_offset_hours=defect_local_offset_hours,
+        grid_naive_offset_hours=grid_naive_offset_hours)
+    existing["candidate_material_history"] = candidates
 
     if checkpoint_cb:
         checkpoint_cb(existing)
 
     if not componentes:
-        if not base.get("rows"):
+        if base_coverage["status"] == "incomplete_page":
+            status = "CONSULTA_PCBA_3074_PARCIAL_NAO_E_ZERO"
+        elif not base.get("rows"):
             status = "SEM_REGISTROS_3074_NA_CONSULTA"
         elif temporal["summary"].get("time_unknown") or temporal["summary"].get("boundary_ambiguous"):
             status = "COMPONENTES_NAO_DETERMINADOS_POR_INTERVALO_INCOMPLETO"
@@ -98,6 +164,8 @@ def executar_varredura(
                               "future_links_excluded": temporal["summary"].get("bound_after_defect",0),
                               "past_links_excluded": temporal["summary"].get("ended_before_defect",0)},
             "temporal_filter": temporal,
+            "base_coverage": base_coverage,
+            "candidate_material_history": candidates,
             "summary": resumir_resultados([], temporal["summary"]),
             "results": [],
             "base_query": base,
@@ -113,7 +181,9 @@ def executar_varredura(
 
     for idx, item in enumerate(componentes, 1):
         item_sn = normalizar_sn(item["item_sn"])
-        if item_sn in existing_results:
+        if item_sn in existing_results and existing_results[item_sn].get("status") not in (
+            "HISTORICO_3074_PARCIAL", "ERRO_CONSULTA"
+        ) and (existing_results[item_sn].get("coverage") or {}).get("status") != "incomplete_page":
             r = existing_results[item_sn]
             resultados.append(r)
             if progress:
@@ -234,6 +304,8 @@ def executar_varredura(
                            "future_links_excluded": temporal["summary"].get("bound_after_defect",0),
                            "past_links_excluded": temporal["summary"].get("ended_before_defect",0)},
         "temporal_filter": temporal,
+        "base_coverage": base_coverage,
+        "candidate_material_history": candidates,
         "summary": resumir_resultados(resultados, temporal["summary"]),
         "results": resultados,
         "base_query": base,
