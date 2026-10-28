@@ -243,13 +243,17 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
         navigator = session_object(navigation_mod.AmesNavigation(browser._target))
         if line_callback:
             line_callback("3074 preparando view A-MES")
-        navigator.ensure_3074()
+        page3074 = navigator.ensure_3074()
         if line_callback:
             line_callback("2114 preparando OPC / view")
         page2114 = navigator.ensure_2114()
         navigator.ensure_current_shift_2114(page2114)
         tela3074 = session_object(tela3074_mod.Tela3074(browser._target, engine_dir))
         tela2114 = session_object(tela2114_mod.Tela2114(browser._target, engine_dir))
+        # Deep trace MUST pin the verified Home/3074 page: OPC/2114 was
+        # opened afterwards, and choose_active_page() can otherwise select OPC.
+        # This is independent of the individual-SN flow, which already pins it.
+        tela3074.target_page = page3074
         # Fail fast with the exact missing real-world prerequisite instead of
         # silently consulting a stale/wrong tab.
         tela3074._page()
