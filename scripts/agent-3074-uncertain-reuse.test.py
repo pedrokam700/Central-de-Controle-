@@ -40,17 +40,18 @@ class Fake3074:
         raise AssertionError('Unknown source request '+sn)
 
 class Tests(unittest.TestCase):
-    def run_flow(self,source,collector,checkpoint):
+    def run_flow(self,source,collector,checkpoint,audit_uncertain=False):
         records=[{'pcba_sn':PCBA,'defect_time':DEFECT,'defect_code':'VIBRATION',
                   'defect_desc':'Motor No Vibration','line':'TAN10102'}]
         return executar_fluxo(source,{'records':records,'records_count':1,'unique_pcba_count':1},
-                              collector,max_pcbas=0,checkpoint_path=checkpoint,pause_s=0)
+                              collector,max_pcbas=0,checkpoint_path=checkpoint,pause_s=0,
+                              audit_uncertain=audit_uncertain)
 
     def test_reverse_history_is_visible_as_candidate_not_false_second_use(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=pathlib.Path(tmp)
             source=root/'3028.json';source.write_text('FIXTURE-3028',encoding='utf-8')
-            result=self.run_flow(source,Fake3074(partial=False),root/'checkpoint.json')
+            result=self.run_flow(source,Fake3074(partial=False),root/'checkpoint.json',audit_uncertain=True)
         self.assertEqual(result['items'][0]['status'],'COMPLETE')
         trace=result['items'][0]['defect_traces'][0]['trace_3074']
         self.assertEqual([r['item_sn'] for r in trace['results']],['CAM-VALID'])
