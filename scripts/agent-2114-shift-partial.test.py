@@ -23,6 +23,7 @@ sys.path.insert(0, str(ENGINE))
 from ames import shift_2114  # noqa: E402
 from ames.navigation import AmesNavigation  # noqa: E402
 from core import fluxo_2114  # noqa: E402
+from core.correlacao_falhas import selecionar_ocorrencia_atual, analisar_historico_pcba_atual  # noqa: E402
 
 
 class FakeClock:
@@ -344,6 +345,24 @@ def test_2114_shift_lookup_on_first_board_only():
         shift_2114.current_shift=original_current
         tela_2114.Tela2114._query_response_tracker=original_track
 
+
+def test_hist_seq_zero_is_not_replaced_by_grid_position():
+    # The physical 2114 has Hist Seq 0/1 for the same antenna failure.
+    # The MES grid may be sorted newest-first; 0 must still be older.
+    rows = [
+        {'Defect Hist Seq': '1', 'Defect Code': 'GN01-TX02',
+         'Defect Description': 'Antenna: ANT1 test failed'},
+        {'Defect Hist Seq': '0', 'Defect Code': 'GN01-TX02',
+         'Defect Description': 'Antenna: ANT1 test failed'},
+    ]
+    selected = selecionar_ocorrencia_atual('', '', rows)
+    assert selected['current_history'] is rows[0]
+    assert selected['prior_histories'] == [rows[1]]
+    assert selected['current_seq'] == '1'
+    result = analisar_historico_pcba_atual('GN01-TX02', 'Antenna: ANT1 test failed', rows)
+    assert result['same_repetitions'] == 1, 'reused PCBA must be classified as same failure'
+    assert result['status'] == 'MESMA_FALHA_REPETIDA'
+
 def main():
     tests = [
         test_shift_waits_for_committed_confirmation,
@@ -354,6 +373,7 @@ def main():
         test_partial_checkpoint_resumes_only_unfinished_pcba,
         test_2114_exact_lot_without_extjs_load_is_fast,
         test_2114_shift_lookup_on_first_board_only,
+        test_hist_seq_zero_is_not_replaced_by_grid_position,
     ]
     for test in tests:
         test()

@@ -195,8 +195,9 @@ def _usage_cycles_summary(usage):
 def _hist_signature(hist):
     if not hist:
         return None
+    raw_seq = hist.get("Defect Hist Seq")
     return (
-        str(hist.get("Defect Hist Seq") or ""),
+        str(raw_seq if raw_seq is not None else ""),
         str(hist.get("Defect Code") or ""),
         str(hist.get("Defect Description") or ""),
         str(hist.get("Repair Status") or ""),

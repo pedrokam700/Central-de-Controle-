@@ -258,7 +258,6 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
         if line_callback:
             line_callback("2114 preparando OPC / view")
         page2114 = navigator.ensure_2114()
-        navigator.ensure_current_shift_2114(page2114)
         raw3074 = tela3074_mod.Tela3074(browser._target, engine_dir)
         # SessionObject does not delegate __setattr__; bind Home on the real
         # collector BEFORE wrapping to avoid silently using the OPC/2114 tab.
@@ -269,9 +268,10 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
         # silently consulting a stale/wrong tab.
         tela3074._page()
         tela2114._page()
+        # The 2114 source itself retries/marks an unconfirmed Shift as partial.
+        # Avoid a duplicate lookup here and do not discard successful 3074
+        # capture merely because this independent source is unavailable.
         shift = tela2114.turno_atual()
-        if not shift:
-            raise RuntimeError("AWIP2114 encontrada, mas o Shift nao esta selecionado/legivel.")
 
         def pcba_progress(i, total, sn, failures, status):
             if line_callback:
@@ -492,16 +492,16 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 seen.add(x); pcba_candidates.append(x)
 
         if line_callback: line_callback("2114", 35, "Abrindo OPC / AWIP2114")
-        p2114 = nav.ensure_2114()
-        shift = nav.ensure_current_shift_2114(p2114)
         tela2114 = session_object(tela2114_mod.Tela2114(browser._target, engine_dir))
+        shift = None
         histories = []
         for i, pcba in enumerate(pcba_candidates, start=1):
             try:
                 if line_callback:
                     line_callback("2114", min(72, 35 + int(37*i/max(1,len(pcba_candidates)))), f"Histórico {i}/{len(pcba_candidates)} · {pcba}")
-                shift = nav.ensure_current_shift_2114(p2114)
+                nav.ensure_2114()
                 rr = tela2114.consultar(pcba)
+                shift = rr.get("shift") or shift
                 histories.append({"pcba_sn": pcba, "status": "COMPLETE", "result": rr, "error": None})
             except Exception as exc:
                 histories.append({"pcba_sn": pcba, "status": "ERROR", "result": None, "error": f"{type(exc).__name__}: {exc}"})
@@ -1026,6 +1026,10 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             },
             "material_investigation": material_investigation,
             "trace_2114": {
+                "status": ("partial" if any(h["status"] != "COMPLETE" for h in histories)
+                           and any(h["status"] == "COMPLETE" for h in histories)
+                           else "error" if any(h["status"] != "COMPLETE" for h in histories)
+                           else "complete" if histories else "not_collected"),
                 "pcbas": histories, "rows": all_hist_rows,
                 "current_failure": current_failure_2114,
                 "previous_failures": previous_failures_2114 if any(h["pcba_sn"] == query and h["status"] == "COMPLETE" for h in histories) else None,

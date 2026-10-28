@@ -197,9 +197,14 @@ class AmesNavigation:
             expected = current_shift()[1]
             # First lookup must be real. Once committed in the MES field,
             # do not re-open/probe every visible ExtJS grid for each PCBA.
-            desc = target.locator('input[name="desc"]:visible')
-            if desc.count() == 1 and (desc.first.input_value(timeout=800) or '').strip() == expected:
-                return expected
+            try:
+                desc = target.locator('input[name="desc"]:visible')
+                if desc.count() == 1 and (desc.first.input_value(timeout=800) or '').strip() == expected:
+                    return expected
+            except Exception:
+                # A missing/transitioning field is not a committed Shift.
+                # Let the real ExtJS lookup try to open and confirm it.
+                pass
             return ensure_shift(target)
         except Exception:
             if strict:

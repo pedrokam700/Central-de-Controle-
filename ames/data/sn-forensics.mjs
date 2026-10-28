@@ -16,7 +16,8 @@ const histSeq=row=>{
  const n=Number(raw);return Number.isSafeInteger(n)?n:-1;
 };
 const latestHistory=rows=>[...(rows||[])].sort((a,b)=>histSeq(b)-histSeq(a)||(instant(defectTime(b))??-Infinity)-(instant(defectTime(a))??-Infinity))[0]||null;
-const sameHistory=(a,b)=>Boolean(a&&b&&histSeq(a)===histSeq(b)&&same(defectCode(a),defectCode(b))&&same(defectTime(a),defectTime(b)));
+const sameHistory=(a,b)=>Boolean(a&&b&&histSeq(a)===histSeq(b)&&same(defectCode(a),defectCode(b))&&
+  (same(defectTime(a),defectTime(b))||(!text(defectTime(a))&&!text(defectTime(b)))));
 // A-MES can record two distinct Defect Hist Seq values at the same displayed
 // factory minute. Equal PCBA/code/time is NOT a duplicate when both sequences
 // are different. Sequence proves order of 2114 records, NOT a completed repair.

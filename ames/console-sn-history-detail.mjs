@@ -66,6 +66,8 @@ export function pcbaUsageEvidence(model={},result={}){
 function sortedFailures(model={}){
   const rows=[...(model.own_history||[]),...(model.current?[model.current]:[])];
   return rows.map(row=>({row,at:instant(row.defect_time)})).sort((a,b)=>{
+    const aSeq=number(a.row.hist_seq),bSeq=number(b.row.hist_seq);
+    if(same(a.row.pcba_sn,b.row.pcba_sn)&&aSeq!==null&&bSeq!==null&&aSeq!==bSeq)return aSeq-bSeq;
     if(a.at===null&&b.at===null)return 0;if(a.at===null)return 1;if(b.at===null)return -1;return a.at-b.at;
   }).map(item=>item.row);
 }
@@ -126,11 +128,14 @@ function materialDetail(item,model,result,locale){
 }
 
 export function renderSnHistoryDetail(model={},result={},locale='pt-BR'){
-  const usage=pcbaUsageEvidence(model,result),failures=sortedFailures(model),currentKey=model.current?JSON.stringify([model.current.pcba_sn,model.current.defect_code,model.current.defect_time]):'';
+  const usage=pcbaUsageEvidence(model,result),failures=sortedFailures(model);
+  // Same PCBA/code can occur at the same minute (or without a Defect Time).
+  // Hist Seq is required to distinguish the current 2114 row from its prior use.
+  const currentKey=model.current?JSON.stringify([model.current.pcba_sn,model.current.hist_seq??null,model.current.defect_code,model.current.defect_time]):'';
   const previousCount=model.own_history?.length||0,repairCount=failures.reduce((sum,failure)=>sum+sortedRepairs(failure).length,0);
   const usageLabel=usage.use_index!==null?ordinal(usage.use_index,locale):'—';
   return `<div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Histórico detalhado da própria PCBA','Detailed PCBA history'))}</h3><p>${esc(t(locale,'Falhas 2114, reparos 3012 e processo 3022 ficam separados em ordem cronológica. Número de uso só aparece quando existe evidência específica; falha não é tratada como uso.','2114 failures, 3012 repairs and 3022 process stay separated chronologically. Use number is shown only when specific evidence exists; a failure is not treated as a use.'))}</p></div><span class="status">${esc(fmt(model.current_pcba))}</span></div><div class="ames-inline-facts"><span>${esc(t(locale,'Uso da PCBA na ocorrência','PCBA use at occurrence'))} <b>${esc(usageLabel)}</b></span><span>${esc(t(locale,'Usos conhecidos da PCBA','Known PCBA uses'))} <b>${esc(fmt(usage.known_uses))}</b></span><span>${esc(t(locale,'Reusos anteriores da PCBA','Previous PCBA reuses'))} <b>${esc(fmt(usage.previous_uses))}</b></span><span>${esc(t(locale,'Falhas anteriores 2114','Previous 2114 failures'))} <b>${esc(previousCount)}</b></span><span>${esc(t(locale,'Reparos 3012 vinculados','Linked 3012 repairs'))} <b>${esc(repairCount)}</b></span></div>${usage.proven?`<small class="ames-sn-evidence-note">${esc(t(locale,'Evidência de uso','Use evidence'))}: ${esc(usage.source||'—')}</small>`:`<div class="ames-sn-forensic-empty">${esc(t(locale,'O número de uso da própria PCBA não foi comprovado pelas fontes desta consulta; permanece — e não é inferido pelo número de falhas.','The queried sources did not prove this PCBA use number; it remains — and is not inferred from the number of failures.'))}</div>`}<div class="ames-sn-pcba-timeline">${failures.length?failures.map((failure,index)=>{
-    const key=JSON.stringify([failure.pcba_sn,failure.defect_code,failure.defect_time]),isCurrent=currentKey&&key===currentKey;
+    const key=JSON.stringify([failure.pcba_sn,failure.hist_seq??null,failure.defect_code,failure.defect_time]),isCurrent=currentKey&&key===currentKey;
     return failureDetails(failure,{current:isCurrent,result,currentPcba:model.current_pcba,locale,index:index+1});
   }).join(''):`<div class="ames-sn-forensic-empty">${esc(t(locale,'Nenhum histórico 2114 comprovado para esta PCBA nesta resposta.','No proven 2114 history for this PCBA in this response.'))}</div>`}</div><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Histórico detalhado dos componentes reutilizados','Detailed reused-component history'))}</h3><p>${esc(t(locale,'Cada material mantém Material SN, PCBA atual/anterior, vínculo 3074, falha 2114, reparos 3012 e comentários quando comprovados.','Each material keeps Material SN, current/previous PCBA, 3074 binding, 2114 failure, 3012 repairs and comments when proven.'))}</p></div><span class="status">${esc(fmt(model.materials?.length??0))}</span></div>${model.materials?.length?model.materials.map(item=>materialDetail(item,model,result,locale)).join(''):`<div class="ames-sn-forensic-empty">${esc(t(locale,'Nenhum componente reutilizado foi confirmado nesta resposta.','No reused component was confirmed in this response.'))}</div>`}`;
 }
