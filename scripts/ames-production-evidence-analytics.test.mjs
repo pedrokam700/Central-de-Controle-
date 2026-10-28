@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {productionEvidenceForOccurrence,sameFailureOccurrence} from '../ames/data/production-evidence.mjs';
+import {productionEvidenceForOccurrence,productionEvidenceGap,sameFailureOccurrence} from '../ames/data/production-evidence.mjs';
 
 const source=path=>fs.readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const occurrence={pcba_sn:'P1',defect_code:'GN01',defect_time:'2026-10-15T10:00:00-03:00'};
@@ -102,4 +102,15 @@ test('future or unparseable 3022 reference times cannot prove earlier production
   const contaminated={...occurrence,production_shift_source:'3022',production_shift_basis:'reference_process',reference_station_code:'A5100'};
   const missingTime={...occurrence,production_shift_source:'3022',production_shift_basis:'reference_process',reference_event_time:'2026-10-15T09:50:00-03:00'};
   assert.equal(productionEvidenceForOccurrence(contaminated,[missingTime]).trusted,false,'partial fields from different records must not be merged into proof');
+});
+
+test('3022 gaps distinguish absent collection, unassociated records and missing route references',()=>{
+  assert.match(productionEvidenceGap(occurrence,[]),/sem contextos/);
+  assert.match(productionEvidenceGap(occurrence,[{...occurrence,pcba_sn:'P2'}]),/sem correlação exata/);
+  assert.match(productionEvidenceGap(occurrence,[{...occurrence,reference_status:'RULE_NOT_MAPPED'}]),/sem posto de referência/);
+  assert.match(productionEvidenceGap(occurrence,[{...occurrence,reference_rule_id:'VIBRATION_REFERENCE',reference_station_code:'A5150'}]),/sem passagem válida/);
+  assert.match(productionEvidenceGap(occurrence,[{...occurrence,reference_rule_id:'VIBRATION_REFERENCE',reference_station_code:'A5150',reference_event_time:'2026-10-15T11:00:00-03:00'}]),/posterior/);
+  const valid={...occurrence,reference_rule_id:'VIBRATION_REFERENCE',reference_station_code:'A5150',reference_event_time:'2026-10-15T09:00:00-03:00',
+    production_shift_source:'3022',production_shift_basis:'reference_process',production_event_time:'2026-10-15T09:00:00-03:00'};
+  assert.equal(productionEvidenceGap(occurrence,[valid]),null);
 });
