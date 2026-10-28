@@ -176,6 +176,49 @@ class Tela2114:
             self.last_shift_error = f"{type(exc).__name__}: {exc}"
         return SHIFT_UNCONFIRMED
 
+    @staticmethod
+    def _query_response_tracker(page, grid, action):
+        """Observe ExtJS load AFTER Enter; a stale empty grid is not no-data.
+
+        Read-only listener; never clicks Confirm/Update or modifies MES rows.
+        """
+        grid_id = str((grid or {}).get("grid_id") or "").strip()
+        frame_url = str((grid or {}).get("frame_url") or "")
+        if not grid_id:
+            return None
+        frames = [frame for frame in page.frames if frame.url == frame_url]
+        if len(frames) != 1:
+            return None
+        frame = frames[0]
+        try:
+            reply = frame.evaluate("""args => {
+              if (!window.Ext || !Ext.getCmp) return null;
+              const grid = Ext.getCmp(args.id);
+              const store = grid && grid.getStore && grid.getStore();
+              if (!store) return null;
+              if (args.action === 'arm') {
+                const old = store.__ames2114Reply;
+                if (old && old.listener && store.un) store.un('load', old.listener);
+                const marker = {loads:0, success:null};
+                marker.listener = function(s, records, success) {
+                  marker.loads++;
+                  marker.success = success === false ? false : true;
+                };
+                store.on('load', marker.listener);
+                store.__ames2114Reply = marker;
+              }
+              const current = store.__ames2114Reply;
+              if (!current) return null;
+              if (args.action === 'dispose') {
+                if (current.listener && store.un) store.un('load', current.listener);
+                delete store.__ames2114Reply;
+              }
+              return {loads:current.loads, success:current.success};
+            }""", {"id": grid_id, "action": action})
+            return (frame, grid_id, reply) if action == "arm" and reply else reply
+        except Exception:
+            return None
+
     def consultar(self, pcba_sn, timeout_s=15.0, empty_confirm_s=1.8):
         pcba_sn = normalizar_sn(pcba_sn)
         if not pcba_sn:
@@ -200,6 +243,17 @@ class Tela2114:
             raise RuntimeError(
                 "Shift da 2114 não está selecionado/legível após tentativa automática."
             )
+
+        # Observe the matching 2114 store BEFORE scan. An empty ExtJS
+        # grid left over from another query is not a valid no-data response.
+        try:
+            before = extract_best_grid(
+                page, expected_headers=EXPECTED_HEADERS,
+                frame_hints=("2114", "Tr Defect Lot By Hand", "Defect History"))
+        except Exception:
+            before = None
+        marker = self._query_response_tracker(page, before, "arm")
+        armed_grid = before if marker else None
 
         # O comportamento da 2114 é de scan: preencher e Enter.
         # Usamos preenchimento/foco direto para que o balão visual do
@@ -226,7 +280,9 @@ class Tela2114:
 
                 # Proteção contra grade antiga: só aceita retorno com a PCBA pesquisada.
                 matching = [r for r in rows if _lot_matches(r, pcba_sn)]
-                if matching:
+                reply = self._query_response_tracker(page, armed_grid, "status") if armed_grid else None
+                confirmed_response = bool(reply and reply.get("loads", 0) >= 1 and reply.get("success") is not False)
+                if matching and (armed_grid is None or confirmed_response):
                     enriched = []
                     for row in matching:
                         item = dict(row)
@@ -252,7 +308,18 @@ class Tela2114:
                     return result
 
                 # Vazio estável é um resultado válido, mas não aceitamos imediatamente.
-                if not rows and loading is not True:
+                # Never classify an old/absent/foreign grid as MES no data.
+                # A request-local successful ExtJS load and a verified empty
+                # store are necessary; otherwise report partial/error for retry.
+                store_empty = (
+                    grid.get("kind") == "extjs_store"
+                    and grid.get("grid_id")
+                    and grid.get("store_total_count") == 0
+                    and grid.get("store_count") == 0
+                    and loading is False
+                    and confirmed_response
+                )
+                if not rows and store_empty:
                     if empty_since is None:
                         empty_since = time.time()
                     if time.time() - empty_since >= empty_confirm_s:
@@ -278,6 +345,9 @@ class Tela2114:
 
             time.sleep(0.15)
 
+        # No successful post-scan response means unknown coverage, never 0.
+        if armed_grid:
+            self._query_response_tracker(page, armed_grid, "dispose")
         rows_count = len((last_grid or {}).get("rows") or [])
         raise RuntimeError(
             f"2114 não confirmou a PCBA {pcba_sn} dentro de {timeout_s:.0f}s. "
