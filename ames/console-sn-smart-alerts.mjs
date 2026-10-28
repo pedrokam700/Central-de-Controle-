@@ -328,7 +328,7 @@ function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,r
     alerts.map(alert=>compactEvidence(alert,locale,result,currentPcba)).join('');
   const header='<div class="ames-sn-alert-header"><span aria-hidden="true" class="ames-sn-alert-symbol">⚠</span>'+
     '<div class="ames-sn-alert-intro"><b class="ames-sn-alert-title">'+esc(title)+'</b><p>'+esc(summary)+'</p>'+
-    usageLine+countLine+(analysisKinds?'<small>'+esc(analysisKinds)+'</small>':'')+'</div>'+
+    usageLine+countLine+'</div>'+
     '<span class="ames-sn-alert-priority" style="color:'+tone+'">'+esc(badge)+'</span></div>';
   const historicalNote=boardAlert&&model.board_reference_is_historical?
     '<p class="ames-sn-alert-rule-note">'+esc(t(locale,
@@ -453,7 +453,11 @@ function translateAlert(alert,locale){
 export function renderSmartSnAlerts(model={},result={},locale='pt-BR'){
   const alerts=buildSmartSnAlerts(model,result).map(alert=>translateAlert(alert,locale));
   if(!alerts.length)return '';
-  const high=alerts.filter(alert=>['high','critical'].includes(alert.severity)).length;
+  const severityCounts=alerts.reduce((counts,a)=>(counts[a.severity]=(counts[a.severity]||0)+1,counts),{});
+  const summary=['critical','high','medium','low'].filter(level=>severityCounts[level])
+    .map(level=>severityCounts[level]+' '+t(locale,
+      ({critical:'muito alta',high:'alta',medium:'média',low:'baixa'})[level],
+      ({critical:'very high',high:'high',medium:'medium',low:'low'})[level])).join(' · ');
   const allProofs=alerts.flatMap(group=>group.alerts);
   const sharedTechnicians=shortTechnicianEvidence(allProofs,locale,result,model.current_pcba);
   let boardHighlightsShown=false;
@@ -462,7 +466,7 @@ export function renderSmartSnAlerts(model={},result={},locale='pt-BR'){
     if(firstBoard)boardHighlightsShown=true;
     return card(alert,locale,result,model.current_pcba,model,i===0?sharedTechnicians:'',firstBoard);
   });
-  return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${high?` · ${high} ${t(locale,'altas','high priority')}`:''}`)}</span></div>${cards.join('')}</section>`;
+  return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${summary?` · ${summary}`:''}`)}</span></div>${cards.join('')}</section>`;
 }
 
 const expansionState=new WeakMap();
