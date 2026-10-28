@@ -11,6 +11,30 @@ const family=r=>value(r,'defect_family','failure_family','Família falha');
 const index=v=>{const m=/^([1-9]\d*)(?:[ºoª]?\s*uso)?$/i.exec(String(v??'').trim());return m?Number(m[1]):null;};
 const useIndex=(r,kind)=>index(kind==='pcba'?value(r,'_pcba_use_index','pcba_use_index','Uso da PCBA na falha'):value(r,'material_use_index','Uso material na falha'));
 const eventKey=r=>JSON.stringify([sn(r),code(r),time(r),r.occurrence_id||r.record_id||null]);
+const sequence=r=>{
+ const v=value(r,'hist_seq','Defect Hist Seq');
+ return v!==null&&v!==''&&Number.isInteger(Number(v))&&Number(v)>=0?Number(v):null;
+};
+/** Separate 2114 Hist Seq order from source Defect Time.
+ * A repeated exact defect on the same PCBA is evidence of recurrence;
+ * it DOES NOT prove this 3028 record happened at a particular 2114 time.
+ */
+export function boardHistSeqRecurrence(occurrence={},history=[]){
+ const pcba=sn(occurrence);
+ if(!pcba||!code(occurrence))return [];
+ const own=history.filter(r=>sn(r)===pcba&&sequence(r)!==null&&code(r));
+ const bySeq=new Map();
+ for(const row of own){
+  const seq=sequence(row);
+  if(!bySeq.has(seq))bySeq.set(seq,row);
+ }
+ const ordered=[...bySeq].sort((a,b)=>a[0]-b[0]);
+ if(ordered.length<2)return [];
+ const latest=ordered.at(-1)[1];
+ if(compareFailures(code(occurrence),occurrence.defect_desc,code(latest),latest.defect_desc).classification!=='EXACT')return [];
+ return ordered.slice(0,-1).map(([,old])=>({...old,history_order_basis:'HIST_SEQ_ONLY',history_timestamp_proven:Boolean(time(old))}));
+}
+
 function exactOccurrence(row,occurrences,kind){
  const candidates=occurrences.filter(o=>sn(o)===sn(row)&&
   (!code(row)||code(row)===code(o))&&(!time(row)||time(row)===time(o))&&
@@ -82,7 +106,11 @@ export function buildReuseCohorts(snapshot={},filters={}){
   const previous=kind==='pcba'?[sn(row)]:list(value(row,'previous_pcbas_json','previous_pcbas','PCBAs desvinculadas'));
   if(kind==='component')item.previous_pcbas.push(...previous);
   if(event){item.events.push(event);const cutoff=time(event);
-   item.prior_events.push(...history.filter(h=>previous.includes(sn(h))&&time(h)&&cutoff&&time(h)<cutoff&&code(h)));
+   const priorByClock=history.filter(h=>previous.includes(sn(h))&&time(h)&&cutoff&&time(h)<cutoff&&code(h));
+   // Hist Seq is a valid order within one 2114 PCBA, including MES variants
+   // that never return Defect Time. Never use this rule across materials/PCBAs.
+   const priorBySeq=kind==='pcba'?boardHistSeqRecurrence(event,history):[];
+   item.prior_events.push(...priorByClock,...priorBySeq);
   }
  }
  for(const o of occurrences)add(pcbas,sn(o),'pcba',o,o,'3028');
