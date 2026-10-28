@@ -160,6 +160,15 @@ export function createTraceConsoleView(root,store,client){
           const form=root.querySelector('[data-trace-form]'),data=new FormData(form),lines=[...form.querySelectorAll('[name=lines]:checked')].map(x=>x.value);
           if(!lines.length)throw Error('Selecione pelo menos uma linha.');
           await client.collect('deep',{lines,performance:data.get('performance'),max_failures:Number(data.get('max_failures')||0),max_pcbas:Number(data.get('max_pcbas')||0),defect_codes:String(data.get('codes')||'').split(',').map(x=>x.trim()).filter(Boolean),trace_mode:data.get('trace_mode')||'full'});
+          // A single-line trace is inspected on THAT line, not the previous
+          // global selection (e.g. old Line 2 after a new Line 3 collection).
+          if(lines.length===1){
+            line=lines[0];
+            store.updateContext?.({line_id:line});
+            const linePicker=root.querySelector('[data-trace-line]');
+            if(linePicker)linePicker.value=line;
+            evidence?.render?.(line);
+          }
         }catch(error){store.updateAgent({error:error.message});}
         finally{store.updateAgent({submitting:false});render();}
       });
