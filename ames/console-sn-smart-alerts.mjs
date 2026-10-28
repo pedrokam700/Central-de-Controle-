@@ -267,7 +267,6 @@ function compactCurrentPrior(alerts,model={},locale='pt-BR',currentPcba=''){
     if(!entry?.failure)return '';
     const f=entry.failure;
     const meta=[
-      f.hist_seq==null?'':'Hist Seq '+f.hist_seq,
       text(f.defect_type).replaceAll('_',' '),
       f.defect_time?time(f.defect_time):t(locale,'Horário 2114 não comprovado','2114 timestamp unproven')
     ].filter(Boolean).join(' · ');
@@ -380,7 +379,7 @@ export function buildSmartSnAlerts(model={},result={}){
   const componentSame=byKind('COMPONENT_SAME_FAILURE'),componentFamily=byKind('COMPONENT_SAME_FAMILY');
   if(componentSame.length){
     const count=new Set(componentSame.map(itemIdentity)).size;
-    out.push({id:'component-same-failure',severity:count>=2?'critical':'high',title:`${count} componente${count===1?'':'s'} reutilizado${count===1?'':'s'} com mesma falha`,summary:'O componente estava anteriormente vinculado a outra PCBA com a mesma falha e o vínculo temporal foi comprovado.',alerts:componentSame});
+    out.push({id:'component-same-failure',severity:count>=3?'critical':'high',title:`${count} componente${count===1?'':'s'} reutilizado${count===1?'':'s'} com mesma falha`,summary:'O componente estava anteriormente vinculado a outra PCBA com a mesma falha e o vínculo temporal foi comprovado.',alerts:componentSame});
   }
   if(componentFamily.length){
     const count=new Set(componentFamily.map(itemIdentity)).size;
