@@ -16,7 +16,18 @@ export function mountReuseCohorts(root,snapshot){
   ${['pcbas','components'].map(kind=>`<button type="button" class="button secondary" data-cohort-kind="${kind}" data-cohort-metric="unknown_outcome">${kind==='pcbas'?t('PCBAs com histórico inconclusivo','Boards with unresolved history'):t('Componentes com histórico inconclusivo','Components with unresolved history')} · ${model[kind].counts.unknown_outcome}</button>`).join('')}
   </details><div data-cohort-detail></div>`;
   root.querySelector('form').addEventListener('submit',e=>{e.preventDefault();filters=Object.fromEntries(new FormData(e.currentTarget));selection=null;render();});
-  for(const button of root.querySelectorAll('[data-cohort-metric]'))button.addEventListener('click',()=>{selection=[button.dataset.cohortKind,button.dataset.cohortMetric];detail(model);});
+  for(const button of root.querySelectorAll('[data-cohort-metric]'))button.addEventListener('click',()=>{
+    selection=[button.dataset.cohortKind,button.dataset.cohortMetric];
+    for(const metricButton of root.querySelectorAll('[data-cohort-metric]')){
+      const active=metricButton.dataset.cohortKind===selection[0]&&metricButton.dataset.cohortMetric===selection[1];
+      metricButton.classList.toggle('active',active);
+      metricButton.setAttribute('aria-pressed',String(active));
+    }
+    detail(model);
+    // Previously this detail was appended below two full KPI matrices:
+    // clicking the first PCBAs card appeared to do nothing.
+    root.querySelector('[data-cohort-detail]')?.scrollIntoView?.({behavior:'smooth',block:'start'});
+  });
   if(selection)detail(model);
  }
  function detail(model){
