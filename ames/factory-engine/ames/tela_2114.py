@@ -233,12 +233,15 @@ class Tela2114:
             )
         sn = sn.first
 
-        from ames.shift_2114 import ensure_shift
-        # The composite preflight already gets the full bounded wait.  Individual
-        # queries retry briefly so a transient lookup can recover without spending
-        # 8 seconds per PCBA when the source is genuinely unavailable.
-        ensure_shift(page, timeout_s=min(3.0, max(1.5, float(timeout_s) / 4.0)))
+        from ames.shift_2114 import ensure_shift, current_shift
+        # The first PCBA often needs a real Shift lookup dialog. Once the
+        # expected shift is confirmed in the MES field, skip reopening the
+        # lookup on EVERY PCBA. Recheck when the factory shift changes.
+        expected_shift = current_shift()[1]
         shift_desc = _safe_input_value(page, "desc")
+        if shift_desc != expected_shift:
+            ensure_shift(page, timeout_s=min(8.0, max(5.0, float(timeout_s) / 2.0)))
+            shift_desc = _safe_input_value(page, "desc")
         if not shift_desc:
             raise RuntimeError(
                 "Shift da 2114 não está selecionado/legível após tentativa automática."
@@ -280,9 +283,14 @@ class Tela2114:
 
                 # Proteção contra grade antiga: só aceita retorno com a PCBA pesquisada.
                 matching = [r for r in rows if _lot_matches(r, pcba_sn)]
-                reply = self._query_response_tracker(page, armed_grid, "status") if armed_grid else None
-                confirmed_response = bool(reply and reply.get("loads", 0) >= 1 and reply.get("success") is not False)
-                if matching and (armed_grid is None or confirmed_response):
+                # An exact Lot Id is the MES response itself. ExtJS often
+                # updates the grid synchronously without firing the 'load'
+                # event; waiting for that optional event caused 15s timeouts
+                # and false 2114 missing results even when the row was visible.
+                # Reject a different Lot Id and a grid still loading.
+                if matching and loading is not True:
+                    if armed_grid:
+                        self._query_response_tracker(page, armed_grid, "dispose")
                     enriched = []
                     for row in matching:
                         item = dict(row)
@@ -311,6 +319,8 @@ class Tela2114:
                 # Never classify an old/absent/foreign grid as MES no data.
                 # A request-local successful ExtJS load and a verified empty
                 # store are necessary; otherwise report partial/error for retry.
+                reply = self._query_response_tracker(page, armed_grid, "status") if armed_grid else None
+                confirmed_response = bool(reply and reply.get("loads", 0) >= 1 and reply.get("success") is not False)
                 store_empty = (
                     grid.get("kind") == "extjs_store"
                     and grid.get("grid_id")
@@ -323,6 +333,8 @@ class Tela2114:
                     if empty_since is None:
                         empty_since = time.time()
                     if time.time() - empty_since >= empty_confirm_s:
+                        if armed_grid:
+                            self._query_response_tracker(page, armed_grid, "dispose")
                         return {
                             "query_sn": pcba_sn,
                             "shift": shift_desc,
