@@ -282,30 +282,53 @@ function compactCurrentPrior(alerts,model={},locale='pt-BR',currentPcba=''){
 }
 function compactComponentPrior(alerts=[],locale='pt-BR'){
   const observed=new Map();
-  for(const a of alerts){
-    for(const proof of evidenceList(a)){
-      const sn=text(a.item_sn)||text(proof.binding?.item_sn);
-      if(!sn)continue;
-      const current=observed.get(sn)||{sn,type:text(a.item_type),boards:new Set(),codes:new Set()};
-      const board=text(proof.binding?.previous_pcba||proof.failure?.pcba_sn);
-      if(board)current.boards.add(board);
-      const desc=text(proof.failure?.defect_desc);
-      if(desc)current.codes.add(desc);
-      observed.set(sn,current);
+  // Use prior board evidence from the correlation model, never infer an
+  // earlier technician by borrowing the currently investigated PCBA.
+  for(const a of alerts)for(const proof of evidenceList(a)){
+    const sn=text(a.item_sn)||text(proof.binding?.item_sn);
+    if(!sn)continue;
+    const group=observed.get(sn)||{sn,type:text(a.item_type),boards:new Set(),failures:new Map(),repairs:new Map()};
+    const board=text(proof.binding?.previous_pcba||proof.failure?.pcba_sn);
+    if(board)group.boards.add(board);
+    if(proof.failure?.defect_desc){
+      const f=proof.failure,key=JSON.stringify([board,f.hist_seq,f.defect_code,f.defect_time]);
+      if(!group.failures.has(key))group.failures.set(key,{pcba:board,description:text(f.defect_desc),at:f.defect_time,type:text(f.defect_type)});
     }
+    for(const rep of proof.repairs||[]){
+      // 3012 notes from a previous PCBAs only with explicit matching SN.
+      if(!board||text(rep.pcba_sn)!==board)continue;
+      const key=text(rep.row_key)||JSON.stringify([board,rep.repair_time,rep.repair_user,rep.repair_comment]);
+      if(!group.repairs.has(key))group.repairs.set(key,rep);
+    }
+    observed.set(sn,group);
   }
   if(!observed.size)return '';
-  const all=[...observed.values()],tiles=all.slice(0,3).map(a=>
-    '<div class="ames-sn-alert-summary-card" data-sn-alert-component-segment>'+
-    '<small>'+esc(t(locale,'Componente histórico · 3074 + 2114','Historical component · 3074 + 2114'))+'</small>'+
-    '<b>'+esc(a.type||t(locale,'Material','Material'))+' · '+esc(a.sn)+'</b>'+
-    '<span>'+esc(t(locale,'PCBAs anteriores','Previous PCBAs'))+': '+esc([...a.boards].join(', ')||'—')+'</span>'+
-    (a.codes.size?'<span>'+esc([...a.codes].join(' · '))+'</span>':'')+
-    '</div>').join('');
+  const all=[...observed.values()],tiles=all.slice(0,3).map(a=>{
+    const rows=[...a.failures.values()];
+    const earlier=rows.slice(0,2).map(f=>
+      '<div class="ames-sn-alert-component-prior-failure" data-sn-prior-pcba-failure>'+
+      '<small>'+esc(t(locale,'Falha da PCBA anterior · 2114','Previous PCBA failure · 2114'))+'</small>'+
+      '<b>'+esc(f.description)+'</b>'+
+      '<span>'+esc(f.pcba||'—')+' · '+esc(f.at?time(f.at):t(locale,'Horário não comprovado','Time unproven'))+
+      (f.type?' · '+esc(f.type.replaceAll('_',' ')):'')+'</span></div>').join('');
+    const notes=[...a.repairs.values()].slice(0,2).map(r=>
+      '<div class="ames-sn-alert-component-prior-failure" data-sn-prior-pcba-repair>'+
+      '<small>'+esc(t(locale,'AT da PCBA anterior · 3012','Previous PCBA technician · 3012'))+'</small>'+
+      '<b>'+esc(text(r.repair_user)||t(locale,'Identificação não comprovada','Identity unproven'))+'</b>'+
+      '<span>'+esc(r.repair_time?time(r.repair_time):'—')+' · '+esc(text(r.repair_comment)||'—')+'</span></div>').join('');
+    return '<div class="ames-sn-alert-summary-card" data-sn-alert-component-segment>'+
+      '<small>'+esc(t(locale,'Material reutilizado · 3074','Reused material · 3074'))+'</small>'+
+      '<b>'+esc(a.type||t(locale,'Material','Material'))+' · '+esc(a.sn)+'</b>'+
+      '<span>'+esc(t(locale,'PCBAs anteriores','Previous PCBAs'))+': '+esc([...a.boards].join(', ')||'—')+'</span>'+
+      earlier+notes+
+      (rows.length>2?'<small>+'+(rows.length-2)+' '+esc(t(locale,'falhas anteriores nas evidências','more previous failures in evidence'))+'</small>':'')+
+      '</div>';
+  }).join('');
   return '<section class="ames-sn-alert-summary-grid" data-sn-alert-components>'+
     tiles+(all.length>3?'<small>+'+(all.length-3)+' '+esc(t(locale,'outros componentes nas evidências','more components in evidence'))+'</small>':'')+
     '</section>';
 }
+
 
 function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,result={},currentPcba='',model={},sharedTechnicians='',showBoardHighlights=true) {
   const boardAlert=id.startsWith('pcba-')||id.startsWith('mainboard-');
