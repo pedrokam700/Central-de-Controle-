@@ -103,6 +103,51 @@ def legacy_context_rows(store,dataset,sid,line=None,limit=5000):
         out.append(row)
     return out[:max(1,min(int(limit),100000))]
 
+def _candidate_materials_from_trace(integrated, defects, max_rows=500):
+    """Read-only projection: retain uncertain 3074 evidence, never reuse KPIs.
+
+    Raw trace lives in snapshot_payloads. Material candidates are scoped by
+    exact 3028 PCBA; an unknown defect key is explicitly NOT occurrence proof.
+    """
+    traced=(integrated or {}).get('trace_3074') or {}
+    allowed={str(row.get('pcba_sn') or '') for row in defects if row.get('pcba_sn')}
+    allowed_keys={str(row.get('defect_key') or '') for row in defects if row.get('defect_key')}
+    out=[];seen=set()
+    for item in traced.get('items') or []:
+        pcba=str(item.get('pcba_sn') or '').strip()
+        if pcba not in allowed:continue
+        for occurrence in item.get('defect_traces') or []:
+            defect_key=str(occurrence.get('defect_key') or '').strip()
+            if defect_key and defect_key not in allowed_keys:continue
+            scope=(occurrence.get('trace_3074') or {})
+            candidate_rows=scope.get('candidate_material_history') or []
+            if not candidate_rows:
+                candidate_rows=list((scope.get('temporal_filter') or {}).get('time_unknown') or [])
+                candidate_rows += (scope.get('temporal_filter') or {}).get('boundary_ambiguous') or []
+            for material in candidate_rows:
+                item_sn=str(material.get('item_sn') or '').strip()
+                if not item_sn:continue
+                key=(pcba,defect_key,item_sn)
+                if key in seen:continue
+                seen.add(key)
+                out.append({
+                    'pcba_sn':pcba,'defect_key':defect_key or None,
+                    'item_sn':item_sn,'item_type':material.get('item_type'),
+                    'status':material.get('status') or 'UNVERIFIED_TEMPORAL_LINK',
+                    'temporal_reason':material.get('temporal_reason'),
+                    'bind_time_utc':material.get('bind_time_utc'),
+                    'unbind_time_utc':material.get('unbind_time_utc'),
+                    'binding_operation':material.get('binding_operation'),
+                    'iss_status_now':material.get('iss_status_now'),
+                    'historical_pcbas':material.get('historical_pcbas') or [],
+                    'proven_at_defect':False,'proven_reuse_at_defect':False,
+                    'scope':'3028_EXACT_OCCURRENCE_CANDIDATE' if defect_key else 'PCBA_UNASSIGNED_CANDIDATE',
+                    'source_view':'3074',
+                })
+                if len(out)>=max_rows:return out
+    return out
+
+
 def export_revision(store,sid,line,insight_builder=None):
     if line not in LINES:raise ValueError('Explicit supported line required')
     sid=int(sid)
@@ -166,6 +211,12 @@ def export_revision(store,sid,line,insight_builder=None):
                 ambiguous+=int(len(candidates)>1);rows.append(row)
             sets[dataset]=rows
             coverage[dataset]={'status':'not_collected' if dataset=='process_timeline' and not rows else 'partial','stored_total':len(rows),'unassigned_rows':unassigned,'ambiguous_context_rows':ambiguous,'transport_complete':True,'source_complete':False,'scope':'stored_snapshot_line_context','reason':'Legacy source has no durable MES ID or completeness proof'}
+        raw=con.execute("SELECT payload_json FROM snapshot_payloads WHERE snapshot_id=? AND kind='integrated_json'",(sid,)).fetchone()
+        try:
+            source_payload=json.loads(raw['payload_json']) if raw else {}
+        except (ValueError,TypeError):
+            source_payload={}
+        material_candidates=_candidate_materials_from_trace(source_payload,sets['defects'])
         metrics=[dict(r) for r in con.execute('SELECT * FROM line_metrics WHERE snapshot_id=? AND line=?',(sid,line))]
         m=metrics[0] if len(metrics)==1 else {}
 
@@ -217,7 +268,7 @@ def export_revision(store,sid,line,insight_builder=None):
         if insight_builder:
             try:insights=insight_builder(line=line,snapshot_id=sid)
             except Exception:pass
-        payload={'projection_version':PROJECTION_VERSION,'schema':SCHEMA,'schema_version':2,'source_id':source,'snapshot_id':str(sid),'line_id':line,'collected_at':snap['collected_at'],'source_view':'3028','source_timestamp':None,'summary':{'period':dict(con.execute('SELECT start_at,end_at,mode FROM analysis_windows WHERE id=?',(snap['window_id'],)).fetchone() or {}),'line':line,'snapshot_id':str(sid),'collected_at':snap['collected_at'],'fpy':m.get('fpy'),'check_fpy':m.get('check_fpy'),'quantity':m.get('quantity'),'defect_rows':len(sets['defects'])},'datasets':sets,'coverage':coverage,'source_coverage':source_coverage,'insights':insights,'process_contexts':process_contexts,'capabilities':{'process_timeline':bool(sets['process_timeline'])}}
+        payload={'projection_version':PROJECTION_VERSION,'schema':SCHEMA,'schema_version':2,'source_id':source,'snapshot_id':str(sid),'line_id':line,'collected_at':snap['collected_at'],'source_view':'3028','source_timestamp':None,'summary':{'period':dict(con.execute('SELECT start_at,end_at,mode FROM analysis_windows WHERE id=?',(snap['window_id'],)).fetchone() or {}),'line':line,'snapshot_id':str(sid),'collected_at':snap['collected_at'],'fpy':m.get('fpy'),'check_fpy':m.get('check_fpy'),'quantity':m.get('quantity'),'defect_rows':len(sets['defects'])},'datasets':sets,'coverage':coverage,'source_coverage':source_coverage,'insights':insights,'process_contexts':process_contexts,'material_candidates':material_candidates,'capabilities':{'process_timeline':bool(sets['process_timeline'])}}
         fingerprint=digest(payload)
         if previous and previous['content_hash']==fingerprint:
             con.execute('UPDATE mes_revisions SET epoch=? WHERE snapshot_id=? AND line=? AND revision=?',(epoch,sid,line,previous['revision']));return json.loads(previous['payload'])
