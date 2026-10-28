@@ -12,7 +12,7 @@ import repair_association
 from datetime import datetime, timezone
 
 SCHEMA = 'central-ames-v2'
-PROJECTION_VERSION = 9  # preserves proof grades and temporal provenance for 3012 candidates
+PROJECTION_VERSION = 10  # add noncausal 3074 candidate projection without overwriting immutable revisions
 LINES = ('TAN10101', 'TAN10102', 'TAN10103')
 DATASETS = ('defects','pcba_history','material_reuse','history_contexts','process_timeline')
 TABLES = ('defect_observations','line_metrics','pcba_history','material_reuse','history_contexts','snapshot_payloads','mes_process_timeline')
