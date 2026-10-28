@@ -258,40 +258,31 @@ function renderMatrix(rows){
   return `<div class="table-wrap"><table class="ames-dfa-matrix"><thead><tr><th>${t('Linha','Line')}</th><th>${t('1º Turno','1st Shift')}</th><th>${t('2º Turno','2nd Shift')}</th><th>${t('Sem turno 3022 comprovado','No proven 3022 shift')}</th><th>${t('Total','Total')}</th></tr></thead><tbody>${LINE_IDS.map((line,i)=>{const a=cell(line,'1st Shift'),b=cell(line,'2nd Shift'),u=unknown(line),proven=rows.some(r=>r.line===line&&r.production_evidence_proven&&r.production_shift);return `<tr><th>${t('Linha','Line')} ${i+1} · ${esc(line)}</th><td>${proven?`<button data-matrix-line="${esc(line)}" data-matrix-shift="1st Shift">${a}</button>`:'—'}</td><td>${proven?`<button data-matrix-line="${esc(line)}" data-matrix-shift="2nd Shift">${b}</button>`:'—'}</td><td>${u}</td><td><b>${a+b+u}</b></td></tr>`;}).join('')}</tbody></table></div>`;
 }
 
-export function dailyFailureHourCoverage(rows=[]){
-  const recorded=new Map(),produced=new Map();
-  let missingRecorded=0,missingProduced=0;
+export function dailyFailureHourCoverage(rows=[]) {
+  const bins=new Map(),unresolved=[];
   for(const row of rows){
-    const recordHour=factoryHourKey(row.defect_time);
-    if(recordHour)recorded.set(recordHour,(recorded.get(recordHour)||0)+1);
-    else missingRecorded++;
-    const generationHour=rowHour(row);
-    if(generationHour)produced.set(generationHour,(produced.get(generationHour)||0)+1);
-    else missingProduced++;
+    const hour=rowHour(row);
+    if(hour)bins.set(hour,(bins.get(hour)||0)+1);
+    else unresolved.push({pcba:row.pcba||null,line:row.line||null,defect_desc:row.defect_desc||null,defect_code:row.defect_code||null});
   }
-  return {total:rows.length,recorded:[...recorded].sort((a,b)=>a[0].localeCompare(b[0])),
-    produced:[...produced].sort((a,b)=>a[0].localeCompare(b[0])),
-    missingRecorded,missingProduced};
+  return {total:rows.length,proven:rows.length-unresolved.length,unresolved,bins:[...bins].sort((a,b)=>a[0].localeCompare(b[0]))};
 }
-
 function renderHourChart(rows,selected=''){
-  const summary=dailyFailureHourCoverage(rows);
-  const bars=(data,interactive=false)=>{
-    const max=Math.max(1,...data.map(x=>x[1]));
-    return data.length?`<div class="ames-dfa-hour-chart">${data.map(([h,n])=>
-      interactive?`<button type="button" class="ames-dfa-hour-row${selected===h?' active':''}" data-dfa-hour="${esc(h)}"><span>${esc(h)}</span><i><b style="width:${Math.max(2,n/max*100)}%"></b></i><strong>${n}</strong></button>`:
-      `<div class="ames-dfa-hour-row" data-dfa-record-hour="${esc(h)}"><span>${esc(h)}</span><i><b style="width:${Math.max(2,n/max*100)}%"></b></i><strong>${n}</strong></div>`).join('')}</div>`:
-      `<p>${t('Horário não disponível nesta fonte.','Time unavailable from this source.')}</p>`;
-  };
-  return `<div data-dfa-hour-coverage><b>${t('Ocorrências no filtro','Filtered occurrences')}: ${summary.total}</b>
-    <p>${t('Registro da falha 3028','MES failure record 3028')}: ${summary.total-summary.missingRecorded}/${summary.total}
-      · ${t('horário indisponível','time unavailable')}: ${summary.missingRecorded}</p>
-    ${bars(summary.recorded)}
-    <h4>${t('Geração comprovada 3022','Proven production time 3022')}</h4>
-    <p>${summary.total-summary.missingProduced}/${summary.total} ${t('ocorrências comprovadas','proven occurrences')}
-    · ${summary.missingProduced} ${t('sem horário de geração comprovado','without proven production time')}.
-    ${t('Horário do registro 3028 não substitui passagem 3022.','3028 record time is not 3022 production evidence.')}</p>
-    ${bars(summary.produced,true)}</div>`;
+  const coverage=dailyFailureHourCoverage(rows);
+  const preview=coverage.unresolved.slice(0,25);
+  const warning=coverage.unresolved.length
+    ? '<div class="notice warn" data-dfa-3022-missing><b>'+t('3022: horários de geração não recuperados','3022: generation times not recovered')+'</b> · '+coverage.proven+'/'+coverage.total
+      +' '+t('ocorrências com horário comprovado; investigar','occurrences with proven time; investigate')+' '
+      +coverage.unresolved.length+' '+t('ocorrências pendentes de cruzamento 3022.','occurrences pending 3022 correlation.')
+      +'<details><summary>'+t('PCBAs que precisam de conferência 3022','PCBAs requiring 3022 verification')+'</summary><div>'
+      +preview.map(r=>'<p>'+esc(r.line||'—')+' · '+esc(r.pcba||'—')+' · '+esc(defectLabel(r.defect_code,r.defect_desc))+'</p>').join('')
+      +(coverage.unresolved.length>preview.length?'<p>+'+(coverage.unresolved.length-preview.length)+' '+t('outros','more')+'</p>':'')
+      +'</div></details></div>'
+    : '';
+  const bins=new Map();
+  for(const r of rows){const h=rowHour(r);if(h)bins.set(h,(bins.get(h)||0)+1);}
+  const data=[...bins].sort((a,b)=>a[0].localeCompare(b[0])),max=Math.max(1,...data.map(x=>x[1]));
+  return warning+(data.length?`<div class="ames-dfa-hour-chart">${data.map(([h,n])=>`<button type="button" class="ames-dfa-hour-row${selected===h?' active':''}" data-dfa-hour="${h}"><span>${h}</span><i><b style="width:${Math.max(2,n/max*100)}%"></b></i><strong>${n}</strong></button>`).join('')}</div>`:`<p>${t('Sem horários de geração 3022 comprovados para o gráfico.','No proven 3022 generation times for the chart.')}</p>`);
 }
 
 function renderReuseDashboard(rows,state,metrics={}){
@@ -404,7 +395,7 @@ export function createDailyFailureAnalytics(root,store){
     <section class="mes-context-panel ames-dfa-filters"><div class="mes-filters"><label>${t('Registro MES · de','MES record · from')}<input type="date" data-dfa="from" value="${esc(state.from)}"></label><label>${t('Registro MES · até','MES record · to')}<input type="date" data-dfa="to" value="${esc(state.to)}"></label><label>${t('Linha','Line')}<select data-dfa="line">${selectOptions(LINE_IDS,state.line,t('Todas','All'))}</select></label><label>${t('Turno comprovado 3022','Proven 3022 shift')}<select data-dfa="shift"><option value="">${t('Todos','All')}</option><option value="1st Shift"${state.shift==='1st Shift'?' selected':''}>${t('1º Turno','1st Shift')}</option><option value="2nd Shift"${state.shift==='2nd Shift'?' selected':''}>${t('2º Turno','2nd Shift')}</option></select></label><label>${t('Hora de geração 3022','3022 generation hour')}<select data-dfa="hour">${selectOptions(chartRows.map(rowHour).filter(Boolean),state.hour,t('Todas','All'))}</select></label><label>CPH<select data-dfa="product">${selectOptions(products,state.product,t('Todos','All'))}</select></label><label>Defect Code<select data-dfa="defect">${selectOptions(defects,state.defect,t('Todos','All'))}</select></label><label>${t('Nome da falha','Failure name')}<input data-dfa="defectName" value="${esc(state.defectName)}"></label><label>Repair User<select data-dfa="repairUser">${selectOptions(users,state.repairUser,t('Todos','All'))}</select></label><label>PCBA<input data-dfa="pcba" value="${esc(state.pcba)}"></label><label>${t('Família componente','Component family')}<select data-dfa="family">${selectOptions(families,state.family,t('Todas','All'))}</select></label><label>${t('Reuso','Reuse')}<select data-dfa="reuse"><option value="">${t('Todos','All')}</option><option value="present"${state.reuse==='present'?' selected':''}>${t('Reuso presente','Reuse present')}</option><option value="with_failure"${state.reuse==='with_failure'?' selected':''}>${t('Reuso com histórico de falha','Reuse with prior failure')}</option><option value="pcba_failure"${state.reuse==='pcba_failure'?' selected':''}>${t('PCBA reutilizada + falha antiga','Reused PCBA + prior failure')}</option><option value="component_failure"${state.reuse==='component_failure'?' selected':''}>${t('Componente reutilizado + falha antiga','Reused component + prior failure')}</option><option value="both"${state.reuse==='both'?' selected':''}>${t('PCBA + componente','PCBA + component')}</option></select></label><label>${t('Relação','Relation')}<select data-dfa="relation">${selectOptions(relations,state.relation,t('Todas','All'))}</select></label><label>${t('Busca geral','General search')}<input data-dfa="query" value="${esc(state.query)}" placeholder="${t('falha, comentário AT, SN...','failure, AT comment, SN...')}"></label></div><div class="mes-pagination"><button class="button secondary" data-dfa-clear>${t('Limpar filtros','Clear filters')}</button></div></section>
     <section class="ames-dfa-mode-tabs"><button class="button ${state.mode==='ranking'?'primary':'secondary'}" data-dfa-mode="ranking">${t('Ranking de falhas','Failure ranking')}</button><button class="button ${state.mode==='occurrences'?'primary':'secondary'}" data-dfa-mode="occurrences">${t('Ocorrências detalhadas','Detailed occurrences')}</button><button class="button ${state.mode==='matrix'?'primary':'secondary'}" data-dfa-mode="matrix">${t('Linha × turno','Line × shift')}</button><button class="button ${state.mode==='reuse'?'primary':'secondary'}" data-dfa-mode="reuse">${t('Dashboard de reuso','Reuse dashboard')}</button></section>
     <section class="mes-context-panel ames-dfa-main">${state.mode==='ranking'?`<div class="section-head"><div><h3>${t('Pareto de falhas que impactam o target','Target-impact failure Pareto')}</h3><p>${t('Ranking e percentuais excluem somente Standard Error, F1_9999, Process Skip Station e Process Inconsistent scheme/work order/version. Todas continuam nas ocorrências e nos totais gerais; FPY/Quantity não são recalculados.','Ranking and shares exclude only Standard Error, F1_9999, Process Skip Station and Process Inconsistent scheme/work order/version. All remain in occurrences and general totals; FPY/Quantity are not recalculated.')}${rankingCoverage.excluded?' · '+rankingCoverage.excluded+' '+t('fora deste Pareto','excluded from this Pareto'):''}</p></div><span>${metrics.quantity===null?t('Quantidade produzida indisponível','Production quantity unavailable'):t('Produção no escopo: ','Production in scope: ')+metrics.quantity}</span></div>${renderRanking(filtered,metrics.quantity)}`:state.mode==='occurrences'?`<div class="section-head"><div><h3>${t('Ocorrências detalhadas','Detailed occurrences')}</h3><p>${t('Uma falha por linha lógica, com AT, turno 3022 quando comprovado, PCBA e reuso relevante.','One logical failure per row, with AT, proven 3022 shift when available, PCBA and relevant reuse.')}</p></div></div>${renderOccurrences(filtered)}`:state.mode==='reuse'?renderReuseDashboard(filtered,state,metrics):`<div class="section-head"><div><h3>${t('Linha × turno','Line × shift')}</h3><p>${t('Turno só é contado quando a referência 3022 está comprovada.','Shift is counted only when the 3022 reference is proven.')}</p></div></div>${renderMatrix(filtered)}`}</section>
-    <section class="mes-context-panel"><div class="section-head"><div><h3>${t('Horários das falhas · 3028 × 3022','Failure times · 3028 vs 3022')}</h3><p>${t('Primeiro, todos os registros de falha com horário 3028. Depois, somente os horários de geração comprovados pela 3022. As duas fontes nunca são misturadas. Registro da falha (MES) não é usado como fallback de produção.','First, all recorded failures with 3028 timestamps. Then, only proven production times from 3022. Sources are never merged.')}</p></div>${state.hour?`<button class="button secondary" data-dfa-hour-clear>${t('Remover hora ','Clear hour ')}${esc(state.hour)}</button>`:''}</div>${renderHourChart(chartRows,state.hour)}</section>`;
+    <section class="mes-context-panel"><div class="section-head"><div><h3>${t('Falhas por horário de geração · 3022','Failures by generation time · 3022')}</h3><p>${t('Somente horários de geração associados aos postos reais da 3022. Se faltarem ocorrências, o cruzamento precisa ser investigado; o horário da 3028 nunca substitui a 3022.','Only generation times associated with real 3022 stations. Missing occurrences require investigating the correlation; 3028 timestamps never substitute 3022 evidence.')}</p></div>${state.hour?`<button class="button secondary" data-dfa-hour-clear>${t('Remover hora ','Clear hour ')}${esc(state.hour)}</button>`:''}</div>${renderHourChart(chartRows,state.hour)}</section>`;
     root.querySelectorAll('[data-dfa]').forEach(el=>el.addEventListener(el.tagName==='SELECT'?'change':'input',()=>{state[el.dataset.dfa]=el.value;last='';render();}));
     root.querySelectorAll('[data-dfa-mode]').forEach(b=>b.onclick=()=>{state.mode=b.dataset.dfaMode;last='';render();});
     root.querySelector('[data-dfa-reuse-axis]')?.addEventListener('change',event=>{
