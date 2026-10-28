@@ -150,3 +150,20 @@ test('one physical technician comment in multiple alerts appears once, with no i
   assert.equal((html.match(/data-sn-alert-repair-row/g)||[]).length,1);
   assert.equal(JSON.stringify(m.alerts),before,'UI must never mutate model evidence');
 });
+
+
+test('prior component board facts show 2114 failure, time, and only exact-PCBA 3012 technician',()=>{
+  const m=model(),component=m.alerts.find(a=>a.item_sn==='LCM-1');
+  component.evidence.failure={...failure('PCB-OLD-1'),defect_desc:'LCD: Leakage',defect_time:'2026-10-07T08:00:00-03:00'};
+  component.evidence.repairs=[
+    {pcba_sn:'PCB-OLD-1',row_key:'old-board-1',repair_user:'BRM-OLD',repair_time:'2026-10-07T10:00:00-03:00',repair_comment:'Reconnected display cable'},
+    {pcba_sn:'PCB-OTHER',row_key:'other-1',repair_user:'BRM-FOREIGN',repair_time:'2026-10-07T10:01:00-03:00',repair_comment:'Foreign board note'}];
+  const html=renderSmartSnAlerts(m,reusedResult);
+  const componentCard=html.split('data-sn-alert-component-segment')[1]||'';
+  assert.match(componentCard,/Falha da PCBA anterior/);
+  assert.match(componentCard,/LCD: Leakage/);
+  assert.match(componentCard,/PCB-OLD-1/);
+  assert.match(componentCard,/Reconnected display cable/);
+  assert.doesNotMatch(componentCard.split('</div></div>')[0],/Foreign board note/,
+    'a foreign 3012 repair must never be attributed to the reused component');
+});
