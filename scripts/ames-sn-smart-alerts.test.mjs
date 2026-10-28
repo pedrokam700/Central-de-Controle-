@@ -123,8 +123,10 @@ test('same proven board failure seen at three distinct 2114 sequences becomes VE
   assert.match(html,/data-sn-alert-current-prior/);
   assert.match(html,/Hist Seq 2/);
 });
-test('two reused components with same failure yield very high; same-family is medium and compatible-only is low',()=>{
+test('three reused same-failure components yield very high; same-family is medium and compatible-only is low',()=>{
   const m=model();
+  m.alerts.push({kind:'COMPONENT_SAME_FAILURE',pcba_sn:'PCB-OLD-3',item_type:'BATTERY',item_sn:'BAT-3',
+    prior_defect_code:'F1',evidence:{failure:failure('PCB-OLD-3'),binding:{item_sn:'BAT-3',previous_pcba:'PCB-OLD-3',current_pcba:'PCB-A'}}});
   m.alerts.push({kind:'COMPONENT_TYPE_COMPATIBLE',pcba_sn:'PCB-A',item_type:'SPEAKER',item_sn:'SPEAKER-5',
     evidence:{failure:failure('OTHER'),binding:{item_sn:'SPEAKER-5',previous_pcba:'OTHER',current_pcba:'PCB-A'}}});
   m.alerts.push({kind:'COMPONENT_SAME_FAMILY',pcba_sn:'OTHER',item_type:'LCD',item_sn:'LCD-7',
