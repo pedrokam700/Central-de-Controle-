@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildReuseCohorts,summarizeReusePopulation} from '../ames/data/reuse-cohorts.mjs';
+import {buildReuseCohorts,summarizeReusePopulation,boardHistSeqRecurrence} from '../ames/data/reuse-cohorts.mjs';
 const event={pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-19 10:00:00',defect_key:'K1',record_id:'D1',product_key:'CPH1',failure_family:'DISPLAY'};
 function fixture(){return {source_id:'A',snapshot_id:'S',revision:2,line_id:'TAN10101',occurrences:[event],
  pcba_history:{records:[{pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-17 08:00:00',failure_family:'DISPLAY',record_id:'H1'},
@@ -68,4 +68,26 @@ test('summary cannot bypass a future canonical binding; missing type resolves on
  assert.equal(buildReuseCohorts(s).components.rows[0].events.length,0);
  delete s.material_trace.records[0].bind_time_utc;delete s.material_trace.records[0].item_type;
  assert.equal(buildReuseCohorts(s).components.counts.observed,1);
+});
+
+test('physical case 002527005C0535F300007060: same 2114 defect Hist Seq 0 and 1 prove board recurrence without defect time',()=>{
+ const pcba='002527005C0535F300007060',code='GN01-TX02',desc='Antenna: ANT1 test failed';
+ const s={source_id:'FACTORY',snapshot_id:'TEST',revision:4,line_id:'TAN10103',
+  occurrences:[{pcba_sn:pcba,defect_key:'D1',defect_code:code,defect_desc:desc,defect_time:'2026-10-28T13:00:00-03:00',product_key:'CPH2819BR'}],
+  pcba_history:{records:[
+    {pcba_sn:pcba,hist_seq:0,defect_code:code,defect_desc:desc,defect_type:'MainBoard'},
+    {pcba_sn:pcba,hist_seq:1,defect_code:code,defect_desc:desc,defect_type:'MainBoard'},
+    {pcba_sn:'OTHER',hist_seq:0,defect_code:code,defect_desc:desc}
+  ]},material_trace:{records:[]},
+  insights:{drilldowns:{pcba_analysis:[{PCBA:pcba,'Defect Code':code,
+     'Defect Time':'2026-10-28T13:00:00-03:00','Uso da PCBA na falha':'2º uso'}]}}};
+ const m=buildReuseCohorts(s);
+ assert.equal(m.pcbas.counts.second_use,1);
+ assert.equal(m.pcbas.counts.same_failure,1,'same failure must not disappear merely because 2114 lacks Defect Time');
+ assert.equal(m.pcbas.metrics.same_failure[0].prior_events[0].history_order_basis,'HIST_SEQ_ONLY');
+ assert.equal(m.pcbas.metrics.same_failure[0].prior_events[0].defect_time,undefined);
+ const changed=structuredClone(s);changed.pcba_history.records[1].defect_code='OTHER-FAIL';
+ assert.equal(boardHistSeqRecurrence(s.occurrences[0],changed.pcba_history.records).length,0);
+ const one=structuredClone(s);one.pcba_history.records=one.pcba_history.records.filter(r=>r.hist_seq!==1||r.pcba_sn==='OTHER');
+ assert.equal(buildReuseCohorts(one).pcbas.counts.same_failure,0);
 });
