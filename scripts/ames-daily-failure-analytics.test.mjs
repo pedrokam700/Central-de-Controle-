@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildDailyFailureRows,filterDailyFailureRows,productionMetrics,rankDailyFailures,createDailyFailureAnalytics} from '../ames/daily-failure-analytics.mjs';
+import {buildDailyFailureRows,filterDailyFailureRows,productionMetrics,rankDailyFailures,dailyFailureHourCoverage,createDailyFailureAnalytics} from '../ames/daily-failure-analytics.mjs';
 import {aggregatePcbas,componentGroup,reuseKpis,reuseLinks} from '../ames/data/reuse-analysis.mjs';
 import {pcbaReuseCategoryMap} from '../ames/reuse-table-view.mjs';
 import {reuseGroup,reuseCriteriaEvidence} from '../ames/data/daily-reuse-evidence.mjs';
@@ -253,4 +253,30 @@ test('3012 contradicted and exact-identity candidates never become the current o
     assert.match(root.innerHTML,/3012 history · unproven association/);
     assert.doesNotMatch(root.innerHTML,/Candidato não confirmado/);
   }finally{globalThis.document=previousDocument;}
+});
+
+
+test('seven 3028 occurrences remain visible when only two have proven 3022 generation',()=>{
+  const rows=Array.from({length:7},(_,i)=>({
+    defect_time:'2026-10-27T'+String(9+i).padStart(2,'0')+':15:00Z',
+    production_event_time:i<2?'2026-10-27T'+String(10+i).padStart(2,'0')+':05:00Z':null,
+    production_evidence_proven:i<2,
+  }));
+  const result=dailyFailureHourCoverage(rows);
+  assert.equal(result.total,7);
+  assert.equal(result.recorded.reduce((n,[,count])=>n+count,0),7);
+  assert.equal(result.produced.reduce((n,[,count])=>n+count,0),2);
+  assert.equal(result.missingRecorded,0);
+  assert.equal(result.missingProduced,5,'missing 3022 is not zero 3028 events');
+});
+
+test('no proven 3022 still retains all available 3028 record times',()=>{
+  const rows=[{defect_time:'2026-10-27T11:25:00Z'},
+    {defect_time:'2026-10-27T11:45:00Z'},
+    {defect_time:'invalid'}];
+  const result=dailyFailureHourCoverage(rows);
+  assert.deepEqual(result.recorded,[['08:00',2]]);
+  assert.deepEqual(result.produced,[]);
+  assert.equal(result.missingProduced,3);
+  assert.equal(result.missingRecorded,1);
 });
