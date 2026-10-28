@@ -227,8 +227,8 @@ function shortTechnicianEvidence(alerts,locale,result,currentPcba){
     '<div class="ames-sn-alert-evidence-head"><b>'+esc(t(locale,'ATs e comentários · 3012','Technicians and comments · 3012'))+
     '</b><span>'+rows.length+' '+esc(t(locale,'registro(s)','record(s)'))+'</span></div>'+
     '<p class="ames-sn-alert-muted">'+esc(t(locale,
-      'Nomes apresentados somente quando comprovados. Registros sem vínculo temporal não são atribuídos individualmente à sequência 2114.',
-      'Names appear only with evidence. Rows without temporal linkage are not assigned to individual 2114 sequences.'))+'</p>'+
+      'Contexto 3012 da PCBA investigada. Nomes somente quando comprovados; registros sem vínculo temporal não são atribuídos a uma sequência 2114 nem ao risco deste alerta.',
+      '3012 context for the investigated PCBA. Names appear only with evidence; rows without temporal linkage are not assigned to a 2114 sequence or to this alert.'))+'</p>'+
     '<div class="ames-sn-alert-technician-list">'+rows.slice(0,maxVisible).map(evidence).join('')+'</div>'+
     (rows.length>maxVisible?'<details class="ames-sn-alert-extra-repairs"><summary>'+
       esc(t(locale,'Outros comentários 3012','Other 3012 comments'))+' ('+(rows.length-maxVisible)+')</summary>'+
@@ -307,7 +307,7 @@ function compactComponentPrior(alerts=[],locale='pt-BR'){
     '</section>';
 }
 
-function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,result={},currentPcba='',model={},sharedTechnicians='') {
+function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,result={},currentPcba='',model={},sharedTechnicians='',showBoardHighlights=true) {
   const boardAlert=id.startsWith('pcba-')||id.startsWith('mainboard-');
   const tier=SMART_SN_PRIORITY[severity]||SMART_SN_PRIORITY.medium;
   const tone=tier.tone,background=tier.background;
@@ -336,7 +336,7 @@ function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,r
       'Historical recurrence of this board in 2114. A later mounting exists: these records are NOT proven faults of parts installed in the newer cycle.'))+'</p>':'';
   const production=boardAlert&&!model.board_reference_is_historical?
     productionSnapshot(model,result,locale,currentPcba):'';
-  const highlights=boardAlert&&id.startsWith('pcba-')?compactCurrentPrior(alerts,model,locale,currentPcba):compactComponentPrior(alerts,locale);
+  const highlights=boardAlert?(id.startsWith('pcba-')&&showBoardHighlights?compactCurrentPrior(alerts,model,locale,currentPcba):''):compactComponentPrior(alerts,locale);
   // Restore the compact alert agreed by the operator. No evidence is dropped:
   // 2114/3012/3022, timestamps and candidate limits open under one control.
   return '<article class="ames-sn-smart-alert ames-sn-alert-level-'+esc(severity)+'" data-smart-alert="'+esc(id)+'" data-sn-alert-severity="'+esc(severity)+'" style="border:1px solid color-mix(in srgb,'+
@@ -456,7 +456,13 @@ export function renderSmartSnAlerts(model={},result={},locale='pt-BR'){
   const high=alerts.filter(alert=>['high','critical'].includes(alert.severity)).length;
   const allProofs=alerts.flatMap(group=>group.alerts);
   const sharedTechnicians=shortTechnicianEvidence(allProofs,locale,result,model.current_pcba);
-  return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${high?` · ${high} ${t(locale,'alta','high')}`:''}`)}</span></div>${alerts.map((alert,i)=>card(alert,locale,result,model.current_pcba,model,i===0?sharedTechnicians:'')).join('')}</section>`;
+  let boardHighlightsShown=false;
+  const cards=alerts.map((alert,i)=>{
+    const firstBoard=alert.id.startsWith('pcba-')&&!boardHighlightsShown;
+    if(firstBoard)boardHighlightsShown=true;
+    return card(alert,locale,result,model.current_pcba,model,i===0?sharedTechnicians:'',firstBoard);
+  });
+  return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${high?` · ${high} ${t(locale,'altas','high priority')}`:''}`)}</span></div>${cards.join('')}</section>`;
 }
 
 const expansionState=new WeakMap();
