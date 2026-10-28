@@ -1,4 +1,5 @@
 import {defectLabel} from './defect-label.mjs';
+import {formatFactoryDateTime} from './data/time-display.mjs';
 import {targetRankingRows,targetRankingCoverage} from './data/target-impact.mjs';
 import {LINE_IDS,productKey} from './data/contract.mjs';
 import {selectDashboard} from './data/dashboard.mjs';
@@ -155,8 +156,8 @@ export function createDailyFailureSummary(root,store){
         '<p>'+t('Linha','Line')+' '+esc(line)+' · Snapshot '+esc(snapshot?.snapshot_id||'—')+
         ' / r'+esc(snapshot?.snapshot_revision??'—')+' · '+esc(rows.length)+
         ' '+t('registros exatos nesta leitura. Associação de material não comprova causa.','exact records in this read. Material association does not establish cause.')+'</p>'+
-        (rows.length?'<div class="table-wrap"><table><thead><tr><th>PCBA</th><th>Defect Time</th><th>CPH</th><th>Defect Code</th></tr></thead><tbody>'+
-          rows.map(row=>'<tr><td>'+esc(row.pcba_sn||'—')+'</td><td>'+esc(row.defect_time||'—')+'</td><td>'+esc(row.product_model||row.product_key||'—')+'</td><td>'+esc(code)+'</td></tr>').join('')+
+        (rows.length?'<div class="table-wrap"><table><thead><tr><th>PCBA</th><th>Horário do registro (MES)</th><th>CPH</th><th>Descrição da falha</th></tr></thead><tbody>'+
+          rows.map(row=>'<tr><td>'+esc(row.pcba_sn||'—')+'</td><td>'+esc(formatFactoryDateTime(row.defect_time))+'</td><td>'+esc(row.product_model||row.product_key||'—')+'</td><td>'+esc(defectLabel(row.defect_code||code,row.defect_desc||row.defect_description||''))+'</td></tr>').join('')+
           '</tbody></table></div>':'<p>'+t('Ocorrências detalhadas indisponíveis nesta revisão; o ranking agregado continua registrado.','Detailed occurrences unavailable in this revision; aggregated ranking remains recorded.')+'</p>');
       root.querySelector('.ames-daily-summary')?.after(panel);
       panel.scrollIntoView?.({block:'nearest',behavior:'smooth'});
