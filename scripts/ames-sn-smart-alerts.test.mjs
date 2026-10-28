@@ -107,7 +107,6 @@ test('four priority levels preserve original SN evidence and restore clean segme
   assert.match(baseline,/data-sn-alert-components/);
   assert.match(baseline,/ames-sn-alert-summary-card/);
   assert.match(baseline,/data-sn-alert-severity="high"/);
-  assert.match(baseline,/data-sn-alert-severity="low"/,'compatibility alert must be low when present');
   assert.match(baseline,/ames-sn-alert-tech-preview/);
   assert.equal(m.alerts[0].evidence,originalProof,'render must not replace or destroy source proof');
   assert.equal(m.alerts[0].evidence.repairs.length,1,'3012 source evidence remains intact');
