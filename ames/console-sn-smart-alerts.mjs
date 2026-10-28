@@ -227,7 +227,7 @@ function shortTechnicianEvidence(alerts,locale,result,currentPcba){
     '<div class="ames-sn-alert-evidence-head"><b>'+esc(t(locale,'ATs e comentários · 3012','Technicians and comments · 3012'))+
     '</b><span>'+rows.length+' '+esc(t(locale,'registro(s)','record(s)'))+'</span></div>'+
     '<p class="ames-sn-alert-muted">'+esc(t(locale,
-      'Contexto 3012 da PCBA investigada. Nomes somente quando comprovados; registros sem vínculo temporal não são atribuídos a uma sequência 2114 nem ao risco deste alerta.',
+      'Contexto 3012 da PCBA investigada. Nomes somente quando comprovados; registros sem vínculo temporal não são atribuídos individualmente à sequência 2114 nem ao risco deste alerta.',
       '3012 context for the investigated PCBA. Names appear only with evidence; rows without temporal linkage are not assigned to a 2114 sequence or to this alert.'))+'</p>'+
     '<div class="ames-sn-alert-technician-list">'+rows.slice(0,maxVisible).map(evidence).join('')+'</div>'+
     (rows.length>maxVisible?'<details class="ames-sn-alert-extra-repairs"><summary>'+
