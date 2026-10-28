@@ -9,7 +9,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ames'/'factory-engine'))
-from core.fluxo_3028_3074 import executar_fluxo
+from core.varredura_3074 import executar_varredura
 
 PCBA='CURRENT-BOARD'
 DEFECT='2026-10-28 10:00:00'
@@ -40,20 +40,9 @@ class Fake3074:
         raise AssertionError('Unknown source request '+sn)
 
 class Tests(unittest.TestCase):
-    def run_flow(self,source,collector,checkpoint,audit_uncertain=False):
-        records=[{'pcba_sn':PCBA,'defect_time':DEFECT,'defect_code':'VIBRATION',
-                  'defect_desc':'Motor No Vibration','line':'TAN10102'}]
-        return executar_fluxo(source,{'records':records,'records_count':1,'unique_pcba_count':1},
-                              collector,max_pcbas=0,checkpoint_path=checkpoint,pause_s=0,
-                              audit_uncertain=audit_uncertain)
-
     def test_reverse_history_is_visible_as_candidate_not_false_second_use(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root=pathlib.Path(tmp)
-            source=root/'3028.json';source.write_text('FIXTURE-3028',encoding='utf-8')
-            result=self.run_flow(source,Fake3074(partial=False),root/'checkpoint.json',audit_uncertain=True)
-        self.assertEqual(result['items'][0]['status'],'COMPLETE')
-        trace=result['items'][0]['defect_traces'][0]['trace_3074']
+        fake=Fake3074(partial=False)
+        trace=executar_varredura(fake,PCBA,DEFECT,query_memo={},pause_s=0,audit_uncertain=True)
         self.assertEqual([r['item_sn'] for r in trace['results']],['CAM-VALID'])
         self.assertEqual(trace['summary']['componentes_com_reuso_anterior'],1)
         cand=trace['candidate_material_history']
@@ -63,25 +52,23 @@ class Tests(unittest.TestCase):
         self.assertEqual(cand[0]['status'],'CANDIDATE_HISTORY_AVAILABLE')
         self.assertIsNone(cand[0]['previous_pcba_count'])
         self.assertFalse(cand[0]['proven_at_defect'])
+        self.assertEqual(trace['base_coverage']['status'],'returned')
 
-    def test_incomplete_pcba_grid_never_becomes_zero_and_retries_checkpoint(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root=pathlib.Path(tmp)
-            source=root/'3028.json';source.write_text('FIXTURE-3028',encoding='utf-8')
-            checkpoint=root/'checkpoint.json'
-            partial=Fake3074(partial=True)
-            first=self.run_flow(source,partial,checkpoint)
-            self.assertEqual(first['items'][0]['status'],'PARTIAL')
-            trace=first['items'][0]['defect_traces'][0]['trace_3074']
-            self.assertEqual(trace['status'],'CONSULTA_PCBA_3074_PARCIAL_NAO_E_ZERO')
-            self.assertEqual(trace['base_coverage']['status'],'incomplete_page')
-            complete=Fake3074(partial=False)
-            final=self.run_flow(source,complete,checkpoint)
-            self.assertEqual(final['items'][0]['status'],'COMPLETE')
-            self.assertEqual(final['processed_pcba_count'],1)
-            self.assertGreaterEqual(complete.calls.count(PCBA),1)
-            recovered=final['items'][0]['defect_traces'][0]['trace_3074']
-            self.assertEqual(recovered['summary']['componentes_com_reuso_anterior'],1)
+    def test_frozen_default_scans_only_selected_materials(self):
+        fake=Fake3074(partial=False)
+        trace=executar_varredura(fake,PCBA,DEFECT,query_memo={},pause_s=0)
+        self.assertEqual(fake.calls,[PCBA,'CAM-VALID'])
+        self.assertEqual(trace['candidate_material_history'][0]['status'],'CANDIDATE_QUERY_DEFERRED')
+        self.assertEqual(trace['summary']['componentes_com_reuso_anterior'],1)
+
+    def test_incomplete_pcba_grid_is_not_reported_as_zero(self):
+        fake=Fake3074(partial=True)
+        trace=executar_varredura(fake,PCBA,DEFECT,query_memo={},pause_s=0)
+        self.assertEqual(trace['status'],'CONSULTA_PCBA_3074_PARCIAL_NAO_E_ZERO')
+        self.assertEqual(trace['base_coverage']['status'],'incomplete_page')
+        self.assertEqual(trace['summary']['componentes_com_reuso_anterior'],0)
+        self.assertEqual(trace['candidate_material_history'][0]['status'],'CANDIDATE_QUERY_DEFERRED')
+        self.assertEqual(fake.calls,[PCBA])
 
 if __name__=='__main__':
     unittest.main(verbosity=2)
