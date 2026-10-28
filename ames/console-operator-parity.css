@@ -188,3 +188,10 @@ body.dark .ames-sn-alert-summary-card>span{color:var(--ames-muted)}
   .ames-sn-smart-alert{padding:12px!important}
   .ames-sn-alert-summary-card{padding:10px 11px}
 }
+
+/* Old-PCBA context stays inside the same white material card, avoiding a red
+   wall of unrelated historic notes and keeping dates/analysts legible. */
+.ames-sn-alert-component-prior-failure{display:grid;gap:3px;padding:9px 10px;margin-top:7px;background:var(--ames-surface,#fff);border:1px solid var(--ames-line2,#e5e7eb);border-radius:7px;overflow-wrap:anywhere}
+.ames-sn-alert-component-prior-failure small{font-size:10px;font-weight:750;color:var(--ames-muted,#64748b)}
+.ames-sn-alert-component-prior-failure b{font-size:11px;line-height:1.45}
+.ames-sn-alert-component-prior-failure span{font-size:10px;line-height:1.5;white-space:pre-wrap}
