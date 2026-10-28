@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildDailyFailureRows,filterDailyFailureRows,productionMetrics,rankDailyFailures,dailyFailureHourCoverage,createDailyFailureAnalytics} from '../ames/daily-failure-analytics.mjs';
+import {buildDailyFailureRows,filterDailyFailureRows,productionMetrics,rankDailyFailures,dailyFailureHourCoverage,dailyHourDrilldownRows,createDailyFailureAnalytics} from '../ames/daily-failure-analytics.mjs';
 import {aggregatePcbas,componentGroup,reuseKpis,reuseLinks} from '../ames/data/reuse-analysis.mjs';
 import {pcbaReuseCategoryMap} from '../ames/reuse-table-view.mjs';
 import {reuseGroup,reuseCriteriaEvidence} from '../ames/data/daily-reuse-evidence.mjs';
@@ -280,4 +280,38 @@ test('3028 Defect Time is never substituted for 3022 production',()=>{
   assert.deepEqual(report.bins,[]);
   assert.equal(report.proven,0);
   assert.deepEqual(report.unresolved.map(x=>x.pcba),['P1','P2']);
+});
+
+
+test('hour drilldown follows selected defect from 3028 and only proven 3022 times',()=>{
+  const occurrence=(pcba,code,time,proven=true)=>({
+    pcba,line:'TAN10102',defect_code:code,defect_desc:code==='V'?'Motor No Vibration':'Camera Stain',
+    component_families:[],relations:[],production_evidence_proven:proven,
+    production_event_time:time,defect_time:'2026-10-28T17:00:00-03:00',
+  });
+  const records=[
+    occurrence('V1','V','2026-10-28T13:12:00-03:00'),
+    occurrence('V2','V','2026-10-28T13:44:00-03:00'),
+    occurrence('C1','C','2026-10-28T13:55:00-03:00'),
+    occurrence('V3','V','2026-10-28T12:20:00-03:00'),
+    occurrence('V4','V',null,false),
+  ];
+  const all=filterDailyFailureRows(records,{});
+  assert.equal(dailyHourDrilldownRows(all,'13:00').length,3);
+  const vibration=filterDailyFailureRows(records,{defect:'V'});
+  assert.equal(vibration.length,4,'all Motor/Vibration occurrences remain in selected mode');
+  assert.equal(dailyFailureHourCoverage(vibration).proven,3);
+  assert.deepEqual(dailyHourDrilldownRows(vibration,'13:00').map(x=>x.pcba),['V1','V2']);
+  assert.deepEqual(filterDailyFailureRows(records,{defect:'V',hour:'13:00'}).map(x=>x.pcba),['V1','V2']);
+  assert.deepEqual(filterDailyFailureRows(records,{defect:'C',hour:'12:00'}),[]);
+});
+
+test('explicit generation hour fails closed with no 3022 evidence and never falls back to 3028',()=>{
+  const rows=[{pcba:'P1',line:'TAN10102',defect_code:'MOTOR',
+    defect_desc:'Motor No Vibration',defect_time:'2026-10-28T13:15:00-03:00',
+    component_families:[],relations:[],production_event_time:null,production_evidence_proven:false}];
+  assert.equal(filterDailyFailureRows(rows,{}).length,1);
+  assert.equal(dailyFailureHourCoverage(rows).unresolved.length,1);
+  assert.deepEqual(filterDailyFailureRows(rows,{hour:'13:00'}),[]);
+  assert.deepEqual(dailyHourDrilldownRows(rows,'13:00'),[]);
 });
