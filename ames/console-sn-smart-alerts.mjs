@@ -311,7 +311,7 @@ function card({id,title,summary,severity='medium',alerts=[],usage=null},locale,r
   const boardAlert=id.startsWith('pcba-')||id.startsWith('mainboard-');
   const tier=SMART_SN_PRIORITY[severity]||SMART_SN_PRIORITY.medium;
   const tone=tier.tone,background=tier.background;
-  const badge=t(locale,'PRIORIDADE '+tier.labelPt,tier.labelEn+' PRIORITY');
+  const badge=t(locale,tier.labelPt+' PRIORIDADE',tier.labelEn+' PRIORITY');
   const usageLine=usage?.proven?'<span>'+esc(t(locale,'Uso da PCBA','PCBA use'))+': <b>'+
     esc(usage.use_index?String(usage.use_index)+'º':fmt(usage.known_uses))+'</b>'+
     (usage.previous_uses!==null?' · '+esc(t(locale,'reusos anteriores','previous reuses'))+': '+esc(fmt(usage.previous_uses)):'')+'</span>':'';
