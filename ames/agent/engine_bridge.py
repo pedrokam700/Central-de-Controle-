@@ -174,6 +174,17 @@ def run_full_v016(engine_dir: Path, export_path: str | Path, line_callback=None)
     return {"payload":payload, "json_path":str(target), "stdout_tail":warnings}
 
 
+def bind_3074_target_page(view, verified_page):
+    """Bind a validated Home page to a raw collector or SessionObject wrapper.
+
+    Some isolated source tests provide a navigation fake with no actual page.
+    Only a verified non-null page overrides the collector's existing routing.
+    """
+    if verified_page is not None:
+        target = getattr(view, '_target', view)
+        target.target_page = verified_page
+
+
 def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], source_key: str, work_dir: str | Path, line_callback=None, event_callback=None, max_pcbas=0, shared_query_memo=None, performance="balanced") -> Dict[str, Any]:
     """Run the validated V0.16 3074 -> 2114 pipeline from records already collected by live 3028.
 
@@ -432,7 +443,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             source3074_stage = "query"
             tela3074 = session_object(tela3074_mod.Tela3074(browser._target, engine_dir))
             # Pin the navigation-verified 3074 Home page, never OPC/2114.
-            tela3074._target.target_page = page3074
+            bind_3074_target_page(tela3074, page3074)
             r3074 = tela3074.consultar(query)
             if not isinstance(r3074, dict) or not isinstance(r3074.get("rows"), list):
                 raise RuntimeError("3074_GRID_NOT_CONFIRMED")
@@ -604,7 +615,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 # or process tab active. Resolve the actual 3074 view again
                 # before reading each Material SN; otherwise _page() can pick
                 # a view without input[name=sn] and silently lose reuse.
-                tela3074._target.target_page = nav.ensure_3074()
+                bind_3074_target_page(tela3074, nav.ensure_3074())
                 if line_callback:
                     line_callback("3074", min(72, 35 + int(25 * idx / max(1, len(components)))),
                                   f"Material da montagem {idx}/{len(components)} · {item_sn}")
@@ -664,7 +675,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                 if item_sn in component_query_cache:
                     item_query = component_query_cache[item_sn]
                 else:
-                    tela3074._target.target_page = nav.ensure_3074()
+                    bind_3074_target_page(tela3074, nav.ensure_3074())
                     item_query = tela3074.consultar(item_sn)
                     component_query_cache[item_sn] = item_query
                 scoped = temporal3074.pcbas_do_item_ate_a_falha(
@@ -718,7 +729,7 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                     if line_callback:
                         line_callback('3074', min(74, 55 + int(15*index/max(1, len(audit_candidates)))),
                                       f'Historico 3074 {index}/{len(audit_candidates)} · {material_sn}')
-                    tela3074._target.target_page = nav.ensure_3074()
+                    bind_3074_target_page(tela3074, nav.ensure_3074())
                     item_query = tela3074.consultar(material_sn)
                     component_query_cache[material_sn] = item_query
                     timeline = temporal3074.historico_completo_pcbas_do_item(
