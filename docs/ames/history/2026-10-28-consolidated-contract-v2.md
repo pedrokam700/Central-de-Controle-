@@ -57,3 +57,9 @@ Para cada fonte/ocorrência exigir status próprio: `NOT_COLLECTED`, `PARTIAL`, 
 **Aplicado agora na PR69:** teste sintético integrado `scripts/agent-multi-cycle-3028-3074.test.py`, conectado à Quality Gate, que executa o orquestrador verdadeiro com duas D, C1/C2, Cboard reutilizado em duas PCBAs e N sem Unbind. Não alterou cálculos/coletores em produção. CI do SHA exato no GitHub é a evidência de teste.
 
 **Condição para alterar produção:** primeiro provas automatizadas para GAP-T01/T02 + caso Motor/Vibra/Cboard real e 3022 com 7→2; diff seletivo, evolução append-only, comparação de resultados antes/depois e aprovação física. PR69 continua DRAFT.
+
+## Adendo de captura do histórico legado
+
+A revisão do arquivo histórico `info.txt` revelou detalhes de captura que complementam este contrato sem substituí-lo: três stores da 3028 e o caso legítimo de unidades defeituosas ≠ ocorrências; consulta bidirecional da 3074 e proibição de usar `Batch Count` como contagem de reuso; coleta de todas as histórias 2114 da PCBA atual e das PCBAs anteriores; diferenças entre Manual/Automatic e Repair Status; 3012 direta pela grade/store com cache/chunking; fonte 3028 de Repair Comment; postos 3022 e Mat Id de produto ainda sem prova de BOM. Matriz verificada, status dos códigos e testes recomendados: [`2026-10-28-legacy-source-capture-audit.md`](./2026-10-28-legacy-source-capture-audit.md).
+
+**Sem mudança funcional nesta revisão.** Não restaurar antigas instruções de instalação ou fases encerradas a partir de um arquivo histórico. Incertezas permanecem pendentes de teste físico.
