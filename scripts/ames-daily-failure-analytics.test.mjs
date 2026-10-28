@@ -256,27 +256,28 @@ test('3012 contradicted and exact-identity candidates never become the current o
 });
 
 
-test('seven 3028 occurrences remain visible when only two have proven 3022 generation',()=>{
+test('only proven 3022 process hours appear; missing matches are actionable',()=>{
   const rows=Array.from({length:7},(_,i)=>({
+    pcba:'P'+i,line:'TAN10102',defect_desc:'Motor: No Vibration',
     defect_time:'2026-10-27T'+String(9+i).padStart(2,'0')+':15:00Z',
     production_event_time:i<2?'2026-10-27T'+String(10+i).padStart(2,'0')+':05:00Z':null,
     production_evidence_proven:i<2,
   }));
-  const result=dailyFailureHourCoverage(rows);
-  assert.equal(result.total,7);
-  assert.equal(result.recorded.reduce((n,[,count])=>n+count,0),7);
-  assert.equal(result.produced.reduce((n,[,count])=>n+count,0),2);
-  assert.equal(result.missingRecorded,0);
-  assert.equal(result.missingProduced,5,'missing 3022 is not zero 3028 events');
+  const report=dailyFailureHourCoverage(rows);
+  assert.equal(report.total,7);
+  assert.equal(report.proven,2);
+  assert.equal(report.unresolved.length,5);
+  assert.deepEqual(report.unresolved.map(x=>x.pcba),['P2','P3','P4','P5','P6']);
+  assert.equal(report.bins.reduce((n,[,count])=>n+count,0),2);
+  assert.equal(report.bins.some(([hour])=>hour==='06:00'),false);
 });
 
-test('no proven 3022 still retains all available 3028 record times',()=>{
-  const rows=[{defect_time:'2026-10-27T11:25:00Z'},
-    {defect_time:'2026-10-27T11:45:00Z'},
-    {defect_time:'invalid'}];
-  const result=dailyFailureHourCoverage(rows);
-  assert.deepEqual(result.recorded,[['08:00',2]]);
-  assert.deepEqual(result.produced,[]);
-  assert.equal(result.missingProduced,3);
-  assert.equal(result.missingRecorded,1);
+test('3028 Defect Time is never substituted for 3022 production',()=>{
+  const report=dailyFailureHourCoverage([
+    {pcba:'P1',line:'TAN10102',defect_time:'2026-10-27T11:25:00Z'},
+    {pcba:'P2',line:'TAN10102',defect_time:'2026-10-27T11:45:00Z'}
+  ]);
+  assert.deepEqual(report.bins,[]);
+  assert.equal(report.proven,0);
+  assert.deepEqual(report.unresolved.map(x=>x.pcba),['P1','P2']);
 });
