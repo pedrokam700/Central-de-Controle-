@@ -3,7 +3,7 @@ import {targetRankingRows,targetRankingCoverage} from './data/target-impact.mjs'
 import {LINE_IDS} from './data/contract.mjs';
 import {selectDashboard} from './data/dashboard.mjs';
 import {reuseLinks} from './data/reuse-analysis.mjs';
-import {productionEvidenceForOccurrence,parseFailureInstant} from './data/production-evidence.mjs';
+import {productionEvidenceForOccurrence,productionEvidenceGap,parseFailureInstant} from './data/production-evidence.mjs';
 import {factoryHourKey,formatFactoryDateTime as displayTime,formatFactoryDate as displayDate} from './data/time-display.mjs';
 import {factoryWallMinute} from './data/history.mjs';
 import {observedReuseDashboard,theoreticalReuseSensitivity,filterReuseCriteria,REUSE_CRITERIA} from './data/daily-reuse-evidence.mjs';
@@ -118,6 +118,7 @@ export function buildDailyFailureRows(store){
         line,pcba,defect_key:occ.defect_key||null,defect_code:occ.defect_code||null,defect_desc:occ.defect_desc||null,defect_time:occ.defect_time||null,failure_record_date:day(occ.defect_time)||null,
         product:occ.product_model||occ.product_key||occ.product||null,repair_status:occ.repair_status||null,registration_mode:occ.registration_mode||occ.manual_or_auto||occ['Manual/Automatic']||null,
         production_event_time:production.event_time,production_shift:production.shift,production_operational_date:production.operational_date,production_evidence_proven:production.trusted,
+        generation_evidence_gap:productionEvidenceGap(occ,contexts),
         repair_user:repair.repair_user||occ.repair_user||null,repair_comment:repair.repair_comment||occ.repair_comment||null,repair_time:repair.repair_time||occ.repair_time||null,repair_code:repair.repair_code||occ.repair_code||null,repair_source:repairs.best?'3012':(occ.repair_source||occ.source_view||null),repair_rows:repairs.rows,repair_candidates:repairs.rows.filter(r=>r!==repairs.best),
         pcba_reused:Boolean(reused),pcba_prior_failure:Boolean(selfPrior),pcba_prior_failure_code:prior.code,pcba_prior_failure_desc:prior.desc,
         pcba_prior_events:pcbaPriorEvents,
@@ -263,7 +264,7 @@ export function dailyFailureHourCoverage(rows=[]) {
   for(const row of rows){
     const hour=rowHour(row);
     if(hour)bins.set(hour,(bins.get(hour)||0)+1);
-    else unresolved.push({pcba:row.pcba||null,line:row.line||null,defect_desc:row.defect_desc||null,defect_code:row.defect_code||null});
+    else unresolved.push({pcba:row.pcba||null,line:row.line||null,defect_desc:row.defect_desc||null,defect_code:row.defect_code||null,reason:row.generation_evidence_gap||null});
   }
   return {total:rows.length,proven:rows.length-unresolved.length,unresolved,bins:[...bins].sort((a,b)=>a[0].localeCompare(b[0]))};
 }
@@ -275,7 +276,7 @@ function renderHourChart(rows,selected=''){
       +' '+t('ocorrências com horário comprovado; investigar','occurrences with proven time; investigate')+' '
       +coverage.unresolved.length+' '+t('ocorrências pendentes de cruzamento 3022.','occurrences pending 3022 correlation.')
       +'<details><summary>'+t('PCBAs que precisam de conferência 3022','PCBAs requiring 3022 verification')+'</summary><div>'
-      +preview.map(r=>'<p>'+esc(r.line||'—')+' · '+esc(r.pcba||'—')+' · '+esc(defectLabel(r.defect_code,r.defect_desc))+'</p>').join('')
+      +preview.map(r=>'<p>'+esc(r.line||'—')+' · '+esc(r.pcba||'—')+' · '+esc(defectLabel(r.defect_code,r.defect_desc))+' — '+esc(r.reason||t('3022 sem referência comprovada','3022 reference unproven'))+'</p>').join('')
       +(coverage.unresolved.length>preview.length?'<p>+'+(coverage.unresolved.length-preview.length)+' '+t('outros','more')+'</p>':'')
       +'</div></details></div>'
     : '';
