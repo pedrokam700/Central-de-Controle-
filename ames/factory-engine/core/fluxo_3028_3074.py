@@ -69,6 +69,16 @@ def _incomplete_3074_result(trace):
 
 
 
+def _checkpoint_requires_refresh(state):
+    base = (state or {}).get("base_query") or {}
+    if base and classify_3074_page(base)["status"] == "incomplete_page":
+        return True
+    for sub in ((state or {}).get("defect_traces") or {}).values():
+        if _incomplete_3074_result(sub.get("trace_3074") or {}):
+            return True
+    return False
+
+
 def executar_fluxo(
     arquivo3028,
     parser_result,
@@ -113,7 +123,7 @@ def executar_fluxo(
 
     for idx, sn in enumerate(sns, 1):
         state = checkpoint["pcbas"].get(sn, {})
-        if state.get("status") == "COMPLETE":
+        if state.get("status") == "COMPLETE" and not _checkpoint_requires_refresh(state):
             if progress_pcba:
                 progress_pcba(idx, len(sns), sn, len(grupos[sn]), "CHECKPOINT_COMPLETE")
             continue
@@ -143,7 +153,7 @@ def executar_fluxo(
             for di, defect in enumerate(defects, 1):
                 key = _defect_key(defect, di)
                 dstate = state["defect_traces"].get(key, {})
-                if dstate.get("status") == "COMPLETE":
+                if dstate.get("status") == "COMPLETE" and not _incomplete_3074_result(dstate.get("trace_3074") or {}):
                     continue
 
                 defect_time = defect.get("defect_time")
