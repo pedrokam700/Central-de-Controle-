@@ -92,6 +92,7 @@ def executar_fluxo(
     defect_local_offset_hours=-3,
     grid_naive_offset_hours=0,
     progress_result=None,
+    audit_uncertain=False,
 ):
     arquivo3028 = Path(arquivo3028)
     grupos = agrupar_falhas_por_pcba(parser_result["records"])
@@ -188,6 +189,7 @@ def executar_fluxo(
                     base_query=base_query,
                     defect_local_offset_hours=defect_local_offset_hours,
                     grid_naive_offset_hours=grid_naive_offset_hours,
+                    audit_uncertain=audit_uncertain,
                 )
                 dstate["trace_3074"] = trace
                 dstate["status"] = "PARTIAL" if _incomplete_3074_result(trace) else "COMPLETE"
