@@ -59,6 +59,7 @@ jobs:
           python3 scripts/agent-3074-pagination.test.py
           python3 scripts/agent-assembly-scope.test.py
           python3 scripts/agent-multi-cycle-3028-3074.test.py
+          python3 scripts/agent-3074-uncertain-reuse.test.py
 
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
