@@ -97,3 +97,55 @@ test('historical 2114 same-failure alert clearly separates new mounting',()=>{
   assert.match(html,/Hist Seq 0/);
   assert.match(html,/Hist Seq 1/);
 });
+
+
+test('four priority levels preserve original SN evidence and restore clean segmented presentation',()=>{
+  const m=model();
+  const originalProof=m.alerts[0].evidence;
+  const baseline=renderSmartSnAlerts(m,reusedResult,'pt-BR');
+  assert.match(baseline,/data-sn-alert-current-prior/);
+  assert.match(baseline,/data-sn-alert-components/);
+  assert.match(baseline,/ames-sn-alert-summary-card/);
+  assert.match(baseline,/data-sn-alert-severity="high"/);
+  assert.match(baseline,/data-sn-alert-severity="low"/,'compatibility alert must be low when present');
+  assert.match(baseline,/ames-sn-alert-tech-preview/);
+  assert.equal(m.alerts[0].evidence,originalProof,'render must not replace or destroy source proof');
+  assert.equal(m.alerts[0].evidence.repairs.length,1,'3012 source evidence remains intact');
+});
+test('same proven board failure seen at three distinct 2114 sequences becomes VERY HIGH, two remain HIGH',()=>{
+  const f=(seq)=>({...failure('PCB-A'),hist_seq:seq,defect_time:'2026-10-10T0'+(8+seq)+':00:00-03:00'});
+  const m={...model(),current:f(2),own_history:[f(0),f(1)],
+    alerts:[{kind:'PCBA_SAME_FAILURE',pcba_sn:'PCB-A',prior_defect_code:'F1',prior_hist_seq:1,
+      evidence:{failure:f(1),current_failure:f(2)}}]};
+  const result=buildSmartSnAlerts(m,reusedResult);
+  assert.equal(result[0].severity,'critical');
+  const html=renderSmartSnAlerts(m,reusedResult);
+  assert.match(html,/MUITO ALTA/);
+  assert.match(html,/data-sn-alert-current-prior/);
+  assert.match(html,/Hist Seq 2/);
+});
+test('two reused components with same failure yield very high; same-family is medium and compatible-only is low',()=>{
+  const m=model();
+  m.alerts.push({kind:'COMPONENT_TYPE_COMPATIBLE',pcba_sn:'PCB-A',item_type:'SPEAKER',item_sn:'SPEAKER-5',
+    evidence:{failure:failure('OTHER'),binding:{item_sn:'SPEAKER-5',previous_pcba:'OTHER',current_pcba:'PCB-A'}}});
+  m.alerts.push({kind:'COMPONENT_SAME_FAMILY',pcba_sn:'OTHER',item_type:'LCD',item_sn:'LCD-7',
+    evidence:{failure:failure('OTHER'),binding:{item_sn:'LCD-7',previous_pcba:'OTHER',current_pcba:'PCB-A'}}});
+  const alerts=buildSmartSnAlerts(m,reusedResult);
+  assert.equal(alerts.find(x=>x.id==='component-same-failure').severity,'critical');
+  assert.equal(alerts.find(x=>x.id==='component-same-family').severity,'medium');
+  assert.equal(alerts.find(x=>x.id==='component-compatible-failure').severity,'low');
+  assert.deepEqual(alerts.map(x=>x.severity),[...alerts].sort((a,b)=>
+    ({critical:0,high:1,medium:2,low:3}[a.severity]-{critical:0,high:1,medium:2,low:3}[b.severity])).map(x=>x.severity));
+});
+test('one physical technician comment in multiple alerts appears once, with no invented 2114 attribution',()=>{
+  const m=model();
+  const comment='Checked antenna RF connector';
+  const repair={pcba_sn:'PCB-A',row_key:'REPAIR-CANONICAL-1',
+    repair_user:'BRM00061',repair_comment:comment,repair_time:'2026-10-10T10:30:00-03:00'};
+  for(const alert of m.alerts)alert.evidence={...alert.evidence,repairs:[repair],ambiguous_3012:[repair]};
+  const before=JSON.stringify(m.alerts);
+  const html=renderSmartSnAlerts(m,reusedResult);
+  assert.equal((html.match(/data-sn-alert-technician-preview/g)||[]).length,1);
+  assert.equal((html.match(/data-sn-alert-repair-row/g)||[]).length,1);
+  assert.equal(JSON.stringify(m.alerts),before,'UI must never mutate model evidence');
+});
