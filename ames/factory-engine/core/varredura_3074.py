@@ -40,7 +40,7 @@ def resumir_resultados(resultados, temporal_summary=None):
 
 
 def auditar_materiais_temporais_incertos(
-    tela3074, temporal, defect_time, query_memo, pause_s=0, max_queries=20,
+    tela3074, temporal, defect_time, query_memo, pause_s=0, max_queries=0,
     defect_local_offset_hours=-3, grid_naive_offset_hours=0,
 ):
     """Read-only investigation of uncertain 3074 bindings.
@@ -107,6 +107,7 @@ def executar_varredura(
     base_query=None,
     defect_local_offset_hours=-3,
     grid_naive_offset_hours=0,
+    audit_uncertain=False,
 ):
     """Rastreia SOMENTE componentes que estavam vinculados no Defect Time.
 
@@ -136,6 +137,7 @@ def executar_varredura(
     existing["base_coverage"] = base_coverage
     candidates = auditar_materiais_temporais_incertos(
         tela3074, temporal, defect_time, query_memo, pause_s,
+        max_queries=20 if audit_uncertain else 0,
         defect_local_offset_hours=defect_local_offset_hours,
         grid_naive_offset_hours=grid_naive_offset_hours)
     existing["candidate_material_history"] = candidates
