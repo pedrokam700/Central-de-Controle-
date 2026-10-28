@@ -3,7 +3,6 @@ import json
 from datetime import datetime
 from pathlib import Path
 from core.varredura_3074 import executar_varredura
-from ames.coverage_3074 import classify_3074_page
 
 
 def agrupar_falhas_por_pcba(records):
@@ -53,32 +52,6 @@ def _new_checkpoint(source_path, parser_result, targets, source_hash):
     }
 
 
-
-def _incomplete_3074_result(trace):
-    """A finished job is not proof of complete ExtJS paging/capture."""
-    if not isinstance(trace, dict):
-        return False
-    if (trace.get("base_coverage") or {}).get("status") == "incomplete_page":
-        return True
-    if any((row.get("coverage") or {}).get("status") == "incomplete_page"
-           or row.get("status") in {"HISTORICO_3074_PARCIAL", "ERRO_CONSULTA"}
-           for row in (trace.get("results") or [])):
-        return True
-    return any((row.get("coverage") or {}).get("status") == "incomplete_page"
-               for row in (trace.get("candidate_material_history") or []))
-
-
-
-def _checkpoint_requires_refresh(state):
-    base = (state or {}).get("base_query") or {}
-    if base and classify_3074_page(base)["status"] == "incomplete_page":
-        return True
-    for sub in ((state or {}).get("defect_traces") or {}).values():
-        if _incomplete_3074_result(sub.get("trace_3074") or {}):
-            return True
-    return False
-
-
 def executar_fluxo(
     arquivo3028,
     parser_result,
@@ -92,7 +65,6 @@ def executar_fluxo(
     defect_local_offset_hours=-3,
     grid_naive_offset_hours=0,
     progress_result=None,
-    audit_uncertain=False,
 ):
     arquivo3028 = Path(arquivo3028)
     grupos = agrupar_falhas_por_pcba(parser_result["records"])
@@ -124,7 +96,7 @@ def executar_fluxo(
 
     for idx, sn in enumerate(sns, 1):
         state = checkpoint["pcbas"].get(sn, {})
-        if state.get("status") == "COMPLETE" and not _checkpoint_requires_refresh(state):
+        if state.get("status") == "COMPLETE":
             if progress_pcba:
                 progress_pcba(idx, len(sns), sn, len(grupos[sn]), "CHECKPOINT_COMPLETE")
             continue
@@ -144,7 +116,7 @@ def executar_fluxo(
         try:
             # Uma unica consulta da PCBA e reutilizada para todas as falhas dessa PCBA.
             base_query = state.get("base_query")
-            if not base_query or classify_3074_page(base_query)["status"] == "incomplete_page":
+            if not base_query:
                 base_query = tela3074.consultar(sn)
                 state["base_query"] = base_query
                 if checkpoint_path:
@@ -154,7 +126,7 @@ def executar_fluxo(
             for di, defect in enumerate(defects, 1):
                 key = _defect_key(defect, di)
                 dstate = state["defect_traces"].get(key, {})
-                if dstate.get("status") == "COMPLETE" and not _incomplete_3074_result(dstate.get("trace_3074") or {}):
+                if dstate.get("status") == "COMPLETE":
                     continue
 
                 defect_time = defect.get("defect_time")
@@ -189,20 +161,16 @@ def executar_fluxo(
                     base_query=base_query,
                     defect_local_offset_hours=defect_local_offset_hours,
                     grid_naive_offset_hours=grid_naive_offset_hours,
-                    audit_uncertain=audit_uncertain,
                 )
                 dstate["trace_3074"] = trace
-                dstate["status"] = "PARTIAL" if _incomplete_3074_result(trace) else "COMPLETE"
+                dstate["status"] = "COMPLETE"
                 dstate["error"] = None
                 dstate["updated_at"] = datetime.now().isoformat(timespec="seconds")
                 state["defect_traces"][key] = dstate
                 if checkpoint_path:
                     _atomic_json(checkpoint_path, checkpoint)
 
-            state["status"] = ("PARTIAL" if
-                classify_3074_page(state.get("base_query") or {})["status"] == "incomplete_page"
-                or any(d.get("status") == "PARTIAL" for d in state["defect_traces"].values())
-                else "COMPLETE")
+            state["status"] = "COMPLETE"
             state["error"] = None
 
         except KeyboardInterrupt:
