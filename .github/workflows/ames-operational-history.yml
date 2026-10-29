@@ -132,7 +132,9 @@ jobs:
                              'scripts/issue57-coordinator-abandonment.windows.test.ps1',
                              'scripts/issue57-direct-launcher-claim.windows.test.ps1',
                              'scripts/issue57-private-backup-acl.windows.test.ps1',
-                             'scripts/issue57-process-witness.windows.test.ps1')) {
+                             'scripts/issue57-process-witness.windows.test.ps1',
+                             'scripts/ames-pr69-switch-parser.windows.test.ps1',
+                             'tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1')) {
             $tokens=$null; $parseErrors=$null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$parseErrors)|Out-Null
             if($parseErrors.Count -gt 0){$parseErrors|ForEach-Object{Write-Error $_};exit 1}
@@ -162,6 +164,8 @@ jobs:
           if(-not ($acl -contains 'Issue57 private backup ACL: verified synthetic data and rejected broad ACE; no production touch')){throw 'private_acl_fixture_not_completed'}
           $witness=@(& ./scripts/issue57-process-witness.windows.test.ps1)
           if(-not ($witness -contains 'Issue57 Windows process witness: OS listener PID + creation + exact script; negative cases fail closed; no update')){throw 'process_witness_fixture_not_completed'}
+          $pr69switch=@(& ./scripts/ames-pr69-switch-parser.windows.test.ps1)
+          if(-not ($pr69switch -contains 'PR69 Windows switcher syntax and 6 classification cases: PASS')){throw 'pr69_switcher_fixture_not_completed'}
           Write-Output 'Issue57 Windows fixtures: guardian + mutex + dual-lock ledger + coordinator crash + direct launcher + backup ACL end-to-end GREEN'
   reading-firestore:
     runs-on: ubuntu-latest
