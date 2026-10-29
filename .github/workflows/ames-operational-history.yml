@@ -166,6 +166,7 @@ jobs:
           if(-not ($witness -contains 'Issue57 Windows process witness: OS listener PID + creation + exact script; negative cases fail closed; no update')){throw 'process_witness_fixture_not_completed'}
           $pr69switch=@(& ./scripts/ames-pr69-switch-parser.windows.test.ps1)
           if(-not ($pr69switch -contains 'PR69 Windows switcher syntax and 6 classification cases: PASS')){throw 'pr69_switcher_fixture_not_completed'}
+          if(-not ($pr69switch -contains 'PR69 Windows autostart and active agent same-root regression: PASS')){throw 'pr69_registry_same_root_fixture_not_completed'}
           Write-Output 'Issue57 Windows fixtures: guardian + mutex + dual-lock ledger + coordinator crash + direct launcher + backup ACL end-to-end GREEN'
   reading-firestore:
     runs-on: ubuntu-latest

@@ -57,7 +57,9 @@ test('Troca supervisionada exige versao assinada, confirmacao e protecao de guar
 test('Troca reconhece o launcher canonico antigo e espera sua saida sem encerrar PID desconhecido',()=>{
   assert.match(switcher,/function RelauncherType\(\$process\)/);
   assert.match(switcher,/START_AGENT_CANONICAL\.ps1','START_LOCAL_CANDIDATE\.ps1/);
-  assert.match(switcher,/\$entry=After \(Args \$process\.CommandLine\) '-File'/);
+  assert.match(switcher,/\$entry=ValueAfter \(SplitArgv \$process\.CommandLine\) '-File'/);
+  assert.match(switcher,/function ValueAfter\(\[string\[\]\]\$tokens,\[string\]\$flag\)/);
+  assert.match(switcher,/\$runTokens=SplitArgv \$oldRun/);
   assert.match(switcher,/\$kind='launcher'/);
   assert.match(switcher,/\$waitDeadline=\(Get-Date\)\.AddSeconds\(75\)/);
   assert.match(switcher,/Start-Sleep -Seconds 2/);

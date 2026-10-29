@@ -33,13 +33,13 @@ public static class PR69Argv {
  public static string[] Split(string cmd){int n;IntPtr p=CommandLineToArgvW(cmd,out n);if(p==IntPtr.Zero)return new string[0];try{var a=new string[n];for(int i=0;i<n;i++)a[i]=Marshal.PtrToStringUni(Marshal.ReadIntPtr(p,i*IntPtr.Size));return a;}finally{LocalFree(p);}}
 }
 '@
-function Args($line){if(-not $line){return @()};return @([PR69Argv]::Split([string]$line))}
-function After($args,[string]$flag){for($i=0;$i -lt $args.Count-1;$i++){if($args[$i] -ieq $flag){return $args[$i+1]}};return $null}
+function SplitArgv([string]$line){if(-not $line){return @()};return @([PR69Argv]::Split($line))}
+function ValueAfter([string[]]$tokens,[string]$flag){for($i=0;$i -lt $tokens.Count-1;$i++){if($tokens[$i] -ieq $flag){return $tokens[$i+1]}};return $null}
 function RelauncherType($process){
   if(-not $process -or -not $process.CommandLine){return $null}
   $exe=[IO.Path]::GetFileName([string]$process.ExecutablePath)
   if($exe -notin @('powershell.exe','pwsh.exe')){return $null}
-  $entry=After (Args $process.CommandLine) '-File'
+  $entry=ValueAfter (SplitArgv $process.CommandLine) '-File'
   if(-not $entry){return $null}
   $leaf=[IO.Path]::GetFileName([string]$entry)
   if($leaf -ieq 'KEEP_AGENT_RUNNING.ps1'){return 'guardian'}
@@ -48,7 +48,7 @@ function RelauncherType($process){
 }
 function Identify($process){
   if(-not $process -or -not $process.CommandLine){return $null}
-  $argv=Args $process.CommandLine
+  $argv=SplitArgv $process.CommandLine
   $exe=[IO.Path]::GetFileName([string]$process.ExecutablePath)
   if(-not $exe){return $null}
   $exe=$exe.ToLowerInvariant()
@@ -59,12 +59,12 @@ function Identify($process){
       $root=RootFor $argv[$i] 'ames-agent';$kind='agent'
     }
   }elseif($exe -in @('powershell.exe','pwsh.exe')){
-    $entry=After $argv '-File'
+    $entry=ValueAfter $argv '-File'
     if($entry){
       $leaf=[IO.Path]::GetFileName([string]$entry)
       if($leaf -in @('KEEP_AGENT_RUNNING.ps1','START_AGENT_CANONICAL.ps1')){
         $root=RootFor $entry 'ames-workstation'
-        $given=Full (After $argv '-Root')
+        $given=Full (ValueAfter $argv '-Root')
         if(-not $given -or -not(EqualPath $given $root)){$root=$null}
         if($leaf -ieq 'KEEP_AGENT_RUNNING.ps1'){$kind='guardian'}else{$kind='launcher'}
       }elseif($leaf -ieq 'START_LOCAL_CANDIDATE.ps1'){
@@ -143,7 +143,7 @@ try {
     foreach($launcher in $launchers){
       $match=@($known | Where-Object {$_.pid -eq $launcher.ProcessId -and $_.kind -eq 'launcher'})
       if($match.Count -ne 1){
-        $leaf=[IO.Path]::GetFileName([string](After (Args $launcher.CommandLine) '-File'))
+        $leaf=[IO.Path]::GetFileName([string](ValueAfter (SplitArgv $launcher.CommandLine) '-File'))
         Fail "Inicializador A-MES nao reconhecido PID $($launcher.ProcessId) ($leaf); preservado sem encerrar nenhum agente."
       }
       if(EqualPath $match[0].root $NewRoot){Fail 'Inicializador da nova pasta ja esta em andamento; aguarde seu encerramento.'}
@@ -166,7 +166,7 @@ try {
   foreach($process in $all){
     $type=RelauncherType $process
     if($type -and -not(@($known|Where-Object {$_.pid -eq $process.ProcessId -and $_.kind -eq $type}).Count)){
-      $entry=[IO.Path]::GetFileName([string](After (Args $process.CommandLine) '-File'))
+      $entry=[IO.Path]::GetFileName([string](ValueAfter (SplitArgv $process.CommandLine) '-File'))
       Fail "Relauncher A-MES nao reconhecido PID $($process.ProcessId) ($entry); troca bloqueada."
     }
   }
@@ -178,12 +178,17 @@ try {
   if(EqualPath $oldRoot $NewRoot){Fail 'Nova versao ja esta ativa.'}
   $oldRun=RegistryRun
   if($oldRun){
-    $args=Args $oldRun
-    $watcher=After $args '-File'
-    $regRoot=Full (After $args '-Root')
+    $runTokens=SplitArgv $oldRun
+    $watcher=ValueAfter $runTokens '-File'
+    $regRoot=Full (ValueAfter $runTokens '-Root')
     $watcherRoot=if($watcher){RootFor $watcher 'ames-workstation'}else{$null}
-    if(-not $regRoot -or -not $watcherRoot -or -not(EqualPath $oldRoot $regRoot) -or -not(EqualPath $regRoot $watcherRoot)){
-      Fail 'Inicio automatico antigo nao corresponde ao agente ativo; preservado sem alteracao.'
+    $registryProblems=@()
+    if(-not $regRoot){$registryProblems+='parametro_Root_invalido'}
+    if(-not $watcherRoot){$registryProblems+='guardian_nao_atestado'}
+    if($regRoot -and -not(EqualPath $oldRoot $regRoot)){$registryProblems+='raiz_diferente_do_agente'}
+    if($regRoot -and $watcherRoot -and -not(EqualPath $regRoot $watcherRoot)){$registryProblems+='script_guardian_em_outra_raiz'}
+    if($registryProblems.Count){
+      Fail ('Inicio automatico antigo nao corresponde ao agente ativo: '+($registryProblems -join ',')+'. Preservado sem alteracao.')
     }
   }
   if(Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue){
