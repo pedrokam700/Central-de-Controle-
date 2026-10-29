@@ -80,6 +80,18 @@ test('completed 3028 run exposes only exact per-line local snapshot receipt, not
  assert.equal(JSON.stringify(h.store.agent().job).includes('private'),false);
  h.client.clear();
 });
+test('completed deep trace exposes exact local snapshot IDs for UI selection but no MES records in trace receipt',async()=>{
+ const h=harness();await h.client.connect();
+ h.routes['jobs/J']={id:'J',kind:'deep_trace',status:'done',result:{
+  snapshot_ids:{[line]:17,TAN10102:'other',TAN10103:0},
+  deep_trace:{[line]:{'3074':{records:[{secret:'raw-MES'}]}}}
+ }};
+ await h.client.collect('deep',scope);await h.tick();
+ assert.deepEqual(h.store.agent().job.trace_receipt,{snapshot_ids:{[line]:'17'}});
+ assert.equal(JSON.stringify(h.store.agent().job.trace_receipt).includes('raw-MES'),false);
+ assert.equal(h.store.agent().job.collection_receipt,null);
+ h.client.clear();
+});
 test('monitor is explicit; original Excel bytes pass through without regenerating',async()=>{
   const h=harness();await h.client.connect();await h.client.monitor(true,{...scope,interval_minutes:5});assert.deepEqual(h.calls.find(c=>c.key==='monitor/start').body,{mode:'today',lines:[line],performance:'fast',interval_minutes:5});
   await h.client.monitor(false,scope);assert.equal(h.store.agent().monitor.enabled,false);assert.equal(await (await h.client.excel()).text(),'PKoriginal');

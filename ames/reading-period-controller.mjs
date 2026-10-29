@@ -48,6 +48,7 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
     if(disposed)throw Error('reading_controller_disposed');
     reconcileSession();const selectedSession=activeSession;
     const collectionReceipt=options.collectionReceipt||null;
+    const traceReceipt=options.traceReceipt||null;
     const generation=store.selectReadingPeriod(mode,options),serial=++request;
     const selected=store.readingPeriod();
     const alive=()=>!disposed&&request===serial&&store.periodGeneration()===generation&&sessionKey()===selectedSession;
@@ -78,6 +79,15 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
       const verifiedCollection=expectCollectedLocal&&agentSource
         ?entries.find(e=>e.history_source==='local'&&e.source_id===agentSource&&
           String(e.snapshot_id)===String(collectedId)):null;
+      // Unlike a new 3028 run, deep trace adds 3074/2114/3022 evidence to
+      // an existing exact local snapshot. Its ID is valid only when the
+      // period-filtered local index and connected agent agree; a trace from
+      // another day/line/source must never retarget this reading.
+      const tracedId=traceReceipt?.snapshot_ids?.[line];
+      const verifiedTrace=tracedId&&agentSource
+        ?entries.find(e=>e.history_source==='local'&&e.source_id===agentSource&&
+          String(e.snapshot_id)===String(tracedId)):null;
+      const verifiedRefresh=verifiedCollection||verifiedTrace;
       if(expectCollectedLocal&&!verifiedCollection){
         store.clearHistoricalSnapshot?.(line,{generation});
         throw Error('Coleta local concluída, mas a revisão '+collectedId+' não foi comprovada no agente deste PC; exibida como pendência, não como atualização');
@@ -98,7 +108,7 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
         const resolution=resolveHistorySource(entries,{
           preferredSource:remembered,agentSource:provenSource,retainedSource:retained
         });
-        const resolved=verifiedCollection?.source_id||resolution.source_id;
+        const resolved=verifiedRefresh?.source_id||resolution.source_id;
         // Keep the picker available AFTER resolving. Never trap an operator in a source.
         const options=sources.map(source_id=>{
           const rows=entries.filter(e=>e.source_id===source_id);
@@ -114,11 +124,11 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
         }
         entries=entries.filter(e=>e.source_id===resolved);
       }
-      if(verifiedCollection){
+      if(verifiedRefresh){
         // If the source is also on Firebase, the remote row can have the same
         // timestamp. Read the proven on-machine snapshot requested by this
         // job first, without deleting or rewriting any historical revision.
-        entries=[verifiedCollection,...entries.filter(e=>e!==verifiedCollection)];
+        entries=[verifiedRefresh,...entries.filter(e=>e!==verifiedRefresh)];
       }
       let unreadable=0,lastFailure=null;
       for(const entry of entries){
@@ -140,7 +150,7 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
           // partial observations remain read-only with their exact scope.
           if(mode==='today'&&store.read(line).snapshot&&!store.read(line).saved_today)return;
           store.installHistoricalSnapshot(payload,{generation,source:entry.history_source==='local'?'local':'remote'});
-          if(verifiedCollection===entry){
+          if(verifiedRefresh===entry){
             // Keep this deliberate collection visible across Refresh reading
             // and page reload. A human can still choose the other source.
             rememberSource(line,entry.source_id,sources);

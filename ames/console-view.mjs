@@ -8,6 +8,7 @@ import {createReadingPeriodController} from './reading-period-controller.mjs';
 import {readingPeriod as computeReadingPeriod} from './data/reading-period.mjs';
 import { createAgentClient } from './agent-client.mjs';
 import { AGENT_URL } from './data/agent-contract.mjs';
+import { LINE_IDS } from './data/contract.mjs';
 import { createAutomationView } from './automation-view.mjs';
 import { createAdvancedView } from './advanced-view.mjs';
 import { createLineOverview, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
@@ -116,7 +117,17 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   function refreshHistoricalOnCompletedJob(){
     const job=store.agent()?.job,period=store.readingPeriod?.();
     if(!job?.id||job.status!=='done'||!period||period.mode==='today')return;
-    const key=JSON.stringify([job.id,period.mode,period.start,period.end,job.collection_receipt||null]);
+    // Polling publishes job completion before its final canonical refresh.
+    // Re-read the local index once more if that refresh installs a newer
+    // immutable revision; otherwise the first read can race the transport.
+    const receipt=job.trace_receipt||job.collection_receipt;
+    const localRevisions=receipt?.snapshot_ids
+      ?LINE_IDS.filter(line=>receipt.snapshot_ids[line]).map(line=>{
+        const head=store.localCanonical().find(p=>p.line_id===line&&
+          String(p.snapshot_id)===String(receipt.snapshot_ids[line]));
+        return [line,head?.snapshot_revision||0,head?.content_hash||''];
+      }):null;
+    const key=JSON.stringify([job.id,period.mode,period.start,period.end,job.collection_receipt||null,job.trace_receipt||null,localRevisions]);
     if(key===lastCompletedJobRead)return;
     lastCompletedJobRead=key;
     queueMicrotask(()=>{
@@ -124,7 +135,8 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       if(disposed||!selected||selected.mode!==period.mode||selected.start!==period.start||selected.end!==period.end)return;
       void periodController.select(period.mode,{
         ...(period.mode==='custom'?{start:period.start,end:period.end}:{}),
-        ...(job.kind==='analysis'&&job.collection_receipt?{collectionReceipt:job.collection_receipt}:{})
+        ...(job.kind==='analysis'&&job.collection_receipt?{collectionReceipt:job.collection_receipt}:{}),
+        ...(job.kind==='deep_trace'&&job.trace_receipt?{traceReceipt:job.trace_receipt}:{})
       })
         .catch(error=>{store.updateAgent({period_read:{status:'partial',errors:[{line_id:'—',error:error.message}]}});renderActive();});
     });

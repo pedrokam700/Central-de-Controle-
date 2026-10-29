@@ -248,6 +248,45 @@ test('completed previous-day 3028 locally collected revision replaces pinned old
  assert.equal(s.read(line).snapshot.snapshot_id,'37','older shared history remains accessible on request');
  ctl.clear();
 });
+
+test('completed 3074 deep trace displays enriched LOCAL revision of same snapshot instead of pinned remote revision',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),localOld=snapshot('36','2026-10-16','previous_day');
+ const localEnriched={...localOld,snapshot_revision:2,content_hash:'enriched',insights:{schema:'ames-insights-v1',line,snapshot_id:'36',ready:true,material_kpis:[['Materiais em 2º uso',1]]}};
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'remote-pc',collected_at:'2026-10-19T17:00:00Z'};
+ let local=localOld;
+ const e=p=>({...entry(p),history_source:p.source_id===local.source_id?'local':'shared'});
+ const history={list:async l=>l===line?[e(remote),e(local)]:[],open:async target=>target.source_id===remote.source_id?remote:local};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:local.source_id}});
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).source,'remote');
+ local=localEnriched;
+ await ctl.select('previous',{traceReceipt:{snapshot_ids:{[line]:'36'}}});
+ assert.equal(s.read(line).source,'local');
+ assert.equal(s.read(line).snapshot.snapshot_revision,2);
+ assert.equal(s.read(line).snapshot.insights.groups.material_kpis[0][1],1);
+ await ctl.select('previous');
+ assert.equal(s.read(line).snapshot.snapshot_revision,2,'refresh retains the enriched local origin');
+ await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).snapshot.snapshot_id,'37','older shared origin is still accessible');
+ ctl.clear();
+});
+
+test('deep trace from another day or source never changes the displayed origin',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),local=snapshot('36','2026-10-16','previous_day');
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'remote-pc'};
+ const history={list:async l=>l===line?[{...entry(remote),history_source:'shared'},{...entry(local),history_source:'local'}]:[],
+   open:async target=>target.source_id===remote.source_id?remote:local};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:local.source_id}});
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ await ctl.select('previous',{traceReceipt:{snapshot_ids:{[line]:'35'}}});
+ assert.equal(s.read(line).source,'remote','different historical snapshot is ignored');
+ s.updateAgent({status:'connected',capabilities:{source_id:'unknown-pc'}});
+ await ctl.select('previous',{traceReceipt:{snapshot_ids:{[line]:'36'}}});
+ assert.equal(s.read(line).source,'remote','an unverified workstation may not select local');
+ ctl.clear();
+});
 test('collection receipt cannot switch an operator-selected remote source without exact local snapshot and period',async()=>{
  const s=createAmesStore({now:()=>now.getTime()}),local=snapshot('38','2026-10-16','previous_day');
  const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'other-workstation'};
