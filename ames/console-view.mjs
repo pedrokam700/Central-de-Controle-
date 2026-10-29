@@ -116,13 +116,16 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   function refreshHistoricalOnCompletedJob(){
     const job=store.agent()?.job,period=store.readingPeriod?.();
     if(!job?.id||job.status!=='done'||!period||period.mode==='today')return;
-    const key=JSON.stringify([job.id,period.mode,period.start,period.end]);
+    const key=JSON.stringify([job.id,period.mode,period.start,period.end,job.collection_receipt||null]);
     if(key===lastCompletedJobRead)return;
     lastCompletedJobRead=key;
     queueMicrotask(()=>{
       const selected=store.readingPeriod?.();
       if(disposed||!selected||selected.mode!==period.mode||selected.start!==period.start||selected.end!==period.end)return;
-      void periodController.select(period.mode,period.mode==='custom'?{start:period.start,end:period.end}:{})
+      void periodController.select(period.mode,{
+        ...(period.mode==='custom'?{start:period.start,end:period.end}:{}),
+        ...(job.kind==='analysis'&&job.collection_receipt?{collectionReceipt:job.collection_receipt}:{})
+      })
         .catch(error=>{store.updateAgent({period_read:{status:'partial',errors:[{line_id:'—',error:error.message}]}});renderActive();});
     });
   }

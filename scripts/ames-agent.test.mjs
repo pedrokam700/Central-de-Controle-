@@ -66,6 +66,20 @@ test('real payloads, persistent config, 850ms progress and >2200ms changed parti
   await h.client.collect('today',scope);assert.deepEqual(h.calls.find(c=>c.key==='runs').body,{preset:'today',lines:[line],performance:'fast',request_id:h.calls.find(c=>c.key==='runs').body.request_id});
   await h.client.cancel();assert(h.calls.some(c=>c.key==='jobs/J/cancel'));h.client.clear();assert.equal(h.pending.length,0);
 });
+test('completed 3028 run exposes only exact per-line local snapshot receipt, not MES result data',async()=>{
+ const h=harness();await h.client.connect();
+ h.routes['jobs/J']={id:'J',kind:'analysis',status:'done',result:{
+  snapshot_ids:{[line]:38,TAN10102:'foreign',TAN10103:0},
+  start_at:'2026-10-16T07:00',end_at:'2026-10-17T07:00',
+  dashboard:{secret:'never in view state'},records_3028:[{private:'no'}]
+ }};
+ await h.client.collect('previous_day',scope);await h.tick();
+ assert.deepEqual(h.store.agent().job.collection_receipt,{snapshot_ids:{[line]:'38'},
+  period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'});
+ assert.equal(JSON.stringify(h.store.agent().job).includes('secret'),false);
+ assert.equal(JSON.stringify(h.store.agent().job).includes('private'),false);
+ h.client.clear();
+});
 test('monitor is explicit; original Excel bytes pass through without regenerating',async()=>{
   const h=harness();await h.client.connect();await h.client.monitor(true,{...scope,interval_minutes:5});assert.deepEqual(h.calls.find(c=>c.key==='monitor/start').body,{mode:'today',lines:[line],performance:'fast',interval_minutes:5});
   await h.client.monitor(false,scope);assert.equal(h.store.agent().monitor.enabled,false);assert.equal(await (await h.client.excel()).text(),'PKoriginal');

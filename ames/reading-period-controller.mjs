@@ -47,6 +47,7 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
   async function select(mode,options={}){
     if(disposed)throw Error('reading_controller_disposed');
     reconcileSession();const selectedSession=activeSession;
+    const collectionReceipt=options.collectionReceipt||null;
     const generation=store.selectReadingPeriod(mode,options),serial=++request;
     const selected=store.readingPeriod();
     const alive=()=>!disposed&&request===serial&&store.periodGeneration()===generation&&sessionKey()===selectedSession;
@@ -59,15 +60,32 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
         return start===selected.start&&end&&end>start&&(mode==='custom'?end===selected.end:end<=selected.end);
       }).sort(orderEntries);
       if(!alive())return;
+      const collectedId=collectionReceipt?.snapshot_ids?.[line];
+      const expectCollectedLocal=collectedId&&
+        factoryWallMinute(collectionReceipt.period_start)===selected.start&&
+        factoryWallMinute(collectionReceipt.period_end)===selected.end;
       if(!entries.length){
         store.clearHistoricalSnapshot?.(line,{generation});
+        if(expectCollectedLocal)throw Error('Coleta local concluída, mas a nova revisão '+collectedId+' não aparece no histórico deste período; a tela não foi atualizada');
         return;
+      }
+      // After a completed, operator-triggered 3028 run, use the exact new
+      // LOCAL snapshot for this same line/period. A previous browser choice
+      // for another workstation must not pin an old shared revision after
+      // this workstation has just collected fresh evidence. Never infer a
+      // source solely from a remote index or a job completion flag.
+      const agent=store.agent(),agentSource=agent.status==='connected'?agent.capabilities?.source_id:null;
+      const verifiedCollection=expectCollectedLocal&&agentSource
+        ?entries.find(e=>e.history_source==='local'&&e.source_id===agentSource&&
+          String(e.snapshot_id)===String(collectedId)):null;
+      if(expectCollectedLocal&&!verifiedCollection){
+        store.clearHistoricalSnapshot?.(line,{generation});
+        throw Error('Coleta local concluída, mas a revisão '+collectedId+' não foi comprovada no agente deste PC; exibida como pendência, não como atualização');
       }
       const sources=[...new Set(entries.map(e=>e.source_id).filter(Boolean))];
       if(sources.length>1){
-        const agent=store.agent(),scope=scopeKey(selected,line);
+        const scope=scopeKey(selected,line);
         const remembered=sourceOverrides.get(scope)||preferredSource(line);
-        const agentSource=agent.status==='connected'?agent.capabilities?.source_id:null;
         const localHeads=agent.status==='connected'
           ? [...new Set(store.localCanonical().map(p=>p.source_id).filter(Boolean))]:[];
         const provenSource=agentSource||(localHeads.length===1?localHeads[0]:null);
@@ -80,7 +98,7 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
         const resolution=resolveHistorySource(entries,{
           preferredSource:remembered,agentSource:provenSource,retainedSource:retained
         });
-        const resolved=resolution.source_id;
+        const resolved=verifiedCollection?.source_id||resolution.source_id;
         // Keep the picker available AFTER resolving. Never trap an operator in a source.
         const options=sources.map(source_id=>{
           const rows=entries.filter(e=>e.source_id===source_id);
@@ -95,6 +113,12 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
           return;
         }
         entries=entries.filter(e=>e.source_id===resolved);
+      }
+      if(verifiedCollection){
+        // If the source is also on Firebase, the remote row can have the same
+        // timestamp. Read the proven on-machine snapshot requested by this
+        // job first, without deleting or rewriting any historical revision.
+        entries=[verifiedCollection,...entries.filter(e=>e!==verifiedCollection)];
       }
       let unreadable=0,lastFailure=null;
       for(const entry of entries){
@@ -116,6 +140,12 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
           // partial observations remain read-only with their exact scope.
           if(mode==='today'&&store.read(line).snapshot&&!store.read(line).saved_today)return;
           store.installHistoricalSnapshot(payload,{generation,source:entry.history_source==='local'?'local':'remote'});
+          if(verifiedCollection===entry){
+            // Keep this deliberate collection visible across Refresh reading
+            // and page reload. A human can still choose the other source.
+            rememberSource(line,entry.source_id,sources);
+            sourceOverrides.set(scopeKey(selected,line),entry.source_id);
+          }
           // A missing/corrupt newer revision cannot make an older immutable
           // revision disappear. Never claim it is the latest FULL or current
           // MES state: surface the degraded read with its exact identity.

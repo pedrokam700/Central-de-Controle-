@@ -133,7 +133,17 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     if(token!==generation)return;
     try {
       const raw=await request('/jobs/'+encodeURIComponent(id));
-      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
+      // An operator-triggered 3028 run carries only the immutable IDs and
+      // period needed to reopen its exact local revision. Do not copy the
+      // full MES dashboard, records, or raw job configuration into UI state.
+      const ids=raw.kind==='analysis'&&raw.status==='done'&&raw.result?.snapshot_ids;
+      const collected=ids&&typeof ids==='object'&&!Array.isArray(ids)
+        ?Object.fromEntries(LINE_IDS.filter(line=>Number.isSafeInteger(Number(ids[line]))&&Number(ids[line])>0)
+          .map(line=>[line,String(ids[line])])):null;
+      const collection_receipt=collected&&Object.keys(collected).length&&
+        typeof raw.result?.start_at==='string'&&typeof raw.result?.end_at==='string'
+        ?{snapshot_ids:collected,period_start:raw.result.start_at,period_end:raw.result.end_at}:null;
+      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
       if(done||(partial!==lastPartial&&now()-lastRefresh>2200)){
         try{await refresh();lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}

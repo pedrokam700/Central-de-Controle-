@@ -220,6 +220,66 @@ test('preferred source survives the operational period change in one session, bu
  ctl.clear();
 });
 
+test('completed previous-day 3028 locally collected revision replaces pinned old shared origin, without losing history',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),localOld=snapshot('36','2026-10-16','previous_day');
+ const localNew={...snapshot('38','2026-10-16','previous_day'),collected_at:'2026-10-19T17:35:00Z'};
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'other-workstation',collected_at:'2026-10-19T17:00:00Z'};
+ let local=localOld;
+ const e=p=>({...entry(p),history_source:p.source_id===local.source_id?'local':'shared'});
+ const history={list:async l=>l===line?[e(remote),e(local)]:[],open:async target=>
+   target.source_id===remote.source_id?remote:local};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:local.source_id}});
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).source,'remote');
+ assert.equal(traceTargetForLine(s,line).reason,'Revisão não pertence ao agente local conectado');
+ local=localNew;
+ // A manual/period read refresh alone must retain the explicit historical choice.
+ await ctl.select('previous');assert.equal(s.read(line).snapshot.snapshot_id,'37');
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'38'},
+   period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'}});
+ assert.equal(s.read(line).snapshot.snapshot_id,'38');
+ assert.equal(s.read(line).source,'local');
+ assert.equal(s.agent().period_read.source_choices[0].selected_source_id,local.source_id);
+ assert.equal(traceTargetForLine(s,line).available,true);
+ await ctl.select('previous');
+ assert.equal(s.read(line).snapshot.snapshot_id,'38','refresh keeps the locally collected version');
+ await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).snapshot.snapshot_id,'37','older shared history remains accessible on request');
+ ctl.clear();
+});
+test('collection receipt cannot switch an operator-selected remote source without exact local snapshot and period',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),local=snapshot('38','2026-10-16','previous_day');
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'other-workstation'};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:local.source_id}});
+ const history={list:async l=>l===line?[{...entry(local),history_source:'local'},entry(remote)]:[],
+  open:async e=>e.source_id===local.source_id?local:remote};
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'99'},
+  period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'}});
+ assert.equal(s.agent().period_read.status,'partial','unknown local job revision cannot masquerade as updated');
+ assert.equal(s.read(line).snapshot,null);
+ await ctl.select('previous');
+ assert.equal(s.read(line).snapshot.source_id,remote.source_id);
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'38'},
+  period_start:'2026-10-15T07:00',period_end:'2026-10-16T07:00'}});
+ assert.equal(s.read(line).snapshot.source_id,remote.source_id,'a different production day cannot change this selection');
+ ctl.clear();
+});
+test('a completed local collection missing its exact historical revision fails visibly instead of showing the old shared one as updated',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),remote={...snapshot('37','2026-10-16','previous_day'),source_id:'other-workstation'};
+ s.updateAgent({status:'connected',capabilities:{source_id:'my-agent'}});
+ const ctl=createReadingPeriodController(s,{list:async l=>l===line?[entry(remote)]:[],open:async()=>remote});
+ await ctl.select('previous');assert.equal(s.read(line).snapshot?.snapshot_id,'37');
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'38'},
+  period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'}});
+ assert.equal(s.agent().period_read.status,'partial');
+ assert.match(s.agent().period_read.errors[0].error,/não foi comprovada no agente deste PC/);
+ assert.equal(s.read(line).snapshot,null);
+ ctl.clear();
+});
+
 test('Line 2 keeps the exact prior-day source already proven in memory across refresh even when preferences are unavailable',async()=>{
  const line2='TAN10102',p={...snapshot('LOCAL-L2','2026-10-16','previous_day'),line_id:line2,source_id:'source-L2'};
  p.summary={...p.summary,line:line2};
