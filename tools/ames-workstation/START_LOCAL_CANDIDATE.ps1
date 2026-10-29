@@ -32,7 +32,7 @@ try {
   # the agent. The network tool will request UAC only when route repair is needed.
   $NetworkSetup=Join-Path $Root '08_PREPARAR_REDE_AMES.bat'
   if(-not(Test-Path -LiteralPath $NetworkSetup)){throw 'Pacote incompleto: 08_PREPARAR_REDE_AMES.bat'}
-  & $NetworkSetup
+  & $NetworkSetup /auto
   if($LASTEXITCODE -ne 0){throw 'Rede A-MES nao validada. Conecte TAXXX_5G ou solicite apoio da TI para a rota persistente.'}
   if(!(Test-Path $Python)){& "$Root\01_INSTALAR_UMA_VEZ.bat" /auto;if($LASTEXITCODE -ne 0){throw 'Instalacao Python falhou'}}
   & $Python -c "import pandas,openpyxl,playwright,pyautogui,pyperclip; from playwright.sync_api import sync_playwright; from zoneinfo import ZoneInfo; ZoneInfo('America/Sao_Paulo')"

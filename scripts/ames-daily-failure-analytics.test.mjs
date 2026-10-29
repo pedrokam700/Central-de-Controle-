@@ -212,6 +212,49 @@ test('daily dashboard refreshes same snapshot number on new revision or collecto
   }finally{globalThis.document=previousDocument;}
 });
 
+test('clicking a ranking summary selects its defect and refreshes only proven 3022 hours',()=>{
+  const previousDocument=globalThis.document;
+  globalThis.document={documentElement:{lang:'pt-BR'}};
+  const occurrences=[
+    {pcba_sn:'M1',defect_key:'K1',defect_code:'MOTOR',defect_desc:'Motor No Vibration',defect_time:'2026-10-28T15:00:00-03:00'},
+    {pcba_sn:'M2',defect_key:'K2',defect_code:'MOTOR',defect_desc:'Motor No Vibration',defect_time:'2026-10-28T15:30:00-03:00'},
+    {pcba_sn:'C1',defect_key:'K3',defect_code:'CAMERA',defect_desc:'Camera Stain',defect_time:'2026-10-28T15:30:00-03:00'},
+  ];
+  const contexts=[
+    {pcba_sn:'M1',defect_key:'K1',defect_code:'MOTOR',defect_time:occurrences[0].defect_time,
+      reference_station_code:'A5150',reference_event_time:'2026-10-28T13:12:00-03:00',
+      production_event_time:'2026-10-28T13:12:00-03:00',production_shift_source:'3022',
+      production_shift_basis:'reference_process',production_shift:'1st Shift'},
+    {pcba_sn:'C1',defect_key:'K3',defect_code:'CAMERA',defect_time:occurrences[2].defect_time,
+      reference_station_code:'A5110',reference_event_time:'2026-10-28T14:35:00-03:00',
+      production_event_time:'2026-10-28T14:35:00-03:00',production_shift_source:'3022',
+      production_shift_basis:'reference_process',production_shift:'1st Shift'},
+  ];
+  const snapshot={line_id:'TAN10102',snapshot_id:7,summary:{},occurrences,process_timeline:{contexts},
+    pcba_history:{records:[]},material_trace:{records:[]},insights:{drilldowns:{}}};
+  let html='',summary=null,scrolls=0;
+  const root={classList:{add(){}},
+    set innerHTML(value){html=value;summary={tagName:'SUMMARY',dataset:{dfaFocusDefect:'MOTOR'}};},
+    get innerHTML(){return html;},
+    querySelectorAll:selector=>selector==='[data-dfa-focus-defect]'?[summary]:[],
+    querySelector:selector=>selector==='[data-dfa-hour-panel]'?{scrollIntoView(){scrolls++;}}:null};
+  const store={read:line=>({snapshot:line==='TAN10102'?snapshot:null}),
+    occurrences:()=>({rows:occurrences,coverage:{status:'partial'}})};
+  try{
+    const view=createDailyFailureAnalytics(root,store);view.render();
+    assert.match(html,/data-dfa-focus-defect="MOTOR"/);
+    assert.doesNotMatch(html,/data-dfa-selected-mode/);
+    let prevented=false;summary.onclick({preventDefault(){prevented=true;}});
+    assert.equal(prevented,true,'summary does not accidentally toggle and close on rerender');
+    assert.equal(scrolls,1);
+    assert.match(html,/data-dfa-selected-mode/);
+    assert.match(html,/2 ocorr\u00eancia\(s\) da 3028/);
+    assert.match(html,/data-dfa-3022-missing/,'second MOTOR has no proven 3022 reference');
+    assert.match(html,/data-dfa-hour="13:00"/);
+    assert.doesNotMatch(html,/data-dfa-hour="14:00"/,'camera reference is outside selected failure mode');
+  }finally{globalThis.document=previousDocument;}
+});
+
 
 test('3012 contradicted and exact-identity candidates never become the current occurrence AT',()=>{
   const candidate={pcba_sn:'P1',defect_code:'OTHER',defect_time:'2026-10-21T09:00:00-03:00',

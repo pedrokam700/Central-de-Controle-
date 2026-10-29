@@ -6,6 +6,7 @@ const build = readFileSync('scripts/build-integrated-candidate.py','utf8');
 const start = readFileSync('tools/ames-workstation/START_LOCAL_CANDIDATE.ps1','utf8');
 const install = readFileSync('tools/ames-workstation/01_INSTALAR_UMA_VEZ.bat','utf8');
 const route = readFileSync('tools/ames-workstation/ensure_ames_route.ps1','utf8');
+const networkBat = readFileSync('tools/ames-workstation/08_PREPARAR_REDE_AMES.bat','utf8');
 const switcher = readFileSync('tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1','utf8');
 
 test('PR69 CLEAN inclui utilitario de troca, rede inicial e os 5 documentos perdidos',()=>{
@@ -27,6 +28,9 @@ test('PC virgem deve comprovar rede antes de instalar/iniciar o agente',()=>{
   const agent=start.indexOf('START_AGENT_CANONICAL.ps1" -Root $Root');
   assert.ok(guard>=0 && network>guard && installAt>network && agent>installAt);
   assert.match(start,/Rede A-MES nao validada/);
+  assert.match(start,/& \$NetworkSetup \/auto/);
+  assert.match(networkBat,/if \/I "%~1"=="\/auto" set "AUTO_MODE=1"/);
+  assert.match(networkBat,/if "%AUTO_MODE%"=="0" pause/);
   assert.match(install,/if "%AUTO_MODE%"=="0"[\s\S]*?08_PREPARAR_REDE_AMES\.bat/);
   assert.match(install,/:network_error[\s\S]*?goto :fail/);
   assert.match(route,/TAXXX_5G nao conectado/);
@@ -40,9 +44,12 @@ test('PC virgem deve comprovar rede antes de instalar/iniciar o agente',()=>{
 
 test('Troca supervisionada exige versao assinada, confirmacao e protecao de guardian/porta',()=>{
   for(const needle of ['__BUNDLE_SHA__','CANDIDATE_MANIFEST.json','Get-FileHash',
-    "Read-Host 'Para continuar, digite TROCAR'",'CentralAMES.UpdateTransaction.8765',
+    "New-Object -ComObject WScript.Shell",'CentralAMES.UpdateTransaction.8765',
     'Get-NetTCPConnection -LocalPort 8765','Get-ScheduledTask','Win32_Service',
     'StopKnown','TROCA_PR69=BLOCKED','TROCA_PR69=SUCCESS', 'WriteRun $oldRun']){
     assert.ok(switcher.includes(needle),`Protecao da troca ausente: ${needle}`);
   }
+  assert.doesNotMatch(switcher,/Read-Host 'Para continuar, digite TROCAR'/);
+  assert.ok(switcher.indexOf('if($answer -ne 6)')>switcher.indexOf('Nenhum agente/guardian antigo identificado'));
+  assert.ok(switcher.indexOf('if($answer -ne 6)')<switcher.indexOf('if($oldRun){WriteRun $null}'));
 });

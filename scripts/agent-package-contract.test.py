@@ -140,7 +140,10 @@ def test_pr69_clean_retains_supervised_switch_and_first_run_network():
     assert "255.255.255.255" in route
     assert "Confirm-Route $index $gateway" in route
     assert "__BUNDLE_SHA__" in switch
-    assert "Read-Host 'Para continuar, digite TROCAR'" in switch
+    assert "Read-Host 'Para continuar, digite TROCAR'" not in switch
+    assert "New-Object -ComObject WScript.Shell" in switch
+    assert switch.index("if($answer -ne 6)") > switch.index("Nenhum agente/guardian antigo identificado")
+    assert switch.index("if($answer -ne 6)") < switch.index("if($oldRun){WriteRun $null}")
     assert "Get-NetTCPConnection -LocalPort 8765" in switch
     assert "StopKnown" in switch
     assert "START_LOCAL_CANDIDATE.ps1" in switch

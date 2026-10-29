@@ -70,7 +70,11 @@ class TwoOccurrenceContracts(unittest.TestCase):
         self.assertEqual(cboard['previous_pcba_count'],2)
         self.assertEqual(cboard['status'],'REUSO_MULTIPLO_ANTERIOR')
         self.assertEqual(fake.calls.count(PCBA),1)
+        # Frozen CLEAN V3 flow still defers unknown bindings. The canonical
+        # bridge audits these separately without changing confirmed KPIs.
         self.assertEqual(set(fake.calls[1:]),{'LCD-OLD','BOARD-OLD','LCD-NEW','BOARD-NEW'})
+        self.assertEqual(trace[0]['trace_3074']['candidate_material_history'][0]['status'],
+                         'CANDIDATE_QUERY_DEFERRED')
 
 if __name__=='__main__':
     unittest.main(verbosity=2)

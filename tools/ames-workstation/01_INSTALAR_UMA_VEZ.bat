@@ -22,7 +22,7 @@ rem installer directly must not mistake a local-only install for MES readiness.
 if "%AUTO_MODE%"=="0" (
   echo [REDE] Confirmando TAXXX_5G e rota persistente A-MES antes da instalacao...
   if not exist "%~dp008_PREPARAR_REDE_AMES.bat" goto :network_error
-  call "%~dp008_PREPARAR_REDE_AMES.bat"
+  call "%~dp008_PREPARAR_REDE_AMES.bat" /auto
   if errorlevel 1 goto :network_error
 )
 

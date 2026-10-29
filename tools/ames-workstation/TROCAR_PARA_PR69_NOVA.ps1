@@ -98,11 +98,10 @@ try {
   Write-Host "Pacote PR69 confirmado: $ExpectedSha"
   Write-Host 'Este procedimento preserva a pasta/banco/token antigo, mas interrompe o agente confirmado.'
   Write-Host 'Somente execute com autorizacao local, backup e sem coletas/sincronizacoes pendentes.'
-  if((Read-Host 'Para continuar, digite TROCAR') -cne 'TROCAR'){Fail 'Operacao cancelada pelo operador.'}
 
   # Network checks happen before stopping the old agent; a failed Wi-Fi/UAC
   # must not cause production downtime.
-  & (Join-Path $NewRoot '08_PREPARAR_REDE_AMES.bat')
+  & (Join-Path $NewRoot '08_PREPARAR_REDE_AMES.bat') /auto
   if($LASTEXITCODE -ne 0){Fail 'Rede da nova instalacao ainda nao comprovada.'}
 
   $mutex=New-Object System.Threading.Mutex($false,'Global\CentralAMES.UpdateTransaction.8765')
@@ -151,6 +150,16 @@ try {
     if($null -eq $jobs.jobs){Fail 'Agente antigo nao retornou lista de coletas valida.'}
     if(@($jobs.jobs|Where-Object {$_.status -in @('running','queued','pending','starting','in_progress')}).Count){Fail 'Ha coleta em andamento; troca bloqueada.'}
   }
+  # Ask only after validating the old agent, guardian and idle job queue.
+  # A click on 01_TROCAR is the operator's intent; never demand a typed word.
+  # PCs without an identified old agent exit above with the 00_INICIAR_AQUI path.
+  try {
+    $dialog=New-Object -ComObject WScript.Shell -ErrorAction Stop
+    $answer=$dialog.Popup('Agente antigo confirmado e sem coletas ativas. A troca interrompera somente esse agente. Continue apenas se o backup e a autorizacao local estiverem confirmados.',0,'Central/A-MES PR69 - troca supervisionada',0x34)
+  } catch {
+    Fail 'Confirmacao visual do Windows indisponivel; troca bloqueada sem desligar o agente antigo.'
+  }
+  if($answer -ne 6){Fail 'Operador escolheu nao prosseguir; agente antigo preservado.'}
   if($oldRun){WriteRun $null}
   foreach($process in @($known|Where-Object {$_.kind -eq 'guardian'})){StopKnown $process}
   foreach($process in @($known|Where-Object {$_.kind -eq 'agent'})){StopKnown $process}

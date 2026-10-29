@@ -52,9 +52,11 @@ def auditar_materiais_temporais_incertos(
     pending = temporal["time_unknown"] + temporal["boundary_ambiguous"]
     unique = {}
     for row in pending:
-        unique.setdefault(row.get("item_sn"), row)
+        if row.get("item_sn"):
+            unique.setdefault(row["item_sn"], row)
     audited = []
-    for i, (sn, row) in enumerate(unique.items()):
+    query_count = 0
+    for sn, row in unique.items():
         result = {
             "item_sn": sn, "item_type": row.get("item_type"),
             "temporal_reason": row.get("temporal_reason"),
@@ -67,7 +69,7 @@ def auditar_materiais_temporais_incertos(
             "historical_pcbas": [],
             "status": "CANDIDATE_UNVERIFIED",
         }
-        if i >= max_queries:
+        if query_count >= max_queries and sn not in query_memo:
             result["status"] = "CANDIDATE_QUERY_DEFERRED"
         else:
             try:
@@ -75,6 +77,7 @@ def auditar_materiais_temporais_incertos(
                     q = query_memo[sn]
                 else:
                     q = tela3074.consultar(sn)
+                    query_count += 1
                     query_memo[sn] = q
                     if pause_s:
                         time.sleep(pause_s)
@@ -137,7 +140,9 @@ def executar_varredura(
     existing["base_coverage"] = base_coverage
     candidates = auditar_materiais_temporais_incertos(
         tela3074, temporal, defect_time, query_memo, pause_s,
-        max_queries=20 if audit_uncertain else 0,
+        # Only eight extra MES queries per PCBA/defect, with run-level memo.
+        # Reverse results are investigation candidates, never confirmed reuse.
+        max_queries=8 if audit_uncertain else 0,
         defect_local_offset_hours=defect_local_offset_hours,
         grid_naive_offset_hours=grid_naive_offset_hours)
     existing["candidate_material_history"] = candidates

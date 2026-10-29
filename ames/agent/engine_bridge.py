@@ -27,6 +27,66 @@ def _has_partial_3074_page(value):
                for child in (value.get(key) or []))
 
 
+def enrich_deferred_3074_candidates(result, tela3074, *, query_memo=None,
+                                    pause_s=0, max_extra_per_pcba=8,
+                                    checkpoint_path=None, line_callback=None):
+    """Read-only second pass for deferred 3074 histories, without changing the frozen flow.
+
+    Only unproven candidates are queried. Historical PCBAs belong to a
+    separate investigation dataset, never confirmed second-use counters.
+    Updates old COMPLETE checkpoints in-place using the frozen atomic writer.
+    """
+    memo = query_memo if query_memo is not None else {}
+    attempted = 0
+    amended = []
+    for item in (result or {}).get("items") or []:
+        pcba = str(item.get("pcba_sn") or "")
+        queries_for_pcba = 0
+        for defect in item.get("defect_traces") or []:
+            trace = defect.get("trace_3074") or {}
+            existing = trace.get("candidate_material_history") or []
+            deferred = {str(row.get("item_sn") or "") for row in existing
+                        if row.get("status") == "CANDIDATE_QUERY_DEFERRED" and row.get("item_sn")}
+            if not deferred:
+                continue
+            temporal = trace.get("temporal_filter") or {}
+            scope = {name: [row for row in (temporal.get(name) or [])
+                            if str(row.get("item_sn") or "") in deferred]
+                     for name in ("time_unknown", "boundary_ambiguous")}
+            available = max(0, max_extra_per_pcba - queries_for_pcba)
+            if not scope["time_unknown"] and not scope["boundary_ambiguous"]:
+                continue
+            if line_callback and available:
+                line_callback(f"3074 investigando Material SNs sem vinculo temporal ({pcba}; limite {available})")
+            module = importlib.import_module("core.varredura_3074")
+            audited = module.auditar_materiais_temporais_incertos(
+                tela3074, scope, (defect.get("defect") or {}).get("defect_time"),
+                memo, pause_s=pause_s, max_queries=available)
+            updates = {str(row.get("item_sn")): row for row in audited}
+            count = sum(1 for row in audited if row.get("status") != "CANDIDATE_QUERY_DEFERRED")
+            queries_for_pcba += count
+            attempted += count
+            trace["candidate_material_history"] = [updates.get(str(row.get("item_sn")), row) for row in existing]
+            amended.append((pcba, str(defect.get("defect_key") or ""), trace["candidate_material_history"]))
+    result["candidate_reverse_audit"] = {"probed": attempted, "amended_defects": len(amended),
+                                         "max_extra_per_pcba": max_extra_per_pcba,
+                                         "confirmed_reuse_added": 0}
+    if amended and checkpoint_path:
+        path = Path(checkpoint_path)
+        # Exact fingerprint: never modify a checkpoint for a different import.
+        if path.is_file():
+            checkpoint = json.loads(path.read_text(encoding="utf-8"))
+            if checkpoint.get("source_sha256") != result.get("source_sha256") or checkpoint.get("version") != "0.8.1":
+                raise RuntimeError("3074 candidate checkpoint fingerprint differs; no write performed")
+            for pcba, key, candidates in amended:
+                stored = ((checkpoint.get("pcbas") or {}).get(pcba) or {}).get("defect_traces") or {}
+                if key not in stored:
+                    raise RuntimeError("3074 candidate checkpoint occurrence differs; no write performed")
+                stored[key].setdefault("trace_3074", {})["candidate_material_history"] = candidates
+            importlib.import_module("core.fluxo_3028_3074")._atomic_json(path, checkpoint)
+    return result
+
+
 def discover_engine(config: Dict[str, Any], agent_dir: Path) -> Optional[Path]:
     candidates = []
     env = os.environ.get("AMES_ENGINE_DIR")
@@ -295,6 +355,13 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
             checkpoint_path=checkpoint_3074, query_memo=shared_query_memo, pause_s=pause_3074,
             defect_local_offset_hours=defect_offset, grid_naive_offset_hours=grid_offset,
         )
+        # Keep CLEAN V3's 3028->3074 flow byte-for-byte. Its default defers
+        # uncertain reverse searches; fill only those candidates in a bounded
+        # read-only pass before the separate 2114 collection begins.
+        result_3074 = enrich_deferred_3074_candidates(
+            result_3074, tela3074, query_memo=shared_query_memo,
+            pause_s=pause_3074, checkpoint_path=checkpoint_3074,
+            line_callback=line_callback)
         if _has_partial_3074_page(result_3074):
             result_3074["source_status"] = "PARTIAL"
         if event_callback:
