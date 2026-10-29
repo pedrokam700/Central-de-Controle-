@@ -114,6 +114,40 @@ def test_integrated_clean_support_files_are_explicit():
         assert legacy not in builder.SUPPORT_FILES
 
 
+def test_pr69_clean_retains_supervised_switch_and_first_run_network():
+    builder = integrated_builder_module()
+    assert set(builder.FIRST_RUN_FILES) == {
+        "01_TROCAR_PARA_PR69_NOVA.bat",
+        "TROCAR_PARA_PR69_NOVA.ps1",
+        "08_PREPARAR_REDE_AMES.bat",
+    }
+    assert set(builder.PACKAGE_DOCS) == {
+        "INSTRUCOES_INSTALACAO_LIMPA.txt",
+        "MANUAL_LOGICA_CAPTURA_E_CRUZAMENTO.md",
+        "NOTAS_ALERTAS_SN_PR69.md",
+        "NOTAS_CORRECOES_28OUT_RESTAURACAO.md",
+        "NOTAS_VALIDACAO_FPY_TOP3_RASTREABILIDADE.md",
+    }
+    startup = (ROOT / "tools/ames-workstation/START_LOCAL_CANDIDATE.ps1").read_text(encoding="utf-8")
+    route = (ROOT / "tools/ames-workstation/ensure_ames_route.ps1").read_text(encoding="utf-8")
+    switch = (ROOT / "tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1").read_text(encoding="utf-8")
+    assert startup.index("Get-NetTCPConnection -LocalPort 8765") < startup.index("08_PREPARAR_REDE_AMES.bat") < startup.index("01_INSTALAR_UMA_VEZ.bat")
+    assert "if($LASTEXITCODE -ne 0){throw 'Rede A-MES nao validada" in startup
+    assert "netsh wlan connect name=$Profile" in route
+    assert "TAXXX_5G nao conectado" in route
+    assert "-Verb RunAs -Wait -PassThru" in route
+    assert "172.29.185.215" in route
+    assert "255.255.255.255" in route
+    assert "Confirm-Route $index $gateway" in route
+    assert "__BUNDLE_SHA__" in switch
+    assert "Read-Host 'Para continuar, digite TROCAR'" in switch
+    assert "Get-NetTCPConnection -LocalPort 8765" in switch
+    assert "StopKnown" in switch
+    assert "START_LOCAL_CANDIDATE.ps1" in switch
+    assert "WriteRun $oldRun" in switch
+    assert "ames-agent\\data\\local_agent_token" in switch
+
+
 def test_integrated_clean_builder_rejects_runtime_private_files():
     builder = integrated_builder_module()
     assert builder.assert_clean_payload({
@@ -204,6 +238,7 @@ if __name__ == "__main__":
         test_active_package_builders_derive_from_single_updater_contract,
         test_integrated_clean_builder_copies_all_agent_python_modules,
         test_integrated_clean_support_files_are_explicit,
+        test_pr69_clean_retains_supervised_switch_and_first_run_network,
         test_integrated_clean_builder_rejects_runtime_private_files,
         test_integrated_clean_final_zip_verification_fails_closed,
         test_legacy_fastlane_is_not_an_active_package_authority,

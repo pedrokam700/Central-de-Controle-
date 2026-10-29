@@ -16,6 +16,16 @@ echo Nao altera a CLEAN V3 e nao migra banco automaticamente.
 echo O Google Chrome instalado no PC sera usado via CDP.
 echo.
 
+rem /auto is used ONLY after START_LOCAL_CANDIDATE has checked the network,
+rem or by the offline GitHub Windows installer test. A human opening the
+rem installer directly must not mistake a local-only install for MES readiness.
+if "%AUTO_MODE%"=="0" (
+  echo [REDE] Confirmando TAXXX_5G e rota persistente A-MES antes da instalacao...
+  if not exist "%~dp008_PREPARAR_REDE_AMES.bat" goto :network_error
+  call "%~dp008_PREPARAR_REDE_AMES.bat"
+  if errorlevel 1 goto :network_error
+)
+
 set "PYEXE="
 if exist "%LocalAppData%\Programs\Python\Python312\python.exe" set "PYEXE=%LocalAppData%\Programs\Python\Python312\python.exe"
 if not defined PYEXE (
@@ -123,6 +133,9 @@ echo [ERRO] Google Chrome nao foi localizado/instalado.
 goto :fail
 :agent_error
 echo [ERRO] O agente nao passou no selftest local.
+goto :fail
+:network_error
+echo [ERRO] Rede A-MES ainda nao validada. Conecte TAXXX_5G e repita.
 goto :fail
 :fail
 if "%AUTO_MODE%"=="0" pause

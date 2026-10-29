@@ -1,0 +1,45 @@
+CENTRAL + A-MES — PR69 — PACOTE CLEAN COMPLETO (CANDIDATO)
+SHA EXATO DO PACOTE: __BUNDLE_SHA__
+ESTADO: PR69 em validacao; aceite fisico na fabrica PENDENTE.
+
+NUNCA EXTRAIA ESTE ZIP SOBRE UMA INSTALACAO ANTERIOR.
+NUNCA COPIE SQLite, tokens, cookies, config.json ou filas entre pastas.
+
+COMPUTADOR VIRGEM / SEM AGENTE ANTERIOR:
+1. Extraia em uma pasta nova do usuario com permissao de escrita.
+2. Garanta internet normal para instalar Python 3.12, dependencias e Chrome,
+   caso nao estejam disponiveis. O ZIP nao inclui instaladores offline.
+3. Conecte o Wi-Fi TAXXX_5G pelo Windows, com credenciais fornecidas pela TI.
+   Uma instalacao virgem nao possui perfil salvo; este pacote nao fornece senha.
+4. Execute 08_PREPARAR_REDE_AMES.bat para checar SSID, IPv4, gateway,
+   rota persistente 172.29.185.215/32 e TCP 80. O Windows podera pedir UAC.
+   A rota nao altera gateway padrao, Ethernet, DNS nem proxy.
+5. Execute 00_INICIAR_AQUI.bat. O inicializador verificara a rede novamente,
+   instalara dependencias locais se faltarem e iniciara um unico agente/Chrome.
+6. Se uma etapa falhar, nao declare o posto pronto nem inicie coleta.
+   Envie print do erro sem mostrar credenciais, token ou dados pessoais.
+
+POSTO COM AGENTE ANTIGO / PORTA 8765 EM USO:
+1. Termine as coletas, confirme sincronizacoes e backup/rollback da pasta antiga.
+2. Extraia a candidata numa pasta completamente separada e preservada.
+3. Nao execute 00_INICIAR_AQUI.bat enquanto o agente antigo estiver ativo.
+4. Somente com autorizacao do responsavel e inventario confirmado, execute
+   01_TROCAR_PARA_PR69_NOVA.bat e digite TROCAR quando solicitado.
+5. A ferramenta verifica SHA, hashes, rede, processos, guardians, porta,
+   relancadores e coletas pendentes antes de encerrar processos identificados.
+6. Se TROCA_PR69=BLOCKED aparecer, nao force nem execute dois agentes.
+   Em caso de falha apos parar o antigo, reinicie manualmente a versao antiga
+   conhecida; a pasta e os dados originais sao preservados.
+7. A ferramenta NAO migra nem copia bancos, token, configuracoes ou historico.
+
+TESTES OBRIGATORIOS NO POSTO REAL:
+- Rede A-MES + Ethernet simultaneas e persistencia apos reboot.
+- Primeira selecao de turno da 2114 e tempo de troca entre PCBAs.
+- PCBA 002527005C0535F300007060: duas passagens 2114 e mesma falha,
+  desde que ambas estejam comprovadas na fonte; sem conclusoes inventadas.
+- Consulta por SN: prioridade, alerta, historico, AT/3012 e 3074 completos.
+- Rastreabilidade 3028/3022/2114/3074, reuso e FPY/Top3 com prova fisica.
+
+OS MANUAIS E NOTAS ADICIONAIS SAO REFERENCIAS HISTORICAS DA PR69.
+PODEM MENCIONAR SHAs ANTIGOS E NAO SUBSTITUEM ESTE AVISO DE INSTALACAO.
+O CI E OS TESTES SINTETICOS NAO SUBSTITUEM A VALIDACAO FISICA.

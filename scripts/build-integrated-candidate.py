@@ -4,6 +4,8 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
 SUPPORT_FILES=('START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','KEEP_AGENT_RUNNING.ps1','ISSUE57_RELAUNCH_ENROLLMENT.ps1')
+FIRST_RUN_FILES=('08_PREPARAR_REDE_AMES.bat','01_TROCAR_PARA_PR69_NOVA.bat','TROCAR_PARA_PR69_NOVA.ps1')
+PACKAGE_DOCS=('INSTRUCOES_INSTALACAO_LIMPA.txt','MANUAL_LOGICA_CAPTURA_E_CRUZAMENTO.md','NOTAS_ALERTAS_SN_PR69.md','NOTAS_CORRECOES_28OUT_RESTAURACAO.md','NOTAS_VALIDACAO_FPY_TOP3_RASTREABILIDADE.md')
 _FORBIDDEN_EXACT={'config.json','local_agent_token','network_health.jsonl','.env','cookies.json','session.json'}
 _FORBIDDEN_SUFFIXES={'.sqlite','.sqlite3','.db','.pyc','.log','.zip','.pem','.key'}
 
@@ -60,6 +62,18 @@ def build(destination, development=False):
   payload['suporte/ames-workstation/'+name]=source.read_bytes()
  for name in ['01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','START_LOCAL_CANDIDATE.ps1']:
   payload[name]=(ws/name).read_bytes()
+ for name in FIRST_RUN_FILES:
+  source=ws/name
+  if not source.is_file():raise ValueError('Required first-run/migration utility missing: '+name)
+  data=source.read_bytes()
+  if name=='TROCAR_PARA_PR69_NOVA.ps1':
+   if data.count(b'__BUNDLE_SHA__')!=1:raise ValueError('PR69 migration SHA marker missing or ambiguous')
+   data=data.replace(b'__BUNDLE_SHA__',sha.encode())
+  payload[name]=data
+ for name in PACKAGE_DOCS:
+  source=ws/'package-docs'/name
+  if not source.is_file():raise ValueError('Required PR69 instruction/evidence missing: '+name)
+  payload[name]=source.read_bytes().replace(b'__BUNDLE_SHA__',sha.encode())
  payload['09_REPARAR_DEPENDENCIAS.bat']=(ws/'09_REPARAR_DEPENDENCIAS_CLEAN.bat').read_bytes()
  payload['network/ensure_ames_route.ps1']=(ws/'ensure_ames_route.ps1').read_bytes()
  launcher=b'@echo off\r\ncd /d "%~dp0"\r\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0START_LOCAL_CANDIDATE.ps1"\r\nif errorlevel 1 pause\r\n'
@@ -77,7 +91,7 @@ def build(destination, development=False):
   raise ValueError('Integrated Central bootstrap missing from CLEAN index')
  if 'src="/Central-de-Controle-/local-entry.mjs"' in html:
   raise ValueError('CLEAN regressed to standalone local Console entry')
- extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat'] or k.startswith('suporte/ames-workstation/')}
+ extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat',*FIRST_RUN_FILES,*PACKAGE_DOCS] or k.startswith('suporte/ames-workstation/')}
  payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES)},indent=2).encode()
  for doc in (ROOT/'docs/ames').glob('integrated-v5*'):
   if doc.is_file():payload['evidence/'+doc.name]=doc.read_bytes()
@@ -101,6 +115,9 @@ INSTALACAO / TESTE — LEIA ANTES DE EXECUTAR:
 3. Extraia ESTE ZIP em uma pasta NOVA e independente, sem sobrescrever a antiga.
 4. SOMENTE em posto sem guardian anterior, ou APOS a migracao supervisionada
    e a liberacao expressa, execute 00_INICIAR_AQUI.bat.
+   PC virgem: conecte TAXXX_5G via Windows com credenciais da TI; o launcher
+   executa 08_PREPARAR_REDE_AMES.bat, valida a rota /32 e bloqueia sem rede.
+   A rota solicita UAC apenas quando precisa ser criada/reparada.
 5. Primeiro uso cria .venv, config.json e SQLite somente nesta pasta.
    Se Python 3.12, Google Chrome ou dependencias nao existirem, o primeiro uso requer internet.
 6. Central e Console MES usam o MESMO frontend local: http://127.0.0.1:8765/Central-de-Controle-/
@@ -108,6 +125,11 @@ INSTALACAO / TESTE — LEIA ANTES DE EXECUTAR:
 8. O primeiro login da Central pode exigir internet. Depois, Auth/Firestore usam persistencia/cache do navegador quando disponiveis.
 
 ESTE PACOTE NAO E UM UPDATER NEM UMA MIGRACAO AUTOMATICA:
+- O arquivo 01_TROCAR_PARA_PR69_NOVA.bat oferece TROCA SUPERVISIONADA
+  opcional, com confirmacao expressa e sem migracao de dados. Ele so pode
+  parar um agente/guardian antigo reconhecido; bloqueios nao devem ser forcados.
+- INSTRUCOES_INSTALACAO_LIMPA.txt e o procedimento atualizado do SHA acima.
+- Manuais/notas PR69 adicionais sao HISTORICOS e podem citar SHAs anteriores.
 - nao sobrepoe CLEAN V3;
 - nao traz banco operacional, senha, cookie, sessao CDP ou token;
 - o A-MES, agente, SQLite, coletores e scheduler continuam locais/offline por padrao;
