@@ -12,7 +12,7 @@ function fixture(){
   return {schema:'central-agent-read-v1',legacy,datasets:{pcba_history:[{line,snapshot_id:legacy.summary.snapshot_id,pcba_sn:'P',defect_code:'D1'}],material_reuse:[],history_contexts:[]},insights:{schema:'ames-insights-v1',line,snapshot_id:legacy.summary.snapshot_id,ready:true,pcba_kpis:[['PCBAs',1]],component_types:[{'Tipo material':'RAM'}],drilldowns:{pcbas:[{PCBA:'P',cookie:'secret'}]}}};
 }
 export function harness(){
-  const store=createAmesStore(),f=fixture(),calls=[],pending=[];let clock=10000;
+  const store=createAmesStore(),f=fixture(),calls=[],pending=[],events=[];let clock=10000;
   f.legacy.summary={...f.legacy.summary,snapshot_id:'17',period:{mode:'today',start_at:'2026-10-08T07:00-03:00',end_at:'2026-10-08T14:00-03:00'}};
   const routes={ready:{ok:true,ready:true,agent_build:'CANONICAL-R11-BATCH',agent_version:'0.5.23'},'v2/capabilities':{schema:'central-ames-v2',native_console:true,revision:true,cursor:true,exact_trace_targets:true,source_id:'test-source'},'v2/snapshots':()=>({ok:true,json:async()=>({snapshots:[canonicalAgentFixture(f)]})}),health:{agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY},engine_found:true},config:{configured_lines:[line],performance:'fast',production_day_start:'07:00',timezone:'America/Sao_Paulo',work_shifts:{'1':{label:'1º Turno',start:'07:30',end:'17:30'},'2':{label:'2º Turno',start:'17:30',end:'07:30'}}},monitor:{enabled:0},backup:{ok:true,backup:{path:'C:/Users/private/data/backups/ames.sqlite3',bytes:2048,created_at:'2026-10-15T09:38:00',reason:'native_console',token:'secret'}},'team-dashboard':{snapshot_ids:{[line]:f.legacy.summary.snapshot_id},lines:[{...f.legacy.summary,metrics:f.legacy.summary}]},insights:f.insights,'deep-trace':{id:'J',status:'queued'},runs:{id:'J',status:'queued'},'jobs/J':{id:'J',status:'running',stage_progress:{'3074':{line,current:1,total:3,line_percent:33}},partial_refresh:0},'jobs/J/cancel':{ok:true},'monitor/start':{enabled:true,interval_minutes:5},'monitor/stop':{enabled:false}};
   const fetcher=async(url,options)=>{
@@ -25,8 +25,8 @@ export function harness(){
     if(!value)throw Error('Unexpected route '+key);
     return {ok:true,json:async()=>structuredClone(value)};
   };
-  const client=createAgentClient(store,{fetcher,now:()=>clock,schedule:(fn,ms)=>{pending.push({fn,ms});return fn;},unschedule:fn=>{const i=pending.findIndex(x=>x.fn===fn);if(i>=0)pending.splice(i,1);}});
-  return {store,f,calls,routes,pending,client,tick:async(ms=850)=>{clock+=ms;await pending.shift().fn();}};
+  const client=createAgentClient(store,{fetcher,changed:()=>{const j=store.agent().job;if(j?.status==='done')events.push({kind:j.kind,post:!!j.post_completion_history_check});},now:()=>clock,schedule:(fn,ms)=>{pending.push({fn,ms});return fn;},unschedule:fn=>{const i=pending.findIndex(x=>x.fn===fn);if(i>=0)pending.splice(i,1);}});
+  return {store,f,calls,routes,pending,events,client,tick:async(ms=850)=>{clock+=ms;await pending.shift().fn();}};
 }
 test('real local projection is partial, line/snapshot isolated; exact CPH and manual state preserved',()=>{
   const f=fixture();f.datasets.pcba_history.push({line:'TAN10102',snapshot_id:f.legacy.summary.snapshot_id,pcba_sn:'P',defect_code:'D1'},{line,snapshot_id:'wrong',pcba_sn:'P'});
@@ -80,6 +80,23 @@ test('completed 3028 run exposes only exact per-line local snapshot receipt, not
  assert.equal(JSON.stringify(h.store.agent().job).includes('private'),false);
  h.client.clear();
 });
+
+test('previous-day completion rechecks the local history index after today-only canonical refresh',async()=>{
+ const h=harness();await h.client.connect();
+ h.routes['v2/snapshots']=()=>({ok:true,json:async()=>({snapshots:[],scope:'today'})});
+ h.routes['jobs/J']={id:'J',kind:'analysis',status:'done',result:{
+  snapshot_ids:{[line]:38},start_at:'2026-10-16T07:00:00-03:00',end_at:'2026-10-17T07:00:00-03:00'
+ }};
+ await h.client.collect('previous_day',scope);await h.tick();
+ const done=h.events.filter(e=>e.kind==='analysis');
+ assert(done.length>=2,'the completed job is published again after the today-only refresh');
+ assert.equal(done[0].post,false);
+ assert.equal(done.at(-1).post,true);
+ assert.equal(h.store.localCanonical().length,0,'canonical TODAY does not contain previous-day snapshots');
+ assert.equal(h.store.agent().job.collection_receipt.snapshot_ids[line],'38');
+ h.client.clear();
+});
+
 test('completed deep trace exposes exact local snapshot IDs for UI selection but no MES records in trace receipt',async()=>{
  const h=harness();await h.client.connect();
  h.routes['jobs/J']={id:'J',kind:'deep_trace',status:'done',result:{

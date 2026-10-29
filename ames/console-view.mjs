@@ -127,7 +127,10 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
           String(p.snapshot_id)===String(receipt.snapshot_ids[line]));
         return [line,head?.snapshot_revision||0,head?.content_hash||''];
       }):null;
-    const key=JSON.stringify([job.id,period.mode,period.start,period.end,job.collection_receipt||null,job.trace_receipt||null,localRevisions]);
+    // post_completion_history_check forces a second read from /local-history.
+    // The today-only canonical dashboard cannot indicate whether yesterday's
+    // revision has appeared in the historical index.
+    const key=JSON.stringify([job.id,period.mode,period.start,period.end,job.collection_receipt||null,job.trace_receipt||null,localRevisions,job.post_completion_history_check===true]);
     if(key===lastCompletedJobRead)return;
     lastCompletedJobRead=key;
     queueMicrotask(()=>{

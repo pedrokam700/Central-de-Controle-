@@ -153,6 +153,14 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(done||(partial!==lastPartial&&now()-lastRefresh>2200)){
         try{await refresh();lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
       }
+      // /v2/snapshots intentionally exposes TODAY only. A completed 3028
+      // previous-day capture is available through /local-history, not through
+      // that dashboard refresh. Signal a second historical-index read even if
+      // today's canonical head has not changed. This also closes the race
+      // where the initial done notification precedes the final refresh.
+      if(done&&token===generation&&(['analysis','deep_trace'].includes(raw.kind))){
+        publish({job:{...store.agent().job,post_completion_history_check:true}});
+      }
       if(!done&&token===generation)timer=schedule(()=>poll(id,token),850);
     }catch(e){if(token===generation){publish({error:'Leitura do job interrompida: '+e.message});timer=schedule(()=>poll(id,token),850);}}
   }
