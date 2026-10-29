@@ -3,7 +3,7 @@ import {classifyWorkstationReady} from './data/workstation-update-policy.mjs';
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
 import {CANONICAL_SCHEMA,DATASETS,normalizeCanonical} from './data/canonical.mjs';
 import {projectLiveJobEvents} from './data/job-live-events.mjs';
-import {exactTraceTargets} from './data/trace-targets.mjs';
+import {exactTraceTargets,refreshedTraceTarget} from './data/trace-targets.mjs';
 
 const AGENT_TOKEN_KEY='central.ames.agentToken.v1';
 function bootstrapAgentToken(explicit=''){
@@ -343,6 +343,18 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         path='/deep-trace';body={...scope};
         if(store.agent().capabilities?.exact_trace_targets!==true)throw Error('Atualize o agente para rastrear o snapshot exato do período selecionado.');
         body.snapshot_targets=exactTraceTargets(store,scope.lines);
+        // Read the most recent immutable export of the SAME local 3028
+        // snapshot before dispatch. Partial 3074/2114/3022 captures may have
+        // advanced its revision since the previous screen render. This local
+        // read is not another MES collection and cannot retarget the period.
+        for(const line of scope.lines){
+          const selected=body.snapshot_targets[line];
+          const query=new URLSearchParams({snapshot_id:String(selected.snapshot_id),line});
+          const latest=await request('/local-history?'+query);
+          normalizeCanonical(latest); // Reject incomplete/mixed canonical data.
+          body.snapshot_targets[line]=refreshedTraceTarget({...selected,line_id:line},latest);
+          delete body.snapshot_targets[line].line_id;
+        }
         if(value.trace_mode!==undefined){
           if(!['full','process_only','reuse_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
           if(value.trace_mode==='process_only'&&store.agent().capabilities?.process_timeline!==true)throw Error('process_only exige coleta 3022 em lote. Conecte um agente 3022-R12+ ou aguarde a incorporação do coletor 3022 no agente canônico.');

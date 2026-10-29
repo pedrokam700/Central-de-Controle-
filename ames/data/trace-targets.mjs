@@ -38,3 +38,23 @@ export function exactTraceTargets(store,lines){
   if(missing.length)throw Error('Coleta não iniciada: '+missing.join(' · ')+'. Selecione apenas linhas com revisão local do período ou atualize a leitura.');
   return targets;
 }
+
+
+// A prior deep trace can enrich the SAME 3028 snapshot while the operator is
+// still viewing its older immutable revision. The agent requires the current
+// revision. Validate the latest LOCAL canonical export without silently
+// switching to another 3028 snapshot, another PC, line or operational day.
+export function refreshedTraceTarget(original, current){
+  const expected=original?.period,actual=current?.summary?.period;
+  if(!expected||!actual||current?.source_id!==original.source_id||
+     current?.line_id!==original.line_id||
+     String(current?.snapshot_id)!==String(original.snapshot_id)||
+     actual.start_at!==expected.start_at||actual.end_at!==expected.end_at||
+     actual.mode!==expected.mode)
+    throw Error('Revisão local mudou de origem, linha, snapshot ou período; coleta não iniciada.');
+  if(!Number.isSafeInteger(current.snapshot_revision)||
+     current.snapshot_revision<original.snapshot_revision||
+     typeof current.content_hash!=='string'||!current.content_hash)
+    throw Error('Revisão local inválida ou anterior à selecionada; coleta não iniciada.');
+  return {...original,snapshot_revision:current.snapshot_revision,content_hash:current.content_hash};
+}
