@@ -4,7 +4,6 @@
 import {parseFailureInstant,sameFailureOccurrence} from './data/production-evidence.mjs';
 import {boardHistSeqRecurrence} from './data/reuse-cohorts.mjs';
 import {compareFailures} from './data/failure-taxonomy.mjs';
-import {parseFailureInstant} from './data/production-evidence.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
 import {knownDescription} from './defect-label.mjs';
 
