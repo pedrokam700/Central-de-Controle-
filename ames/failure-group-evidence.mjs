@@ -1,7 +1,9 @@
 // Grouped 3028 context is investigative, never an exact reuse/defect denominator.
 // A reported association needs the same PCBA + defect code + MES defect instant;
 // a PCBAs-only join must not borrow an unrelated occurrence's correlation.
-import {reuseLinks} from './data/reuse-analysis.mjs';
+import {parseFailureInstant,sameFailureOccurrence} from './data/production-evidence.mjs';
+import {boardHistSeqRecurrence} from './data/reuse-cohorts.mjs';
+import {compareFailures} from './data/failure-taxonomy.mjs';
 import {parseFailureInstant} from './data/production-evidence.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
 import {knownDescription} from './defect-label.mjs';
@@ -23,51 +25,66 @@ export function evidenceCountLabel(value){const n=Number(value?.count||0);
   return value?.exact?String(n):n>0?(value?.observed?String(n):'≥ '+n):'—';}
 export function formatFailureLastOccurrence(value){const s=formatFactoryDateTime(value,{seconds:false});return s==='—'?s:s.replace(/\s+(\d{2}:\d{2})$/,' · $1');}
 
+
+const value=(row,fields)=>fields.map(k=>nonempty(row?.[k])).find(Boolean)||'';
+const material=row=>value(row,['material_sn','item_sn','Material SN']);
+const ordinal=(row,fields)=>{const v=value(row,fields),m=/^([1-9]\d*)\s*(?:[º°.]?\s*(?:uso|use))?$/i.exec(v);return m?Number(m[1]):null;};
+const boardUse=row=>ordinal(row,['_pcba_use_index','pcba_use_index','use_index','Uso da PCBA na falha','Uso PCBA']);
+const materialUse=row=>ordinal(row,['material_use_index','known_use_count','total_pcba_count_known_now','Usos conhecidos material','Uso material na falha']);
+const unpack=v=>{if(Array.isArray(v))return v;try{const x=JSON.parse(v);if(Array.isArray(x))return x;}catch{}return typeof v==='string'?v.split(/[|,;\n]/).map(x=>x.trim()).filter(Boolean):[];};
+const exactFailure=(a,b)=>compareFailures(code(a),a.defect_desc,code(b),b.defect_desc).classification==='EXACT';
+const earlier=(h,e)=>{const htime=parseFailureInstant(h.defect_time),etime=parseFailureInstant(e.defect_time);return htime!==null&&etime!==null&&htime<etime;};
+function exactEvent(row,event){
+ if(pcba(row)!==nonempty(event.pcba_sn))return false;
+ const suppliedCode=code(row),suppliedTime=when(row),key=value(row,['current_defect_key','defect_key']);
+ if(key&&event.defect_key&&key===nonempty(event.defect_key))
+  return sameFailureOccurrence(event,{...row,pcba_sn:pcba(row),defect_key:key});
+ return Boolean(suppliedCode&&suppliedTime&&sameFailureOccurrence(event,{...row,pcba_sn:pcba(row),defect_code:suppliedCode,defect_time:suppliedTime}));
+}
+function boundAtFailure(row,event){
+ const time=parseFailureInstant(event.defect_time);if(time===null)return false;
+ const from=value(row,['bind_time_utc','bind_time','Bind Time']),to=value(row,['unbind_time_utc','unbind_time','Unbind Time']);
+ const started=from?parseFailureInstant(from):null,ended=to?parseFailureInstant(to):null;
+ if(from&&started===null||to&&ended===null)return false;
+ if(started!==null&&started>time||ended!==null&&ended<=time)return false;
+ return Boolean(started!==null||(materialUse(row)>=2&&value(row,['Uso material na falha']))||
+ ['Y','YES','TRUE','1'].includes(value(row,['linked_at_defect','binding_active_at_defect','is_current_at_failure']).toUpperCase()));
+}
+const observed=set=>({count:set.size,observed:true,population_complete:false});
+
+/** Four investigation counts: all units are distinct CURRENT PCBAs by failure
+ * mode. Ten reused materials on one board are ONE affected board.
+ * Every current component correlation requires an exact occurrence and
+ * a source-supported binding at that defect; unknown is not a proven zero.
+ */
 export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailureName){
- const reuseBoards=new Set(keysOf(snapshot,['pcba_second_use','pcba_3plus_use','pcba_reused_with_prior_failure']).map(pcba).filter(Boolean));
- const observedLinks=reuseLinks(snapshot||{});
- const itemBoards=new Set(observedLinks.map(x=>nonempty(x.pcba)).filter(Boolean));
- const materialsByOccurrence=new Map();
- for(const link of observedLinks){
-   const key=identity(link),material=nonempty(link.material);
-   if(!key||!material)continue;
-   if(!materialsByOccurrence.has(key))materialsByOccurrence.set(key,new Set());
-   materialsByOccurrence.get(key).add(material);
- }
- // The newer canonical insight may expose a numeric or a human-readable ordinal
- // instead of the old categorical drilldowns. Count these only when they
- // explicitly prove 2nd+ use; do not infer use from past defects alone.
- const reuseOrdinal=(row,keys)=>{
-   const raw=first(row,keys),match=/^(\d+)\s*(?:[º°.]?\s*(?:uso|use))?$/i.exec(raw);
-   return match?Number(match[1]):null;
- };
- for(const row of named(snapshot,'pcba_analysis'))
-   if(reuseOrdinal(row,['pcba_use_index','use_index','Uso da PCBA na falha','Uso PCBA'])>=2&&pcba(row))reuseBoards.add(pcba(row));
- for(const row of named(snapshot,'material_analysis'))
-   if(reuseOrdinal(row,['material_use_index','use_index','known_use_count','Uso material na falha','Usos conhecidos material'])>=2
-      &&first(row,['material_sn','item_sn','Material SN'])&&pcba(row))itemBoards.add(pcba(row));
- // Association rows without a concrete defect code/time are not sufficient.
- const relatedIds=new Set(keysOf(snapshot,[
-   'pcba_same_failure','pcba_same_family','pcba_second_use_same_failure','pcba_second_use_same_family',
-   'correlation_same_failure','correlation_same_family','material_same_failure','material_same_family'
- ]).map(identity).filter(Boolean));
+ const boardReused=new Set(keysOf(snapshot,['pcba_second_use','pcba_3plus_use','pcba_reused_with_prior_failure']).map(pcba).filter(Boolean));
+ for(const row of named(snapshot,'pcba_analysis'))if(pcba(row)&&boardUse(row)>=2)boardReused.add(pcba(row));
+ const history=snapshot?.pcba_history?.records||[];
+ const components=[...(snapshot?.material_trace?.records||[]),...named(snapshot,'material_analysis')];
  const grouped=new Map();
- for(const row of rows){
-   const group=nameOf(row);if(!grouped.has(group))grouped.set(group,{boards:new Set(),occurrences:new Map()});
-   const current=grouped.get(group),board=nonempty(row.pcba_sn),key=identity(row);
-   if(board)current.boards.add(board);
-   if(key)current.occurrences.set(key,board);
+ for(const e of rows){const group=nameOf(e);if(!grouped.has(group))grouped.set(group,{events:[],b:new Set(),bSame:new Set(),materialBoards:new Set(),materialSame:new Set()});if(e.pcba_sn)grouped.get(group).events.push(e);}
+ for(const g of grouped.values())for(const e of g.events){
+  const board=nonempty(e.pcba_sn);
+  if(boardReused.has(board)){
+   g.b.add(board);
+   if(history.some(h=>pcba(h)===board&&earlier(h,e)&&exactFailure(h,e))||
+      boardHistSeqRecurrence(e,history).some(h=>exactFailure(h,e))||
+      keysOf(snapshot,['pcba_same_failure','pcba_second_use_same_failure']).some(h=>exactEvent(h,e)))g.bSame.add(board);
+  }
+  const links=components.filter(r=>material(r)&&materialUse(r)>=2&&exactEvent(r,e)&&boundAtFailure(r,e));
+  if(!links.length)continue;
+  g.materialBoards.add(board);
+  for(const link of links){
+   const previous=[...new Set(unpack(value(link,['previous_pcbas_json','previous_pcbas','PCBAs desvinculadas'])).filter(Boolean))];
+   if(!previous.length)continue;
+   const same=history.some(h=>previous.includes(pcba(h))&&earlier(h,e)&&exactFailure(h,e))||
+    keysOf(snapshot,['material_same_failure','correlation_same_failure']).some(h=>material(h)===material(link)&&exactEvent(h,e));
+   if(same){g.materialSame.add(board);break;}
+  }
  }
- const output={};
- for(const [name,g] of grouped){
-   const relatedBoards=new Set([...g.occurrences].filter(([k])=>relatedIds.has(k)).map(([,board])=>board));
-   const physical=new Set([...g.occurrences].flatMap(([k])=>[...(materialsByOccurrence.get(k)||[])]));
-   output[name]={
-     pcbaReuse:result(reuseBoards,g.boards),
-     itemReuse:result(itemBoards,g.boards),
-     physicalMaterials:{count:physical.size,observed:true,population_complete:false},
-     sameFailureOrFamily:{count:relatedBoards.size,observed:true,population_complete:false},
-   };
- }
- return output;
+ const out={};
+ for(const [name,g] of grouped)out[name]={pcbaReuse:observed(g.b),pcbaSameFailure:observed(g.bSame),
+  componentAffected:observed(g.materialBoards),componentSameFailureAffected:observed(g.materialSame)};
+ return out;
 }
