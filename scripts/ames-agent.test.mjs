@@ -17,6 +17,15 @@ export function harness(){
   const routes={ready:{ok:true,ready:true,agent_build:'CANONICAL-R11-BATCH',agent_version:'0.5.23'},'v2/capabilities':{schema:'central-ames-v2',native_console:true,revision:true,cursor:true,exact_trace_targets:true,source_id:'test-source'},'v2/snapshots':()=>({ok:true,json:async()=>({snapshots:[canonicalAgentFixture(f)]})}),health:{agent_version:'0.5.23',mes_scheduler:{policy:SCHEDULER_POLICY},engine_found:true},config:{configured_lines:[line],performance:'fast',production_day_start:'07:00',timezone:'America/Sao_Paulo',work_shifts:{'1':{label:'1º Turno',start:'07:30',end:'17:30'},'2':{label:'2º Turno',start:'17:30',end:'07:30'}}},monitor:{enabled:0},backup:{ok:true,backup:{path:'C:/Users/private/data/backups/ames.sqlite3',bytes:2048,created_at:'2026-10-15T09:38:00',reason:'native_console',token:'secret'}},'team-dashboard':{snapshot_ids:{[line]:f.legacy.summary.snapshot_id},lines:[{...f.legacy.summary,metrics:f.legacy.summary}]},insights:f.insights,'deep-trace':{id:'J',status:'queued'},runs:{id:'J',status:'queued'},'jobs/J':{id:'J',status:'running',stage_progress:{'3074':{line,current:1,total:3,line_percent:33}},partial_refresh:0},'jobs/J/cancel':{ok:true},'monitor/start':{enabled:true,interval_minutes:5},'monitor/stop':{enabled:false}};
   const fetcher=async(url,options)=>{
     const u=new URL(url),key=u.pathname.replace('/api/v1/','');calls.push({key,body:options.body&&JSON.parse(options.body),options,url});
+    if(key==='local-history'&&!Object.hasOwn(routes,'local-history')){
+      // A trace preflight reads the current revision of the operator-selected
+      // on-machine snapshot. Use that SAME identity instead of fixture TODAY
+      // (older period / different snapshot must not be silently substituted).
+      const chosen=store.read(line).snapshot?.canonical;
+      if(!chosen||String(chosen.snapshot_id)!==u.searchParams.get('snapshot_id')||
+         chosen.line_id!==u.searchParams.get('line'))throw Error('Unexpected local-history identity');
+      return {ok:true,json:async()=>structuredClone(chosen)};
+    }
     if(key==='v2/records')return {ok:true,json:async()=>canonicalResponse(canonicalAgentFixture(f),u)};
     if(key==='base')return {ok:true,json:async()=>({rows:u.searchParams.get('dataset')==='defects'?f.legacy.defects:(f.datasets[u.searchParams.get('dataset')]||[])})};
     if(key==='base/catalog')return {ok:true,json:async()=>({datasets:[{dataset:'defects',rows:f.legacy.defects.length}]})};
