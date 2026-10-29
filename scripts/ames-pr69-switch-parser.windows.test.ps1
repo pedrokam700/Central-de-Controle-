@@ -42,4 +42,4 @@ foreach($case in $cases){
   $actual=RelauncherType $process
   if($actual -cne $case.want){throw "Launcher classification failed: $($case.name); expected=$($case.want); actual=$actual"}
 }
-Write-Host ('PR69 Windows switcher syntax and '+$cases.Count+' classification cases: PASS')
+Write-Output ('PR69 Windows switcher syntax and '+$cases.Count+' classification cases: PASS')
