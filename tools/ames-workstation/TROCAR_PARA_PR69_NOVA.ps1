@@ -35,6 +35,17 @@ public static class PR69Argv {
 '@
 function Args($line){if(-not $line){return @()};return @([PR69Argv]::Split([string]$line))}
 function After($args,[string]$flag){for($i=0;$i -lt $args.Count-1;$i++){if($args[$i] -ieq $flag){return $args[$i+1]}};return $null}
+function RelauncherType($process){
+  if(-not $process -or -not $process.CommandLine){return $null}
+  $exe=[IO.Path]::GetFileName([string]$process.ExecutablePath)
+  if($exe -notin @('powershell.exe','pwsh.exe')){return $null}
+  $entry=After (Args $process.CommandLine) '-File'
+  if(-not $entry){return $null}
+  $leaf=[IO.Path]::GetFileName([string]$entry)
+  if($leaf -ieq 'KEEP_AGENT_RUNNING.ps1'){return 'guardian'}
+  if($leaf -in @('START_AGENT_CANONICAL.ps1','START_LOCAL_CANDIDATE.ps1')){return 'launcher'}
+  return $null
+}
 function Identify($process){
   if(-not $process -or -not $process.CommandLine){return $null}
   $argv=Args $process.CommandLine
@@ -49,11 +60,24 @@ function Identify($process){
     }
   }elseif($exe -in @('powershell.exe','pwsh.exe')){
     $entry=After $argv '-File'
-    if($entry -and [IO.Path]::GetFileName($entry) -ieq 'KEEP_AGENT_RUNNING.ps1'){
-      $root=RootFor $entry 'ames-workstation'
-      $given=Full (After $argv '-Root')
-      if(-not $given -or -not(EqualPath $given $root)){$root=$null}
-      $kind='guardian'
+    if($entry){
+      $leaf=[IO.Path]::GetFileName([string]$entry)
+      if($leaf -in @('KEEP_AGENT_RUNNING.ps1','START_AGENT_CANONICAL.ps1')){
+        $root=RootFor $entry 'ames-workstation'
+        $given=Full (After $argv '-Root')
+        if(-not $given -or -not(EqualPath $given $root)){$root=$null}
+        if($leaf -ieq 'KEEP_AGENT_RUNNING.ps1'){$kind='guardian'}else{$kind='launcher'}
+      }elseif($leaf -ieq 'START_LOCAL_CANDIDATE.ps1'){
+        $path=Full $entry
+        if($path -and (Test-Path -LiteralPath $path -PathType Leaf)){
+          $candidateRoot=Split-Path $path -Parent
+          if((RootFor (Join-Path $candidateRoot 'ames-agent\agent_hardened_entry.py') 'ames-agent') -and
+             (Test-Path -LiteralPath (Join-Path $candidateRoot 'START_LOCAL_CANDIDATE.ps1') -PathType Leaf)){
+            $root=$candidateRoot
+          }
+        }
+        $kind='launcher'
+      }
     }
   }
   if(-not $kind -or -not $root){return $null}
@@ -107,6 +131,32 @@ try {
   $mutex=New-Object System.Threading.Mutex($false,'Global\CentralAMES.UpdateTransaction.8765')
   try{$held=$mutex.WaitOne(12000)}catch [System.Threading.AbandonedMutexException]{$held=$true}
   if(-not $held){Fail 'Trava de atualizacao ocupada; nenhum agente encerrado.'}
+  # The canonical starter can still be completing a legitimate bootstrap when
+  # the operator clicks TROCAR. Let it exit on its own; never kill a launcher
+  # whose PID has not been independently attested to a single package root.
+  $waitDeadline=(Get-Date).AddSeconds(75)
+  $announcedWait=$false
+  while($true){
+    $all=@(Get-CimInstance Win32_Process -ErrorAction Stop)
+    $known=@($all | ForEach-Object {Identify $_} | Where-Object {$_})
+    $launchers=@($all | Where-Object {(RelauncherType $_) -eq 'launcher'})
+    foreach($launcher in $launchers){
+      $match=@($known | Where-Object {$_.pid -eq $launcher.ProcessId -and $_.kind -eq 'launcher'})
+      if($match.Count -ne 1){
+        $leaf=[IO.Path]::GetFileName([string](After (Args $launcher.CommandLine) '-File'))
+        Fail "Inicializador A-MES nao reconhecido PID $($launcher.ProcessId) ($leaf); preservado sem encerrar nenhum agente."
+      }
+      if(EqualPath $match[0].root $NewRoot){Fail 'Inicializador da nova pasta ja esta em andamento; aguarde seu encerramento.'}
+    }
+    if($launchers.Count -eq 0){break}
+    if(-not $announcedWait){Write-Host '[AGUARDANDO] Inicializador A-MES antigo ainda finalizando; ate 75 segundos, sem encerrar nenhum PID.' -ForegroundColor Yellow;$announcedWait=$true}
+    if((Get-Date) -ge $waitDeadline){
+      Fail "Inicializador A-MES PID $($launchers[0].ProcessId) segue ativo depois de 75 segundos; nenhum agente encerrado."
+    }
+    Start-Sleep -Seconds 2
+  }
+  # Reinspect immediately after the last launcher exits. The transaction
+  # mutex suppresses enrolled guardians throughout this supervised transition.
   $all=@(Get-CimInstance Win32_Process -ErrorAction Stop)
   $known=@($all | ForEach-Object {Identify $_} | Where-Object {$_})
   $listeners=ListenerPids
@@ -114,11 +164,13 @@ try {
     if(@($known|Where-Object {$_.pid -eq $listener -and $_.kind -eq 'agent'}).Count -ne 1){Fail "Porta 8765 pertence a PID nao reconhecido: $listener"}
   }
   foreach($process in $all){
-    if($process.CommandLine -match 'KEEP_AGENT_RUNNING\.ps1|START_AGENT_CANONICAL\.ps1' -and
-      -not(@($known|Where-Object {$_.pid -eq $process.ProcessId}).Count)){
-      Fail "Relauncher nao reconhecido PID $($process.ProcessId); troca bloqueada."
+    $type=RelauncherType $process
+    if($type -and -not(@($known|Where-Object {$_.pid -eq $process.ProcessId -and $_.kind -eq $type}).Count)){
+      $entry=[IO.Path]::GetFileName([string](After (Args $process.CommandLine) '-File'))
+      Fail "Relauncher A-MES nao reconhecido PID $($process.ProcessId) ($entry); troca bloqueada."
     }
   }
+  if(@($known|Where-Object {$_.kind -eq 'launcher'}).Count){Fail 'Outro inicializador A-MES comecou durante o inventario; aguarde e tente novamente.'}
   $roots=@($known|ForEach-Object {$_.root}|Sort-Object -Unique)
   if($roots.Count -gt 1){Fail 'Mais de uma instalacao ativa; precisa de investigacao manual.'}
   if($roots.Count -eq 0){Fail 'Nenhum agente/guardian antigo identificado; para PC virgem, use 00_INICIAR_AQUI.bat.'}

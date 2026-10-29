@@ -53,3 +53,18 @@ test('Troca supervisionada exige versao assinada, confirmacao e protecao de guar
   assert.ok(switcher.indexOf('if($answer -ne 6)')>switcher.indexOf('Nenhum agente/guardian antigo identificado'));
   assert.ok(switcher.indexOf('if($answer -ne 6)')<switcher.indexOf('if($oldRun){WriteRun $null}'));
 });
+
+test('Troca reconhece o launcher canonico antigo e espera sua saida sem encerrar PID desconhecido',()=>{
+  assert.match(switcher,/function RelauncherType\(\$process\)/);
+  assert.match(switcher,/START_AGENT_CANONICAL\.ps1','START_LOCAL_CANDIDATE\.ps1/);
+  assert.match(switcher,/\$entry=After \(Args \$process\.CommandLine\) '-File'/);
+  assert.match(switcher,/\$kind='launcher'/);
+  assert.match(switcher,/\$waitDeadline=\(Get-Date\)\.AddSeconds\(75\)/);
+  assert.match(switcher,/Start-Sleep -Seconds 2/);
+  assert.match(switcher,/Inicializador A-MES nao reconhecido PID/);
+  assert.match(switcher,/\$match\.Count -ne 1/);
+  assert.match(switcher,/if\(@\(\$known\|Where-Object \{\$_.kind -eq 'launcher'\}\)\.Count\)/);
+  assert.doesNotMatch(switcher,/\$process\.CommandLine -match 'KEEP_AGENT_RUNNING/);
+  assert.ok(switcher.indexOf('if($launchers.Count -eq 0){break}')<switcher.indexOf('$listeners=ListenerPids'));
+  assert.ok(switcher.indexOf('if(@($known|Where-Object {$_.kind -eq \'launcher\'}).Count)')<switcher.indexOf('StopKnown $process'));
+});
