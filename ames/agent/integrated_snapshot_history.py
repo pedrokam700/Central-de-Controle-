@@ -96,14 +96,25 @@ def recover_snapshot_line(versions, line, base_rows):
         # Preserve all rows of the chosen latest base query as they are required
         # to recover PCBA self-use (Barcode + Aut Cmf1), not just material use.
         if board["bases"]:
-            item["base_query"] = max(board["bases"], key=lambda x:x[0])[1]
+            def base_score(pair):
+                _, query = pair
+                own_rows = [row for row in query.get("rows") or []
+                            if str(row.get("Barcode") or "").strip() == sn]
+                self_rows = [row for row in own_rows
+                             if str(row.get("Aut Cmf1") or "").strip().upper() == "PCBA"
+                             or "pcba" in str(row.get("Sn Type") or "").lower()]
+                return (bool(self_rows), len(own_rows), pair[0])
+            item["base_query"] = max(board["bases"], key=base_score)[1]
             for row in (item["base_query"].get("rows") or []):
                 if str(row.get("Barcode") or "").strip() != sn:
                     continue
                 if str(row.get("Aut Cmf1") or "").strip().upper() == "PCBA" or "pcba" in str(row.get("Sn Type") or "").lower():
                     self_linked.add(sn)
                     break
-        item["status"] = "COMPLETE" if all(_complete(t) for t in item["defect_traces"]) else "PARTIAL"
+        item["status"] = ("COMPLETE" if (
+            all(_complete(t) for t in item["defect_traces"])
+            and all(_complete(board["source"][key]) for key in traces)
+        ) else "PARTIAL")
         items.append(item)
         permitted_history.add(sn)
         permitted_history.update(_old_pcbas(item))
