@@ -266,8 +266,15 @@ def export_revision(store,sid,line,insight_builder=None):
         }
         insights=None
         if insight_builder:
-            try:insights=insight_builder(line=line,snapshot_id=sid)
-            except Exception:pass
+            try:
+                insights=insight_builder(line=line,snapshot_id=sid)
+            except Exception:
+                # Do not silently classify missing evidence as zero reuse.
+                # Never expose SNs, SQL, exception text or tokens in the API.
+                insights={"schema":"ames-insights-v1","ready":False,
+                          "reason":"LOCAL_INSIGHT_BUILD_FAILED",
+                          "message":"Falha na classificação local de reuso; dados MES salvos preservados.",
+                          "drilldowns":{},"population_complete":False}
         payload={'projection_version':PROJECTION_VERSION,'schema':SCHEMA,'schema_version':2,'source_id':source,'snapshot_id':str(sid),'line_id':line,'collected_at':snap['collected_at'],'source_view':'3028','source_timestamp':None,'summary':{'period':dict(con.execute('SELECT start_at,end_at,mode FROM analysis_windows WHERE id=?',(snap['window_id'],)).fetchone() or {}),'line':line,'snapshot_id':str(sid),'collected_at':snap['collected_at'],'fpy':m.get('fpy'),'check_fpy':m.get('check_fpy'),'quantity':m.get('quantity'),'defect_rows':len(sets['defects'])},'datasets':sets,'coverage':coverage,'source_coverage':source_coverage,'insights':insights,'process_contexts':process_contexts,'material_candidates':material_candidates,'capabilities':{'process_timeline':bool(sets['process_timeline'])}}
         fingerprint=digest(payload)
         if previous and previous['content_hash']==fingerprint:
