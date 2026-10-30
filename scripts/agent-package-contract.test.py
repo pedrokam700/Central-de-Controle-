@@ -134,7 +134,10 @@ def test_pr69_clean_retains_supervised_switch_and_first_run_network():
     assert startup.index("Get-NetTCPConnection -LocalPort 8765") < startup.index("08_PREPARAR_REDE_AMES.bat") < startup.index("01_INSTALAR_UMA_VEZ.bat")
     assert "if($LASTEXITCODE -ne 0){throw 'Rede A-MES nao validada" in startup
     assert "netsh wlan connect name=$Profile" in route
-    assert "TAXXX_5G nao conectado" in route
+    assert "TAXXX_5G nao identificado" in route
+    assert "Resolve-WlanGuidForSsid $wifi $Profile" in route
+    assert "Resolve-WifiInterfaceIndex @(Get-NetAdapter -ErrorAction Stop) $wlanGuid" in route
+    assert "Get-NetConnectionProfile -ErrorAction Stop | Where-Object { $_.Name -eq $Profile }" not in route
     assert "-Verb RunAs -Wait -PassThru" in route
     assert "172.29.185.215" in route
     assert "255.255.255.255" in route
