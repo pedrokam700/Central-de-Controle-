@@ -1,6 +1,42 @@
 from __future__ import annotations
 
+# Issue #57: reject a direct Python launch during a pending update/recovery,
+# before importing MES, opening the store or loading any workstation settings.
+# This is only defense in depth; it does NOT attest exclusive maintenance idle.
+import os as _issue57_os
+import stat as _issue57_stat
+from pathlib import Path as _Issue57Path
+
+
+def _issue57_refuse_pending_recovery():
+    try:
+        install_root = _Issue57Path(__file__).resolve().parent.parent
+        metadata_dir = install_root / '.ames-update'
+    except (OSError, RuntimeError, ValueError):
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED') from None
+    try:
+        metadata = metadata_dir.lstat()
+    except FileNotFoundError:
+        return  # The existing installation has never started an update.
+    except OSError:
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED') from None
+    reparse = (getattr(metadata, 'st_file_attributes', 0)
+               & getattr(_issue57_stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))
+    if not _issue57_stat.S_ISDIR(metadata.st_mode) or reparse:
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED')
+    try:
+        with _issue57_os.scandir(metadata_dir) as entries:
+            if next(entries, None) is not None:
+                # claim.lock alone, journal, unexpected files: manual recovery.
+                raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED')
+    except OSError:
+        raise SystemExit('UPDATE_PENDING_OR_UNVERIFIED') from None
+
+
+_issue57_refuse_pending_recovery()
+
 from mes_scheduler import MES, mes_call, Cancelled, MonitorSkipped
+from maintenance_admission import MAINTENANCE, MaintenanceBlocked
 
 import argparse
 import base64
@@ -25,6 +61,7 @@ from urllib.request import Request, urlopen
 
 from ames_3028 import parse_export
 from ames_3028_live import collect_live_3028 as _collect_live_3028
+from comment_provenance_3028 import preserve_3028_comment
 collect_live_3028 = mes_call(_collect_live_3028)
 from engine_bridge import (choose_current_history, discover_engine, refresh_2114, repair_state,
                            run_full_v016, run_deep_v016_records, run_individual_lookup, regenerate_v016_excel, build_trace_insights)
@@ -291,7 +328,7 @@ def _persist_3028_live(live, *, mode="today", start_at=None, end_at=None, shift=
     validations = live.get("validations") or []
     for line in actual_lines:
         line_metrics = [m for m in (live.get("line_metrics") or []) if normalize_line_id(m.get("line")) == line]
-        line_records = [r for r in (live.get("records") or []) if normalize_line_id(r.get("line")) == line]
+        line_records = [preserve_3028_comment(r) for r in (live.get("records") or []) if normalize_line_id(r.get("line")) == line]
         line_caps = [c for c in captures if normalize_line_id(c.get("lineId")) == line]
         line_valid = [v for v in validations if normalize_line_id(v.get("line")) == line]
         line_live = {
@@ -550,6 +587,18 @@ def _launch_mes_job(kind, cfg, worker, monitor=False):
 
 
 def _launch_new_mes_job(kind, cfg, worker, monitor=False, admission=None):
+    try:
+        # Include the SQLite queued-row write and monitor reservation in a
+        # single admission. An idle observation alone does not close this race.
+        with MAINTENANCE.mutation():
+            return _launch_new_admitted_mes_job(kind, cfg, worker, monitor, admission)
+    except MaintenanceBlocked:
+        if monitor:
+            return None  # Internal timer tick is skipped during a drain.
+        raise
+
+
+def _launch_new_admitted_mes_job(kind, cfg, worker, monitor=False, admission=None):
     reservation = MES.reserve_monitor() if monitor else None
     if monitor and reservation is None:
         return None  # No job/status row or queued thread for a skipped tick.
@@ -569,10 +618,21 @@ def _launch_new_mes_job(kind, cfg, worker, monitor=False, admission=None):
             except Exception as exc:
                 _persist_job(_job_update(job['id'],status='error',stage='error',finished_at=utc_now(),message=str(exc),error=type(exc).__name__))
             finally:
-                _job_update(job["id"], mes_state="idle")
-                with JOBS_LOCK:
-                    JOB_CANCEL.pop(job["id"], None)
-        threading.Thread(target=run, daemon=True).start()
+                try:
+                    _job_update(job["id"], mes_state="idle")
+                    with JOBS_LOCK:
+                        JOB_CANCEL.pop(job["id"], None)
+                finally:
+                    # The ticket bridges the short HTTP/scheduler admission
+                    # and the actual MES thread, including its final writes.
+                    background_work.finish()
+        background_work = MAINTENANCE.reserve_background_work()
+        try:
+            threading.Thread(target=run, daemon=True).start()
+        except BaseException:
+            # Thread.start may fail before ownership reaches the worker.
+            background_work.finish()
+            raise
         return job
     except BaseException:
         if reservation is not None:
@@ -691,12 +751,36 @@ def trace_insights(line=None, snapshot_id=None):
     payload = STORE.get_snapshot_payload(snapshot_id, kinds=["integrated_v016"])
     if not payload:
         return {"schema":"ames-insights-v1","line":line or None,"snapshot_id":snapshot_id,"ready":False,"message":"Este snapshot ainda não terminou o enriquecimento 3074/2114.","drilldowns":{}}
+    # Do not change the established single-revision path. Only multiple
+    # historical captures of this exact snapshot may be reconciled locally.
+    reconstruction = None
+    if line:
+        revisions = STORE.snapshot_payload_history(snapshot_id, "integrated_v016")
+        if len(revisions) > 1:
+            if len(revisions) > 512:
+                return {"schema":"ames-insights-v1","line":line,"snapshot_id":snapshot_id,
+                        "ready":False,"reason":"LOCAL_HISTORY_LIMIT",
+                        "message":"Muitas revisões locais; revisão manual necessária, sem nova coleta MES.",
+                        "drilldowns":{}}
+            from integrated_snapshot_history import recover_snapshot_line
+            versions = [STORE.get_snapshot_payload_revision(
+                snapshot_id, "integrated_v016", int(row["revision"])) for row in revisions]
+            current = STORE.base_rows(snapshot_id=snapshot_id, line=line, limit=100000)
+            recovered, reconstruction = recover_snapshot_line(versions, line, current)
+            if recovered is not None:
+                payload = recovered
     engine = discover_engine(CONFIG, BASE_DIR)
     if not engine:
         raise RuntimeError("Motor V0.16 não encontrado para gerar indicadores de reuso")
     out = build_trace_insights(engine, payload, line=line or None)
     out["snapshot_id"] = snapshot_id
     out["ready"] = True
+    if reconstruction is not None:
+        out["local_reconstruction"] = reconstruction
+        out["population_complete"] = False
+        if reconstruction.get("reason") != "read_only_local_recovery":
+            out["ready"] = False
+            out["message"] = "A 3074 não comprovou as ocorrências selecionadas; usos indeterminados não são primeiro uso."
     return out
 
 
@@ -1116,32 +1200,40 @@ def today_window():
 
 def monitor_loop():
     while not MONITOR_STOP.wait(5):
-        with STORE.connect() as con:
-            row = con.execute("SELECT * FROM monitor_profiles WHERE id=1").fetchone()
-        if not row or not row["enabled"]:
-            continue
-        cfg = json.loads(row["config_json"] or "{}")
-        interval = max(5, int(row["interval_minutes"] or 30))
-        next_run = row["next_run_at"]
-        due = True
-        if next_run:
-            try:
-                due = datetime.fromisoformat(next_run) <= datetime.now()
-            except ValueError:
-                due = True
-        if not due:
-            continue
-        if cfg.get("mode") == "today":
-            start_at, end_at = today_window()
-        else:
-            start_at, end_at = previous_day_window()
-        run_cfg = dict(cfg)
-        run_cfg.update({"start_at": start_at, "end_at": end_at, "mode": cfg.get("mode", "today")})
-        start_job(run_cfg, monitor=True)
-        nxt = datetime.now() + timedelta(minutes=interval)
-        with STORE.connect() as con:
-            con.execute("UPDATE monitor_profiles SET next_run_at=?,updated_at=? WHERE id=1",
-                        (nxt.isoformat(timespec="seconds"), utc_now()))
+        try:
+            with MAINTENANCE.mutation():
+                _monitor_tick()
+        except MaintenanceBlocked:
+            continue  # No scheduling metadata writes while draining.
+
+
+def _monitor_tick():
+    with STORE.connect() as con:
+        row = con.execute("SELECT * FROM monitor_profiles WHERE id=1").fetchone()
+    if not row or not row["enabled"]:
+        return
+    cfg = json.loads(row["config_json"] or "{}")
+    interval = max(5, int(row["interval_minutes"] or 30))
+    next_run = row["next_run_at"]
+    due = True
+    if next_run:
+        try:
+            due = datetime.fromisoformat(next_run) <= datetime.now()
+        except ValueError:
+            due = True
+    if not due:
+        return
+    if cfg.get("mode") == "today":
+        start_at, end_at = today_window()
+    else:
+        start_at, end_at = previous_day_window()
+    run_cfg = dict(cfg)
+    run_cfg.update({"start_at": start_at, "end_at": end_at, "mode": cfg.get("mode", "today")})
+    start_job(run_cfg, monitor=True)
+    nxt = datetime.now() + timedelta(minutes=interval)
+    with STORE.connect() as con:
+        con.execute("UPDATE monitor_profiles SET next_run_at=?,updated_at=? WHERE id=1",
+                    (nxt.isoformat(timespec="seconds"), utc_now()))
 
 
 def ensure_monitor_thread():

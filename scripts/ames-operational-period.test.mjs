@@ -30,6 +30,19 @@ test('only explicit live scope and exact current period may affect Today',()=>{
   assert.equal(periodIdentity(previous).operational_date,'2026-10-16');
 });
 
+test('equivalent UTC and factory-offset periods are one live production day',()=>{
+  const local=p('today','2026-10-19T07:00:00-03:00','2026-10-19T09:45:00-03:00');
+  const utc=p('today','2026-10-19T10:00:00Z','2026-10-19T12:45:00Z');
+  assert.deepEqual(periodIdentity(local),periodIdentity(utc));
+  assert.equal(isTodaySnapshot(utc,now),true);
+  assert.equal(publicationIntent(utc,now),'today');
+  assert.equal(isTodaySnapshot(p('today','2026-10-19T10:00:01Z','2026-10-19T12:45:00Z'),now),false,
+    'nonzero seconds must not round up to the factory boundary');
+  assert.equal(isTodaySnapshot(p('today','2026-10-19T10:00:00Z','2026-10-20T10:00:01Z'),now),false,
+    'overrunning the production window must remain historical');
+  assert.equal(isTodaySnapshot(p('today','2026-10-19T10:00:00Z','invalid'),now),false);
+});
+
 test('unproved calendar or query intent is historical fail-closed',()=>{
   assert.equal(publicationIntent(p(null,'2026-10-19T07:00','2026-10-19T09:00'),now),'history');
   assert.equal(publicationIntent(p('custom','',''),now),'history');

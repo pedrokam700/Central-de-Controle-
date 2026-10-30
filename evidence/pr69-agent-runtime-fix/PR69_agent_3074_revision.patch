@@ -1,0 +1,133 @@
+--- before/ames-agent/agent_entry.py
++++ after/ames-agent/agent_entry.py
+@@ -95,6 +95,52 @@
+     return ids
+ 
+ 
++def _rebase_trace_targets_at_execution(cfg, attempts=3):
++    """Resolve an operator-selected 3028 snapshot *at MES job execution*.
++
++    Admission and queue execution can be separated by SQLite writes from an
++    earlier trace/repair. A browser-only refresh cannot close this interval.
++    A changed revision is acceptable ONLY on the same workstation, line,
++    3028 snapshot and operational period. Never retarget to a newer snapshot.
++    The current-epoch validation is repeated a bounded number of times when
++    a background evidence write races the canonical export. No MES access.
++    """
++    original=cfg.get('snapshot_targets') or {}
++    lines=cfg.get('lines') or []
++    last_error=None
++    for _ in range(attempts):
++        targets={}
++        for line in lines:
++            expected=original.get(line)
++            if not isinstance(expected,dict):
++                raise ValueError('Explicit trace snapshot target required')
++            sid=int(expected.get('snapshot_id') or 0)
++            if sid<=0:raise ValueError('Invalid trace snapshot ID')
++            latest=canonical.export_revision(a.STORE,sid,line,a.trace_insights)
++            period=latest.get('summary',{}).get('period')
++            if (latest.get('source_id')!=expected.get('source_id') or
++                latest.get('line_id')!=line or
++                str(latest.get('snapshot_id'))!=str(sid) or
++                period!=expected.get('period')):
++                raise ValueError('Trace target identity changed; not retargeting')
++            new_revision=latest.get('snapshot_revision')
++            if type(new_revision) is not int or new_revision<int(expected.get('snapshot_revision') or 0):
++                raise ValueError('Invalid or downgraded trace revision')
++            targets[line]={**expected,'snapshot_revision':new_revision,
++                           'content_hash':latest.get('content_hash')}
++        candidate={**cfg,'snapshot_targets':targets}
++        try:
++            _trace_snapshot_ids(candidate,require_current=True)
++        except ValueError as exc:
++            if str(exc)!='Trace revision changed; reload the selected period':
++                raise
++            last_error=exc
++            continue
++        cfg['snapshot_targets']=targets
++        return {line:int(targets[line]['snapshot_id']) for line in lines}
++    raise last_error or ValueError('Trace revision could not be stabilized')
++
++
+ def _run_deep_trace_job(job_id, cfg):
+     mode=str(cfg.get("trace_mode") or "full").strip().lower()
+     if mode not in {"full","process_only","reuse_only"}:
+@@ -107,7 +153,7 @@
+                       scope={"trace_mode":mode})
+     a._persist_job(job)
+     try:
+-        ids=_trace_snapshot_ids(cfg,require_current=True)
++        ids=_rebase_trace_targets_at_execution(cfg)
+         engine=a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR)
+         if not engine:raise RuntimeError("Motor V0.16 nao encontrado")
+         lines=a.normalize_lines(cfg.get("lines") or a.CONFIG.get("configured_lines") or [])
+--- before/ames-agent/engine_bridge.py
++++ after/ames-agent/engine_bridge.py
+@@ -86,6 +86,54 @@
+             importlib.import_module("core.fluxo_3028_3074")._atomic_json(path, checkpoint)
+     return result
+ 
++
++
++def summarize_3074_capture(result):
++    """Distinguish extraction coverage from unproven component reuse.
++
++    CLEAN's collector returns counts/items but no top-level source_status on
++    complete runs. Missing status must not be reinterpreted as not_run. On the
++    other hand, a completed job is NOT complete evidence when a PCBA failed or
++    an ExtJS store only returned the first page. Preserve all raw rows.
++    """
++    items=(result or {}).get('items') or []
++    expected=(result or {}).get('requested_pcba_count')
++    processed=(result or {}).get('processed_pcba_count')
++    errors=(result or {}).get('pcba_error_count')
++    partial_pages=[]; pcba_errors=[]; missing=[]
++    def walk_pages(value,loc):
++        if not isinstance(value,dict):return
++        c=value.get('coverage')
++        if isinstance(c,dict) and c.get('status')=='incomplete_page':
++            partial_pages.append({'pcba_index':loc,'reason':str(c.get('reason') or 'pagination_incomplete'),
++                'returned':c.get('returned'),'reported_total':c.get('reported_total')})
++        for k in ('base_query','query','trace_3074'):
++            walk_pages(value.get(k),loc)
++        for k in ('items','defect_traces','results','component_usage'):
++            for child in value.get(k) or []:walk_pages(child,loc)
++    for i,item in enumerate(items):
++        status=str(item.get('status') or '').upper()
++        if status=='ERROR':pcba_errors.append(i+1)
++        elif status!='COMPLETE':missing.append(i+1)
++        walk_pages(item,i+1)
++    counts_valid=(type(expected) is int and expected>0 and type(processed) is int
++                  and type(errors) is int and len(items)==expected)
++    complete=(counts_valid and processed==expected and errors==0 and
++              not pcba_errors and not missing and not partial_pages)
++    failure=(counts_valid and errors==expected and processed==0)
++    reasons=[]
++    if not counts_valid:reasons.append('totals_not_verified')
++    if pcba_errors:reasons.append('pcba_errors')
++    if missing:reasons.append('pcba_not_complete')
++    if partial_pages:reasons.append('extjs_pagination_incomplete')
++    if counts_valid and processed!=expected:reasons.append('pcba_count_mismatch')
++    return {'source_status':'ERROR' if failure else 'COMPLETE' if complete else 'PARTIAL',
++        'coverage_diagnostic':{'requested_pcbas':expected,'processed_pcbas':processed,
++          'pcba_errors':errors,'failed_indexes':pcba_errors[:20],
++          'non_complete_indexes':missing[:20],
++          'partial_page_count':len(partial_pages),'partial_pages':partial_pages[:20],
++          'reasons':reasons,'source_complete':complete,
++          'reuse_proven':None}}
+ 
+ def discover_engine(config: Dict[str, Any], agent_dir: Path) -> Optional[Path]:
+     candidates = []
+@@ -362,8 +410,9 @@
+             result_3074, tela3074, query_memo=shared_query_memo,
+             pause_s=pause_3074, checkpoint_path=checkpoint_3074,
+             line_callback=line_callback)
+-        if _has_partial_3074_page(result_3074):
+-            result_3074["source_status"] = "PARTIAL"
++        # Only certify source coverage when all requested PCBAs were completed
++        # and all ExtJS pages are proven. Raw rows and reuse logic are unchanged.
++        result_3074.update(summarize_3074_capture(result_3074))
+         if event_callback:
+             done_3074 = int(result_3074.get("requested_pcba_count") or parser_result.get("unique_pcba_count") or 0)
+             event_callback({"stage":"3074","kind":"result","current":done_3074,"total":done_3074,"status":str(result_3074.get("source_status") or result_3074.get("status") or "done"),"result":result_3074})

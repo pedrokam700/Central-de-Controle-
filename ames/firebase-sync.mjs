@@ -1,4 +1,5 @@
 // Firebase primitives are injected from the shell's existing app/Auth instance.
+import {factoryWallMinute} from './data/history.mjs';
 const LINES=Object.freeze(['TAN10101','TAN10102','TAN10103']);
 const validLine=line=>{if(!LINES.includes(line))throw Error('Linha MES inválida');return line;};
 const collectedAt=head=>{const t=Date.parse(head?.collected_at||'');return Number.isFinite(t)?t:0;};
@@ -72,12 +73,18 @@ export function firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc
         },error));
         if(useDayIndex){
           const key='day:'+line;
-          const upper=new Date(Date.parse(startAt+'Z')+60000).toISOString().slice(0,16);
+          // An immutable revision may encode the SAME 07:00 factory start as
+          // 07:00-03:00 or 10:00Z. A lexical one-minute query silently hides
+          // the latter writer. Scan only the start's calendar date and then
+          // narrow by normalized factory wall minute before any part download.
+          const day=startAt.slice(0,10);
+          const lower=day;
+          const upper=new Date(Date.parse(day+'T00:00:00Z')+86400000).toISOString().slice(0,10);
           const source=query(collection(db,'amesTeamLines',line,'history'),
-            where('period_start','>=',startAt),where('period_start','<',upper));
+            where('period_start','>=',lower),where('period_start','<',upper));
           unsub.push(onSnapshot(source,{includeMetadataChanges:true},s=>{
             loaded.add(key);cached.set(key,!!s.metadata?.fromCache||!!s.metadata?.hasPendingWrites);
-            days.set(line,s.docs.map(d=>d.data()));
+            days.set(line,s.docs.map(d=>d.data()).filter(h=>factoryWallMinute(h.period_start)===startAt));
             emit();
           },error));
         }

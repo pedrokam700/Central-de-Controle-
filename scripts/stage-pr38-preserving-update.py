@@ -65,6 +65,7 @@ def stage(destination: Path, *, expected_sha: str | None = None) -> dict:
         "suporte/ames-workstation/ROTA_AMES_REMOVER.bat": "ROTA_AMES_REMOVER.bat",
         "suporte/ames-workstation/START_AGENT_CANONICAL.ps1": "START_AGENT_CANONICAL.ps1",
         "suporte/ames-workstation/DIAGNOSTICO_POSTO.ps1": "DIAGNOSTICO_POSTO.ps1",
+        "suporte/ames-workstation/KEEP_AGENT_RUNNING.ps1": "KEEP_AGENT_RUNNING.ps1",
         "suporte/ames-workstation/CAPTURAR_MOTOR_R12_SEGURO.bat": "CAPTURAR_MOTOR_R12_SEGURO.bat",
         "suporte/ames-workstation/capture-r12-engine.py": "capture-r12-engine.py",
     }

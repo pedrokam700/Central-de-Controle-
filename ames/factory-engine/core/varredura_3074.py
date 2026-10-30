@@ -1,6 +1,7 @@
 from datetime import datetime
 import time
 from core.normalizacao import normalizar_sn
+from ames.coverage_3074 import classify_3074_page
 from core.temporal_3074 import (
     componentes_no_momento_da_falha,
     pcbas_do_item_ate_a_falha,
@@ -37,6 +38,66 @@ def resumir_resultados(resultados, temporal_summary=None):
     return out
 
 
+
+def auditar_materiais_temporais_incertos(
+    tela3074, temporal, defect_time, query_memo, pause_s=0, max_queries=0,
+    defect_local_offset_hours=-3, grid_naive_offset_hours=0,
+):
+    """Read-only investigation of uncertain 3074 bindings.
+
+    These Material SNs are NOT attributed to the 3028 defect and do not enter
+    second-use KPIs. Reverse 3074 lookup can still expose previous PCBAs for
+    an operator to examine instead of silently presenting zero candidates.
+    """
+    pending = temporal["time_unknown"] + temporal["boundary_ambiguous"]
+    unique = {}
+    for row in pending:
+        if row.get("item_sn"):
+            unique.setdefault(row["item_sn"], row)
+    audited = []
+    query_count = 0
+    for sn, row in unique.items():
+        result = {
+            "item_sn": sn, "item_type": row.get("item_type"),
+            "temporal_reason": row.get("temporal_reason"),
+            "bind_time_utc": row.get("bind_time_utc"),
+            "unbind_time_utc": row.get("unbind_time_utc"),
+            "binding_operation": row.get("binding_operation"),
+            "iss_status_now": row.get("iss_status_now"),
+            "proven_at_defect": False,
+            "previous_pcba_count": None,
+            "historical_pcbas": [],
+            "status": "CANDIDATE_UNVERIFIED",
+        }
+        if query_count >= max_queries and sn not in query_memo:
+            result["status"] = "CANDIDATE_QUERY_DEFERRED"
+        else:
+            try:
+                if sn in query_memo:
+                    q = query_memo[sn]
+                else:
+                    q = tela3074.consultar(sn)
+                    query_count += 1
+                    query_memo[sn] = q
+                    if pause_s:
+                        time.sleep(pause_s)
+                coverage = classify_3074_page(q)
+                full = historico_completo_pcbas_do_item(
+                    q.get("rows", []), grid_naive_offset_hours=grid_naive_offset_hours)
+                result["historical_pcbas"] = [
+                    v.get("pcba_sn") for v in full["associations"] if v.get("pcba_sn")]
+                result["historical_pcba_count"] = full["distinct_pcba_count"]
+                result["coverage"] = coverage
+                result["status"] = ("CANDIDATE_SOURCE_PARTIAL"
+                                    if coverage["status"] == "incomplete_page"
+                                    else "CANDIDATE_HISTORY_AVAILABLE")
+            except Exception as exc:
+                result["status"] = "CANDIDATE_QUERY_ERROR"
+                result["error"] = f"{type(exc).__name__}: {exc}"
+        audited.append(result)
+    return audited
+
+
 def executar_varredura(
     tela3074,
     pcba_sn,
@@ -49,6 +110,7 @@ def executar_varredura(
     base_query=None,
     defect_local_offset_hours=-3,
     grid_naive_offset_hours=0,
+    audit_uncertain=False,
 ):
     """Rastreia SOMENTE componentes que estavam vinculados no Defect Time.
 
@@ -74,12 +136,24 @@ def executar_varredura(
     )
     componentes = temporal["active"]
     existing["temporal_filter"] = temporal
+    base_coverage = classify_3074_page(base)
+    existing["base_coverage"] = base_coverage
+    candidates = auditar_materiais_temporais_incertos(
+        tela3074, temporal, defect_time, query_memo, pause_s,
+        # Only eight extra MES queries per PCBA/defect, with run-level memo.
+        # Reverse results are investigation candidates, never confirmed reuse.
+        max_queries=8 if audit_uncertain else 0,
+        defect_local_offset_hours=defect_local_offset_hours,
+        grid_naive_offset_hours=grid_naive_offset_hours)
+    existing["candidate_material_history"] = candidates
 
     if checkpoint_cb:
         checkpoint_cb(existing)
 
     if not componentes:
-        if not base.get("rows"):
+        if base_coverage["status"] == "incomplete_page":
+            status = "CONSULTA_PCBA_3074_PARCIAL_NAO_E_ZERO"
+        elif not base.get("rows"):
             status = "SEM_REGISTROS_3074_NA_CONSULTA"
         elif temporal["summary"].get("time_unknown") or temporal["summary"].get("boundary_ambiguous"):
             status = "COMPONENTES_NAO_DETERMINADOS_POR_INTERVALO_INCOMPLETO"
@@ -97,6 +171,8 @@ def executar_varredura(
                               "future_links_excluded": temporal["summary"].get("bound_after_defect",0),
                               "past_links_excluded": temporal["summary"].get("ended_before_defect",0)},
             "temporal_filter": temporal,
+            "base_coverage": base_coverage,
+            "candidate_material_history": candidates,
             "summary": resumir_resultados([], temporal["summary"]),
             "results": [],
             "base_query": base,
@@ -112,7 +188,9 @@ def executar_varredura(
 
     for idx, item in enumerate(componentes, 1):
         item_sn = normalizar_sn(item["item_sn"])
-        if item_sn in existing_results:
+        if item_sn in existing_results and existing_results[item_sn].get("status") not in (
+            "HISTORICO_3074_PARCIAL", "ERRO_CONSULTA"
+        ) and (existing_results[item_sn].get("coverage") or {}).get("status") != "incomplete_page":
             r = existing_results[item_sn]
             resultados.append(r)
             if progress:
@@ -140,8 +218,12 @@ def executar_varredura(
                 defect_local_offset_hours=defect_local_offset_hours,
                 grid_naive_offset_hours=grid_naive_offset_hours,
             )
+            page_coverage = classify_3074_page(hist)
+            history_partial = page_coverage["status"] == "incomplete_page"
             previous_count = hist_temporal["previous_pcba_count"]
             status = classificar_reuso_anterior(previous_count) if hist_temporal["current_pcba_confirmed"] else "VINCULO_PCBA_ITEM_NAO_CONFIRMADO"
+            if history_partial and not previous_count:
+                status = "HISTORICO_3074_PARCIAL"
             full_history = historico_completo_pcbas_do_item(
                 hist.get("rows", []),
                 grid_naive_offset_hours=grid_naive_offset_hours,
@@ -157,7 +239,8 @@ def executar_varredura(
                 "bind_time_utc": item.get("bind_time_utc"),
                 "unbind_time_utc": item.get("unbind_time_utc"),
                 "iss_status_now": item.get("iss_status_now"),
-                "previous_pcba_count": previous_count if hist_temporal["current_pcba_confirmed"] else None,
+                "previous_pcba_count": previous_count if hist_temporal["current_pcba_confirmed"] and (previous_count or not history_partial) else None,
+                "coverage": page_coverage,
                 "previous_pcbas": [x["pcba_sn"] for x in hist_temporal["previous_pcbas"]] if hist_temporal["current_pcba_confirmed"] else [],
                 "unverified_previous_pcbas": [x["pcba_sn"] for x in hist_temporal["previous_pcbas"]] if not hist_temporal["current_pcba_confirmed"] else [],
                 "pcbas_until_defect": [x["pcba_sn"] for x in hist_temporal["associations_until_defect"]],
@@ -228,6 +311,8 @@ def executar_varredura(
                            "future_links_excluded": temporal["summary"].get("bound_after_defect",0),
                            "past_links_excluded": temporal["summary"].get("ended_before_defect",0)},
         "temporal_filter": temporal,
+        "base_coverage": base_coverage,
+        "candidate_material_history": candidates,
         "summary": resumir_resultados(resultados, temporal["summary"]),
         "results": resultados,
         "base_query": base,

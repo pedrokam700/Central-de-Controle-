@@ -83,6 +83,22 @@ class AutoStartContract(TestCase):
         for item in ("mes_password", "local_agent_token", "/jobs", "/monitor/start", "Stop-Process -Id"):
             self.assertNotIn(item, content)
 
+    def test_guardian_suppresses_relaunch_during_pending_transaction(self):
+        content = (Path(__file__).resolve().parents[1] / "tools" / "ames-workstation" / "KEEP_AGENT_RUNNING.ps1").read_text(encoding="utf-8")
+        assert "Global\\CentralAMES.OperatorGuardian.8765" in content
+        assert "Global\\CentralAMES.UpdateTransaction.8765" in content
+        assert ".ames-update'" in content
+        shared = (Path(__file__).resolve().parents[1] / "tools/ames-workstation/ISSUE57_RELAUNCH_ENROLLMENT.ps1").read_text()
+        assert "Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop" in shared
+        assert "UPDATE_DIR_NONEMPTY_OR_UNVERIFIED; guardian restart suppressed" in content
+        assert "UPDATE_MUTEX_BUSY; guardian restart suppressed" in content
+        assert content.index("$transactionMutex.WaitOne(0)") < content.index("$maintenanceBlocked=Test-Issue57RelaunchBlocked $root")
+        assert content.index("$maintenanceBlocked=Test-Issue57RelaunchBlocked $root") < content.index("& powershell.exe")
+        assert "if($maintenanceBlocked)" in content
+        assert "($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)" in shared
+        assert "$transactionMutex.ReleaseMutex()" in content
+        assert "if(-not $portActive)" in content
+
 
 if __name__ == "__main__":
     main()

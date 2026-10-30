@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {canonicalAgentFixture,productFixture} from './ames-fixtures.mjs';
 import {createHistoryTrendReader,planHistoryDays,compareHistoryDays,historyWeekSummary} from '../ames/data/history-trends.mjs';
+import {withHistoricalTrends} from '../ames/console-history-trends.mjs';
+
+test('historical trend UI module parses before its browser initializer runs',()=>{
+ assert.equal(typeof withHistoricalTrends,'function');
+});
 function fixture(date,{id=date,source='A',revision=1,mode='previous_day',end='12:00',fpy=98,complete=false}={}){
  const p=canonicalAgentFixture(productFixture('TAN10101',2));p.snapshot_id=id;p.summary.snapshot_id=id;p.source_id=source;p.snapshot_revision=revision;
  p.summary.period={start_at:date+'T07:00-03:00',end_at:date+'T'+end+'-03:00',mode};p.summary.fpy=fpy;
@@ -69,4 +74,57 @@ test('historic comparisons reject different, mixed or missing CPH without hiding
  assert.equal(mixed.previous.observed_failures,2,'observed evidence is retained, not converted to zero');
  const other=historyWeekSummary(points.map(p=>p.date==='2026-10-16'?altered(['CPH9999']):p),options.endDate);
  assert.notEqual(other.current.scope_key,other.previous.scope_key);
+});
+
+test('FULL closure trend keeps prior complete revision when a later capture is partial',async()=>{
+ const full=fixture('2026-10-19',{id:'DAY19',revision:1,complete:true});
+ full.content_hash='a'.repeat(64);
+ full.summary.period.end_at='2026-10-20T07:00-03:00';
+ full.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
+   status:'complete',transport_complete:true,source_complete:true,
+   scope:{line_id:full.line_id,source_id:full.source_id,snapshot_id:full.snapshot_id,snapshot_revision:full.snapshot_revision}}]));
+ const partial=fixture('2026-10-19',{id:'DAY19',revision:2,complete:true});
+ partial.content_hash='b'.repeat(64);
+ partial.summary.period.end_at='2026-10-20T07:00-03:00';
+ partial.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
+   status:'observed_partial',transport_complete:true,source_complete:false,
+   scope:{line_id:partial.line_id,source_id:partial.source_id,snapshot_id:partial.snapshot_id,snapshot_revision:partial.snapshot_revision}}]));
+ const reader=createHistoryTrendReader(source([full,partial]));
+ const observed=(await reader.read(options)).points.at(-1);
+ assert.equal(observed.entry.snapshot_revision,2,'observed mode preserves the existing latest-revision behavior');
+ const closure=(await reader.read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(closure.entry.snapshot_revision,1,'later partial must not downgrade the previous FULL');
+ assert.equal(closure.status,'complete');
+ const onlyPartial=(await createHistoryTrendReader(source([partial])).read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(onlyPartial.status,'unproven_full');
+ assert.equal(onlyPartial.snapshot,undefined);
+ assert.equal(onlyPartial.observed_failures,undefined,'missing full data is not a zero');
+});
+
+test('FULL history preserves an older proven closure when a newer immutable revision cannot be read',async()=>{
+ const full=fixture('2026-10-19',{id:'DAY19',revision:1,complete:true});
+ full.content_hash='a'.repeat(64);
+ full.summary.period.end_at='2026-10-20T07:00-03:00';
+ full.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
+  status:'complete',source_complete:true,transport_complete:true,
+  scope:{line_id:full.line_id,source_id:full.source_id,snapshot_id:full.snapshot_id,snapshot_revision:1}}]));
+ const newest=fixture('2026-10-19',{id:'DAY19',revision:2,complete:true});
+ newest.summary.period.end_at='2026-10-20T07:00-03:00';
+ const history=source([full,newest]);
+ const remote={list:history.list,open:async e=>{
+  if(e.snapshot_revision===2)throw Error('immutable revision unavailable');
+  return history.open(e);
+ }};
+ const reader=createHistoryTrendReader(remote);
+ const fallback=(await reader.read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(fallback.status,'complete');
+ assert.equal(fallback.entry.snapshot_revision,1);
+ assert.equal(fallback.unreadable_newer_revisions,1,'the unreadable newer entry must remain auditable');
+ const observed=(await reader.read(options)).points.at(-1);
+ assert.equal(observed.status,'unavailable','normal historical mode cannot silently fall back');
+ const noFull=(await createHistoryTrendReader({list:async()=>[entry(newest)],open:async()=>{throw Error('missing')}})
+  .read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(noFull.status,'unavailable');
+ assert.equal(noFull.snapshot,undefined);
+ assert.equal(noFull.unreadable_newer_revisions,1);
 });

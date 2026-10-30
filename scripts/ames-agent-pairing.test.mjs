@@ -77,7 +77,7 @@ test('public local agent identification sends no token and never probes MES or l
  const requests=[],store=fakeStore();
  const fetcher=async(uri,opt)=>{
    requests.push({uri,opt});return {ok:true,json:async()=>({
-     ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:123,workstation_pairing_flow:3,
+     ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:123,workstation_pairing_flow:3,workstation_pairing_revision:4,
      workstation_token:'MUST_NOT_LEAK',source_id:'MUST_NOT_LEAK'
    })};
  };
@@ -108,6 +108,33 @@ test('old flow-2 Vercel agent must be identified as outdated, not incorrectly pr
  const client=createAgentClient(store,{fetcher:async()=>({ok:true,json:async()=>({
   ok:true,ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',pid:345
  })})});
- assert.deepEqual(await client.detectInstalled(),{state:'outdated'});
- assert.deepEqual(store.agent().workstation_probe,{state:'outdated'});
+ assert.deepEqual(await client.detectInstalled(),{state:'outdated',reason:'pairing_contract'});
+ assert.deepEqual(store.agent().workstation_probe,{state:'outdated',reason:'pairing_contract'});
+});
+
+test('copied local 127 and localhost tabs probe their own origin; HTTPS stays on fixed loopback',async()=>{
+  const original=globalThis.location;
+  try{
+    for(const [location,expected] of [
+      ['http://127.0.0.1:8765/Central-de-Controle-/','http://127.0.0.1:8765/api/v1/ready'],
+      ['http://localhost:8765/Central-de-Controle-/','http://localhost:8765/api/v1/ready'],
+      ['https://pedrokam700.github.io/Central-de-Controle-/','http://127.0.0.1:8765/api/v1/ready']
+    ]){
+      globalThis.location=new URL(location);
+      const requests=[];
+      const client=createAgentClient(fakeStore(),{fetcher:async (url,options)=>{
+        requests.push({url,options});return {ok:true,json:async()=>({
+          ready:true,agent_version:'0.5.23',agent_build:'CANONICAL-R11-BATCH',
+          pid:123,workstation_pairing_flow:3,workstation_pairing_revision:4
+        })};
+      }});
+      await client.detectInstalled();
+      assert.equal(requests[0].url,expected);
+      assert.equal(requests[0].options.headers,undefined);
+      assert.equal(client.paired(),false);
+    }
+  }finally{
+    if(original===undefined)delete globalThis.location;
+    else globalThis.location=original;
+  }
 });

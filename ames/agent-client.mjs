@@ -1,7 +1,10 @@
 import { AGENT_URL, SCHEDULER_POLICY, collectionScope, r12CompatibleBuild } from './data/agent-contract.mjs';
+import {classifyWorkstationReady} from './data/workstation-update-policy.mjs';
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
 import {CANONICAL_SCHEMA,DATASETS,normalizeCanonical} from './data/canonical.mjs';
 import {projectLiveJobEvents} from './data/job-live-events.mjs';
+import {traceTargetForLine,exactTraceTargets,refreshedTraceTarget} from './data/trace-targets.mjs';
+import {matchesReadingPeriod} from './data/reading-period.mjs';
 
 const AGENT_TOKEN_KEY='central.ames.agentToken.v1';
 function bootstrapAgentToken(explicit=''){
@@ -30,6 +33,12 @@ const boundedOffset=(value,max=100000)=>{const n=Number(value);return Number.isI
 export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
   let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false, lastPartial=-1,lastRefresh=0,pendingSubmission=null;
   const workstationToken=bootstrapAgentToken(agentToken);
+  // Keep API requests same-origin when a user pastes the local Central URL into
+  // another tab. Fetch Metadata proves same-origin even when Origin is omitted
+  // by normal browser GETs; the official HTTPS site still uses fixed loopback.
+  const localOrigin=globalThis.location?.origin;
+  const agentBase=['http://127.0.0.1:8765','http://localhost:8765'].includes(localOrigin)
+    ?localOrigin+'/api/v1':AGENT_URL;
   const canOpenOfficial=()=>!!workstationToken&&globalThis.location?.protocol==='http:'&&['127.0.0.1','localhost'].includes(globalThis.location?.hostname)&&globalThis.location?.port==='8765';
   const canPairFromOfficial=()=>globalThis.location?.origin==='https://pedrokam700.github.io' && globalThis.location?.pathname.startsWith('/Central-de-Controle-/');
 
@@ -39,7 +48,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     const headers={};
     if(body!==undefined)headers['Content-Type']='application/json';
     if(workstationToken)headers['X-Central-Agent-Token']=workstationToken;
-    let response;try{response=await fetcher(AGENT_URL+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(requestTimeout(path))]),cache:'no-store',credentials:'omit'});}catch(error){error.code ||= 'agent-network';throw error;}
+    let response;try{response=await fetcher(agentBase+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(requestTimeout(path))]),cache:'no-store',credentials:'omit'});}catch(error){error.code ||= 'agent-network';throw error;}
     if(response.status===401)throw Object.assign(new Error('Agente local não autorizado nesta aba. Abra pelo launcher ou use o pareamento HTTPS no posto local.'),{code:'agent-unauthorized'});
     if(!response.ok)throw new Error(`Agente: HTTP ${response.status}`);
     const data=blob?await response.blob():await response.json();
@@ -125,10 +134,33 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     if(token!==generation)return;
     try {
       const raw=await request('/jobs/'+encodeURIComponent(id));
-      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
+      // An operator-triggered 3028 run carries only the immutable IDs and
+      // period needed to reopen its exact local revision. Do not copy the
+      // full MES dashboard, records, or raw job configuration into UI state.
+      const ids=['analysis','deep_trace'].includes(raw.kind)&&raw.status==='done'&&raw.result?.snapshot_ids;
+      const collected=ids&&typeof ids==='object'&&!Array.isArray(ids)
+        ?Object.fromEntries(LINE_IDS.filter(line=>Number.isSafeInteger(Number(ids[line]))&&Number(ids[line])>0)
+          .map(line=>[line,String(ids[line])])):null;
+      const collection_receipt=raw.kind==='analysis'&&collected&&Object.keys(collected).length&&
+        typeof raw.result?.start_at==='string'&&typeof raw.result?.end_at==='string'
+        ?{snapshot_ids:collected,period_start:raw.result.start_at,period_end:raw.result.end_at}:null;
+      // Deep trace enriches an existing immutable 3028 snapshot. Its exact
+      // local IDs can select the corresponding period after 3074/2114/3022,
+      // without copying MES evidence into the source-selection receipt.
+      const trace_receipt=raw.kind==='deep_trace'&&collected&&Object.keys(collected).length
+        ?{snapshot_ids:collected}:null;
+      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
       if(done||(partial!==lastPartial&&now()-lastRefresh>2200)){
         try{await refresh();lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
+      }
+      // /v2/snapshots intentionally exposes TODAY only. A completed 3028
+      // previous-day capture is available through /local-history, not through
+      // that dashboard refresh. Signal a second historical-index read even if
+      // today's canonical head has not changed. This also closes the race
+      // where the initial done notification precedes the final refresh.
+      if(done&&token===generation&&(['analysis','deep_trace'].includes(raw.kind))){
+        publish({job:{...store.agent().job,post_completion_history_check:true}});
       }
       if(!done&&token===generation)timer=schedule(()=>poll(id,token),850);
     }catch(e){if(token===generation){publish({error:'Leitura do job interrompida: '+e.message});timer=schedule(()=>poll(id,token),850);}}
@@ -150,16 +182,13 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const lease=generation;
       let probe={state:'unknown'};
       try{
-        const response=await fetcher(AGENT_URL+'/ready',{
+        const response=await fetcher(agentBase+'/ready',{
           method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
           signal:AbortSignal.any([controller.signal,AbortSignal.timeout(2500)])
         });
         if(response.ok){
           const ready=await response.json();
-          if(ready?.ready===true&&ready?.ok===true&&ready?.agent_version==='0.5.23'&&
-             Number.isInteger(ready.pid)&&ready.pid>0&&typeof ready.agent_build==='string'){
-            probe={state:ready.workstation_pairing_flow===3?'detected':'outdated'};
-          }
+          probe=classifyWorkstationReady(ready);
         }
       }catch{ /* CORS/PNA or agent not running: unknown, never absent */ }
       if(generation===lease)publish({workstation_probe:probe});
@@ -314,11 +343,68 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(type==='deep'){
         path='/deep-trace';body={...scope};
         if(store.agent().capabilities?.exact_trace_targets!==true)throw Error('Atualize o agente para rastrear o snapshot exato do período selecionado.');
-        body.snapshot_targets=Object.fromEntries(scope.lines.map(line=>{
-          const read=store.read(line),p=read.snapshot?.canonical,period=p?.summary?.period;
-          if(read.source!=='local'||!p||p.source_id!==store.agent().capabilities.source_id||!period?.start_at||!period?.end_at)throw Error('Selecione uma revisão local com período comprovado para '+line+'.');
-          return [line,{source_id:p.source_id,snapshot_id:p.snapshot_id,snapshot_revision:p.snapshot_revision,content_hash:p.content_hash,period}];
-        }));
+        // A previous-day snapshot can be shown through a shared-history
+        // presentation even when it is physically stored in this workstation.
+        // Do NOT relax traceTargetForLine's synchronous foreign-source guard.
+        // A candidate is eligible ONLY after two authenticated loopback reads:
+        // (1) the exact immutable revision and content hash that were displayed;
+        // (2) the latest local revision of THAT SAME source/snapshot/period.
+        // Both are read-only; a failed comparison prevents any MES POST.
+        const prepared={},missing=[];
+        for(const line of scope.lines){
+          const state=traceTargetForLine(store,line);
+          if(state.available){prepared[line]=state.target;continue;}
+          const shown=store.read(line)?.snapshot?.canonical;
+          const period=store.readingPeriod?.();
+          const ownSource=store.agent()?.capabilities?.source_id;
+          const eligible=state.reason==='Revisão não pertence ao agente local conectado'&&
+            shown&&shown.source_id&&shown.source_id===ownSource&&
+            Number.isSafeInteger(Number(shown.snapshot_id))&&Number(shown.snapshot_id)>0&&
+            Number.isSafeInteger(shown.snapshot_revision)&&shown.snapshot_revision>0&&
+            typeof shown.content_hash==='string'&&!!shown.content_hash&&
+            shown.summary?.period?.start_at&&shown.summary?.period?.end_at&&
+            matchesReadingPeriod(shown,period);
+          if(!eligible){missing.push(`${line}: ${state.reason}`);continue;}
+          try{
+            const query=new URLSearchParams({snapshot_id:String(shown.snapshot_id),line,
+              snapshot_revision:String(shown.snapshot_revision)});
+            const exact=await request('/local-history?'+query);
+            normalizeCanonical(exact);
+            if(exact.source_id!==shown.source_id||exact.line_id!==line||
+               String(exact.snapshot_id)!==String(shown.snapshot_id)||
+               exact.snapshot_revision!==shown.snapshot_revision||
+               exact.content_hash!==shown.content_hash||
+               JSON.stringify(exact.summary?.period||null)!==JSON.stringify(shown.summary.period))
+              throw Error('A revisão exibida não corresponde à revisão imutável do agente local');
+            // A later revision can enrich the same 3028 snapshot, never change
+            // the operational period or source. The ordinary loop below rechecks
+            // the latest local head again before submission.
+            const latest=await request('/local-history?'+new URLSearchParams({
+              snapshot_id:String(shown.snapshot_id),line}));
+            normalizeCanonical(latest);
+            const target=refreshedTraceTarget({
+              source_id:shown.source_id,line_id:line,
+              snapshot_id:shown.snapshot_id,snapshot_revision:shown.snapshot_revision,
+              content_hash:shown.content_hash,period:shown.summary.period
+            },latest);
+            delete target.line_id;
+            prepared[line]=target;
+          }catch(error){missing.push(`${line}: revisão não comprovada no agente local (${error.message})`);}
+        }
+        if(missing.length)throw Error('Coleta não iniciada: '+missing.join(' · '));
+        body.snapshot_targets=prepared;
+        // Read the most recent immutable export of the SAME local 3028
+        // snapshot before dispatch. Partial 3074/2114/3022 captures may have
+        // advanced its revision since the previous screen render. This local
+        // read is not another MES collection and cannot retarget the period.
+        for(const line of scope.lines){
+          const selected=body.snapshot_targets[line];
+          const query=new URLSearchParams({snapshot_id:String(selected.snapshot_id),line});
+          const latest=await request('/local-history?'+query);
+          normalizeCanonical(latest); // Reject incomplete/mixed canonical data.
+          body.snapshot_targets[line]=refreshedTraceTarget({...selected,line_id:line},latest);
+          delete body.snapshot_targets[line].line_id;
+        }
         if(value.trace_mode!==undefined){
           if(!['full','process_only','reuse_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
           if(value.trace_mode==='process_only'&&store.agent().capabilities?.process_timeline!==true)throw Error('process_only exige coleta 3022 em lote. Conecte um agente 3022-R12+ ou aguarde a incorporação do coletor 3022 no agente canônico.');

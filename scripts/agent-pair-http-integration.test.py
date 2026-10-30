@@ -30,13 +30,16 @@ class LocalHandler(http.server.BaseHTTPRequestHandler):
         if self.path != pairing.PAIR_PATH:return self.reply(404)
         if not pairing.local_address(self.headers,self.client_address[0],self.server.server_port):
             return self.reply(403)
-        return self.reply(200,pairing.page(pairing.GATE.issue()),{"Content-Type":"text/html; charset=utf-8"})
+        nonce=pairing.GATE.issue()
+        return self.reply(200,pairing.page(nonce),{"Content-Type":"text/html; charset=utf-8",
+                                                  "Set-Cookie":pairing.confirmation_cookie(nonce)})
     def do_POST(self):
         if self.path != pairing.PAIR_PATH:return self.reply(404)
         data=self.rfile.read(int(self.headers.get("Content-Length","0")))
         if not pairing.confirm(self.headers,self.client_address[0],self.server.server_port,data):
             return self.reply(403,pairing.retry_page(),{"Content-Type":"text/html; charset=utf-8"})
-        return self.reply(303,headers={"Location":pairing.destination(TOKEN)})
+        return self.reply(303,headers={"Location":pairing.destination(TOKEN),
+                                      "Set-Cookie":pairing.expired_cookie()})
 
 def request(port,verb,body=None,headers=None):
     conn=http.client.HTTPConnection("127.0.0.1",port,timeout=5)
@@ -51,55 +54,54 @@ def run():
     threading.Thread(target=srv.serve_forever,daemon=True).start()
     try:
         port=srv.server_port
-        def new_nonce():
-            code,headers,html=request(port,"GET")
-            assert code==200 and b"Autorizar e abrir a Central" in html
+        def new_proof():
+            status,headers,html=request(port,"GET",headers={"Host":f"127.0.0.1:{port}"})
+            assert status==200 and b"Autorizar e abrir a Central" in html
             assert TOKEN.encode() not in html
-            return re.search(rb'name="nonce" value="([^"]+)"',html).group(1)
-        def form(nonce,headers=None):
+            cookie=headers["Set-Cookie"].split(";",1)[0]
+            assert "SameSite=Strict" in headers["Set-Cookie"]
+            nonce=re.search(rb'name="nonce" value="([^"]+)"',html).group(1)
+            return nonce,cookie
+        def form(nonce,cookie=None,headers=None):
             body=b"nonce="+nonce
-            default={"Content-Type":"application/x-www-form-urlencoded",
-                     "Sec-Fetch-Site":"same-origin","Sec-Fetch-Mode":"navigate"}
-            default.update(headers or {})
-            return request(port,"POST",body,default)
-        nonce=new_nonce()
-        status,headers,body=form(nonce)
-        assert status==303 and headers["Location"].endswith("#ames_agent_token="+TOKEN)
-        assert headers["Cache-Control"]=="no-store, max-age=0"
-        assert status==303 and not body
-        status,headers,body=form(nonce)
-        assert status==403 and b"Reiniciar conexao segura" in body
-        assert TOKEN.encode() not in body
-        # Actual Edge 127 form submission observed in factory on 22/10/2026.
-        edge={"Origin":"null","Sec-Fetch-Site":"same-origin",
-              "Sec-Fetch-Mode":"navigate","Sec-Fetch-Dest":"document",
-              "Sec-Fetch-User":"?1"}
-        nonce=new_nonce()
-        status,response_headers,body=form(nonce,edge)
-        assert status==303 and response_headers["Location"] == pairing.destination(TOKEN)
+            h={"Content-Type":"application/x-www-form-urlencoded",
+               "Host":f"127.0.0.1:{port}",
+               "Sec-Fetch-Site":"same-origin","Sec-Fetch-Mode":"navigate"}
+            if cookie:h["Cookie"]=cookie
+            h.update(headers or {})
+            return request(port,"POST",body,h)
+        nonce,cookie=new_proof()
+        status,headers,body=form(nonce,cookie)
+        assert status==303 and headers["Location"]==pairing.destination(TOKEN)
+        assert "Max-Age=0" in headers["Set-Cookie"]
         assert not body
-        status,response_headers,body=form(nonce,edge)
-        assert status==403 and TOKEN.encode() not in body
+        assert form(nonce,cookie)[0]==403
+        nonce,cookie=new_proof()
+        edge={"Origin":"null","Sec-Fetch-Site":"same-origin",
+              "Sec-Fetch-Mode":"navigate","Sec-Fetch-Dest":"document"}
+        assert form(nonce,cookie,edge)[0]==303
+        nonce,cookie=new_proof()
+        # A valid local form remains authorized without Origin/Fetch Metadata.
+        assert form(nonce,cookie,{"Sec-Fetch-Site":"",
+                                  "Sec-Fetch-Mode":""})[0]==303
         for unsafe in [
+            {"Origin":"https://evil.example"},
             {"Sec-Fetch-Site":"cross-site"},
-            {"Sec-Fetch-Site":"none"},
+            {"Sec-Fetch-Site":"same-site"},
             {"Sec-Fetch-Mode":"cors"},
             {"Sec-Fetch-Dest":"iframe"},
-            {"Sec-Fetch-User":""},
+            {"Host":"attacker.example"},
         ]:
-            nonce=new_nonce()
-            status,response_headers,body=form(nonce,{**edge,**unsafe})
+            nonce,cookie=new_proof()
+            status,headers,body=form(nonce,cookie,unsafe)
             assert status==403 and TOKEN.encode() not in body
-        for injected in [
-            {"Origin":"https://evil.example","Sec-Fetch-Site":"cross-site"},
-            {"Sec-Fetch-Site":"cross-site"},
-            {"Sec-Fetch-Site":"none"}
-        ]:
-            nonce=new_nonce()
-            code,headers,body=form(nonce,injected)
-            assert code==403 and b"Reiniciar conexao segura" in body
-        print("PASS: HTTP GET->POST same-origin without Origin or Edge Origin:null issues 303 exactly once")
-        print("PASS: external, ambiguous and replayed forms remain 403; no secret in responses")
+            assert form(nonce,cookie)[0]==303
+        nonce,cookie=new_proof()
+        assert form(nonce)[0]==403  # nonce alone cannot authorize
+        assert form(nonce,"central_pair_confirm=wrong")[0]==403
+        assert form(nonce,cookie)[0]==303
+        print("PASS: HTTP local GET cookie+nonce -> POST/303 across missing/opaque Origin")
+        print("PASS: cross-site, cookie-less, foreign Host and replay remain 403")
     finally:
         srv.shutdown();srv.server_close()
 

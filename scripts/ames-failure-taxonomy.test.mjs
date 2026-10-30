@@ -23,7 +23,7 @@ test('versioned classifier covers codes, multilingual plurals, subtypes and nega
  for(const [cc,cd,oc,od,expected,context] of cases){const result=compareFailures(cc,cd,oc,od,context);assert.equal(result.classification,expected,JSON.stringify([cc,cd,oc,od]));assert.equal(result.current_desc,cd);assert.equal(result.version,FAILURE_TAXONOMY_VERSION);assert(result.reason_code);}
 });
 test('Excel/Python and browser use identical version, rules and results',()=>{
- const sync=spawnSync('python3',['scripts/sync-failure-taxonomy.py','--check'],{encoding:'utf8'});assert.equal(sync.status,0,sync.stderr||sync.stdout);
- const run=spawnSync('python3',['-c',"import sys,json;sys.path.insert(0,'ames/factory-engine');from core.failure_taxonomy import compare;print(json.dumps([compare(*c[:4],context=c[5] if len(c)>5 else None) for c in json.load(sys.stdin)]))"],{input:JSON.stringify(cases),encoding:'utf8'});
+ const sync=spawnSync(process.env.PYTHON_BIN||'python3',['scripts/sync-failure-taxonomy.py','--check'],{encoding:'utf8'});assert.equal(sync.status,0,sync.stderr||sync.stdout);
+ const run=spawnSync(process.env.PYTHON_BIN||'python3',['-c',"import sys,json;sys.path.insert(0,'ames/factory-engine');from core.failure_taxonomy import compare;print(json.dumps([compare(*c[:4],context=c[5] if len(c)>5 else None) for c in json.load(sys.stdin)]))"],{input:JSON.stringify(cases),encoding:'utf8'});
  assert.equal(run.status,0,run.stderr);assert.deepEqual(JSON.parse(run.stdout),cases.map(([cc,cd,oc,od,,context])=>compareFailures(cc,cd,oc,od,context)));
 });

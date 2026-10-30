@@ -9,7 +9,7 @@ import canonical, process_r11, production_shift, repair_3012, ames_3012_live, lo
 
 class IntegratedTests(unittest.TestCase):
  def test_shift_boundaries_timezone_and_missing_source(self):
-  for stamp,shift,day in [('2026-10-13T07:29:59-03:00','2nd Shift','2026-10-12'),('2026-10-13T07:30:00-03:00','1st Shift','2026-10-13'),('2026-10-13T17:29:59-03:00','1st Shift','2026-10-13'),('2026-10-13T17:30:00-03:00','2nd Shift','2026-10-13'),('2026-10-13T06:00:00Z','2nd Shift','2026-10-12')]:
+  for stamp,shift,day in [('2026-10-13T07:29:59-03:00','Outside scheduled shifts','2026-10-13'),('2026-10-13T03:29:59-03:00','2nd Shift','2026-10-12'),('2026-10-13T03:30:00-03:00','Outside scheduled shifts','2026-10-12'),('2026-10-13T07:30:00-03:00','1st Shift','2026-10-13'),('2026-10-13T17:29:59-03:00','1st Shift','2026-10-13'),('2026-10-13T17:30:00-03:00','2nd Shift','2026-10-13'),('2026-10-13T06:00:00Z','2nd Shift','2026-10-12')]:
    out=production_shift.classify(stamp);self.assertEqual(out['production_shift'],shift);self.assertEqual(out['production_operational_date'],day);self.assertEqual(out['production_shift_source'],'3022')
   self.assertIsNone(production_shift.classify(None)['production_shift'])
   self.assertIsNone(production_shift.classify('bad','2026-10-13T10:30Z')['production_shift'])

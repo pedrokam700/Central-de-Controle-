@@ -23,6 +23,7 @@ sys.path.insert(0, str(ENGINE))
 from ames import shift_2114  # noqa: E402
 from ames.navigation import AmesNavigation  # noqa: E402
 from core import fluxo_2114  # noqa: E402
+from core.correlacao_falhas import selecionar_ocorrencia_atual, analisar_historico_pcba_atual  # noqa: E402
 
 
 class FakeClock:
@@ -248,6 +249,120 @@ def test_partial_checkpoint_resumes_only_unfinished_pcba():
     assert second["checkpoint_refreshed"] is False
 
 
+
+def test_2114_exact_lot_without_extjs_load_is_fast():
+    """Regression from physical test: visible exact Lot Id is sufficient."""
+    from ames import tela_2114
+    class SN:
+        def count(self): return 1
+        @property
+        def first(self):return self
+        def fill(self,value,**kw):self.value=value
+        def focus(self,**kw):pass
+    class P:
+        frames=[]
+        keyboard=type('K',(),{'press':lambda self,key:None})()
+        def __init__(self):self.sn=SN()
+        def locator(self,selector):return self.sn
+    page=P()
+    original_grid=tela_2114.extract_best_grid
+    original_safe=tela_2114._safe_input_value
+    original_shift=shift_2114.ensure_shift
+    original_current=shift_2114.current_shift
+    original_track=tela_2114.Tela2114._query_response_tracker
+    reads=[{'kind':'extjs_store','grid_id':'g','frame_url':'MES','rows':[{'Lot Id':'OTHER-BOARD'}],'store_loading':False},
+       {'kind':'extjs_store','grid_id':'g','frame_url':'MES','rows':[
+        {'Lot Id':'002527005C0535F300007060','Defect Hist Seq':'0',
+          'Defect Code':'GN01-TX02','Defect Description':'Antenna: ANT1 test failed','Defect Type':'MainBoard'},
+        {'Lot Id':'002527005C0535F300007060','Defect Hist Seq':'1',
+          'Defect Code':'GN01-TX02','Defect Description':'Antenna: ANT1 test failed','Defect Type':'MainBoard'}
+       ],'store_loading':False}]
+    trace=[]
+    def mock_grid(*args,**kwargs):
+        trace.append('grid')
+        return reads[0] if len(trace)==1 else reads[1]
+    try:
+        tela_2114.extract_best_grid=mock_grid
+        tela_2114._safe_input_value=lambda page,name:'1st Shift' if name=='desc' else ''
+        shift_2114.current_shift=lambda now=None:('1','1st Shift')
+        shift_2114.ensure_shift=lambda *args,**kw:(_ for _ in ()).throw(AssertionError('lookup already committed'))
+        tela_2114.Tela2114._query_response_tracker=staticmethod(lambda *args,**kw:None)
+        t=tela_2114.Tela2114.__new__(tela_2114.Tela2114)
+        t._page=lambda:page
+        result=t.consultar('002527005C0535F300007060',timeout_s=.5)
+        assert result['summary']['histories_total']==2, result
+        assert result['summary']['mainboard']==2
+        assert len(trace)==2,'must finish on first exact-PCBA grid update without waiting for a load event'
+    finally:
+        tela_2114.extract_best_grid=original_grid
+        tela_2114._safe_input_value=original_safe
+        shift_2114.ensure_shift=original_shift
+        shift_2114.current_shift=original_current
+        tela_2114.Tela2114._query_response_tracker=original_track
+
+
+def test_2114_shift_lookup_on_first_board_only():
+    from ames import tela_2114
+    original_grid=tela_2114.extract_best_grid
+    original_safe=tela_2114._safe_input_value
+    original_shift=shift_2114.ensure_shift
+    original_current=shift_2114.current_shift
+    original_track=tela_2114.Tela2114._query_response_tracker
+    state={'shift':'','lookup_count':0}
+    class SN:
+        def count(self):return 1
+        @property
+        def first(self):return self
+        def fill(self,value,**kw):self.value=value
+        def focus(self,**kw):pass
+    class P:
+        frames=[]
+        keyboard=type('K',(),{'press':lambda self,key:None})()
+        def __init__(self):self.sn=SN()
+        def locator(self,selector):return self.sn
+    page=P()
+    try:
+        tela_2114._safe_input_value=lambda page,name:state['shift'] if name=='desc' else ''
+        shift_2114.current_shift=lambda now=None:('1','1st Shift')
+        def select(*args,**kw):
+            state['lookup_count']+=1
+            state['shift']='1st Shift'
+            return state['shift']
+        shift_2114.ensure_shift=select
+        tela_2114.Tela2114._query_response_tracker=staticmethod(lambda *args,**kw:None)
+        tela_2114.extract_best_grid=lambda page,**kw:{
+            'kind':'extjs_store','grid_id':'grid','rows':[{'Lot Id':page.sn.value,
+            'Defect Hist Seq':'0','Defect Code':'GN01-TX02'}],'store_loading':False}
+        obj=tela_2114.Tela2114.__new__(tela_2114.Tela2114)
+        obj._page=lambda:page
+        obj.consultar('BOARD-ONE',timeout_s=.5)
+        obj.consultar('BOARD-TWO',timeout_s=.5)
+        assert state['lookup_count']==1,'never reopen Shift lookup per PCBA'
+    finally:
+        tela_2114.extract_best_grid=original_grid
+        tela_2114._safe_input_value=original_safe
+        shift_2114.ensure_shift=original_shift
+        shift_2114.current_shift=original_current
+        tela_2114.Tela2114._query_response_tracker=original_track
+
+
+def test_hist_seq_zero_is_not_replaced_by_grid_position():
+    # The physical 2114 has Hist Seq 0/1 for the same antenna failure.
+    # The MES grid may be sorted newest-first; 0 must still be older.
+    rows = [
+        {'Defect Hist Seq': '1', 'Defect Code': 'GN01-TX02',
+         'Defect Description': 'Antenna: ANT1 test failed'},
+        {'Defect Hist Seq': '0', 'Defect Code': 'GN01-TX02',
+         'Defect Description': 'Antenna: ANT1 test failed'},
+    ]
+    selected = selecionar_ocorrencia_atual('', '', rows)
+    assert selected['current_history'] is rows[0]
+    assert selected['prior_histories'] == [rows[1]]
+    assert selected['current_seq'] == '1'
+    result = analisar_historico_pcba_atual('GN01-TX02', 'Antenna: ANT1 test failed', rows)
+    assert result['same_repetitions'] == 1, 'reused PCBA must be classified as same failure'
+    assert result['status'] == 'MESMA_FALHA_REPETIDA'
+
 def main():
     tests = [
         test_shift_waits_for_committed_confirmation,
@@ -256,6 +371,9 @@ def main():
         test_one_2114_error_does_not_abort_remaining_targets,
         test_completed_checkpoint_is_requeried_on_new_explicit_trace,
         test_partial_checkpoint_resumes_only_unfinished_pcba,
+        test_2114_exact_lot_without_extjs_load_is_fast,
+        test_2114_shift_lookup_on_first_board_only,
+        test_hist_seq_zero_is_not_replaced_by_grid_position,
     ]
     for test in tests:
         test()

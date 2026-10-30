@@ -53,8 +53,16 @@ def capture_source(store, *, target, line, job_id, view, result, status='partial
         'source_complete':False,
         'captured_at':utc_now(),'result':result,
     }
-    # B3.1 journals every update; another job cannot overwrite this job's data.
-    store.save_snapshot_payload(sid,kind,envelope)
+    # A replay of the SAME job/scope/status/result is not a new observation.
+    # Compare everything except this envelope's write clock, preserving both
+    # the original evidence time and the existing immutable revision. A new
+    # job or any changed identity/status/result still appends an audit event.
+    previous = store.get_snapshot_payload(sid, [kind])
+    without_write_clock = lambda value: {k:v for k,v in value.items() if k != 'captured_at'}
+    unchanged = (isinstance(previous, dict) and
+                 stable_json(without_write_clock(previous)) == stable_json(without_write_clock(envelope)))
+    if not unchanged:
+        store.save_snapshot_payload(sid,kind,envelope)
     return {'kind':kind,'snapshot_id':sid,'line_id':line,
             'source_view':view,'job_id':job_id,'status':status,
             'result_sha256':hashlib.sha256(stable_json(result).encode('utf-8')).hexdigest()}

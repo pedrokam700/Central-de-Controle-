@@ -16,11 +16,13 @@ import base_paging_backend
 import candidate_config
 import hardening
 import local_security
+from maintenance_admission import MAINTENANCE, MaintenanceBlocked
 import operational_calendar
 import origin_policy
 import performance_indexes
 import source_capture
 import sn_lookup_context
+import update_readiness
 import workstation_pairing
 import workstation_autostart
 
@@ -122,8 +124,12 @@ class HardenedHandler(entry.Handler):
             if not workstation_pairing.local_address(self.headers, self.client_address[0], self._active_port()):
                 self._pair_response(403)
                 return
-            body = workstation_pairing.page(workstation_pairing.GATE.issue())
-            self._pair_response(200, body, {"Content-Type": "text/html; charset=utf-8"})
+            nonce = workstation_pairing.GATE.issue()
+            body = workstation_pairing.page(nonce)
+            self._pair_response(200, body, {
+                "Content-Type": "text/html; charset=utf-8",
+                "Set-Cookie": workstation_pairing.confirmation_cookie(nonce),
+            })
             return
         static_root = (entry.a.BASE_DIR.parent / "frontend").resolve()
         if path == "/" and static_root.is_dir():
@@ -261,6 +267,7 @@ class HardenedHandler(entry.Handler):
                     # The web UI can distinguish an older local engine whose
                     # form handler still rejects valid Edge submissions.
                     "workstation_pairing_flow": 3,  # GitHub Pages official origin + one-time local confirmation
+                     "workstation_pairing_revision": 4,  # 0.5.38 official base path + safe pinned CORS origin; never a token
                     "agent_version": entry.a.AGENT_VERSION,
                     "candidate_version": entry.a.CANDIDATE_VERSION,
                     "pid": os.getpid(),
@@ -272,6 +279,13 @@ class HardenedHandler(entry.Handler):
                 self._send(workstation_autostart.status())
             except Exception as exc:
                 self._send({"ok": False, "error": type(exc).__name__}, 503)
+            return
+        if path == "/api/v1/workstation/update-readiness":
+            # Protected by the workstation token, unlike the public /ready.
+            # This only OBSERVES activity; never grants an updater lease.
+            self._send(update_readiness.observe(entry.a.MES, entry.a.JOBS,
+                                                entry.a.JOBS_LOCK, entry.a.STORE,
+                                                MAINTENANCE))
             return
         if path == "/api/v1/hardening/health":
             try:
@@ -294,6 +308,23 @@ class HardenedHandler(entry.Handler):
         return super().do_GET()
 
     def do_POST(self):
+        # A future updater needs to drain every ordinary write request, not
+        # just MES jobs. This is only an internal fence: no route starts a
+        # drain, and the updater remains unauthorized without other gates.
+        try:
+            with MAINTENANCE.mutation():
+                return self._post_admitted()
+        except MaintenanceBlocked:
+            self.send_response(503)
+            self._cors()
+            self.send_header("Retry-After", "5")
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            body = b'{"error":"maintenance_draining","update_authorized":false}'
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def _post_admitted(self):
         path = urlparse(self.path).path
         if path == workstation_pairing.PAIR_PATH:
             if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/x-www-form-urlencoded":
@@ -319,7 +350,8 @@ class HardenedHandler(entry.Handler):
                 return
             # Fixed official HTTPS destination; never available as JSON.
             self._pair_response(303, headers={
-                "Location": workstation_pairing.destination(AGENT_TOKEN)
+                "Location": workstation_pairing.destination(AGENT_TOKEN),
+                "Set-Cookie": workstation_pairing.expired_cookie(),
             })
             return
         if not self._authorized(path):

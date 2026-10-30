@@ -64,6 +64,25 @@ export function productionEvidenceForOccurrence(occurrence={},contexts=[]){
   return proven.every(row=>identity(row)===identity(proven[0]))?proven[0]:trustedProductionEvidence({});
 }
 
+/** Diagnose missing 3022 generation evidence without treating 3028 timestamps as a replacement.
+ * Returns only observable source/matching states, never guesses the station. */
+export function productionEvidenceGap(occurrence={},contexts=[]){
+  if(productionEvidenceForOccurrence(occurrence,contexts).trusted)return null;
+  if(!Array.isArray(contexts)||!contexts.length)return '3022 sem contextos carregados para a linha/revisão';
+  const matched=contexts.filter(row=>row&&sameFailureOccurrence(occurrence,row));
+  if(!matched.length)return '3022 carregada, mas sem correlação exata PCBA + falha + Defect Time';
+  if(matched.length>1)return '3022 com contextos conflitantes/duplicados para esta ocorrência';
+  const ctx=matched[0];
+  const status=String(ctx.reference_status||ctx.status||'').toUpperCase();
+  if(/RULE_NOT_MAPPED|UNMAPPED/.test(status)||!ctx.reference_rule_id&&!(ctx.reference_station_code||ctx.reference_event_time))
+    return '3022 sem posto de referência mapeado para o CPH e família';
+  if(!ctx.reference_event_time)return '3022 sem passagem válida concluída no posto de referência';
+  const failure=instant(defectTime(occurrence)),event=instant(ctx.reference_event_time);
+  if(failure===null||event===null)return '3022 com horário de referência inválido ou não interpretável';
+  if(event>failure)return '3022 com referência posterior à ocorrência investigada';
+  return '3022 com referência encontrada, porém sem vínculo de evidência confiável';
+}
+
 export function genericReturnEvidence(row={}){
   const station=text(row.return_station_code)||null;
   const operation=text(row.return_operation_name)||null;

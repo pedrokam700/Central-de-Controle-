@@ -59,8 +59,24 @@ def local_origin(origin: str | None, port: int) -> bool:
 
 
 def authorized(headers, token: str, port: int) -> bool:
-    """Authorize same-origin local UI or an exact workstation capability."""
+    """Allow verified browser loopback UI or the exact workstation capability.
+
+    Browser same-origin GET/fetch commonly omits Origin. The previous Origin-
+    only gate returned 401 in every newly pasted local tab despite an active
+    agent. Fetch Metadata provides a narrow, browser-controlled proof that
+    remains unavailable to a cross-site page. Missing/opaque metadata still
+    requires the workstation token.
+    """
     if local_origin(headers.get("Origin"), port):
+        return True
+    origin = str(headers.get("Origin") or "").strip()
+    local_host = str(headers.get("Host") or "").strip().lower()
+    allowed_hosts = {f"127.0.0.1:{int(port)}", f"localhost:{int(port)}"}
+    if (not origin
+            and local_host in allowed_hosts
+            and str(headers.get("Sec-Fetch-Site") or "").lower() == "same-origin"
+            and str(headers.get("Sec-Fetch-Mode") or "").lower() in {"cors", "same-origin"}
+            and str(headers.get("Sec-Fetch-Dest") or "").lower() in {"", "empty"}):
         return True
     supplied = str(headers.get(TOKEN_HEADER) or "")
     return bool(supplied) and hmac.compare_digest(supplied, token)

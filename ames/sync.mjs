@@ -1,6 +1,6 @@
 import {normalizeCanonical,CANONICAL_SCHEMA} from './data/canonical.mjs';
 import {LINE_IDS} from './data/contract.mjs';
-import {historyMetadata} from './data/history.mjs';
+import {factoryWallMinute,historyMetadata} from './data/history.mjs';
 import {publicationIntent,factoryWindow,isTodaySnapshot} from './data/operational-period.mjs';
 const sha=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const syncHeadMetadata=(head,authority='team_latest')=>Object.freeze({
@@ -16,6 +16,66 @@ const syncHeadsMetadata=(heads,authority='team_latest')=>{
   const latest=remote_heads.map(h=>h.collected_at).filter(Boolean).sort().at(-1)||null;
   return {remote_scope:authority,remote_heads,remote_line_count:remote_heads.length,remote_latest_collected_at:latest};
 };
+// Comparison is diagnostic only: timestamps + PCBA + defect code are possible
+// matches between 3028 extractions, NOT proven shared occurrence identities.
+// No output may contain an SN, account identity or original observation key.
+export function compareCompetingPublisherObservations(installs){
+  if(!Array.isArray(installs)||installs.length!==2)return {state:'unsupported_installation_count'};
+  const windows=installs.map(x=>[
+    factoryWallMinute(x.payload?.summary?.period?.start_at),
+    factoryWallMinute(x.payload?.summary?.period?.end_at)
+  ]);
+  if(windows.some(([start,end])=>!start||!end||start>=end))return {state:'period_unverified'};
+  const overlapStart=windows.map(w=>w[0]).sort().at(-1),overlapEnd=windows.map(w=>w[1]).sort()[0];
+  if(overlapStart>=overlapEnd)return {state:'different_periods'};
+  const window_scope=JSON.stringify(windows[0])===JSON.stringify(windows[1])?'same_window':'overlap_only';
+  const observations=installs.map(({payload})=>{
+    const rows=Array.isArray(payload.datasets?.defects)?payload.datasets.defects:[];
+    const keys=new Set();let unverifiable=0,ambiguous=0,outside=0,observed=0;
+    for(const row of rows){
+      const sn=String(row?.pcba_sn||'').trim(),code=String(row?.defect_code||'').trim();
+      const time=factoryWallMinute(row?.defect_time);
+      if(!sn||!code||!time){unverifiable++;continue;}
+      // Compare only the actually shared time window. Rows outside it are
+      // neither missing from nor zero in the other workstation's collection.
+      // The MES extraction may include observations at its end instant;
+      // preserve the source's inclusive boundary until a stronger contract.
+      if(time<overlapStart||time>overlapEnd){outside++;continue;}
+      observed++;
+      const key=JSON.stringify([sn,code,time]);
+      if(keys.has(key))ambiguous++;
+      keys.add(key);
+    }
+    const coverage=payload.coverage?.defects||{};
+    return {keys,observed,unverifiable,ambiguous,outside,
+      source_complete:coverage.transport_complete===true&&coverage.source_complete===true};
+  });
+  const summary={window_scope,observed_defects:observations.map(x=>x.observed),
+    outside_common_window:observations.map(x=>x.outside),
+    coverage_complete:observations.map(x=>x.source_complete),
+    unverifiable_rows:observations.map(x=>x.unverifiable),
+    ambiguous_keys:observations.map(x=>x.ambiguous)};
+  if(observations.some(x=>x.unverifiable||x.ambiguous))
+    return {state:'ambiguous_identifiers',...summary};
+  const [first,second]=observations;
+  const matches=[...first.keys].filter(k=>second.keys.has(k)).length;
+  return {state:matches?'candidate_overlap':'no_candidate_matches',...summary,
+    candidate_matches:matches,unmatched_observed:[first.keys.size-matches,second.keys.size-matches]};
+}
+// Safe, read-only observations for competing CURRENT sources. These are
+// values inside each verified payload, never a team-wide total or FULL close.
+// Deliberately exclude identifiers, raw records, repair comments and UIDs.
+export function isolatedPublisherMetrics(payload){
+  const percentage=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:null;
+  const nonnegative=value=>Number.isSafeInteger(value)&&value>=0?value:null;
+  return {
+    fpy:percentage(payload?.summary?.fpy),
+    check_fpy:percentage(payload?.summary?.check_fpy),
+    quantity:nonnegative(payload?.summary?.quantity),
+    observed_defects:Array.isArray(payload?.datasets?.defects)?payload.datasets.defects.length:null,
+    defects_source_complete:payload?.coverage?.defects?.source_complete===true&&payload?.coverage?.defects?.transport_complete===true
+  };
+}
 export function sanitizeSnapshot(payload){
   normalizeCanonical(payload);
   const allowed=['schema','schema_version','source_id','snapshot_id','snapshot_revision','content_hash','line_id','collected_at','source_view','source_timestamp','summary','datasets','coverage','insights','capabilities','process_contexts'];
@@ -29,7 +89,15 @@ export async function publication(uid,payload,{now=new Date(),productionConfig}=
   const head={schema:CANONICAL_SCHEMA,owner_uid:uid,line_id:safe.line_id,source_id:safe.source_id,snapshot_id:safe.snapshot_id,snapshot_num:Number(safe.snapshot_id),snapshot_revision:safe.snapshot_revision,key,hash,parts:parts.length,collected_at:safe.collected_at};
   return {id:uid+':'+safe.line_id+':'+key,uid,head,parts,history:historyMetadata(safe),publish_scope:publicationIntent(safe,now,productionConfig)};
 }
-export function indexedQueue(){
+// Native Web Locks coordinate writers in *cooperating, current* tabs of one
+// browser origin/profile. Previously opened tabs, other profiles and machines
+// may still write without this lock; it is never update authorization.
+const OUTBOX_WRITER_LOCK='central-ames-outbox-v2-cooperative-writer-v1';
+const REMOTE_PUBLISH_LOCK='central-ames-firestore-v1-cooperative-publisher-v1';
+const MAINTENANCE_CLAIM_ID='!ames-maintenance-active-v1';
+const validMaintenanceBinding=b=>b&&Object.keys(b).sort().join(',')==='installation_sha256,scope_id,transaction_id'&&/^[a-f0-9]{64}$/.test(b.installation_sha256)&&/^[a-f0-9]{64}$/.test(b.scope_id)&&/^[a-f0-9]{32}$/.test(b.transaction_id);
+const maintenanceBlocked=()=>Object.assign(Error('ames_browser_maintenance_pending'),{code:'ames_browser_maintenance_pending'});
+export function indexedQueue({lockManager=globalThis.navigator?.locks}={}){
   let db,markersDb;
   // Preserve the already proven IndexedDB outbox schema/version EXACTLY.
   const open=()=>db||(db=new Promise((resolve,reject)=>{
@@ -45,29 +113,111 @@ export function indexedQueue(){
     r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
   }));
   const run=async(mode,work,marker=false)=>{const d=await (marker?openMarkers():open());return new Promise((resolve,reject)=>{const t=d.transaction(marker?'sent':'pending',mode),s=t.objectStore(marker?'sent':'pending');let value;const r=work(s);r.onsuccess=()=>value=r.result;t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});};
+  const lockSupported=()=>typeof lockManager?.request==='function';
+  const readClaim=()=>run('readonly',s=>s.get(MAINTENANCE_CLAIM_ID),true);
+  const assertWritable=async()=>{if(await readClaim())throw maintenanceBlocked();};
+  const withWriter=work=>{
+    const guarded=async()=>{await assertWritable();return work();};
+    return lockSupported()?lockManager.request(OUTBOX_WRITER_LOCK,{mode:'shared'},guarded):guarded();
+  };
+  const failedFence=reason=>({schema:'ames-browser-cooperative-fence-v1',cooperative_fence_observed:false,pending_entries:null,reason,multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false});
   return {
-    put:x=>run('readwrite',s=>s.put(x)),
-    remove:id=>run('readwrite',s=>s.delete(id)),
+    put:x=>withWriter(()=>run('readwrite',s=>s.put(x))),
+    remove:id=>withWriter(()=>run('readwrite',s=>s.delete(id))),
     list:async uid=>(await run('readonly',s=>s.getAll())).filter(x=>x.uid===uid),
+    // Count every UID in this browser origin, including evidence left by a
+    // previous login. Never fetch payloads or mutate the offline outbox.
+    countAll:()=>run('readonly',s=>s.count()),
+    // Metadata only, existing marker DB/store; no schema change or expiry.
+    maintenanceClaim:readClaim,
+    // Candidate-only inter-tab probe. The caller's asynchronous observation
+    // runs while the exclusive lock blocks NEW cooperating writers; Web Locks
+    // releases the lock even if the observer rejects or its tab closes. This
+    // does not fence older clients, unrelated profiles or Firestore uploads.
+    async withCooperativeMaintenanceFence(observe=async()=>{},{transaction}={}){
+      if(typeof observe!=='function')throw TypeError('maintenance_observer_must_be_function');
+      if(transaction!==undefined&&!validMaintenanceBinding(transaction))return failedFence('browser_maintenance_binding_invalid');
+      if(!lockSupported())return failedFence('browser_web_locks_unavailable');
+      try{
+        return await lockManager.request(OUTBOX_WRITER_LOCK,{mode:'exclusive',ifAvailable:true},async lock=>{
+          if(!lock)return failedFence('cooperative_outbox_writer_busy');
+          const pending=await run('readonly',s=>s.count());
+          if(!Number.isSafeInteger(pending)||pending<0)return failedFence('browser_outbox_unavailable');
+          let persistent={};
+          if(transaction){
+            if(pending!==0)return failedFence('pending_outbox_evidence');
+            const desired={id:MAINTENANCE_CLAIM_ID,schema:'ames-browser-maintenance-claim-v1',...transaction,update_authorized:false};
+            const previous=await readClaim();
+            if(previous&&JSON.stringify(previous)!==JSON.stringify(desired))return failedFence('browser_maintenance_claim_conflict');
+            if(!previous)await run('readwrite',s=>s.put(desired),true);
+            persistent={persistent_claim_held:true,transaction:Object.freeze({...transaction})};
+          }else if(await readClaim())return failedFence('browser_maintenance_recovery_required');
+          await observe(Object.freeze({cooperative_fence_held:true,pending_entries:pending,...persistent,update_authorized:false,multi_tab_attested:false,other_browser_profiles_attested:false}));
+          return {schema:'ames-browser-cooperative-fence-v1',cooperative_fence_observed:true,cooperative_fence_released:true,pending_entries:pending,reason:pending?'pending_outbox_evidence':'other_tabs_profiles_and_legacy_clients_unattested',multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false};
+        });
+      }catch{return failedFence('cooperative_outbox_fence_failed');}
+    },
     hasHistory:async id=>!!(await run('readonly',s=>s.get(id),true)),
-    markHistory:id=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),true)
+    markHistory:id=>withWriter(()=>run('readwrite',s=>s.put({id,at:new Date().toISOString()}),true))
   };
 }
 
-export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
-  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),watchDay='';
+// A local, account-scoped safety marker only: no snapshots, origin IDs,
+// PCBA, material SN, repair comments or credentials are persisted here.
+// One key per line makes concurrent tabs' identical writes idempotent.
+export function browserConflictJournal(storage=()=>{
+  try{return typeof localStorage==='undefined'?null:localStorage;}catch{return null;}
+}){
+  const key=(uid,day,line)=>`central-ames-verified-conflict-v1:${encodeURIComponent(uid)}:${day}:${line}`;
+  const valid=(uid,day,line)=>typeof uid==='string'&&uid.length>0&&
+    /^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(day)&&LINE_IDS.includes(line);
+  return {
+    list(uid,day){return LINE_IDS.filter(line=>{
+      if(!valid(uid,day,line))return false;
+      try{return storage()?.getItem(key(uid,day,line))==='multiwriter_verified';}catch{return false;}
+    });},
+    mark(uid,day,line){
+      if(!valid(uid,day,line))return false;
+      try{const target=storage();if(!target)return false;
+        target.setItem(key(uid,day,line),'multiwriter_verified');
+        return target.getItem(key(uid,day,line))==='multiwriter_verified';
+      }catch{return false;}
+    }
+  };
+}
+
+export function createMesSync(store,remote,{queue=indexedQueue(),conflictJournal=browserConflictJournal(),publicationLocks=globalThis.navigator?.locks,online=()=>navigator.onLine,changed=()=>{},schedule=setTimeout,unschedule=clearTimeout,now=()=>new Date(),productionConfig=()=>({timezone:store.agent().config?.timezone||'America/Sao_Paulo',dayStart:store.agent().config?.production_day_start||store.agent().config?.day_start||'07:00'})}={}){
+  let uid=null,generation=0,running=false,timer,readTimer,retry=1000,readRetry=1000,unwatch,seen='',headsKey='',readGeneration=0,lastHeads=[],lastReadMeta={},hasHeads=false,watchFailed=false,watchGeneration=0,capturing=null,identityBlocked=new Map(),uploadedParts=new Set(),remotePayloadCache=new Map(),verifiedConflicts=new Map(),watchDay='';
+  // Do not erase the counters on logout: an already-started remote promise may
+  // still be unsettled after its session has been invalidated.
+  let uploadsInFlight=0,capturesInFlight=0,readsInFlight=0;
   const alive=(u,g)=>u===uid&&g===generation;
   const currentConfig=()=>typeof productionConfig==='function'?productionConfig():productionConfig;
   const entryScope=e=>publicationIntent(JSON.parse(e.parts.join('')),now(),currentConfig());
   const status=patch=>{store.updateAgent({sync:{...(store.agent().sync||{}),...patch}});changed();};
-  const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null,identity_blocked:[],last_publish_timing:null});
+  const preservedGuard=line=>({line_id:line,installations:null,distinct_sources:null,
+    identity_collision:false,candidates:[],observation_comparison:{state:'persisted_guard_no_payload'},
+    retained_from_verified_conflict:true,persisted_guard:true});
+  const restoreConflictMarkers=()=>{
+    if(!uid||!watchDay)return;
+    for(const line of conflictJournal.list(uid,watchDay)){
+      if(!verifiedConflicts.has(line))verifiedConflicts.set(line,{day:watchDay,conflict:preservedGuard(line)});
+    }
+  };
+  const clearRemoteStatus=()=>status({status:'idle',pending:null,last_sent:null,last_received_at:null,server_received_at:null,publish_errors:[],error:'',read_status:'idle',read_error:'',remote_scope:'team_latest',remote_heads:[],remote_line_count:0,remote_latest_collected_at:null,origin_conflict_lines:[],origin_conflict_candidates:[],identity_blocked:[],last_publish_timing:null});
   async function flush(){
-    if(!uid||running)return;running=true;const u=uid,g=generation;
+    if(!uid||running)return;running=true;uploadsInFlight++;const u=uid,g=generation;
     try{
       let entries=await queue.list(u);
       if(!alive(u,g))return;
       status({pending:entries.length,status:entries.length?'pending':(store.agent().sync?.last_sent?'synchronized':'idle')});
       if(!online())return;
+      // Keep the shared publication lease until Firestore writes AND the
+      // matching IndexedDB acknowledgement have completed. An exclusive
+      // maintenance observer must acquire this lease BEFORE the outbox lease
+      // to avoid deadlock with queue.remove/markHistory below.
+      const transfer=async()=>{
+      if(typeof queue.maintenanceClaim==='function'&&await queue.maintenanceClaim())throw maintenanceBlocked();
       while(entries.length&&alive(u,g)){
         entries.sort((a,b)=>b.head.snapshot_num-a.head.snapshot_num||b.head.snapshot_revision-a.head.snapshot_revision);
         const errors=[];
@@ -126,12 +276,17 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       }
       retry=1000;
       if(alive(u,g))status({status:identityBlocked.size?'shared_history_legacy_conflict':store.agent().sync?.last_sent?'synchronized':'idle',pending:0,error:'',identity_blocked:[...identityBlocked.keys()],publish_errors:[...identityBlocked.values()]});
+      };
+      if(typeof publicationLocks?.request==='function')await publicationLocks.request(REMOTE_PUBLISH_LOCK,{mode:'shared'},transfer);
+      else await transfer();
     }catch(error){if(alive(u,g)){status({status:'pending',error:error.message});unschedule(timer);timer=schedule(()=>{if(alive(u,g))flush();},retry);retry=Math.min(retry*2,60000);}}
-    finally{if(alive(u,g))running=false;}
+    finally{uploadsInFlight--;if(alive(u,g))running=false;}
   }
   async function receive(heads,meta=lastReadMeta){
+    readsInFlight++;
     const u=uid,g=generation,read=++readGeneration,receivedAt=Date.now();
     try{
+      restoreConflictMarkers();
       const candidates=meta.day_index_available?heads.filter(h=>h.period_start):heads;
       const byLine=new Map();
       for(const h of candidates){
@@ -139,7 +294,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         if(!byLine.has(h.line_id))byLine.set(h.line_id,[]);
         byLine.get(h.line_id).push(h);
       }
-      const payloads=[],selectedHeads=[],originConflictLines=[];
+      const payloads=[],selectedHeads=[],originConflictLines=[],originConflictCandidates=[];
       let downloaded=0,cacheHits=0,skippedVersions=0,downloadMs=0;
       for(const [line,variants] of byLine){
         const recent=variants.sort((a,b)=>Date.parse(b.collected_at||0)-Date.parse(a.collected_at||0)||Number(b.snapshot_num)-Number(a.snapshot_num)||Number(b.snapshot_revision)-Number(a.snapshot_revision));
@@ -179,10 +334,36 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         }
         if(!byInstallation.size)continue;
         if(byInstallation.size>1){
-          originConflictLines.push(line);continue;
+          // Keep verified candidate metadata visible for human review, but
+          // never expose owner UIDs, combine rows, or promote a competing head.
+          const installs=[...byInstallation.values()];
+          const verified=installs.map(({head,payload})=>({
+            ...syncHeadMetadata(head,meta.day_index_available?'operational_day_history':'team_latest'),
+            period_start:payload.summary?.period?.start_at||null,
+            period_end:payload.summary?.period?.end_at||null,
+            isolated_metrics:isolatedPublisherMetrics(payload)
+          }));
+          const distinctSources=new Set(verified.map(h=>h.source_id));
+          originConflictLines.push(line);
+          const guard_persisted=conflictJournal.mark(u,watchDay,line);
+          const conflict={line_id:line,installations:verified.length,
+            distinct_sources:distinctSources.size,identity_collision:distinctSources.size<verified.length,
+            guard_persisted,
+            candidates:verified.slice(0,10),observation_comparison:compareCompetingPublisherObservations(installs)};
+          originConflictCandidates.push(conflict);
+          verifiedConflicts.set(line,{day:watchDay,conflict});
+          continue;
         }
+        // A server index that temporarily omits one immutable source does
+        // not constitute a verified multiwriter resolution for this day.
+        if(verifiedConflicts.get(line)?.day===watchDay)continue;
         const selected=byInstallation.values().next().value;
         selectedHeads.push(selected.head);payloads.push(selected.payload);
+      }
+      for(const [line,record] of verifiedConflicts){
+        if(record.day!==watchDay||originConflictLines.includes(line))continue;
+        originConflictLines.push(line);
+        originConflictCandidates.push({...record.conflict,retained_from_verified_conflict:true});
       }
       if(alive(u,g)&&read===readGeneration){
         unschedule(readTimer);readRetry=1000;
@@ -192,6 +373,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
           read_status:originConflictLines.length?'origin_conflict':meta.from_cache?'cached':'ready',
           read_error:originConflictLines.length?'Múltiplas instalações publicaram a mesma linha e dia. Nenhuma foi escolhida automaticamente.':'',
           origin_conflict_lines:originConflictLines,
+          origin_conflict_candidates:originConflictCandidates,
           last_receive_timing:{read_ms:Date.now()-receivedAt,download_ms:downloadMs,
             candidates:candidates.length,downloaded,cache_hits:cacheHits,skipped_versions:skippedVersions},
           last_received_at:stamp,
@@ -200,13 +382,23 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
         });
       }
     }catch(error){if(alive(u,g)&&read===readGeneration){status({read_status:'error',read_error:error.message});unschedule(readTimer);readTimer=schedule(()=>{if(alive(u,g)&&online())receive(lastHeads,lastReadMeta);},readRetry);readRetry=Math.min(readRetry*2,60000);}}
+    finally{readsInFlight--;}
   }
   function subscribe(){
     if(!uid)return;
     const u=uid,g=generation,w=++watchGeneration;
+    readGeneration++;
     unwatch?.();unwatch=null;watchFailed=false;headsKey='';hasHeads=false;lastHeads=[];
-    watchDay=factoryWindow(now(),currentConfig()).start_at;
+    const nextDay=factoryWindow(now(),currentConfig()).start_at;
+    if(nextDay!==watchDay)verifiedConflicts.clear();
+    watchDay=nextDay;
+    restoreConflictMarkers();
     status({read_status:'connecting',read_error:''});
+    if(verifiedConflicts.size){
+      const present=[...verifiedConflicts].filter(([,record])=>record.day===watchDay);
+      if(present.length)status({read_status:'origin_conflict',origin_conflict_lines:present.map(([line])=>line),
+        origin_conflict_candidates:present.map(([,record])=>record.conflict.persisted_guard?record.conflict:{...record.conflict,retained_from_verified_conflict:true})});
+    }
     const failed=error=>{
       if(!alive(u,g)||w!==watchGeneration)return;
       watchFailed=true;readGeneration++;status({read_status:'error',read_error:error.message});
@@ -215,9 +407,20 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     try{
       unwatch=remote.watch(u,(heads,meta={})=>{
         if(!alive(u,g)||w!==watchGeneration||watchFailed)return;
+        // Once this subscription has received a server index, a later
+        // Firestore cache event has weaker provenance. This also protects
+        // the window while the server payloads are still being verified.
+        if(meta.from_cache&&hasHeads&&lastReadMeta.from_cache===false)return;
         const key=JSON.stringify([heads.map(h=>[h.line_id,h.owner_uid,h.key]).sort(),!!meta.from_cache]);
         if(key===headsKey)return;
         headsKey=key;
+        // A partial offline Firestore cache is not proof that a competing
+        // publisher disappeared. Never collapse a server-verified conflict
+        // into one selected team head because a cache omitted a source.
+        if(meta.from_cache&&(store.agent().sync?.origin_conflict_lines||[]).length){
+          status({read_status:'origin_conflict'});
+          return;
+        }
         // An empty local Firestore cache cannot revoke previously verified data.
         if(meta.from_cache&&!heads.length&&lastHeads.length){status({read_status:'cached'});return;}
         hasHeads=true;lastHeads=heads;lastReadMeta={...meta,received_at:new Date().toISOString()};void receive(heads,lastReadMeta);
@@ -228,6 +431,7 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
     if(!uid)return;
     if(capturing){await capturing;if(!uid)return;return capture();}
     const u=uid,g=generation;
+    capturesInFlight++;
     const work=(async()=>{
       const payloads=store.localCanonical();
       const signature=JSON.stringify(payloads.map(p=>[p.line_id,p.source_id,p.snapshot_id,p.snapshot_revision,p.content_hash]));
@@ -238,9 +442,71 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       if(alive(u,g)){status({status:pending?'pending':'idle',pending});void flush();}
     })();
     capturing=work;
-    try{await work;}finally{if(capturing===work)capturing=null;}
+    try{await work;}finally{capturesInFlight--;if(capturing===work)capturing=null;}
   }
   return {
+    async withCooperativeBrowserFence(observer=async()=>{},{transaction}={}){
+      // This is an optional, unconnected candidate primitive. Neither this
+      // callback nor its return value may authorize Windows maintenance.
+      const fail=reason=>({schema:'ames-browser-dual-cooperative-fence-v1',cooperative_fence_observed:false,reason,pending_entries:null,multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false});
+      if(typeof observer!=='function')throw TypeError('maintenance_observer_must_be_function');
+      if(transaction!==undefined&&!validMaintenanceBinding(transaction))return fail('browser_maintenance_binding_invalid');
+      if(typeof publicationLocks?.request!=='function'||typeof queue.withCooperativeMaintenanceFence!=='function')return fail('browser_cooperative_locks_unavailable');
+      const initial={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+      if(initial.uploadsInFlight||initial.capturesInFlight||initial.readsInFlight)return fail('local_browser_activity_in_flight');
+      try{
+        return await publicationLocks.request(REMOTE_PUBLISH_LOCK,{mode:'exclusive',ifAvailable:true},async lock=>{
+          if(!lock)return fail('cooperative_remote_publication_busy');
+          let blocked=false;
+          const outbox=await queue.withCooperativeMaintenanceFence(async evidence=>{
+            const current={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+            if((transaction&&(!evidence.persistent_claim_held||JSON.stringify(evidence.transaction)!==JSON.stringify(transaction)))||evidence.pending_entries!==0||Object.keys(initial).some(key=>initial[key]!==current[key])){blocked=true;return;}
+            await observer(Object.freeze({...evidence,remote_publication_fence_held:true,update_authorized:false,multi_tab_attested:false,other_browser_profiles_attested:false}));
+            const after={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+            if(Object.keys(initial).some(key=>initial[key]!==after[key]))blocked=true;
+          },{transaction});
+          if(!outbox.cooperative_fence_observed)return fail(outbox.reason||'cooperative_outbox_fence_failed');
+          if(blocked)return fail(outbox.pending_entries?'pending_outbox_evidence':'local_browser_activity_changed');
+          return {schema:'ames-browser-dual-cooperative-fence-v1',cooperative_fence_observed:true,cooperative_fence_released:true,pending_entries:0,reason:'legacy_tabs_other_profiles_and_other_machines_unattested',multi_tab_attested:false,other_browser_profiles_attested:false,update_authorized:false};
+        });
+      }catch{return fail('cooperative_browser_fence_failed');}
+    },
+    async withMaintenanceTransaction(binding,observer){
+      // Opt-in only: no UI/HTTP activation. Failure never deletes the claim.
+      if(!validMaintenanceBinding(binding))throw TypeError('browser_maintenance_binding_invalid');
+      return this.withCooperativeBrowserFence(observer,{transaction:binding});
+    },
+    async inspectMaintenanceClaim(){return typeof queue.maintenanceClaim==='function'?queue.maintenanceClaim():null;},
+    async inspectUpdateReadiness(){
+      // This is only an observation of ONE browser origin/profile. Other
+      // profiles, old tabs and a concurrently changing queue cannot be fenced
+      // here; only an external coordinator can eventually authorize an update.
+      const initial={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+      let pending=null,reason='browser_outbox_unavailable';
+      if(typeof queue.countAll==='function'){
+        try{
+          const total=await queue.countAll();
+          if(Number.isSafeInteger(total)&&total>=0){pending=total;reason='';}
+        }catch{/* IndexedDB locked, denied or unavailable: fail closed. */}
+      }
+      const observed={generation,uploadsInFlight,capturesInFlight,readsInFlight};
+      const changed=Object.keys(initial).some(key=>initial[key]!==observed[key]);
+      return {
+        schema:'ames-browser-outbox-readonly-v1',
+        pending_entries:pending,
+        uploads_inflight:observed.uploadsInFlight,
+        captures_inflight:observed.capturesInFlight,
+        reads_inflight:observed.readsInFlight,
+        observation_stable:!changed,
+        advisory_no_pending:pending===0&&!changed&&
+          !observed.uploadsInFlight&&!observed.capturesInFlight&&!observed.readsInFlight,
+        reason:reason||(changed?'session_or_activity_changed_during_observation':pending?'pending_outbox_evidence':''),
+        multi_tab_attested:false,
+        other_browser_profiles_attested:false,
+        exclusive_lease_held:false,
+        update_authorized:false,
+      };
+    },
     async listHistory(line){
       if(!uid||!remote.listHistory)throw Error('History unavailable');
       const u=uid,g=generation,rows=await remote.listHistory(line);
@@ -278,6 +544,6 @@ export function createMesSync(store,remote,{queue=indexedQueue(),online=()=>navi
       status({status:'pending',pending:(await queue.list(u)).length});void flush();return true;
     },
     retry(){if(watchFailed)subscribe();else if(uid&&hasHeads)void receive(lastHeads,{...lastReadMeta,from_cache:lastReadMeta.from_cache||!online()});return flush();},
-    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;identityBlocked.clear();uploadedParts.clear();remotePayloadCache.clear();watchDay='';unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
+    stop(){generation++;readGeneration++;uid=null;running=false;seen='';headsKey='';lastHeads=[];lastReadMeta={};hasHeads=false;watchFailed=false;watchGeneration++;capturing=null;identityBlocked.clear();uploadedParts.clear();remotePayloadCache.clear();verifiedConflicts.clear();watchDay='';unwatch?.();unwatch=null;unschedule(timer);unschedule(readTimer);retry=readRetry=1000;store.replaceSyncedSnapshots([]);clearRemoteStatus();}
   };
 }

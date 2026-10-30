@@ -59,6 +59,7 @@ test('wrong line stays absent; mismatched period fails closed; no metrics invent
 });
 
 import {createReadingPeriodController} from '../ames/reading-period-controller.mjs';
+import {traceTargetForLine} from '../ames/data/trace-targets.mjs';
 const entry=p=>({line_id:p.line_id,source_id:p.source_id,snapshot_id:p.snapshot_id,snapshot_revision:p.snapshot_revision,collected_at:p.collected_at,period_start:p.summary.period.start_at,period_end:p.summary.period.end_at,history_source:'shared'});
 test('loader uses immutable history, excludes custom and preserves selected line',async()=>{
  const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day');s.updateContext({line_id:'TAN10102'});
@@ -104,6 +105,56 @@ test('chosen source cannot admit another source payload even with a matching lin
  assert.equal(s.read(line).snapshot,null);
  assert.match(s.agent().period_read.errors[0].error,/historical_identity_mismatch/);
  c.clear();
+});
+test('unreadable newest historical revision recovers an older revision without claiming latest or starting MES',async()=>{
+ const l3='TAN10103',base=snapshot('14','2026-10-16','previous_day');
+ const old={...base,line_id:l3,content_hash:'a'.repeat(64),source_id:'factory-A'};
+ old.summary={...base.summary,line:l3};
+ const newest={...old,snapshot_revision:2,content_hash:'b'.repeat(64),collected_at:'2026-10-17T21:00:00Z'};
+ const store=createAmesStore({now:()=>now.getTime()}),opened=[];
+ store.setLocalConnected(true);
+ store.updateAgent({status:'connected',capabilities:{source_id:'factory-A',exact_trace_targets:true}});
+ const ctl=createReadingPeriodController(store,{list:async line=>line===l3?[entry(newest),entry(old)]:[],
+   open:async e=>{opened.push(e.snapshot_revision);if(e.snapshot_revision===2)throw Error('corrupted_saved_revision');return old;}});
+ await ctl.select('previous');
+ assert.deepEqual(opened,[2,1]);
+ assert.equal(store.read(l3).snapshot?.snapshot_id,'14');
+ assert.equal(store.read(l3).snapshot?.revision,1);
+ assert.equal(store.agent().period_read.status,'partial');
+ assert.deepEqual(store.agent().period_read.recovered_lines,[{
+   line_id:l3,unreadable_revisions:1,source_id:'factory-A',snapshot_id:'14',snapshot_revision:1}]);
+ assert.equal(traceTargetForLine(store,l3).available,false,'recovered older revision must not be sent to MES');
+ ctl.clear();
+});
+test('historical fallback never crosses a second collector and fails closed if all entries from selected origin are corrupt',async()=>{
+ const p=snapshot('old','2026-10-16','previous_day'),newer={...p,snapshot_revision:2,
+   collected_at:'2026-10-18T19:00:00Z'};
+ const foreign={...snapshot('foreign','2026-10-16','previous_day'),source_id:'foreign-pc'};
+ const opened=[],store=createAmesStore({now:()=>now.getTime()});
+ store.updateAgent({status:'connected',capabilities:{source_id:p.source_id}});
+ const ctl=createReadingPeriodController(store,{list:async l=>l===line?[{...entry(newer),history_source:'local'},{...entry(p),history_source:'local'},entry(foreign)]:[],
+   open:async e=>{opened.push(e.source_id);throw Error('all_selected_origin_unreadable');}});
+ await ctl.select('previous');
+ assert.deepEqual(opened,[p.source_id,p.source_id]);
+ assert.equal(store.read(line).snapshot,null);
+ assert.equal(store.agent().period_read.status,'partial');
+ assert.equal(store.agent().period_read.recovered_lines.length,0);
+ assert.match(store.agent().period_read.errors[0].error,/all_selected_origin_unreadable/);
+ ctl.clear();
+});
+test('newest revision with a false period index is not silently skipped',async()=>{
+ const old=snapshot('14','2026-10-16','previous_day'),incorrect={...old,snapshot_revision:2,
+   collected_at:'2026-10-17T21:00:00Z',summary:{...old.summary,period:{
+     ...old.summary.period,start_at:'2026-10-15T07:00'}}};
+ const store=createAmesStore({now:()=>now.getTime()});
+ const ctl=createReadingPeriodController(store,{list:async l=>l===line?[{...entry(incorrect),
+   period_start:old.summary.period.start_at},entry(old)]:[],
+   open:async e=>e.snapshot_revision===2?incorrect:old});
+ await ctl.select('previous');
+ assert.equal(store.read(line).snapshot?.snapshot_id,'14');
+ assert.equal(store.agent().period_read.status,'partial');
+ assert.equal(store.agent().period_read.recovered_lines[0].unreadable_revisions,1);
+ ctl.clear();
 });
 test('loader does not mix late historical reads after switching back Today',async()=>{
  const s=createAmesStore({now:()=>now.getTime()}),p=snapshot('old','2026-10-16','previous_day');let release;
@@ -169,6 +220,142 @@ test('preferred source survives the operational period change in one session, bu
  ctl.clear();
 });
 
+test('completed previous-day 3028 locally collected revision replaces pinned old shared origin, without losing history',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),localOld=snapshot('36','2026-10-16','previous_day');
+ const localNew={...snapshot('38','2026-10-16','previous_day'),collected_at:'2026-10-19T17:35:00Z'};
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'other-workstation',collected_at:'2026-10-19T17:00:00Z'};
+ let local=localOld;
+ const e=p=>({...entry(p),history_source:p.source_id===local.source_id?'local':'shared'});
+ const history={list:async l=>l===line?[e(remote),e(local)]:[],open:async target=>
+   target.source_id===remote.source_id?remote:local};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:local.source_id}});
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).source,'remote');
+ assert.equal(traceTargetForLine(s,line).reason,'Revisão não pertence ao agente local conectado');
+ local=localNew;
+ // A manual/period read refresh alone must retain the explicit historical choice.
+ await ctl.select('previous');assert.equal(s.read(line).snapshot.snapshot_id,'37');
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'38'},
+   period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'}});
+ assert.equal(s.read(line).snapshot.snapshot_id,'38');
+ assert.equal(s.read(line).source,'local');
+ assert.equal(s.agent().period_read.source_choices[0].selected_source_id,local.source_id);
+ assert.equal(traceTargetForLine(s,line).available,true);
+ await ctl.select('previous');
+ assert.equal(s.read(line).snapshot.snapshot_id,'38','refresh keeps the locally collected version');
+ await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).snapshot.snapshot_id,'37','older shared history remains accessible on request');
+ ctl.clear();
+});
+
+test('completed 3074 deep trace displays enriched LOCAL revision of same snapshot instead of pinned remote revision',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),localOld=snapshot('36','2026-10-16','previous_day');
+ const localEnriched={...localOld,snapshot_revision:2,content_hash:'enriched',insights:{schema:'ames-insights-v1',line,snapshot_id:'36',ready:true,material_kpis:[['Materiais em 2º uso',1]]}};
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'remote-pc',collected_at:'2026-10-19T17:00:00Z'};
+ let local=localOld;
+ const e=p=>({...entry(p),history_source:p.source_id===local.source_id?'local':'shared'});
+ const history={list:async l=>l===line?[e(remote),e(local)]:[],open:async target=>target.source_id===remote.source_id?remote:local};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:local.source_id}});
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).source,'remote');
+ local=localEnriched;
+ await ctl.select('previous',{traceReceipt:{snapshot_ids:{[line]:'36'}}});
+ assert.equal(s.read(line).source,'local');
+ assert.equal(s.read(line).snapshot.snapshot_revision,2);
+ assert.equal(s.read(line).snapshot.insights.groups.material_kpis[0][1],1);
+ await ctl.select('previous');
+ assert.equal(s.read(line).snapshot.snapshot_revision,2,'refresh retains the enriched local origin');
+ await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).snapshot.snapshot_id,'37','older shared origin is still accessible');
+ ctl.clear();
+});
+
+test('completed deep trace materializes pending newer LOCAL revision instead of reopening the stale numbered r22',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),old=snapshot('36','2026-10-16','previous_day');
+ const current={...old,snapshot_revision:23,content_hash:'new-enrichment-r23'};
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'another-workstation'};
+ const oldEntry={...entry(old),snapshot_revision:22,history_source:'local'};
+ const pending={...entry(old),snapshot_revision:null,revision_pending:true,history_source:'local'};
+ const opened=[];
+ const history={list:async l=>l===line?[{...entry(remote),history_source:'shared'},oldEntry,pending]:[],
+  open:async e=>{opened.push([e.history_source,e.snapshot_revision]);return e.history_source==='shared'?remote:e.revision_pending?current:{...old,snapshot_revision:22};}};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:old.source_id}});
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ await ctl.select('previous',{traceReceipt:{snapshot_ids:{[line]:'36'}}});
+ assert.deepEqual(opened.at(-1),['local',null],
+  'a completed trace must ask the agent to materialize the pending revision, not replay an old local export');
+ assert.equal(s.read(line).snapshot.snapshot_revision,23);
+ assert.equal(s.read(line).source,'local');
+ assert.equal(traceTargetForLine(s,line).available,true);
+ ctl.clear();
+});
+
+test('refresh or page reload of selected LOCAL history materializes pending source epoch without needing job receipt',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),old=snapshot('36','2026-10-16','previous_day');
+ const pending={...entry(old),history_source:'local',revision_pending:true,snapshot_revision:null};
+ const numbered={...entry(old),history_source:'local',snapshot_revision:22};
+ const latest={...old,snapshot_revision:23,content_hash:'materialized-r23'};
+ const opened=[];
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:old.source_id}});
+ const ctl=createReadingPeriodController(s,{list:async l=>l===line?[numbered,pending]:[],
+  open:async e=>{opened.push(e.snapshot_revision);return e.revision_pending?latest:{...old,snapshot_revision:22};}});
+ await ctl.select('previous');
+ assert.deepEqual(opened,[null]);
+ assert.equal(s.read(line).snapshot.snapshot_revision,23);
+ assert.equal(s.read(line).source,'local');
+ ctl.clear();
+});
+
+test('deep trace from another day or source never changes the displayed origin',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),local=snapshot('36','2026-10-16','previous_day');
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'remote-pc'};
+ const history={list:async l=>l===line?[{...entry(remote),history_source:'shared'},{...entry(local),history_source:'local'}]:[],
+   open:async target=>target.source_id===remote.source_id?remote:local};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:local.source_id}});
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ await ctl.select('previous',{traceReceipt:{snapshot_ids:{[line]:'35'}}});
+ assert.equal(s.read(line).source,'remote','different historical snapshot is ignored');
+ s.updateAgent({status:'connected',capabilities:{source_id:'unknown-pc'}});
+ await ctl.select('previous',{traceReceipt:{snapshot_ids:{[line]:'36'}}});
+ assert.equal(s.read(line).source,'remote','an unverified workstation may not select local');
+ ctl.clear();
+});
+test('collection receipt cannot switch an operator-selected remote source without exact local snapshot and period',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),local=snapshot('38','2026-10-16','previous_day');
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'other-workstation'};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:local.source_id}});
+ const history={list:async l=>l===line?[{...entry(local),history_source:'local'},entry(remote)]:[],
+  open:async e=>e.source_id===local.source_id?local:remote};
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'99'},
+  period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'}});
+ assert.equal(s.agent().period_read.status,'partial','unknown local job revision cannot masquerade as updated');
+ assert.equal(s.read(line).snapshot,null);
+ await ctl.select('previous');
+ assert.equal(s.read(line).snapshot.source_id,remote.source_id);
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'38'},
+  period_start:'2026-10-15T07:00',period_end:'2026-10-16T07:00'}});
+ assert.equal(s.read(line).snapshot.source_id,remote.source_id,'a different production day cannot change this selection');
+ ctl.clear();
+});
+test('a completed local collection missing its exact historical revision fails visibly instead of showing the old shared one as updated',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),remote={...snapshot('37','2026-10-16','previous_day'),source_id:'other-workstation'};
+ s.updateAgent({status:'connected',capabilities:{source_id:'my-agent'}});
+ const ctl=createReadingPeriodController(s,{list:async l=>l===line?[entry(remote)]:[],open:async()=>remote});
+ await ctl.select('previous');assert.equal(s.read(line).snapshot?.snapshot_id,'37');
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'38'},
+  period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'}});
+ assert.equal(s.agent().period_read.status,'partial');
+ assert.match(s.agent().period_read.errors[0].error,/não foi comprovada no agente deste PC/);
+ assert.equal(s.read(line).snapshot,null);
+ ctl.clear();
+});
+
 test('Line 2 keeps the exact prior-day source already proven in memory across refresh even when preferences are unavailable',async()=>{
  const line2='TAN10102',p={...snapshot('LOCAL-L2','2026-10-16','previous_day'),line_id:line2,source_id:'source-L2'};
  p.summary={...p.summary,line:line2};
@@ -218,5 +405,46 @@ test('Today does not import a saved observation from yesterday or a shifted/cust
  await ctl.select('today');
  assert.equal(s.read(line).snapshot,null);
  assert.equal(s.read(line).saved_today,false);
+ ctl.clear();
+});
+
+
+test('history source preference is authenticated-account scoped and ignores unscoped legacy keys',async()=>{
+ const previous=globalThis.localStorage,values=new Map();
+ globalThis.localStorage={getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value)};
+ const p=snapshot('p','2026-10-16','previous_day'),q={...snapshot('q','2026-10-16','previous_day'),source_id:'OTHER-POST'};
+ const history={list:async l=>l===line?[entry(p),entry(q)]:[],open:async e=>e.source_id===q.source_id?q:p};
+ values.set('ames-history-source-preference-v1:'+line,q.source_id);
+ const make=account=>{const store=createAmesStore({now:()=>now.getTime()});return {store,ctl:createReadingPeriodController(store,history,{preferenceScope:account})};};
+ try{
+  const a=make('SYNTHETIC-ACCOUNT-A');await a.ctl.select('previous');
+  assert.equal(a.store.read(line).snapshot,null,'legacy browser-wide preference is not account consent');
+  await a.ctl.chooseSource(line,q.source_id);
+  const b=make('SYNTHETIC-ACCOUNT-B');await b.ctl.select('previous');
+  assert.equal(b.store.read(line).snapshot,null,'account B cannot inherit account A source choice');
+  const again=make('SYNTHETIC-ACCOUNT-A');await again.ctl.select('previous');
+  assert.equal(again.store.read(line).snapshot?.source_id,q.source_id,'the same account keeps its own valid preference');
+  assert.equal(values.get('ames-history-source-preference-v1:'+line),q.source_id,'do not delete or migrate legacy data');
+  a.ctl.clear();b.ctl.clear();again.ctl.clear();
+ }finally{globalThis.localStorage=previous;}
+});
+
+test('changing account or resetting session invalidates source overrides and stale reads',async()=>{
+ let account='SYNTHETIC-A',release;
+ const p=snapshot('p','2026-10-16','previous_day'),q={...snapshot('q','2026-10-16','previous_day'),source_id:'OTHER-POST'};
+ const store=createAmesStore({now:()=>now.getTime()});
+ const history={list:async l=>l===line?[entry(p),entry(q)]:[],open:async e=>e.source_id===q.source_id?q:p};
+ const ctl=createReadingPeriodController(store,history,{preferenceScope:()=>account});
+ await ctl.select('previous');await ctl.chooseSource(line,q.source_id);
+ account='SYNTHETIC-B';store.clear();
+ await ctl.select('previous');assert.equal(store.read(line).snapshot,null);
+ assert.equal(ctl.preferredSource(line),null);
+ await ctl.chooseSource(line,p.source_id);
+ history.open=()=>new Promise(resolve=>{release=resolve;});
+ const pending=ctl.select('previous');
+ for(let i=0;i<10&&!release;i++)await Promise.resolve();
+ assert.equal(typeof release,'function');
+ account='SYNTHETIC-C';release(p);await pending;
+ assert.equal(store.agent().period_read.status,'loading','response from prior account must not complete the new account read');
  ctl.clear();
 });
