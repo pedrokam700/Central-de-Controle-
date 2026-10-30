@@ -84,3 +84,30 @@ test('complete source coverage has no warning and degraded source is translated 
     else globalThis.document=prior;
   }
 });
+
+test('3074 partial collection names real query and pagination gaps, never equates job done with full',()=>{
+ const state=doneState({status:'complete',source_status:'COMPLETE'});
+ state.job.result.stages={'3074':'partial','2114':'done','3022':'done'};
+ state.job.result.deep_trace.TAN10103['3074']={
+   source_status:'PARTIAL',requested_pcba_count:97,processed_pcba_count:94,pcba_error_count:3,
+   coverage_diagnostic:{requested_pcbas:97,processed_pcbas:94,pcba_errors:3,partial_page_count:2,
+     reasons:['pcba_errors','extjs_pagination_incomplete']}
+ };
+ const html=collectionStatus(state);
+ assert.match(html,/3074 parcial/);
+ assert.match(html,/94\/97 PCBAs concluídas/);
+ assert.match(html,/3 erro\(s\)/);
+ assert.match(html,/2 páginas sem cobertura comprovada/);
+ assert.match(html,/Páginas da 3074 não comprovadas/);
+ assert.match(html,/Cobertura não comprovada/);
+});
+test('a verified 3074 COMPLETE is not mislabeled partial or missing',()=>{
+ const state=doneState({status:'complete',source_status:'COMPLETE'});
+ state.job.result.stages={'3074':'done','2114':'done','3022':'done'};
+ state.job.result.deep_trace.TAN10103['3074']={source_status:'COMPLETE',
+   coverage_diagnostic:{requested_pcbas:3,processed_pcbas:3,pcba_errors:0,partial_page_count:0}};
+ const html=collectionStatus(state);
+ assert.match(html,/3\/3 PCBAs/);
+ assert.match(html,/cobertura de extração comprovada/);
+ assert.doesNotMatch(html,/data-trace-source-coverage/);
+});
