@@ -53,6 +53,20 @@ function trace3074Summary(row){
  if(state==='COMPLETE')return `3074 · ${esc(processed)}/${esc(requested)} PCBAs · cobertura de extração comprovada (não comprova ausência de falha)`;
  if(state==='PARTIAL'||state==='ERROR'){
   const reasons=Array.isArray(diag.reasons)?diag.reasons.slice(0,6):[];
+  // Every candidate here comes from the SAME completed local job, never
+  // a guessed SN from another day/snapshot or an additional MES request.
+  const itemRows=Array.isArray(src.items)?src.items:[];
+  const badSn=new Set();
+  for(const item of itemRows){
+   if(item&&String(item.status||'').toUpperCase()!=='COMPLETE'&&item.pcba_sn)
+    badSn.add(String(item.pcba_sn));
+  }
+  for(const page of (Array.isArray(diag.partial_pages)?diag.partial_pages:[])){
+   const idx=Number(page.pcba_index);
+   const item=Number.isInteger(idx)&&idx>0?itemRows[idx-1]:null;
+   if(item?.pcba_sn)badSn.add(String(item.pcba_sn));
+  }
+  const unverified=[...badSn].slice(0,8);
   const details=reasons.map(reason=>({
    pcba_errors:t('PCBAs com erro de consulta','Boards with query errors'),
    pcba_not_complete:t('Consultas de PCBAs não concluídas','Board queries not completed'),
@@ -60,7 +74,7 @@ function trace3074Summary(row){
    pcba_count_mismatch:t('Quantidade de PCBAs divergente','Board count mismatch'),
    totals_not_verified:t('Totais da coleta não comprovados','Unverified collection totals')
   })[reason]||reason);
-  return `<span class="notice warn" data-trace-3074-detail><b>3074 ${state==='PARTIAL'?t('parcial','partial'):t('indisponível','unavailable')}</b> · ${esc(processed)}/${esc(requested||'—')} PCBAs concluídas · ${esc(errors)} erro(s) · ${esc(partialPages)} ${t('páginas sem cobertura comprovada','unverified pages')}${details.length?` · ${esc(details.join('; '))}`:''}</span>`;
+  return `<span class="notice warn" data-trace-3074-detail><b>3074 ${state==='PARTIAL'?t('parcial','partial'):t('indisponível','unavailable')}</b> · ${esc(processed)}/${esc(requested||'—')} PCBAs concluídas · ${esc(errors)} erro(s) · ${esc(partialPages)} ${t('páginas sem cobertura comprovada','unverified pages')}${details.length?` · ${esc(details.join('; '))}`:''}${unverified.length?` · ${t('PCBAs a conferir','Boards to inspect')}: ${esc(unverified.join(', '))}${badSn.size>unverified.length?' …':''}`:''}</span>`;
  }
  return t('3074 · cobertura não comprovada','3074 · unverified coverage');
 }
