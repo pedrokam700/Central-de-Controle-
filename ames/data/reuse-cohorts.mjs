@@ -35,6 +35,43 @@ export function boardHistSeqRecurrence(occurrence={},history=[]){
  return ordered.slice(0,-1).map(([,old])=>({...old,history_order_basis:'HIST_SEQ_ONLY',history_timestamp_proven:Boolean(time(old))}));
 }
 
+/** Auditable whole 2114 history of the same board, independent of a 3028 match.
+ * Hist Seq orders MES records (including seq 0), not assembly/use cycles.
+ * A same-code repeat within the 2114 sequence is NOT evidence of a
+ * specific 3028 defect, of another mounting, or of its original timestamp.
+ */
+export function board2114Timeline(board,history=[]){
+ const id=typeof board==='string'?board:sn(board);
+ const original=history.filter(r=>sn(r)===id&&code(r));
+ const seen=new Set();
+ const records=original.filter(r=>{
+  const key=JSON.stringify([sequence(r),code(r),value(r,'defect_desc','Defect Description'),value(r,'defect_type','Defect Type'),value(r,'repair_status','Repair Status')]);
+  if(seen.has(key))return false;
+  seen.add(key);return true;
+ }).sort((a,b)=>{
+  const sa=sequence(a),sb=sequence(b);
+  return sa===null&&sb===null?0:sa===null?1:sb===null?-1:sa-sb;
+ });
+ const earlier=[];
+ return records.map(row=>{
+  const seq=sequence(row),hasOrder=seq!==null;
+  const prior=hasOrder?earlier.filter(r=>sequence(r)!==null&&sequence(r)<seq):[];
+  const exact=prior.filter(r=>compareFailures(code(row),value(row,'defect_desc','Defect Description'),code(r),value(r,'defect_desc','Defect Description')).classification==='EXACT');
+  const similar=prior.filter(r=>compareFailures(code(row),value(row,'defect_desc','Defect Description'),code(r),value(r,'defect_desc','Defect Description')).classification==='SIMILAR');
+  earlier.push(row);
+  return {hist_seq:seq,defect_code:code(row),defect_desc:value(row,'defect_desc','Defect Description')||null,
+   defect_type:value(row,'defect_type','Defect Type')||null,
+   repair_status:value(row,'repair_status','Repair Status')||null,
+   manual_or_auto:value(row,'manual_or_auto','TestTools Auto Defect Or Defect By Hand')||null,
+   defect_oper:value(row,'defect_oper','Defect Oper')||null,
+   defect_time:value(row,'defect_time','Defect Time')||null,
+   history_order_proven:hasOrder,
+   repeat_exact_prior_count:exact.length,repeat_family_prior_count:similar.length,
+   recurrence_basis:hasOrder?'2114_HIST_SEQ':'NO_ORDER_PROOF',
+   record_id:row.record_id||null};
+ });
+}
+
 function exactOccurrence(row,occurrences,kind){
  const candidates=occurrences.filter(o=>sn(o)===sn(row)&&
   (!code(row)||code(row)===code(o))&&(!time(row)||time(row)===time(o))&&
@@ -137,6 +174,13 @@ export function buildReuseCohorts(snapshot={},filters={}){
   (r.kind==='pcba'||!filters.item_type||r.item_type===filters.item_type)&&(r.kind==='pcba'||!filters.part_number||r.part_numbers.includes(filters.part_number))&&
   (!filters.sn||r.sn.toLowerCase().includes(String(filters.sn).toLowerCase())));
  const pcbaRows=filter(finish(pcbas)),componentRows=filter(finish(components));
+ // A PCBA's full 2114 sequence is always inspectable even when 3074 has
+ // insufficient self-mounting evidence to determine a physical use count.
+ // Keep it separate from the current 3028-vs-2114 recurrence KPI.
+ for(const board of pcbaRows){
+  board.history_2114=board2114Timeline(board.sn,history);
+  board.history_2114_repeats=board.history_2114.filter(h=>h.repeat_exact_prior_count>0).length;
+ }
  return {pcbas:{rows:pcbaRows,...summarizeReusePopulation(pcbaRows)},
   components:{rows:componentRows,...summarizeReusePopulation(componentRows)}};
 }
