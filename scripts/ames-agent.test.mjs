@@ -172,6 +172,9 @@ test('deep trace refuses legacy capability, other workstation and remote histori
    const p=structuredClone(h.store.localCanonical()[0]);p.summary.period={mode:'previous_day',start_at:'2026-10-07T07:00',end_at:'2026-10-08T07:00'};
    h.store.selectReadingPeriod('custom',{start:'2026-10-07T07:00',end:'2026-10-08T07:00'});
    h.store.installHistoricalSnapshot(p,{source:'remote'});
+   // Matching source IDs are not enough; the immutable hash of the agent's
+   // local revision differs from this shared copy. Fail before MES dispatch.
+   h.routes['local-history']={...p,content_hash:'different-local-immutable-hash'};
   }
   if(scenario==='missing-period'){
    const p=structuredClone(h.store.localCanonical()[0]);p.summary.period={};p.content_hash='without-period';h.store.replaceLocalSnapshots([p]);
