@@ -751,12 +751,36 @@ def trace_insights(line=None, snapshot_id=None):
     payload = STORE.get_snapshot_payload(snapshot_id, kinds=["integrated_v016"])
     if not payload:
         return {"schema":"ames-insights-v1","line":line or None,"snapshot_id":snapshot_id,"ready":False,"message":"Este snapshot ainda não terminou o enriquecimento 3074/2114.","drilldowns":{}}
+    # Do not change the established single-revision path. Only multiple
+    # historical captures of this exact snapshot may be reconciled locally.
+    reconstruction = None
+    if line:
+        revisions = STORE.snapshot_payload_history(snapshot_id, "integrated_v016")
+        if len(revisions) > 1:
+            if len(revisions) > 512:
+                return {"schema":"ames-insights-v1","line":line,"snapshot_id":snapshot_id,
+                        "ready":False,"reason":"LOCAL_HISTORY_LIMIT",
+                        "message":"Muitas revisões locais; revisão manual necessária, sem nova coleta MES.",
+                        "drilldowns":{}}
+            from integrated_snapshot_history import recover_snapshot_line
+            versions = [STORE.get_snapshot_payload_revision(
+                snapshot_id, "integrated_v016", int(row["revision"])) for row in revisions]
+            current = STORE.base_rows(snapshot_id=snapshot_id, line=line, limit=100000)
+            recovered, reconstruction = recover_snapshot_line(versions, line, current)
+            if recovered is not None:
+                payload = recovered
     engine = discover_engine(CONFIG, BASE_DIR)
     if not engine:
         raise RuntimeError("Motor V0.16 não encontrado para gerar indicadores de reuso")
     out = build_trace_insights(engine, payload, line=line or None)
     out["snapshot_id"] = snapshot_id
     out["ready"] = True
+    if reconstruction is not None:
+        out["local_reconstruction"] = reconstruction
+        out["population_complete"] = False
+        if reconstruction.get("reason") != "read_only_local_recovery":
+            out["ready"] = False
+            out["message"] = "A 3074 não comprovou as ocorrências selecionadas; usos indeterminados não são primeiro uso."
     return out
 
 
