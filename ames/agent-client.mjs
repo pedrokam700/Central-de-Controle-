@@ -3,7 +3,8 @@ import {classifyWorkstationReady} from './data/workstation-update-policy.mjs';
 import { LINE_IDS, LEGACY_SCHEMA } from './data/contract.mjs';
 import {CANONICAL_SCHEMA,DATASETS,normalizeCanonical} from './data/canonical.mjs';
 import {projectLiveJobEvents} from './data/job-live-events.mjs';
-import {exactTraceTargets,refreshedTraceTarget} from './data/trace-targets.mjs';
+import {traceTargetForLine,exactTraceTargets,refreshedTraceTarget} from './data/trace-targets.mjs';
+import {matchesReadingPeriod} from './data/reading-period.mjs';
 
 const AGENT_TOKEN_KEY='central.ames.agentToken.v1';
 function bootstrapAgentToken(explicit=''){
@@ -342,7 +343,56 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(type==='deep'){
         path='/deep-trace';body={...scope};
         if(store.agent().capabilities?.exact_trace_targets!==true)throw Error('Atualize o agente para rastrear o snapshot exato do período selecionado.');
-        body.snapshot_targets=exactTraceTargets(store,scope.lines);
+        // A previous-day snapshot can be shown through a shared-history
+        // presentation even when it is physically stored in this workstation.
+        // Do NOT relax traceTargetForLine's synchronous foreign-source guard.
+        // A candidate is eligible ONLY after two authenticated loopback reads:
+        // (1) the exact immutable revision and content hash that were displayed;
+        // (2) the latest local revision of THAT SAME source/snapshot/period.
+        // Both are read-only; a failed comparison prevents any MES POST.
+        const prepared={},missing=[];
+        for(const line of scope.lines){
+          const state=traceTargetForLine(store,line);
+          if(state.available){prepared[line]=state.target;continue;}
+          const shown=store.read(line)?.snapshot?.canonical;
+          const period=store.readingPeriod?.();
+          const ownSource=store.agent()?.capabilities?.source_id;
+          const eligible=state.reason==='Revisão não pertence ao agente local conectado'&&
+            shown&&shown.source_id&&shown.source_id===ownSource&&
+            Number.isSafeInteger(Number(shown.snapshot_id))&&Number(shown.snapshot_id)>0&&
+            Number.isSafeInteger(shown.snapshot_revision)&&shown.snapshot_revision>0&&
+            typeof shown.content_hash==='string'&&!!shown.content_hash&&
+            shown.summary?.period?.start_at&&shown.summary?.period?.end_at&&
+            matchesReadingPeriod(shown,period);
+          if(!eligible){missing.push(`${line}: ${state.reason}`);continue;}
+          try{
+            const query=new URLSearchParams({snapshot_id:String(shown.snapshot_id),line,
+              snapshot_revision:String(shown.snapshot_revision)});
+            const exact=await request('/local-history?'+query);
+            normalizeCanonical(exact);
+            if(exact.source_id!==shown.source_id||exact.line_id!==line||
+               String(exact.snapshot_id)!==String(shown.snapshot_id)||
+               exact.snapshot_revision!==shown.snapshot_revision||
+               exact.content_hash!==shown.content_hash||
+               JSON.stringify(exact.summary?.period||null)!==JSON.stringify(shown.summary.period))
+              throw Error('A revisão exibida não corresponde à revisão imutável do agente local');
+            // A later revision can enrich the same 3028 snapshot, never change
+            // the operational period or source. The ordinary loop below rechecks
+            // the latest local head again before submission.
+            const latest=await request('/local-history?'+new URLSearchParams({
+              snapshot_id:String(shown.snapshot_id),line}));
+            normalizeCanonical(latest);
+            const target=refreshedTraceTarget({
+              source_id:shown.source_id,line_id:line,
+              snapshot_id:shown.snapshot_id,snapshot_revision:shown.snapshot_revision,
+              content_hash:shown.content_hash,period:shown.summary.period
+            },latest);
+            delete target.line_id;
+            prepared[line]=target;
+          }catch(error){missing.push(`${line}: revisão não comprovada no agente local (${error.message})`);}
+        }
+        if(missing.length)throw Error('Coleta não iniciada: '+missing.join(' · '));
+        body.snapshot_targets=prepared;
         // Read the most recent immutable export of the SAME local 3028
         // snapshot before dispatch. Partial 3074/2114/3022 captures may have
         // advanced its revision since the previous screen render. This local
