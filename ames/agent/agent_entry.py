@@ -95,6 +95,54 @@ def _trace_snapshot_ids(cfg, require_current=False):
     return ids
 
 
+def _rebase_trace_targets_at_execution(cfg, attempts=3):
+    """Resolve an operator-selected 3028 snapshot *at MES job execution*.
+
+    Admission and queue execution can be separated by SQLite writes from an
+    earlier trace/repair. A browser-only refresh cannot close this interval.
+    A changed revision is acceptable ONLY on the same workstation, line,
+    3028 snapshot and operational period. Never retarget to a newer snapshot.
+    The current-epoch validation is repeated a bounded number of times when
+    a background evidence write races the canonical export. No MES access.
+    """
+    # Revalidate the admitted immutable revision before allowing a newer one.
+    _trace_snapshot_ids(cfg)
+    original=cfg.get('snapshot_targets') or {}
+    lines=cfg.get('lines') or []
+    last_error=None
+    for _ in range(attempts):
+        targets={}
+        for line in lines:
+            expected=original.get(line)
+            if not isinstance(expected,dict):
+                raise ValueError('Explicit trace snapshot target required')
+            sid=int(expected.get('snapshot_id') or 0)
+            if sid<=0:raise ValueError('Invalid trace snapshot ID')
+            latest=canonical.export_revision(a.STORE,sid,line,a.trace_insights)
+            period=latest.get('summary',{}).get('period')
+            if (latest.get('source_id')!=expected.get('source_id') or
+                latest.get('line_id')!=line or
+                str(latest.get('snapshot_id'))!=str(sid) or
+                period!=expected.get('period')):
+                raise ValueError('Trace target identity changed; not retargeting')
+            new_revision=latest.get('snapshot_revision')
+            if type(new_revision) is not int or new_revision<int(expected.get('snapshot_revision') or 0):
+                raise ValueError('Invalid or downgraded trace revision')
+            targets[line]={**expected,'snapshot_revision':new_revision,
+                           'content_hash':latest.get('content_hash')}
+        candidate={**cfg,'snapshot_targets':targets}
+        try:
+            _trace_snapshot_ids(candidate,require_current=True)
+        except ValueError as exc:
+            if str(exc)!='Trace revision changed; reload the selected period':
+                raise
+            last_error=exc
+            continue
+        cfg['snapshot_targets']=targets
+        return {line:int(targets[line]['snapshot_id']) for line in lines}
+    raise last_error or ValueError('Trace revision could not be stabilized')
+
+
 def _run_deep_trace_job(job_id, cfg):
     mode=str(cfg.get("trace_mode") or "full").strip().lower()
     if mode not in {"full","process_only","reuse_only"}:
@@ -107,7 +155,7 @@ def _run_deep_trace_job(job_id, cfg):
                       scope={"trace_mode":mode})
     a._persist_job(job)
     try:
-        ids=_trace_snapshot_ids(cfg,require_current=True)
+        ids=_rebase_trace_targets_at_execution(cfg)
         engine=a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR)
         if not engine:raise RuntimeError("Motor V0.16 nao encontrado")
         lines=a.normalize_lines(cfg.get("lines") or a.CONFIG.get("configured_lines") or [])

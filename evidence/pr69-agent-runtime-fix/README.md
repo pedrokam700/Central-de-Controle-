@@ -1,4 +1,14 @@
 # PR69 — Agent runtime hotfix candidate (NOT production approved)
+## Superseded packaging procedure — 2026-10-30
+
+The patch below is now integrated into the canonical `ames/agent/agent_entry.py`
+and `ames/agent/engine_bridge.py`. Build with `scripts/build-integrated-candidate.py`
+from a clean commit; do not patch or rehash a delivered ZIP by hand. The archived
+patch remains historical evidence, not another build input. Canonical regression
+tests cover two successive SQLite-backed jobs, bounded epoch races, base-page
+coverage, missing pagination proof and mismatched switcher/release/cache identity.
+
+The following records the earlier archive-only procedure, retained for comparison.
 Date: 2026-10-29. The reference archive is CENTRAL_AMES_PR69_TRACE_REVISAO_82311F5_CANDIDATA.zip (312 files).
 
 **Physical evidence**: first selected-one-PCBA trace executed and finished with 3074 partial, 2114/3022 complete; second wider trace never began and returned `Trace revision changed; reload the selected period`. Treat these as two independent failures.

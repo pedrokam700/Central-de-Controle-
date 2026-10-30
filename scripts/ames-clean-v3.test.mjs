@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import crypto from 'node:crypto';import {spawnSync} from 'node:child_process';
 import {filterRows,orderRows,csv} from '../ames/advanced-table.mjs';import {reuseLinks,aggregatePcbas,reuseKpis,componentFamily} from '../ames/data/reuse-analysis.mjs';import {REUSE_PRESETS} from '../ames/reuse-table-view.mjs';
 const sha256=path=>crypto.createHash('sha256').update(fs.readFileSync(path)).digest('hex');
-const shiftSelector=()=>{const py=spawnSync('python',['-c',"import sys;sys.path.insert(0,'ames/factory-engine');from ames.shift_2114 import SELECT_SHIFT_JS;print(SELECT_SHIFT_JS)"],{encoding:'utf8'});assert.equal(py.status,0,py.stderr);return eval('('+py.stdout+')');};
+const shiftSelector=()=>{const py=spawnSync(process.env.PYTHON_BIN||'python',['-c',"import sys;sys.path.insert(0,'ames/factory-engine');from ames.shift_2114 import SELECT_SHIFT_JS;print(SELECT_SHIFT_JS)"],{encoding:'utf8'});assert.equal(py.status,0,py.stderr);return eval('('+py.stdout+')');};
 test('frozen 3028 matches physical CLEAN V3 hashes',()=>{for(const [name,sha] of Object.entries({ames_3028:'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1',ames_3028_live:'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}))assert.equal(sha256('ames/agent/'+name+'.py'),sha);});
 test('unrelated essential engine remains byte-for-byte CLEAN V3',()=>{const manifest=JSON.parse(fs.readFileSync('docs/ames/clean-v3-source-manifest.json'));for(const name of ['ames/browser.py','core/fluxo_3028_3074.py'])assert.equal(sha256('ames/factory-engine/'+name),manifest[name],name);});
 test('Issue #66 3074 View-response correction is explicit and source-pinned',()=>{

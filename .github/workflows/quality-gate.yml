@@ -40,6 +40,8 @@ jobs:
           python3 scripts/agent-source-capture.test.py
           python3 scripts/agent-capture-manifest.test.py
           python3 scripts/agent-trace-target.test.py
+          python3 scripts/agent-3074-coverage-summary.test.py
+          python3 scripts/agent-package-contract.test.py
 
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
@@ -174,6 +176,7 @@ jobs:
           node scripts/ames-experience.browser.mjs
           node scripts/ames-sync-reload.browser.mjs
           node scripts/ames-pairing.browser.mjs
+          node scripts/ames-3028-completion.browser.mjs
       - uses: actions/upload-artifact@v6
         if: always()
         with:

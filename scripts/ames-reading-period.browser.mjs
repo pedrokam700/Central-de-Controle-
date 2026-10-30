@@ -137,12 +137,12 @@ try{
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening evidence cannot query MES');
  const groupTable=page.locator('[data-console-pane=failures] [data-failure-groups] table');
  assert.deepEqual(await groupTable.locator('thead th').allTextContents(),
-   ['Falha','Ocorrências','PCBAs 2º+*','C/ item 2º+*','Materiais 2º+*','Mesma falha/fam.*','Última ocorrência'],
+   ['Falha','Ocorrências','PCBAs 2º+*','PCBAs 2º+ · mesma falha*','PCBAs c/ material 2º+*','PCBAs c/ material 2º+ · mesma falha*','Última ocorrência'],
    'grouped failures retain all four distinct reuse/correlation evidence columns');
  const groupedCells=await groupTable.locator('tbody tr').evaluateAll(rows=>rows.map(row=>[...row.querySelectorAll('td')].map(td=>td.textContent.trim())));
  assert.equal(groupedCells.reduce((sum,cells)=>sum+Number(cells[1]),0),old.datasets.defects.length,'grouping cannot duplicate observed 3028 occurrences');
- assert(groupedCells.some(cells=>cells[2]==='1'&&cells[3]==='1'&&cells[4]==='—'),
-   'exact board/context counts cannot invent a physical SN count without an occurrence-bound material link');
+ assert(groupedCells.some(cells=>cells[2]==='1'&&cells[3]==='—'&&cells[4]==='1'),
+   'duplicate occurrence-bound material rows count ONE affected PCBA; missing exact prior failure stays unknown');
  assert(groupedCells.some(cells=>cells[5]==='—'),'unproven correlation remains unknown rather than zero');
  assert.doesNotMatch(await groupTable.locator('tbody').innerText(),/≥/,'exact observed counts must not be confused with population coverage');
  assert.match(await page.locator('[data-failure-groups]').innerText(),/cobertura pode estar incompleta/i,'incomplete population coverage stays explicit');
@@ -173,6 +173,7 @@ try{
  assert.doesNotMatch(await analytics.locator('.ames-dfa-occ-grid').allTextContents().then(v=>v.join(' ')),/SYNTHETIC-OLD-AT/);
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening preserved repair candidates cannot query MES');
  await page.locator('[data-console-view=reuse]').click();
+ await page.locator('[data-console-pane=reuse] details').filter({has:page.locator('[data-component-matrix]')}).evaluate(e=>e.open=true);
  const matrix=page.locator('[data-component-matrix]');
  assert.equal(await matrix.locator('[data-component-cell=total] > summary').innerText(),'1');
  await matrix.locator('[data-component-cell=total] > summary').click();
@@ -181,9 +182,10 @@ try{
  assert.equal(await matrix.locator('img').count(),0);
  const cohorts=page.locator('[data-reuse-cohorts]');
  assert.match(await cohorts.innerText(),/Denominador não comprovado/);
- assert.equal(await cohorts.locator('[data-cohort-kind=pcbas][data-cohort-metric=second_use] strong').innerText(),'1');
- assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=third_plus_use] strong').innerText(),'1');
- assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=failed] strong').innerText(),'0');
+ assert.equal(await cohorts.locator('[data-cohort-kind=pcbas][data-cohort-metric=reused] strong').innerText(),'1');
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=reused] strong').innerText(),'1');
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=same_failure] strong').innerText(),'0',
+   'the duplicated reused material has no proven previous same failure');
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure]').count(),0,
   'unknown denominator cannot occupy an unproven no-failure KPI');
  await cohorts.locator('[data-cohort-limits] > summary').click();
@@ -294,7 +296,7 @@ try{
  assert.equal(await snLive.locator('[data-sn-live-provenance]').evaluate(el=>el.open),false,'source details start collapsed');
  await snLive.locator('[data-sn-live-provenance] summary').click();
  assert.match(await snLive.locator('[data-sn-live-provenance]').innerText(),/3012|2114/);
- assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1);
+ assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),0,'a current failure without prior proof must not create an alert');
  assert.equal(await snLive.locator('[data-sn-temporal-detail]').count(),1);
  assert.equal(await snLive.locator('[data-sn-history-detail]').count(),1);
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'SN live decoration cannot collect MES');
@@ -340,7 +342,7 @@ try{
  });
  assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1,'source panel must not duplicate across SN queries');
  assert.equal(await snLive.locator('[data-sn-source-state]').count(),5,'new SN retains all five distinct source statuses');
- assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1,'smart alerts panel must not duplicate');
+ assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),0,'a new SN without evidence must clear the previous alert');
  // Factory SIM case: A5162 is a prior completed process, NOT a mapped origin.
  await page.evaluate(()=>{
    qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
@@ -439,7 +441,7 @@ try{
  await page.locator('[data-console-view=sn]').click();
  assert.equal(await page.locator('[data-sn-form] input[name=sn]').inputValue(),'PCBA-PERSIST-PERIOD');
  assert.equal(await page.evaluate(()=>qa.snFormIdentity===document.querySelector('[data-console-pane=sn] [data-sn-form]')),true,'period selection must not discard active SN investigation');
- assert.equal(await page.locator('[data-sn-live] [data-sn-smart-alerts]').count(),1);
+ assert.equal(await page.locator('[data-sn-live] [data-sn-smart-alerts]').count(),0,'changing period must not manufacture prior-failure evidence for this SN');
  assert.equal(await page.locator('[data-sn-saved-toggle]').count(),1);
  assert.equal(await page.locator('[data-stored-search]').count(),0);
  assert.match(await page.locator('[data-console-pane="sn"] [data-shared-period]').innerText(),/independente/);

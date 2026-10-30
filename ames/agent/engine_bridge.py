@@ -87,6 +87,63 @@ def enrich_deferred_3074_candidates(result, tela3074, *, query_memo=None,
     return result
 
 
+
+def summarize_3074_capture(result):
+    """Distinguish extraction coverage from unproven component reuse.
+
+    CLEAN's collector returns counts/items but no top-level source_status on
+    complete runs. Missing status must not be reinterpreted as not_run. On the
+    other hand, a completed job is NOT complete evidence when a PCBA failed or
+    an ExtJS store only returned the first page. Preserve all raw rows.
+    """
+    items=(result or {}).get('items') or []
+    expected=(result or {}).get('requested_pcba_count')
+    processed=(result or {}).get('processed_pcba_count')
+    errors=(result or {}).get('pcba_error_count')
+    partial_pages=[]; pcba_errors=[]; missing=[]; page_proofs=[]
+    def walk_pages(value,loc):
+        if not isinstance(value,dict):return
+        # Base-PCBA pages use base_coverage; component pages use coverage.
+        # An unknown total cannot certify full extraction either.
+        for key in ('coverage','base_coverage'):
+            c=value.get(key)
+            if isinstance(c,dict):page_proofs.append(loc)
+            if isinstance(c,dict) and (c.get('status')=='incomplete_page' or
+                    type(c.get('reported_total')) is not int or c.get('returned')!=c.get('reported_total')):
+                partial_pages.append({'pcba_index':loc,'reason':str(c.get('reason') or 'pagination_unverified'),
+                    'returned':c.get('returned'),'reported_total':c.get('reported_total')})
+        for k in ('base_query','query','trace_3074'):
+            walk_pages(value.get(k),loc)
+        for k in ('items','defect_traces','results','component_usage'):
+            for child in value.get(k) or []:walk_pages(child,loc)
+    for i,item in enumerate(items):
+        if not isinstance(item,dict):
+            missing.append(i+1);continue
+        status=str(item.get('status') or '').upper()
+        if status=='ERROR':pcba_errors.append(i+1)
+        elif status!='COMPLETE':missing.append(i+1)
+        walk_pages(item,i+1)
+        if status=='COMPLETE' and i+1 not in page_proofs:
+            partial_pages.append({'pcba_index':i+1,'reason':'pagination_evidence_missing'})
+    counts_valid=(type(expected) is int and expected>0 and type(processed) is int
+                  and type(errors) is int and len(items)==expected)
+    complete=(counts_valid and processed==expected and errors==0 and
+              not pcba_errors and not missing and not partial_pages)
+    failure=(counts_valid and errors==expected and processed==0)
+    reasons=[]
+    if not counts_valid:reasons.append('totals_not_verified')
+    if pcba_errors or errors:reasons.append('pcba_errors')
+    if missing:reasons.append('pcba_not_complete')
+    if partial_pages:reasons.append('extjs_pagination_incomplete')
+    if counts_valid and processed!=expected:reasons.append('pcba_count_mismatch')
+    return {'source_status':'ERROR' if failure else 'COMPLETE' if complete else 'PARTIAL',
+        'coverage_diagnostic':{'requested_pcbas':expected,'processed_pcbas':processed,
+          'pcba_errors':errors,'failed_indexes':pcba_errors[:20],
+          'non_complete_indexes':missing[:20],
+          'partial_page_count':len(partial_pages),'partial_pages':partial_pages[:20],
+          'reasons':reasons,'source_complete':complete,
+          'reuse_proven':None}}
+
 def discover_engine(config: Dict[str, Any], agent_dir: Path) -> Optional[Path]:
     candidates = []
     env = os.environ.get("AMES_ENGINE_DIR")
@@ -362,8 +419,9 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
             result_3074, tela3074, query_memo=shared_query_memo,
             pause_s=pause_3074, checkpoint_path=checkpoint_3074,
             line_callback=line_callback)
-        if _has_partial_3074_page(result_3074):
-            result_3074["source_status"] = "PARTIAL"
+        # Only certify source coverage when all requested PCBAs were completed
+        # and all ExtJS pages are proven. Raw rows and reuse logic are unchanged.
+        result_3074.update(summarize_3074_capture(result_3074))
         if event_callback:
             done_3074 = int(result_3074.get("requested_pcba_count") or parser_result.get("unique_pcba_count") or 0)
             event_callback({"stage":"3074","kind":"result","current":done_3074,"total":done_3074,"status":str(result_3074.get("source_status") or result_3074.get("status") or "done"),"result":result_3074})

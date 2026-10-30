@@ -35,13 +35,13 @@ class TraceTargetTests(unittest.TestCase):
             with self.store.connect() as con:con.execute("UPDATE defect_observations SET repair_status_current='Y' WHERE snapshot_id=? AND line=?",(sid,LINE))
             return {'snapshot_id':sid}
         a=types.SimpleNamespace(STORE=self.store,CONFIG={},ENGINE_DIR='synthetic-engine',DATA_DIR=pathlib.Path(self.tmp.name),
-            normalize_lines=lambda lines:lines,utc_now=lambda:'synthetic-now',_job_update=lambda job_id,**kw:{'id':job_id,**kw},
+            trace_insights=None,normalize_lines=lambda lines:lines,utc_now=lambda:'synthetic-now',_job_update=lambda job_id,**kw:{'id':job_id,**kw},
             _persist_job=lambda job:self.jobs.append(job),_select_trace_records=lambda rows,**kw:rows,MES=types.SimpleNamespace(critical=nullcontext),
             _job_live_event=lambda jid,ev,line,idx,total,sid:{'id':jid,'stage':ev.get('stage'),'event':ev.get('kind')},
             run_deep_v016_records=collect,enrich_snapshot_from_integrated=enrich,
             _launch_mes_job=lambda kind,cfg,worker:self.admissions.append(cfg) or {'id':'J'})
         source=ast.parse((ROOT/'ames/agent/agent_entry.py').read_text())
-        names={'_trace_snapshot_ids','_run_deep_trace_job','start_deep_trace_job','_source_stage','_aggregate_stage'}
+        names={'_trace_snapshot_ids','_rebase_trace_targets_at_execution','_run_deep_trace_job','start_deep_trace_job','_source_stage','_aggregate_stage'}
         nodes=[n for n in source.body if isinstance(n,ast.FunctionDef) and n.name in names]
         self.env={'a':a,'canonical':canonical,'json':json,'time':time,'_process_support':lambda:{'ready':True},'urlparse':urlparse,'source_capture':source_capture}
         exec(compile(ast.Module(body=nodes,type_ignores=[]),'<actual trace functions>','exec'),self.env)
@@ -77,16 +77,40 @@ class TraceTargetTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.env['start_deep_trace_job'](cfg)
         self.assertEqual(self.admissions,[]);self.assertEqual(self.calls,[])
 
-    def test_queue_race_rejected_without_mes_and_idempotent_readmission_stays_possible(self):
+    def test_queue_race_rebases_same_snapshot_and_two_successive_jobs_complete(self):
         self.env['start_deep_trace_job'](self.cfg)
         with self.store.connect() as con:con.execute("UPDATE defect_observations SET repair_status_current='Y' WHERE snapshot_id=?",(self.sid,))
         # Admission checks durable identity; the existing scheduler owns request_id replay.
         self.env['start_deep_trace_job'](self.cfg)
         self.env['_run_deep_trace_job']('J',self.cfg)
-        self.assertEqual(self.calls,[]);self.assertEqual(self.jobs[-1]['status'],'error')
-        self.assertIn('revision changed',self.jobs[-1]['error'])
-        self.assertEqual(source_capture.capture_index(self.store,self.sid,LINE),[])
+        self.assertEqual(len(self.calls),1);self.assertEqual(self.jobs[-1]['status'],'done')
+        self.env['_run_deep_trace_job']('J2',self.cfg)
+        self.assertEqual(len(self.calls),2);self.assertEqual(self.jobs[-1]['status'],'done')
+        self.assertEqual({r['snapshot_id'] for records,_ in self.calls for r in records},{self.sid})
+        self.assertGreater(self.cfg['snapshot_targets'][LINE]['snapshot_revision'],1)
         self.assertEqual(canonical.read_revision(self.store,self.sid,LINE,1),self.first)
+
+    def test_worker_rejects_identity_change_even_after_admission(self):
+        self.env['start_deep_trace_job'](self.cfg)
+        for field,value in [('source_id','other-pc'),('period',{'mode':'today'}),('snapshot_revision',999)]:
+            cfg=copy.deepcopy(self.cfg);cfg['snapshot_targets'][LINE][field]=value
+            self.env['_run_deep_trace_job']('BAD',cfg)
+            self.assertEqual(self.jobs[-1]['status'],'error')
+        self.assertEqual(self.calls,[])
+
+    def test_continuously_changing_epoch_is_bounded_and_never_queries_mes(self):
+        count=[]
+        original=canonical.export_revision
+        def racing(*args,**kwargs):
+            value=original(*args,**kwargs);count.append(1)
+            with self.store.connect() as con:
+                con.execute('UPDATE mes_source_clock SET epoch=epoch+1 WHERE snapshot_id=?',(self.sid,))
+            return value
+        from unittest.mock import patch
+        with patch.object(canonical,'export_revision',side_effect=racing):
+            self.env['_run_deep_trace_job']('RACE',self.cfg)
+        self.assertEqual(len(count),3);self.assertEqual(self.calls,[])
+        self.assertEqual(self.jobs[-1]['status'],'error')
 
     def test_interrupted_deep_trace_retains_partial_3074_and_2114_evidence(self):
         def stopped(engine,records,**kwargs):

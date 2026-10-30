@@ -1,5 +1,5 @@
 """Build one standalone clean local Central + A-MES candidate from canonical sources."""
-import argparse, hashlib, json, os, subprocess, tempfile, zipfile
+import argparse, hashlib, json, os, re, subprocess, tempfile, zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
@@ -8,6 +8,27 @@ FIRST_RUN_FILES=('08_PREPARAR_REDE_AMES.bat','01_TROCAR_PARA_PR69_NOVA.bat','TRO
 PACKAGE_DOCS=('INSTRUCOES_INSTALACAO_LIMPA.txt','MANUAL_LOGICA_CAPTURA_E_CRUZAMENTO.md','NOTAS_ALERTAS_SN_PR69.md','NOTAS_CORRECOES_28OUT_RESTAURACAO.md','NOTAS_VALIDACAO_FPY_TOP3_RASTREABILIDADE.md')
 _FORBIDDEN_EXACT={'config.json','local_agent_token','network_health.jsonl','.env','cookies.json','session.json'}
 _FORBIDDEN_SUFFIXES={'.sqlite','.sqlite3','.db','.pyc','.log','.zip','.pem','.key'}
+REQUIRED_FILES={'00_INICIAR_AQUI.bat','ames-agent/agent_entry.py','ames-agent/engine_bridge.py',
+ 'ames-agent/agent_hardened_entry.py','network/ensure_ames_route.ps1','LOCAL_BUNDLE_MANIFEST.json',
+ 'frontend/release-build.json','frontend/Central-de-Controle-/sw.js',
+ *FIRST_RUN_FILES,*PACKAGE_DOCS,*('suporte/ames-workstation/'+n for n in SUPPORT_FILES)}
+
+def verify_build_identity(z,manifest):
+ sha=manifest.get('sha')
+ if not isinstance(sha,str) or not re.fullmatch(r'[0-9a-f]{40}',sha):raise ValueError('Invalid build SHA')
+ missing=REQUIRED_FILES-set(z.namelist())
+ if missing:raise ValueError('Required package files missing: '+', '.join(sorted(missing)))
+ local=json.loads(z.read('LOCAL_BUNDLE_MANIFEST.json'))
+ release=json.loads(z.read('frontend/release-build.json'))
+ switch=z.read('TROCAR_PARA_PR69_NOVA.ps1').decode('utf-8-sig')
+ sw=z.read('frontend/Central-de-Controle-/sw.js').decode('utf-8-sig')
+ expected=re.findall(r"^\$ExpectedSha='([0-9a-f]{40})'",switch,re.M)
+ cache=re.findall(r'''^const CACHE_REVISION=['"]([0-9a-f]{40})['"];''',sw,re.M)
+ if local.get('sha')!=sha or release.get('sha')!=sha or expected!=[sha] or cache!=[sha]:
+  raise ValueError('Build identity mismatch: manifest/local/release/switch/cache')
+ for name,want in local.get('files',{}).items():
+  if name not in manifest['files'] or hashlib.sha256(z.read(name)).hexdigest()!=want:
+   raise ValueError('Local manifest hash mismatch: '+name)
 
 def assert_clean_payload(payload):
  bad=[]
@@ -22,6 +43,8 @@ def assert_clean_payload(payload):
 def verify_zip(destination):
  destination=Path(destination)
  with zipfile.ZipFile(destination) as z:
+  if len(z.namelist())!=len(set(z.namelist())):raise ValueError('Duplicate ZIP paths')
+  if z.testzip():raise ValueError('ZIP CRC failure')
   names=set(z.namelist())
   if 'CANDIDATE_MANIFEST.json' not in names:raise ValueError('CANDIDATE_MANIFEST.json missing from final ZIP')
   manifest=json.loads(z.read('CANDIDATE_MANIFEST.json').decode('utf-8'))
@@ -38,6 +61,7 @@ def verify_zip(destination):
    if got!=want:mismatched.append(name)
   if mismatched:raise ValueError('Final ZIP hash mismatch: '+', '.join(sorted(mismatched)))
   assert_clean_payload({name:b'' for name in names})
+  verify_build_identity(z,manifest)
   return {'zip_files':len(names),'manifest_files':len(files),'sha':manifest.get('sha')}
 
 def build(destination, development=False):

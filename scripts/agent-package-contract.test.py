@@ -181,16 +181,23 @@ def test_integrated_clean_builder_rejects_runtime_private_files():
             raise AssertionError(f"forbidden CLEAN payload file accepted: {name}")
 
 
-def _write_synthetic_candidate(path: Path, *, content: bytes = b"safe", manifest_hash: str | None = None, extra: bool = False):
+def _write_synthetic_candidate(path: Path, *, content: bytes = b"safe", manifest_hash: str | None = None, extra: bool = False, wrong_sha=False):
     wanted = manifest_hash or hashlib.sha256(content).hexdigest()
+    sha='a'*40
+    payload={name:b'synthetic' for name in integrated_builder_module().REQUIRED_FILES}
+    payload['safe.txt']=content
+    payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':{}}).encode()
+    payload['frontend/release-build.json']=json.dumps({'sha':sha}).encode()
+    payload['frontend/Central-de-Controle-/sw.js']=('const CACHE_REVISION="'+sha+'";').encode()
+    payload['TROCAR_PARA_PR69_NOVA.ps1']=("$ExpectedSha='"+('b'*40 if wrong_sha else sha)+"'").encode()
     manifest = {
         "sha": "a" * 40,
         "standalone_clean": True,
         "physical_gate": "PENDING",
-        "files": {"safe.txt": wanted},
+        "files": {**{name:hashlib.sha256(data).hexdigest() for name,data in payload.items()},"safe.txt": wanted},
     }
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("safe.txt", content)
+        for name,data in payload.items():z.writestr(name,data)
         if extra:
             z.writestr("unmanifested.txt", b"extra")
         z.writestr("CANDIDATE_MANIFEST.json", json.dumps(manifest).encode("utf-8"))
@@ -203,9 +210,15 @@ def test_integrated_clean_final_zip_verification_fails_closed():
         valid = root / "valid.zip"
         _write_synthetic_candidate(valid)
         state = builder.verify_zip(valid)
-        assert state["zip_files"] == 2
-        assert state["manifest_files"] == 1
+        assert state["zip_files"] == len(builder.REQUIRED_FILES)+2
+        assert state["manifest_files"] == state["zip_files"]-1
         assert state["sha"] == "a" * 40
+
+        wrong = root / 'wrong-identity.zip'
+        _write_synthetic_candidate(wrong,wrong_sha=True)
+        try:builder.verify_zip(wrong)
+        except ValueError as exc:assert 'identity mismatch' in str(exc)
+        else:raise AssertionError('Rehashed manifest hid a stale switcher SHA')
 
         tampered = root / "tampered.zip"
         _write_synthetic_candidate(tampered, content=b"changed", manifest_hash=hashlib.sha256(b"original").hexdigest())

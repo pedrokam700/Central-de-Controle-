@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.COMMIT||process.env.GITHUB_SHA||null;
+const sha=process.env.COMMIT||process.env.GITHUB_SHA||process.env.VERCEL_GIT_COMMIT_SHA||null;
 const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
 const names=['index.html','app.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest'];
 const allowed=/\.(mjs|css|svg|png|json)$/;

@@ -69,6 +69,7 @@ jobs:
         run: |
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/history-tests/node_modules/playwright/index.mjs"
           node scripts/ames-reading-period.browser.mjs
+          node scripts/ames-3028-completion.browser.mjs
   reading-windows:
     runs-on: windows-latest
     timeout-minutes: 12
@@ -87,6 +88,7 @@ jobs:
             'scripts/agent-source-capture.test.py',
             'scripts/agent-capture-manifest.test.py',
             'scripts/agent-trace-target.test.py',
+            'scripts/agent-3074-coverage-summary.test.py',
             'scripts/agent-canonical.test.py',
             'scripts/agent-repair-association.test.py',
             'scripts/agent-sn-lookup-context.test.py',

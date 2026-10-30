@@ -441,7 +441,10 @@ def prepare_candidate_files(coordinator):
 
 def probe_candidate_http(active, version="new"):
     """Launch ONLY fixture-owned code and confirm /ready PID + version."""
-    child = subprocess.Popen([sys.executable, "-u", str(active / "ames-agent/health_fixture.py")],
+    # Windows venv python.exe redirects to a second process. This stdlib-only
+    # fixture needs the native executable so /ready PID equals the owned child.
+    executable = getattr(sys, '_base_executable', sys.executable) if os.name == 'nt' else sys.executable
+    child = subprocess.Popen([executable, "-u", str(active / "ames-agent/health_fixture.py")],
                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     try:
         ready_line = Queue(maxsize=1)
