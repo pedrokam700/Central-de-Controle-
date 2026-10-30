@@ -39,4 +39,23 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(result['source_status'],'PARTIAL')
         self.assertEqual(result['coverage_diagnostic']['partial_pages'][0]['reason'],'pagination_evidence_missing')
 
+class AggregateStageTests(unittest.TestCase):
+    def test_3074_source_status_is_authoritative_not_absent_raw_status(self):
+        # Compile only the two pure helpers: importing agent_entry would launch
+        # agent services and is strictly forbidden in this offline test.
+        import ast
+        filename=Path(__file__).resolve().parents[1]/'ames/agent/agent_entry.py'
+        tree=ast.parse(filename.read_text(encoding='utf-8'))
+        nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and
+               n.name in ('_source_stage','_aggregate_stage')]
+        ns={}
+        exec(compile(ast.Module(body=nodes,type_ignores=[]),str(filename),'exec'),ns)
+        aggregate=ns['_aggregate_stage']
+        fixture=lambda status: {'TAN10103': {'3074': {'source_status': status,
+                    'coverage_diagnostic': {'source_complete': status=='COMPLETE'}}}}
+        self.assertEqual(aggregate(fixture('COMPLETE'),'3074'),'done')
+        self.assertEqual(aggregate(fixture('PARTIAL'),'3074'),'partial')
+        self.assertEqual(aggregate(fixture('ERROR'),'3074'),'error')
+        self.assertEqual(aggregate({'TAN10103':{'3074':{}}},'3074'),'partial')
+
 if __name__=='__main__':unittest.main()
