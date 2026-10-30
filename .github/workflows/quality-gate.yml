@@ -43,6 +43,7 @@ jobs:
           python3 scripts/agent-3074-coverage-summary.test.py
           python3 scripts/agent-package-contract.test.py
           python3 scripts/agent-integrated-v5.test.py
+          python3 scripts/agent-integrated-snapshot-history.test.py
 
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
