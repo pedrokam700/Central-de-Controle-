@@ -21,8 +21,15 @@ test('same source, line, snapshot and period: use already verified local head, n
  assert.equal(state.target.snapshot_revision,2);
  assert.equal(state.proof,'local_current');
 });
-test('shared copy without verified local head remains blocked, even from same source',()=>{
+test('shared copy from matching connected source is provisionally eligible for authenticated local-history check',()=>{
  const state=traceTargetForLine(harness({local:null}),LINE);
+ assert.equal(state.available,true);
+ assert.equal(state.proof,'requires_local_history_verification');
+ assert.equal(state.target.source_id,'A');
+ assert.equal(state.target.snapshot_id,'2');
+});
+test('shared copy from another agent source is never provisionally eligible',()=>{
+ const state=traceTargetForLine(harness({shown:payload({source:'A'}),local:null,agentSource:'B'}),LINE);
  assert.equal(state.available,false);
  assert.equal(state.reason,'Revisão não pertence ao agente local conectado');
 });
