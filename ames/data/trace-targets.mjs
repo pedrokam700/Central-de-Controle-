@@ -24,11 +24,8 @@ export function traceTargetForLine(store,line){
   // agent still considers it the latest revision for this snapshot.
   if(selected?.mode!=='today'&&store.agent()?.period_read?.recovered_lines?.some(x=>x.line_id===line))
     return {available:false,reason:'Revisão mais recente indisponível; atualize a leitura antes de coletar'};
-  if(p.source_id!==agentSource)
-    return {available:false,reason:'A origem desta revisão não corresponde ao agente conectado; escolha uma revisão do mesmo posto e período. Nenhuma coleta foi iniciada.'};
-  // A shared copy from THIS SAME agent is only a candidate. /local-history
-  // verifies the current on-disk source/line/snapshot/period before POST; the
-  // client never dispatches a MES job based on an unproven shared copy.
+  if((read.source!=='local'&&!provenLocal)||p.source_id!==agentSource)
+    return {available:false,reason:'Revisão não pertence ao agente local conectado'};
   if(!period?.start_at||!period?.end_at)
     return {available:false,reason:'Período operacional não comprovado'};
   if(!Number.isSafeInteger(Number(p.snapshot_id))||Number(p.snapshot_id)<1||
