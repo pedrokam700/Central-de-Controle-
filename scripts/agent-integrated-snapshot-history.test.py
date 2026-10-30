@@ -84,6 +84,33 @@ class RecoveryGate(unittest.TestCase):
         self.assertEqual({x["pcba_sn"] for x in out["trace_2114"]["pcbas"]},
                          {"A", "OLD"})
 
+    def test_recovered_2114_does_not_replace_five_seq_records_with_later_two(self):
+        sn = "00252700662035F300086822"
+        def hist(seqs, status="COMPLETE"):
+            return {"pcba_sn": sn, "status": status, "result": {"rows": [
+                {"Defect Hist Seq": n,
+                 "Defect Code": "GN11-WX02" if n else "GN01-IR02",
+                 "Defect Description": "Wireless connection: GPS/WIFI failed" if n else "Sensor: Infrared sensor test failed",
+                 "Defect Type": "MainBoard" if n != 1 else "Phone Disassembly",
+                 "Repair Status": "Y"} for n in seqs]}}
+        out, diag = recover_snapshot_line(
+            [version([capture(sn)], [hist(range(5))]),
+             version([capture(sn)], [hist((3, 4))])], LINE, [event(sn)])
+        results = out["trace_2114"]["pcbas"]
+        self.assertEqual(len(results), 1)
+        self.assertEqual([r["Defect Hist Seq"] for r in results[0]["result"]["rows"]], list(range(5)))
+        self.assertFalse(diag["source_complete"])
+
+    def test_more_complete_newer_history_is_still_accepted(self):
+        sn = "BOARD"
+        def hist(seqs):
+            return {"pcba_sn": sn, "status": "COMPLETE", "result": {"rows": [
+                {"Defect Hist Seq": n, "Defect Code": "GN11-WX02"} for n in seqs]}}
+        out, _ = recover_snapshot_line(
+            [version([capture(sn)], [hist((0, 1))]),
+             version([capture(sn)], [hist((0, 1, 2))])], LINE, [event(sn)])
+        self.assertEqual(len(out["trace_2114"]["pcbas"][0]["result"]["rows"]), 3)
+
     def test_unknown_self_binding_does_not_become_first_use(self):
         out, diag = recover_snapshot_line(
             [version([capture("A", aut="CAMERA")])], LINE, [event("A")])
