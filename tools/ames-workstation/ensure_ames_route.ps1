@@ -33,25 +33,57 @@ function Test-AmesTcp {
   } finally { $client.Close() }
 }
 
+
+# WLAN GUID is the stable adapter identity. Network profile display names
+# may be "TAXXX_5G 2" or "Rede 5" even when SSID is exactly TAXXX_5G.
+function Resolve-WlanGuidForSsid([string[]]$lines,[string]$ssid) {
+  $currentGuid=$null
+  $found=@()
+  foreach($line in $lines) {
+    if($line -match '^\s*(?:Nome|Name)\s*:'){$currentGuid=$null;continue}
+    if($line -match '^\s*GUID\s*:\s*\{?\s*([0-9A-Fa-f-]{36})\s*\}?\s*$') {
+      $currentGuid=[guid]$Matches[1]
+      continue
+    }
+    if($line -match '^\s*SSID\s*:\s*(.+?)\s*$' -and $Matches[1].Trim() -ceq $ssid) {
+      if(-not $currentGuid){throw "SSID $ssid sem GUID WLAN. Nenhuma rota alterada."}
+      $found+= $currentGuid
+    }
+  }
+  $unique=@($found|Select-Object -Unique)
+  if($unique.Count -ne 1){throw "SSID $ssid sem interface WLAN unica ($($unique.Count)). Nenhuma rota alterada."}
+  return [guid]$unique[0]
+}
+function Resolve-WifiInterfaceIndex([object[]]$adapters,[guid]$wlanGuid) {
+  $matched=@($adapters|Where-Object {
+    $_.InterfaceGuid -and $_.Status -eq 'Up' -and ([guid]$_.InterfaceGuid -eq $wlanGuid)
+  })
+  if($matched.Count -ne 1){throw "WLAN nao corresponde a adaptador ativo unico ($($matched.Count)). Nenhuma rota alterada."}
+  return [int]$matched[0].ifIndex
+}
+
 try {
   Write-Host '=== REDE A-MES: Wi-Fi TAXXX_5G + rota persistente /32 ==='
   $wifi=@(netsh wlan show interfaces 2>&1)
+  if(($wifi -join "`n") -match 'WlanQueryInterface'){
+    throw 'Consulta WLAN negada pelo Windows. Verifique a permissao Localizacao ou procure a TI. Nenhuma rota alterada.'
+  }
   if(-not ($wifi | Where-Object { $_ -match '^\s*SSID\s*:\s*TAXXX_5G\s*$' })){
-    Write-Host 'TAXXX_5G nao conectado. Tentando perfil ja salvo no Windows...'
+    Write-Host 'TAXXX_5G nao identificado. Tentando perfil ja salvo no Windows...'
     & netsh wlan connect name=$Profile | Out-Null
     Start-Sleep -Seconds 4
     $wifi=@(netsh wlan show interfaces 2>&1)
   }
+  if(($wifi -join "`n") -match 'WlanQueryInterface'){
+    throw 'Consulta WLAN negada pelo Windows. Verifique a permissao Localizacao ou procure a TI. Nenhuma rota alterada.'
+  }
   if(-not ($wifi | Where-Object { $_ -match '^\s*SSID\s*:\s*TAXXX_5G\s*$' })){
-    throw 'TAXXX_5G nao conectado. Em PC virgem, conecte pelo Windows com as credenciais da TI e tente novamente. Nenhuma senha e distribuida neste pacote.'
+    throw 'TAXXX_5G nao identificado pelo Windows. Conecte pelo Windows com credenciais da TI. Nenhuma senha e distribuida neste pacote.'
   }
-  # Bind the /32 to the actual Windows network profile of TAXXX_5G.
-  # An unrelated Ethernet interface may also be in 172.29.x.x; never guess.
-  $profiles=@(Get-NetConnectionProfile -ErrorAction Stop | Where-Object { $_.Name -eq $Profile })
-  if($profiles.Count -ne 1){
-    throw "Perfil de rede TAXXX_5G ambiguo ou indisponivel ($($profiles.Count)). Nenhuma rota alterada. Solicite verificacao da TI."
-  }
-  $wifiIndex=[int]$profiles[0].InterfaceIndex
+  # Prove the SSID and map its WLAN GUID to an active adapter, never to an
+  # arbitrary Windows profile display name or an unrelated Ethernet interface.
+  $wlanGuid=Resolve-WlanGuidForSsid $wifi $Profile
+  $wifiIndex=Resolve-WifiInterfaceIndex @(Get-NetAdapter -ErrorAction Stop) $wlanGuid
   $interfaces=@(Get-NetIPConfiguration -InterfaceIndex $wifiIndex | Where-Object {
     $_.IPv4Address.IPAddress -like '172.29.*' -and $_.IPv4DefaultGateway.NextHop -like '172.29.*'
   })

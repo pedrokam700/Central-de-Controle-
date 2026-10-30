@@ -136,6 +136,7 @@ jobs:
                              'scripts/issue57-private-backup-acl.windows.test.ps1',
                              'scripts/issue57-process-witness.windows.test.ps1',
                              'scripts/ames-pr69-switch-parser.windows.test.ps1',
+                              'scripts/ames-pr69-wifi-profile.windows.test.ps1',
                              'tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1')) {
             $tokens=$null; $parseErrors=$null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$parseErrors)|Out-Null
@@ -175,6 +176,11 @@ jobs:
           if($LASTEXITCODE -ne 0){throw "pr69_windows_powershell_51_failed_$LASTEXITCODE"}
           if(-not ($winps -contains 'PR69 Windows switcher syntax and 6 classification cases: PASS')){throw 'pr69_windows_powershell_51_parser_not_completed'}
           if(-not ($winps -contains 'PR69 Windows autostart and active agent same-root regression: PASS')){throw 'pr69_windows_powershell_51_same_root_not_completed'}
+          $wifiCase=@(& ./scripts/ames-pr69-wifi-profile.windows.test.ps1)
+          if(-not ($wifiCase -contains 'PR69 WLAN GUID/profile-name mismatch and route safety: PASS')){throw 'pr69_wifi_profile_fixture_not_completed'}
+          $winWifiCase=@(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File './scripts/ames-pr69-wifi-profile.windows.test.ps1')
+          if($LASTEXITCODE -ne 0){throw "pr69_wifi_profile_windows_51_failed_$LASTEXITCODE"}
+          if(-not ($winWifiCase -contains 'PR69 WLAN GUID/profile-name mismatch and route safety: PASS')){throw 'pr69_wifi_profile_windows_51_not_completed'}
           Write-Output 'Issue57 Windows fixtures: guardian + mutex + dual-lock ledger + coordinator crash + direct launcher + backup ACL end-to-end GREEN'
   reading-firestore:
     runs-on: ubuntu-latest

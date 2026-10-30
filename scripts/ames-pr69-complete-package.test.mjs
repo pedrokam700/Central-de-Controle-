@@ -33,11 +33,13 @@ test('PC virgem deve comprovar rede antes de instalar/iniciar o agente',()=>{
   assert.match(networkBat,/if "%AUTO_MODE%"=="0" pause/);
   assert.match(install,/if "%AUTO_MODE%"=="0"[\s\S]*?08_PREPARAR_REDE_AMES\.bat/);
   assert.match(install,/:network_error[\s\S]*?goto :fail/);
-  assert.match(route,/TAXXX_5G nao conectado/);
+  assert.match(route,/TAXXX_5G nao identificado/);
   assert.match(route,/Start-Process.*-Verb RunAs -Wait -PassThru/);
   assert.match(route,/\$TargetIp='172\.29\.185\.215'/);
   assert.match(route,/\$Prefix="\$TargetIp\/32"/);
-  assert.match(route,/Get-NetConnectionProfile[\s\S]*?\.Name -eq \$Profile/);
+  assert.match(route,/Resolve-WlanGuidForSsid \$wifi \$Profile/);
+  assert.match(route,/Resolve-WifiInterfaceIndex @\(Get-NetAdapter -ErrorAction Stop\) \$wlanGuid/);
+  assert.doesNotMatch(route,/Get-NetConnectionProfile[\s\S]*?\.Name -eq \$Profile/);
   assert.match(route,/Get-NetIPConfiguration -InterfaceIndex \$wifiIndex/);
   assert.doesNotMatch(route,/route\.exe\s+(?:add|change)\s+0\.0\.0\.0/);
 });
