@@ -43,6 +43,27 @@ function stageDetail(stage,p){
   if(p.detail)bits.push(String(p.detail));
   return bits.join(' · ');
 }
+function trace3074Summary(row){
+ const src=row?.['3074']||{},state=sourceState(src.source_status||src.status);
+ const diag=src.coverage_diagnostic||{};
+ const requested=Number(diag.requested_pcbas??src.requested_pcba_count??0);
+ const processed=Number(diag.processed_pcbas??src.processed_pcba_count??0);
+ const errors=Number(diag.pcba_errors??src.pcba_error_count??0);
+ const partialPages=Number(diag.partial_page_count??0);
+ if(state==='COMPLETE')return `3074 · ${esc(processed)}/${esc(requested)} PCBAs · cobertura de extração comprovada (não comprova ausência de falha)`;
+ if(state==='PARTIAL'||state==='ERROR'){
+  const reasons=Array.isArray(diag.reasons)?diag.reasons.slice(0,6):[];
+  const details=reasons.map(reason=>({
+   pcba_errors:t('PCBAs com erro de consulta','Boards with query errors'),
+   pcba_not_complete:t('Consultas de PCBAs não concluídas','Board queries not completed'),
+   extjs_pagination_incomplete:t('Páginas da 3074 não comprovadas','Unverified 3074 pages'),
+   pcba_count_mismatch:t('Quantidade de PCBAs divergente','Board count mismatch'),
+   totals_not_verified:t('Totais da coleta não comprovados','Unverified collection totals')
+  })[reason]||reason);
+  return `<span class="notice warn" data-trace-3074-detail><b>3074 ${state==='PARTIAL'?t('parcial','partial'):t('indisponível','unavailable')}</b> · ${esc(processed)}/${esc(requested||'—')} PCBAs concluídas · ${esc(errors)} erro(s) · ${esc(partialPages)} ${t('páginas sem cobertura comprovada','unverified pages')}${details.length?` · ${esc(details.join('; '))}`:''}</span>`;
+ }
+ return t('3074 · cobertura não comprovada','3074 · unverified coverage');
+}
 function trace2114Summary(row){
   const src=row?.['2114']||{};
   const state=sourceState(src.source_status||src.status);
@@ -88,5 +109,5 @@ export function collectionStatus(state){
     ${job.kind==='deep_trace'?`<p>${stages.join(' → ')}</p>`:''}
     <div class="ames-progress-list">${stages.map(stage=>{const p=progress[stage];return `<article><b>${stage}</b> · <span>${esc(p?.line||'Linha aguardando informação')}</span>${p?`<progress max="100" value="${Math.max(0,Math.min(100,Number(p.line_percent)||0))}"></progress><small>${esc(stageDetail(stage,p))}</small>`:` · ${esc(job.stage===stage?'Em execução':'Aguardando')}`}${completedTrace?`<small data-trace-source-stage="${esc(stage)}"> · ${t('Cobertura','Coverage')}: ${esc(sourceProofLabel(sourceStages[stage]))}</small>`:''}</article>`;}).join('')}</div>
     ${liveTraceFeed(job)}
-    ${job.status==='done'&&result?`<section data-trace-result><h4>Resultado da coleta</h4><p>Valores informados pelo job; erro/indisponibilidade de uma fonte nunca é convertido em zero.</p>${Object.entries(result).map(([line,r])=>`<article><b>${esc(line)}</b>${r.skipped?`<p>${esc(r.reason||'Linha sem ocorrências no escopo.')}</p>`:`<p>Escopo consultado: ${esc(r.scope?.records??'—')} ocorrências · ${esc(r.scope?.unique_pcbas??'—')} PCBAs</p><p>3074 · materiais no snapshot: ${esc(r.enrichment?.material_rows??'—')}<br>${trace2114Summary(r)}<br>${trace3022Summary(r)}</p>${(r['3022']?.warnings||[]).map(w=>`<p class="notice warn">${esc(w)}</p>`).join('')}`}</article>`).join('')}</section>`:''}`;
+    ${job.status==='done'&&result?`<section data-trace-result><h4>Resultado da coleta</h4><p>Valores informados pelo job; erro/indisponibilidade de uma fonte nunca é convertido em zero.</p>${Object.entries(result).map(([line,r])=>`<article><b>${esc(line)}</b>${r.skipped?`<p>${esc(r.reason||'Linha sem ocorrências no escopo.')}</p>`:`<p>Escopo consultado: ${esc(r.scope?.records??'—')} ocorrências · ${esc(r.scope?.unique_pcbas??'—')} PCBAs</p><p>${trace3074Summary(r)}<br>3074 · ${t('materiais salvos no snapshot','materials stored in snapshot')}: ${esc(r.enrichment?.material_rows??'—')}<br>${trace2114Summary(r)}<br>${trace3022Summary(r)}</p>${(r['3022']?.warnings||[]).map(w=>`<p class="notice warn">${esc(w)}</p>`).join('')}`}</article>`).join('')}</section>`:''}`;
 }
