@@ -179,7 +179,7 @@ test('deep trace refuses legacy capability, other workstation and remote histori
   if(scenario==='missing-period'){
    const p=structuredClone(h.store.localCanonical()[0]);p.summary.period={};p.content_hash='without-period';h.store.replaceLocalSnapshots([p]);
   }
-  await assert.rejects(h.client.collect('deep',scope),/agente|revisão local/,scenario);
+  await assert.rejects(h.client.collect('deep',scope),/agente|revisão local|Período operacional não comprovado/,scenario);
   assert.equal(h.calls.filter(c=>c.key==='deep-trace').length,0);h.client.clear();
  }
 });
