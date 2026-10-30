@@ -120,8 +120,12 @@ export function summarizeReusePopulation(rows,proof=null){
  const metrics={observed:rows,first_use:select(r=>r.use_index===1),second_use:select(r=>r.use_index===2),
   third_plus_use:select(r=>r.use_index>=3),unknown_use:select(r=>!r.use_index),
   reused,failed:reused.filter(r=>r.outcome==='failed'),
-  associated:reused.filter(r=>r.associated_current_failure),prior_failure:reused.filter(r=>r.prior_events.length),
-  same_failure:reused.filter(r=>r.same_failure),same_family:reused.filter(r=>r.same_family),
+  associated:reused.filter(r=>r.associated_current_failure),
+  // A PCBA's 2114 history may prove recurrence even if its physical
+  // mounting/use count is unknown. Components still need proven reuse.
+  prior_failure:select(r=>r.prior_events.length>0&&(r.kind==='pcba'||r.reused)),
+  same_failure:select(r=>r.same_failure&&(r.kind==='pcba'||r.reused)),
+  same_family:select(r=>r.same_family&&(r.kind==='pcba'||r.reused)),
   verified_no_failure:proven?reused.filter(r=>r.outcome==='verified_no_failure'):[],
   unknown_outcome:reused.filter(r=>r.outcome!=='failed'&&!(proven&&r.outcome==='verified_no_failure'))};
  return {metrics,counts:Object.fromEntries(Object.entries(metrics).map(([k,v])=>[k,k==='verified_no_failure'&&!proven?null:v.length])),
