@@ -24,8 +24,11 @@ export function traceTargetForLine(store,line){
   // agent still considers it the latest revision for this snapshot.
   if(selected?.mode!=='today'&&store.agent()?.period_read?.recovered_lines?.some(x=>x.line_id===line))
     return {available:false,reason:'Revisão mais recente indisponível; atualize a leitura antes de coletar'};
-  if((read.source!=='local'&&!provenLocal)||p.source_id!==agentSource)
-    return {available:false,reason:'Revisão não pertence ao agente local conectado'};
+  if(p.source_id!==agentSource)
+    return {available:false,reason:'A origem desta revisão não corresponde ao agente conectado; escolha uma revisão do mesmo posto e período. Nenhuma coleta foi iniciada.'};
+  // A shared copy from THIS SAME agent is only a candidate. /local-history
+  // verifies the current on-disk source/line/snapshot/period before POST; the
+  // client never dispatches a MES job based on an unproven shared copy.
   if(!period?.start_at||!period?.end_at)
     return {available:false,reason:'Período operacional não comprovado'};
   if(!Number.isSafeInteger(Number(p.snapshot_id))||Number(p.snapshot_id)<1||
@@ -34,6 +37,7 @@ export function traceTargetForLine(store,line){
     return {available:false,reason:'Identidade da revisão incompleta'};
   return {available:true,target:{source_id:p.source_id,snapshot_id:p.snapshot_id,
     snapshot_revision:p.snapshot_revision,content_hash:p.content_hash,period},
+    proof:read.source==='local'||Boolean(provenLocal)?'local_current':'requires_local_history_verification',
     period,revision:p.snapshot_revision,snapshot_id:p.snapshot_id};
 }
 
@@ -65,6 +69,7 @@ export function refreshedTraceTarget(original, current){
     throw Error('Revisão local mudou de origem, linha, snapshot ou período; coleta não iniciada.');
   if(!Number.isSafeInteger(current.snapshot_revision)||
      current.snapshot_revision<original.snapshot_revision||
+     (current.snapshot_revision===original.snapshot_revision&&current.content_hash!==original.content_hash)||
      typeof current.content_hash!=='string'||!current.content_hash)
     throw Error('Revisão local inválida ou anterior à selecionada; coleta não iniciada.');
   return {...original,snapshot_revision:current.snapshot_revision,content_hash:current.content_hash};
