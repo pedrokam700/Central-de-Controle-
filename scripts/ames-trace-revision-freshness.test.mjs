@@ -23,7 +23,9 @@ function rig(fresh=canonical(2),{source='local'}={}){
   readingPeriod:()=>({mode:'previous'}),localCanonical:()=>[]};
  const fetcher=async(url,opts)=>{const u=new URL(url);
   calls.push({path:u.pathname,body:opts.body?JSON.parse(opts.body):null});
-  if(u.pathname.endsWith('/local-history'))return {ok:true,json:async()=>structuredClone(fresh)};
+  if(u.pathname.endsWith('/local-history'))return {ok:true,json:async()=>structuredClone(
+   u.searchParams.has('snapshot_revision')?canonical(Number(u.searchParams.get('snapshot_revision'))):fresh
+  )};
   if(u.pathname.endsWith('/deep-trace'))return {ok:true,json:async()=>({id:'J',kind:'deep_trace',status:'queued'})};
   throw Error('Unexpected '+u.pathname);
  };
@@ -48,8 +50,10 @@ test('reloaded shared history of the SAME local agent and snapshot passes only a
  h.client.clear();
 });
 test('shared same-source copy without a matching local snapshot fails closed before /deep-trace',async()=>{
+ // Exact immutable revision exists in the mock, but the local latest
+ // belongs to a different snapshot: do not retarget or send a MES POST.
  const h=rig({...canonical(2),snapshot_id:'3'},{source:'remote'});
- await assert.rejects(h.client.collect('deep',h.scope),/mudou de origem, linha, snapshot ou período/);
+ await assert.rejects(h.client.collect('deep',h.scope),/revisão não comprovada no agente local/);
  assert(h.calls.some(c=>c.path.endsWith('/local-history')),'agent proof required');
  assert.equal(h.calls.some(c=>c.path.endsWith('/deep-trace')),false);
  h.client.clear();
