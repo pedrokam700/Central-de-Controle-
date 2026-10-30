@@ -42,6 +42,7 @@ jobs:
           python3 scripts/agent-trace-target.test.py
           python3 scripts/agent-3074-coverage-summary.test.py
           python3 scripts/agent-package-contract.test.py
+          python3 scripts/agent-integrated-v5.test.py
 
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
@@ -107,6 +108,9 @@ jobs:
 
       - name: Build integrated local candidate
         run: python3 scripts/build-integrated-candidate.py "$RUNNER_TEMP/central-ames-integrated.zip"
+
+      - name: Preserve synthetic installation identity through update and rollback
+        run: python3 scripts/agent-pr38-preserving-stage.test.py
 
       - name: Upload integrated local candidate
         uses: actions/upload-artifact@v6

@@ -123,6 +123,8 @@ def build(destination, development=False):
  if analytics_doc.exists():payload['evidence/'+analytics_doc.name]=analytics_doc.read_bytes()
  unified_handoff=ROOT/'docs/ames/handoffs/ISSUE66_CANDIDATA_CONSOLIDADA_20261023.md'
  if unified_handoff.exists():payload['evidence/'+unified_handoff.name]=unified_handoff.read_bytes()
+ recovery_handoff=ROOT/'docs/ames/handoffs/PR69_RECOVERY_20261030.md'
+ payload['evidence/'+recovery_handoff.name]=recovery_handoff.read_bytes()
  payload['LEIA_PRIMEIRO.txt']=(f'''CENTRAL + A-MES — PACOTE CLEAN INTEGRADO (GITHUB / CANDIDATO DE TESTE)
 HEAD: {sha}
 Gate fisico pendente. Nao e uma promocao de producao.
