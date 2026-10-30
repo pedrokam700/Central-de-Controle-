@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildReuseCohorts,summarizeReusePopulation,boardHistSeqRecurrence} from '../ames/data/reuse-cohorts.mjs';
+import {buildReuseCohorts,summarizeReusePopulation,boardHistSeqRecurrence,board2114Timeline} from '../ames/data/reuse-cohorts.mjs';
 const event={pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-19 10:00:00',defect_key:'K1',record_id:'D1',product_key:'CPH1',failure_family:'DISPLAY'};
 function fixture(){return {source_id:'A',snapshot_id:'S',revision:2,line_id:'TAN10101',occurrences:[event],
  pcba_history:{records:[{pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-17 08:00:00',failure_family:'DISPLAY',record_id:'H1'},
@@ -90,4 +90,45 @@ test('physical case 002527005C0535F300007060: same 2114 defect Hist Seq 0 and 1 
  assert.equal(boardHistSeqRecurrence(s.occurrences[0],changed.pcba_history.records).length,0);
  const one=structuredClone(s);one.pcba_history.records=one.pcba_history.records.filter(r=>r.hist_seq!==1||r.pcba_sn==='OTHER');
  assert.equal(buildReuseCohorts(one).pcbas.counts.same_failure,0);
+});
+
+test('physical 086822: all five 2114 entries and repeated WIFI remain visible without inventing assembly uses',()=>{
+ const id='00252700662035F300086822';
+ const s={source_id:'FACTORY',snapshot_id:'captured',line_id:'TAN10103',
+  occurrences:[{pcba_sn:id,defect_code:'GN11-WX02',defect_desc:'Wireless connection: GPS/WIFI failed',
+   defect_time:'2026-10-30 08:00:00',defect_key:'D1'}],
+  pcba_history:{records:[
+   {pcba_sn:id,hist_seq:0,defect_code:'GN01-IR02',defect_desc:'Sensor: Infrared sensor test failed',defect_type:'MainBoard',repair_status:'Y'},
+   {pcba_sn:id,hist_seq:1,defect_code:'GN11-WX02',defect_desc:'Wireless connection: GPS/WIFI failed',defect_type:'Phone Disassembly',repair_status:'Y'},
+   {pcba_sn:id,hist_seq:2,defect_code:'GN11-WX02',defect_desc:'Wireless connection: GPS/WIFI failed',defect_type:'MainBoard',repair_status:'Y'},
+   {pcba_sn:id,hist_seq:3,defect_code:'GN11-WX02',defect_desc:'Wireless connection: GPS/WIFI failed',defect_type:'MainBoard',repair_status:'N'},
+   {pcba_sn:id,hist_seq:4,defect_code:'GN11-WX02',defect_desc:'Wireless connection: GPS/WIFI failed',defect_type:'MainBoard',repair_status:'Y'}]},
+  insights:{drilldowns:{pcba_analysis:[]}},material_trace:{records:[]}};
+ const actual=buildReuseCohorts(s);
+ const board=actual.pcbas.rows[0];
+ assert.equal(actual.pcbas.counts.unknown_use,1,'failure count alone does not prove a second mounting');
+ assert.deepEqual(board.history_2114.map(h=>h.hist_seq),[0,1,2,3,4]);
+ assert.equal(board.history_2114_repeats,3);
+ assert.equal(board.history_2114[1].defect_type,'Phone Disassembly');
+ assert.equal(board.history_2114[2].defect_type,'MainBoard');
+ assert.equal(board.history_2114[3].repair_status,'N');
+ assert.equal(actual.pcbas.counts.same_failure,1,'current failure matches latest 2114 and earlier WIFI');
+ const mismatch=structuredClone(s);
+ mismatch.occurrences[0].defect_code='OTHER',mismatch.occurrences[0].defect_desc='Another failure';
+ const other=buildReuseCohorts(mismatch);
+ assert.equal(other.pcbas.counts.same_failure,0,'do not reclassify unrelated current 3028 defect');
+ assert.equal(other.pcbas.rows[0].history_2114_repeats,3,'full intrinsic 2114 repetition remains inspectable');
+});
+test('duplicate same Hist Seq and missing sequence do not fabricate recurrence order',()=>{
+ const id='PCB';
+ const timeline=board2114Timeline(id,[
+  {pcba_sn:id,hist_seq:0,defect_code:'WIFI',defect_desc:'Wireless connection: GPS/WIFI failed'},
+  {pcba_sn:id,hist_seq:0,defect_code:'WIFI',defect_desc:'Wireless connection: GPS/WIFI failed'},
+  {pcba_sn:id,defect_code:'WIFI',defect_desc:'Wireless connection: GPS/WIFI failed'},
+ ]);
+ assert.equal(timeline.length,2);
+ assert.equal(timeline[0].hist_seq,0);
+ assert.equal(timeline[0].repeat_exact_prior_count,0);
+ assert.equal(timeline[1].history_order_proven,false);
+ assert.equal(timeline[1].repeat_exact_prior_count,0);
 });
