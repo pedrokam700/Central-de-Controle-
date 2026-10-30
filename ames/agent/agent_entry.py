@@ -45,8 +45,14 @@ def _aggregate_stage(results, source):
     for item in (results or {}).values():
         if item.get("skipped"):continue
         payload=item.get(source) or {}
-        if source=="2114":raw=payload.get("source_status") or payload.get("status")
-        else:raw=payload.get("status")
+        # 3074 is certified by summarize_3074_capture(source_status).
+        # Its raw result intentionally has no top-level "status". Ignoring
+        # source_status mislabeled EVERY successful 3074 job as "not_run" and
+        # caused the aggregate to stay PARTIAL even with proven full paging.
+        if source in {"3074","2114"}:
+            raw=payload.get("source_status") or payload.get("status")
+        else:
+            raw=payload.get("status") or payload.get("source_status")
         state=_source_stage(raw)
         states.append(state)
     if not states:return "not_run"
