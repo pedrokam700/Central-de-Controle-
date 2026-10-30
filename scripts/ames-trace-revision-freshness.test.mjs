@@ -20,7 +20,7 @@ function rig(fresh=canonical(2),{source='local'}={}){
  const calls=[],selected=canonical(1);
  const store={agent:()=>agent,updateAgent(patch){agent={...agent,...patch};},
   setLocalConnected(){},read:()=>({source,snapshot:{canonical:selected}}),
-  readingPeriod:()=>({mode:'previous'}),localCanonical:()=>[]};
+  readingPeriod:()=>({mode:'previous',start:period.start_at.slice(0,16),end:period.end_at.slice(0,16)}),localCanonical:()=>[]};
  const fetcher=async(url,opts)=>{const u=new URL(url);
   calls.push({path:u.pathname,body:opts.body?JSON.parse(opts.body):null});
   if(u.pathname.endsWith('/local-history'))return {ok:true,json:async()=>structuredClone(
