@@ -91,7 +91,9 @@ test('3074 partial collection names real query and pagination gaps, never equate
  state.job.result.deep_trace.TAN10103['3074']={
    source_status:'PARTIAL',requested_pcba_count:97,processed_pcba_count:94,pcba_error_count:3,
    coverage_diagnostic:{requested_pcbas:97,processed_pcbas:94,pcba_errors:3,partial_page_count:2,
-     reasons:['pcba_errors','extjs_pagination_incomplete']}
+     reasons:['pcba_errors','extjs_pagination_incomplete'],
+     partial_pages:[{pcba_index:3,reason:'page_timeout'}]},
+   items:[{pcba_sn:'BOARD-A',status:'COMPLETE'},{pcba_sn:'BOARD-B',status:'ERROR'},{pcba_sn:'BOARD-C',status:'COMPLETE'}]
  };
  const html=collectionStatus(state);
  assert.match(html,/3074 parcial/);
@@ -99,6 +101,7 @@ test('3074 partial collection names real query and pagination gaps, never equate
  assert.match(html,/3 erro\(s\)/);
  assert.match(html,/2 páginas sem cobertura comprovada/);
  assert.match(html,/Páginas da 3074 não comprovadas/);
+ assert.match(html,/PCBAs a conferir: BOARD-B, BOARD-C/);
  assert.match(html,/Cobertura não comprovada/);
 });
 test('a verified 3074 COMPLETE is not mislabeled partial or missing',()=>{
