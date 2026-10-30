@@ -85,7 +85,7 @@ class RecoveryGate(unittest.TestCase):
                          {"A", "OLD"})
 
     def test_recovered_2114_does_not_replace_five_seq_records_with_later_two(self):
-        sn = "00252700662035F300086822"
+        sn = "SYNTHETIC_FIVE_ROW_HISTORY"
         def hist(seqs, status="COMPLETE"):
             return {"pcba_sn": sn, "status": status, "result": {"rows": [
                 {"Defect Hist Seq": n,
