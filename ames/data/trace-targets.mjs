@@ -1,19 +1,30 @@
 import {LINE_IDS} from './contract.mjs';
+import {matchesReadingPeriod} from './reading-period.mjs';
 
 // A deep trace enriches one immutable 3028 revision, never the latest snapshot.
 // The same check drives the line picker and the actual HTTP request. A missing
 // local revision is actionable, but must not prevent tracing a different line.
 export function traceTargetForLine(store,line){
   if(!LINE_IDS.includes(line))return {available:false,reason:'Linha inválida'};
-  const read=store.read(line),p=read.snapshot?.canonical,period=p?.summary?.period;
-  if(!p)return {available:false,reason:'Sem revisão 3028 neste período'};
+  const read=store.read(line),shown=read.snapshot?.canonical,selected=store.readingPeriod?.();
+  const agentSource=store.agent()?.capabilities?.source_id;
+  if(!shown)return {available:false,reason:'Sem revisão 3028 neste período'};
+  // A read-only shared presentation may be the SAME underlying local source
+  // and 3028 snapshot. Prefer its live, verified local head ONLY with exact
+  // source + snapshot + line + period identity; never borrow a similarly
+  // numbered snapshot from another workstation.
+  const provenLocal=(store.localCanonical?.()||[]).find(p=>
+    read.source!=='local'&&
+    p?.line_id===line&&p.source_id===agentSource&&
+    p.source_id===shown.source_id&&
+    String(p.snapshot_id)===String(shown.snapshot_id)&&
+    matchesReadingPeriod(p,selected));
+  const p=provenLocal||shown,period=p?.summary?.period;
   // A previous revision opened as read-only recovery is not proof that the
-  // agent still considers it the latest revision for this snapshot. Do not
-  // start a MES job that would fail the immutable-current queue check.
-  if(store.readingPeriod?.()?.mode!=='today'&&
-    store.agent()?.period_read?.recovered_lines?.some(x=>x.line_id===line))
+  // agent still considers it the latest revision for this snapshot.
+  if(selected?.mode!=='today'&&store.agent()?.period_read?.recovered_lines?.some(x=>x.line_id===line))
     return {available:false,reason:'Revisão mais recente indisponível; atualize a leitura antes de coletar'};
-  if(read.source!=='local'||p.source_id!==store.agent().capabilities?.source_id)
+  if((read.source!=='local'&&!provenLocal)||p.source_id!==agentSource)
     return {available:false,reason:'Revisão não pertence ao agente local conectado'};
   if(!period?.start_at||!period?.end_at)
     return {available:false,reason:'Período operacional não comprovado'};
