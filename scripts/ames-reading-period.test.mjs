@@ -272,6 +272,43 @@ test('completed 3074 deep trace displays enriched LOCAL revision of same snapsho
  ctl.clear();
 });
 
+test('completed deep trace materializes pending newer LOCAL revision instead of reopening the stale numbered r22',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),old=snapshot('36','2026-10-16','previous_day');
+ const current={...old,snapshot_revision:23,content_hash:'new-enrichment-r23'};
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'another-workstation'};
+ const oldEntry={...entry(old),snapshot_revision:22,history_source:'local'};
+ const pending={...entry(old),snapshot_revision:null,revision_pending:true,history_source:'local'};
+ const opened=[];
+ const history={list:async l=>l===line?[{...entry(remote),history_source:'shared'},oldEntry,pending]:[],
+  open:async e=>{opened.push([e.history_source,e.snapshot_revision]);return e.history_source==='shared'?remote:e.revision_pending?current:{...old,snapshot_revision:22};}};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:old.source_id}});
+ const ctl=createReadingPeriodController(s,history);
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ await ctl.select('previous',{traceReceipt:{snapshot_ids:{[line]:'36'}}});
+ assert.deepEqual(opened.at(-1),['local',null],
+  'a completed trace must ask the agent to materialize the pending revision, not replay an old local export');
+ assert.equal(s.read(line).snapshot.snapshot_revision,23);
+ assert.equal(s.read(line).source,'local');
+ assert.equal(traceTargetForLine(s,line).available,true);
+ ctl.clear();
+});
+
+test('refresh or page reload of selected LOCAL history materializes pending source epoch without needing job receipt',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),old=snapshot('36','2026-10-16','previous_day');
+ const pending={...entry(old),history_source:'local',revision_pending:true,snapshot_revision:null};
+ const numbered={...entry(old),history_source:'local',snapshot_revision:22};
+ const latest={...old,snapshot_revision:23,content_hash:'materialized-r23'};
+ const opened=[];
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:old.source_id}});
+ const ctl=createReadingPeriodController(s,{list:async l=>l===line?[numbered,pending]:[],
+  open:async e=>{opened.push(e.snapshot_revision);return e.revision_pending?latest:{...old,snapshot_revision:22};}});
+ await ctl.select('previous');
+ assert.deepEqual(opened,[null]);
+ assert.equal(s.read(line).snapshot.snapshot_revision,23);
+ assert.equal(s.read(line).source,'local');
+ ctl.clear();
+});
+
 test('deep trace from another day or source never changes the displayed origin',async()=>{
  const s=createAmesStore({now:()=>now.getTime()}),local=snapshot('36','2026-10-16','previous_day');
  const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'remote-pc'};

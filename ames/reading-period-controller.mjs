@@ -17,7 +17,13 @@ const safeWrite=(line,value,scope)=>{
 };
 const orderEntries=(a,b)=>{
   const clock=x=>Number.isFinite(Date.parse(x?.collected_at))?Date.parse(x.collected_at):0;
-  return clock(b)-clock(a)||Number(b.snapshot_revision||0)-Number(a.snapshot_revision||0)||
+  const later=clock(b)-clock(a);
+  if(later)return later;
+  // A pending local row is a newer SQLite source epoch, not revision zero.
+  // Make this a total ordering (not a pair-specific comparator) so sorting
+  // stays deterministic even when other workstations share the same clock.
+  const pending=e=>e.history_source==='local'&&e.revision_pending===true?1:0;
+  return pending(b)-pending(a)||Number(b.snapshot_revision||0)-Number(a.snapshot_revision||0)||
     String(b.snapshot_id||'').localeCompare(String(a.snapshot_id||''));
 };
 
@@ -76,17 +82,25 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
       // this workstation has just collected fresh evidence. Never infer a
       // source solely from a remote index or a job completion flag.
       const agent=store.agent(),agentSource=agent.status==='connected'?agent.capabilities?.source_id:null;
+      // A completed MES job can leave the latest SQLite source epoch pending
+      // canonical materialization. History also lists older numbered exports
+      // (for example r22), which sort ahead of a pending/null revision. Only
+      // for the exact authenticated job snapshot, read the pending local row
+      // first so history.open can export r23. If it fails, the usual degraded
+      // recovery path still preserves the old immutable revision as history.
+      const matchingJobLocal=id=>entries.filter(e=>e.history_source==='local'&&
+        e.source_id===agentSource&&String(e.snapshot_id)===String(id))
+        .sort((a,b)=>Number(b.revision_pending===true)-Number(a.revision_pending===true)||
+          Number(b.snapshot_revision||0)-Number(a.snapshot_revision||0))[0]||null;
       const verifiedCollection=expectCollectedLocal&&agentSource
-        ?entries.find(e=>e.history_source==='local'&&e.source_id===agentSource&&
-          String(e.snapshot_id)===String(collectedId)):null;
+        ?matchingJobLocal(collectedId):null;
       // Unlike a new 3028 run, deep trace adds 3074/2114/3022 evidence to
       // an existing exact local snapshot. Its ID is valid only when the
       // period-filtered local index and connected agent agree; a trace from
       // another day/line/source must never retarget this reading.
       const tracedId=traceReceipt?.snapshot_ids?.[line];
       const verifiedTrace=tracedId&&agentSource
-        ?entries.find(e=>e.history_source==='local'&&e.source_id===agentSource&&
-          String(e.snapshot_id)===String(tracedId)):null;
+        ?matchingJobLocal(tracedId):null;
       const verifiedRefresh=verifiedCollection||verifiedTrace;
       if(expectCollectedLocal&&!verifiedCollection){
         store.clearHistoricalSnapshot?.(line,{generation});
