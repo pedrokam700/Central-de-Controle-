@@ -118,19 +118,33 @@ def recover_snapshot_line(versions, line, base_rows):
         items.append(item)
         permitted_history.add(sn)
         permitted_history.update(_old_pcbas(item))
+    # Prefer the richest verified 2114 read for this exact PCBA/snapshot.
+    # A later selective/partial read can return fewer Hist Seq rows despite
+    # status COMPLETE; it must not erase an earlier full history.
+    def history_quality(entry, revision_index):
+        rows = ((entry or {}).get("result") or {}).get("rows") or []
+        ordered = {str(r.get("Defect Hist Seq")).strip()
+                   for r in rows if isinstance(r, dict)
+                   and r.get("Defect Hist Seq") is not None
+                   and str(r.get("Defect Hist Seq")).strip()
+                   and (r.get("Defect Code") or r.get("Defect Description"))}
+        return (int(_complete(entry)), len(ordered), len(rows), revision_index)
+
     history = {}
+    history_score = {}
     contexts = {}
     current_contexts = {}
     current_sns = {x["pcba_sn"] for x in items}
-    for payload in versions:
+    for revision_index, payload in enumerate(versions):
         trace = (payload or {}).get("trace_2114") or {}
         for row in trace.get("pcbas") or []:
             sn = str(row.get("pcba_sn") or "").strip()
             if sn not in permitted_history:
                 continue
-            old = history.get(sn)
-            if old is None or (_complete(row) and not _complete(old)) or _complete(row) == _complete(old):
+            quality = history_quality(row, revision_index)
+            if sn not in history or quality > history_score[sn]:
                 history[sn] = deepcopy(row)
+                history_score[sn] = quality
         for name, dest in (("contexts", contexts), ("current_contexts", current_contexts)):
             for row in trace.get(name) or []:
                 if str(row.get("line") or row.get("line_id") or "").strip() != line:
