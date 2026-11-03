@@ -249,6 +249,80 @@ test('completed previous-day 3028 locally collected revision replaces pinned old
  ctl.clear();
 });
 
+test('completed 3028 waits briefly for its exact LOCAL history row before honoring the collection receipt',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),localOld=snapshot('36','2026-10-16','previous_day');
+ const localNew={...snapshot('38','2026-10-16','previous_day'),collected_at:'2026-10-19T17:35:00Z'};
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'other-workstation'};
+ const localEntry=p=>({...entry(p),history_source:'local'});
+ let published=false,listCalls=0;const waits=[],opened=[];
+ const history={list:async l=>{
+   if(l!==line)return [];
+   listCalls++;
+   return [entry(remote),localEntry(localOld),...(published?[localEntry(localNew)]:[])];
+  },open:async target=>{
+   opened.push([target.source_id,target.snapshot_id]);
+   return target.source_id===remote.source_id?remote:target.snapshot_id==='38'?localNew:localOld;
+  }};
+ s.setLocalConnected(true);s.updateAgent({status:'connected',capabilities:{source_id:localOld.source_id}});
+ const ctl=createReadingPeriodController(s,history,{retryWait:async delay=>{
+   waits.push(delay);published=true;
+ }});
+ await ctl.select('previous');await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).snapshot.snapshot_id,'37');
+ const before=listCalls;
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'38'},
+   period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'}});
+ assert.deepEqual(waits,[120]);
+ assert.equal(listCalls,before+2,'the first stale index is reread once after the brief wait');
+ assert.deepEqual(opened.at(-1),[localNew.source_id,'38']);
+ assert.equal(s.read(line).snapshot.snapshot_id,'38');
+ assert.equal(s.read(line).source,'local');
+ assert.equal(s.agent().period_read.status,'ready');
+ assert(s.agent().period_read.source_choices[0].options.some(o=>o.source_id===remote.source_id));
+ await ctl.chooseSource(line,remote.source_id);
+ assert.equal(s.read(line).snapshot.snapshot_id,'37','operator can still reopen the prior shared source');
+ ctl.clear();
+});
+
+test('late 3028 history retry cannot install yesterday after the operator switches to Today',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),local=snapshot('38','2026-10-16','previous_day');
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'remote-pc'};
+ let release,entered;
+ const waiting=new Promise(resolve=>{entered=resolve;});
+ const history={list:async l=>l===line?[entry(remote)]:[],open:async()=>remote};
+ s.updateAgent({status:'connected',capabilities:{source_id:local.source_id}});
+ const ctl=createReadingPeriodController(s,history,{retryWait:()=>{
+  entered();return new Promise(resolve=>{release=resolve;});
+ }});
+ const pending=ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'38'},
+   period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'}});
+ await waiting;
+ await ctl.select('today');
+ release();await pending;
+ assert.equal(s.readingPeriod().mode,'today');
+ assert.equal(s.read(line).snapshot,null);
+ assert.equal(s.agent().period_read.status,'ready');
+ ctl.clear();
+});
+
+test('3028 history retry never adopts a local receipt after the connected agent changes',async()=>{
+ const s=createAmesStore({now:()=>now.getTime()}),local=snapshot('38','2026-10-16','previous_day');
+ const remote={...snapshot('37','2026-10-16','previous_day'),source_id:'remote-pc'};
+ let opened=0;
+ const ctl=createReadingPeriodController(s,{
+  list:async l=>l===line?[entry(remote)]:[],
+  open:async()=>{opened++;return local;}
+ },{retryWait:async()=>{s.updateAgent({status:'disconnected',capabilities:{source_id:'another-pc'}});}});
+ s.updateAgent({status:'connected',capabilities:{source_id:'original-source'}});
+ await ctl.select('previous',{collectionReceipt:{snapshot_ids:{[line]:'38'},
+  period_start:'2026-10-16T07:00',period_end:'2026-10-17T07:00'}});
+ assert.equal(s.agent().period_read.status,'partial');
+ assert.match(s.agent().period_read.errors[0].error,/Agente local mudou/);
+ assert.equal(s.read(line).snapshot,null);
+ assert.equal(opened,0,'changed workstation cannot open the new receipt');
+ ctl.clear();
+});
+
 test('completed 3074 deep trace displays enriched LOCAL revision of same snapshot instead of pinned remote revision',async()=>{
  const s=createAmesStore({now:()=>now.getTime()}),localOld=snapshot('36','2026-10-16','previous_day');
  const localEnriched={...localOld,snapshot_revision:2,content_hash:'enriched',insights:{schema:'ames-insights-v1',line,snapshot_id:'36',ready:true,material_kpis:[['Materiais em 2º uso',1]]}};

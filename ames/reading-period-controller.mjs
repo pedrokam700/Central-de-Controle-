@@ -27,7 +27,8 @@ const orderEntries=(a,b)=>{
     String(b.snapshot_id||'').localeCompare(String(a.snapshot_id||''));
 };
 
-export function createReadingPeriodController(store,history,{changed=()=>{},preferenceScope=null}={}){
+export function createReadingPeriodController(store,history,{changed=()=>{},preferenceScope=null,
+  retryWait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
   let request=0,disposed=false;
   const sourceOverrides=new Map(),preferredByLine=new Map();
   const scopeKey=(period,line)=>JSON.stringify([period.mode,period.start,period.end,line]);
@@ -62,15 +63,37 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
     const errors=[],source_choices=[],unresolved=[],recovered=[];
     const results=await Promise.allSettled(LINE_IDS.map(async line=>{
       if(!history)return;
-      let entries=(await history.list(line)).filter(e=>{
+      const listScoped=async()=>(await history.list(line)).filter(e=>{
         const start=factoryWallMinute(e.period_start),end=factoryWallMinute(e.period_end);
         return start===selected.start&&end&&end>start&&(mode==='custom'?end===selected.end:end<=selected.end);
       }).sort(orderEntries);
+      let entries=await listScoped();
       if(!alive())return;
       const collectedId=collectionReceipt?.snapshot_ids?.[line];
       const expectCollectedLocal=collectedId&&
         factoryWallMinute(collectionReceipt.period_start)===selected.start&&
         factoryWallMinute(collectionReceipt.period_end)===selected.end;
+      const agent=store.agent(),agentSource=agent.status==='connected'?agent.capabilities?.source_id:null;
+      const sameLocalAgent=()=>agentSource&&store.agent().status==='connected'&&
+        store.agent().capabilities?.source_id===agentSource;
+      // SQLite may finish publishing the exact local history row just after
+      // 3028 reports completion. Retry only this verified job/period/PC, for
+      // less than two seconds; each wait remains cancellable by a new reading.
+      if(expectCollectedLocal&&sameLocalAgent()){
+        const indexed=()=>entries.some(e=>e.history_source==='local'&&
+          e.source_id===agentSource&&String(e.snapshot_id)===String(collectedId));
+        for(const delay of [120,300,600]){
+          if(indexed()||!sameLocalAgent())break;
+          await retryWait(delay);
+          if(!alive())return;
+          if(!sameLocalAgent()){
+            store.clearHistoricalSnapshot?.(line,{generation});
+            throw Error('Agente local mudou enquanto o histórico da coleta era atualizado; revisão não aplicada');
+          }
+          entries=await listScoped();
+          if(!alive())return;
+        }
+      }
       if(!entries.length){
         store.clearHistoricalSnapshot?.(line,{generation});
         if(expectCollectedLocal)throw Error('Coleta local concluída, mas a nova revisão '+collectedId+' não aparece no histórico deste período; a tela não foi atualizada');
@@ -81,7 +104,6 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
       // for another workstation must not pin an old shared revision after
       // this workstation has just collected fresh evidence. Never infer a
       // source solely from a remote index or a job completion flag.
-      const agent=store.agent(),agentSource=agent.status==='connected'?agent.capabilities?.source_id:null;
       // A completed MES job can leave the latest SQLite source epoch pending
       // canonical materialization. History also lists older numbered exports
       // (for example r22), which sort ahead of a pending/null revision. Only
@@ -92,14 +114,14 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
         e.source_id===agentSource&&String(e.snapshot_id)===String(id))
         .sort((a,b)=>Number(b.revision_pending===true)-Number(a.revision_pending===true)||
           Number(b.snapshot_revision||0)-Number(a.snapshot_revision||0))[0]||null;
-      const verifiedCollection=expectCollectedLocal&&agentSource
+      const verifiedCollection=expectCollectedLocal&&sameLocalAgent()
         ?matchingJobLocal(collectedId):null;
       // Unlike a new 3028 run, deep trace adds 3074/2114/3022 evidence to
       // an existing exact local snapshot. Its ID is valid only when the
       // period-filtered local index and connected agent agree; a trace from
       // another day/line/source must never retarget this reading.
       const tracedId=traceReceipt?.snapshot_ids?.[line];
-      const verifiedTrace=tracedId&&agentSource
+      const verifiedTrace=tracedId&&sameLocalAgent()
         ?matchingJobLocal(tracedId):null;
       const verifiedRefresh=verifiedCollection||verifiedTrace;
       if(expectCollectedLocal&&!verifiedCollection){
