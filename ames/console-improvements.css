@@ -83,3 +83,29 @@ body.dark .ames-legacy-shell .ames-health-agent.unknown{background:var(--ames-so
 .ames-history-facts b{font-weight:670}
 @media(max-width:990px){.ames-history-facts{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:610px){.ames-history-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.ames-history-head{flex-direction:column}.ames-history-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Explicit 3074 current-versus-last-failure investigation; each KPI owns its scope. */
+.ames-sn-mounting-compare{border-left:3px solid #ba7a28!important;margin-bottom:10px}
+.ames-mounting-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.ames-mounting-scope{margin:0!important;background:#fafafa}
+.ames-mounting-scope h4{font-size:11px;margin:0 0 7px}
+.ames-mounting-materials{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.ames-mounting-materials li{padding:8px;border:1px solid #dce5e8;border-radius:7px;background:white;overflow-wrap:anywhere}
+.ames-mounting-materials li small{display:block;margin-top:4px}
+.ames-mounting-materials li .status{display:inline-block;margin-left:6px}
+@media(max-width:760px){.ames-mounting-columns{grid-template-columns:1fr}}
+
+/* PR69 compact observed reuse populations */
+.ames-console-pane[data-console-pane="reuse"] > [data-reuse-cohorts]{order:2;margin:8px 0 12px}
+.ames-console-pane[data-console-pane="reuse"] > .ames-reuse-technical{order:3}
+.ames-console-pane[data-console-pane="reuse"] > .ames-reuse-component-details{order:4}
+.ames-console-pane[data-console-pane="reuse"] > .ames-selected-evidence{order:5}
+.ames-console-pane[data-console-pane="reuse"] > .ames-reuse-granularity{order:6}
+[data-reuse-cohorts] [data-cohort]{margin-top:18px}
+[data-reuse-cohorts] [data-cohort] h4{margin:0 0 10px;font-size:14px}
+[data-reuse-cohorts] .ames-reuse-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+[data-reuse-cohorts] .ames-reuse-kpis .stat{border:1px solid var(--ames-line);border-radius:10px;text-align:left;padding:13px;min-height:77px;background:#fff}
+[data-reuse-cohorts] .ames-reuse-kpis .stat-value{font-size:23px}
+[data-reuse-cohorts] [data-cohort-detail]{margin-top:14px;scroll-margin-top:95px}
+.ames-reuse-technical>summary,.ames-reuse-component-details>summary{cursor:pointer;font-size:12px}
+@media(max-width:900px){[data-reuse-cohorts] .ames-reuse-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){[data-reuse-cohorts] .ames-reuse-kpis{grid-template-columns:1fr}}

@@ -7,11 +7,11 @@ const release=JSON.parse(fs.readFileSync(new URL('../ames/releases/latest/releas
 
 test('approved public GitHub CLEAN is SHA-bound and safe for new Windows computers',()=>{
   const m=readRelease({...release,password:'secret',cookies:'secret',endpoint:'invented'});
-  assert.equal(m.version,'0.5.35');
+  assert.equal(m.version,'0.5.39');
   assert.equal(m.package_available,true);
-  assert.equal(m.validated_sha,'e6799420bfd356eca89d4c3515de275e7500707a');
-  assert.equal(m.sha256,'9b7b854b93444e398e23a65c787c94bf6b4b00a72203f36ca9131c5303d1d775');
-  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.35-multipc-20261021/AMES_Central_CLEAN_e6799420.zip');
+  assert.equal(m.validated_sha,'b283b1764432f5d90486d38a7553b30542a5c118');
+  assert.equal(m.sha256,'4407332be1d7e6ed78ee11ad2cf7dca893d2ba9c72e55bf4b93d453892cc482a');
+  assert.equal(m.download_url,'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.39-multipc-20261022/AMES_Central_CLEAN_b283b176.zip');
   assert.equal(m.local_runtime.agent_health_url,'http://127.0.0.1:8765/api/v1/health');
   assert(!JSON.stringify(m).includes('secret'));assert.equal(m.endpoint,undefined);
   assert.equal(integrationMode('collector'),'collector');assert.equal(integrationMode('viewer'),'viewer');
@@ -66,21 +66,21 @@ test('first-login screen exposes the same public approved CLEAN without requirin
  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
  const approved=readRelease(release);
  assert.match(html,/Primeiro acesso neste computador\?/);
- assert.equal(approved.version,'0.5.35');
+ assert.equal(approved.version,'0.5.39');
  assert(html.includes('id="approvedCleanLoginDownload" href="https://github.com/pedrokam700/Central-de-Controle-/releases/latest"'));
  assert(!html.includes('href="'+approved.download_url+'"'),'login fallback must use GitHub latest landing instead of a version-pinned file');
  assert.match(html,/n[aã]o precisa instalar o agente A-MES/);
  assert.match(html,/00_INICIAR_AQUI\.bat/);
 });
 
-const latest={draft:false,prerelease:false,tag_name:'ames-v0.5.30-multipc-20261021',
+const latest={draft:false,prerelease:false,tag_name:'ames-v0.5.40-multipc-20261023',
  target_commitish:'c'.repeat(40),
  assets:[{name:'AMES_Central_CLEAN_cccccccc.zip',size:1200000,
  state:'uploaded',digest:'sha256:'+'d'.repeat(64),
- browser_download_url:'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.30-multipc-20261021/AMES_Central_CLEAN_cccccccc.zip'}]};
+ browser_download_url:'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.40-multipc-20261023/AMES_Central_CLEAN_cccccccc.zip'}]};
 test('only GitHub latest with exact asset, digest, tag and commit can become the download',()=>{
  const m=verifiedLatestRelease(latest,release);
- assert.equal(m.version,'0.5.30');
+ assert.equal(m.version,'0.5.40');
  assert.equal(m.validated_sha,'c'.repeat(40));
  assert.equal(m.sha256,'d'.repeat(64));
  assert.equal(m.download_url,latest.assets[0].browser_download_url);
@@ -96,6 +96,13 @@ test('only GitHub latest with exact asset, digest, tag and commit can become the
    const old=verifiedLatestRelease(bad,release);
    assert.equal(old.download_url,release.download_url);
  }
+ const historical={...latest,tag_name:'ames-v0.5.30-multipc-20261021',assets:[{
+   ...latest.assets[0],browser_download_url:
+     'https://github.com/pedrokam700/Central-de-Controle-/releases/download/ames-v0.5.30-multipc-20261021/AMES_Central_CLEAN_cccccccc.zip'
+ }]};
+ const preserved=verifiedLatestRelease(historical,release);
+ assert.equal(preserved.version,'0.5.39','a API nao pode retroceder o fallback oficial');
+ assert.equal(preserved.download_url,release.download_url);
 });
 test('release discovery is read-only and falls back offline to exact factory-approved CLEAN',async()=>{
  const fetcher=async(url,options)=>{
@@ -104,7 +111,7 @@ test('release discovery is read-only and falls back offline to exact factory-app
    return {ok:true,json:async()=>latest};
  };
  const m=await discoverOfficialRelease(undefined,fetcher,async()=>release);
- assert.equal(m.version,'0.5.30');
+ assert.equal(m.version,'0.5.40');
  const fallback=await discoverOfficialRelease(undefined,async()=>{throw Error('offline');},async()=>release);
  assert.equal(fallback.sha256,release.sha256);
 });
@@ -121,7 +128,7 @@ test('validated GitHub manifest remains valid through view-level validation',()=
  const latestOnce=verifiedLatestRelease(latest,release);
  const latestTwice=readRelease(latestOnce);
  assert.equal(latestTwice.validated_sha,'c'.repeat(40));
- assert.equal(latestTwice.version,'0.5.30');
+ assert.equal(latestTwice.version,'0.5.40');
 });
 
 test('all static installation URLs use GitHub latest, and SHA-validated direct URL is retained only in approved manifest',()=>{

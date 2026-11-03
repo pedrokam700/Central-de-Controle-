@@ -1,6 +1,12 @@
 import {readRelease} from './data/onboarding.mjs';
 const API='https://api.github.com/repos/pedrokam700/Central-de-Controle-/releases/latest';
 const SHAPE=/^ames-v(0\.5\.\d+)-(?:factory|multipc)-\d{8}$/;
+function olderThanCurrent(candidate,current){
+  const left=String(candidate||'').split('.').map(Number),right=String(current||'').split('.').map(Number);
+  if(left.length!==3||right.length!==3||[...left,...right].some(x=>!Number.isSafeInteger(x)))return true;
+  for(let i=0;i<3;i++){if(left[i]!==right[i])return left[i]<right[i];}
+  return false;
+}
 
 // The GitHub API is read-only public release metadata. No token or cookies.
 // Failure falls back to the SHA-pinned, factory-proven local manifest.
@@ -9,6 +15,8 @@ export function verifiedLatestRelease(json, fallback){
   if(!json||json.draft!==false||json.prerelease!==false||
     typeof json.target_commitish!=='string'||!/^[a-f0-9]{40}$/.test(json.target_commitish)||
     !SHAPE.test(json.tag_name||''))return original;
+  const incomingVersion=json.tag_name.match(SHAPE)[1];
+  if(olderThanCurrent(incomingVersion,original.version))return original;
   const assetName='AMES_Central_CLEAN_'+json.target_commitish.slice(0,8)+'.zip';
   const asset=(Array.isArray(json.assets)?json.assets:[]).find(item=>
     item?.name===assetName&&Number.isFinite(item.size)&&item.size>100000&&
@@ -17,7 +25,7 @@ export function verifiedLatestRelease(json, fallback){
   if(!asset)return original;
   const exact='https://github.com/pedrokam700/Central-de-Controle-/releases/download/'+json.tag_name+'/'+assetName;
   if(asset.browser_download_url!==exact)return original;
-  return readRelease({...fallback,version:json.tag_name.match(SHAPE)[1],
+  return readRelease({...fallback,version:incomingVersion,
     package_available:true,package_name:assetName,sha256:asset.digest.slice(7),
     download_url:exact,validated_candidate_sha:json.target_commitish,
     candidate_status:'github_latest_release_verified'});

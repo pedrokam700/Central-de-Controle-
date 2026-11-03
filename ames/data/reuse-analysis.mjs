@@ -1,3 +1,4 @@
+import {parseFailureInstant} from './production-evidence.mjs';
 const value=(r,...keys)=>keys.map(k=>r?.[k]).find(v=>v!==null&&v!==undefined&&v!=='')??null;
 const list=v=>{if(Array.isArray(v))return v;try{const a=JSON.parse(v);if(Array.isArray(a))return a;}catch{}return typeof v==='string'?v.split(/[,;|\n]/).map(x=>x.trim()).filter(Boolean):[];};
 const unique=a=>[...new Set(a.filter(v=>v!==null&&v!==undefined&&v!==''))];
@@ -59,7 +60,13 @@ export function reuseLinks(snapshot){
  const occurrences=snapshot?.occurrences||[],historyRows=snapshot?.pcba_history?.records||[],processRows=snapshot?.process_timeline?.events||[];
  const summaryIndex=new Map();for(const row of materialSummaries)summaryIndex.set(key(value(row,'PCBA atual'),value(row,'Material SN')),row);
  const corrIndex=new Map();for(const row of correlations)addIndex(corrIndex,key(value(row,'PCBA atual','current_pcba_sn','pcba_sn'),value(row,'Material SN','item_sn','material_sn')),row);
- const occurrenceExact=new Map(),occurrencePcba=new Map();for(const row of occurrences){if(row?.pcba_sn){if(row.defect_key)occurrenceExact.set(key(row.pcba_sn,row.defect_key),row);if(!occurrencePcba.has(String(row.pcba_sn)))occurrencePcba.set(String(row.pcba_sn),row);}}
+ const occurrenceExact=new Map(),occurrenceByIdentity=new Map(),occurrencePcba=new Map();
+ for(const row of occurrences){if(row?.pcba_sn){
+  if(row.defect_key){const k=key(row.pcba_sn,row.defect_key);occurrenceExact.set(k,occurrenceExact.has(k)?null:row);}
+  const at=parseFailureInstant(row.defect_time);
+  if(row.defect_code&&at!==null){const k=key(row.pcba_sn,row.defect_code,at);occurrenceByIdentity.set(k,occurrenceByIdentity.has(k)?null:row);}
+  if(!occurrencePcba.has(String(row.pcba_sn)))occurrencePcba.set(String(row.pcba_sn),row);
+ }}
  const historyIndex=new Map();for(const row of historyRows)if(row?.pcba_sn)addIndex(historyIndex,String(row.pcba_sn),row);
  const processIndex=new Map();for(const row of processRows)if(row?.pcba_sn)addIndex(processIndex,String(row.pcba_sn),row);
  const out=new Map();
@@ -73,7 +80,16 @@ export function reuseLinks(snapshot){
   const uses=value(r,'known_use_count','total_pcba_count_known_now','Usos conhecidos material','Uso material na falha');
   const reused=previous.length>0||Number(uses)>1||Number(value(r,'previous_pcba_count','Reusos anteriores material'))>0;
   if(!reused)continue;
-  const occurrence=(r.current_defect_key?occurrenceExact.get(key(pcba,r.current_defect_key)):null)||occurrencePcba.get(String(pcba));
+  const rawCode=value(r,'defect_code','Defect Code atual');
+  const rawInstant=parseFailureInstant(value(r,'defect_time','Defect Time atual'));
+  const byKey=r.current_defect_key?occurrenceExact.get(key(pcba,r.current_defect_key)):null;
+  const byIdentity=rawCode&&rawInstant!==null?occurrenceByIdentity.get(key(pcba,rawCode,rawInstant)):null;
+  // An explicit but contradictory identity must never fall back to a different
+  // 3028 event. PCBA-wide fallback remains display context only.
+  const explicit=r.current_defect_key?byKey:byIdentity;
+  const proven=explicit&&(!rawCode||String(explicit.defect_code)===String(rawCode))&&
+    (rawInstant===null||parseFailureInstant(explicit.defect_time)===rawInstant);
+  const occurrence=(proven?explicit:null)||occurrencePcba.get(String(pcba));
   const corr=corrIndex.get(key(pcba,material))||[];
   const family=componentFamily(value(r,'item_type','material_type','Tipo material'));
   const group=componentGroup(r,family);

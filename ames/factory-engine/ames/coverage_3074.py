@@ -9,6 +9,13 @@ def classify_3074_page(grid):
         total=int(raw_total) if raw_total not in (None,"") else None
     except (TypeError,ValueError):
         total=None
+    # A store reporting fewer records than it visibly holds is inconsistent,
+    # not evidence that the whole query was captured. Retain the rows but
+    # refuse to certify a complete material history from this response.
+    if total is not None and total < 0:
+        return {"status":"incomplete_page","returned":actual,"reported_total":total,"reason":"extjs_store_total_invalid"}
+    if total is not None and total < actual:
+        return {"status":"incomplete_page","returned":actual,"reported_total":total,"reason":"extjs_store_total_below_loaded_rows"}
     if total is not None and total>=0 and total>actual:
         return {"status":"incomplete_page","returned":actual,"reported_total":total,"reason":"extjs_store_total_exceeds_loaded_rows"}
     return {"status":"returned","returned":actual,"reported_total":total,"reason":None}

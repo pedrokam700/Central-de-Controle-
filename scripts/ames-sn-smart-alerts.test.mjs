@@ -70,7 +70,100 @@ test('smart alert surface is bilingual while technical IDs and evidence remain e
 test('no correlation stays explicit unknown rather than zero alerts',()=>{
   const m={current_pcba:'PCB-A',current:{...failure(),raw:{}},own_history:[],materials:[],alerts:[],correlation_limits:[]};
   const html=renderSmartSnAlerts(m,{},'pt-BR');
-  assert.match(html,/Nenhum alerta técnico comprovado/);
-  assert.match(html,/não prova ausência de histórico/);
+  assert.equal(html,'','No provable alert must produce no alert box');
+  assert.equal(html,'','Unproven source coverage must be handled by provenance, not an alert');
   assert.doesNotMatch(html,/>0 alert/);
+});
+
+test('empty unproven technical evidence does not render an alert panel',()=>{
+  assert.equal(renderSmartSnAlerts({current_pcba:'PCB-A',alerts:[],own_history:[],materials:[]}), '');
+});
+
+test('historical 2114 same-failure alert clearly separates new mounting',()=>{
+  const m=model();
+  m.current=null;
+  m.board_reference_is_historical=true;
+  m.board_failure_reference={...failure('PCB-A'),hist_seq:1};
+  m.own_history=[{...failure('PCB-A'),hist_seq:0}];
+  m.alerts=[{kind:'PCBA_SAME_FAILURE',severity:'high',
+    board_reference_is_historical:true,pcba_sn:'PCB-A',
+    prior_defect_code:'F1',prior_hist_seq:0,evidence:{
+      ...proof('PCB-A'),failure:{...failure('PCB-A'),hist_seq:0},
+      current_failure:{...failure('PCB-A'),hist_seq:1},
+    }}];
+  const html=renderSmartSnAlerts(m);
+  assert.match(html,/Recorrência histórica desta PCBA/);
+  assert.match(html,/componentes do novo ciclo/);
+  assert.match(html,/Hist Seq 0/);
+  assert.match(html,/Hist Seq 1/);
+});
+
+
+test('four priority levels preserve original SN evidence and restore clean segmented presentation',()=>{
+  const m=model();
+  const originalProof=m.alerts[0].evidence;
+  const baseline=renderSmartSnAlerts(m,reusedResult,'pt-BR');
+  assert.match(baseline,/data-sn-alert-current-prior/);
+  assert.match(baseline,/data-sn-alert-components/);
+  assert.match(baseline,/ames-sn-alert-summary-card/);
+  assert.match(baseline,/data-sn-alert-severity="high"/);
+  assert.match(baseline,/ames-sn-alert-tech-preview/);
+  assert.equal(m.alerts[0].evidence,originalProof,'render must not replace or destroy source proof');
+  assert.equal(m.alerts[0].evidence.repairs.length,1,'3012 source evidence remains intact');
+});
+test('same proven board failure seen at three distinct 2114 sequences becomes VERY HIGH, two remain HIGH',()=>{
+  const f=(seq)=>({...failure('PCB-A'),hist_seq:seq,defect_time:'2026-10-10T0'+(8+seq)+':00:00-03:00'});
+  const m={...model(),current:f(2),own_history:[f(0),f(1)],
+    alerts:[{kind:'PCBA_SAME_FAILURE',pcba_sn:'PCB-A',prior_defect_code:'F1',prior_hist_seq:1,
+      evidence:{failure:f(1),current_failure:f(2)}}]};
+  const result=buildSmartSnAlerts(m,reusedResult);
+  assert.equal(result[0].severity,'critical');
+  const html=renderSmartSnAlerts(m,reusedResult);
+  assert.match(html,/MUITO ALTA/);
+  assert.match(html,/data-sn-alert-current-prior/);
+  assert.match(html,/Hist Seq 2/);
+});
+test('three reused same-failure components yield very high; same-family is medium and compatible-only is low',()=>{
+  const m=model();
+  m.alerts.push({kind:'COMPONENT_SAME_FAILURE',pcba_sn:'PCB-OLD-3',item_type:'BATTERY',item_sn:'BAT-3',
+    prior_defect_code:'F1',evidence:{failure:failure('PCB-OLD-3'),binding:{item_sn:'BAT-3',previous_pcba:'PCB-OLD-3',current_pcba:'PCB-A'}}});
+  m.alerts.push({kind:'COMPONENT_TYPE_COMPATIBLE',pcba_sn:'PCB-A',item_type:'SPEAKER',item_sn:'SPEAKER-5',
+    evidence:{failure:failure('OTHER'),binding:{item_sn:'SPEAKER-5',previous_pcba:'OTHER',current_pcba:'PCB-A'}}});
+  m.alerts.push({kind:'COMPONENT_SAME_FAMILY',pcba_sn:'OTHER',item_type:'LCD',item_sn:'LCD-7',
+    evidence:{failure:failure('OTHER'),binding:{item_sn:'LCD-7',previous_pcba:'OTHER',current_pcba:'PCB-A'}}});
+  const alerts=buildSmartSnAlerts(m,reusedResult);
+  assert.equal(alerts.find(x=>x.id==='component-same-failure').severity,'critical');
+  assert.equal(alerts.find(x=>x.id==='component-same-family').severity,'medium');
+  assert.equal(alerts.find(x=>x.id==='component-compatible-failure').severity,'low');
+  assert.deepEqual(alerts.map(x=>x.severity),[...alerts].sort((a,b)=>
+    ({critical:0,high:1,medium:2,low:3}[a.severity]-{critical:0,high:1,medium:2,low:3}[b.severity])).map(x=>x.severity));
+});
+test('one physical technician comment in multiple alerts appears once, with no invented 2114 attribution',()=>{
+  const m=model();
+  const comment='Checked antenna RF connector';
+  const repair={pcba_sn:'PCB-A',row_key:'REPAIR-CANONICAL-1',
+    repair_user:'BRM00061',repair_comment:comment,repair_time:'2026-10-10T10:30:00-03:00'};
+  for(const alert of m.alerts)alert.evidence={...alert.evidence,repairs:[repair],ambiguous_3012:[repair]};
+  const before=JSON.stringify(m.alerts);
+  const html=renderSmartSnAlerts(m,reusedResult);
+  assert.equal((html.match(/data-sn-alert-technician-preview/g)||[]).length,1);
+  assert.equal((html.match(/data-sn-alert-repair-row/g)||[]).length,1);
+  assert.equal(JSON.stringify(m.alerts),before,'UI must never mutate model evidence');
+});
+
+
+test('prior component board facts show 2114 failure, time, and only exact-PCBA 3012 technician',()=>{
+  const m=model(),component=m.alerts.find(a=>a.item_sn==='LCM-1');
+  component.evidence.failure={...failure('PCB-OLD-1'),defect_desc:'LCD: Leakage',defect_time:'2026-10-07T08:00:00-03:00'};
+  component.evidence.repairs=[
+    {pcba_sn:'PCB-OLD-1',row_key:'old-board-1',repair_user:'BRM-OLD',repair_time:'2026-10-07T10:00:00-03:00',repair_comment:'Reconnected display cable'},
+    {pcba_sn:'PCB-OTHER',row_key:'other-1',repair_user:'BRM-FOREIGN',repair_time:'2026-10-07T10:01:00-03:00',repair_comment:'Foreign board note'}];
+  const html=renderSmartSnAlerts(m,reusedResult);
+  const componentCard=html.split('data-sn-alert-component-segment')[1]||'';
+  assert.match(componentCard,/Falha da PCBA anterior/);
+  assert.match(componentCard,/LCD: Leakage/);
+  assert.match(componentCard,/PCB-OLD-1/);
+  assert.match(componentCard,/Reconnected display cable/);
+  assert.doesNotMatch(componentCard.split('</div></div>')[0],/Foreign board note/,
+    'a foreign 3012 repair must never be attributed to the reused component');
 });

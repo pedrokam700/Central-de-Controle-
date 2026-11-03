@@ -1,2 +1,6 @@
+# Canonical collector hashes and source contracts must survive Windows checkout.
+*.py text eol=lf
+*.mjs text eol=lf
+*.yml text eol=lf
 ames/agent/ames_3028.py -text
 ames/agent/ames_3028_live.py -text

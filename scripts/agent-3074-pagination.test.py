@@ -11,5 +11,9 @@ def main():
   assert classify_3074_page({"rows":[],"store_total_count":0})["status"]=="returned"
   assert classify_3074_page({"rows":[{"Barcode":"P1"}],"store_total_count":None})["reported_total"] is None
   assert classify_3074_page({"rows":[{"Barcode":"P1"}],"store_total_count":"unknown"})["status"]=="returned"
+  for count,reason in [(0,"extjs_store_total_below_loaded_rows"),(-1,"extjs_store_total_invalid")]:
+    mismatch=classify_3074_page({"rows":[{"Barcode":"P1"}],"store_total_count":count})
+    assert mismatch=={"status":"incomplete_page","returned":1,"reported_total":count,"reason":reason}
+  assert classify_3074_page({"rows":[],"store_total_count":-1})["status"]=="incomplete_page"
   print("PASS 3074 incomplete pagination is not silently complete")
 if __name__=="__main__":main()

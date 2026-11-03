@@ -137,6 +137,11 @@ jobs:
         run: |
           python scripts/agent-pr38-preserving-stage.test.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Parse supervised PR69 switcher and test launcher classification without touching processes
+        shell: pwsh
+        run: |
+          ./scripts/ames-pr69-switch-parser.windows.test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # No upload-artifact: stage is NOT an installable bundle.
       # A real factory package requires separate review/authorization and gates.
 

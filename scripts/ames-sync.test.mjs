@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createAmesStore} from '../ames/data/store.mjs';
 import {normalizeCanonical,DATASETS} from '../ames/data/canonical.mjs';
-import {publication,createMesSync,sanitizeSnapshot} from '../ames/sync.mjs';
+import {publication,createMesSync,sanitizeSnapshot,compareCompetingPublisherObservations,isolatedPublisherMetrics,browserConflictJournal} from '../ames/sync.mjs';
 import {selectCoraContext} from '../ames/data/cora.mjs';
 import {selectProcess} from '../ames/data/process-timeline.mjs';
 const FACTORY_NOW=new Date('2026-10-09T12:00:00Z');
@@ -26,6 +26,45 @@ test('canonical revision validation and CPH-specific 3074/2114 CORA projection',
 test('publication strips credential fields and is idempotent',async()=>{
   const p=canonicalFixture();p.cookie='secret';p.datasets.defects[0].raw_json='secret';p.datasets.defects[0].password='secret';
   const a=await publication('A',p),b=await publication('A',p);assert.equal(a.id,b.id);assert(!a.parts.join('').includes('secret'));assert.equal(a.head.owner_uid,'A');assert.notEqual(a.id,(await publication('B',p)).id);
+});
+test('two collectors only produce candidate 3028 overlap, never an aggregate or proven deduplication',()=>{
+  const a=canonicalFixture('TAN10102'),b=structuredClone(a);
+  b.source_id='different-collector';b.datasets.defects[0].defect_time='2026-10-09T07:00:00-03:00';
+  const r=compareCompetingPublisherObservations([{payload:a},{payload:b}]);
+  assert.deepEqual(r,{state:'candidate_overlap',window_scope:'same_window',observed_defects:[1,1],outside_common_window:[0,0],coverage_complete:[false,false],
+    unverifiable_rows:[0,0],ambiguous_keys:[0,0],candidate_matches:1,unmatched_observed:[0,0]});
+  assert.equal(JSON.stringify(r).includes('P'),false,'no PCBA/SN in comparison evidence');
+  assert.equal('merged_defects' in r,false,'a comparison is never a synthesized team snapshot');
+  const other=structuredClone(b);other.datasets.defects[0].defect_code='D2';
+  assert.equal(compareCompetingPublisherObservations([{payload:a},{payload:other}]).state,'no_candidate_matches');
+  other.summary.period={mode:'today',start_at:'2026-10-09T11:00',end_at:'2026-10-09T12:00'};
+  assert.deepEqual(compareCompetingPublisherObservations([{payload:a},{payload:other}]),{state:'different_periods'});
+  const longer=structuredClone(b);longer.summary.period.end_at='2026-10-09T12:00';
+  longer.datasets.defects.push({...longer.datasets.defects[0],record_id:'LATE',defect_time:'2026-10-09T11:00'});
+  const partial=compareCompetingPublisherObservations([{payload:a},{payload:longer}]);
+  assert.deepEqual([partial.state,partial.window_scope,partial.candidate_matches,partial.observed_defects,partial.outside_common_window],
+    ['candidate_overlap','overlap_only',1,[1,1],[0,1]],'late-only data must not be treated as absent on shorter collection');
+  const incomplete=structuredClone(a);incomplete.datasets.defects[0].defect_time=null;
+  assert.equal(compareCompetingPublisherObservations([{payload:incomplete},{payload:b}]).state,'ambiguous_identifiers');
+  const repeated=structuredClone(a);repeated.datasets.defects.push({...repeated.datasets.defects[0],record_id:'ANOTHER'});
+  assert.deepEqual(compareCompetingPublisherObservations([{payload:repeated},{payload:b}]).ambiguous_keys,[1,0]);
+  assert.deepEqual(compareCompetingPublisherObservations([{payload:a}]),{state:'unsupported_installation_count'});
+});
+test('competing source metrics are verified, bounded, isolated and exclude identifiers',()=>{
+  const payload=canonicalFixture('TAN10102');
+  payload.summary.fpy=97.69;
+  payload.summary.check_fpy=97.86;
+  payload.summary.quantity=1124;
+  payload.summary.owner_uid='private-owner';
+  payload.coverage.defects.source_complete=false;
+  const result=isolatedPublisherMetrics(payload);
+  assert.deepEqual(result,{fpy:97.69,check_fpy:97.86,quantity:1124,observed_defects:1,defects_source_complete:false});
+  assert.equal(JSON.stringify(result).includes('private-owner'),false);
+  assert.equal(JSON.stringify(result).includes('pcba_sn'),false);
+  payload.summary.fpy=150;
+  payload.summary.check_fpy='97.86';
+  payload.summary.quantity=-1;
+  assert.deepEqual([isolatedPublisherMetrics(payload).fpy,isolatedPublisherMetrics(payload).check_fpy,isolatedPublisherMetrics(payload).quantity],[null,null,null]);
 });
 test('offline/reconnect publishes once; active teammates read sanitized latest line; logout clears state',async()=>{
   let online=false,watcher;const pending=new Map(),parts=new Map(),heads=new Map(),writes=[];let fail=true;
@@ -130,6 +169,8 @@ test('Line 3 reaches PC B from immutable day index despite an old legacy owner h
 test('different current installations cannot silently replace one another on PC B',async()=>{
   const first=canonicalFixture('TAN10103'),second=canonicalFixture('TAN10103');
   second.source_id='new-source';
+  first.summary.fpy=97.26;first.summary.quantity=1422;
+  second.summary.fpy=96.5;second.summary.quantity=1420;
   const p1=await publication('A',first,{now:FACTORY_NOW}),p2=await publication('B',second,{now:FACTORY_NOW});
   const parts=new Map();
   for(const p of [p1,p2])p.parts.forEach((v,i)=>parts.set(p.head.key+':'+i,v));
@@ -143,6 +184,124 @@ test('different current installations cannot silently replace one another on PC 
   assert.equal(store.read('TAN10103').snapshot,null);
   assert.equal(store.agent().sync.read_status,'origin_conflict');
   assert.deepEqual(store.agent().sync.origin_conflict_lines,['TAN10103']);
+  assert.deepEqual(store.agent().sync.origin_conflict_candidates.map(x=>[x.line_id,x.installations,x.distinct_sources,x.identity_collision]),
+    [['TAN10103',2,2,false]]);
+  assert.deepEqual(store.agent().sync.origin_conflict_candidates[0].candidates.map(x=>x.source_id).sort(),['new-source','source']);
+  assert.equal(JSON.stringify(store.agent().sync.origin_conflict_candidates).includes('owner_uid'),false);
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].observation_comparison.state,'candidate_overlap');
+  const isolated=store.agent().sync.origin_conflict_candidates[0].candidates.map(x=>x.isolated_metrics);
+  assert.deepEqual(isolated.map(x=>x.quantity).sort(),[1420,1422]);
+  assert.deepEqual(isolated.map(x=>x.fpy).sort(),[96.5,97.26]);
+  assert(isolated.every(x=>x.observed_defects===1&&x.defects_source_complete===false));
+  assert.equal(store.agent().sync.remote_line_count,0,'observations must not become a team head');
+  assert.equal(store.read('TAN10103').snapshot,null,'read-only isolated observations never become Today');
+  sync.stop();
+  assert.deepEqual(store.agent().sync.origin_conflict_candidates,[],'logout removes reviewer metadata');
+});
+
+test('an incomplete Firestore cache cannot revoke a server-verified multiwriter conflict',async()=>{
+  const a=canonicalFixture('TAN10102'),b=canonicalFixture('TAN10102');b.source_id='second-live-source';
+  const pa=await publication('owner-A',a,{now:FACTORY_NOW}),pb=await publication('owner-B',b,{now:FACTORY_NOW});
+  const parts=new Map();for(const p of [pa,pb])p.parts.forEach((v,i)=>parts.set(p.head.key+':'+i,v));
+  let notify;
+  const remote={getPart:async(_u,h,i)=>parts.get(h.key+':'+i),
+    watch:(_u,cb)=>{notify=cb;cb([{...pa.head,...pa.history},{...pb.head,...pb.history}],{day_index_available:true,from_cache:false});return()=>{};}};
+  const queue={put:async()=>{},remove:async()=>{},list:async()=>[]},store=createAmesStore();
+  let clock=FACTORY_NOW;
+  const sync=createMesSync(store,remote,{queue,online:()=>true,now:()=>clock,schedule:()=>0,unschedule:()=>{}});
+  sync.start('reader');
+  notify([{...pa.head,...pa.history}],{day_index_available:true,from_cache:true});
+  await new Promise(r=>setTimeout(r,40));
+  assert.equal(store.agent().sync.read_status,'origin_conflict');
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
+  notify([{...pa.head,...pa.history}],{day_index_available:true,from_cache:true});
+  await new Promise(r=>setTimeout(r,40));
+  assert.equal(store.agent().sync.read_status,'origin_conflict');
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
+  assert.equal(store.agent().sync.remote_line_count,0);
+  assert.equal(store.read('TAN10102').snapshot,null,'cache may not promote a single source');
+  notify([],{day_index_available:true,from_cache:true});
+  await new Promise(r=>setTimeout(r,20));
+  assert.equal(store.agent().sync.read_status,'origin_conflict','empty cached index cannot clear prior conflict');
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
+  notify([{...pa.head,...pa.history}],{day_index_available:true,from_cache:false});
+  await new Promise(r=>setTimeout(r,40));
+  assert.equal(store.agent().sync.read_status,'origin_conflict','server index alone does not prove legitimate writer reconciliation');
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].installations,2);
+  assert.equal(store.agent().sync.origin_conflict_candidates[0].retained_from_verified_conflict,true);
+  assert.equal(store.agent().sync.remote_line_count,0);
+  assert.equal(store.read('TAN10102').snapshot,null);
+  notify([],{day_index_available:true,from_cache:false});
+  await new Promise(r=>setTimeout(r,30));
+  assert.equal(store.agent().sync.read_status,'origin_conflict','empty server index cannot erase previously verified competing sources for the same day');
+  clock=new Date('2026-10-10T12:00:00Z');sync.ensureOperationalDay();
+  await new Promise(r=>setTimeout(r,40));
+  assert.equal(store.agent().sync.read_status,'ready','conflict from yesterday must not block the next operating day');
+  assert.deepEqual(store.agent().sync.origin_conflict_lines,[]);
+  sync.stop();
+});
+
+test('a verified conflict marker survives a reload without storing source identifiers or metrics',async()=>{
+  const values=new Map();
+  const storage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v)};
+  const journal=browserConflictJournal(()=>storage);
+  assert.deepEqual(journal.list('reader','2026-10-09T07:00'),[]);
+  assert.equal(journal.mark('reader','invalid-day','TAN10102'),false);
+  const a=canonicalFixture('TAN10102'),b=canonicalFixture('TAN10102');b.source_id='second-source';
+  const pa=await publication('owner-A',a,{now:FACTORY_NOW}),pb=await publication('owner-B',b,{now:FACTORY_NOW});
+  const parts=new Map();for(const p of [pa,pb])p.parts.forEach((v,i)=>parts.set(p.head.key+':'+i,v));
+  let index=[{...pa.head,...pa.history},{...pb.head,...pb.history}];
+  const remote={getPart:async(_u,h,i)=>parts.get(h.key+':'+i),
+    watch:(_u,cb)=>{cb(index,{day_index_available:true,from_cache:false});return()=>{}}};
+  const queue={put:async()=>{},remove:async()=>{},list:async()=>[]};
+  const create=()=>{
+    const store=createAmesStore();
+    const sync=createMesSync(store,remote,{queue,conflictJournal:journal,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
+    return {store,sync};
+  };
+  const first=create();first.sync.start('reader');await new Promise(r=>setTimeout(r,40));
+  assert.equal(first.store.agent().sync.read_status,'origin_conflict');
+  first.sync.stop();
+  assert.deepEqual(journal.list('reader','2026-10-09T07:00'),['TAN10102']);
+  assert.deepEqual(journal.list('another-user','2026-10-09T07:00'),[]);
+  assert.deepEqual(journal.list('reader','2026-10-10T07:00'),[]);
+  assert.deepEqual([...values.values()],['multiwriter_verified']);
+  assert.equal(JSON.stringify([...values]).includes('second-source'),false);
+  assert.equal(JSON.stringify([...values]).includes('pcba_sn'),false);
+  index=[{...pa.head,...pa.history}];
+  const second=create();second.sync.start('reader');await new Promise(r=>setTimeout(r,40));
+  assert.equal(second.store.agent().sync.read_status,'origin_conflict');
+  assert.deepEqual(second.store.agent().sync.origin_conflict_lines,['TAN10102']);
+  assert.equal(second.store.agent().sync.origin_conflict_candidates[0].persisted_guard,true);
+  assert.deepEqual(second.store.agent().sync.origin_conflict_candidates[0].candidates,[]);
+  assert.equal(second.store.agent().sync.remote_line_count,0);
+  assert.equal(second.store.read('TAN10102').snapshot,null);
+  second.sync.stop();
+  const denied=browserConflictJournal(()=>{throw Error('storage-denied')});
+  assert.deepEqual(denied.list('reader','2026-10-09T07:00'),[]);
+  assert.equal(denied.mark('reader','2026-10-09T07:00','TAN10102'),false);
+});
+
+test('same source ID reused under different owners stays in conflict without exposing owner UID',async()=>{
+  const payload=canonicalFixture('TAN10102');
+  const a=await publication('installation-owner-A',payload,{now:FACTORY_NOW});
+  const b=await publication('installation-owner-B',payload,{now:FACTORY_NOW});
+  const parts=new Map();for(const item of [a,b])item.parts.forEach((v,i)=>parts.set(item.head.owner_uid+':'+i,v));
+  const remote={
+    getPart:async(owner,_head,index)=>parts.get(owner+':'+index),
+    watch:(_uid,cb)=>{cb([{...a.head,...a.history},{...b.head,...b.history}],{day_index_available:true});return()=>{};}
+  };
+  const queue={put:async()=>{},remove:async()=>{},list:async()=>[]},store=createAmesStore();
+  const sync=createMesSync(store,remote,{queue,online:()=>true,now:()=>FACTORY_NOW,schedule:()=>0,unschedule:()=>{}});
+  sync.start('third-workstation');await new Promise(resolve=>setTimeout(resolve,40));
+  assert.equal(store.agent().sync.read_status,'origin_conflict');
+  const conflict=store.agent().sync.origin_conflict_candidates[0];
+  assert.deepEqual([conflict.line_id,conflict.installations,conflict.distinct_sources,conflict.identity_collision],
+    ['TAN10102',2,1,true]);
+  assert.equal(conflict.candidates.length,2);
+  assert.equal(conflict.observation_comparison.candidate_matches,1);
+  assert.equal(JSON.stringify(conflict).includes('installation-owner-'),false);
+  assert.equal(store.read('TAN10102').snapshot,null);
   sync.stop();
 });
 

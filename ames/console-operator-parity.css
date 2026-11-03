@@ -137,3 +137,88 @@ body.dark .ames-reuse-line-tabs button{background:var(--ames-surface);border-col
 .ames-2114-table-note{font-size:11px;line-height:1.55;color:var(--ames-muted);margin:6px 0 10px}
 @media(max-width:760px){.ames-sn-alert-header{flex-wrap:wrap}.ames-sn-alert-priority{margin-left:28px}.ames-sn-alert-production-grid,.ames-sn-alert-evidence-grid{grid-template-columns:1fr}.ames-sn-alert-tech-id time{margin-left:0}.ames-sn-smart-alert .ames-sn-alert-white{padding:10px}}
 body.dark .ames-sn-smart-alert .ames-sn-alert-white{background:var(--ames-surface)!important}
+
+/* SN alert legacy layout restored: colored left rail, soft risk canvas, clean
+   white blocks and separated current / previous evidence. Keep all source
+   proof below a single operator-controlled expander. */
+.ames-sn-smart-alerts{gap:12px!important}
+.ames-sn-smart-alert{
+  padding:15px 16px!important;
+  border-radius:12px!important;
+  border-left-width:6px!important;
+  box-shadow:0 1px 3px rgba(20,35,55,.035);
+}
+.ames-sn-alert-summary-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px;margin:8px 0 10px;
+}
+.ames-sn-alert-summary-card{
+  min-width:0;display:grid;gap:6px;
+  padding:12px 13px;background:#fff;color:#26313e;
+  border:1px solid #e8e9eb;border-radius:9px;
+  box-shadow:0 1px 2px rgba(15,23,42,.03);
+  overflow-wrap:anywhere;
+}
+.ames-sn-alert-summary-card>small{
+  display:block;font-size:11px;font-weight:750;color:#657080;line-height:1.5;
+}
+.ames-sn-alert-summary-card>b{
+  display:block;font-size:12.5px;line-height:1.5;color:#1b2634;
+}
+.ames-sn-alert-summary-card>span{
+  display:block;font-size:11px;line-height:1.6;color:#536172;
+}
+.ames-sn-alert-level-critical>.ames-sn-alert-header .ames-sn-alert-title{color:#9f211a}
+.ames-sn-alert-level-critical .ames-sn-alert-priority,
+.ames-sn-alert-level-high .ames-sn-alert-priority{
+  font-weight:850;letter-spacing:.015em
+}
+.ames-sn-alert-level-low .ames-sn-alert-priority{font-weight:700}
+.ames-sn-smart-alert .ames-sn-alert-technicians{margin-top:10px;margin-bottom:10px}
+.ames-sn-smart-alert>details>summary{font-size:12px}
+body.dark .ames-sn-alert-summary-card{
+  color:var(--ames-text);background:var(--ames-surface);
+  border-color:var(--ames-line2)
+}
+body.dark .ames-sn-alert-summary-card>b{color:var(--ames-text)}
+body.dark .ames-sn-alert-summary-card>small,
+body.dark .ames-sn-alert-summary-card>span{color:var(--ames-muted)}
+@media(max-width:760px){
+  .ames-sn-alert-summary-grid{grid-template-columns:1fr}
+  .ames-sn-smart-alert{padding:12px!important}
+  .ames-sn-alert-summary-card{padding:10px 11px}
+}
+
+/* Old-PCBA context stays inside the same white material card, avoiding a red
+   wall of unrelated historic notes and keeping dates/analysts legible. */
+.ames-sn-alert-component-prior-failure{display:grid;gap:3px;padding:9px 10px;margin-top:7px;background:var(--ames-surface,#fff);border:1px solid var(--ames-line2,#e5e7eb);border-radius:7px;overflow-wrap:anywhere}
+.ames-sn-alert-component-prior-failure small{font-size:10px;font-weight:750;color:var(--ames-muted,#64748b)}
+.ames-sn-alert-component-prior-failure b{font-size:11px;line-height:1.45}
+.ames-sn-alert-component-prior-failure span{font-size:10px;line-height:1.5;white-space:pre-wrap}
+
+/* SN alert 2026-10-28 restored high-contrast icon and white internal evidence blocks.
+   The operator-approved red title and status disc are not ordinary text. */
+.ames-sn-smart-alert .ames-sn-alert-header{display:flex;align-items:flex-start;gap:11px;padding-bottom:8px}
+.ames-sn-smart-alert .ames-sn-alert-header .ames-sn-alert-symbol{
+  display:inline-flex;flex:none;align-items:center;justify-content:center;
+  width:28px;height:28px;border-radius:50%;font-size:15px;
+  background:#d92d20;color:#fff;border:2px solid #fff;
+  box-shadow:0 0 0 1px #d92d20
+}
+.ames-sn-alert-level-critical .ames-sn-alert-symbol{background:#a42318!important;box-shadow:0 0 0 1px #a42318!important}
+.ames-sn-alert-level-medium .ames-sn-alert-symbol{background:#b54708!important;box-shadow:0 0 0 1px #b54708!important}
+.ames-sn-alert-level-low .ames-sn-alert-symbol{background:#506579!important;box-shadow:0 0 0 1px #506579!important}
+.ames-sn-smart-alert .ames-sn-alert-title{color:#c12b20;font-weight:850;font-size:14px;line-height:1.35}
+.ames-sn-smart-alert .ames-sn-alert-intro>p{color:#394453;font-size:12px;line-height:1.5}
+.ames-sn-smart-alert .ames-sn-alert-priority{font-weight:850;font-size:10px;white-space:nowrap}
+.ames-sn-smart-alert .ames-sn-alert-summary-grid{margin-top:11px}
+.ames-sn-smart-alert .ames-sn-alert-white,
+.ames-sn-smart-alert .ames-sn-alert-summary-card{background:#fff;border:1px solid #eadfdf;border-radius:9px;box-shadow:none}
+.ames-sn-smart-alert .ames-sn-alert-technicians .ames-sn-alert-tech-preview{
+  background:#fff;border:1px solid #ececed;border-radius:7px;padding:9px 10px;margin-top:6px
+}
+.ames-sn-smart-alert>details>summary{color:#a82820;font-weight:700}
+@media(max-width:800px){
+ .ames-sn-smart-alert .ames-sn-alert-header{flex-wrap:wrap}
+ .ames-sn-smart-alert .ames-sn-alert-priority{margin-left:38px}
+}

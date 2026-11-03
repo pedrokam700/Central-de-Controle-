@@ -1,0 +1,187 @@
+param(
+  [Parameter(Mandatory=$true)][ValidateRange(1,2147483647)][int]$TargetPid,
+  [Parameter(Mandatory=$true)][string]$ExpectedScript,
+  [ValidateRange(1,65535)][int]$Port=8765,
+  [switch]$FixtureOnly,
+  [ValidateSet("agent","guardian","launcher")][string]$Role="agent",
+  [string]$ExpectedRoot,
+  [string]$ExpectedMaintenanceRoot
+)
+
+# Issue #57 T1: OS-level, READ-ONLY witness. Never stops/restarts/installs an
+# agent, opens credentials, grants a lease or certifies the installed guardian.
+# Output deliberately omits CommandLine, paths, user/SID and raw timestamps.
+$ErrorActionPreference='Stop'
+$result=[ordered]@{
+  schema='ames-windows-process-witness-v1'
+  read_only=$true
+  pid=$TargetPid
+  endpoint_owner_pid=0
+  script_sha256=$null
+  script_path_sha256=$null
+  start_marker=$null
+  account_sha256=$null
+  session_id=$null
+  root_sha256=$null
+  helper_sha256=$null
+  process_identity_observed=$false
+  guardian_attested=$false
+  all_sessions_attested=$false
+  update_authorized=$false
+  reason='unverified'
+  reason_code=$null
+}
+
+function Get-Issue57Hash([string]$value){
+  $sha=[Security.Cryptography.SHA256]::Create()
+  try{return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($value)))).Replace('-','').ToLowerInvariant()}
+  finally{$sha.Dispose()}
+}
+
+function Get-Issue57ScriptDigest([string]$path){
+  # Use .NET directly in both Windows PowerShell 5.1 and PowerShell 7. The
+  # subprocess must not depend on a parent shell's Get-FileHash module state.
+  $stream=[IO.File]::OpenRead($path)
+  $sha=[Security.Cryptography.SHA256]::Create()
+  try{return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToLowerInvariant()}
+  finally{$sha.Dispose();$stream.Dispose()}
+}
+
+$witnessStage='witness_configuration_failed'
+try{
+  # Port 8765 is the only operational target. Random fixture ports are
+  # permitted exclusively on a GitHub-hosted Windows CI runner.
+  if($FixtureOnly){
+    if($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or
+       -not $env:RUNNER_TEMP){throw 'fixture_environment_required'}
+  }elseif($Port -ne 8765){throw 'production_port_mismatch'}
+
+  $witnessStage='witness_script_inspection_failed'
+  $scriptPath=[IO.Path]::GetFullPath($ExpectedScript)
+  $file=Get-Item -LiteralPath $scriptPath -ErrorAction Stop
+  if($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)){
+    throw 'script_file_untrusted'
+  }
+  $witnessStage='witness_process_lookup_failed'
+  $proc=Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $TargetPid) -ErrorAction Stop
+  if(@($proc).Count -ne 1 -or -not $proc.CommandLine -or
+     -not $proc.Name -or
+     -not $proc.CreationDate -or -not $proc.ExecutablePath){throw 'process_unverified'}
+
+  if(($Role -eq 'agent' -and [string]$proc.Name -notmatch '^(?:python|pythonw)\.exe$') -or
+     ($Role -ne 'agent' -and [string]$proc.Name -notmatch '^(?:powershell|pwsh)\.exe$')){throw 'process_unverified'}
+
+  if($Role -eq 'agent'){
+  # The independent kernel TCP table, not /ready, must prove the listener.
+  $witnessStage='witness_listener_lookup_failed'
+  $owners=@(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop)
+  if($owners.Count -eq 0){throw 'listener_absent'}
+  foreach($owner in $owners){
+    if([int]$owner.OwningProcess -ne $TargetPid -or
+       [string]$owner.LocalAddress -notin @('127.0.0.1','::1')){
+      throw 'port_owner_or_bind_mismatch'
+    }
+  }
+
+  }
+
+  # Parse command-line arguments with the Windows API: a substring search
+  # would incorrectly accept an attacker-controlled prefix/path argument.
+  $witnessStage='witness_command_line_parse_failed'
+  if(-not ('Issue57ArgvReadOnly' -as [type])){
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class Issue57ArgvReadOnly {
+    [DllImport("shell32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern IntPtr CommandLineToArgvW(string text, out int argc);
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr LocalFree(IntPtr pointer);
+}
+'@
+  }
+  [int]$argc=0
+  $pointer=[Issue57ArgvReadOnly]::CommandLineToArgvW([string]$proc.CommandLine,[ref]$argc)
+  if($pointer -eq [IntPtr]::Zero -or $argc -lt 2){throw 'command_line_unparseable'}
+  try{
+    $scriptArgument=$null
+    $arguments=New-Object System.Collections.Generic.List[string]
+    for($n=1;$n -lt $argc;$n++){
+      $arguments.Add([Runtime.InteropServices.Marshal]::PtrToStringUni(
+        [Runtime.InteropServices.Marshal]::ReadIntPtr($pointer,$n*[IntPtr]::Size)))
+    }
+    if($Role -ne 'agent'){
+      # Only the explicit compatible entrypoint is enrollable. No -Command,
+      # opaque encoded command, legacy script, extra argument or other root.
+      if(-not $FixtureOnly -or $arguments.Count -ne 11 -or
+         $arguments[0] -ine '-NoProfile' -or $arguments[1] -ine '-NonInteractive' -or
+         $arguments[2] -ine '-File' -or $arguments[4] -ine '-Root' -or
+         $arguments[6] -ine '-MaintenanceEnrollment' -or
+         $arguments[7] -ine '-MaintenanceRoot' -or $arguments[9] -ine '-FixtureMutex' -or
+         $arguments[10] -notmatch '^Global\\CentralAMES\.Issue57Dual(?:Update|Bootstrap)Test\.[0-9a-f]{32}$' -or
+         -not [string]::Equals([IO.Path]::GetFullPath($arguments[5]),[IO.Path]::GetFullPath($ExpectedRoot),[StringComparison]::OrdinalIgnoreCase) -or
+         -not [string]::Equals([IO.Path]::GetFullPath($arguments[8]),[IO.Path]::GetFullPath($ExpectedMaintenanceRoot),[StringComparison]::OrdinalIgnoreCase)){
+        throw 'script_argument_mismatch'
+      }
+      $scriptArgument=$arguments[3]
+    }else{
+    for($index=1;$index -lt $argc;$index++){
+      $text=[Runtime.InteropServices.Marshal]::PtrToStringUni(
+        [Runtime.InteropServices.Marshal]::ReadIntPtr($pointer,$index*[IntPtr]::Size))
+      # A script path appearing as a later argument to "python -c" or "-m"
+      # is NOT the program executed. Only fixed safe interpreter flags may
+      # precede the first, rooted source-code argument.
+      if($text -cin @('-B','-u','-E','-I','-s','-S')){continue}
+      $scriptArgument=$text
+      break
+    }
+    }
+    if(-not $scriptArgument -or -not [IO.Path]::IsPathRooted($scriptArgument) -or
+       -not [string]::Equals([IO.Path]::GetFullPath($scriptArgument),$scriptPath,
+                             [StringComparison]::OrdinalIgnoreCase)){
+      throw 'script_argument_mismatch'
+    }
+  }finally{[void][Issue57ArgvReadOnly]::LocalFree($pointer)}
+
+  # The marker binds OS process creation, PID and executed image, but it is
+  # not an authorization token and not an attestation of guardian cooperation.
+  $witnessStage='witness_creation_time_failed'
+  $creation=([DateTime]$proc.CreationDate).ToUniversalTime().Ticks
+  if($Role -eq 'agent'){$result.endpoint_owner_pid=$TargetPid}
+  $owner=Invoke-CimMethod -InputObject $proc -MethodName GetOwnerSid -ErrorAction Stop
+  if($owner.ReturnValue -ne 0 -or -not $owner.Sid -or $null -eq $proc.SessionId){throw 'process_unverified'}
+  $result.account_sha256=Get-Issue57Hash ([string]$owner.Sid)
+  $result.session_id=[int]$proc.SessionId
+  if($Role -ne 'agent'){
+    $expectedName='KEEP_AGENT_RUNNING.ps1'
+    if($Role -eq 'launcher'){$expectedName='START_AGENT_CANONICAL.ps1'}
+    if($file.Name -cne $expectedName -or $file.LastWriteTimeUtc.Ticks -gt $creation){throw 'script_file_untrusted'}
+    $helper=Get-Item -LiteralPath (Join-Path $file.DirectoryName 'ISSUE57_RELAUNCH_ENROLLMENT.ps1') -ErrorAction Stop
+    if($helper.PSIsContainer -or ($helper.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+       $helper.LastWriteTimeUtc.Ticks -gt $creation){throw 'script_file_untrusted'}
+    $result.helper_sha256=Get-Issue57ScriptDigest $helper.FullName
+    $result.root_sha256=Get-Issue57Hash (([IO.Path]::GetFullPath($ExpectedRoot)).ToLowerInvariant())
+  }
+  $witnessStage='witness_script_digest_failed'
+  $result.script_sha256=Get-Issue57ScriptDigest $scriptPath
+  $witnessStage='witness_script_path_digest_failed'
+  $result.script_path_sha256=Get-Issue57Hash ($scriptPath.ToLowerInvariant())
+  $witnessStage='witness_process_marker_failed'
+  $result.start_marker=Get-Issue57Hash ("{0}|{1}|{2}" -f $TargetPid,$creation,([string]$proc.ExecutablePath).ToLowerInvariant())
+  $result.process_identity_observed=$true
+  $result.reason='process_only_guardian_and_writers_unattested'
+}catch{
+  # Never serialize native error messages, command line or private paths.
+  $result.endpoint_owner_pid=0
+  $result.script_sha256=$null
+  $result.script_path_sha256=$null
+  $result.start_marker=$null
+  $result.process_identity_observed=$false
+  $safeReasons=@('fixture_environment_required','production_port_mismatch',
+    'script_file_untrusted','process_unverified','listener_absent',
+    'port_owner_or_bind_mismatch','command_line_unparseable','script_argument_mismatch')
+  $result.reason='independent_windows_witness_failed_closed'
+  $result.reason_code=$witnessStage
+  if($_.Exception.Message -cin $safeReasons){$result.reason_code=$_.Exception.Message}
+}
+[pscustomobject]$result|ConvertTo-Json -Compress -Depth 3

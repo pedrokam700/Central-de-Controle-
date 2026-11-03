@@ -8,6 +8,7 @@ import {createReadingPeriodController} from './reading-period-controller.mjs';
 import {readingPeriod as computeReadingPeriod} from './data/reading-period.mjs';
 import { createAgentClient } from './agent-client.mjs';
 import { AGENT_URL } from './data/agent-contract.mjs';
+import { LINE_IDS } from './data/contract.mjs';
 import { createAutomationView } from './automation-view.mjs';
 import { createAdvancedView } from './advanced-view.mjs';
 import { createLineOverview, createTrendAddon, createFailuresParityView } from './console-legacy-parity.mjs';
@@ -67,7 +68,7 @@ const OPERATOR_PARITY_STYLE_HREF = new URL('./console-operator-parity.css', impo
 const WORKSTATION_SETUP_STYLE_HREF = new URL('./console-workstation-setup.css', import.meta.url).href;
 const MONITOR_MODERN_STYLE_HREF = new URL('./console-monitor-modern.css', import.meta.url).href;
 
-export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {}, history, agentClient, verify } = {}) {
+export function createConsoleView(root, store, { locale, onChange = () => {}, transport = {}, history, agentClient, verify, historyPreferenceScope } = {}) {
   let active='monitor', mounted=false, disposed=false;let preparation, translator, evidenceDrawer;const views=new Map();
   const client=agentClient||createAgentClient(store,{...transport,changed(){if(disposed)return;renderActive();paintHeader();onChange();}});
   const meta=()=>VIEWS.find(([id])=>id===active)||VIEWS[0];
@@ -86,7 +87,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     });root.querySelector('[data-console-open-ames]')?.addEventListener('click',async()=>{try{if(store.agent().status!=='connected')await client.connect();await client.auxiliary('chrome');}catch(error){store.updateAgent({error:error.message});paintHeader();}});root.querySelector('[data-console-setup]')?.addEventListener('click',openWorkstationSetup);root.querySelector('[data-console-check]')?.addEventListener('click',async()=>{try{if(verify)await verify();else if(store.agent().status==='connected')await client.refresh();else await client.connect();}catch(error){store.updateAgent({error:error.message});}finally{renderActive();}});
     const theme=document.createElement('link');theme.rel='stylesheet';theme.href=new URL('./console-theme.css',import.meta.url).href;root.append(theme);evidenceDrawer=createEvidenceDrawer(root);mounted=true;translator=createConsoleTranslator(root,locale);preparation=createPreparationView(root.querySelector('[data-console-preparation]'),store,client,{verify});preparation.render();paintHeader();
   }
-  const periodController=createReadingPeriodController(store,history,{changed(){if(!disposed){renderActive();onChange();}}});
+  const periodController=createReadingPeriodController(store,history,{preferenceScope:historyPreferenceScope,changed(){if(!disposed){renderActive();onChange();}}});
   let renderedPeriod=store.periodGeneration?.();
   let renderedSession=store.sessionGeneration?.();
   let lastCompletedJobRead='';
@@ -116,13 +117,30 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   function refreshHistoricalOnCompletedJob(){
     const job=store.agent()?.job,period=store.readingPeriod?.();
     if(!job?.id||job.status!=='done'||!period||period.mode==='today')return;
-    const key=JSON.stringify([job.id,period.mode,period.start,period.end]);
+    // Polling publishes job completion before its final canonical refresh.
+    // Re-read the local index once more if that refresh installs a newer
+    // immutable revision; otherwise the first read can race the transport.
+    const receipt=job.trace_receipt||job.collection_receipt;
+    const localRevisions=receipt?.snapshot_ids
+      ?LINE_IDS.filter(line=>receipt.snapshot_ids[line]).map(line=>{
+        const head=store.localCanonical().find(p=>p.line_id===line&&
+          String(p.snapshot_id)===String(receipt.snapshot_ids[line]));
+        return [line,head?.snapshot_revision||0,head?.content_hash||''];
+      }):null;
+    // post_completion_history_check forces a second read from /local-history.
+    // The today-only canonical dashboard cannot indicate whether yesterday's
+    // revision has appeared in the historical index.
+    const key=JSON.stringify([job.id,period.mode,period.start,period.end,job.collection_receipt||null,job.trace_receipt||null,localRevisions,job.post_completion_history_check===true]);
     if(key===lastCompletedJobRead)return;
     lastCompletedJobRead=key;
     queueMicrotask(()=>{
       const selected=store.readingPeriod?.();
       if(disposed||!selected||selected.mode!==period.mode||selected.start!==period.start||selected.end!==period.end)return;
-      void periodController.select(period.mode,period.mode==='custom'?{start:period.start,end:period.end}:{})
+      void periodController.select(period.mode,{
+        ...(period.mode==='custom'?{start:period.start,end:period.end}:{}),
+        ...(job.kind==='analysis'&&job.collection_receipt?{collectionReceipt:job.collection_receipt}:{}),
+        ...(job.kind==='deep_trace'&&job.trace_receipt?{traceReceipt:job.trace_receipt}:{})
+      })
         .catch(error=>{store.updateAgent({period_read:{status:'partial',errors:[{line_id:'—',error:error.message}]}});renderActive();});
     });
   }
@@ -134,7 +152,13 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     // Selecting an operational-day read scope must never replace that workflow
     // with an incomplete daily-snapshot search.
     if(historical&&['base','knowledge'].includes(id))view=createStoredPeriodRecords(pane,store,{kind:id,client});
-    else if(id==='monitor'){pane.innerHTML='<section data-monitor-lines></section><section data-monitor-main></section><section data-monitor-tools></section><details class="mes-context-panel" data-monitor-technical><summary>Diagnósticos e informações técnicas</summary><p data-history-publication-state role="status"></p><section data-monitor-health></section><section data-monitor-runtime></section><section data-monitor-network></section><section data-history-shortcut><button type="button" class="button secondary" data-open-production-history>Abrir histórico detalhado</button><p data-local-console-access><a href="${LOCAL_CENTRAL_HREF}" target="_blank" rel="noopener noreferrer">Abrir a Central local deste computador</a></p></section></details>';pane.querySelector('[data-open-production-history]')?.addEventListener('click',()=>switchView('base'));const monitorRoot=pane.querySelector('[data-monitor-main]'),primary=createAutomationView(monitorRoot,store,client),lineBoard=createLineOverview(pane.querySelector('[data-monitor-lines]'),store,client,periodController,history),health=createDataHealthView(pane.querySelector('[data-monitor-health]'),store,{onEvidence:value=>evidenceDrawer?.open(value)}),runtime=createMonitorRuntimeView(pane.querySelector('[data-monitor-runtime]'),store),network=createNetworkHealthView(pane.querySelector('[data-monitor-network]'),store),tools=createAdvancedView(pane.querySelector('[data-monitor-tools]'),store,client);view={render(){const output=pane.querySelector('[data-history-publication-state]'),agent=store.agent(),sync=agent.sync||{};const localHelp=pane.querySelector('[data-local-console-access]');if(localHelp)localHelp.hidden=agent.status==='connected';if(output)output.textContent=agent.status==='connected'&&sync.status!=='synchronized'&&sync.status!=='shared_history_legacy_conflict'?'Coleta local disponível; envio para a equipe ainda não confirmado. Confira a sincronização abaixo.':sync.status==='shared_history_legacy_conflict'?'Há revisão imutável, mas o cabeçalho legado continua em conflito; confira a leitura no outro posto.':sync.status==='synchronized'?'Última publicação confirmada pela fila; confira a leitura no outro posto.':'O histórico pode estar somente no SQLite deste computador ou na base compartilhada.';primary.render();applyMonitorProcessCapability(monitorRoot,store);lineBoard.render();health.render();runtime.render();network.render();tools.render();},clear(){primary.clear?.();lineBoard.clear?.();health.clear?.();runtime.clear?.();network.clear?.();tools.clear?.();pane.replaceChildren();}};}
+    else if(id==='monitor'){pane.innerHTML='<section data-monitor-lines></section><section data-monitor-main></section><section data-monitor-tools></section><details class="mes-context-panel" data-monitor-technical><summary>Diagnósticos e informações técnicas</summary><p data-history-publication-state role="status"></p><section data-monitor-health></section><section data-monitor-runtime></section><section data-monitor-network></section><section data-history-shortcut><button type="button" class="button secondary" data-open-production-history>Abrir histórico detalhado</button><p data-local-console-access><a href="${LOCAL_CENTRAL_HREF}" target="_blank" rel="noopener noreferrer">Abrir a Central local deste computador</a></p></section></details>';pane.querySelector('[data-open-production-history]')?.addEventListener('click',()=>switchView('base'));const monitorRoot=pane.querySelector('[data-monitor-main]'),primary=createAutomationView(monitorRoot,store,client,{onCustomAccepted:async({start,end,lines})=>{
+      // A user-requested MES investigation stays historical and source-scoped.
+      // Keep the chosen line when it is part of the requested batch.
+      const current=store.context?.().line_id||store.preferredLine?.();
+      if(lines?.length&&!lines.includes(current))store.updateContext?.({line_id:lines[0]});
+      await periodController.select('custom',{start,end});
+    }}),lineBoard=createLineOverview(pane.querySelector('[data-monitor-lines]'),store,client,periodController,history),health=createDataHealthView(pane.querySelector('[data-monitor-health]'),store,{onEvidence:value=>evidenceDrawer?.open(value)}),runtime=createMonitorRuntimeView(pane.querySelector('[data-monitor-runtime]'),store),network=createNetworkHealthView(pane.querySelector('[data-monitor-network]'),store),tools=createAdvancedView(pane.querySelector('[data-monitor-tools]'),store,client);view={render(){const output=pane.querySelector('[data-history-publication-state]'),agent=store.agent(),sync=agent.sync||{};const localHelp=pane.querySelector('[data-local-console-access]');if(localHelp)localHelp.hidden=agent.status==='connected';if(output)output.textContent=agent.status==='connected'&&sync.status!=='synchronized'&&sync.status!=='shared_history_legacy_conflict'?'Coleta local disponível; envio para a equipe ainda não confirmado. Confira a sincronização abaixo.':sync.status==='shared_history_legacy_conflict'?'Há revisão imutável, mas o cabeçalho legado continua em conflito; confira a leitura no outro posto.':'O histórico pode estar somente no SQLite deste computador ou na base compartilhada.';primary.render();applyMonitorProcessCapability(monitorRoot,store);lineBoard.render();health.render();runtime.render();network.render();tools.render();},clear(){primary.clear?.();lineBoard.clear?.();health.clear?.();runtime.clear?.();network.clear?.();tools.clear?.();pane.replaceChildren();}};}
     else if(id==='top3'){pane.innerHTML='<section data-top3-main></section><section data-top3-shift></section><section data-top3-analytics data-no-i18n></section><section data-top3-trend></section>';const primary=createDailyFailureSummary(pane.querySelector('[data-top3-main]'),store),shiftSummary=createShiftSummaryView(pane.querySelector('[data-top3-shift]'),store,{onEvidence:value=>evidenceDrawer?.open(value)}),analytics=createDailyFailureAnalytics(pane.querySelector('[data-top3-analytics]'),store),trend=createTrendAddon(pane.querySelector('[data-top3-trend]'),store,client),base={render(){primary.render();shiftSummary.render();analytics.render();trend.render();},clear(){primary.clear?.();shiftSummary.clear?.();analytics.clear?.();trend.clear?.();pane.replaceChildren();}};view=withAgentRefresh(withHistoricalTrends(base,pane,store,history),pane,store,client,{label:'Atualizar'});}
     else if(id==='failures'){pane.innerHTML='<section data-failures-main></section><section data-failures-process></section>';const failureRoot=pane.querySelector('[data-failures-main]'),primary=withFailureOccurrenceEvidence(createFailuresParityView(failureRoot,store,client),failureRoot,store),process=createFailureProcessAddon(pane.querySelector('[data-failures-process]'),store,failureRoot);view={render(){primary.render();process.render();},clear(){primary.clear?.();process.clear?.();pane.replaceChildren();}};}
     else if(id==='sn'){pane.innerHTML='<section data-sn-live></section><section data-sn-saved></section>';const snRoot=pane.querySelector('[data-sn-live]');const current=withOfflineSnNavigation(withOfflineSnLookup(withProcessCapability(withSnLiveContext(withFastlaneSnEnhancements(createSnConsoleView(snRoot,store,client),snRoot,store),snRoot,store),snRoot,store,'sn'),snRoot,store),snRoot);const saved=createSavedSnHistoryView(pane.querySelector('[data-sn-saved]'),client,store);view={render(){current.render();saved.render();},clear(){current.clear?.();saved.clear();pane.replaceChildren();}};}
@@ -145,16 +169,44 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       pane.innerHTML='<section data-reuse-period-control class="mes-context-panel"></section><section data-reuse-dashboard></section>';
       const scope=pane.querySelector('[data-reuse-period-control]'),content=pane.querySelector('[data-reuse-dashboard]');
       const primary=withAgentRefresh(withHistoricalTrends(withReuseProvenance(createReuseConsoleView(content,store),content,store),content,store,history),content,store,client,{label:'Atualizar'});
-      view={render(){paintReadingPeriod(scope,store,periodController);primary.render();},
+      view={render(){paintReadingPeriod(scope,store,periodController,{onContinueTrace:line=>{
+        // Continuation is explicit; opening Rastreabilidade never starts MES.
+        // The existing deep-trace gate verifies this exact local revision again
+        // before submitting 3074/2114/3022 to the agent.
+        store.updateContext?.({line_id:line});
+        switchView('trace');
+      }});primary.render();},
         clear(){primary.clear?.();pane.replaceChildren();}};
     }
     else if(id==='process'){pane.innerHTML='<section data-process-main></section><section data-process-3012></section>';const processRoot=pane.querySelector('[data-process-main]'),processBase=withProcessOperatorLayout(withProcessCapability(createProcessConsoleView(processRoot,store),processRoot,store,'process'),processRoot),base=withAgentRefresh(processBase,processRoot,store,client,{label:'Atualizar'}),repair3012=historical?createStoredPeriodRecords(pane.querySelector('[data-process-3012]'),store,{kind:'repairs'}):create3012FastlaneView(pane.querySelector('[data-process-3012]'),store);view={render(){base.render();repair3012.render();},clear(){base.clear?.();repair3012.clear?.();pane.replaceChildren();}};}
     else if(id==='base'){pane.innerHTML='<section data-base-history></section><section data-base-local></section>';const local=pane.querySelector('[data-base-local]'),base=withBaseCatalog(createBaseConsoleView(local,store,client),local,store,client),periods=createHistoryView(pane.querySelector('[data-base-history]'),store,client,history);view={render(){periods.render();base.render();},clear(){periods.clear();base.clear();}};}
-    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);views.set(id,view);return view;
+    else if(id==='knowledge')view=withKnowledgeArchitecture(createKnowledgeConsoleView(pane,client,store),pane);
+    if(id==='monitor'){
+      // Visible even while the technical accordion is closed: operators must
+      // not have to guess where the cross-workstation conflict is reported.
+      const details=pane.querySelector('[data-monitor-technical]');
+      if(details){
+        const shortcut=pane.ownerDocument.createElement('button');
+        shortcut.type='button';shortcut.className='button secondary';
+        shortcut.dataset.openSyncHealth='';
+        const shortcutLabel=()=>document.documentElement.lang.startsWith('en')
+          ?'Cross-workstation sync · view diagnostics'
+          :'Sincronização entre postos · ver diagnóstico';
+        shortcut.textContent=shortcutLabel();
+        const previousRender=view.render;
+        view.render=function(...args){shortcut.textContent=shortcutLabel();return previousRender.apply(this,args);};
+        details.before(shortcut);
+        shortcut.addEventListener('click',()=>{
+          details.open=true;
+          pane.querySelector('[data-sync-health]')?.scrollIntoView?.({block:'nearest'});
+        });
+      }
+    }
+    views.set(id,view);return view;
   }
   function paintHeader(){if(!mounted)return;const a=store.agent(),m=meta(),title=root.querySelector('[data-console-title]'),sub=root.querySelector('[data-console-sub]'),status=root.querySelector('[data-console-status]'),foot=root.querySelector('[data-console-build-foot]'),dot=root.querySelector('[data-console-dot]'),top3Nav=root.querySelector('[data-console-nav-label="top3"]'),en=document.documentElement.lang.startsWith('en');if(top3Nav)top3Nav.textContent=en?'Daily failures & FPY':'Falhas do dia & FPY';for(const group of VIEW_GROUPS){const el=root.querySelector(`[data-console-group-label="${group.id}"]`);if(el)el.textContent=en?group.en:group.pt;}if(title)title.textContent=en&&active==='top3'?'Daily failures & FPY':m[3];if(sub)sub.textContent=en&&active==='top3'?'Top 3 summary, full ranking, occurrences, shift and reuse context in one scope.':m[4];const connected=a.status==='connected';const connect=root.querySelector('[data-console-pair]');
     if(connect){connect.hidden=connected||!client.canPairFromOfficial?.();connect.textContent=client.paired?.()?'Refazer conexão deste PC':'Conectar agente deste PC';}
-    if(status)status.textContent=connected?`Agente local conectado${a.agent_build?' · '+a.agent_build:''}`:(a.workstation_probe?.state==='outdated'?'Agente local desatualizado · instalar CLEAN oficial':a.workstation_probe?.state==='detected'||a.connection_error?.code==='agent-unauthorized'?'Agente local detectado · conectar':'MES local não confirmado neste computador');dot?.classList.toggle('ok',connected);const shared=root.querySelector('[data-console-sync-status]'),sync=a.sync||{};if(shared)shared.textContent=sync.read_status==='error'?(en?'Shared data: error':'Dados da equipe: erro'):sync.read_status==='cached'?(en?'Shared data: cache':'Dados da equipe: cache'):sync.read_status==='ready'&&sync.remote_line_count?(en?'Team data synchronized':'Dados da equipe sincronizados'):(en?'Team data not confirmed':'Dados da equipe não confirmados');if(foot)foot.textContent=`${a.agent_build||a.capabilities?.agent_build||'MES local'} · 9 views`;}
+    if(status)status.textContent=connected?`Agente local conectado${a.agent_build?' · '+a.agent_build:''}`:(a.workstation_probe?.state==='outdated'?'Agente local · atualização segura necessária':a.workstation_probe?.state==='unverified_revision'?'Agente detectado · revisão não comprovada':a.workstation_probe?.state==='detected'||a.connection_error?.code==='agent-unauthorized'?'Agente local detectado · conectar':'MES local não confirmado neste computador');dot?.classList.toggle('ok',connected);const shared=root.querySelector('[data-console-sync-status]'),sync=a.sync||{};if(shared)shared.textContent=sync.read_status==='error'?(en?'Current team data: error':'Dados atuais da equipe: erro'):sync.read_status==='cached'?(en?'Current team data: cache':'Dados atuais da equipe: cache'):sync.read_status==='ready'&&sync.remote_line_count?(en?'Current team data synchronized':'Dados atuais da equipe sincronizados'):(en?'Current team data not confirmed':'Dados atuais da equipe não confirmados');if(foot)foot.textContent=`UI 28.10 · RAST-FPY-SN3 · ${a.agent_build||a.capabilities?.agent_build||'MES local'} · 9 views`;}
   function switchView(id){if(!VIEWS.some(([key])=>key===id))return;active=id;setMenu(false);if(id!=='monitor')preparation?.collapse();for(const button of root.querySelectorAll('[data-console-view]'))button.classList.toggle('active',button.dataset.consoleView===id);for(const pane of root.querySelectorAll('[data-console-pane]'))pane.hidden=pane.dataset.consolePane!==id;renderActive();}
   function renderActive(){
     if(!mounted)mount();
@@ -186,18 +238,25 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     let note=pane?.querySelector('[data-shared-period]');
     if(pane&&!note){note=document.createElement('p');note.dataset.sharedPeriod='';note.setAttribute('data-no-i18n','');note.className='mes-context';pane.prepend(note);}
     const currentLine=store.context?.()?.line_id||store.preferredLine?.();
-    const savedToday=period?.mode==='today'&&store.read(currentLine).saved_today;
+    const selectedRead=store.read(currentLine),selectedSnapshot=selectedRead.snapshot?.canonical;
+    const savedToday=period?.mode==='today'&&selectedRead.saved_today;
     if(note){const en=document.documentElement.lang.startsWith('en');
       note.textContent=active==='sn'
         ?(en?'SN investigation is independent of the monitoring period.':'Consulta por SN independente do período de monitoramento.')
         :(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+
           (period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):
-          savedToday?(en?' · Latest saved partial capture · read-only':' · Última coleta salva hoje · janela parcial · somente leitura'):'');
+          savedToday?(en?' · Latest saved partial capture · read-only':' · Última coleta salva hoje · janela parcial · somente leitura'):'')+
+          (selectedSnapshot?` · ${currentLine} · snapshot ${selectedSnapshot.snapshot_id} / r${selectedSnapshot.snapshot_revision} · ${selectedRead.source==='remote'?(en?'Shared':'Compartilhada'):(en?'Local':'Local')} ${selectedSnapshot.source_id||''}`:
+            (en?' · No verified revision for the selected line':' · Sem revisão comprovada para a linha selecionada'));
     }
     if(period?.mode!=='today'){
-      // Live execution controls and last-job results describe another scope. Keep
-      // historical evidence visible; mutation awaits the exact-snapshot contract.
-      for(const el of pane?.querySelectorAll('[data-trace-form],.ames-trace-progress,[data-top3-trend]')||[])el.hidden=true;
+      // Historical 3028 revisions CAN be enriched: deep_trace is bound to an
+      // exact local snapshot/revision/period on both client and agent. Hiding
+      // the entire trace form made "Último dia" impossible to investigate.
+      // Keep only unrelated live trend controls out of historical readings.
+      for(const el of pane?.querySelectorAll('[data-top3-trend]')||[])el.hidden=true;
+    }else{
+      for(const el of pane?.querySelectorAll('[data-top3-trend]')||[])el.hidden=false;
     }
     // A recovered observation from a partial custom window is not a live
     // head and must never unlock a repair mutation simply because tab=Hoje.

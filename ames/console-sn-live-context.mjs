@@ -7,6 +7,8 @@ import {decorateSnRepairEvidence,provenRepairUserName} from './console-sn-repair
 import {decorateSnHistoryDetail} from './console-sn-history-detail.mjs';
 import {decorateSnTemporalProof} from './console-sn-temporal-proof.mjs';
 import {decorateSmartSnAlerts} from './console-sn-smart-alerts.mjs';
+import {renderMaterialSnInvestigation} from './console-sn-material-investigation.mjs';
+import {renderSnMountingViews} from './console-sn-mounting-views.mjs';
 
 const lang=()=>globalThis.document?.documentElement?.lang||'pt-BR';
 const t=(pt,en)=>lang().startsWith('en')?en:pt;
@@ -88,8 +90,14 @@ export function renderSnCompactContext(model={},result={},locale='pt-BR'){
    '</div></section>';
 }
 
-function decorate(root,result){
+function decorate(root,result,mountingMode='compare'){
   const evidence=snLiveSummaryEvidence(result);
+  root.querySelector('[data-sn-mounting-views]')?.remove();
+  const mountingMarkup=renderSnMountingViews(result,lang(),mountingMode);
+  if(mountingMarkup)root.querySelector('[data-sn-result]')?.insertAdjacentHTML('afterbegin',mountingMarkup);
+  root.querySelector('[data-material-sn-investigation]')?.remove();
+  const investigation=renderMaterialSnInvestigation(result,lang());
+  if(investigation)root.querySelector('[data-sn-result]')?.insertAdjacentHTML('afterbegin',investigation);
   // Show the reference of the investigated mounting. A 2114 latest-failure
   // fallback must never silently look like an exact 3028 occurrence.
   root.querySelector('[data-sn-assembly-scope]')?.remove();
@@ -98,11 +106,20 @@ function decorate(root,result){
     const selected=Number(scope.scanned_components||0);
     const excluded=Number(scope.historical_components_ignored||0);
     const unknown=Number(scope.temporal_unknown||0);
-    const message=scope.status==='selected_at_latest_2114_candidate'
-      ?t('Materiais selecionados pela falha mais recente da 2114 (referência provisória, não equivalência comprovada à 3028).',
-         'Materials selected using the latest 2114 failure (provisional reference, not proven equivalent to 3028).')
-      :t('Montagem da falha não determinada: é necessário um Defect Time comprovado. Nenhum histórico de materiais foi consultado automaticamente.',
-         'Defect assembly not determined: a proven Defect Time is required. No material history was queried automatically.');
+    const message=scope.cycle_state==='current_new_cycle'
+      ?t('Novo ciclo comprovado por vínculo Y posterior à última falha 2114. O indicador principal permanece na montagem atual; o recorte da última falha é mostrado separadamente na comparação 3074.',
+         'New assembly proven by Y binding after the last 2114 failure. The primary KPI uses the current assembly; the last-failure mounting is shown separately in the 3074 comparison.')
+      :scope.cycle_state==='current_same_cycle'
+        ?t('Montagem atual Y pertence ao mesmo ciclo da última falha 2114; não duplicamos conjuntos.',
+           'Current Y assembly belongs to the last 2114 failure cycle; no duplicated assemblies.')
+      :scope.cycle_state==='current_cycle_unanchored'
+        ?t('Vínculos atuais Y comprovados na 3074, mas não há última falha 2114 para ancorar análise de recorrência.',
+           'Current Y bindings proven in 3074, but no last 2114 failure exists to anchor recurrence analysis.')
+      :scope.cycle_state==='last_failure_assembly'
+        ?t('Sem conjunto atual Y: reconstrução dos vínculos da última falha 2114, inclusive materiais hoje N comprovados naquele instante.',
+           'No current Y assembly: links from the last 2114 failure, including materials now N but proven at that instant.')
+      :t('Ciclo da montagem indeterminado; vínculos candidatos não são apresentados como peças comprovadas.',
+         'Assembly cycle undetermined; candidate links are not presented as proven parts.');
     const section=root.ownerDocument.createElement('section');
     section.dataset.snAssemblyScope='1';
     section.className='mes-context-panel';
@@ -114,6 +131,15 @@ function decorate(root,result){
       ' · '+t('Históricos fora do recorte','Historical outside scope')+': '+excluded+
       ' · '+t('Indeterminados','Uncertain')+': '+unknown;
     section.append(header,details);
+    if(evidence.model.candidate_materials?.length){
+      const candidateBlock=root.ownerDocument.createElement('details');
+      candidateBlock.dataset.snAssemblyCandidates='1';
+      candidateBlock.innerHTML='<summary>'+esc(t('Materiais candidatos sem comprovação temporal','Candidate materials without temporal proof'))+
+        ' ('+evidence.model.candidate_materials.length+')</summary><ul>'+
+        evidence.model.candidate_materials.map(item=>'<li><b>'+esc(item.item_type||'Material')+'</b> · '+
+          esc(item.item_sn||'—')+' · '+esc(item.temporal_reason)+'</li>').join('')+'</ul>';
+      section.append(candidateBlock);
+    }
     root.prepend(section);
   }
   if(evidence.has2114){
@@ -137,22 +163,41 @@ export function withSnLiveContext(base,root,store){
   // Polling a running job should never close the operator's expanded evidence.
   // Capture before base rerenders, restore only for the same SN; no manual
   // navigation/collection should be triggered from a UI refresh.
-  let openBySn=new Map(),lastSn='';
+  let openBySn=new Map(),lastSn='',linked=false,mountingMode='compare';
+  const openRelatedPcba=event=>{
+    const modeButton=event.target.closest('[data-sn-mounting-mode]');
+    if(modeButton){
+      const panel=modeButton.closest('[data-sn-mounting-views]');
+      const raw=store.agent().job?.result;
+      if(panel&&raw){mountingMode=modeButton.dataset.snMountingMode;panel.outerHTML=renderSnMountingViews(raw,lang(),mountingMode);}
+      return;
+    }
+    const trigger=event.target.closest('[data-sn-open-pcba],[data-sn-open-material]');
+    if(!trigger)return;
+    const sn=String(trigger.dataset.snOpenPcba||trigger.dataset.snOpenMaterial||'').trim();
+    if(!sn)return;
+    const input=root.querySelector('[data-sn-form] [name=sn]');
+    if(!input)return;
+    input.value=sn;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    root.querySelector('[data-sn-form] [data-sn-run]')?.click();
+  };
   return {
     render(){
+      if(!linked){root.addEventListener('click',openRelatedPcba);linked=true;}
       const incoming=store.agent().resultSource==='sn'?store.agent().job?.result:null;
       const nextSn=String(incoming?.sn||'');
-      if(nextSn!==lastSn){openBySn.clear();lastSn=nextSn;}
+      if(nextSn!==lastSn){openBySn.clear();mountingMode='compare';lastSn=nextSn;}
       for(const [index,node] of [...root.querySelectorAll('[data-sn-correlation-alerts] [data-correlation-evidence]')].entries()){
         openBySn.set(index,node.open);
       }
       base.render();
       const agent=store.agent(),result=agent.resultSource==='sn'?agent.job?.result:null;
-      if(result)decorate(root,result);
+      if(result)decorate(root,result,mountingMode);
       for(const [index,node] of [...root.querySelectorAll('[data-sn-correlation-alerts] [data-correlation-evidence]')].entries()){
         if(openBySn.has(index))node.open=openBySn.get(index);
       }
     },
-    clear(){openBySn.clear();lastSn='';base.clear?.();}
+    clear(){openBySn.clear();lastSn='';mountingMode='compare';if(linked)root.removeEventListener('click',openRelatedPcba);linked=false;base.clear?.();}
   };
 }

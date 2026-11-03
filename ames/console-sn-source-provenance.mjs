@@ -12,7 +12,13 @@ const observedCount=(view,src)=>{
  if(!src||typeof src!=='object')return null;
  const count=rows=>Array.isArray(rows)?rows.length:null;
  if(view==='3028')return count(src.defects)??count(src.datasets?.defects);
- if(view==='3074')return count(src.component_usage)??count(src.reused_components)??count(src.query?.rows);
+ if(view==='3074'){
+   // Empty arrays produced by an errored source are placeholders, not proof
+   // that the MES returned zero material records.
+   const observed=count(src.query?.rows);
+   if(String(src.status||'').toLowerCase()==='error'&&observed===null)return null;
+   return observed??count(src.component_usage)??count(src.reused_components);
+ }
  if(view==='2114')return count(src.rows)??(Array.isArray(src.pcbas)?src.pcbas.reduce((n,item)=>n+(item?.result?.rows?.length||0),0):null);
  if(view==='3022')return count(src.process_passages)??count(src.rows);
  if(view==='3012')return count(src.rows);

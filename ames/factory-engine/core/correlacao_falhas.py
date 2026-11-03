@@ -13,7 +13,10 @@ def comparar_falhas(current_code, current_desc, old_code, old_desc):
 
 
 def _hist_seq_value(hist, fallback=0):
-    value = str((hist or {}).get("Defect Hist Seq") or "").strip()
+    # Hist Seq 0 is a real sequence, not a missing value. Treating it as
+    # falsy used the grid row index instead, reversing 0/1 on some sort orders.
+    raw = (hist or {}).get("Defect Hist Seq")
+    value = str(raw if raw is not None else "").strip()
     try:
         return int(float(value))
     except Exception:

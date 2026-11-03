@@ -18,6 +18,11 @@ const local=fixture(17,'2026-10-15','custom');
 local.content_hash='b'.repeat(64);
 // Serialized insights survive the same sanitization used by shared snapshots.
 const oldDefect=old.datasets.defects[0];
+oldDefect.repair_evidence_3012=[{pcba_sn:oldDefect.pcba_sn,defect_code:'OTHER-CODE',
+ defect_time:'2026-10-07T10:00:00-03:00',repair_time:'2026-10-07T11:00:00-03:00',
+ repair_user:'SYNTHETIC-OLD-AT',repair_comment:'Preserved history <script>candidate</script>',
+ association:'distinct_occurrence_candidate',occurrence_match:'contradicted',
+ candidate_for_occurrence:false,repair_confirmed:false}];
 old.insights={schema:'ames-insights-v1',ready:true,line:old.line_id,snapshot_id:old.snapshot_id,
  drilldowns:{pcba_analysis:[{PCBA:oldDefect.pcba_sn,'Defect Code':oldDefect.defect_code,
  'Defect Time':oldDefect.defect_time,'Uso da PCBA na falha':'2º uso','Modelo':oldDefect.product_model}],
@@ -39,9 +44,9 @@ import {createAmesStore} from './ames/data/store.mjs';
 import {createConsoleView} from './ames/console-view.mjs';
 const store=createAmesStore({now:()=>Date.parse('2026-10-19T15:00:00Z')}),old=${JSON.stringify(old)},local=${JSON.stringify(local)};
 store.replaceSyncedSnapshots([${JSON.stringify(today)}]);
-let mutations=0,savedReads=0,savedOpens=0,captureReads=0,localPairCount=0;
+let mutations=0,savedReads=0,savedOpens=0,captureReads=0,localPairCount=0,lastCollection=null;
 const savedEntry={job_id:'J123',query_sn:'PCBA-TEST',query_created_at:'2026-10-16T14:00:00Z',query_status:'done',entry_hash:'b'.repeat(64),line_id:null,production_date:null,clock_kind:'query_created_at',local_only:true};
-const client={canOpenOfficial:()=>true,openOfficial:()=>{},canPairFromOfficial:()=>true,openLocalPairing:()=>{localPairCount++;},collect:async()=>{mutations++;},auxiliary:async name=>{if(name!=='autostartStatus')mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
+const client={canOpenOfficial:()=>true,openOfficial:()=>{},canPairFromOfficial:()=>true,openLocalPairing:()=>{localPairCount++;},collect:async(type,value)=>{mutations++;lastCollection={type,value};},auxiliary:async name=>{if(name!=='autostartStatus')mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
  sourceCaptures:async params=>{
   captureReads++;
   if(params.snapshot_id!==17||params.snapshot_revision!==1||params.content_hash!==local.content_hash)throw Error('wrong capture target');
@@ -66,7 +71,7 @@ const history={list:async line=>{historyReads++;return line===old.line_id?[
 const view=createConsoleView(document.querySelector('#mesConsole'),store,{agentClient:client,history});
 document.querySelectorAll('.page').forEach(el=>el.classList.add('hidden'));
 document.querySelector('#mesConsoleView')?.classList.remove('hidden');document.querySelector('#accountScreen')?.classList.add('hidden');
-window.qa={store,view,mutations:()=>mutations,localPairCount:()=>localPairCount,historyReads:()=>historyReads,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads,setAmbiguous:value=>{ambiguousHistory=value;}};view.render();
+window.qa={store,view,mutations:()=>mutations,lastCollection:()=>lastCollection,localPairCount:()=>localPairCount,historyReads:()=>historyReads,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads,setAmbiguous:value=>{ambiguousHistory=value;}};view.render();
 `;
 const html=fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<script type="module" src="/Central-de-Controle-/qa-context.mjs"></script>';
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -131,8 +136,16 @@ try{
  assert.equal(await evidenceCells.locator('img, script').count(),0,'untrusted SN cannot create markup');
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening evidence cannot query MES');
  const groupTable=page.locator('[data-console-pane=failures] [data-failure-groups] table');
- assert.equal(await groupTable.locator('thead th').count(),6,'three reuse-evidence columns remain in grouped Failures');
- assert.match(await groupTable.locator('tbody').innerText(),/≥\s*1/,'2nd+ use is a minimum observed, never an invented exact denominator');
+ assert.deepEqual(await groupTable.locator('thead th').allTextContents(),
+   ['Falha','Ocorrências','PCBAs 2º+*','PCBAs 2º+ · mesma falha*','PCBAs c/ material 2º+*','PCBAs c/ material 2º+ · mesma falha*','Última ocorrência'],
+   'grouped failures retain all four distinct reuse/correlation evidence columns');
+ const groupedCells=await groupTable.locator('tbody tr').evaluateAll(rows=>rows.map(row=>[...row.querySelectorAll('td')].map(td=>td.textContent.trim())));
+ assert.equal(groupedCells.reduce((sum,cells)=>sum+Number(cells[1]),0),old.datasets.defects.length,'grouping cannot duplicate observed 3028 occurrences');
+ assert(groupedCells.some(cells=>cells[2]==='1'&&cells[3]==='—'&&cells[4]==='1'),
+   'duplicate occurrence-bound material rows count ONE affected PCBA; missing exact prior failure stays unknown');
+ assert(groupedCells.some(cells=>cells[5]==='—'),'unproven correlation remains unknown rather than zero');
+ assert.doesNotMatch(await groupTable.locator('tbody').innerText(),/≥/,'exact observed counts must not be confused with population coverage');
+ assert.match(await page.locator('[data-failure-groups]').innerText(),/cobertura pode estar incompleta/i,'incomplete population coverage stays explicit');
  assert.equal(await page.locator('[data-failure-sort]').inputValue(),'count_desc');
  await page.locator('[data-failure-sort]').selectOption('failure_asc');
  assert.equal(await page.locator('[data-failure-sort]').inputValue(),'failure_asc');
@@ -145,7 +158,24 @@ try{
  await page.waitForFunction(()=>!!document.querySelector('[data-console-pane=top3] [data-top3-analytics] .ames-dfa-rank-item[open]'));
  assert.equal(await page.evaluate(()=>qa.store.context()?.defect??null),beforeDefect,'Top 3 drilldown may not overwrite shared defect scope');
  assert.equal(await page.evaluate(()=>qa.mutations()),0);
+ // Issue66: a contradicted 3012 candidate stays auditable, never the current AT.
+ const analytics=page.locator('[data-console-pane=top3] [data-top3-analytics]');
+ await analytics.locator('[data-dfa-clear]').click();
+ await analytics.locator('[data-dfa-mode=occurrences]').click();
+ const repairCandidates=analytics.locator('[data-dfa-repair-candidates]');
+ assert.equal(await repairCandidates.count(),1);
+ const candidateOccurrence=analytics.locator('.ames-dfa-occurrence').filter({has:page.locator('[data-dfa-repair-candidates]')});
+ await candidateOccurrence.locator('summary').first().click();
+ await repairCandidates.locator('summary').click();
+ assert.match(await repairCandidates.innerText(),/Outra ocorrência \/ não associado/);
+ assert.match(await repairCandidates.innerText(),/Preserved history <script>candidate<\/script>/);
+ assert.equal(await repairCandidates.locator('img, script').count(),0);
+ assert.doesNotMatch(await analytics.locator('.ames-dfa-occ-grid').allTextContents().then(v=>v.join(' ')),/SYNTHETIC-OLD-AT/);
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening preserved repair candidates cannot query MES');
  await page.locator('[data-console-view=reuse]').click();
+ assert.equal(await page.locator('[data-console-pane=reuse] [data-period-extract]').isDisabled(),true,
+   'a shared historical snapshot cannot initiate local deep tracing');
+ await page.locator('[data-console-pane=reuse] details').filter({has:page.locator('[data-component-matrix]')}).evaluate(e=>e.open=true);
  const matrix=page.locator('[data-component-matrix]');
  assert.equal(await matrix.locator('[data-component-cell=total] > summary').innerText(),'1');
  await matrix.locator('[data-component-cell=total] > summary').click();
@@ -154,9 +184,10 @@ try{
  assert.equal(await matrix.locator('img').count(),0);
  const cohorts=page.locator('[data-reuse-cohorts]');
  assert.match(await cohorts.innerText(),/Denominador não comprovado/);
- assert.equal(await cohorts.locator('[data-cohort-kind=pcbas][data-cohort-metric=second_use] strong').innerText(),'1');
- assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=third_plus_use] strong').innerText(),'1');
- assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=failed] strong').innerText(),'0');
+ assert.equal(await cohorts.locator('[data-cohort-kind=pcbas][data-cohort-metric=reused] strong').innerText(),'1');
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=reused] strong').innerText(),'1');
+ assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=same_failure] strong').innerText(),'0',
+   'the duplicated reused material has no proven previous same failure');
  assert.equal(await cohorts.locator('[data-cohort-kind=components][data-cohort-metric=verified_no_failure]').count(),0,
   'unknown denominator cannot occupy an unproven no-failure KPI');
  await cohorts.locator('[data-cohort-limits] > summary').click();
@@ -267,7 +298,7 @@ try{
  assert.equal(await snLive.locator('[data-sn-live-provenance]').evaluate(el=>el.open),false,'source details start collapsed');
  await snLive.locator('[data-sn-live-provenance] summary').click();
  assert.match(await snLive.locator('[data-sn-live-provenance]').innerText(),/3012|2114/);
- assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1);
+ assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),0,'a current failure without prior proof must not create an alert');
  assert.equal(await snLive.locator('[data-sn-temporal-detail]').count(),1);
  assert.equal(await snLive.locator('[data-sn-history-detail]').count(),1);
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'SN live decoration cannot collect MES');
@@ -313,7 +344,7 @@ try{
  });
  assert.equal(await snLive.locator('[data-sn-live-provenance]').count(),1,'source panel must not duplicate across SN queries');
  assert.equal(await snLive.locator('[data-sn-source-state]').count(),5,'new SN retains all five distinct source statuses');
- assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),1,'smart alerts panel must not duplicate');
+ assert.equal(await snLive.locator('[data-sn-smart-alerts]').count(),0,'a new SN without evidence must clear the previous alert');
  // Factory SIM case: A5162 is a prior completed process, NOT a mapped origin.
  await page.evaluate(()=>{
    qa.store.updateAgent({status:'connected',resultSource:'sn',job:{result:{
@@ -412,7 +443,7 @@ try{
  await page.locator('[data-console-view=sn]').click();
  assert.equal(await page.locator('[data-sn-form] input[name=sn]').inputValue(),'PCBA-PERSIST-PERIOD');
  assert.equal(await page.evaluate(()=>qa.snFormIdentity===document.querySelector('[data-console-pane=sn] [data-sn-form]')),true,'period selection must not discard active SN investigation');
- assert.equal(await page.locator('[data-sn-live] [data-sn-smart-alerts]').count(),1);
+ assert.equal(await page.locator('[data-sn-live] [data-sn-smart-alerts]').count(),0,'changing period must not manufacture prior-failure evidence for this SN');
  assert.equal(await page.locator('[data-sn-saved-toggle]').count(),1);
  assert.equal(await page.locator('[data-stored-search]').count(),0);
  assert.match(await page.locator('[data-console-pane="sn"] [data-shared-period]').innerText(),/independente/);
@@ -431,7 +462,7 @@ try{
  await page.locator('[data-base-history] form input[name=end]').fill('2026-10-15T12:00');
  await page.locator('[data-base-history] form button[type=submit]').click();
  await page.locator('[data-history-open]').waitFor();
- await page.evaluate(()=>qa.store.updateAgent({status:'connected',capabilities:{source_id:'preserved-workstation'}}));
+ await page.evaluate(()=>qa.store.updateAgent({status:'connected',capabilities:{source_id:'preserved-workstation',exact_trace_targets:true}}));
  await page.locator('[data-history-open]').click();
  await page.locator('[data-source-capture-toggle]').waitFor();
  assert.equal(await page.evaluate(()=>qa.captureReads()),0,'capture metadata must be lazy');
@@ -460,6 +491,18 @@ try{
  await page.locator('[data-reading-range] input[name=end]').fill('2026-10-15T12:00');
  await page.locator('[data-reading-range] button[type=submit]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready'&&String(qa.store.read('TAN10101').snapshot?.snapshot_id)==='17');
+ // A custom 3028 interval must offer the next step from the same Period card.
+ // Opening the trace form is read-only; the operator must explicitly start MES.
+ await page.locator('[data-console-view=reuse]').click();
+ const continuePeriod=page.locator('[data-console-pane=reuse] [data-period-extract]');
+ assert.equal(await continuePeriod.isEnabled(),true,'verified local period has a continuation');
+ assert.match(await page.locator('[data-period-revision]').innerText(),/snapshot 17 \/ r1/);
+ await continuePeriod.click();
+ assert.equal(await page.locator('[data-console-pane=trace]').isVisible(),true);
+ assert.equal(await page.locator('[data-console-pane=trace] [name=trace_mode][value=full]').isChecked(),true);
+ assert.equal(await page.locator('[data-console-pane=trace] [name=lines][value=TAN10101]').isChecked(),true);
+ assert.equal(await page.evaluate(()=>qa.store.readingPeriod().mode),'custom');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'continuation navigation must never start MES');
  await page.locator('[data-console-view=base]').click();
  await page.locator('[data-stored-captures] [data-source-capture-toggle]').waitFor();
  assert.equal(await page.evaluate(()=>qa.captureReads()),1,'no metadata auto-read on global period navigation');
@@ -558,6 +601,8 @@ try{
  assert.equal(await page.locator('[data-history-source-select]').inputValue(),'preserved-workstation');
  assert.equal(await page.locator('[data-history-source-select] option').count(),3,'other source remains selectable');
  assert.equal(await page.locator('[data-last-capture-panel]').count(),1,'latest archival evidence also remains reachable outside Today');
+ assert.equal(await page.locator('[data-last-capture-panel]').evaluate(el=>el.open),true,
+   'the latest saved capture preview must be visible when the workstation opens');
 
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');
  await page.locator('[data-read-period=today]').click();
@@ -573,6 +618,25 @@ try{
  assert.equal(await kpiCols(),2,'mobile primary KPIs in two columns');
  assert.equal(await page.locator('[data-line-tab]').count(),3);
  await page.setViewportSize({width:1440,height:950});
+ // The factory's Period tab is an editable collection entrypoint, not a
+ // navigation dead end. Draft dates survive a line switch/repaint.
+ await page.locator('[data-global-reading-period] [data-read-period=custom]').click();
+ const periodEditor=page.locator('[data-global-reading-period] [data-reading-range]');
+ assert.equal(await periodEditor.isVisible(),true);
+ assert.equal(await page.locator('[data-global-reading-period] [data-read-period=custom]').getAttribute('aria-pressed'),'true');
+ await periodEditor.locator('[name=start]').fill('2026-10-15T07:00');
+ await periodEditor.locator('[name=end]').fill('2026-10-15T12:00');
+ await page.locator('[data-line-tab=TAN10102]').click();
+ assert.equal(await periodEditor.isVisible(),true);
+ assert.equal(await periodEditor.locator('[name=start]').inputValue(),'2026-10-15T07:00');
+ await page.locator('[data-line-tab=TAN10101]').click();
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'editing period does not collect MES');
+ await periodEditor.locator('[data-reading-collect]').click();
+ await page.waitForFunction(()=>qa.store.readingPeriod()?.mode==='custom');
+ assert.deepEqual(await page.evaluate(()=>qa.lastCollection()),{type:'custom',value:{lines:['TAN10101'],performance:'balanced',start_at:'2026-10-15T07:00',end_at:'2026-10-15T12:00'}});
+ assert.equal(await page.evaluate(()=>qa.mutations()),1,'exactly one explicit 3028 submission');
+ await page.waitForFunction(()=>String(qa.store.read('TAN10101').snapshot?.snapshot_id)==='17');
+ assert.match(await page.locator('[data-console-pane=monitor] [data-shared-period]').innerText(),/snapshot 17 \/ r1/);
  // An actual logout/reset must destroy the retained SN form and previous
  // forensic content rather than exposing another account's SN investigation.
  await page.evaluate(()=>{qa.store.clear();qa.store.selectReadingPeriod('today');qa.view.render();});

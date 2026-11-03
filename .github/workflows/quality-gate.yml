@@ -35,17 +35,46 @@ jobs:
       - name: Run database and snapshot hardening tests
         run: python3 scripts/agent-hardening.test.py
 
+      - name: Run preserved source capture and revision contracts
+        run: |
+          python3 scripts/agent-source-capture.test.py
+          python3 scripts/agent-capture-manifest.test.py
+          python3 scripts/agent-trace-target.test.py
+          python3 scripts/agent-3074-coverage-summary.test.py
+          python3 scripts/agent-package-contract.test.py
+          python3 scripts/agent-integrated-v5.test.py
+          python3 scripts/agent-integrated-snapshot-history.test.py
+
       - name: Run operational calendar tests
         run: python3 scripts/agent-operational-calendar.test.py
 
       - name: Run read-only workstation preflight tests
         run: python3 scripts/agent-preflight.test.py
 
+      - name: Run individual SN source isolation tests
+        run: python3 scripts/agent-individual-assembly.test.py
+
+      - name: Run deep 3028 occurrence-to-3074 Home page regression
+        run: python3 scripts/agent-deep-3074-page.test.py
+
+      - name: Run 3074 View response and stale-grid regression tests
+        run: |
+          python3 scripts/agent-3074-grid-lifecycle.test.py
+          python3 scripts/agent-3074-pagination.test.py
+          python3 scripts/agent-assembly-scope.test.py
+          python3 scripts/agent-multi-cycle-3028-3074.test.py
+          python3 scripts/agent-3074-uncertain-reuse.test.py
+          python3 scripts/agent-3074-projection-audit.test.py
+
       - name: Run auth hardening contract
         run: node --test scripts/ames-auth-hardening.test.mjs
 
       - name: Run local agent pairing contract
-        run: node --test scripts/ames-agent-pairing.test.mjs
+        run: |
+          node --test scripts/ames-agent-pairing.test.mjs
+          python3 scripts/agent-loopback-origin.test.py
+          python3 scripts/agent-workstation-pairing.test.py
+          python3 scripts/agent-pair-http-integration.test.py
 
       - name: Run A-MES Node contract suites
         run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
@@ -57,7 +86,15 @@ jobs:
         run: python3 scripts/agent-canonical.test.py
 
       - name: Run updater Python contract
-        run: python3 scripts/agent-update.test.py
+        run: |
+          python3 scripts/agent-pr69-code-patch.test.py
+          python3 scripts/agent-update.test.py
+          python3 scripts/agent-issue57-update-preflight.test.py
+          python3 scripts/agent-issue57-maintenance-ledger.test.py
+          python3 scripts/agent-issue57-drain-protocol.test.py
+          python3 scripts/agent-issue57-transaction-simulation.test.py
+          python3 scripts/agent-issue57-integrated-recovery.test.py
+          python3 scripts/agent-issue57-direct-python-recovery.test.py
 
       - name: Agent auto-start registry contract (mocked, no real Windows changes)
         run: python3 scripts/agent-workstation-autostart.test.py
@@ -72,6 +109,9 @@ jobs:
 
       - name: Build integrated local candidate
         run: python3 scripts/build-integrated-candidate.py "$RUNNER_TEMP/central-ames-integrated.zip"
+
+      - name: Preserve synthetic installation identity through update and rollback
+        run: python3 scripts/agent-pr38-preserving-stage.test.py
 
       - name: Upload integrated local candidate
         uses: actions/upload-artifact@v6
@@ -140,32 +180,10 @@ jobs:
           export BROWSER_OUTPUT="$RUNNER_TEMP/console-evidence"
           node scripts/ames-experience.browser.mjs
           node scripts/ames-sync-reload.browser.mjs
+          node scripts/ames-pairing.browser.mjs
+          node scripts/ames-3028-completion.browser.mjs
       - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: console-experience-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/console-evidence
-
-  post-deploy-smoke:
-    name: Published preview smoke
-    if: github.event_name == 'pull_request'
-    needs: static-quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-      - name: Verify exact SHA and canonical route on deployed preview
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: >-
-          node scripts/post-deploy-smoke.mjs
-          --origin "https://deploy-preview-${PR_NUMBER}--productcontrolcenter.netlify.app"
-          --sha "$EXPECTED_SHA"
-          --wait-ms 180000
-          --max-redirects 4

@@ -37,7 +37,7 @@ export function normalizeCanonical(payload){
   }
   const processContexts=[...contextMap.values()];
   return immutable({...base,source_schema:CANONICAL_SCHEMA,revision,snapshot_revision:revision,source_id:payload.source_id,content_hash:payload.content_hash,
-    occurrences,pcba_history:{status:'partial',records:datasets.pcba_history},material_trace:{status:'partial',records:datasets.material_reuse},history_contexts:datasets.history_contexts,
+    occurrences,pcba_history:{status:'partial',records:datasets.pcba_history},material_trace:{status:'partial',records:datasets.material_reuse},material_investigation:{status:'unverified',records:Array.isArray(payload.material_candidates)?payload.material_candidates:[]},history_contexts:datasets.history_contexts,
     process_timeline:{status:payload.capabilities?.process_timeline?'partial':'not_collected',events:processEvents,contexts:processContexts},
     coverage:{...base.coverage,datasets:payload.coverage,sources:payload.source_coverage||null,reasons:['Source coverage remains partial; transport covers the stored revision']},canonical:payload});
 }

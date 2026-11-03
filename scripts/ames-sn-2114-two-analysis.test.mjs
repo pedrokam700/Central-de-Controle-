@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {buildLiveSnForensics,provenPreviousFailures,failureOrder} from '../ames/data/sn-forensics.mjs';
 import {renderSmartSnAlerts,buildSmartSnAlerts} from '../ames/console-sn-smart-alerts.mjs';
+import {renderSnHistoryDetail} from '../ames/console-sn-history-detail.mjs';
 const pcba='TEST-PCBA-1',clock='2026-10-20T09:30:00-03:00';
 const history=(seq,at,code='CAM-01',extra={})=>({pcba_sn:pcba,'Defect Hist Seq':seq,'Defect Code':code,
  'Defect Description':'Camera: front cameras failed', 'Defect Time':at,'Repair Status':seq===0?'Y':'N',
@@ -25,6 +26,35 @@ test('two 2114 histories with same clock, code and PCBA but distinct Hist Seq pr
  assert.match(html,/Vínculo 2114/);
  assert.match(html,/Tipos de análise diferentes na 2114/);assert.match(html,/não identifica reparo executado/);
  assert.doesNotMatch(html,/Falha reapareceu após MainBoard repair/);
+});
+
+test('physical 2114 Hist Seq 0/1 with missing timestamps remains a prior same failure and one current row',()=>{
+  const older=history('0',null,'GN01-TX02',{'Defect Description':'Antenna: ANT1 test failed'});
+  const newer=history('1',null,'GN01-TX02',{'Defect Description':'Antenna: ANT1 test failed'});
+  const data=mk(newer,older);
+  // The engine exposes records both inside the verified PCBA and its flat trace.
+  // Repeating the latter must not duplicate the failure in the operator story.
+  data.trace_2114.rows=[older,newer];
+  const model=buildLiveSnForensics(data),alert=alertOf(model);
+  assert.equal(model.current.hist_seq,1);
+  assert.equal(model.own_history.length,1);
+  assert(alert,'Hist Seq alone can establish two distinct ordered 2114 records');
+  assert.equal(alert.order_basis,'hist_seq_only');
+  assert.equal(buildSmartSnAlerts(model,data)[0].severity,'high');
+  const html=renderSnHistoryDetail(model,data);
+  assert.equal((html.match(/<summary><span>Falha atual<\/span>/g)||[]).length,1);
+  assert.equal((html.match(/<summary><span>Falha anterior/g)||[]).length,1);
+  assert.match(html,/Antenna: ANT1 test failed/);
+});
+
+test('a failed 2114 navigation is reported as error, not a proven zero',()=>{
+  const data={sn:pcba,detected_type:'PCBA',trace_2114:{status:'error',
+    pcbas:[{pcba_sn:pcba,status:'ERROR',result:null,error:'SHIFT_UNCONFIRMED'}],rows:[]}};
+  const model=buildLiveSnForensics(data);
+  assert.equal(model.source_states['2114'],'error');
+  assert.equal(model.coverage['2114'],false);
+  assert.equal(model.current,null);
+  assert(!model.alerts.some(a=>a.kind==='PCBA_SAME_FAILURE'));
 });
 
 test('without trustworthy sequence equal clock does not prove recurrence; contradicted sequence stays invalid',()=>{

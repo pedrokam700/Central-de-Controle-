@@ -56,7 +56,8 @@ class MesScheduler:
 
     def snapshot(self):
         with self.condition:
-            return dict(busy=self.owner is not None, queued=len(self.queue), policy='fifo-monitor-skip-v1')
+            return dict(busy=self.owner is not None, queued=len(self.queue),
+                        normal_jobs=self.normal_jobs, policy='fifo-monitor-skip-v1')
 
     @contextmanager
     def critical(self, cleanup=False):

@@ -2,6 +2,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ames'/'agent'))
@@ -61,6 +62,34 @@ class SourceCaptureTests(unittest.TestCase):
         self.assertEqual(self.store.get_snapshot_payload_revision(self.sid,'source_capture_3074_JOB1',1)['result'],base)
         self.assertEqual(self.store.get_snapshot_payload_revision(self.sid,'source_capture_3074_JOB2',1)['result']['items'][0]['sn'],'C')
         self.assertEqual(len(source_capture.capture_index(self.store,self.sid,LINE)),3)
+
+    def test_retry_identical_capture_does_not_add_revision_or_refresh_evidence_time(self):
+        result={"status":"complete","items":[{"sn":"SYNTHETIC","bindings":["A","B"]}]}
+        with patch.object(source_capture,'utc_now',return_value='2026-10-17T12:00:00Z'):
+            first=source_capture.capture_source(self.store,target=self.target,line=LINE,
+                job_id='RETRY',view='3074',result=result,status='done')
+        original=self.store.get_snapshot_payload_revision(self.sid,'source_capture_3074_RETRY',1)
+        with patch.object(source_capture,'utc_now',return_value='2026-10-17T13:00:00Z'):
+            repeated=source_capture.capture_source(self.store,target=self.target,line=LINE,
+                job_id='RETRY',view='3074',result=result,status='done')
+        self.assertEqual(first,repeated)
+        self.assertEqual(len(self.store.snapshot_payload_history(self.sid,'source_capture_3074_RETRY')),1)
+        self.assertEqual(self.store.get_snapshot_payload(self.sid,['source_capture_3074_RETRY']),original)
+        self.assertEqual(source_capture.capture_index(self.store,self.sid,LINE)[0]['capture_revision'],1)
+
+    def test_changed_status_content_and_new_job_remain_immutable_audit_events(self):
+        for result,status in [({'items':[1]},'partial'),({'items':[1]},'done'),({'items':[1,2]},'done')]:
+            source_capture.capture_source(self.store,target=self.target,line=LINE,
+                job_id='CHANGES',view='3074',result=result,status=status)
+        versions=self.store.snapshot_payload_history(self.sid,'source_capture_3074_CHANGES')
+        self.assertEqual(len(versions),3)
+        first=self.store.get_snapshot_payload_revision(self.sid,'source_capture_3074_CHANGES',1)
+        self.assertEqual(first['source_status'],'partial')
+        self.assertEqual(first['result'],{'items':[1]})
+        source_capture.capture_source(self.store,target=self.target,line=LINE,
+            job_id='NEW_JOB',view='3074',result={'items':[1,2]},status='done')
+        self.assertEqual(len(self.store.snapshot_payload_history(self.sid,'source_capture_3074_NEW_JOB')),1)
+        self.assertEqual(len(source_capture.capture_index(self.store,self.sid,LINE)),4)
 
     def test_partial_progress_is_bounded_and_preserves_separate_final_result(self):
         journal=source_capture.BoundedPartialJournal(self.store,target=self.target,line=LINE,job_id='JOB_PROGRESS')

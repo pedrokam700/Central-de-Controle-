@@ -1,6 +1,7 @@
 import {factoryWallMinute} from './history.mjs';
 import {normalizeCanonical} from './canonical.mjs';
 import {buildReuseCohorts} from './reuse-cohorts.mjs';
+import {fullDayClosureEvidence} from './full-day-closure.mjs';
 const DAY=86400000;
 export const shiftDay=(day,n)=>new Date(Date.parse(day+'T12:00:00Z')+n*DAY).toISOString().slice(0,10);
 const dayOf=e=>factoryWallMinute(e.period_start)?.slice(0,10);
@@ -37,8 +38,10 @@ export function trendPoint(snapshot,entry,filters={}){
  const ids=new Set(cohorts.components.rows.flatMap(r=>r.events.map(e=>e.occurrence_id||e.evidence_ref)));
  const rows=componentFilter?occurrences.filter(e=>ids.has(e.occurrence_id||e.evidence_ref)):occurrences;
  const sourceComplete=snapshot.canonical?.coverage?.defects?.source_complete===true;
- const fullDay=factoryWallMinute(entry.period_end)===shiftDay(dayOf(entry),1)+'T07:00';
- return {date:dayOf(entry),status:sourceComplete&&fullDay?'complete':'partial',entry,snapshot,cohorts,rows,
+ // A complete 3028 alone is not a closed production day: 3074, 2114 and
+ // 3022 require independently verified transport, source and exact revision.
+ const closure=fullDayClosureEvidence(snapshot.canonical);
+ return {date:dayOf(entry),status:closure.status==='FULL'?'complete':'partial',entry,snapshot,cohorts,rows,
   fpy:filtered?null:snapshot.summary.fpy,check_fpy:filtered?null:snapshot.summary.check_fpy,
   quantity:filtered?null:snapshot.summary.quantity,observed_failures:rows.length,
   // Occurrence rows can contain multiple failures of one unit. Never call this a defective-unit rate.
@@ -64,15 +67,44 @@ export function createHistoryTrendReader(history){
   for(let i=0;i<plan.length;i+=6){
    const batch=await Promise.all(plan.slice(i,i+6).map(async day=>{
     if(day.status!=='indexed')return {...day,candidates:undefined};
-    let point=null;
+    const preferFull=options.preferFullClosure===true;
+    let point=null,latestObserved=null,readable=0,unreadable=0,unreadableBeforeObserved=0;
     for(const entry of day.candidates){
      try{const snapshot=await open(entry);
       // Custom queries are distinct identities, even when their bounds look like a day.
       if(!dailyModes.has(snapshot.canonical.summary.period?.mode))continue;
-      point={...trendPoint(snapshot,entry,options.filters),stored_revisions:day.candidates.length};break;
-     }catch(error){point={date:day.date,status:'unavailable',error:error.message,entry};break;}
+      readable++;
+      // The observed trend intentionally permits partial snapshots. An opt-in
+      // FULL trend must skip newer partial revisions and retain the latest
+      // independently proven complete revision instead.
+      const current={...trendPoint(snapshot,entry,options.filters),stored_revisions:day.candidates.length,
+        unreadable_newer_revisions:unreadable};
+      if(options.requireFullClosure===true||preferFull){
+       if(!latestObserved){latestObserved=current;unreadableBeforeObserved=unreadable;}
+       if(current.status!=='complete')continue;
+      }
+      point=current;break;
+     }catch(error){
+      if(options.requireFullClosure===true||preferFull){
+       // An unreadable newer revision cannot disprove a separately verified
+       // older FULL. Keep the evidence gap visible and look for that FULL.
+       unreadable++;continue;
+      }
+      point={date:day.date,status:'unavailable',error:error.message,entry};break;
+     }
     }
-    return point||{date:day.date,status:'not_collected'};
+    // If no independently proven FULL exists, show the latest observed partial
+    // as diagnostic data, not as a closure. Never silently fall back to an old
+    // partial when a newer revision could not be read.
+    if(!point&&preferFull&&options.requireFullClosure!==true&&latestObserved&&unreadableBeforeObserved===0)
+      point={...latestObserved,unreadable_newer_revisions:unreadable,
+        no_proven_closure:true};
+    return point||(options.requireFullClosure===true&&readable>0?
+      {date:day.date,status:'unproven_full',entry:day.candidates[0],stored_revisions:day.candidates.length,
+        unreadable_newer_revisions:unreadable}:
+      unreadable>0?{date:day.date,status:'unavailable',entry:day.candidates[0],
+        stored_revisions:day.candidates.length,unreadable_newer_revisions:unreadable}:
+      {date:day.date,status:'not_collected'});
    }));
    points.push(...batch);
   }
@@ -81,10 +113,16 @@ export function createHistoryTrendReader(history){
 }
 export function compareHistoryDays(a,b){
  const comparable=Boolean(a?.snapshot&&b?.snapshot&&a.entry.source_id===b.entry.source_id&&a.entry.line_id===b.entry.line_id&&
-  a.status===b.status&&observedCph(a)!==null&&observedCph(a)===observedCph(b)&&
+  a.status==='complete'&&b.status==='complete'&&observedCph(a)!==null&&observedCph(a)===observedCph(b)&&
   factoryWallMinute(a.entry.period_end)?.slice(10)===factoryWallMinute(b.entry.period_end)?.slice(10));
  return {comparable,fpy_delta:comparable&&a.fpy!==null&&b.fpy!==null?a.fpy-b.fpy:null,
   observed_failure_delta:comparable?a.observed_failures-b.observed_failures:null};
+}
+export function latestComparableHistoryDays(points=[]){
+ // An empty current day and a later partial capture must not hide the last
+ // two certified closures. Their scopes still go through compareHistoryDays.
+ const closed=points.filter(p=>p.snapshot&&p.status==='complete');
+ return {current:closed.at(-1)||null,previous:closed.at(-2)||null};
 }
 export function historyWeekSummary(points,endDate){
  const monday=shiftDay(endDate,-((new Date(endDate+'T12:00Z').getUTCDay()+6)%7));

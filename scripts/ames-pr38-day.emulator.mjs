@@ -55,5 +55,32 @@ try{
     const history=await sync.listHistory('TAN10103');
     assert.equal(history.length,2,'old and new revisions remain immutable');
   }finally{sync.stop();}
-  console.log('PASS: real Firestore Rules guard keeps prior source ID and history; B reads new Line3 by day index without mutable-head takeover');
+  // The second workstation publishes the SAME factory-day 07:00 instant as
+  // 10:00Z. The index must not hide it or promote the first origin as unique.
+  const utc=snapshot({id:12,source:'second-install',date:'2026-10-19',mode:'today'});
+  utc.summary.period={mode:'today',start_at:'2026-10-19T10:00:00Z',end_at:'2026-10-19T12:00:00Z'};
+  const competitor=await publication('B',utc,{now:new Date('2026-10-19T12:20:00Z')});
+  assert.equal(competitor.publish_scope,'today');
+  await saveParts(b,'B',competitor);await b.commitHistory('B',competitor.head,competitor.history);
+  // Another revision with a different start on the same lexical date must
+  // not shadow the valid competing head or be downloaded as a current head.
+  const different=snapshot({id:13,source:'second-install',date:'2026-10-19',mode:'today'});
+  different.summary.period={mode:'today',start_at:'2026-10-19T11:00:00Z',end_at:'2026-10-19T13:00:00Z'};
+  const unrelated=await publication('B',different,{now:new Date('2026-10-19T12:20:00Z')});
+  assert.equal(unrelated.publish_scope,'history');
+  await saveParts(b,'B',unrelated);await b.commitHistory('B',unrelated.head,unrelated.history);
+  const conflictStore=createAmesStore();
+  const receiver=createMesSync(conflictStore,a,{queue,online:()=>true,now:()=>new Date('2026-10-19T12:25:00Z'),schedule:()=>0,unschedule:()=>{}});
+  try{
+    receiver.start('A');
+    await waitFor(()=>conflictStore.agent().sync.read_status==='origin_conflict','UTC/local two-origin conflict');
+    const status=conflictStore.agent().sync;
+    assert.deepEqual(status.origin_conflict_lines,['TAN10103']);
+    assert.equal(status.origin_conflict_candidates[0].installations,2);
+    assert.deepEqual(status.origin_conflict_candidates[0].candidates.map(x=>x.source_id).sort(),['new-install','second-install']);
+    assert.equal(status.remote_line_count,0,'never promote a single current head for competing collectors');
+    assert.equal(conflictStore.read('TAN10103').snapshot,null,'no merged/selected 3028 snapshot is installed');
+    assert.equal(status.last_receive_timing.candidates,2,'same-day unrelated periods are filtered before payload download');
+  }finally{receiver.stop();}
+  console.log('PASS: real Firestore Rules preserves prior identity, discovers equivalent UTC/local production starts, excludes unrelated periods and blocks competing current heads');
 }finally{await env.cleanup();}

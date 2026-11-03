@@ -1,6 +1,17 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {buildDataHealth,buildSecurityHealth,buildWorkstationHealth,buildSyncHealth,factorySyncEvidence,createDataHealthView} from '../ames/console-data-health.mjs';
+
+test('the Monitor exposes a direct cross-workstation sync shortcut without mutating sync state',()=>{
+  const code=fs.readFileSync(new URL('../ames/console-view.mjs',import.meta.url),'utf8');
+  assert.match(code,/data-monitor-technical/);
+  assert.match(code,/shortcut\.dataset\.openSyncHealth/);
+  assert.match(code,/Sincronização entre postos · ver diagnóstico/);
+  assert.match(code,/Cross-workstation sync · view diagnostics/);
+  assert.match(code,/view\.render=function\(\.\.\.args\)/,'label refreshes when language changes');
+  assert.match(code,/details\.open=true/);
+});
 
 function fakeStore(occurrences=[]){
   return {
@@ -102,6 +113,18 @@ test('shared sync health exposes team-latest provenance without account identity
   assert.equal(JSON.stringify(model).includes('must-not-leak'),false);
 });
 
+test('receiver with historical access but no current heads does not misreport history as missing',()=>{
+  const model=buildSyncHealth({sync:{read_status:'ready',remote_scope:'operational_day_history',remote_heads:[]}});
+  assert.equal(model.tone,'unknown');
+  assert.equal(model.count,0);
+  assert.equal(model.authority,'operational_day_history');
+  assert.match(model.label,/snapshot compartilhado atual|current shared snapshot/i);
+  assert.match(model.detail,/histórico de dias anteriores|history from previous days/i);
+  const code=fs.readFileSync(new URL('../ames/console-view.mjs',import.meta.url),'utf8');
+  assert.match(code,/Dados atuais da equipe não confirmados/);
+  assert.match(code,/Current team data not confirmed/);
+});
+
 test('shared sync read error preserves last valid provenance instead of erasing it',()=>{
   const model=buildSyncHealth({sync:{read_status:'error',read_error:'technical details',remote_scope:'team_latest',remote_heads:[{line_id:'TAN10102',source_id:'posto-2',snapshot_id:'9',snapshot_revision:1,collected_at:'2026-10-14T10:00:00Z',authority:'team_latest'}]}});
   assert.equal(model.tone,'partial');
@@ -109,6 +132,55 @@ test('shared sync read error preserves last valid provenance instead of erasing 
   assert.equal(model.count,1);
   assert.equal(model.heads[0].source_id,'posto-2');
   assert.equal(JSON.stringify(model).includes('technical details'),false);
+});
+
+test('origin conflict diagnostics expose verified candidates, never Firebase account identities',()=>{
+  const agent={status:'offline',sync:{read_status:'origin_conflict',origin_conflict_lines:['TAN10102'],
+    origin_conflict_candidates:[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true,
+      owner_uid:'PRIVATE-ACCOUNT',candidates:[
+        {source_id:'station-<A>',snapshot_id:'8',snapshot_revision:2,collected_at:'2026-10-23T12:00:00Z',owner_uid:'SECRET',isolated_metrics:{fpy:97.69,check_fpy:97.86,quantity:1124,observed_defects:26,defects_source_complete:false,pcba_sn:'DO_NOT_SHOW'}},
+        {source_id:'station-<A>',snapshot_id:'9',snapshot_revision:3,collected_at:'2026-10-23T12:30:00Z',isolated_metrics:{fpy:97.26,check_fpy:98.31,quantity:1422,observed_defects:39,defects_source_complete:false}}],
+      observation_comparison:{state:'candidate_overlap',window_scope:'overlap_only',observed_defects:[5,6],outside_common_window:[0,1],coverage_complete:[false,true],candidate_matches:4,unmatched_observed:[1,2]}}]}};
+  const model=buildSyncHealth(agent);
+  assert.equal(model.read_status,'origin_conflict');
+  assert.equal(model.conflicts[0].identity_collision,true);
+  assert.deepEqual(model.conflicts[0].candidates.map(c=>c.snapshot_id),['8','9']);
+  assert.equal(JSON.stringify(model).includes('PRIVATE-ACCOUNT'),false);
+  assert.equal(JSON.stringify(model).includes('SECRET'),false);
+  const store={agent:()=>agent,read:()=>({snapshot:null,freshness:'unknown',source:null})};
+  const root={innerHTML:'',setAttribute(){},removeAttribute(){},replaceChildren(){this.innerHTML='';},querySelectorAll(){return [];}};
+  createDataHealthView(root,store).render();
+  assert.match(root.innerHTML,/data-sync-origin-conflicts/);
+  assert.match(root.innerHTML,/station-&lt;A&gt;/);
+  assert.match(root.innerHTML,/Coincidências candidatas.*4/);
+  assert.match(root.innerHTML,/Comparação restrita à janela temporal comum/);
+  assert.match(root.innerHTML,/Fora da janela comum.*0 \/ 1/);
+  assert.match(root.innerHTML,/Cobertura 3028 reportada completa por coleta.*não \/ sim/);
+  assert.match(root.innerHTML,/data-isolated-publisher-metrics/);
+  assert.match(root.innerHTML,/Observação apenas desta origem/);
+  assert.match(root.innerHTML,/1\.124/);
+  assert.match(root.innerHTML,/1\.422/);
+  assert.match(root.innerHTML,/Completude 3028 comprovada: não/);
+  assert.match(root.innerHTML,/data-sync-guard-unavailable/,'missing persistence proof must be visible');
+  assert.doesNotMatch(root.innerHTML,/PRIVATE-ACCOUNT|SECRET|DO_NOT_SHOW/);
+  const copy=factorySyncEvidence(agent);
+  assert.deepEqual(copy.receiving.conflict_candidates,[{line_id:'TAN10102',installations:2,distinct_sources:1,identity_collision:true,comparison_state:'candidate_overlap',candidate_matches:4}]);
+  assert.equal(JSON.stringify(copy).includes('station-'),false);
+});
+
+test('restored conflict marker is labeled as local safety evidence, never zero verified installations',()=>{
+  const agent={status:'offline',sync:{read_status:'origin_conflict',origin_conflict_lines:['TAN10102'],
+    origin_conflict_candidates:[{line_id:'TAN10102',installations:null,distinct_sources:null,
+      persisted_guard:true,candidates:[],observation_comparison:{state:'persisted_guard_no_payload'}}]}};
+  const model=buildSyncHealth(agent);
+  assert.equal(model.conflicts[0].persisted_guard,true);
+  const store={agent:()=>agent,read:()=>({snapshot:null,freshness:'unknown',source:null})};
+  const root={innerHTML:'',setAttribute(){},removeAttribute(){},replaceChildren(){this.innerHTML='';},querySelectorAll(){return []}};
+  createDataHealthView(root,store).render();
+  assert.match(root.innerHTML,/data-sync-persisted-conflict/);
+  assert.match(root.innerHTML,/Conflito comprovado anteriormente neste navegador/);
+  assert.doesNotMatch(root.innerHTML,/0 instalações verificadas/);
+  assert.doesNotMatch(root.innerHTML,/Snapshot undefined/);
 });
 
 test('data health renders shared workstation authority and escaped source metadata',()=>{

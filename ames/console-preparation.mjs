@@ -2,6 +2,7 @@ import { createOnboardingView, savedIntegrationMode } from './onboarding-view.mj
 import { INTEGRATION_MODE_KEY,sharingState,installationDetection } from './data/onboarding.mjs';
 import { escapeHtml as esc } from './evidence-view.mjs';
 import { LINE_IDS } from './data/contract.mjs';
+import {workstationUpdateNotice,OFFICIAL_UPDATE_HELP} from './data/workstation-update-policy.mjs';
 
 const t = (pt, en) => typeof document !== 'undefined' && document.documentElement?.lang?.startsWith('en') ? en : pt;
 
@@ -84,6 +85,7 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     if (checking || disposed) return;
     checking = true; render();
     try { await client.connect({quiet:true}); } catch { /* unavailability is a normal viewer state */ }
+    try { await client.detectInstalled?.(); } catch { /* unknown is not absent */ }
     finally { checked = true; checking = false; if (!disposed) { last = ''; render(); } }
   }
   async function readAutostart() {
@@ -150,12 +152,13 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
     const pairing=!!client.canOpenOfficial?.(),connectionError=agent.connection_error?.message||'';
     const checks = workstationChecks(agent), ready = checks.every(c => c.state === 'ok');
     const maintenance = workstationMaintenance(agent);
+    const updateNotice = workstationUpdateNotice(agent.workstation_probe,connected);
     // Pairing must remain reachable even when the local agent is already ready.
     // Previously the entire preparation panel was hidden once connected.
     // A verified local agent should not bury the operation dashboard beneath
     // onboarding every time it rerenders. Pairing remains one click away via
     // the persistent "Configurar posto" button.
-    const visible = expanded || viewerGuideOpen || (!connected && mode !== 'viewer');
+    const visible = expanded || viewerGuideOpen || (!connected && mode !== 'viewer') || updateNotice.required || updateNotice.show;
 
     const detector=installationDetection(agent,!!client.paired?.());
     const shared=sharingState(agent);
@@ -206,10 +209,16 @@ export function createPreparationView(root, store, client, { verify=async()=>cli
         (autoMessage?'<p role="status">'+esc(autoMessage)+'</p>':'')+'</section>'
       : '';
     root.hidden=!visible;
-    const key=JSON.stringify([checking,checked,expanded,viewerGuideOpen,mode,connected,pairing,connectionError,detector,shared,checks,maintenance,backupBusy,maintenanceMessage,autoState,autoBusy,autoChecked,autoMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
+    const key=JSON.stringify([checking,checked,expanded,viewerGuideOpen,mode,connected,pairing,connectionError,detector,shared,checks,maintenance,updateNotice,backupBusy,maintenanceMessage,autoState,autoBusy,autoChecked,autoMessage,map3012Busy,map3012Message,typeof document === 'undefined' ? '' : document.documentElement?.lang]);
     if(key===last)return;last=key;
     root.innerHTML = `<div class="ames-preparation" data-preparation>
       <p role="status">${checking ? 'Verificando este computador…' : connected ? 'Agente local conectado' : 'MES local não disponível neste computador'}${!connected && mode === 'viewer' ? ' · Dados compartilhados' : ''}</p>
+      ${updateNotice.required||updateNotice.show?'<section class="notice warn ames-agent-update-notice" data-agent-update-notice role="status"><b>'+
+        (updateNotice.required?t('Atualização segura necessária neste posto','Safe agent update required'):t('Revisão do agente ainda não comprovada','Agent pairing revision not verified'))+
+        '</b><p>'+(updateNotice.required?t('O contrato de pareamento foi identificado como antigo. Não substitua o CLEAN, SQLite ou token sem um atualizador validado.','The installed pairing contract is outdated. Never overwrite CLEAN, SQLite or token without a validated updater.'):
+        t('O agente responde, mas ainda não anuncia a revisão do pareamento. Isso NÃO prova que esteja desatualizado; continue o diagnóstico antes de substituir arquivos.','The agent responds but does not advertise a pairing revision. This does NOT prove it is outdated; diagnose before replacing files.'))+
+        '</p><a class="button secondary" href="'+OFFICIAL_UPDATE_HELP+'" target="_blank" rel="noopener noreferrer">'+t('Acompanhar atualização segura','Safe update details')+'</a><small>'+
+        t('Atualização automática do motor ainda não habilitada neste posto.','Automatic engine update is not yet enabled here.')+'</small></section>':''}
       ${autostartPanel}
       ${connectionError?`<p class="notice warn" role="status">${esc(connectionError)}</p>`:''}
       ${!connected && client.canPairFromOfficial?.()?`<section class="notice warn" data-workstation-pair-hint><strong>${t('Conectar agente deste computador','Connect this computer’s agent')}</strong><p>${t('Se o agente já está conectado na Central local, não reinstale o CLEAN. Autorize uma única vez a Central HTTPS neste mesmo navegador.','If the agent is already connected locally, do not reinstall CLEAN. Authorize the HTTPS Work Center once in this browser.')}</p><button type="button" class="button primary" data-pair-local>${t('Autorizar agente local','Authorize local agent')}</button></section>`:''}${summary}

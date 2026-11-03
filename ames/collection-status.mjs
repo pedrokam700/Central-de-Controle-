@@ -1,6 +1,15 @@
 import {escapeHtml as esc} from './evidence-view.mjs';
 
 const sourceState=value=>String(value||'').trim().toUpperCase();
+const t=(pt,en)=>typeof document!=='undefined'&&document.documentElement?.lang?.startsWith('en')?en:pt;
+const SOURCE_PROOF=Object.freeze({
+  done:['Completa','Complete'],partial:['Parcial','Partial'],
+  error:['Falhou','Failed'],not_run:['Não coletada','Not collected'],
+});
+const sourceProofLabel=value=>{
+  const pair=SOURCE_PROOF[String(value||'').toLowerCase()];
+  return pair?t(...pair):t('Não comprovada','Unverified');
+};
 
 const stageLabel=x=>({'3074':'3074 · Vínculos físicos','2114':'2114 · Histórico PCBA','3022':'3022 · Processo'})[x]||x;
 const friendlyLine=id=>({'TAN10101':'Linha 1','TAN10102':'Linha 2','TAN10103':'Linha 3'})[id]||id||'Linha não informada';
@@ -33,6 +42,41 @@ function stageDetail(stage,p){
   if(p.phase)bits.push(p.phase==='mes'?'leitura A-MES':p.phase==='local'?'processamento local':String(p.phase));
   if(p.detail)bits.push(String(p.detail));
   return bits.join(' · ');
+}
+function trace3074Summary(row){
+ const src=row?.['3074']||{},state=sourceState(src.source_status||src.status);
+ const diag=src.coverage_diagnostic||{};
+ const requested=Number(diag.requested_pcbas??src.requested_pcba_count??0);
+ const processed=Number(diag.processed_pcbas??src.processed_pcba_count??0);
+ const errors=Number(diag.pcba_errors??src.pcba_error_count??0);
+ const partialPages=Number(diag.partial_page_count??0);
+ if(state==='COMPLETE')return `3074 · ${esc(processed)}/${esc(requested)} PCBAs · cobertura de extração comprovada (não comprova ausência de falha)`;
+ if(state==='PARTIAL'||state==='ERROR'){
+  const reasons=Array.isArray(diag.reasons)?diag.reasons.slice(0,6):[];
+  // Every candidate here comes from the SAME completed local job, never
+  // a guessed SN from another day/snapshot or an additional MES request.
+  const itemRows=Array.isArray(src.items)?src.items:[];
+  const badSn=new Set();
+  for(const item of itemRows){
+   if(item&&String(item.status||'').toUpperCase()!=='COMPLETE'&&item.pcba_sn)
+    badSn.add(String(item.pcba_sn));
+  }
+  for(const page of (Array.isArray(diag.partial_pages)?diag.partial_pages:[])){
+   const idx=Number(page.pcba_index);
+   const item=Number.isInteger(idx)&&idx>0?itemRows[idx-1]:null;
+   if(item?.pcba_sn)badSn.add(String(item.pcba_sn));
+  }
+  const unverified=[...badSn].slice(0,8);
+  const details=reasons.map(reason=>({
+   pcba_errors:t('PCBAs com erro de consulta','Boards with query errors'),
+   pcba_not_complete:t('Consultas de PCBAs não concluídas','Board queries not completed'),
+   extjs_pagination_incomplete:t('Páginas da 3074 não comprovadas','Unverified 3074 pages'),
+   pcba_count_mismatch:t('Quantidade de PCBAs divergente','Board count mismatch'),
+   totals_not_verified:t('Totais da coleta não comprovados','Unverified collection totals')
+  })[reason]||reason);
+  return `<span class="notice warn" data-trace-3074-detail><b>3074 ${state==='PARTIAL'?t('parcial','partial'):t('indisponível','unavailable')}</b> · ${esc(processed)}/${esc(requested||'—')} PCBAs concluídas · ${esc(errors)} erro(s) · ${esc(partialPages)} ${t('páginas sem cobertura comprovada','unverified pages')}${details.length?` · ${esc(details.join('; '))}`:''}${unverified.length?` · ${t('PCBAs a conferir','Boards to inspect')}: ${esc(unverified.join(', '))}${badSn.size>unverified.length?' …':''}`:''}</span>`;
+ }
+ return t('3074 · cobertura não comprovada','3074 · unverified coverage');
 }
 function trace2114Summary(row){
   const src=row?.['2114']||{};
@@ -70,9 +114,14 @@ export function collectionStatus(state){
   const stages=job.kind!=='deep_trace'?Object.keys(job.stage_progress||{}):mode==='process_only'?['3022']:mode==='reuse_only'?['3074','2114']:['3074','2114','3022'];
   const progress=job.stage_progress||{};
   const result=job.result?.deep_trace;
+  const completedTrace=job.kind==='deep_trace'&&job.status==='done';
+  const sourceStages=job.result?.stages||{};
+  const unverified=completedTrace?stages.filter(stage=>sourceStages[stage]!=='done'):[];
+  const sourceWarning=unverified.length?`<div class="notice warn" data-trace-source-coverage role="status"><b>${t('Cobertura não comprovada','Coverage not verified')}</b> · ${unverified.map(stage=>`${esc(stage)}: ${esc(sourceProofLabel(sourceStages[stage]))}`).join(' · ')}. ${t('Job finalizado não significa fontes completas.','Finished job does not mean complete sources.')}</div>`:'';
   return `${error}<div class="ames-job-head"><b>Job ${esc(job.id)}</b><span>${esc(job.status)}</span></div><p>${esc(job.message||job.error||'Aguardando execução.')}</p>
+    ${sourceWarning}
     ${job.kind==='deep_trace'?`<p>${stages.join(' → ')}</p>`:''}
-    <div class="ames-progress-list">${stages.map(stage=>{const p=progress[stage];return `<article><b>${stage}</b> · <span>${esc(p?.line||'Linha aguardando informação')}</span>${p?`<progress max="100" value="${Math.max(0,Math.min(100,Number(p.line_percent)||0))}"></progress><small>${esc(stageDetail(stage,p))}</small>`:` · ${esc(job.stage===stage?'Em execução':job.result?.stages?.[stage]||'Aguardando')}`}</article>`;}).join('')}</div>
+    <div class="ames-progress-list">${stages.map(stage=>{const p=progress[stage];return `<article><b>${stage}</b> · <span>${esc(p?.line||'Linha aguardando informação')}</span>${p?`<progress max="100" value="${Math.max(0,Math.min(100,Number(p.line_percent)||0))}"></progress><small>${esc(stageDetail(stage,p))}</small>`:` · ${esc(job.stage===stage?'Em execução':'Aguardando')}`}${completedTrace?`<small data-trace-source-stage="${esc(stage)}"> · ${t('Cobertura','Coverage')}: ${esc(sourceProofLabel(sourceStages[stage]))}</small>`:''}</article>`;}).join('')}</div>
     ${liveTraceFeed(job)}
-    ${job.status==='done'&&result?`<section data-trace-result><h4>Resultado da coleta</h4><p>Valores informados pelo job; erro/indisponibilidade de uma fonte nunca é convertido em zero.</p>${Object.entries(result).map(([line,r])=>`<article><b>${esc(line)}</b>${r.skipped?`<p>${esc(r.reason||'Linha sem ocorrências no escopo.')}</p>`:`<p>Escopo consultado: ${esc(r.scope?.records??'—')} ocorrências · ${esc(r.scope?.unique_pcbas??'—')} PCBAs</p><p>3074 · materiais no snapshot: ${esc(r.enrichment?.material_rows??'—')}<br>${trace2114Summary(r)}<br>${trace3022Summary(r)}</p>${(r['3022']?.warnings||[]).map(w=>`<p class="notice warn">${esc(w)}</p>`).join('')}`}</article>`).join('')}</section>`:''}`;
+    ${job.status==='done'&&result?`<section data-trace-result><h4>Resultado da coleta</h4><p>Valores informados pelo job; erro/indisponibilidade de uma fonte nunca é convertido em zero.</p>${Object.entries(result).map(([line,r])=>`<article><b>${esc(line)}</b>${r.skipped?`<p>${esc(r.reason||'Linha sem ocorrências no escopo.')}</p>`:`<p>Escopo consultado: ${esc(r.scope?.records??'—')} ocorrências · ${esc(r.scope?.unique_pcbas??'—')} PCBAs</p><p>${trace3074Summary(r)}<br>3074 · ${t('materiais salvos no snapshot','materials stored in snapshot')}: ${esc(r.enrichment?.material_rows??'—')}<br>${trace2114Summary(r)}<br>${trace3022Summary(r)}</p>${(r['3022']?.warnings||[]).map(w=>`<p class="notice warn">${esc(w)}</p>`).join('')}`}</article>`).join('')}</section>`:''}`;
 }

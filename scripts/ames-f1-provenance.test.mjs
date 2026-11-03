@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {groupedFailureName} from '../ames/failure-group-evidence.mjs';
 
 const root=new URL('..',import.meta.url);
@@ -38,7 +39,7 @@ with tempfile.TemporaryDirectory() as tmp:
     projected=canonical.export_revision(db,sid,'TAN10101')
     print(json.dumps({'transformed':rec['defect_code'],'stored':stored['defect_code'],'raw':json.loads(stored['raw_json'])['defect_code'],'projected':projected['datasets']['defects'][0]['defect_code']}))
 `;
-  const result=JSON.parse(execFileSync('python3',['-c',py,new URL('..',import.meta.url).pathname],{encoding:'utf8'}).trim());
+  const result=JSON.parse(execFileSync(process.env.PYTHON_BIN||'python3',['-c',py,fileURLToPath(new URL('..',import.meta.url))],{encoding:'utf8'}).trim());
   assert.deepEqual(result,{transformed:'F1_9999',stored:'F1_9999',raw:'F1_9999',projected:'F1_9999'});
 });
 

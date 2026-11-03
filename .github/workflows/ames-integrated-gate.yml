@@ -106,7 +106,7 @@ jobs:
           z=Path(os.environ['RUNNER_TEMP'])/'central-ames-integrated.zip'
           with zipfile.ZipFile(z) as f:
               names=set(f.namelist())
-              required={'00_INICIAR_AQUI.bat','01_INSTALAR_UMA_VEZ.bat','START_LOCAL_CANDIDATE.ps1','ames-agent/config.example.json','ames-agent/agent_hardened_entry.py','ames-agent/base_paging_backend.py','ames-agent/performance_indexes.py','frontend/Central-de-Controle-/index.html','frontend/Central-de-Controle-/ames/console-base-view.mjs','frontend/Central-de-Controle-/ames/console-data-health.mjs','frontend/Central-de-Controle-/ames/console-shift-summary.mjs','frontend/Central-de-Controle-/ames/console-evidence-drawer.mjs','frontend/Central-de-Controle-/ames/agent-diagnostics.mjs','CANDIDATE_MANIFEST.json'}
+              required={'00_INICIAR_AQUI.bat','01_INSTALAR_UMA_VEZ.bat','START_LOCAL_CANDIDATE.ps1','01_TROCAR_PARA_PR69_NOVA.bat','TROCAR_PARA_PR69_NOVA.ps1','08_PREPARAR_REDE_AMES.bat','INSTRUCOES_INSTALACAO_LIMPA.txt','MANUAL_LOGICA_CAPTURA_E_CRUZAMENTO.md','NOTAS_ALERTAS_SN_PR69.md','NOTAS_CORRECOES_28OUT_RESTAURACAO.md','NOTAS_VALIDACAO_FPY_TOP3_RASTREABILIDADE.md','ames-agent/config.example.json','ames-agent/agent_hardened_entry.py','ames-agent/base_paging_backend.py','ames-agent/performance_indexes.py','frontend/Central-de-Controle-/index.html','frontend/Central-de-Controle-/ames/console-base-view.mjs','frontend/Central-de-Controle-/ames/console-data-health.mjs','frontend/Central-de-Controle-/ames/console-shift-summary.mjs','frontend/Central-de-Controle-/ames/console-evidence-drawer.mjs','frontend/Central-de-Controle-/ames/agent-diagnostics.mjs','CANDIDATE_MANIFEST.json'}
               missing=required-names
               assert not missing, f'missing clean bundle files: {missing}'
               assert 'ames-agent/config.json' not in names
@@ -153,7 +153,7 @@ jobs:
       - name: Parse Windows launchers from exact artifact
         shell: powershell
         run: |
-          foreach($file in @('package\START_LOCAL_CANDIDATE.ps1','package\suporte\ames-workstation\START_AGENT_CANONICAL.ps1','package\suporte\ames-workstation\DIAGNOSTICO_POSTO.ps1','package\network\ensure_ames_route.ps1')){
+          foreach($file in @('package\START_LOCAL_CANDIDATE.ps1','package\TROCAR_PARA_PR69_NOVA.ps1','package\suporte\ames-workstation\START_AGENT_CANONICAL.ps1','package\suporte\ames-workstation\DIAGNOSTICO_POSTO.ps1','package\network\ensure_ames_route.ps1')){
             $tokens=$null;$errors=$null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors)|Out-Null
             if($errors.Count){$errors|ForEach-Object{Write-Host $_.Message -ForegroundColor Red};throw "PowerShell parse failed: $file"}

@@ -1,0 +1,82 @@
+{
+  "schema": "ames-archive-comparison-1",
+  "created": "2026-10-28",
+  "source": "user-supplied ZIPs read as static source only",
+  "warning": "These package hashes are not Git commit SHAs; ZIPs/binaries/SQLite/tokens are NOT archived in Git.",
+  "paths": {
+    "flow": "core/fluxo_3028_3074.py",
+    "temporal": "core/temporal_3074.py",
+    "scan": "core/varredura_3074.py",
+    "view3022": "ames/tela_3022.py",
+    "view3074": "ames/tela_3074.py",
+    "process": "ames-agent/process_r11.py"
+  },
+  "archives": [
+    {
+      "id": "S1",
+      "name": "AMES_Automacao_V0_8(1).zip",
+      "zip": "31229ed5bef4078e103fed29c7f8d61acf314087cb8b7b5b53c046ff6d36e1c3",
+      "flow": "9a74cc9f5f48171e2c99aef153e21f884187a18493bab4863dea0ad1e85801a7",
+      "temporal": "92ba2ff0f15fa588a3261977e65fbc5a6b9e77469e8ba8cc7fa590b4317eb0c2",
+      "scan": "d0fe9e955399a3ec7a36246de72622470be0ac90448d01fd8b8c23d7d4329f3c",
+      "view3022": "d22ce72b1d987329ba79b9c6ddec9f050295ce6c1ce7ab79cf544d1eb9e56948",
+      "view3074": "4c72d38532ba00a08e3778621af7ec9b00c3ff34bf0b7b6d463c0c53714d4df7",
+      "process": null
+    },
+    {
+      "id": "S2",
+      "name": "AMES_Central_Offline_V0_5_22_CONSOLIDADA_FABRICA(2).zip",
+      "zip": "e5cf91879d057a28eca6de4ba2364c0bc056f32c6a46dd086e7ddb600c4abf9e",
+      "flow": "780e448aaea5766ae5a95ba10363fb31350c3be0ff86e6c5d6b96d59f5853b87",
+      "temporal": "a56b985eb1c0a9454b2d961a797bccdbe1a06a24c09a69f71b53260e4abf7ae1",
+      "scan": "195aa9a169e37ddbb6d6400f5256387bce7084f091f861af1d8f9d6722c77284",
+      "view3022": "b6f8fba0b51423a3f30d34f5db53171c7db9f50b5e9e765d5a57d6101e55cbd5",
+      "view3074": "e9a08855578720f1a49add07828b4eebef27f37db3a7fad9d3402d33869c156e",
+      "process": null
+    },
+    {
+      "id": "S3",
+      "name": "CENTRAL_AMES_CLEAN_931f0627_3022_LIFECYCLE_READY(1).zip",
+      "zip": "20a02af9b2db21dc15b804c393f4517404e68e27a576529c3718f5b8996a0bce",
+      "flow": "780e448aaea5766ae5a95ba10363fb31350c3be0ff86e6c5d6b96d59f5853b87",
+      "temporal": "a56b985eb1c0a9454b2d961a797bccdbe1a06a24c09a69f71b53260e4abf7ae1",
+      "scan": "195aa9a169e37ddbb6d6400f5256387bce7084f091f861af1d8f9d6722c77284",
+      "view3022": "e5e860baaffd97dbe5c080bfb7cb60c44e0ff5c7df9daba1d20bcf217b2c006e",
+      "view3074": "e9a08855578720f1a49add07828b4eebef27f37db3a7fad9d3402d33869c156e",
+      "process": "19ef3ee17a2017d3312d5e2b13687ee9e008c3eb89469c17b5f6e5d55094f3e3"
+    },
+    {
+      "id": "S4",
+      "name": "AMES_Central_CLEAN_dbe424da(1).zip",
+      "zip": "046ae20de387fe6d156230851cd3f8f070526a6ecb0fb5312ac421b5812c2f6a",
+      "flow": "780e448aaea5766ae5a95ba10363fb31350c3be0ff86e6c5d6b96d59f5853b87",
+      "temporal": "faf527dc28710d29db6569fb4182f0909bd660b48545f39cf7c50c5d80123a7e",
+      "scan": "4cecf3dcac9aa24800dc862ef2f077c74a595118f4d7060af11f3bc0f82478e0",
+      "view3022": "edcbe80eb68d1bb78a69a80c3be073d3b69f5be9935537b90d81b93716a67a50",
+      "view3074": "e9a08855578720f1a49add07828b4eebef27f37db3a7fad9d3402d33869c156e",
+      "process": "19ef3ee17a2017d3312d5e2b13687ee9e008c3eb89469c17b5f6e5d55094f3e3"
+    },
+    {
+      "id": "S5",
+      "name": "CENTRAL_AMES_INTEGRATED_1e65eb71_GREEN(1).zip",
+      "zip": "e4d78c8eec847da8d811c2df2899656015c87cde3a99d6bc18368141a245745e",
+      "flow": "780e448aaea5766ae5a95ba10363fb31350c3be0ff86e6c5d6b96d59f5853b87",
+      "temporal": "a56b985eb1c0a9454b2d961a797bccdbe1a06a24c09a69f71b53260e4abf7ae1",
+      "scan": "195aa9a169e37ddbb6d6400f5256387bce7084f091f861af1d8f9d6722c77284",
+      "view3022": "f8b3b627e76a6101c519ecdc6db70185540eb9fd313be0c071780d5bb242c975",
+      "view3074": "e9a08855578720f1a49add07828b4eebef27f37db3a7fad9d3402d33869c156e",
+      "process": "4e0b0b501392d2bca118106508c2066ac866c3c0e74a1d230b52d94bfca36351"
+    },
+    {
+      "id": "S6",
+      "name": "CENTRAL_PR37_COMPLETA_CORRIGIDA_V2(1).zip",
+      "zip": "2b053f344ddd23dd51a7b0c54a75c9d20fa457ebb44e4a53f63d3ee2b9b395d3",
+      "flow": "780e448aaea5766ae5a95ba10363fb31350c3be0ff86e6c5d6b96d59f5853b87",
+      "temporal": "a56b985eb1c0a9454b2d961a797bccdbe1a06a24c09a69f71b53260e4abf7ae1",
+      "scan": "195aa9a169e37ddbb6d6400f5256387bce7084f091f861af1d8f9d6722c77284",
+      "view3022": "1a107fc01244abb2eb87ef59f516a57f11e2ac8b587be55b77fe2353f0503849",
+      "view3074": "e9a08855578720f1a49add07828b4eebef27f37db3a7fad9d3402d33869c156e",
+      "process": "19ef3ee17a2017d3312d5e2b13687ee9e008c3eb89469c17b5f6e5d55094f3e3"
+    }
+  ]
+}

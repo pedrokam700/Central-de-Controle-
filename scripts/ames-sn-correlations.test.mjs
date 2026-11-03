@@ -104,8 +104,8 @@ function componentsFixture(){
   const old=failure(11,code,'OLD');
   input.trace_3074.reused_components.push({item_sn:sn,item_type:type,previous_pcbas:['OLD'],previous_pcba_evidence:[{pcba_sn:'OLD',relation:code==='LCM-1'?'MESMA_FALHA':'FALHA_SIMILAR',history:old}]});
   input.trace_3074.component_usage.push({item_sn:sn,query:{rows:[
-   {Barcode:'P','Sn Type':'PCBA','Bind Time':'2026-10-14 12:00:00','Unbind Time':''},
-   {Barcode:'OLD','Sn Type':'PCBA','Bind Time':'2026-10-10 12:00:00','Unbind Time':'2026-10-12 12:00:00'}]}});
+   {Barcode:'P','Sn Type':'PCBA','Bind Time':'2026-10-14 12:00:00','Unbind Time':'','Iss Status':'Y'},
+   {Barcode:'OLD','Sn Type':'PCBA','Bind Time':'2026-10-10 12:00:00','Unbind Time':'2026-10-12 12:00:00','Iss Status':'N'}]}});
   input.trace_3012.rows.push(repair(old,11,11,{repair_desc:'FPC removal',repair_comment:'FPC desmontado na análise LCM; placa condenada'}));
  }
  return input;
@@ -127,6 +127,10 @@ test('future, missing or ended bindings cannot establish component correlation a
  }
  const input=componentsFixture();for(const u of input.trace_3074.component_usage)u.query.rows[1]['Unbind Time']='2026-10-10 13:00:00';
  assert(!kinds(buildLiveSnForensics(input)).some(k=>k.startsWith('COMPONENT')));
+ const noUnbind=componentsFixture();
+ for(const usage of noUnbind.trace_3074.component_usage)usage.query.rows[1]['Unbind Time']='';
+ assert(!kinds(buildLiveSnForensics(noUnbind)).some(k=>k.startsWith('COMPONENT')),
+   'historical N binding without an unbind time is candidate evidence, not proven presence');
 });
 
 test('aggregate relation does not leak to another historical occurrence',()=>{
@@ -150,7 +154,7 @@ test('local SQLite projection and live payload yield the same correlations witho
  const before=JSON.stringify(live),online=buildLiveSnForensics(live);
  const local={query_sn:'P',pcba_history:[live.trace_2114.current_failure,...live.trace_2114.previous_failures,
   ...histories.map(h=>h.history)],repair_3012:live.trace_3012.rows,
-  material_reuse:live.trace_3074.reused_components.map(m=>({current_pcba_sn:'P',item_sn:m.item_sn,item_type:m.item_type,previous_pcbas_json:'["OLD"]',bind_time_utc:'2026-10-14T12:00:00Z',raw_json:JSON.stringify({all_pcba_history:[{pcba_sn:'OLD',bind_time_utc:'2026-10-10T12:00:00Z',unbind_time_utc:'2026-10-12T12:00:00Z',event_count:1}]})})),coverage:{2114:true,3012:true,3074:true}};
+  material_reuse:live.trace_3074.reused_components.map(m=>({current_pcba_sn:'P',item_sn:m.item_sn,item_type:m.item_type,previous_pcbas_json:'["OLD"]',bind_time_utc:'2026-10-14T12:00:00Z',iss_status_now:'Y',raw_json:JSON.stringify({all_pcba_history:[{pcba_sn:'OLD',bind_time_utc:'2026-10-10T12:00:00Z',unbind_time_utc:'2026-10-12T12:00:00Z',event_count:1}]})})),coverage:{2114:true,3012:true,3074:true}};
  const offline=buildLocalSnForensics(local);
  assert.deepEqual(kinds(offline).sort(),kinds(online).sort());assert.equal(JSON.stringify(live),before);
  assert.deepEqual(kinds(buildLocalSnForensics({cached_lookup:live})).sort(),kinds(online).sort());

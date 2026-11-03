@@ -1,13 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {canonicalAgentFixture,productFixture} from './ames-fixtures.mjs';
-import {createHistoryTrendReader,planHistoryDays,compareHistoryDays,historyWeekSummary} from '../ames/data/history-trends.mjs';
+import {createHistoryTrendReader,planHistoryDays,compareHistoryDays,latestComparableHistoryDays,historyWeekSummary} from '../ames/data/history-trends.mjs';
+import {withHistoricalTrends} from '../ames/console-history-trends.mjs';
+
+test('historical trend UI module parses before its browser initializer runs',()=>{
+ assert.equal(typeof withHistoricalTrends,'function');
+});
 function fixture(date,{id=date,source='A',revision=1,mode='previous_day',end='12:00',fpy=98,complete=false}={}){
  const p=canonicalAgentFixture(productFixture('TAN10101',2));p.snapshot_id=id;p.summary.snapshot_id=id;p.source_id=source;p.snapshot_revision=revision;
  p.summary.period={start_at:date+'T07:00-03:00',end_at:date+'T'+end+'-03:00',mode};p.summary.fpy=fpy;
  p.coverage.defects.source_complete=complete;
  for(const rows of Object.values(p.datasets))for(const r of rows){r.snapshot_id=id;r.snapshot_revision=revision;}
  return p;
+}
+function provenFull(p){
+ const day=p.summary.period.start_at.slice(0,10),next=new Date(Date.parse(day+'T12:00:00Z')+86400000).toISOString().slice(0,10);
+ p.summary.period.end_at=next+'T07:00-03:00';p.content_hash='a'.repeat(64);
+ p.coverage.defects.source_complete=true;p.coverage.defects.transport_complete=true;
+ p.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
+  status:'complete',source_complete:true,transport_complete:true,
+  scope:{line_id:p.line_id,source_id:p.source_id,snapshot_id:p.snapshot_id,snapshot_revision:p.snapshot_revision}
+ }]));return p;
 }
 const entry=p=>({line_id:p.line_id,source_id:p.source_id,snapshot_id:p.snapshot_id,snapshot_revision:p.snapshot_revision,collected_at:p.collected_at,period_start:p.summary.period.start_at,period_end:p.summary.period.end_at,history_source:'shared'});
 function source(payloads){let opens=0;const entries=payloads.map(entry);return {list:async()=>entries,open:async e=>{opens++;return payloads.find(p=>p.source_id===e.source_id&&p.snapshot_id===e.snapshot_id&&p.snapshot_revision===e.snapshot_revision);},opens:()=>opens};}
@@ -40,7 +54,7 @@ test('filters remove aggregate FPY/quantity; zero Check FPY remains valid and ra
  assert.equal(filtered.fpy,null);assert.equal(filtered.quantity,null);assert.equal(filtered.observed_failures,1);
 });
 test('day comparison refuses different origins or clock cutoffs; weekly rates are not invented',async()=>{
- const r=await createHistoryTrendReader(source([fixture('2026-10-16'),fixture('2026-10-19',{fpy:96})])).read(options);
+ const r=await createHistoryTrendReader(source([provenFull(fixture('2026-10-16')),provenFull(fixture('2026-10-19',{fpy:96}))])).read(options);
  const [a,b]=[r.points.at(-1),r.points.find(p=>p.date==='2026-10-16')];
  assert.equal(compareHistoryDays(a,b).fpy_delta,null,'CPH2859V and CPH2859 mixed in the same day cannot be compared');
  const single=point=>({...point,snapshot:{...point.snapshot,occurrences:point.snapshot.occurrences.filter(o=>o.product_key==='CPH2859')}});
@@ -56,7 +70,7 @@ test('missing, pending and cross-line index rows cannot enter the daily series',
 });
 
 test('historic comparisons reject different, mixed or missing CPH without hiding observed weekly totals',async()=>{
- const read=await createHistoryTrendReader(source([fixture('2026-10-16'),fixture('2026-10-19')])).read(options);
+ const read=await createHistoryTrendReader(source([provenFull(fixture('2026-10-16')),provenFull(fixture('2026-10-19'))])).read(options);
  const oneProduct=point=>!point.snapshot?point:{...point,snapshot:{...point.snapshot,occurrences:point.snapshot.occurrences.filter(o=>o.product_key==='CPH2859')}};
  const points=read.points.map(oneProduct),a=points.at(-1),b=points.find(p=>p.date==='2026-10-16');
  const altered=(products)=>({...b,snapshot:{...b.snapshot,occurrences:products.map((product_key,i)=>({...b.snapshot.occurrences[0],product_key,occurrence_id:'O'+i}))}});
@@ -69,4 +83,97 @@ test('historic comparisons reject different, mixed or missing CPH without hiding
  assert.equal(mixed.previous.observed_failures,2,'observed evidence is retained, not converted to zero');
  const other=historyWeekSummary(points.map(p=>p.date==='2026-10-16'?altered(['CPH9999']):p),options.endDate);
  assert.notEqual(other.current.scope_key,other.previous.scope_key);
+});
+
+test('FULL closure trend keeps prior complete revision when a later capture is partial',async()=>{
+ const full=fixture('2026-10-19',{id:'DAY19',revision:1,complete:true});
+ full.content_hash='a'.repeat(64);
+ full.summary.period.end_at='2026-10-20T07:00-03:00';
+ full.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
+   status:'complete',transport_complete:true,source_complete:true,
+   scope:{line_id:full.line_id,source_id:full.source_id,snapshot_id:full.snapshot_id,snapshot_revision:full.snapshot_revision}}]));
+ const partial=fixture('2026-10-19',{id:'DAY19',revision:2,complete:true});
+ partial.content_hash='b'.repeat(64);
+ partial.summary.period.end_at='2026-10-20T07:00-03:00';
+ partial.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
+   status:'observed_partial',transport_complete:true,source_complete:false,
+   scope:{line_id:partial.line_id,source_id:partial.source_id,snapshot_id:partial.snapshot_id,snapshot_revision:partial.snapshot_revision}}]));
+ const reader=createHistoryTrendReader(source([full,partial]));
+ const observed=(await reader.read(options)).points.at(-1);
+ assert.equal(observed.entry.snapshot_revision,2,'observed mode preserves the existing latest-revision behavior');
+ const closure=(await reader.read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(closure.entry.snapshot_revision,1,'later partial must not downgrade the previous FULL');
+ assert.equal(closure.status,'complete');
+ const onlyPartial=(await createHistoryTrendReader(source([partial])).read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(onlyPartial.status,'unproven_full');
+ assert.equal(onlyPartial.snapshot,undefined);
+ assert.equal(onlyPartial.observed_failures,undefined,'missing full data is not a zero');
+});
+
+test('FULL history preserves an older proven closure when a newer immutable revision cannot be read',async()=>{
+ const full=fixture('2026-10-19',{id:'DAY19',revision:1,complete:true});
+ full.content_hash='a'.repeat(64);
+ full.summary.period.end_at='2026-10-20T07:00-03:00';
+ full.source_coverage=Object.fromEntries(['3074','2114','3022'].map(view=>[view,{
+  status:'complete',source_complete:true,transport_complete:true,
+  scope:{line_id:full.line_id,source_id:full.source_id,snapshot_id:full.snapshot_id,snapshot_revision:1}}]));
+ const newest=fixture('2026-10-19',{id:'DAY19',revision:2,complete:true});
+ newest.summary.period.end_at='2026-10-20T07:00-03:00';
+ const history=source([full,newest]);
+ const remote={list:history.list,open:async e=>{
+  if(e.snapshot_revision===2)throw Error('immutable revision unavailable');
+  return history.open(e);
+ }};
+ const reader=createHistoryTrendReader(remote);
+ const fallback=(await reader.read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(fallback.status,'complete');
+ assert.equal(fallback.entry.snapshot_revision,1);
+ assert.equal(fallback.unreadable_newer_revisions,1,'the unreadable newer entry must remain auditable');
+ const observed=(await reader.read(options)).points.at(-1);
+ assert.equal(observed.status,'unavailable','normal historical mode cannot silently fall back');
+ const noFull=(await createHistoryTrendReader({list:async()=>[entry(newest)],open:async()=>{throw Error('missing')}})
+  .read({...options,requireFullClosure:true})).points.at(-1);
+ assert.equal(noFull.status,'unavailable');
+ assert.equal(noFull.snapshot,undefined);
+ assert.equal(noFull.unreadable_newer_revisions,1);
+});
+
+test('daily comparison prefers the last proven FULL, while preserving newer partials for diagnostic reading',async()=>{
+ const full=provenFull(fixture('2026-10-19',{id:'SHIFT19',revision:1,complete:true}));
+ const partial=fixture('2026-10-19',{id:'SHIFT19',revision:2,complete:true,fpy:91});
+ partial.summary.period.end_at=full.summary.period.end_at;
+ const reader=createHistoryTrendReader(source([full,partial]));
+ const chosen=(await reader.read({...options,preferFullClosure:true})).points.at(-1);
+ assert.equal(chosen.entry.snapshot_revision,1);
+ assert.equal(chosen.status,'complete');
+ assert.equal(chosen.stored_revisions,2,'later partial revision remains indexed');
+ const raw=(await reader.read(options)).points.at(-1);
+ assert.equal(raw.entry.snapshot_revision,2,'the original latest partial remains available');
+ assert.equal(raw.status,'partial','3028 complete alone does not close 3074/2114/3022');
+ const fallback=(await createHistoryTrendReader(source([partial])).read({...options,preferFullClosure:true})).points.at(-1);
+ assert.equal(fallback.entry.snapshot_revision,2);
+ assert.equal(fallback.status,'partial');
+ assert.equal(fallback.no_proven_closure,true);
+ assert.equal(compareHistoryDays(fallback,fallback).comparable,false,'partial observations never produce certified daily deltas');
+ const unreadable={list:async()=>[entry(partial)],open:async()=>{throw Error('revision unreadable');}};
+ const unavailable=(await createHistoryTrendReader(unreadable).read({...options,preferFullClosure:true})).points.at(-1);
+ assert.equal(unavailable.status,'unavailable');
+ assert.equal(unavailable.snapshot,undefined);
+});
+
+test('morning opening compares the last two closed days, not an uncollected today or later partial',async()=>{
+ const old=provenFull(fixture('2026-10-17',{id:'DAY17',complete:true}));
+ const last=provenFull(fixture('2026-10-18',{id:'DAY18',complete:true}));
+ const partial=fixture('2026-10-19',{id:'DAY19',complete:true});
+ partial.summary.period.end_at='2026-10-20T07:00-03:00';
+ const read=await createHistoryTrendReader(source([old,last,partial])).read({...options,preferFullClosure:true});
+ const {current,previous}=latestComparableHistoryDays(read.points);
+ assert.equal(current.date,'2026-10-18');
+ assert.equal(previous.date,'2026-10-17');
+ assert.equal(read.points.at(-1).status,'partial');
+ assert.equal(compareHistoryDays(current,previous).comparable,false,'mixed CPH cannot be compared just because both days closed');
+ const oneCph=p=>({...p,snapshot:{...p.snapshot,occurrences:p.snapshot.occurrences.filter(o=>o.product_key==='CPH2859')}});
+ assert.equal(compareHistoryDays(oneCph(current),oneCph(previous)).comparable,true);
+ const noClosure=latestComparableHistoryDays(read.points.filter(p=>p.date==='2026-10-19'));
+ assert.equal(noClosure.current,null);assert.equal(noClosure.previous,null);
 });

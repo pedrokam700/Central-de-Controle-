@@ -102,6 +102,7 @@ def test_integrated_clean_support_files_are_explicit():
         "START_AGENT_CANONICAL.ps1",
         "DIAGNOSTICO_POSTO.ps1",
         "KEEP_AGENT_RUNNING.ps1",
+        "ISSUE57_RELAUNCH_ENROLLMENT.ps1",
     )
     source = (ROOT / "scripts" / "build-integrated-candidate.py").read_text(encoding="utf-8")
     assert "for p in ws.iterdir()" not in source
@@ -111,6 +112,46 @@ def test_integrated_clean_support_files_are_explicit():
         "ROTA_AMES_REMOVER.bat",
     ):
         assert legacy not in builder.SUPPORT_FILES
+
+
+def test_pr69_clean_retains_supervised_switch_and_first_run_network():
+    builder = integrated_builder_module()
+    assert set(builder.FIRST_RUN_FILES) == {
+        "01_TROCAR_PARA_PR69_NOVA.bat",
+        "TROCAR_PARA_PR69_NOVA.ps1",
+        "08_PREPARAR_REDE_AMES.bat",
+    }
+    assert set(builder.PACKAGE_DOCS) == {
+        "INSTRUCOES_INSTALACAO_LIMPA.txt",
+        "MANUAL_LOGICA_CAPTURA_E_CRUZAMENTO.md",
+        "NOTAS_ALERTAS_SN_PR69.md",
+        "NOTAS_CORRECOES_28OUT_RESTAURACAO.md",
+        "NOTAS_VALIDACAO_FPY_TOP3_RASTREABILIDADE.md",
+    }
+    startup = (ROOT / "tools/ames-workstation/START_LOCAL_CANDIDATE.ps1").read_text(encoding="utf-8")
+    route = (ROOT / "tools/ames-workstation/ensure_ames_route.ps1").read_text(encoding="utf-8")
+    switch = (ROOT / "tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1").read_text(encoding="utf-8")
+    assert startup.index("Get-NetTCPConnection -LocalPort 8765") < startup.index("08_PREPARAR_REDE_AMES.bat") < startup.index("01_INSTALAR_UMA_VEZ.bat")
+    assert "if($LASTEXITCODE -ne 0){throw 'Rede A-MES nao validada" in startup
+    assert "netsh wlan connect name=$Profile" in route
+    assert "TAXXX_5G nao identificado" in route
+    assert "Resolve-WlanGuidForSsid $wifi $Profile" in route
+    assert "Resolve-WifiInterfaceIndex @(Get-NetAdapter -ErrorAction Stop) $wlanGuid" in route
+    assert "Get-NetConnectionProfile -ErrorAction Stop | Where-Object { $_.Name -eq $Profile }" not in route
+    assert "-Verb RunAs -Wait -PassThru" in route
+    assert "172.29.185.215" in route
+    assert "255.255.255.255" in route
+    assert "Confirm-Route $index $gateway" in route
+    assert "__BUNDLE_SHA__" in switch
+    assert "Read-Host 'Para continuar, digite TROCAR'" not in switch
+    assert "New-Object -ComObject WScript.Shell" in switch
+    assert switch.index("if($answer -ne 6)") > switch.index("Nenhum agente/guardian antigo identificado")
+    assert switch.index("if($answer -ne 6)") < switch.index("if($oldRun){WriteRun $null}")
+    assert "Get-NetTCPConnection -LocalPort 8765" in switch
+    assert "StopKnown" in switch
+    assert "START_LOCAL_CANDIDATE.ps1" in switch
+    assert "WriteRun $oldRun" in switch
+    assert "ames-agent\\data\\local_agent_token" in switch
 
 
 def test_integrated_clean_builder_rejects_runtime_private_files():
@@ -143,16 +184,23 @@ def test_integrated_clean_builder_rejects_runtime_private_files():
             raise AssertionError(f"forbidden CLEAN payload file accepted: {name}")
 
 
-def _write_synthetic_candidate(path: Path, *, content: bytes = b"safe", manifest_hash: str | None = None, extra: bool = False):
+def _write_synthetic_candidate(path: Path, *, content: bytes = b"safe", manifest_hash: str | None = None, extra: bool = False, wrong_sha=False):
     wanted = manifest_hash or hashlib.sha256(content).hexdigest()
+    sha='a'*40
+    payload={name:b'synthetic' for name in integrated_builder_module().REQUIRED_FILES}
+    payload['safe.txt']=content
+    payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':{}}).encode()
+    payload['frontend/release-build.json']=json.dumps({'sha':sha}).encode()
+    payload['frontend/Central-de-Controle-/sw.js']=('const CACHE_REVISION="'+sha+'";').encode()
+    payload['TROCAR_PARA_PR69_NOVA.ps1']=("$ExpectedSha='"+('b'*40 if wrong_sha else sha)+"'").encode()
     manifest = {
         "sha": "a" * 40,
         "standalone_clean": True,
         "physical_gate": "PENDING",
-        "files": {"safe.txt": wanted},
+        "files": {**{name:hashlib.sha256(data).hexdigest() for name,data in payload.items()},"safe.txt": wanted},
     }
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("safe.txt", content)
+        for name,data in payload.items():z.writestr(name,data)
         if extra:
             z.writestr("unmanifested.txt", b"extra")
         z.writestr("CANDIDATE_MANIFEST.json", json.dumps(manifest).encode("utf-8"))
@@ -165,9 +213,15 @@ def test_integrated_clean_final_zip_verification_fails_closed():
         valid = root / "valid.zip"
         _write_synthetic_candidate(valid)
         state = builder.verify_zip(valid)
-        assert state["zip_files"] == 2
-        assert state["manifest_files"] == 1
+        assert state["zip_files"] == len(builder.REQUIRED_FILES)+2
+        assert state["manifest_files"] == state["zip_files"]-1
         assert state["sha"] == "a" * 40
+
+        wrong = root / 'wrong-identity.zip'
+        _write_synthetic_candidate(wrong,wrong_sha=True)
+        try:builder.verify_zip(wrong)
+        except ValueError as exc:assert 'identity mismatch' in str(exc)
+        else:raise AssertionError('Rehashed manifest hid a stale switcher SHA')
 
         tampered = root / "tampered.zip"
         _write_synthetic_candidate(tampered, content=b"changed", manifest_hash=hashlib.sha256(b"original").hexdigest())
@@ -203,6 +257,7 @@ if __name__ == "__main__":
         test_active_package_builders_derive_from_single_updater_contract,
         test_integrated_clean_builder_copies_all_agent_python_modules,
         test_integrated_clean_support_files_are_explicit,
+        test_pr69_clean_retains_supervised_switch_and_first_run_network,
         test_integrated_clean_builder_rejects_runtime_private_files,
         test_integrated_clean_final_zip_verification_fails_closed,
         test_legacy_fastlane_is_not_an_active_package_authority,

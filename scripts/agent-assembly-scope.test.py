@@ -71,6 +71,23 @@ class AssemblyScopeTests(unittest.TestCase):
         self.assertIsNone(item["previous_pcba_count"])
         self.assertEqual(item["previous_pcbas"],[])
         self.assertEqual(item["unverified_previous_pcbas"],["OLDPCB"])
+    def test_truncated_material_history_keeps_positive_links_but_not_false_zero(self):
+        class Truncated(Fake3074):
+            def consultar(self, sn):
+                result = super().consultar(sn)
+                if sn in ("M1", "M6"):
+                    result["store_total_count"] = 10
+                return result
+        trace = executar_varredura(Truncated(), "CUR", DEFECT, pause_s=0)
+        items = {x["item_sn"]: x for x in trace["results"]}
+        self.assertEqual(items["M1"]["previous_pcbas"], ["OLDPCB"])
+        self.assertEqual(items["M1"]["previous_pcba_count"], 1)
+        self.assertIsNone(items["M6"]["previous_pcba_count"])
+        self.assertEqual(items["M6"]["status"], "HISTORICO_3074_PARCIAL")
+        self.assertEqual(trace["summary"]["sem_reuso_anterior"], 0)
+        self.assertTrue(engine_bridge._has_partial_3074_page({"items": [{"defect_traces": [{"trace_3074": trace}]}]}))
+        self.assertEqual(len(trace["results"]), 2)
+
     def test_station_requires_same_pcba_completed_working_oper_inside_interval(self):
         item={"binding_operation":"A5162","bind_time_utc":"2026-10-19T12:00:00+00:00"}
         events=[

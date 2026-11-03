@@ -32,3 +32,14 @@ test('return to full ranking clears only the local analytics defect filter',()=>
   assert.match(body,/dispatchAnalytics\(defect,''\)/);
   assert.match(body,/data-dfa-mode="ranking"/);
 });
+
+test('Top 3 failure opens the linked 3022 hourly chart, without changing shared context',()=>{
+  const body=functionBody('openAnalyticsFailure','openFullRanking');
+  assert.match(body,/\[data-dfa-hour-panel\]/);
+  assert.match(body,/\(chart\|\|detail\)\?\.scrollIntoView/);
+  assert.doesNotMatch(body,/store\.updateContext\?\.\(\{defect:/);
+});
+test('Top 3 operational labels display human descriptions instead of raw technical code',()=>{
+  assert.match(source,/defectDescription\(item\.description\)/);
+  assert.doesNotMatch(source,/esc\(item\.code\|\|t\('Código não informado'/);
+});

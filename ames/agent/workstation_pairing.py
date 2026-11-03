@@ -53,44 +53,68 @@ def local_address(headers, address, port):
     except ValueError:
         return False
 
+COOKIE_NAME = "central_pair_confirm"
+
+
+def confirmation_cookie(nonce):
+    """Set only on local GET, scoped to the one-time confirmation form."""
+    return f"{COOKIE_NAME}={nonce}; Path={PAIR_PATH}; Max-Age={TTL_SECONDS}; HttpOnly; SameSite=Strict"
+
+
+def expired_cookie():
+    return f"{COOKIE_NAME}=; Path={PAIR_PATH}; Max-Age=0; HttpOnly; SameSite=Strict"
+
+
+def _matches_confirmation_cookie(headers, nonce):
+    """Double-submit proof of a browser that received this local form."""
+    from http.cookies import SimpleCookie
+    try:
+        cookies = SimpleCookie()
+        cookies.load(str(headers.get("Cookie") or ""))
+        entry = cookies.get(COOKIE_NAME)
+        return entry is not None and hmac.compare_digest(entry.value, str(nonce))
+    except Exception:
+        return False
+
+
 def confirm(headers, address, port, form_body, gate=GATE):
-    if not local_address(headers,address,port):
+    """Only a real local form with an issued nonce AND matching Strict cookie.
+
+    Chromium/Edge can omit Origin or report Origin:null for localhost forms.
+    Fetch metadata is not consistently present across versions. The CSRF
+    proof is the one-time server nonce bound to a SameSite=Strict HttpOnly
+    cookie issued with this very local GET; foreign and opaque origins are
+    still rejected if explicitly reported by the browser.
+    """
+    if not local_address(headers, address, port):
         return False
     origin = str(headers.get("Origin") or "").strip().rstrip("/").lower()
-    site = str(headers.get("Sec-Fetch-Site") or "").lower()
-    mode = str(headers.get("Sec-Fetch-Mode") or "").lower()
-    dest = str(headers.get("Sec-Fetch-Dest") or "").lower()
-    user = str(headers.get("Sec-Fetch-User") or "").strip()
-    # Edge 127 was observed sending Origin: null from this *local* form even
-    # with Sec-Fetch-Site: same-origin. A generic opaque Origin is NOT trusted:
-    # the narrow exception additionally requires an explicit user-initiated,
-    # top-level same-origin navigation. Host, loopback and one-time nonce are
-    # independently enforced. This is not an exception for cross-site forms.
     local_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
-    if origin == "null":
-        if not (site == "same-origin" and mode == "navigate"
-                and dest == "document" and user == "?1"):
-            return False
-    elif origin:
-        if origin not in local_origins:
-            return False
-        if site not in {"same-origin", "none", ""}:
-            return False
-    elif site != "same-origin":
-        # If Origin is omitted entirely, browser Fetch Metadata must confirm
-        # same-origin. Missing BOTH is never accepted.
+    if origin and origin not in local_origins and origin != "null":
         return False
-    # All supported flows require a regular navigation, never an XHR API.
-    if mode not in {"navigate", ""}:
+    site = str(headers.get("Sec-Fetch-Site") or "").strip().lower()
+    mode = str(headers.get("Sec-Fetch-Mode") or "").strip().lower()
+    dest = str(headers.get("Sec-Fetch-Dest") or "").strip().lower()
+    if site not in {"", "same-origin", "none"}:
+        return False
+    if mode not in {"", "navigate"} or dest not in {"", "document"}:
         return False
     try:
-        data = parse_qs(form_body.decode("ascii"),strict_parsing=True)
+        if len(form_body) > 512:
+            return False
+        data = parse_qs(form_body.decode("ascii"), strict_parsing=True)
+        if set(data) != {"nonce"}:
+            return False
         fields = data.get("nonce") or []
         if len(fields) != 1 or len(fields[0]) > 128:
             return False
-        return gate.consume(fields[0])
-    except (ValueError,UnicodeError):
+        nonce = fields[0]
+        if not _matches_confirmation_cookie(headers, nonce):
+            return False
+        return gate.consume(nonce)
+    except (ValueError, UnicodeError):
         return False
+
 
 def destination(token):
     if not isinstance(token,str) or len(token)<32:
@@ -132,7 +156,7 @@ h1{font-size:22px}p{line-height:1.55}a{display:inline-block;padding:12px 16px;ba
 def secure_headers():
     return {
         "Cache-Control":"no-store, max-age=0",
-        "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+        "Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://pedrokam700.github.io; frame-ancestors 'none'; base-uri 'none'",
         "X-Frame-Options":"DENY",
         "X-Content-Type-Options":"nosniff",
         "Referrer-Policy":"no-referrer",

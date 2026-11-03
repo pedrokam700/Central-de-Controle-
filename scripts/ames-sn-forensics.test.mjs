@@ -59,3 +59,34 @@ assert.equal(offline.materials[0].history[0].failure.repairs[0].repair_comment,'
 assert.equal(offline.materials[0].history[0].failure.analysis_event.operator_id,'BRM00111');
 
 console.log('PASS: SN story joins 3074 + 2114 + 3012 + 3022, recovers current/previous failures from raw 2114 rows, prefers A6900/Export Repair, never invents employee names, and rejects cross-PCBA process leakage.');
+
+
+{
+  // Factory observation: 2114 hist seq 0 and 1 share a code, but the
+  // component assembly may have a NEW post-failure Y cycle. Do not erase the
+  // proven recurrence of the BOARD or attribute it to that new LCD.
+  const sn='SYNTHETIC-PCBA-2114';
+  const rows=[0,1].map(seq=>({
+    'Lot Id':sn,'Defect Hist Seq':seq,'Defect Code':'GN11-CN05',
+    'Defect Description':'USB charging test failed',
+    'Defect Type':seq===0?'Phone Disassembly':'MainBoard',
+    'Repair Status':seq===0?'Y':'N',
+  }));
+  const fixture={
+    sn,detected_type:'PCBA',trace_2114:{
+      current_failure:rows[1],previous_failures:[rows[0]],rows,
+      pcbas:[{pcba_sn:sn,status:'COMPLETE',result:{rows}}],
+    },
+    trace_3074:{
+      material_selection:{cycle_state:'current_new_cycle',status:'current_mounting_new_cycle'},
+      query:{rows:[],no_data:false},reused_components:[],
+    },
+  };
+  const model=buildLiveSnForensics(fixture);
+  assert.equal(model.current,null,'new Y parts are not assigned old failure');
+  assert.equal(model.board_failure_reference.hist_seq,1);
+  assert(model.alerts.some(a=>a.kind==='PCBA_SAME_FAILURE'&&a.board_reference_is_historical),
+         'two same-code 2114 occurrences must still alert for the board');
+  assert(!model.alerts.some(a=>a.kind.startsWith('COMPONENT_')),
+         'no component recurrence may be invented without proof');
+}
