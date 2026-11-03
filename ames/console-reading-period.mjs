@@ -5,9 +5,10 @@ import {fiveSourceEvidence} from './data/source-coverage.mjs';
 import {projectRepairTechnicianNames} from './console-sn-repair-evidence.mjs';
 import {createSourceCaptureHistory} from './console-source-capture-history.mjs';
 import {operationalColumns,renderOperationalTable} from './console-base-view.mjs';
+import {traceTargetForLine} from './data/trace-targets.mjs';
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
 
-export function paintReadingPeriod(root,store,controller){
+export function paintReadingPeriod(root,store,controller,{onContinueTrace}={}){
   const p=store.readingPeriod(),status=store.agent().period_read;
   const loaded=LINE_IDS.filter(line=>!!store.read(line).snapshot);
   const line=store.context?.()?.line_id||store.preferredLine?.();
@@ -31,6 +32,24 @@ export function paintReadingPeriod(root,store,controller){
   const advancedOpen=Boolean(root.querySelector('[data-history-source-advanced]')?.open);
   root.setAttribute('data-no-i18n','');
   root.innerHTML=`<nav class="ames-history-tabs" aria-label="${t('Período de leitura','Reading period')}">${[['today',t('Hoje','Today')],['previous',t('Último dia produtivo','Last production day')],['custom',t('Período…','Period…')]].map(([id,label])=>`<button type="button" class="button secondary" data-read-period="${id}" aria-pressed="${p?.mode===id}">${label}</button>`).join('')}</nav><p class="mes-context" data-reading-label>${p?esc(formatFactoryDateTime(p.start)+' → '+formatFactoryDateTime(p.end)):''} · America/Sao_Paulo · ${t('07:00 → 07:00; turnos são outra dimensão','07:00 → 07:00; shifts are a separate dimension')}${p?.mode!=='today'?' · '+t('Somente leitura do passado','Read-only history'):''}</p><form data-reading-range hidden><div class="mes-filters"><label>${t('Início','Start')}<input type="datetime-local" name="start" required value="${esc(p?.start||'')}"></label><label>${t('Fim','End')}<input type="datetime-local" name="end" required value="${esc(p?.end||'')}"></label></div><button class="button secondary" type="submit">${t('Ver dados armazenados','View stored data')}</button></form><p role="status" data-reading-status>${esc(status?.errors?.length?status.errors.map(e=>e.line_id+': '+e.error).join(' · '):note)}</p>${recovered.length?`<div class="notice warn" data-reading-recovery role="status">${recovered.map(x=>esc(t('Linha','Line')+' '+x.line_id+' · '+t('revisão anterior aberta para leitura','older revision opened read-only')+' · snapshot '+x.snapshot_id+' / r'+x.snapshot_revision+' · '+x.unreadable_revisions+' '+t('revisão(ões) recente(s) indisponível(is). Atualize a leitura; não execute coleta MES nesta versão recuperada.','newer revision(s) unavailable. Refresh reading; do not collect MES from this recovered version.'))).join('<br>')}</div>`:''}${sourcePicker}${p?.mode!=='today'?'<button type="button" class="button secondary" data-reading-reload>'+t('Atualizar leitura','Refresh reading')+'</button>':''}`;
+  if(p?.mode!=='today'&&typeof onContinueTrace==='function'){
+    const target=traceTargetForLine(store,line),agent=store.agent();
+    const enabled=target.available&&agent.status==='connected'&&agent.capabilities?.exact_trace_targets===true;
+    const reason=!target.available?target.reason:agent.status!=='connected'
+      ?t('Conecte o agente local para continuar.','Connect the local agent to continue.')
+      :t('Este agente ainda não comprova rastreabilidade por revisão exata.','This agent does not verify exact-revision tracing.');
+    const continuation=document.createElement('section');
+    continuation.className='mes-context-panel';continuation.dataset.periodContinuation='';
+    continuation.innerHTML=`<h4>${t('Completar a coleta deste período','Complete this period capture')}</h4>`+
+      `<p class="mes-context">${t('Etapa 1: 3028 armazenada. Etapa 2: extrair 3074, 2114 e 3022 usando a mesma linha, origem e revisão, sem repetir a 3028.','Stage 1: stored 3028. Stage 2: extract 3074, 2114 and 3022 from the same line, source and revision without rerunning 3028.')}</p>`+
+      `<p data-period-revision>${esc(line||'—')} · ${esc(target.available?'snapshot '+target.snapshot_id+' / r'+target.revision:reason)}</p>`+
+      `<button type="button" class="button primary" data-period-extract${enabled?'':' disabled'}>${t('Continuar para 3074 + 2114 + 3022','Continue to 3074 + 2114 + 3022')}</button>`+
+      `<small>${t('A próxima tela permite conferir as linhas e iniciar a coleta. Nenhum MES é consultado ao navegar.','The next screen lets you verify lines and start collection. Navigation does not query MES.')}</small>`;
+    root.append(continuation);
+    continuation.querySelector('[data-period-extract]')?.addEventListener('click',()=>{
+      if(enabled)onContinueTrace(line);
+    });
+  }
   if(root.querySelector('[data-history-source-advanced]'))root.querySelector('[data-history-source-advanced]').open=advancedOpen;
   for(const b of root.querySelectorAll('[data-read-period]'))b.addEventListener('click',()=>{
     if(b.dataset.readPeriod==='custom'){root.querySelector('form').hidden=false;return;}
