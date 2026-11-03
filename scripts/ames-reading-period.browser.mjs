@@ -44,9 +44,9 @@ import {createAmesStore} from './ames/data/store.mjs';
 import {createConsoleView} from './ames/console-view.mjs';
 const store=createAmesStore({now:()=>Date.parse('2026-10-19T15:00:00Z')}),old=${JSON.stringify(old)},local=${JSON.stringify(local)};
 store.replaceSyncedSnapshots([${JSON.stringify(today)}]);
-let mutations=0,savedReads=0,savedOpens=0,captureReads=0,localPairCount=0;
+let mutations=0,savedReads=0,savedOpens=0,captureReads=0,localPairCount=0,lastCollection=null;
 const savedEntry={job_id:'J123',query_sn:'PCBA-TEST',query_created_at:'2026-10-16T14:00:00Z',query_status:'done',entry_hash:'b'.repeat(64),line_id:null,production_date:null,clock_kind:'query_created_at',local_only:true};
-const client={canOpenOfficial:()=>true,openOfficial:()=>{},canPairFromOfficial:()=>true,openLocalPairing:()=>{localPairCount++;},collect:async()=>{mutations++;},auxiliary:async name=>{if(name!=='autostartStatus')mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
+const client={canOpenOfficial:()=>true,openOfficial:()=>{},canPairFromOfficial:()=>true,openLocalPairing:()=>{localPairCount++;},collect:async(type,value)=>{mutations++;lastCollection={type,value};},auxiliary:async name=>{if(name!=='autostartStatus')mutations++;},refresh:async()=>{},clear(){},connect:async()=>{},
  sourceCaptures:async params=>{
   captureReads++;
   if(params.snapshot_id!==17||params.snapshot_revision!==1||params.content_hash!==local.content_hash)throw Error('wrong capture target');
@@ -71,7 +71,7 @@ const history={list:async line=>{historyReads++;return line===old.line_id?[
 const view=createConsoleView(document.querySelector('#mesConsole'),store,{agentClient:client,history});
 document.querySelectorAll('.page').forEach(el=>el.classList.add('hidden'));
 document.querySelector('#mesConsoleView')?.classList.remove('hidden');document.querySelector('#accountScreen')?.classList.add('hidden');
-window.qa={store,view,mutations:()=>mutations,localPairCount:()=>localPairCount,historyReads:()=>historyReads,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads,setAmbiguous:value=>{ambiguousHistory=value;}};view.render();
+window.qa={store,view,mutations:()=>mutations,lastCollection:()=>lastCollection,localPairCount:()=>localPairCount,historyReads:()=>historyReads,savedReads:()=>savedReads,savedOpens:()=>savedOpens,captureReads:()=>captureReads,setAmbiguous:value=>{ambiguousHistory=value;}};view.render();
 `;
 const html=fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<script type="module" src="/Central-de-Controle-/qa-context.mjs"></script>';
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -601,6 +601,8 @@ try{
  assert.equal(await page.locator('[data-history-source-select]').inputValue(),'preserved-workstation');
  assert.equal(await page.locator('[data-history-source-select] option').count(),3,'other source remains selectable');
  assert.equal(await page.locator('[data-last-capture-panel]').count(),1,'latest archival evidence also remains reachable outside Today');
+ assert.equal(await page.locator('[data-last-capture-panel]').evaluate(el=>el.open),true,
+   'the latest saved capture preview must be visible when the workstation opens');
 
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'source selection never starts MES collection');
  await page.locator('[data-read-period=today]').click();
@@ -616,6 +618,25 @@ try{
  assert.equal(await kpiCols(),2,'mobile primary KPIs in two columns');
  assert.equal(await page.locator('[data-line-tab]').count(),3);
  await page.setViewportSize({width:1440,height:950});
+ // The factory's Period tab is an editable collection entrypoint, not a
+ // navigation dead end. Draft dates survive a line switch/repaint.
+ await page.locator('[data-global-reading-period] [data-read-period=custom]').click();
+ const periodEditor=page.locator('[data-global-reading-period] [data-reading-range]');
+ assert.equal(await periodEditor.isVisible(),true);
+ assert.equal(await page.locator('[data-global-reading-period] [data-read-period=custom]').getAttribute('aria-pressed'),'true');
+ await periodEditor.locator('[name=start]').fill('2026-10-15T07:00');
+ await periodEditor.locator('[name=end]').fill('2026-10-15T12:00');
+ await page.locator('[data-line-tab=TAN10102]').click();
+ assert.equal(await periodEditor.isVisible(),true);
+ assert.equal(await periodEditor.locator('[name=start]').inputValue(),'2026-10-15T07:00');
+ await page.locator('[data-line-tab=TAN10101]').click();
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'editing period does not collect MES');
+ await periodEditor.locator('[data-reading-collect]').click();
+ await page.waitForFunction(()=>qa.store.readingPeriod()?.mode==='custom');
+ assert.deepEqual(await page.evaluate(()=>qa.lastCollection()),{type:'custom',value:{lines:['TAN10101'],performance:'balanced',start_at:'2026-10-15T07:00',end_at:'2026-10-15T12:00'}});
+ assert.equal(await page.evaluate(()=>qa.mutations()),1,'exactly one explicit 3028 submission');
+ await page.waitForFunction(()=>String(qa.store.read('TAN10101').snapshot?.snapshot_id)==='17');
+ assert.match(await page.locator('[data-console-pane=monitor] [data-shared-period]').innerText(),/snapshot 17 \/ r1/);
  // An actual logout/reset must destroy the retained SN form and previous
  // forensic content rather than exposing another account's SN investigation.
  await page.evaluate(()=>{qa.store.clear();qa.store.selectReadingPeriod('today');qa.view.render();});
