@@ -753,15 +753,30 @@ class Store:
         return count
 
     def ingest_material_reuse(self, snapshot_id: int, trace_3074: Dict[str, Any]) -> int:
+        from material_trace_provenance import exact_observation
         count = 0
         with self.connect() as con:
+            # A CLEAN checkpoint key is NOT the SQLite 3028 defect_key.
+            # Resolve only a unique exact occurrence in this same snapshot.
+            observations = [dict(row) for row in con.execute(
+                'SELECT defect_key,line,pcba_sn,defect_time,defect_code,defect_desc,product_model '
+                'FROM defect_observations WHERE snapshot_id=?', (snapshot_id,))]
             for item in trace_3074.get("items") or []:
                 current_pcba = item.get("pcba_sn")
                 for defect_trace in item.get("defect_traces") or []:
-                    dkey = (defect_trace.get("defect_key") or "")
+                    occurrence = defect_trace.get('defect') or {}
+                    matched = exact_observation(occurrence, observations) if str(
+                        occurrence.get('pcba_sn') or '').strip() == str(current_pcba or '').strip() else None
+                    dkey = (matched['defect_key'] if matched else defect_trace.get('defect_key') or '')
                     trace = defect_trace.get("trace_3074") or {}
                     for r in trace.get("results") or []:
-                        if not (r.get("previous_pcba_count") or 0):
+                        previous_count=r.get('previous_pcba_count')
+                        # Preserve proven first-use components as observed
+                        # materials too. Unknown/partial counts stay unknown,
+                        # never a fabricated first-use row.
+                        if (type(previous_count) is not int or previous_count<0 or
+                            r.get('current_pcba_confirmed') is False or
+                            (previous_count==0 and r.get('current_pcba_confirmed') is not True)):
                             continue
                         count += 1
                         con.execute(
@@ -770,7 +785,7 @@ class Store:
                                active_now_pcbas_json,inactive_now_pcbas_json,bind_time_utc,unbind_time_utc,raw_json)
                                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                             (snapshot_id, current_pcba, dkey, r.get("item_sn"), r.get("item_type"), r.get("status"),
-                             int(r.get("previous_pcba_count") or 0), int(r.get("total_pcba_count_known_now") or 0),
+                             previous_count, int(r.get("total_pcba_count_known_now") or 0),
                              stable_json(r.get("previous_pcbas") or []), stable_json(r.get("active_now_pcbas") or []),
                              stable_json(r.get("inactive_now_pcbas") or []), r.get("bind_time_utc"), r.get("unbind_time_utc"),
                              stable_json(r)),

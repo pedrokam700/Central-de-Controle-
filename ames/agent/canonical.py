@@ -9,10 +9,11 @@ import json
 import uuid
 import production_shift
 import repair_association
+from material_trace_provenance import exact_observation, trace_material_links
 from datetime import datetime, timezone
 
 SCHEMA = 'central-ames-v2'
-PROJECTION_VERSION = 10  # add noncausal 3074 candidate projection without overwriting immutable revisions
+PROJECTION_VERSION = 11  # repair exact 3028/3074 key lineage; older revisions stay immutable
 LINES = ('TAN10101', 'TAN10102', 'TAN10103')
 DATASETS = ('defects','pcba_history','material_reuse','history_contexts','process_timeline')
 TABLES = ('defect_observations','line_metrics','pcba_history','material_reuse','history_contexts','snapshot_payloads','mes_process_timeline')
@@ -75,6 +76,34 @@ def contextual_rows(con,sid,dataset):
             row['_contexts']=[{'line_id':line,'product':cph(row.get('product_model') or row.get('product')),'pcba_sn':row.get('pcba_sn') or row.get('current_pcba'),'kind':'source_row'}] if line in LINES else []
         return rows
     defects=[dict(r) for r in con.execute('SELECT * FROM defect_observations WHERE snapshot_id=?',(sid,))]
+    if dataset=='material_reuse' and rows:
+        # Older agents persisted the CLEAN 12-char checkpoint key as if it were
+        # SQLite's 20-char 3028 key. Reconcile in memory only when the saved
+        # raw trace proves the exact occurrence and material. Never migrate or
+        # rewrite old factory evidence merely by opening a dashboard.
+        lookups={};conflicts=set()
+        saved=con.execute("SELECT kind,payload_json FROM snapshot_payloads WHERE snapshot_id=? "
+            "AND kind IN ('integrated_v016','integrated_json')",(sid,)).fetchall()
+        for entry in saved:
+            try:lookup=trace_material_links(json.loads(entry['payload_json']),defects)
+            except (ValueError,TypeError):continue
+            for key,canonical_key in lookup.items():
+                if key in lookups and lookups[key]!=canonical_key:conflicts.add(key)
+                lookups[key]=canonical_key
+        valid={(r['current_pcba_sn'],r['current_defect_key'],r['item_sn']) for r in rows
+               if r['current_defect_key'] and any(d['defect_key']==r['current_defect_key'] for d in defects)}
+        reconciled=[]
+        for row in rows:
+            old_key=row.get('current_defect_key')
+            if old_key and not any(d['defect_key']==old_key for d in defects):
+                lookup_key=(row['current_pcba_sn'],old_key,row['item_sn'])
+                new_key=lookups.get(lookup_key) if lookup_key not in conflicts else None
+                if new_key:
+                    if (row['current_pcba_sn'],new_key,row['item_sn']) in valid:continue
+                    row['current_defect_key']=new_key
+                    row['_legacy_checkpoint_key']=old_key
+            reconciled.append(row)
+        rows=reconciled
     contexts=[dict(r) for r in con.execute('SELECT * FROM history_contexts WHERE snapshot_id=?',(sid,))]
     by_sn={};by_history={}
     for d in defects:by_sn.setdefault(d['pcba_sn'],[]).append(d)
@@ -118,7 +147,12 @@ def _candidate_materials_from_trace(integrated, defects, max_rows=500):
         if pcba not in allowed:continue
         for occurrence in item.get('defect_traces') or []:
             defect_key=str(occurrence.get('defect_key') or '').strip()
-            if defect_key and defect_key not in allowed_keys:continue
+            canonical_key=defect_key if defect_key in allowed_keys else None
+            if defect_key and not canonical_key:
+                matched=exact_observation(occurrence.get('defect') or {},defects)
+                if matched and str(matched.get('pcba_sn') or '')==pcba:
+                    canonical_key=matched.get('defect_key')
+                if not canonical_key:continue
             scope=(occurrence.get('trace_3074') or {})
             candidate_rows=scope.get('candidate_material_history') or []
             if not candidate_rows:
@@ -127,11 +161,11 @@ def _candidate_materials_from_trace(integrated, defects, max_rows=500):
             for material in candidate_rows:
                 item_sn=str(material.get('item_sn') or '').strip()
                 if not item_sn:continue
-                key=(pcba,defect_key,item_sn)
+                key=(pcba,canonical_key or '',item_sn)
                 if key in seen:continue
                 seen.add(key)
                 out.append({
-                    'pcba_sn':pcba,'defect_key':defect_key or None,
+                    'pcba_sn':pcba,'defect_key':canonical_key,
                     'item_sn':item_sn,'item_type':material.get('item_type'),
                     'status':material.get('status') or 'UNVERIFIED_TEMPORAL_LINK',
                     'temporal_reason':material.get('temporal_reason'),
@@ -141,7 +175,7 @@ def _candidate_materials_from_trace(integrated, defects, max_rows=500):
                     'iss_status_now':material.get('iss_status_now'),
                     'historical_pcbas':material.get('historical_pcbas') or [],
                     'proven_at_defect':False,'proven_reuse_at_defect':False,
-                    'scope':'3028_EXACT_OCCURRENCE_CANDIDATE' if defect_key else 'PCBA_UNASSIGNED_CANDIDATE',
+                    'scope':'3028_EXACT_OCCURRENCE_CANDIDATE' if canonical_key else 'PCBA_UNASSIGNED_CANDIDATE',
                     'source_view':'3074',
                 })
                 if len(out)>=max_rows:return out
@@ -200,6 +234,17 @@ def export_revision(store,sid,line,insight_builder=None):
                         material_raw=json.loads(raw.get('raw_json') or '{}')
                         item_row=material_raw.get('row') or material_raw
                         row['part_number']=next((item_row[k] for k in ('Part Number','Part No','Material ID','Material Id') if isinstance(item_row,dict) and item_row.get(k)),None)
+                        # A verified distinct-PCBA history gives a physical
+                        # use ordinal; a bare positive count or unknown 3074
+                        # source must not be presented as a measured use.
+                        prior_count=material_raw.get('previous_pcba_count')
+                        previous_pcbas=material_raw.get('previous_pcbas')
+                        if (material_raw.get('current_pcba_confirmed') is True
+                            and type(prior_count) is int and prior_count>=0
+                            and raw.get('previous_pcba_count')==prior_count
+                            and isinstance(previous_pcbas,list)
+                            and len(set(previous_pcbas))==prior_count):
+                            row['material_use_index']=prior_count+1
                     except (ValueError,TypeError):pass
                     row['material_sn']=raw.get('item_sn');row['bind_id']=str(uuid.uuid5(uuid.UUID(ident),'bind:'+str(raw.get('bind_time_utc')))) if raw.get('bind_time_utc') else None
                     row['unbind_id']=str(uuid.uuid5(uuid.UUID(ident),'unbind:'+str(raw.get('unbind_time_utc')))) if raw.get('unbind_time_utc') else None
@@ -211,7 +256,9 @@ def export_revision(store,sid,line,insight_builder=None):
                 ambiguous+=int(len(candidates)>1);rows.append(row)
             sets[dataset]=rows
             coverage[dataset]={'status':'not_collected' if dataset=='process_timeline' and not rows else 'partial','stored_total':len(rows),'unassigned_rows':unassigned,'ambiguous_context_rows':ambiguous,'transport_complete':True,'source_complete':False,'scope':'stored_snapshot_line_context','reason':'Legacy source has no durable MES ID or completeness proof'}
-        raw=con.execute("SELECT payload_json FROM snapshot_payloads WHERE snapshot_id=? AND kind='integrated_json'",(sid,)).fetchone()
+        raw=con.execute("SELECT payload_json FROM snapshot_payloads WHERE snapshot_id=? "
+                        "AND kind IN ('integrated_v016','integrated_json') "
+                        "ORDER BY CASE kind WHEN 'integrated_v016' THEN 0 ELSE 1 END LIMIT 1",(sid,)).fetchone()
         try:
             source_payload=json.loads(raw['payload_json']) if raw else {}
         except (ValueError,TypeError):
