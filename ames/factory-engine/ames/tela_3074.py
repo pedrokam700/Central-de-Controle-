@@ -166,7 +166,16 @@ class Tela3074:
                   try{s.loadPage(page,{params:{...params},callback:(records,operation,success)=>{
                     if(settled)return;
                     if(success!==true)return done({error:'page_load_failed'});
-                    if(Number(operation?.page)!==page||normal(operation?.params?.sn)!==args.sn)return done({error:'page_identity_unconfirmed'});
+                    // ExtJS releases may omit page/params in callback operation.
+                    // A missing optional field is acceptable only if THIS
+                    // store advanced to the requested page and the original
+                    // query, total, grid and columns are still unchanged.
+                    const declaredPage=operation?.page??operation?.params?.page;
+                    const declaredSn=operation?.params?.sn;
+                    if(Number(s.currentPage)!==page||
+                       declaredPage!=null&&Number(declaredPage)!==page||
+                       declaredSn!=null&&normal(declaredSn)!==args.sn)
+                      return done({error:'page_identity_unconfirmed'});
                     const why=valid();if(why)return done({error:why});
                     const next=(records||[]).map(record=>{
                       const data=record.data||record;

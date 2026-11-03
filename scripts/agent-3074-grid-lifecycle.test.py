@@ -32,11 +32,12 @@ function store(rows){
       if(p.mode==='input_changed')input='OTHER-QUERY';
       if(p.mode==='params_changed')this.lastOptions.params.custom='changed';
       if(p.mode==='store_changed')grids=[grid('3074-grid-1',store([]))];
-      this.currentPage=n;this.rows=p.rows||[];
+      this.currentPage=p.wrongStorePage||n;this.rows=p.rows||[];
       if(p.total!==undefined)this.total=p.total;
       this.loading=false;const success=p.mode!=='failed';
       this.emit('load',this,this.rows,success);
-      options.callback(this.rows.map(data=>({data})),{page:p.wrongPage||n,params:options.params},success);
+      const operation=p.minimalCallback?{}:{page:p.wrongPage||n,params:options.params};
+      options.callback(this.rows.map(data=>({data})),operation,success);
     },
     on(n,f){handlers.set(n,[...(handlers.get(n)||[]),f]);},
     un(n,f){handlers.set(n,(handlers.get(n)||[]).filter(v=>v!==f));},
@@ -269,6 +270,25 @@ class RefreshProofTests(unittest.TestCase):
             self.assertEqual([v["page"] for v in f.call(op="state")["pageCalls"]],[2,3])
             self.assertTrue(all(v["params"]=={"sn":"PCBA-1","custom":"keep"} for v in f.call(op="state")["pageCalls"]))
             self.assertEqual(f.call(op="state")["listeners"],0)
+
+    def test_extjs_callback_without_optional_page_metadata_uses_verified_store_page(self):
+        plan={"rows":rows("M1"),"total":2,"paging":True,
+              "pages":[{"rows":rows("M2"),"minimalCallback":True}]}
+        with Fixture([plan]) as f:
+            result=f.tela.consultar("PCBA-1",timeout_s=.7,retries=1)
+            self.assertEqual([r["Barcode"] for r in result["rows"]],["M1","M2"])
+            self.assertEqual(result["pagination"]["completed_pages"],[1,2])
+            self.assertEqual(result["coverage"]["status"],"returned")
+            self.assertEqual(f.call(op="state")["listeners"],0)
+
+    def test_minimal_extjs_callback_cannot_verify_a_different_store_page(self):
+        plan={"rows":rows("M1"),"total":2,"paging":True,
+              "pages":[{"rows":rows("M2"),"minimalCallback":True,"wrongStorePage":3}]}
+        with Fixture([plan]) as f:
+            result=f.tela.consultar("PCBA-1",timeout_s=.7,retries=1)
+            self.assertEqual([r["Barcode"] for r in result["rows"]],["M1"])
+            self.assertEqual(result["coverage"]["status"],"incomplete_page")
+            self.assertEqual(result["pagination"]["reason"],"page_identity_unconfirmed")
 
     def test_kit_rows_keep_same_physical_sn_at_different_operations(self):
         first=[{**rows("KIT-SN")[0],"Operation":"A1"}]
