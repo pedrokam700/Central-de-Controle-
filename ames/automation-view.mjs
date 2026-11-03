@@ -4,7 +4,7 @@ import { escapeHtml as esc } from './evidence-view.mjs';
 import {readHardeningDiagnostics,readAgentJobDiagnostics} from './agent-diagnostics.mjs';
 import {automationLanguage,automationText,formatAutomationTime,formatDuration,sourceLabel,freshnessLabel,readinessLabel,formatBytes,diagnosticsLabel} from './automation-support.mjs';
 
-export function createAutomationView(root,store,client) {
+export function createAutomationView(root,store,client,{onCustomAccepted=()=>{}}={}) {
   let config,agentKey='',mounted=false,disposed=false;
   let supportDiagnostics=null,supportJobs=null,supportBusy=false,supportError='';
   const text=(pt,en)=>automationText(automationLanguage(),pt,en);
@@ -96,7 +96,14 @@ export function createAutomationView(root,store,client) {
       else if(action==='excel'){const blob=await client.excel(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='AMES_EQUIPE_LINHAS.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
       else if(action==='repairs'){for(const line of value.lines)await client.auxiliary('repairs',{line,snapshot_id:store.read(line).snapshot?.snapshot_id,unresolved_only:true});}
       else if(action==='deep')await client.collect('deep',{...value,trace_mode:'full'});
-      else if(action==='custom')await client.collect('custom',value);
+      else if(action==='custom'){
+        // The agent stores a custom 3028 run as immutable investigative history.
+        // After accepted admission, select that exact interval for reading;
+        // otherwise the operator stays on Hoje and a successful capture looks
+        // invisible because today's canonical feed excludes custom snapshots.
+        await client.collect('custom',value);
+        if(!disposed)await onCustomAccepted({start:value.start_at,end:value.end_at,lines:value.lines});
+      }
       else await client.collect(action,value);
     }catch(error){if(!disposed)store.updateAgent({error:error.message});}
     finally{if(!disposed){store.updateAgent({submitting:false});render();button.focus();}}
