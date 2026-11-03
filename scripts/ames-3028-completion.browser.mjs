@@ -40,7 +40,10 @@ automation=createAutomationView(document.querySelector('#automation'),store,clie
 document.querySelectorAll('.page').forEach(e=>e.classList.add('hidden'));
 document.querySelector('#mesConsoleView').classList.remove('hidden');document.querySelector('#accountScreen')?.classList.add('hidden');
 await client.connect();view.render();automation.render();
-window.qa={store,client,view,posts:()=>posts,reads:()=>historyReads,poll:()=>queued.shift()(),enrich:()=>{local={...local,snapshot_revision:2,content_hash:'enriched-r2'};}};
+window.qa={store,client,view,posts:()=>posts,reads:()=>historyReads,poll:()=>queued.shift()(),enrich:()=>{local={...local,snapshot_revision:2,content_hash:'enriched-r2'};},prepareCustom:()=>{
+ local=make(39,'local-pc');local.summary.period={mode:'custom',start_at:'2026-10-15T07:00',end_at:'2026-10-16T07:00'};
+ completed=false;visible=false;
+}};
 `;
 const html=fs.readFileSync('index.html','utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+'<div id="automation"></div><script type="module" src="/Central-de-Controle-/qa.mjs"></script>';
 const root=process.cwd();
@@ -53,7 +56,7 @@ const server=http.createServer((req,res)=>{
  res.setHeader('content-type',file.endsWith('.mjs')?'text/javascript':file.endsWith('.css')?'text/css':'application/json');res.end(fs.readFileSync(file));
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
-const browser=await chromium.launch({headless:true}),page=await browser.newPage();const errors=[];
+const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH||undefined}),page=await browser.newPage();const errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 try{
  await page.goto('http://127.0.0.1:'+server.address().port+'/Central-de-Controle-/');
@@ -80,6 +83,19 @@ try{
  await page.locator('[data-read-period=previous]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status!=='loading');
  assert.equal(await page.evaluate(()=>qa.posts()),0,'reload must not repeat collection');
+ assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').source),'local');
+ // Regression: custom 3028 capture must select its exact historical read
+ // interval after admission. The today-only feed intentionally excludes it.
+ await page.evaluate(()=>qa.prepareCustom());
+ await page.locator('[data-console-view=monitor]').click();
+ await page.locator('[data-console-pane=monitor] details.ames-monitor-config').evaluate(el=>el.open=true);
+ await page.locator('[data-console-pane=monitor] [name=start_at]').fill('2026-10-15T07:00');
+ await page.locator('[data-console-pane=monitor] [name=end_at]').fill('2026-10-16T07:00');
+ await page.locator('[data-console-pane=monitor] [data-agent-action=custom]').click();
+ await page.waitForFunction(()=>qa.store.readingPeriod()?.mode==='custom');
+ assert.deepEqual(await page.evaluate(()=>qa.store.readingPeriod()),{mode:'custom',start:'2026-10-15T07:00',end:'2026-10-16T07:00'});
+ await page.evaluate(()=>qa.poll());
+ await page.waitForFunction(()=>qa.store.read('TAN10101').snapshot?.snapshot_id==='39');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').source),'local');
  assert.deepEqual(errors,[]);
  console.log('PASS 3028 click -> polling -> delayed local index -> local revision -> navigation -> enriched r2; synthetic HTTP, no MES');
