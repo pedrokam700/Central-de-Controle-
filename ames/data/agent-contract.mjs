@@ -7,6 +7,10 @@ export const R12_MIN_BUILD = 12;
 const fields = [
   'line','snapshot_id','pcba_sn','current_pcba_sn','current_pcba','historical_pcba','item_sn','item_type','usage_status',
   'previous_pcba_count','total_pcba_count_known_now','previous_pcbas_json','active_now_pcbas_json','inactive_now_pcbas_json',
+  // A proven physical ordinal is calculated by the canonical 3074 adapter.
+  // Without these scalars the snapshot still loads, but its 2nd-use material
+  // card and part-number filter silently lose the factory evidence.
+  'material_use_index','part_number',
   'bind_time_utc','unbind_time_utc','hist_seq','defect_key','current_defect_key','defect_code','defect_desc','defect_time','defect_time_utc',
   'defect_oper','defect_location','defect_material_id','repair_status','defect_type','defect_type_class','manual_or_auto','context_kind',
   'material_type','material_sn',
