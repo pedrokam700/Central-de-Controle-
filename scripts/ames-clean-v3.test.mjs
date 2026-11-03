@@ -8,9 +8,10 @@ test('Issue #66 3074 View-response correction is explicit and source-pinned',()=
   const manifest=JSON.parse(fs.readFileSync('docs/ames/clean-v3-source-manifest.json'));
   const path='ames/factory-engine/ames/tela_3074.py';
   assert.notEqual(sha256(path),manifest['ames/tela_3074.py']);
-  // Baseline manifesto is immutable; only this Issue #66 revision has a new
-  // pinned source hash. All unchanged CLEAN V3 source gates remain active.
-  assert.equal(sha256(path),'e7246bddc99537350efd219a2bc293885b69e8558b04ae69fbc6ae09bb684a8a');
+  // Baseline manifesto stays immutable. Stage 3E intentionally extends the
+  // Issue #66 3074 paging fix for ExtJS callbacks without optional metadata;
+  // pin its exact new source bytes without relaxing other CLEAN V3 gates.
+  assert.equal(sha256(path),'86d633edbb736944cda1868c97ea20b83e6a82ca39b25a0fce5081a95baf616d');
   const src=fs.readFileSync(path,'utf8');
   assert.match(src,/STORE_REFRESH_AFTER_VIEW/);
   assert.match(src,/visible_only=True/);
