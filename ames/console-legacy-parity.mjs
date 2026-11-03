@@ -36,7 +36,13 @@ export function createLineOverview(root,store,client,periodController,history=nu
     if(periodController){
       const target=root.querySelector('[data-global-reading-period]');
       if(preservedPeriod)target?.replaceWith(preservedPeriod);
-      paintReadingPeriod(preservedPeriod||target,store,periodController);
+      paintReadingPeriod(preservedPeriod||target,store,periodController,{onCollectCustom:async({start,end})=>{
+        // A deliberate period collection is always scoped to the selected
+        // line; a historical read remains separate from today's live head.
+        await client.collect('custom',{lines:[line],performance:store.agent().config?.performance||'balanced',
+          start_at:start,end_at:end});
+        await periodController.select('custom',{start,end});
+      }});
     }
     if(history&&periodController){
       const nextSlot=root.querySelector('[data-latest-capture-preview]');
