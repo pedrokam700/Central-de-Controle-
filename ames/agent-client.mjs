@@ -31,7 +31,7 @@ const boundedOffset=(value,max=100000)=>{const n=Number(value);return Number.isI
 
 // Transport belongs to the existing session; all operational data lives in store.
 export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
-  let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false, lastPartial=-1,lastRefresh=0,pendingSubmission=null;
+  let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false,refreshSettled=null,lastPartial=-1,lastRefresh=0,pendingSubmission=null;
   const workstationToken=bootstrapAgentToken(agentToken);
   // Keep API requests same-origin when a user pastes the local Central URL into
   // another tab. Fetch Metadata proves same-origin even when Origin is omitted
@@ -81,8 +81,16 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       reason:['manual','native_console','startup','update','rollback'].includes(String(raw.reason||''))?String(raw.reason):null
     };
   }
-  async function refresh() {
-    check();if(refreshing)return;refreshing=true;const token=generation;
+  async function refresh({afterJob=false}={}) {
+    check();const token=generation;
+    if(refreshing){
+      // The periodic workstation read may have started BEFORE the job saved
+      // its revision. A completed job must get a fresh read after that flight,
+      // rather than silently losing its completion refresh to the busy guard.
+      if(afterJob){await refreshSettled;if(token===generation)await refresh();}
+      return;
+    }
+    refreshing=true;let settle;refreshSettled=new Promise(resolve=>{settle=resolve;});
     try {
       if(store.agent().capabilities?.schema===CANONICAL_SCHEMA){
         const response=await request('/v2/snapshots'),payloads=[];
@@ -128,7 +136,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       if(signature(before)!==signature(after))throw new Error('Snapshot mudou durante a leitura. Atualize novamente.');
       const errors=store.replaceLocalSnapshots(payloads);if(errors.length)publish({error:errors.map(e=>e.reason).join('; ')});
       store.setLocalConnected(true);lastRefresh=now();changed();
-    }finally{if(token===generation)refreshing=false;}
+    }finally{if(token===generation){refreshing=false;refreshSettled=null;}settle();}
   }
   async function poll(id,token) {
     if(token!==generation)return;
@@ -152,7 +160,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
       if(done||(partial!==lastPartial&&now()-lastRefresh>2200)){
-        try{await refresh();lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
+        try{await refresh({afterJob:raw.status==='done'&&['analysis','deep_trace'].includes(raw.kind)});lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
       }
       // /v2/snapshots intentionally exposes TODAY only. A completed 3028
       // previous-day capture is available through /local-history, not through
@@ -460,6 +468,6 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(configPatch?{config:configPatch}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
-    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',connection_error:null,config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
+    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;refreshSettled=null;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',connection_error:null,config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
   });
 }
