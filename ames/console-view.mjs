@@ -238,13 +238,16 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
     let note=pane?.querySelector('[data-shared-period]');
     if(pane&&!note){note=document.createElement('p');note.dataset.sharedPeriod='';note.setAttribute('data-no-i18n','');note.className='mes-context';pane.prepend(note);}
     const currentLine=store.context?.()?.line_id||store.preferredLine?.();
-    const savedToday=period?.mode==='today'&&store.read(currentLine).saved_today;
+    const selectedRead=store.read(currentLine),selectedSnapshot=selectedRead.snapshot?.canonical;
+    const savedToday=period?.mode==='today'&&selectedRead.saved_today;
     if(note){const en=document.documentElement.lang.startsWith('en');
       note.textContent=active==='sn'
         ?(en?'SN investigation is independent of the monitoring period.':'Consulta por SN independente do período de monitoramento.')
         :(en?'Reading period: ':'Período de leitura: ')+displayPeriodTime(period?.start)+' → '+displayPeriodTime(period?.end)+
           (period?.mode!=='today'?(en?' · Read-only history':' · Histórico somente leitura'):
-          savedToday?(en?' · Latest saved partial capture · read-only':' · Última coleta salva hoje · janela parcial · somente leitura'):'');
+          savedToday?(en?' · Latest saved partial capture · read-only':' · Última coleta salva hoje · janela parcial · somente leitura'):'')+
+          (selectedSnapshot?` · ${currentLine} · snapshot ${selectedSnapshot.snapshot_id} / r${selectedSnapshot.snapshot_revision} · ${selectedRead.source==='remote'?(en?'Shared':'Compartilhada'):(en?'Local':'Local')} ${selectedSnapshot.source_id||''}`:
+            (en?' · No verified revision for the selected line':' · Sem revisão comprovada para a linha selecionada'));
     }
     if(period?.mode!=='today'){
       // Historical 3028 revisions CAN be enriched: deep_trace is bound to an
