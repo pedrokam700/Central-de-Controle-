@@ -30,7 +30,7 @@ const fetcher=async(url,options)=>{
  else if(key==='monitor')value={enabled:false};
  else if(key==='v2/snapshots'){if(completed){visible=true;sessionStorage.setItem('synthetic-capture','saved');}value={snapshots:[],scope:'today'};}
  else if(key==='runs'){posts++;value={id:'J',status:'queued'};}
- else if(key==='jobs/J'){completed=true;value={id:'J',kind:'analysis',status:'done',result:{snapshot_ids:{[line]:38},start_at:local.summary.period.start_at,end_at:local.summary.period.end_at}};}
+ else if(key==='jobs/J'){completed=true;value={id:'J',kind:'analysis',status:'done',result:{snapshot_ids:{[line]:local.snapshot_id},start_at:local.summary.period.start_at,end_at:local.summary.period.end_at}};}
  else throw Error('Unexpected request '+key);
  return {ok:true,json:async()=>structuredClone(value)};
 };
@@ -95,7 +95,7 @@ try{
  await page.waitForFunction(()=>qa.store.readingPeriod()?.mode==='custom');
  assert.deepEqual(await page.evaluate(()=>qa.store.readingPeriod()),{mode:'custom',start:'2026-10-15T07:00',end:'2026-10-16T07:00'});
  await page.evaluate(()=>qa.poll());
- await page.waitForFunction(()=>qa.store.read('TAN10101').snapshot?.snapshot_id==='39');
+ await page.waitForFunction(()=>String(qa.store.read('TAN10101').snapshot?.snapshot_id)==='39');
  assert.equal(await page.evaluate(()=>qa.store.read('TAN10101').source),'local');
  assert.deepEqual(errors,[]);
  console.log('PASS 3028 click -> polling -> delayed local index -> local revision -> navigation -> enriched r2; synthetic HTTP, no MES');
