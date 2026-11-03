@@ -30,6 +30,78 @@ def _old_pcbas(item):
     return allowed
 
 
+def _confirmed_self_rows(query, pcba):
+    """Only physical self-bindings from a proven, PCBA-scoped 3074 refresh.
+
+    A second query may have different pagination and expose an older mounting.
+    It does not prove an entire population or authorize copying other materials.
+    """
+    if not isinstance(query, dict) or query.get("query_sn") != pcba:
+        return []
+    if query.get("query_confirmation") not in {"STORE_REFRESH_AFTER_VIEW", "EXACT_QUERY_ROW"}:
+        return []
+    result = []
+    for row in query.get("rows") or []:
+        if not isinstance(row, dict) or str(row.get("Barcode") or "").strip() != pcba:
+            continue
+        if (str(row.get("Aut Cmf1") or "").strip().upper() != "PCBA"
+                and "pcba" not in str(row.get("Sn Type") or "").lower()):
+            continue
+        if not str(row.get("Bind Time") or "").strip():
+            continue
+        result.append(row)
+    return result
+
+
+def _reconcile_self_mountings(selected_query, candidates, pcba):
+    """Union verified PCBA mounting rows only; never fill missing components.
+
+    An updated Unbind/status for the same mounting is one physical cycle.
+    The latest verified row wins for a matching SN+Bind Time+operation, while
+    station rows from separate operations may still describe one cycle.
+    """
+    selected_rows = _confirmed_self_rows(selected_query, pcba)
+    if not selected_rows:
+        return selected_query, 0
+    selected_binds = {str(row.get("Bind Time") or "").strip() for row in selected_rows}
+    confirmed = []
+    revisions_with_proof = set()
+    for revision, query in candidates:
+        current_rows = _confirmed_self_rows(query, pcba)
+        if current_rows:
+            revisions_with_proof.add(revision)
+        for row in current_rows:
+            confirmed.append((revision, row))
+    discovered_binds = {str(row.get("Bind Time") or "").strip() for _, row in confirmed}
+    # Same-session pagination or a later status update to an existing bind is
+    # not another use. Require independent proven captures and a genuinely
+    # older/newer mounting not present in the selected response.
+    if len(revisions_with_proof) < 2 or not (discovered_binds - selected_binds):
+        return selected_query, 0
+
+    merged = deepcopy(selected_query)
+    original = merged.get("rows") or []
+    # The unrelated material rows remain exactly those of the selected capture.
+    others = [row for row in original if not (
+        isinstance(row, dict) and str(row.get("Barcode") or "").strip() == pcba
+        and (str(row.get("Aut Cmf1") or "").strip().upper() == "PCBA"
+             or "pcba" in str(row.get("Sn Type") or "").lower()))]
+    by_mounting = {}
+    for revision, row in confirmed:
+        key = (str(row.get("Barcode") or "").strip(),
+               str(row.get("Bind Time") or "").strip(),
+               str(row.get("Operation") or "").strip())
+        # Prefer the latest proven observation; a later Unbind is an update,
+        # not a second mounting or a reason to double-count the old active row.
+        if key not in by_mounting or revision > by_mounting[key][0]:
+            by_mounting[key] = (revision, deepcopy(row))
+    merged["rows"] = others + [entry[1] for entry in by_mounting.values()]
+    # Reconciled rows are an observation set, not a complete MES page.
+    merged["recovered_self_mountings_only"] = True
+    merged["coverage"] = {"status": "incomplete_page", "reason": "read_only_self_mounting_union"}
+    return merged, len(discovered_binds - selected_binds)
+
+
 def recover_snapshot_line(versions, line, base_rows):
     """Return conservative recovered payload and non-sensitive diagnostics.
 
@@ -86,6 +158,7 @@ def recover_snapshot_line(versions, line, base_rows):
                       "expected_pcbas": len({x[0] for x in expected})}
     items = []
     self_linked = set()
+    merged_self_pcbas = set()
     permitted_history = set()
     for sn, board in sorted(by_pcba.items()):
         traces = {k: value[1] for k, value in board["traces"].items()}
@@ -104,7 +177,11 @@ def recover_snapshot_line(versions, line, base_rows):
                              if str(row.get("Aut Cmf1") or "").strip().upper() == "PCBA"
                              or "pcba" in str(row.get("Sn Type") or "").lower()]
                 return (bool(self_rows), len(own_rows), pair[0])
-            item["base_query"] = max(board["bases"], key=base_score)[1]
+            selected = max(board["bases"], key=base_score)[1]
+            item["base_query"], merged_count = _reconcile_self_mountings(
+                selected, board["bases"], sn)
+            if merged_count and item["base_query"] is not selected:
+                merged_self_pcbas.add(sn)
             for row in (item["base_query"].get("rows") or []):
                 if str(row.get("Barcode") or "").strip() != sn:
                     continue
@@ -166,6 +243,7 @@ def recover_snapshot_line(versions, line, base_rows):
     return result, {"reason": "read_only_local_recovery", "versions_checked": len(versions),
         "recovered_pcbas": len(items), "expected_pcbas": len({x[0] for x in expected}),
         "pcbas_with_3074_self_binding": len(self_linked),
+        "pcbas_with_reconciled_self_mountings": len(merged_self_pcbas),
         "line_pcbas": len({x[0] for x in expected}),
         "historical_pcbas_proven": len(history),
         "rejected_items": rejected, "source_complete": False}

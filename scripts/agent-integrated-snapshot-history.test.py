@@ -4,7 +4,10 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ames" / "agent"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ames" / "factory-engine"))
 from integrated_snapshot_history import recover_snapshot_line
+from core.uso_pcba import reconstruir_usos_pcba
+from engine_bridge import build_trace_insights
 
 
 LINE = "TAN10103"
@@ -36,6 +39,60 @@ def version(items, history=None):
 
 
 class RecoveryGate(unittest.TestCase):
+    def test_proven_partial_queries_recover_two_distinct_physical_mountings(self):
+        def mounting(bind, unbind=None):
+            return {"Barcode": "A", "Sn Type": "PCBA", "Aut Cmf1": "PCBA",
+                    "Bind Time": bind, "Unbind Time": unbind,
+                    "Operation": "A5150", "Iss Status": "N" if unbind else "Y"}
+        prior = mounting("2026-10-28 11:00:00+00:00", "2026-10-28 12:00:00+00:00")
+        current = mounting("2026-10-30 10:00:00+00:00")
+        first = capture("A", rows=[prior, {"Barcode": "CAMERA-1", "Sn Type": "Camera"}])
+        latest = capture("A", rows=[current, {"Barcode": "CAMERA-2", "Sn Type": "Camera"}])
+        for item in (first, latest):
+            item["base_query"].update(query_sn="A", query_confirmation="STORE_REFRESH_AFTER_VIEW",
+                                      coverage={"status": "incomplete_page"})
+        out, diag = recover_snapshot_line([version([first]), version([latest])], LINE, [event("A")])
+        self.assertEqual(diag["pcbas_with_reconciled_self_mountings"], 1)
+        rows = out["trace_3074"]["items"][0]["base_query"]["rows"]
+        self.assertEqual(len([r for r in rows if r.get("Barcode") == "A"]), 2)
+        self.assertEqual([r["Barcode"] for r in rows if r.get("Barcode", "").startswith("CAMERA")], ["CAMERA-2"],
+                         "A previous partial response must not invent material completeness")
+        self.assertEqual(reconstruir_usos_pcba(rows, "A", "2026-10-30 09:00:00")["use_index_at_defect"], 2)
+        self.assertEqual(out["trace_3074"]["source_status"], "PARTIAL")
+        self.assertFalse(diag["source_complete"])
+        # The production KPI builder must see the recovered 2nd physical use,
+        # while the query/page and total population remain explicitly partial.
+        summary = build_trace_insights(Path(__file__).resolve().parents[1] / "ames" / "factory-engine", out, line=LINE)
+        self.assertEqual(summary["drilldowns"]["pcba_analysis"][0]["_pcba_use_index"], 2)
+        self.assertIn(["PCBA em 2º uso", 1], summary["pcba_kpis"])
+
+    def test_older_unverified_grid_and_other_line_cannot_add_mountings(self):
+        prior = capture("A", rows=[{"Barcode": "A", "Aut Cmf1": "PCBA", "Bind Time": "2026-10-28 11:00:00"}])
+        latest = capture("A", rows=[{"Barcode": "A", "Aut Cmf1": "PCBA", "Bind Time": "2026-10-30 10:00:00"}])
+        latest["base_query"].update(query_sn="A", query_confirmation="STORE_REFRESH_AFTER_VIEW")
+        out, diag = recover_snapshot_line([version([prior]), version([latest])], LINE, [event("A")])
+        self.assertEqual(diag["pcbas_with_reconciled_self_mountings"], 0)
+        self.assertEqual(len(out["trace_3074"]["items"][0]["base_query"]["rows"]), 1)
+        # Even a proven query for the wrong production line is excluded by
+        # the exact 3028 defect identity before any self-mounting reconciliation.
+        prior["base_query"].update(query_sn="A", query_confirmation="STORE_REFRESH_AFTER_VIEW")
+        prior["defect_traces"][0]["defect"]["line"] = OTHER
+        out, diag = recover_snapshot_line([version([prior]), version([latest])], LINE, [event("A")])
+        self.assertEqual(diag["pcbas_with_reconciled_self_mountings"], 0)
+
+    def test_repeated_binding_status_update_does_not_create_new_use(self):
+        old = capture("A", rows=[{"Barcode": "A", "Aut Cmf1": "PCBA", "Sn Type": "PCBA",
+                                   "Bind Time": "2026-10-30 10:00:00", "Iss Status": "Y"}])
+        new = capture("A", rows=[{"Barcode": "A", "Aut Cmf1": "PCBA", "Sn Type": "PCBA",
+                                   "Bind Time": "2026-10-30 10:00:00", "Unbind Time": "2026-10-31 10:00:00",
+                                   "Iss Status": "N"}])
+        for item in (old, new):
+            item["base_query"].update(query_sn="A", query_confirmation="EXACT_QUERY_ROW")
+        out, diag = recover_snapshot_line([version([old]), version([new])], LINE, [event("A")])
+        self.assertEqual(diag["pcbas_with_reconciled_self_mountings"], 0)
+        self.assertEqual(reconstruir_usos_pcba(out["trace_3074"]["items"][0]["base_query"]["rows"],
+                                                "A", "2026-10-30 09:00:00")["known_use_count"], 1)
+
     def test_selective_batches_recover_same_snapshot(self):
         out, diag = recover_snapshot_line(
             [version([capture("A")]), version([capture("B")])],
