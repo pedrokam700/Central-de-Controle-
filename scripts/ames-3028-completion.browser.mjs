@@ -89,8 +89,8 @@ try{
  await page.evaluate(()=>qa.prepareCustom());
  await page.locator('[data-console-view=monitor]').click();
  await page.locator('[data-console-pane=monitor] details.ames-monitor-config').evaluate(el=>el.open=true);
- await page.locator('[data-console-pane=monitor] [name=start_at]').fill('2026-10-15T07:00');
- await page.locator('[data-console-pane=monitor] [name=end_at]').fill('2026-10-16T07:00');
+ await page.locator('[data-console-pane=monitor] [data-agent-form] [name=start_at]').fill('2026-10-15T07:00');
+ await page.locator('[data-console-pane=monitor] [data-agent-form] [name=end_at]').fill('2026-10-16T07:00');
  await page.locator('[data-console-pane=monitor] [data-agent-action=custom]').click();
  await page.waitForFunction(()=>qa.store.readingPeriod()?.mode==='custom');
  assert.deepEqual(await page.evaluate(()=>qa.store.readingPeriod()),{mode:'custom',start:'2026-10-15T07:00',end:'2026-10-16T07:00'});
