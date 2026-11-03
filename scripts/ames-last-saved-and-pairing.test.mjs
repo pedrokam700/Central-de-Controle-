@@ -42,13 +42,13 @@ test('monitor never destroys saved reader on ordinary render and puts saved pane
  assert.doesNotMatch(code,/last=key;latestPreview\?\.clear\(\)/);
 });
 
-test('latest capture occupies only an explicit expandable row and preserves operator expansion on refresh',()=>{
+test('latest capture opens in its own read-only row and preserves operator collapse on refresh',()=>{
  const code=fs.readFileSync(new URL('../ames/console-latest-capture.mjs',import.meta.url),'utf8');
  const css=fs.readFileSync(new URL('../ames/console-operator-parity.css',import.meta.url),'utf8');
  assert.match(code,/root\.innerHTML='<details class="mes-context-panel ames-last-capture-collapsible" data-last-capture-panel>/);
  assert.match(code,/'<summary><strong>'\+t\('Última coleta disponível/);
  assert.match(code,/data-last-capture-body/);
- assert.match(code,/const panelOpen=Boolean\(root\.querySelector\('\[data-last-capture-panel\]'\)\?\.open\)/);
+ assert.match(code,/const panelOpen=existingPanel\?existingPanel\.open:true/);
  assert.match(code,/root\.querySelector\('\[data-last-capture-panel\]'\)\.open=panelOpen/);
  assert.match(code,/data-last-capture-advanced/);
  assert.match(code,/plan\?\.status==='conflict'&&!latest/);
