@@ -89,7 +89,11 @@ export function createLatestCapturePreview(root,store,history,controller){
    !plan||plan.status==='none'?t('Ainda não há coleta anterior comprovada para esta linha. Isso não representa zero falhas.','No proven previous capture for this line; this is not zero failures.'):
    plan.status==='conflict'&&!latest?t('Existem registros de origens diferentes. Escolha um posto para visualizar, sem substituir o histórico.','Multiple workstation origins exist. Choose one to view without replacing history.'): '';
   const entry=latest?.entry,summary=latest?.canonical.summary||{};
-   const panelOpen=Boolean(root.querySelector('[data-last-capture-panel]')?.open);
+   // On first entry show the latest SAVED observation immediately, as a
+   // separate read-only preview. Never overwrite Hoje or choose a conflicting
+   // source automatically. An operator can still collapse the panel.
+   const existingPanel=root.querySelector('[data-last-capture-panel]');
+   const panelOpen=existingPanel?existingPanel.open:true;
    const advancedOpen=Boolean(root.querySelector('[data-last-capture-advanced]')?.open);
   root.innerHTML='<details class="mes-context-panel ames-last-capture-collapsible" data-last-capture-panel>'+
    '<summary><strong>'+t('Última coleta disponível · histórico preservado','Latest available capture · saved history')+'</strong>'+
