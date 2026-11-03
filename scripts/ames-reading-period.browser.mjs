@@ -173,6 +173,8 @@ try{
  assert.doesNotMatch(await analytics.locator('.ames-dfa-occ-grid').allTextContents().then(v=>v.join(' ')),/SYNTHETIC-OLD-AT/);
  assert.equal(await page.evaluate(()=>qa.mutations()),0,'opening preserved repair candidates cannot query MES');
  await page.locator('[data-console-view=reuse]').click();
+ assert.equal(await page.locator('[data-console-pane=reuse] [data-period-extract]').isDisabled(),true,
+   'a shared historical snapshot cannot initiate local deep tracing');
  await page.locator('[data-console-pane=reuse] details').filter({has:page.locator('[data-component-matrix]')}).evaluate(e=>e.open=true);
  const matrix=page.locator('[data-component-matrix]');
  assert.equal(await matrix.locator('[data-component-cell=total] > summary').innerText(),'1');
@@ -460,7 +462,7 @@ try{
  await page.locator('[data-base-history] form input[name=end]').fill('2026-10-15T12:00');
  await page.locator('[data-base-history] form button[type=submit]').click();
  await page.locator('[data-history-open]').waitFor();
- await page.evaluate(()=>qa.store.updateAgent({status:'connected',capabilities:{source_id:'preserved-workstation'}}));
+ await page.evaluate(()=>qa.store.updateAgent({status:'connected',capabilities:{source_id:'preserved-workstation',exact_trace_targets:true}}));
  await page.locator('[data-history-open]').click();
  await page.locator('[data-source-capture-toggle]').waitFor();
  assert.equal(await page.evaluate(()=>qa.captureReads()),0,'capture metadata must be lazy');
@@ -489,6 +491,18 @@ try{
  await page.locator('[data-reading-range] input[name=end]').fill('2026-10-15T12:00');
  await page.locator('[data-reading-range] button[type=submit]').click();
  await page.waitForFunction(()=>qa.store.agent().period_read?.status==='ready'&&String(qa.store.read('TAN10101').snapshot?.snapshot_id)==='17');
+ // A custom 3028 interval must offer the next step from the same Period card.
+ // Opening the trace form is read-only; the operator must explicitly start MES.
+ await page.locator('[data-console-view=reuse]').click();
+ const continuePeriod=page.locator('[data-console-pane=reuse] [data-period-extract]');
+ assert.equal(await continuePeriod.isEnabled(),true,'verified local period has a continuation');
+ assert.match(await page.locator('[data-period-revision]').innerText(),/snapshot 17 \/ r1/);
+ await continuePeriod.click();
+ assert.equal(await page.locator('[data-console-pane=trace]').isVisible(),true);
+ assert.equal(await page.locator('[data-console-pane=trace] [name=trace_mode][value=full]').isChecked(),true);
+ assert.equal(await page.locator('[data-console-pane=trace] [name=lines][value=TAN10101]').isChecked(),true);
+ assert.equal(await page.evaluate(()=>qa.store.readingPeriod().mode),'custom');
+ assert.equal(await page.evaluate(()=>qa.mutations()),0,'continuation navigation must never start MES');
  await page.locator('[data-console-view=base]').click();
  await page.locator('[data-stored-captures] [data-source-capture-toggle]').waitFor();
  assert.equal(await page.evaluate(()=>qa.captureReads()),1,'no metadata auto-read on global period navigation');
