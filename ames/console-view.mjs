@@ -169,7 +169,13 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       pane.innerHTML='<section data-reuse-period-control class="mes-context-panel"></section><section data-reuse-dashboard></section>';
       const scope=pane.querySelector('[data-reuse-period-control]'),content=pane.querySelector('[data-reuse-dashboard]');
       const primary=withAgentRefresh(withHistoricalTrends(withReuseProvenance(createReuseConsoleView(content,store),content,store),content,store,history),content,store,client,{label:'Atualizar'});
-      view={render(){paintReadingPeriod(scope,store,periodController);primary.render();},
+      view={render(){paintReadingPeriod(scope,store,periodController,{onContinueTrace:line=>{
+        // Continuation is explicit; opening Rastreabilidade never starts MES.
+        // The existing deep-trace gate verifies this exact local revision again
+        // before submitting 3074/2114/3022 to the agent.
+        store.updateContext?.({line_id:line});
+        switchView('trace');
+      }});primary.render();},
         clear(){primary.clear?.();pane.replaceChildren();}};
     }
     else if(id==='process'){pane.innerHTML='<section data-process-main></section><section data-process-3012></section>';const processRoot=pane.querySelector('[data-process-main]'),processBase=withProcessOperatorLayout(withProcessCapability(createProcessConsoleView(processRoot,store),processRoot,store,'process'),processRoot),base=withAgentRefresh(processBase,processRoot,store,client,{label:'Atualizar'}),repair3012=historical?createStoredPeriodRecords(pane.querySelector('[data-process-3012]'),store,{kind:'repairs'}):create3012FastlaneView(pane.querySelector('[data-process-3012]'),store);view={render(){base.render();repair3012.render();},clear(){base.clear?.();repair3012.clear?.();pane.replaceChildren();}};}
