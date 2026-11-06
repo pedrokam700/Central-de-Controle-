@@ -5,7 +5,7 @@ $source=Join-Path $PSScriptRoot '..\tools\ames-workstation\ensure_ames_route.ps1
 $tokens=$null;$parseErrors=$null
 $ast=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $source).Path,[ref]$tokens,[ref]$parseErrors)
 if($parseErrors -and $parseErrors.Count){throw "Route PowerShell syntax failed: $($parseErrors -join '; ')"}
-foreach($name in @('Resolve-WlanGuidForSsid','Resolve-WifiInterfaceIndex')){
+foreach($name in @('Resolve-WlanGuidForSsid','Resolve-WifiInterfaceIndex','Resolve-CorporateWifiByAddress')){
   $defs=@($ast.FindAll({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
@@ -32,6 +32,26 @@ $adapters=@(
 )
 $index=Resolve-WifiInterfaceIndex $adapters $wlan
 if($index -ne 3){throw "Ethernet selected instead of WLAN: $index"}
+$address=@([pscustomobject]@{InterfaceIndex=3;InterfaceAlias='Wi-Fi';
+  IPv4Address=@([pscustomobject]@{IPAddress='172.29.197.24'});
+  IPv4DefaultGateway=@([pscustomobject]@{NextHop='172.29.196.1'})})
+$byNetwork=Resolve-CorporateWifiByAddress $adapters $address
+if($byNetwork.Index -ne 3 -or $byNetwork.Gateway -ne '172.29.196.1'){
+  throw 'Legacy 172.29 network fallback failed to identify the connected Wi-Fi'
+}
+$down=@($adapters|ForEach-Object {
+  if($_.Name -eq 'Wi-Fi'){
+    [pscustomobject]@{InterfaceGuid=$_.InterfaceGuid;Status='Disconnected';ifIndex=$_.ifIndex;Name=$_.Name}
+  }else{$_}
+})
+$blocked=$false
+try{$null=Resolve-CorporateWifiByAddress $down $address}catch{$blocked=$true}
+if(-not $blocked){throw 'Stale DHCP address on disconnected Wi-Fi was wrongly trusted'}
+$ethernetAddress=@($address+[pscustomobject]@{InterfaceIndex=20;InterfaceAlias='Ethernet';
+  IPv4Address=@([pscustomobject]@{IPAddress='172.29.180.20'});
+  IPv4DefaultGateway=@([pscustomobject]@{NextHop='172.29.180.1'})})
+$byNetwork=Resolve-CorporateWifiByAddress $adapters $ethernetAddress
+if($byNetwork.Index -ne 3){throw 'Ethernet spoofed the Wi-Fi fallback'}
 # Windows network profile display name is deliberately TAXXX_5G 2.
 # The resolver must not query that mutable display name.
 $scriptText=Get-Content -LiteralPath $source -Raw

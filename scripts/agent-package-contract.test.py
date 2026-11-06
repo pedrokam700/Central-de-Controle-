@@ -103,6 +103,8 @@ def test_integrated_clean_support_files_are_explicit():
         "DIAGNOSTICO_POSTO.ps1",
         "KEEP_AGENT_RUNNING.ps1",
         "ISSUE57_RELAUNCH_ENROLLMENT.ps1",
+        "SAFE_STATE_TRANSFER.py",
+        "issue57_update_preflight.py",
     )
     source = (ROOT / "scripts" / "build-integrated-candidate.py").read_text(encoding="utf-8")
     assert "for p in ws.iterdir()" not in source
@@ -120,6 +122,8 @@ def test_pr69_clean_retains_supervised_switch_and_first_run_network():
         "01_TROCAR_PARA_PR69_NOVA.bat",
         "TROCAR_PARA_PR69_NOVA.ps1",
         "08_PREPARAR_REDE_AMES.bat",
+        "12_APLICAR_ROTA_AMES_PERSISTENTE.bat",
+        "12_APLICAR_ROTA_AMES_TEMPORARIA.bat",
     }
     assert set(builder.PACKAGE_DOCS) == {
         "INSTRUCOES_INSTALACAO_LIMPA.txt",
