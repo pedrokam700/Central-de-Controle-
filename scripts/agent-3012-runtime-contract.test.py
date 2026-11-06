@@ -44,24 +44,37 @@ for(const [parent,data] of [[startParent,startData],[endParent,endData]]){const 
 const simpleIds=[['txtSnImei','textfield','snImei'],['cdvDefectType','codeviewfieldx','defectType'],['cdvRepairedCode','codeviewfieldx','repairedCode'],['cdvDepartmentNew','codeviewfieldx','department'],['cdvAreaNew','codeviewfieldx','area'],['cdvLineCodeNew','codeviewfieldx','lineCode'],['cdvProdModel','codeviewfieldx','prodModel'],['cdvDefectCode','codeviewfieldx','defectCode']];
 const simple=Object.fromEntries(simpleIds.map(([id,xt,n])=>[id,field(id,xt,n)]));
 let activeStore=makeStore([]);
+const ajaxListeners=new Map();
+const ajax={on(name,fn){ajaxListeners.set(name,fn)},un(name,fn){if(ajaxListeners.get(name)===fn)ajaxListeners.delete(name)},
+  emit(options){ajaxListeners.get('beforerequest')?.(ajax,options)}};
 const grid={itemId:'grdDefectRepair',xtype:'gridpanel',hidden:false,isVisible(){return true},getStore(){return activeStore}};
 function validDate(){return /^2026-01-24 00:00:00$/.test(String(startData.getValue()))&&/^2026-10-17 23:59:00$/.test(String(endData.getValue()))&&simple.txtSnImei.getValue()==='002527TEST'}
 function execute(){
   if(scenario==='stale')return;
   const params={procstep:'x',snImei:simple.txtSnImei.getValue(),fromDate:startData.getValue(),toDate:endData.getValue(),unDisassemble:false};
+  const ajaxForm=scenario==='ajax-form-serialized'||scenario==='ajax-wrong-period'||scenario==='ajax-unrelated-sn';
+  const before=ajaxForm?{procstep:'x',snImei:simple.txtSnImei.getValue()}:params;
+  if(ajaxForm){
+    const dates=scenario==='ajax-wrong-period'
+      ?{'dteFromDate__Data':'2026-01-24 00:00:00','dteToDate__Data':'2026-03-31 23:59:00'}
+      :{'dteFromDate__Data':startData.getValue(),'dteToDate__Data':endData.getValue()};
+    ajax.emit({params:{queryCondition:JSON.stringify({filters:[
+      {name:'snImei',value:scenario==='ajax-unrelated-sn'?'DIFFERENT-PCBA':simple.txtSnImei.getValue()},
+      ...Object.entries(dates).map(([name,value])=>({name,value}))]})}});
+  }
   const rows=validDate()?[record({lotId:'002527TEST',defectCode:'X1',defectDesc:'x',repairCode:'R1',repairComment:'OK',repairTime:'2026-10-16 12:00:00',repairUser:'AT1'})]:[];
   if(scenario==='rebind'){
     const fresh=makeStore(rows);fresh.proxy.extraParams={...params};activeStore=fresh;
-    setTimeout(()=>{fresh.loading=true;fresh.emit('beforeload',fresh,{getParams:()=>params});setTimeout(()=>{fresh.rows=rows;fresh.loading=false;fresh.emit('load',fresh,rows,true);fresh.emit('datachanged',fresh)},90)},20);
+    setTimeout(()=>{fresh.loading=true;fresh.emit('beforeload',fresh,{getParams:()=>before});setTimeout(()=>{fresh.rows=rows;fresh.loading=false;fresh.emit('load',fresh,rows,true);fresh.emit('datachanged',fresh)},90)},20);
   }else{
-    const s=activeStore;s.proxy.extraParams={...params};s.loading=true;s.emit('beforeload',s,{getParams:()=>params});setTimeout(()=>{s.rows=rows;s.loading=false;s.emit('load',s,rows,true);s.emit('datachanged',s)},80);
+    const s=activeStore;s.proxy.extraParams={...before};s.loading=true;s.emit('beforeload',s,{getParams:()=>before});setTimeout(()=>{s.rows=rows;s.loading=false;s.emit('load',s,rows,true);s.emit('datachanged',s)},80);
   }
 }
 const physical={tagName:'A',dispatchEvent(){},click(){if(scenario!=='ext-fallback'&&scenario!=='stale')execute()}};
 const view={itemId:'btnView',xtype:'button',text:'View',isButton:true,hidden:false,isVisible(){return true},btnEl:{dom:physical},fireEvent(name){if(name==='click'&&scenario!=='stale')execute();return true},handler(){if(scenario!=='stale')execute()}};
 const components=[...Object.values(simple),startParent,startData,startDate,startTime,endParent,endData,endDate,endTime,grid,view];
 const ctx=vm.createContext({console,setTimeout,clearTimeout,Date,Promise,JSON,globalThis:null,Event:class{constructor(t,o){this.type=t}},MouseEvent:class{constructor(t,o){this.type=t}},document:{querySelectorAll(){return[]},getElementById(){return null}},window:null});ctx.window=ctx;ctx.globalThis=ctx;ctx.Ext={ComponentManager:{all:{items:components}},ComponentQuery:{query(){return components}}};
-(async()=>{try{const fn=vm.runInContext('('+querySource+')',ctx);const out=await fn({sn:'002527TEST',line:'',model:'',defectCode:'',repairCode:'',defectType:'',dateFrom:'2026-01-24',timeFrom:'00:00',dateTo:'2026-10-17',timeTo:'23:59'});console.log(JSON.stringify({ok:true,out}));}catch(e){console.log(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exitCode=0}})();
+(async()=>{try{ctx.Ext.Ajax=ajax;const fn=vm.runInContext('('+querySource+')',ctx);const out=await fn({sn:'002527TEST',line:'',model:'',defectCode:'',repairCode:'',defectType:'',dateFrom:'2026-01-24',timeFrom:'00:00',dateTo:'2026-10-17',timeTo:'23:59'});console.log(JSON.stringify({ok:true,out}));}catch(e){console.log(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exitCode=0}})();
 '''
 
 
@@ -99,6 +112,25 @@ class Runtime3012Tests(unittest.TestCase):
         self.assertTrue(proof["storeRebound"])
         self.assertIn(proof["freshness"], {"STORE_LOAD_CONFIRMED", "STORE_DATASET_EVENT", "STORE_REBOUND_AFTER_VIEW"})
         self.assertEqual(result["out"]["total"], 1)
+
+    def test_nested_ext_ajax_form_fields_prove_period_when_store_has_only_sn(self):
+        result = run_fixture('ajax-form-serialized')
+        self.assertTrue(result['ok'], result)
+        proof = result['out']['queryProof']
+        self.assertEqual(proof['periodSource'], 'ajax_beforerequest')
+        self.assertEqual(proof['actualWindow'], proof['requestedWindow'])
+
+    def test_outgoing_ajax_period_mismatch_fails_even_if_visible_dates_look_right(self):
+        result = run_fixture('ajax-wrong-period')
+        self.assertFalse(result['ok'], result)
+        self.assertIn('3012_QUERY_PERIOD_MISMATCH', result['error'])
+        self.assertIn('2026-03-31', result['error'])
+
+    def test_unrelated_ajax_request_never_certifies_selected_sn_period(self):
+        result = run_fixture('ajax-unrelated-sn')
+        self.assertFalse(result['ok'], result)
+        self.assertIn('3012_QUERY_PERIOD_MISMATCH', result['error'])
+        self.assertIn('AUSENTE', result['error'])
 
     def test_view_that_never_starts_is_rejected(self):
         result = run_fixture("stale")

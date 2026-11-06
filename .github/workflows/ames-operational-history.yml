@@ -24,6 +24,7 @@ jobs:
           python3 scripts/agent-raw-history.test.py
           python3 scripts/agent-saved-sn-history.test.py
           python3 scripts/agent-trace-target.test.py
+          python3 scripts/agent-trace-auto-resume.test.py
           python3 scripts/agent-source-capture.test.py
           python3 scripts/agent-capture-manifest.test.py
           python3 scripts/agent-canonical.test.py
@@ -88,6 +89,7 @@ jobs:
             'scripts/agent-source-capture.test.py',
             'scripts/agent-capture-manifest.test.py',
             'scripts/agent-trace-target.test.py',
+            'scripts/agent-trace-auto-resume.test.py',
             'scripts/agent-3074-coverage-summary.test.py',
             'scripts/agent-canonical.test.py',
             'scripts/agent-repair-association.test.py',

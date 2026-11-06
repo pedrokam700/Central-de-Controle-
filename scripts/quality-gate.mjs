@@ -108,7 +108,7 @@ const firebaseConfigFile = read('firebase.json');
 
 syntaxCheck('app.js');
 for (const name of ['ames/data/agent-contract.mjs','ames/agent-client.mjs','ames/automation-view.mjs','ames/agent-evidence-view.mjs','ames/data/canonical.mjs','ames/data/process-timeline.mjs','ames/advanced-view.mjs','ames/sync.mjs','ames/firebase-sync.mjs']) syntaxCheck(name);
-for(const suite of ['scripts/agent-scheduler.test.py','scripts/agent-canonical.test.py','scripts/agent-update.test.py','scripts/agent-3012-runtime-contract.test.py','scripts/agent-canonical-insight-retry.test.py']){
+for(const suite of ['scripts/agent-scheduler.test.py','scripts/agent-canonical.test.py','scripts/agent-update.test.py','scripts/agent-3012-runtime-contract.test.py','scripts/agent-trace-auto-resume.test.py','scripts/agent-trace-target.test.py','scripts/agent-canonical-insight-retry.test.py']){
   const result = spawnSync(process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3'), [suite], {cwd:root,encoding:'utf8'});
   assertCheck(result.status === 0, 'Agente: concorrência, endpoints, Excel original e hashes 3028', 'Agente: testes falharam\n'+(result.stderr||result.error||result.stdout));
   if(result.status===0) console.log(result.stderr);

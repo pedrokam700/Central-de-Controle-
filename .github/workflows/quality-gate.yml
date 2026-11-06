@@ -40,6 +40,7 @@ jobs:
           python3 scripts/agent-source-capture.test.py
           python3 scripts/agent-capture-manifest.test.py
           python3 scripts/agent-trace-target.test.py
+          python3 scripts/agent-trace-auto-resume.test.py
           python3 scripts/agent-3074-coverage-summary.test.py
           python3 scripts/agent-package-contract.test.py
           python3 scripts/agent-integrated-v5.test.py

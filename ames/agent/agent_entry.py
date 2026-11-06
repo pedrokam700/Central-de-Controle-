@@ -17,6 +17,7 @@ import process_r11
 import preflight
 import network_watch
 import partial_retry
+import trace_auto_resume
 from engine_bridge import summarize_3074_capture
 
 process_r11.patch_store(a.STORE)
@@ -198,10 +199,13 @@ def _run_deep_trace_job(job_id, cfg):
     job=a._job_update(job_id,status="running",stage="3012" if mode=="history_only" else ("3022" if mode=="process_only" else "3074"),progress=4,started_at=a.utc_now(),
                       message="Preparando coleta seletiva",stage_progress={},live_events=[],partial_refresh=0,
                       scope={"trace_mode":mode,"include_3012":bool(cfg.get("include_3012", True)),
-                             "repair_partials":repair_partials})
+                             "repair_partials":repair_partials,"resumed_from_job":cfg.get('resumed_from_job')})
     a._persist_job(job)
     try:
         ids=_rebase_trace_targets_at_execution(cfg)
+        job=a._job_update(job_id,scope={**job['scope'],'snapshot_ids':ids,
+                      'lines':list(cfg.get('lines') or [])})
+        a._persist_job(job)
         engine=a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR)
         if not engine and mode!="history_only":raise RuntimeError("Motor V0.16 nao encontrado")
         lines=a.normalize_lines(cfg.get("lines") or a.CONFIG.get("configured_lines") or [])
@@ -227,8 +231,9 @@ def _run_deep_trace_job(job_id, cfg):
                 seed_3074_items=partial_retry.verified_3074_items(observed,set(scope_sns))
                 seed_3022_items=partial_retry.verified_3022_items(observed,set(scope_sns))
                 required=('3074','2114') if mode=='reuse_only' else (
-                    ('3022',) if mode=='process_only' else ('3074','2114','3022'))
-                if not any(repair_plan['capture_seen'][source] for source in required):
+                    ('3022',) if mode=='process_only' else
+                    (() if mode=='history_only' else ('3074','2114','3022')))
+                if required and not any(repair_plan['capture_seen'][source] for source in required):
                     raise ValueError(f'{line}: sem coleta anterior dessas fontes; execute o modo normal primeiro')
                 line_result['retry_plan']=repair_plan
                 pending=repair_plan['pending']
@@ -422,6 +427,27 @@ def _run_deep_trace_job(job_id, cfg):
 
 def start_deep_trace_job(cfg):
     _trace_snapshot_ids(cfg)
+    if not cfg.get('repair_partials') and not cfg.get('force_new_run'):
+        with a.JOBS_LOCK:
+            previous=trace_auto_resume.candidate(cfg,list(a.JOBS.values()))
+        if previous:
+            # A previous job is not itself proof that the source returned data.
+            # Require durable, correctly scoped local capture evidence before
+            # switching the new job to gap-only mode. No MES reads here.
+            mode=str(cfg.get('trace_mode') or 'full')
+            eligible=mode=='history_only'
+            if not eligible:
+                required={'process_only':{'3022'},'reuse_only':{'3074','2114'},
+                          'full':{'3074','2114','3022'}}.get(mode,set())
+                for line in cfg['lines']:
+                    captures=partial_retry.load_captures(a.STORE,
+                        cfg['snapshot_targets'][line]['snapshot_id'],line)
+                    if any(c.get('source_view') in required for c in captures):
+                        eligible=True
+                        break
+            if eligible:
+                cfg['repair_partials']=True
+                cfg['resumed_from_job']=previous['id']
     return a._launch_mes_job("deep_trace",cfg,_run_deep_trace_job)
 
 
@@ -508,7 +534,8 @@ class Handler(a.Handler):
                                                  "snapshot_targets":body.get("snapshot_targets"),
                                                  "defect_codes":body.get("defect_codes") or [],"max_failures":body.get("max_failures") or 0,
                                                  "max_pcbas":body.get("max_pcbas") or 0,"performance":body.get("performance") or a.CONFIG.get("performance") or "balanced",
-                                                 "trace_mode":mode,"repair_partials":body.get('repair_partials') is True}),202)
+                                                 "trace_mode":mode,"repair_partials":body.get('repair_partials') is True,
+                                                 "force_new_run":body.get('force_new_run') is True}),202)
             except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
             return
         if u.path=="/api/v1/network/repair":

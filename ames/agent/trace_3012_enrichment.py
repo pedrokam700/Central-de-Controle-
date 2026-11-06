@@ -111,6 +111,10 @@ def collect_historical_3012(a, payload, records, *, job_id, line, progress=None,
             # first 90-day chunk while the operator expected today's date.
             result['failed'].append({'sn': sn, 'error': f'{type(exc).__name__}: {str(exc)[:520]}'})
             consecutive_failures += 1
+            if ames_3012_strategy._fatal_contract_error(exc):
+                result['warning'] = '3012 interrompida: contrato da consulta inválido; demais PCBAs preservadas para retomada'
+                result['omitted'] += len(selected) - index
+                break
             if consecutive_failures >= 2:
                 result['warning'] = '3012 interrompida após duas falhas consecutivas; cobertura parcial'
                 result['omitted'] += len(selected) - index

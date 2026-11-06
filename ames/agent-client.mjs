@@ -419,6 +419,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
           body.trace_mode=value.trace_mode;
         }
         if(value.repair_partials===true)body.repair_partials=true;
+        if(value.force_new_run===true)body.force_new_run=true;
       }
       else if(type==='today'||type==='previous_day'){path='/runs';body={preset:type,lines:scope.lines,performance:scope.performance};}
       else if(type==='custom'){path='/runs';body={preset:'custom',mode:'custom',lines:scope.lines,performance:scope.performance,start_at:value.start_at,end_at:value.end_at,shift:value.shift||null};if(!body.start_at||!body.end_at||body.start_at>=body.end_at)throw Error('Informe período válido.');}

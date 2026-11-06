@@ -185,6 +185,20 @@ async (cfg) => {
   const beforeParams=snapshotParams(initialStore);
   const beforeParamsText=JSON.stringify(beforeParams);
   const observed=new Map();
+  // The 3012 Home sometimes submits the form through Ext.Ajax with serialized
+  // `dteFromDate__Data` / `dteToDate__Data` values, while the grid store's
+  // extraParams contains only paging and an SN. Observe the actual outgoing
+  // request instead of requiring invented top-level `fromDate`/`toDate` keys.
+  // No XHR/fetch monkey patch and no request values are placed in errors.
+  const ajaxRequests=[];
+  const ajax=Ext.Ajax||null;
+  const ajaxBefore=(_connection,options)=>{
+    if(!options||typeof options!=='object')return;
+    ajaxRequests.push({params:options.params,jsonData:options.jsonData,
+      rawData:options.rawData,url:options.url});
+    if(ajaxRequests.length>12)ajaxRequests.shift();
+  };
+  try{ajax?.on?.('beforerequest',ajaxBefore);}catch(e){}
   const observe=store=>{
     if(observed.has(store)) return observed.get(store);
     const state={store,token:storeToken(store),before:0,loads:0,changes:0,success:null,requestParams:null};
@@ -196,7 +210,7 @@ async (cfg) => {
     try{store.on?.('datachanged',state.changeFn);}catch(e){}
     observed.set(store,state);return state;
   };
-  const cleanup=()=>{for(const st of observed.values()){try{st.store.un?.('beforeload',st.beforeFn);}catch(e){}try{st.store.un?.('load',st.loadFn);}catch(e){}try{st.store.un?.('datachanged',st.changeFn);}catch(e){}}};
+  const cleanup=()=>{for(const st of observed.values()){try{st.store.un?.('beforeload',st.beforeFn);}catch(e){}try{st.store.un?.('load',st.loadFn);}catch(e){}try{st.store.un?.('datachanged',st.changeFn);}catch(e){}}try{ajax?.un?.('beforerequest',ajaxBefore);}catch(e){}};
   observe(initialStore); initialStore.currentPage=1;
   const physicalElement=()=>{
     for(const root of [viewButton?.btnEl?.dom,viewButton?.el?.dom]){
@@ -252,6 +266,10 @@ async (cfg) => {
     await sleep(70);
   }
   if(!finalState){cleanup();throw new Error('3012_RESPONSE_NOT_CONFIRMED: View executou, mas nenhuma resposta nova da grid foi comprovada.');}
+  if(!mappedMatches('dteFromDate',cfg.dateFrom,cfg.timeFrom)
+    ||!mappedMatches('dteToDate',cfg.dateTo,cfg.timeTo)){
+    cleanup();throw new Error('3012_DATE_RANGE_DRIFT_AFTER_VIEW: a consulta alterou os campos de data');
+  }
   const store=finalState.cur.store;
   const params=snapshotParams(store);
   const finalToken=storeToken(store);
@@ -260,12 +278,46 @@ async (cfg) => {
   // two distinct, correct bounds in its actual ExtJS store request. This
   // refuses the silent Jan-23-to-Jan-23 empty range seen at the workstation.
   const requestParams=proofState?.requestParams||[...observed.values()].map(x=>x.requestParams).find(Boolean)||{};
-  const queryParams={...params,...requestParams};
-  const paramValue=(aliases)=>{
-    const accepted=new Set(aliases.map(v=>v.toLowerCase().replace(/[^a-z0-9]/g,'')));
-    const entry=Object.entries(queryParams).find(([key])=>accepted.has(key.toLowerCase().replace(/[^a-z0-9]/g,'')));
-    return entry?.[1]??null;
+  const normKey=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const findParameter=(root,aliases,depth=0)=>{
+    if(depth>7||root==null)return null;
+    const accepted=new Set(aliases.map(normKey));
+    if(typeof root==='string'){
+      const raw=root.trim();
+      if((raw[0]==='{'||raw[0]==='[')&&raw.length<50000){
+        try{return findParameter(JSON.parse(raw),aliases,depth+1);}catch(e){}
+      }
+      if(raw.includes('=')){
+        const pairs={};
+        for(const item of raw.replace(/^\?/,'').split('&').slice(0,120)){
+          const pos=item.indexOf('=');if(pos<0)continue;
+          try{pairs[decodeURIComponent(item.slice(0,pos).replace(/\+/g,' '))]=decodeURIComponent(item.slice(pos+1).replace(/\+/g,' '));}catch(e){}
+        }
+        return findParameter(pairs,aliases,depth+1);
+      }
+      return null;
+    }
+    if(Array.isArray(root)){
+      for(const item of root){const value=findParameter(item,aliases,depth+1);if(value!=null)return value;}
+      return null;
+    }
+    if(typeof root!=='object')return null;
+    if(accepted.has(normKey(root.name||root.field||root.itemId)) && root.value!=null)return root.value;
+    for(const [key,value] of Object.entries(root)){
+      if(accepted.has(normKey(key))&&value!=null&&value!=='')return value;
+    }
+    for(const value of Object.values(root)){
+      if(typeof value==='object'||typeof value==='string'){
+        const found=findParameter(value,aliases,depth+1);if(found!=null)return found;
+      }
+    }
+    return null;
   };
+  const fromAliases=['fromDate','dateFrom','defectTimeStart','dteFromDate','dteFromDate__Data'];
+  const toAliases=['toDate','dateTo','defectTimeEnd','dteToDate','dteToDate__Data'];
+  const snAliases=['snImei','lotId','pcbaSn','serialNo'];
+  const requestSources=[...ajaxRequests.map(x=>({name:'ajax_beforerequest',data:x})).reverse(),
+    {name:'store_beforeload',data:requestParams},{name:'proxy',data:params}];
   const stamp=value=>{
     const raw=clean(value);
     const iso=raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})[ T](\d{1,2}):(\d{2})/);
@@ -280,12 +332,17 @@ async (cfg) => {
     return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
   };
   const expectedFrom=`${cfg.dateFrom} ${cfg.timeFrom}`,expectedTo=`${cfg.dateTo} ${cfg.timeTo}`;
-  const actualFrom=stamp(paramValue(['fromDate','dateFrom','defectTimeStart']));
-  const actualTo=stamp(paramValue(['toDate','dateTo','defectTimeEnd']));
+  let actualFrom='',actualTo='',periodSource='not_observed';
+  for(const source of requestSources){
+    // A background ExtJS request may share the same date fields. Never
+    // certify it as the selected board's request without an exact SN match.
+    if(source.name==='ajax_beforerequest'&&clean(findParameter(source.data,snAliases))!==clean(cfg.sn))continue;
+    const begin=stamp(findParameter(source.data,fromAliases)),end=stamp(findParameter(source.data,toAliases));
+    if(begin&&end){actualFrom=begin;actualTo=end;periodSource=source.name;break;}
+  }
   if(actualFrom!==expectedFrom||actualTo!==expectedTo){
-    const source=Object.keys(requestParams).length?'store_beforeload+proxy':'proxy_only';
     // Dates only: no SN, MES response rows, cookies, tokens or request headers.
-    cleanup();throw new Error(`3012_QUERY_PERIOD_MISMATCH: esperado ${expectedFrom} -> ${expectedTo}; observado ${actualFrom||'AUSENTE'} -> ${actualTo||'AUSENTE'} (${source}); consulta recusada`);
+    cleanup();throw new Error(`3012_QUERY_PERIOD_MISMATCH: esperado ${expectedFrom} -> ${expectedTo}; observado ${actualFrom||'AUSENTE'} -> ${actualTo||'AUSENTE'} (${periodSource}); consulta recusada`);
   }
   const records=[];
   try{for(const r of store.getRange?.()||[])records.push(dataOf(r));}catch(e){try{store.each?.(r=>records.push(dataOf(r)));}catch(_) {}}
@@ -302,7 +359,7 @@ async (cfg) => {
   }
   for(let p=2;p<=pages;p++){const rs=await loadPage(p);records.push(...rs);pageResults.push({page:p,count:rs.length});}
   if(records.length!==total){cleanup();throw new Error('3012 incompleta: '+records.length+' / '+total);}
-  const queryProof={contract:CONTRACT,viewAction,viewAttempts,freshness,initialStoreToken:initialToken,finalStoreToken:finalToken,storeRebound:finalToken!==initialToken,requestParams,proxyParams:params,periodVerified:true,
+  const queryProof={contract:CONTRACT,viewAction,viewAttempts,freshness,initialStoreToken:initialToken,finalStoreToken:finalToken,storeRebound:finalToken!==initialToken,requestParams,proxyParams:params,periodVerified:true,periodSource,
     requestedWindow:{from:expectedFrom,to:expectedTo},actualWindow:{from:actualFrom,to:actualTo}};
   cleanup();
   return {records,total,pageSize,pages,pageResults,applied,proxyParams:params,beforeParams,storeFields:storeFields(store),gridItemId:finalState.cur.grid?.itemId||null,viewAction,queryProof};
