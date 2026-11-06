@@ -7,7 +7,10 @@ from typing import Any, Dict, Iterable, List, Tuple
 from store import stable_json, utc_now
 import repair_3012_capture
 
-TRUSTED_COVERAGE_SOURCE = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2"
+# Old mapped-V2 coverage could be certified with an unverified/overwritten
+# end-date. Preserve its rows and audit trail, but require a newly verified MES
+# request interval before treating an empty historical window as covered.
+TRUSTED_COVERAGE_SOURCE = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2_PERIOD_VERIFIED_20261105"
 
 TABLE_SQL = r"""
 CREATE TABLE IF NOT EXISTS repair_history_3012(
@@ -109,6 +112,44 @@ def ensure_schema(store) -> None:
         install_evidence_triggers(con)
 
 
+def _has_verified_mes_period(payload: Dict[str, Any], sn: str, start: datetime, end: datetime) -> bool:
+    """Only certify coverage backed by every chunk's actual MES request.
+
+    A successful UI job, a source string, or even nonempty repair rows cannot
+    prove that the whole requested historical interval was queried. The MES
+    form has minute precision, so compare complete minutes at the boundaries.
+    """
+    if payload.get("contract") != "3012-home-mapped-v2":
+        return False
+    chunks = payload.get("chunks") or []
+    if not chunks:
+        return False
+    spans = []
+    for item in chunks:
+        proof = (item or {}).get("query_proof") or {}
+        requested = proof.get("requestedWindow") or {}
+        if (str(item.get("sn") or "") != sn or proof.get("contract") != "3012-home-mapped-v2"
+                or proof.get("periodVerified") is not True or not proof.get("freshness")
+                or proof.get("actualWindow") != requested
+                or requested != {"from": item.get("from"), "to": item.get("to")}):
+            return False
+        first, last = _parse_dt(item.get("from")), _parse_dt(item.get("to"))
+        if first is None or last is None or last < first:
+            return False
+        spans.append((first, last))
+    spans.sort()
+    cursor = start.replace(second=0, microsecond=0)
+    final = end.replace(second=0, microsecond=0)
+    for first, last in spans:
+        if first > cursor:
+            return False
+        if last >= cursor:
+            cursor = last + timedelta(minutes=1)
+        if cursor > final:
+            return True
+    return False
+
+
 def record_coverage(store, payload: Dict[str, Any]) -> int:
     """Record only successful exact-SN query windows.
 
@@ -128,6 +169,11 @@ def record_coverage(store, payload: Dict[str, Any]) -> int:
         return 0
     now = utc_now()
     source = str((payload or {}).get("source") or "AWIP3012_DIRECT_EXTJS")
+    if source == TRUSTED_COVERAGE_SOURCE and (
+            len(sns) != 1 or not _has_verified_mes_period(payload, sns[0], start, end)):
+        # Keep returned rows and the audit trail, but never create a trusted
+        # zero-row certificate from a fabricated/incomplete checkpoint.
+        return 0
     with store.connect() as con:
         for sn in sns:
             con.execute(

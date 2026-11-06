@@ -27,6 +27,11 @@ body.dark .ames-legacy-shell .ames-health-agent.unknown{background:var(--ames-so
 .ames-trace-config .ames-mode-card b{font-size:11px!important}.ames-trace-config .ames-mode-card small{font-size:9px!important;color:var(--ames-muted)!important}
 .ames-trace-progress{margin:0!important;padding:12px 14px!important;border-left:3px solid var(--ames-blue)!important;box-shadow:none!important}
 .ames-trace-progress>h3{margin:0 0 7px!important;font-size:11px!important}
+.ames-overall-progress{margin:9px 0 13px;padding:11px 12px;border:1px solid #cbddeb;border-radius:9px;background:#f5f9fc}
+.ames-overall-progress-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:11px}
+.ames-overall-progress-head strong{font-weight:800;color:#203d54}.ames-overall-progress-head span{color:#43576b;font-variant-numeric:tabular-nums}
+.ames-overall-progress progress{display:block;width:100%;height:13px;margin:8px 0;accent-color:#2784b5}
+.ames-overall-progress small{display:block;font-size:9px;color:#607286;line-height:1.35}
 .ames-trace-code-helper{margin:12px 0;padding-top:12px;border-top:1px solid var(--ames-line2)}
 .ames-trace-code-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:8px}
 .ames-trace-code-head h4{margin:0 0 3px;font-size:11px}.ames-trace-code-head p{margin:0!important;font-size:9px!important;color:var(--ames-muted)!important}.ames-trace-code-head>span{font-size:9px;color:var(--ames-muted);white-space:nowrap}
@@ -109,3 +114,51 @@ body.dark .ames-legacy-shell .ames-health-agent.unknown{background:var(--ames-so
 .ames-reuse-technical>summary,.ames-reuse-component-details>summary{cursor:pointer;font-size:12px}
 @media(max-width:900px){[data-reuse-cohorts] .ames-reuse-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){[data-reuse-cohorts] .ames-reuse-kpis{grid-template-columns:1fr}}
+
+/* 3074 component drill-down: compact, comparable fault/PCBA rows. */
+[data-reuse-cohorts] .ames-component-comparison{margin-top:11px;overflow-x:auto}
+[data-reuse-cohorts] .ames-component-comparison table{width:100%;min-width:1140px;border-collapse:collapse;font-size:12px;table-layout:auto}
+[data-reuse-cohorts] .ames-component-comparison th{background:#f5f6f8;color:#515967;font-size:11px;text-align:left;white-space:nowrap}
+[data-reuse-cohorts] .ames-component-comparison td,[data-reuse-cohorts] .ames-component-comparison th{padding:9px 11px;border-bottom:1px solid #dde3e8;vertical-align:top}
+[data-reuse-cohorts] .ames-component-comparison tbody tr:nth-child(even){background:#f8fbfc}
+[data-reuse-cohorts] .ames-component-comparison tbody tr:hover{background:#ecf4f8}
+[data-reuse-cohorts] .ames-component-compare-pcba{font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:150px;max-width:230px}
+[data-reuse-cohorts] .ames-component-comparison td strong{font-size:12px;line-height:1.45}
+[data-reuse-cohorts] .ames-component-comparison td small{display:block;margin-top:3px;color:#64748b;font-size:11px;line-height:1.45}
+[data-reuse-cohorts] .ames-reuse-at-cell{min-width:112px;max-width:185px;line-height:1.5}
+[data-reuse-cohorts] .ames-reuse-at-cell .ames-reuse-cell-clipped{display:block;max-width:175px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-reuse-cohorts] .ames-reuse-at-cell small{display:block;font-size:10px;white-space:nowrap;color:#53697b}
+[data-reuse-cohorts] .ames-reuse-unproven{font-size:11px;color:#63768b;font-style:italic}
+[data-reuse-cohorts] .ames-reuse-time-line{display:block;white-space:nowrap;font-variant-numeric:tabular-nums}
+[data-reuse-cohorts] .ames-reuse-compact-more{font-size:11px}
+[data-reuse-cohorts] .ames-reuse-compact-more>summary{cursor:pointer;color:#405873}
+[data-reuse-cohorts] .ames-board-comparison{margin:10px 0}
+[data-reuse-cohorts] .ames-component-raw{font-size:11px;margin-top:5px;color:#556475}
+[data-reuse-cohorts] .ames-component-raw>summary{cursor:pointer;font-weight:600}
+[data-reuse-cohorts] .ames-component-raw>div{padding:4px 0;border-bottom:1px solid #e2e8f0;overflow-wrap:anywhere}
+
+/* Component matrix: metrics in a single compact summary; evidence stays below the table. */
+[data-component-matrix] .ames-matrix-summary table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:640px}
+[data-component-matrix] .ames-matrix-summary th,[data-component-matrix] .ames-matrix-summary td{padding:10px;border-bottom:1px solid #dce5ec;vertical-align:middle;text-align:left}
+[data-component-matrix] .ames-matrix-summary th{max-width:220px;overflow-wrap:anywhere}
+[data-component-matrix] .ames-matrix-summary th small{display:block;font-weight:400;color:#64748b}
+[data-component-matrix] .ames-matrix-summary td{font-variant-numeric:tabular-nums}
+[data-component-matrix] .ames-matrix-summary tbody tr:hover{background:#f5f9fc}
+[data-component-matrix] [data-component-matrix-detail][hidden]{display:none!important}
+[data-component-matrix] .ames-matrix-detail{padding:14px;margin-top:12px;border:1px solid #cedce8;border-radius:10px;background:#f9fcff;scroll-margin-top:90px}
+[data-component-matrix] .ames-matrix-detail h4{margin:0 0 6px}
+[data-component-matrix] .ames-matrix-metric-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:10px 0}
+[data-component-matrix] .ames-matrix-metric-strip span{padding:7px 9px;background:white;border:1px solid #dbe4ec;border-radius:7px}
+[data-component-matrix] .ames-matrix-metric-strip small{display:block;color:#627487}
+[data-component-matrix] .ames-matrix-metric-strip b{display:block;font-size:14px}
+[data-component-matrix] .ames-matrix-mismatch{color:#a45305;font-weight:600}
+[data-component-matrix] .ames-matrix-items table{width:100%;border-collapse:collapse;font-size:12px;min-width:760px}
+[data-component-matrix] .ames-matrix-items th,[data-component-matrix] .ames-matrix-items td{padding:8px 10px;border-bottom:1px solid #e1e8ee;text-align:left;vertical-align:top}
+[data-component-matrix] .ames-matrix-material{font-variant-numeric:tabular-nums;max-width:215px;overflow-wrap:anywhere}
+[data-component-matrix] .ames-matrix-previous{max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+[data-component-matrix] .ames-matrix-item-raw>summary,[data-component-matrix] .ames-matrix-provenance>summary{cursor:pointer;font-weight:650}
+[data-component-matrix] .ames-matrix-raw-list{max-height:240px;overflow:auto;max-width:480px}
+[data-component-matrix] .ames-matrix-raw-list dl{display:grid;grid-template-columns:minmax(100px,40%) minmax(110px,1fr);gap:4px 8px;border-bottom:1px solid #dce5ec;padding:6px 0;overflow-wrap:anywhere}
+[data-component-matrix] .ames-matrix-raw-list dt{color:#53687a}
+[data-component-matrix] .ames-matrix-raw-list dd{margin:0}
+@media(max-width:900px){[data-component-matrix] .ames-matrix-metric-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}

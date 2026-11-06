@@ -248,6 +248,72 @@ def montagem_principal_da_consulta(rows, pcba_sn, defect_time):
             "failure_time_utc": _iso(failure_at), "temporal_summary": selected["summary"]}
 
 
+def ultima_montagem_registrada(rows, pcba_sn):
+    """Recover the last 3074 PCBA *batch* without claiming failure-time presence.
+
+    A currently unbound (N) material is still an historical link. The last
+    PCBA self-row anchors the physical assembly batch; taking the five newest
+    individual component rows would otherwise mix distinct assemblies. If the
+    batch or timestamps cannot be established, leave the scope unverified.
+    """
+    board_sn = normalizar_sn(pcba_sn)
+    own = []
+    for row in rows or []:
+        if not isinstance(row, dict) or normalizar_sn(row.get('Barcode')) != board_sn:
+            continue
+        if 'pcba' not in normalizar_texto(row.get('Sn Type') or '') and str(row.get('Aut Cmf1') or '').strip().upper() != 'PCBA':
+            continue
+        batch = str(row.get('Batch Id') or '').strip()
+        start = (grid_time_to_utc(row.get('Bind Time')) or
+                 grid_time_to_utc(row.get('Prod Time')))
+        if start and batch:
+            own.append((start, batch, row))
+    if not own:
+        return {'status': 'unverified', 'basis': 'missing_pcba_cycle_batch_or_bind',
+                'components': [], 'candidates': []}
+    latest_time, batch, self_row = max(own, key=lambda item: item[0])
+    self_has_bind = grid_time_to_utc(self_row.get('Bind Time')) is not None
+    by_sn = {}
+    candidates = []
+    for row in rows or []:
+        if not isinstance(row, dict) or not _is_component_row(row, board_sn):
+            continue
+        if str(row.get('Batch Id') or '').strip() != batch:
+            continue
+        bound = grid_time_to_utc(row.get('Bind Time'))
+        unbound = grid_time_to_utc(row.get('Unbind Time'))
+        item = {'item_sn': normalizar_sn(row.get('Barcode')),
+                'item_type': str(row.get('Sn Type') or '').strip(),
+                'bind_time_utc': _iso(bound), 'unbind_time_utc': _iso(unbound),
+                'iss_status_now': str(row.get('Iss Status') or '').strip().upper(),
+                'binding_operation': str(row.get('Operation') or '').strip(),
+                'row': row}
+        if bound is None and grid_time_to_utc(row.get('Prod Time')) is not None:
+            # 3074's explicit PCBA batch/row still documents association,
+            # but the exact installation interval is not established.
+            item['temporal_reason'] = 'batch_association_without_bind_clock'
+            by_sn.setdefault(item['item_sn'], []).append(item)
+        elif bound is None or (unbound is not None and unbound < bound):
+            item['temporal_reason'] = 'invalid_or_missing_binding_interval'
+            candidates.append(item)
+        else:
+            by_sn.setdefault(item['item_sn'], []).append(item)
+    components = []
+    for same_material in by_sn.values():
+        if len({x['bind_time_utc'] for x in same_material}) > 1:
+            for item in same_material:
+                item['temporal_reason'] = 'conflicting_batch_mounting_intervals'
+                candidates.append(item)
+        else:
+            components.append(same_material[0])
+    return {'status': 'historical_batch_observed' if components else 'unverified',
+            'basis': ('3074_pcba_self_batch_and_material_bind' if self_has_bind
+                      else '3074_pcba_self_batch_and_prod_time_only'),
+            'batch_id': batch, 'pcba_last_bind_utc': _iso(latest_time),
+            'components': components, 'candidates': candidates,
+            'current_mounting_proven': False, 'failure_mounting_proven': False}
+
+
 def montagens_atual_e_ultima_falha(rows, pcba_sn, defect_time):
     """Independent 3074 mounting scopes for an individual PCBA investigation.
 
@@ -282,6 +348,7 @@ def montagens_atual_e_ultima_falha(rows, pcba_sn, defect_time):
         'comparison': {'only_current': sorted(live_ids - failure_ids),
                        'only_last_failure': sorted(failure_ids - live_ids),
                        'in_both': sorted(live_ids & failure_ids)},
+        'last_recorded': ultima_montagem_registrada(rows, pcba_sn),
     }
 
 

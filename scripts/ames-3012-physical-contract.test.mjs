@@ -26,9 +26,9 @@ test('3012 uses the exact mapped composite date/time controls and versioned runt
   assert.match(collector,/STORE_REBOUND_AFTER_VIEW/);
 });
 
-test('3012 exact SN window remains 24 Jan 2026 through the end of tomorrow',()=>{
+test('3012 exact SN window remains 24 Jan 2026 through the end of today',()=>{
   assert.match(patch,/EXACT_SN_HISTORY_START = datetime\(2026, 1, 24, 0, 0, 0\)/);
-  assert.match(patch,/current \+ timedelta\(days=1\)\)\.replace\(hour=23, minute=59, second=59/);
+  assert.match(patch,/current\.replace\(hour=23, minute=59, second=59/);
 });
 
 test('3012 View proves execution before accepting a response and follows store lifecycle',()=>{

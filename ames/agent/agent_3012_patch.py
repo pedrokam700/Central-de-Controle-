@@ -21,7 +21,9 @@ def exact_sn_history_window(now=None):
     if current.tzinfo:
         current = current.replace(tzinfo=None)
     start = EXACT_SN_HISTORY_START
-    end = (current + timedelta(days=1)).replace(hour=23, minute=59, second=59, microsecond=0)
+    # End on the workstation's *current day*, not the history start day and
+    # not tomorrow. Never silently query an obsolete, collapsed date range.
+    end = current.replace(hour=23, minute=59, second=59, microsecond=0)
     return start, end
 
 
@@ -57,7 +59,7 @@ def install(a, BaseHandler, canonical):
 
     def individual_window(result):
         # Individual SN lookup always covers the factory history baseline through
-        # the end of tomorrow. Historical 2114 timestamps are evidence, not a
+        # the end of today. Historical 2114 timestamps are evidence, not a
         # reason to truncate the requested 3012 window.
         return exact_sn_history_window()
 
@@ -238,7 +240,7 @@ def install(a, BaseHandler, canonical):
                     repair_code=cfg.get("repair_code") or "",
                     defect_type=cfg.get("defect_type") or "",
                     chunk_days=max(1, int(cfg.get("chunk_days") or 31)),
-                    checkpoint_path=a.DATA_DIR / "checkpoints" / "3012" / f"3012_BROAD_{digest}.json",
+                    checkpoint_path=a.DATA_DIR / "checkpoints" / "3012" / f"3012_BROAD_PERIOD_VERIFIED_{digest}.json",
                 )
                 persisted = repair_3012.ingest(a.STORE, payload, workstation=a.WORKSTATION, job_id=job_id)
             repair_3012_capture.finish(a.STORE,job_id,payload.get("rows") or [],

@@ -157,7 +157,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       // without copying MES evidence into the source-selection receipt.
       const trace_receipt=raw.kind==='deep_trace'&&collected&&Object.keys(collected).length
         ?{snapshot_ids:collected}:null;
-      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
+      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,created_at:raw.created_at,started_at:raw.started_at,finished_at:raw.finished_at,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
       if(done||(partial!==lastPartial&&now()-lastRefresh>2200)){
         try{await refresh({afterJob:raw.status==='done'&&['analysis','deep_trace'].includes(raw.kind)});lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
@@ -414,10 +414,11 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
           delete body.snapshot_targets[line].line_id;
         }
         if(value.trace_mode!==undefined){
-          if(!['full','process_only','reuse_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
+          if(!['full','process_only','reuse_only','history_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
           if(value.trace_mode==='process_only'&&store.agent().capabilities?.process_timeline!==true)throw Error('process_only exige coleta 3022 em lote. Conecte um agente 3022-R12+ ou aguarde a incorporação do coletor 3022 no agente canônico.');
           body.trace_mode=value.trace_mode;
         }
+        if(value.repair_partials===true)body.repair_partials=true;
       }
       else if(type==='today'||type==='previous_day'){path='/runs';body={preset:type,lines:scope.lines,performance:scope.performance};}
       else if(type==='custom'){path='/runs';body={preset:'custom',mode:'custom',lines:scope.lines,performance:scope.performance,start_at:value.start_at,end_at:value.end_at,shift:value.shift||null};if(!body.start_at||!body.end_at||body.start_at>=body.end_at)throw Error('Informe período válido.');}
@@ -467,6 +468,20 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const configPatch=name==='config'?publicConfig(result):name==='setup'?publicConfig(result?.config||result):undefined;
       publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(configPatch?{config:configPatch}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
+    // Read-only local SQLite history: no A-MES automation, snapshot write or
+    // 3012 collection is started when the operator opens a reuse detail.
+    cachedRepairHistory:async({sn='',line='',start_at='',limit=5000}={})=>{
+      check();const exact=String(sn).trim(),start=String(start_at).trim();
+      if(exact.length>128||(line&&!LINE_IDS.includes(line))||
+         (start&&!/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/.test(start))||
+         (!exact&&!line&&!start))return [];
+      const params={limit:String(boundedLimit(limit,5000,5000))};
+      if(exact)params.sn=exact;
+      if(line)params.line=line;
+      if(start)params.start_at=start;
+      const data=await request('/3012/history?'+new URLSearchParams(params));
+      return Array.isArray(data?.rows)?data.rows:[];
+    },
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
     clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;refreshSettled=null;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',connection_error:null,config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
   });

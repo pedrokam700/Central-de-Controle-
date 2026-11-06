@@ -79,9 +79,18 @@ export function normalizeAgentRead(payload) {
   }
   const input = payload.insights;
   let insights = null;
+  // Preserve a safe reason when the 3074/2114 classifier fails. Previously
+  // normalizeAgentRead discarded the entire failed result, leaving 85 unknown
+  // boards looking like "3074 never collected" even when material links exist.
+  // This is diagnostic metadata only; it never invents a physical use index.
+  const insight_status=input?.schema==='ames-insights-v1'&&input.ready===false
+    ? {ready:false,reason:String(input.reason||'NOT_READY').slice(0,80),
+       message:String(input.message||'Classificação de uso físico ainda não disponível nesta revisão.').slice(0,300)}
+    : null;
   if (input?.schema === 'ames-insights-v1' && input.ready === true && input.line === base.line_id && String(input.snapshot_id) === base.snapshot_id) {
     const safeRow = r => Object.fromEntries(Object.entries(r || {}).filter(([k,v]) => !k.startsWith('_') && !/password|cookie|token|credential|raw_json/i.test(k) && (typeof v==='string'||typeof v==='number'||typeof v==='boolean')).map(([k,v])=>[k.slice(0,120),typeof v==='string'?v.slice(0,12000):v]));
     insights = { classifier_version:typeof input.classifier_version==='string'?input.classifier_version.slice(0,80):null,line:base.line_id,snapshot_id:base.snapshot_id, coverage:'partial',
+      proof_diagnostics:Object.fromEntries(Object.entries(input.proof_diagnostics||{}).filter(([key,val])=>/^[a-z_]{1,60}$/.test(key)&&Number.isSafeInteger(val)&&val>=0)),
       groups:Object.fromEntries(['rate_kpis','pcba_kpis','material_kpis','correlation_kpis'].map(k=>[k,(input[k]||[]).filter(r=>Array.isArray(r)&&typeof r[0]==='string'&&['string','number'].includes(typeof r[1])).map(r=>[r[0].slice(0,200),r[1]])])),
       component_types:(input.component_types||[]).map(safeRow),
       drilldowns:Object.fromEntries(Object.entries(input.drilldowns||{}).filter(([,rows])=>Array.isArray(rows)).map(([k,rows])=>[k,rows.map(safeRow)])) };
@@ -91,7 +100,7 @@ export function normalizeAgentRead(payload) {
     removed_occurrences:removedOccurrences,
     removed_occurrences_status:removedAvailable?'available':'unavailable',
     pcba_history:{status:'partial',records:datasets.pcba_history},material_trace:{status:'partial',records:datasets.material_reuse},
-    history_contexts:datasets.history_contexts, insights,
+    history_contexts:datasets.history_contexts, insights, insight_status,
     process_timeline:{status:processAvailable?'partial':'not_collected',events:datasets.process_events,contexts:datasets.process_defect_contexts},
     coverage:{...base.coverage,rejected_rows:base.coverage.rejected_rows+legacy.defects.length-defects.length,reasons:[...base.coverage.reasons,'agent_has_no_revision_or_cursor','historical_line_derived_by_agent',...(removedAvailable?[]:['removed_defects_unavailable']),...(removedOccurrences.length?['removed_defects_loaded_separately']:[]),...(processAvailable?['3022_evidence_available']:[])]}});
 }

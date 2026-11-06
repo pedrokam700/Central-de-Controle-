@@ -4,7 +4,9 @@ import path from 'node:path';
 const sha=process.env.COMMIT||process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||null;
 const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
 const names=['index.html','app.js','offline-bootstrap.mjs','styles.css','mobile.css','sw.js','manifest.webmanifest'];
-const allowed=/\.(mjs|css|svg|png|json)$/;
+// Nested HTML routes (e.g. the isolated AT viewer) are genuine application
+// entrypoints and must survive a static/offline build as real files.
+const allowed=/\.(mjs|css|svg|png|json|html)$/;
 
 function collect(dir){
   for(const entry of fs.readdirSync(dir,{withFileTypes:true})){

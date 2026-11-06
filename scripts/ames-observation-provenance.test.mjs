@@ -68,8 +68,11 @@ test('the failure evidence UI shows per-source provenance, period and unknowns w
   assert.match(html,/data-ames-source-view="2114" data-ames-source-state="partial"/);
   assert.match(html,/collector-1/);
   assert.match(html,/data-ames-source-view="3012" data-ames-source-state="not_collected"/,'3028 repair fields do not certify 3012');
-  const confirmed=failureOccurrenceEvidence(snapshot,{...occurrence,repair_evidence_3012:[{pcba_sn:'PCBA-1',defect_code:'F1',repair_comment:'Linked 3012'}]});
-  assert.equal(confirmed.repair.source_confirmed,true);
+  const candidate=failureOccurrenceEvidence(snapshot,{...occurrence,repair_evidence_3012:[{pcba_sn:'PCBA-1',defect_code:'F1',repair_comment:'Linked 3012'}]});
+  assert.equal(candidate.repair.source_confirmed,false,'matching SN alone must not prove that 3012 repaired this exact occurrence');
+  assert.equal(candidate.repair.candidates.length,1);
+  const confirmed=failureOccurrenceEvidence(snapshot,{...occurrence,repair_evidence_3012:[{pcba_sn:'PCBA-1',defect_code:'F1',defect_time:occurrence.defect_time,repair_comment:'Linked 3012',repair_confirmed:true,association:'exact_occurrence'}]});
+  assert.equal(confirmed.repair.source_confirmed,true,'exact occurrence, timestamp and explicit confirmation are required');
   assert.match(renderFailureOccurrenceEvidence(confirmed,'pt-BR',local(snapshot)),/data-ames-source-view="3012" data-ames-source-state="partial"/);
   assert.match(html,/2026-10-16T07:30:00-03:00/);
   assert.match(html,/Posto\/PC informado<\/span>|Posto\/PC informado/);

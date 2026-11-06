@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.temporal_3074 import (montagem_principal_da_consulta,
     ciclos_fisicos_do_material, falhas_durante_vinculos_do_material,
-    montagens_atual_e_ultima_falha)
+    montagens_atual_e_ultima_falha, ultima_montagem_registrada)
 
 
 DEFECT = "2026-10-22 10:00:00"  # factory -03:00 -> 13:00 UTC
@@ -80,6 +80,45 @@ class MountingCycles(unittest.TestCase):
         result = montagem_principal_da_consulta([first, second], "BOARD", DEFECT)
         self.assertEqual(result["state"], "indeterminate")
         self.assertEqual(len(result["candidates"]), 2)
+
+    def test_all_n_reconstructs_latest_complete_batch_not_old_assemblies(self):
+        old = component('LCD-OLD', '2026-10-15 09:00:00', '2026-10-15 16:00:00')
+        old['Batch Id'] = 'BATCH-OCT'
+        new = component('LCD-REUSED', '2026-11-03 09:00:00', '2026-11-03 16:00:00')
+        new['Batch Id'] = 'BATCH-NOV'
+        camera = component('CAM-NOV', '2026-11-03 09:10:00', '2026-11-03 16:00:00')
+        camera['Batch Id'] = 'BATCH-NOV'
+        own_old = {'Barcode': 'BOARD', 'Sn Type': 'PCBA', 'Batch Id': 'BATCH-OCT',
+                   'Bind Time': '2026-10-15 09:00:00', 'Iss Status': 'N'}
+        own_new = {'Barcode': 'BOARD', 'Sn Type': 'PCBA', 'Batch Id': 'BATCH-NOV',
+                   'Bind Time': '2026-11-03 09:00:00', 'Iss Status': 'N'}
+        rows = [old, own_old, camera, own_new, new]
+        record = ultima_montagem_registrada(rows, 'BOARD')
+        self.assertEqual(record['status'], 'historical_batch_observed')
+        self.assertEqual({v['item_sn'] for v in record['components']}, {'LCD-REUSED', 'CAM-NOV'})
+        self.assertFalse(record['failure_mounting_proven'])
+        scopes = montagens_atual_e_ultima_falha(rows, 'BOARD', None)
+        self.assertEqual(scopes['current']['components'], [])
+        self.assertEqual(scopes['last_failure']['components'], [])
+        self.assertEqual(len(scopes['last_recorded']['components']), 2)
+
+    def test_no_self_pcba_cycle_does_not_guess_last_assembly_from_newest_items(self):
+        row = component('LCD-N', '2026-11-03 09:00:00', '2026-11-03 16:00:00')
+        row['Batch Id'] = 'BATCH-NOV'
+        result = ultima_montagem_registrada([row], 'BOARD')
+        self.assertEqual(result['status'], 'unverified')
+        self.assertEqual(result['components'], [])
+
+    def test_own_batch_with_prod_time_retains_history_without_claiming_bind_clock(self):
+        pcba = {'Barcode': 'BOARD', 'Sn Type': 'PCBA', 'Batch Id': 'NOV',
+                'Prod Time': '2026-11-03 15:00:00', 'Iss Status': 'N'}
+        part = {'Barcode': 'LCD', 'Sn Type': 'Screen', 'Batch Id': 'NOV',
+                'Prod Time': '2026-11-03 14:00:00', 'Iss Status': 'N'}
+        result = ultima_montagem_registrada([pcba, part], 'BOARD')
+        self.assertEqual(result['status'], 'historical_batch_observed')
+        self.assertEqual(result['components'][0]['item_sn'], 'LCD')
+        self.assertEqual(result['components'][0]['temporal_reason'], 'batch_association_without_bind_clock')
+        self.assertEqual(result['basis'], '3074_pcba_self_batch_and_prod_time_only')
 
 
 class MaterialLookup(unittest.TestCase):

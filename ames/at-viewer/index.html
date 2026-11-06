@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Central AT · Consulta por SN</title>
+  <link rel="stylesheet" href="/at/at-viewer.css">
+  <link rel="stylesheet" href="/Central-de-Controle-/ames/console-operator-parity.css">
+  <script type="module" src="/at/at-viewer.mjs"></script>
+</head>
+<body>
+  <header class="top"><div class="logo" aria-hidden="true">Q</div><div><strong>Central AT</strong><span>Consulta por SN · A-MES local</span></div><p id="userName"></p></header>
+  <main>
+    <section id="loginPanel" class="panel login">
+      <h1>Entrar na Central AT</h1><p>Utilize o usuário e a senha fornecidos pelo administrador.</p>
+      <form id="loginForm" autocomplete="on">
+        <label>Usuário<input name="username" required minlength="3" maxlength="40" autocomplete="username"></label>
+        <label>Senha<input name="password" required type="password" autocomplete="current-password"></label>
+        <button class="primary">Entrar</button>
+      </form>
+      <p class="notice" id="loginMessage" role="status" aria-live="polite"></p>
+    </section>
+    <section id="queryPanel" hidden>
+      <div class="panel"><div class="title"><div><h1>Consulta por SN</h1><p>Histórico disponível em 3074, 2114, 3022 e 3012. Associação não comprova causa.</p></div><button id="logoutButton" type="button">Sair</button></div>
+      <form id="queryForm" class="query"><label>PCBA ou Material SN<input id="snInput" name="sn" required minlength="4" maxlength="100" autocomplete="off" autofocus placeholder="Digite ou leia o SN"></label><button class="primary">Consultar</button></form>
+      <p class="notice" id="queryMessage" role="status" aria-live="polite"></p></div>
+      <section id="resultPanel" class="panel" hidden></section>
+    </section>
+  </main>
+</body>
+</html>

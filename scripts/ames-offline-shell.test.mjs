@@ -28,6 +28,8 @@ test('build publicado inicializa persistência antes do app e mantém base path'
     assert.match(sw,/offline-bootstrap\.mjs/);
     assert.match(sw,/firebase-auth\.js/);
     assert.match(sw,/firebase-firestore\.js/);
+    assert.ok(fs.existsSync(path.join(base,'ames','at-viewer','index.html')),
+      'isolated AT viewer HTML must be included in the integrated static package');
   } finally { fs.rmSync(out,{recursive:true,force:true}); }
 });
 

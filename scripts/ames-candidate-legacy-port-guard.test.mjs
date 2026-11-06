@@ -22,4 +22,7 @@ test('o pacote exige migracao supervisionada quando existe guardian anterior',()
   assert.doesNotMatch(builder,/volte a usar a CLEAN V3 intacta/);
   assert.match(builder,/instalacao oficial anterior comprovada \(0\.5\.39/);
   assert.match(builder,/nao copie nem substitua SQLite, WAL, token, configuracao, source_id ou filas/);
+  for(const name of ['VERIFIER_FILES','SAFE_STATE_TRANSFER.py','issue57_update_preflight.py','AT_SETUP_FILES']){
+    assert.ok(builder.includes(name),`required previous-package support must survive repackaging: ${name}`);
+  }
 });
