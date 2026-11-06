@@ -1,16 +1,117 @@
 import {buildReuseCohorts} from './data/reuse-cohorts.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
+import {compareFailures} from './data/failure-taxonomy.mjs';
 const t=(pt,en)=>document.documentElement.lang.startsWith('en')?en:pt;
-const labels=()=>({observed:t('SNs observados','Observed SNs'),first_use:t('1º uso','1st use'),reused:t('2º uso ou mais','2nd use or more'),second_use:t('2º uso','2nd use'),third_plus_use:t('3º+ uso','3rd+ use'),unknown_use:t('Uso não determinado','Undetermined use'),failed:t('Reutilizados com falha observada','Reused with observed failure'),associated:t('Reutilizados associados a PCBA defeituosa','Reused associated with defective PCBA'),prior_failure:t('Reutilizados com falha histórica associada','Reused with associated historical failure'),same_failure:t('Mesma falha anterior','Same previous failure'),same_family:t('Mesma família anterior','Same previous family'),verified_no_failure:t('Sem falha registrada · somente com cobertura integral','No recorded failure · complete coverage required'),unknown_outcome:t('Histórico insuficiente para concluir','Insufficient history to conclude')});
+const scopeLabel=scope=>({board_disassembly:t('Desmontagem da placa registrada','Board disassembly recorded'),phone_disassembly:t('Desmontagem do telefone registrada','Phone disassembly recorded'),battery_cover_only:t('Somente tampa da bateria','Battery cover only'),not_recorded:t('Análise não informada','Analysis not recorded'),other:t('Outra análise','Other analysis')})[scope]||'—';
+const labels=()=>({observed:t('PCBAs investigadas','Investigated boards'),scope_pcbas:t('PCBAs investigadas na coleta','Boards investigated in collection'),first_use:t('1º uso','1st use'),reused:t('2º uso ou mais','2nd use or more'),second_use:t('2º uso','2nd use'),third_plus_use:t('3º+ uso','3rd+ use'),unknown_use:t('Uso não determinado','Undetermined use'),failed:t('Reutilizados com falha observada','Reused with observed failure'),associated:t('Reutilizados associados a PCBA defeituosa','Reused associated with defective PCBA'),prior_failure:t('Reutilizados com falha histórica associada','Reused with associated historical failure'),same_failure:t('Mesma falha anterior','Same previous failure'),same_family:t('Mesma família anterior','Same previous family'),verified_no_failure:t('Sem falha registrada · somente com cobertura integral','No recorded failure · complete coverage required'),unknown_outcome:t('Histórico insuficiente para concluir','Insufficient history to conclude')});
 // Physical 3074 reuse and 2114 defect recurrence are independent measures.
 const metricLabel=(kind,key)=>kind==='pcbas'?({
  prior_failure:t('PCBAs com falha anterior na 2114','Boards with prior 2114 failures'),
  same_failure:t('PCBAs com a mesma falha anterior','Boards with the same earlier failure'),
  same_family:t('PCBAs com falha anterior da mesma família','Boards with a similar earlier failure')
-}[key]||labels()[key]):labels()[key];
-export const reuseOverviewMetrics={pcbas:['observed','first_use','reused','prior_failure','same_failure','unknown_use'],components:['observed','reused','associated','prior_failure','same_failure','unknown_use']};
-export function mountReuseCohorts(root,snapshot){
+}[key]||labels()[key]):({
+ observed:t('Componentes físicos identificados','Identified physical components'),
+ prior_failure:t('Componentes em PCBAs com falha histórica','Components on boards with historical failure'),
+ same_failure:t('Componentes com a mesma falha em PCBAs distintas','Components with the same failure across boards')
+}[key]||labels()[key]);
+const boardBasisLabel=r=>r.use_basis==='3074_OWN_PCBA_CYCLES'
+ ?t('Ciclos próprios observados na 3074','Observed own 3074 mounting cycles')
+ :r.use_basis==='2114_AND_3022_REPAIR_RETURN'
+ ?t('Falha anterior, desmontagem concluída na 2114 e reparo seguido de retorno à montagem na 3022; quantidade mínima, não ordinal exato','Earlier defect, completed 2114 dismantling, and 3022 repair followed by assembly return; minimum only, not exact ordinal')
+ :r.use_basis==='2114_DISASSEMBLY_THEN_3022_PRODUCTION'
+ ?t('Desmontagem datada na 2114 seguida de retorno à produção na 3022; quantidade mínima','Dated 2114 dismantling followed by 3022 production return; minimum only')
+ :r.use_basis==='CONFLICTING_3074_ORDINALS'
+ ?t('Dados divergentes de uso próprio da PCBA; não foi escolhido um número arbitrário','Conflicting own-board ordinals; no arbitrary count chosen')
+ :t('Falhas anteriores foram registradas, mas falta comprovação de nova montagem pela 3074 própria ou retorno 2114/3022','Earlier failures were registered, but own 3074 mounting or 2114/3022 return has not been proven');
+// Keep exactly one first/second+/unknown partition for BOTH physical populations.
+// A component's association with a defective board remains in its detail; it
+// must not replace the missing first-use population in the overview.
+export const reuseOverviewMetrics={pcbas:['observed','first_use','reused','prior_failure','same_failure','unknown_use'],components:['observed','first_use','reused','prior_failure','same_failure','unknown_use']};
+// Display one fault per PCBA and exact MES failure identity, but retain every
+// underlying 2114 Hist Seq / 3028 occurrence in the expandable evidence.
+export function consolidateComponentHistory(bindings=[]){
+ const rows=[];
+ for(const binding of bindings){
+  const grouped=[];
+  for(const failure of binding.failures||[]){
+   let group=grouped.find(g=>Boolean(g.defect_code&&failure.defect_code&&
+     String(g.defect_code).trim().toUpperCase()===String(failure.defect_code).trim().toUpperCase())||
+     compareFailures(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT');
+   if(!group){group={pcba_sn:binding.pcba_sn,role:binding.role,defect_code:failure.defect_code,
+     defect_desc:failure.defect_desc,recurrence_pcba_count:failure.recurrence_pcba_count||0,observations:[]};grouped.push(group);}
+   group.recurrence_pcba_count=Math.max(group.recurrence_pcba_count,failure.recurrence_pcba_count||0);
+   group.observations.push(failure);
+  }
+  if(grouped.length)rows.push(...grouped);
+  else rows.push({pcba_sn:binding.pcba_sn,role:binding.role,observations:[]});
+ }
+ return rows;
+}
+export function matchCached3012Repairs(observations=[],history=[]){
+ const sample=observations[0];if(!sample)return [];
+ // Defect Time, never Repair Time. A matching board and exact fault code is
+ // an investigation candidate, not a proved one-to-one 2114 Hist Seq link.
+ const candidates=history.filter(row=>row.pcba_sn===sample.pcba_sn&&
+    observations.some(f=>compareFailures(f.defect_code,f.defect_desc,row.defect_code,row.defect_desc).classification==='EXACT'));
+ return [...new Map(candidates.map(row=>[row.row_key||JSON.stringify([row.pcba_sn,row.defect_code,row.defect_time,row.repair_time,row.repair_user,row.repair_comment]),row])).values()];
+}
+export function matchCached3012FaultTimes(observations=[],history=[]){
+ return [...new Set(matchCached3012Repairs(observations,history).map(row=>String(row.defect_time||'').trim()).filter(Boolean))].sort();
+}
+const distinctText=values=>[...new Set(values.map(value=>String(value??'').trim()).filter(Boolean))];
+function compactEvidenceTimes(observations=[]){
+ const entries=distinctText(observations.filter(h=>h.defect_time).map(h=>`${h.source_view||'MES'} · ${formatFactoryDateTime(h.defect_time)}`));
+ if(!entries.length)return `<span class="ames-reuse-unproven">${t('Não informado na fonte','Not reported by source')}</span>`;
+ const first=entries.slice(0,2).map(item=>`<span class="ames-reuse-time-line">${esc(item)}</span>`).join('');
+ return first+(entries.length>2?`<details class="ames-reuse-compact-more"><summary>+${entries.length-2} ${t('horário(s)','time(s)')}</summary>${entries.slice(2).map(item=>`<span class="ames-reuse-time-line">${esc(item)}</span>`).join('')}</details>`:'');
+}
+const candidateAtHeaders=()=>`<th title="${t('Horário da falha registrado na 3012; a associação é candidata por PCBA e código de falha, não por Hist Seq','3012 defect time; candidate association by board and failure code, not Hist Seq')}">${t('Falha 3012*','3012 fault*')}</th><th>${t('Técnico AT*','AT technician*')}</th><th>${t('Reparo 3012*','3012 repair*')}</th><th>${t('Comentário AT*','AT comment*')}</th>`;
+function candidateAtCells(pcba,code){
+ const attrs=`data-pcba="${esc(pcba||'')}" data-defect-code="${esc(code||'')}"`;
+ return ['fault','technician','repair','comment'].map(field=>`<td class="ames-reuse-at-cell" data-reuse-at-field="${field}" ${attrs}><span class="ames-reuse-unproven">${t('Consultar cache 3012','Check 3012 cache')}</span></td>`).join('');
+}
+export function compact3012CandidateCells(repairs=[]){
+ const dates=distinctText(repairs.map(row=>row.defect_time)).map(formatFactoryDateTime);
+ const technicians=distinctText(repairs.map(row=>row.repair_user));
+ const finishes=distinctText(repairs.map(row=>row.repair_time)).map(formatFactoryDateTime);
+ const comments=repairs.map(row=>String(row.repair_comment||'').trim()).filter(Boolean);
+ const frequency=new Map();for(const comment of comments)frequency.set(comment,(frequency.get(comment)||0)+1);
+ const ranked=[...frequency].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+ const compact=(items,empty)=>items.length?`<span class="ames-reuse-cell-clipped" title="${esc(items.join('\n'))}">${esc(items[0])}</span>${items.length>1?`<small title="${esc(items.join('\n'))}">+${items.length-1}</small>`:''}`:`<span class="ames-reuse-unproven" title="${esc(empty)}">—</span>`;
+ return {
+  fault:compact(dates,t('Sem Defect Time 3012 associado','No associated 3012 Defect Time')),
+  technician:compact(technicians,t('Sem técnico 3012 associado','No associated 3012 technician')),
+  repair:compact(finishes,t('Sem Repair Time 3012 associado','No associated 3012 Repair Time')),
+  comment:ranked.length?`<span class="ames-reuse-cell-clipped" title="${esc(ranked.map(([value,n])=>`${value} ×${n}`).join('\n'))}">${esc(ranked[0][0])}</span><small>×${ranked[0][1]}${ranked.length>1?` · +${ranked.length-1}`:''}</small>`:compact([],t('Sem comentário 3012 associado','No associated 3012 comment'))
+ };
+}
+function sourceAudit(r,rowKind){
+ const uniqueEvidence=[...new Map((r.evidence||[]).map(e=>[
+  JSON.stringify([e.source_view,e.source_id,e.snapshot_id,e.snapshot_revision,e.record_id,e.raw]),e])).values()];
+ const records=uniqueEvidence.map(e=>`<details><summary>${esc(e.source_view)} · ${esc(e.source_id||'—')} / ${esc(e.snapshot_id)} / r${esc(e.snapshot_revision||'—')} · ${esc(e.record_id||'—')}</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(JSON.stringify(e.raw,null,2))}</pre></details>`).join('');
+ const histories=rowKind!=='components'?'':(r.binding_history||[]).map(binding=>
+  `<details><summary>2114/3028 · ${esc(binding.pcba_sn)} · ${binding.failures.length} ${t('registro(s)','record(s)')}</summary>${binding.failures.map(h=>`<div>${esc(h.source_view)} · ${esc(h.defect_desc||h.defect_code||'—')} · ${esc(h.defect_time?formatFactoryDateTime(h.defect_time):t('horário não comprovado','unproven timestamp'))} · Hist Seq ${h.hist_seq==null?'—':esc(h.hist_seq)}</div>`).join('')}</details>`).join('');
+ return `<details data-component-source-audit><summary>${t('Auditoria técnica dos registros originais (3074/2114/3028)','Technical audit of original records (3074/2114/3028)')} · ${uniqueEvidence.length}</summary>${records}${histories}</details>`;
+}
+// Restore the compact, side-by-side comparison that operators used before the
+// large board cards. One row is one *distinct fault on one PCBA*; all source
+// occurrences remain in the expandable audit and are never discarded.
+export function renderComponentComparisonTable(groups=[]){
+ return `<div class="table-wrap ames-component-comparison"><table><thead><tr><th>PCBA (3074)</th><th>${t('Vínculo','Binding')}</th><th>${t('Falha consolidada','Consolidated failure')}</th><th>${t('Horário 2114 / 3028','2114 / 3028 time')}</th>${candidateAtHeaders()}<th>${t('Recorrência entre PCBAs','Cross-board recurrence')}</th><th>${t('Origem','Source')}</th></tr></thead><tbody>
+ ${groups.map(group=>{
+  const count=group.observations.length,board=esc(group.pcba_sn||'—');
+  const role=group.role==='previous'?t('Anterior','Previous'):t('PCBA investigada','Investigated board');
+  const recurrence=group.recurrence_pcba_count>=2?`${t('Mesmo defeito em','Same fault on')} ${group.recurrence_pcba_count} ${t('PCBAs distintas','different boards')}`:'—';
+  const sourceDetails=count?`<details class="ames-component-raw"><summary>${count} ${t('registro(s) de origem (2114/3028)','source record(s) (2114/3028)')}</summary>${group.observations.map(h=>`<div>${esc(h.source_view||'—')} · ${esc(h.defect_desc||h.defect_code||'—')} · ${esc(h.defect_time?formatFactoryDateTime(h.defect_time):t('sem horário comprovado','time not proven'))} · Hist Seq ${h.hist_seq==null?'—':esc(h.hist_seq)}</div>`).join('')}</details>`:'';
+  return `<tr data-component-history-row${count?'':' data-history-missing'}><td class="ames-component-compare-pcba">${board}</td><td>${role}</td><td>${count?`<strong>${esc(group.defect_desc||group.defect_code||'—')}</strong><small>${esc(group.defect_code||'')}</small>`:t('Falha não disponível nesta revisão; ausência não comprovada','Fault unavailable in this revision; absence unproven')}</td><td>${compactEvidenceTimes(group.observations)}</td>${candidateAtCells(group.pcba_sn,group.defect_code)}<td>${esc(recurrence)}</td><td>${sourceDetails||'—'}</td></tr>`;
+ }).join('')}</tbody></table></div>`;
+}
+export function renderBoardComparisonTable(board={}){
+ const rows=[...(board.events||[]).map(e=>[e,false]),...(board.prior_events||[]).map(e=>[e,true])];
+ return `<p class="mes-context" data-board-at-candidate-note>${t('* 3012: técnico, horário e comentário são candidatos por PCBA + código exato de falha, salvo vínculo individual comprovado. Horário 3028/2114 e horário de reparo 3012 não são intercambiáveis. Passe o mouse para ver outros valores.','* 3012: technician, time and comment are candidates matched by board + exact failure code unless individual linkage is proven. 3028/2114 fault time differs from 3012 repair time. Hover to see other values.')}</p><div class="table-wrap ames-component-comparison ames-board-comparison"><table><thead><tr><th>PCBA</th><th>${t('Falha','Failure')}</th><th>${t('Horário 3028 / 2114','3028 / 2114 time')}</th>${candidateAtHeaders()}<th>${t('Contexto','Context')}</th></tr></thead><tbody>${rows.map(([e,prior])=>`<tr data-board-failure-row><td class="ames-component-compare-pcba">${esc(e.pcba_sn||board.sn)}</td><td>${esc(e.defect_desc||e.defect_code||'—')} <small>${esc(e.defect_code||'')}</small></td><td>${compactEvidenceTimes([{...e,source_view:prior?'2114':'3028'}])}</td>${candidateAtCells(e.pcba_sn||board.sn,e.defect_code)}<td>${prior?t('Anterior','Previous'):t('Atual','Current')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+export function mountReuseCohorts(root,snapshot,{cachedRepairHistory}={}){
  let selection=null,filters={};
  const all=buildReuseCohorts(snapshot),options=(key,values)=>`<select name="${key}"><option value="">${t('Todos','All')}</option>${[...new Set(values.filter(Boolean))].sort().map(v=>`<option${filters[key]===v?' selected':''} value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`;
  function render(){
@@ -19,19 +120,45 @@ export function mountReuseCohorts(root,snapshot){
   const verifiedEvidence=model.pcbas.counts.verified_no_failure!==null||model.components.counts.verified_no_failure!==null;
   const health=snapshot.insights?.local_reconstruction||null;
   const failure=snapshot.insights?.ready===false||!snapshot.insights?.drilldowns;
+  const missingBoardUse=model.pcbas.counts.unknown_use||0;
+  const board3074=model.pcbas.rows.filter(r=>r.use_basis==='3074_OWN_PCBA_CYCLES').length;
+  const board3022=model.pcbas.rows.filter(r=>r.use_lower_bound===true).length;
+  const boardUseDiagnostic=missingBoardUse?`<p role="status" class="mes-context" data-reuse-pcba-proof-diagnostic><strong>${missingBoardUse} ${t('PCBAs ainda sem uso físico classificado','boards still without a classified physical use')}.</strong> ${t('Nesta revisão, evidências suficientes classificaram','In this revision, enough evidence classified')} ${board3074} ${t('pela 3074 própria e','by own 3074 cycles and')} ${board3022} ${t('por retorno 2114 → 3022. A atualização visual não cria vínculos ausentes. Antes de repetir a coleta, confira se a revisão existente contém os vínculos próprios da PCBA na 3074 e os retornos de produção na 3022.','by 2114 → 3022 return. Refreshing the display does not create missing bindings. Before repeating collection, check whether this revision has the board’s own 3074 bindings and 3022 production returns.')}</p>`:'';
+  const stored3074=Number(snapshot.coverage?.sources?.['3074']?.stored_rows??snapshot.material_trace?.records?.length??0);
+  const missingInsightWarning=stored3074>0
+    ? t(`Há ${stored3074} vínculos 3074 armazenados, mas a classificação de uso físico da PCBA não está disponível nesta leitura. Coleta realizada não é sinônimo de ciclos próprios de montagem comprovados.`,
+        `There are ${stored3074} stored 3074 links, but physical board-use classification is unavailable in this reading. A completed query does not prove own mounting cycles.`)
+    : t('A classificação 3074/2114 não está disponível. Uso indeterminado não significa primeiro uso.','3074/2114 classification unavailable. Unknown use is not first use.');
+  const proof=snapshot.insights?.proof_diagnostics;
+  const proofWarning=proof&&missingBoardUse?`<p role="status" class="mes-context" data-reuse-raw-pcba-diagnostic><strong>${t('Diagnóstico dos dados brutos 3074:','Raw 3074 diagnostic:')}</strong> ${Number(proof.raw_pcbas_observed||0)} ${t('PCBAs com resultado bruto,','boards with raw results,')} ${Number(proof.raw_pcbas_with_self_rows||0)} ${t('com linhas próprias PCBA e','with own-PCBA rows and')} ${Number(proof.pcba_occurrences_classified||0)} ${t('ocorrências com montagem comprovada na data da falha. A consulta completa não garante classificação temporal.','occurrences with verified mounting at failure time. Complete extraction does not guarantee temporal classification.')}</p>`:'';
   const evidenceWarning=failure
-    ? `<p role="status" class="mes-context" data-reuse-proof-warning>${esc(snapshot.insights?.message||t('A classificação 3074/2114 não está disponível. Uso indeterminado não significa primeiro uso.','3074/2114 classification unavailable. Unknown use is not first use.'))}</p>`
+    ? `<p role="status" class="mes-context" data-reuse-proof-warning>${esc(snapshot.insight_status?.message||snapshot.insights?.message||missingInsightWarning)}</p>`
     : health&&health.source_complete===false
       ? `<p role="status" class="mes-context" data-reuse-proof-warning>${t('Recuperação local parcial, sem nova consulta MES:','Partial local recovery, without MES query:')} ${Number(health.recovered_pcbas||0)}/${Number(health.expected_pcbas||0)} PCBAs · ${Number(health.pcbas_with_3074_self_binding||0)} ${t('vínculos próprios de PCBA comprovados na 3074. Ausência de dados não comprova primeiro uso nem ausência de reuso.','own-PCBA bindings verified in 3074. Missing data do not prove first use or no reuse.')}</p>`
-      : '';
-  root.innerHTML=`<h3>${t('Populações observadas de reuso','Observed reuse populations')}</h3>${evidenceWarning}<p>${t('Denominador não comprovado. Contagens da amostra investigada; taxa de falha indisponível. Zero observado não prova ausência.','Unproven denominator. Counts from the investigated sample; failure rate unavailable. An observed zero does not prove absence.')}</p>
+      : proofWarning;
+  const partitions=['pcbas','components'].map(kind=>{
+    const counts=model[kind].counts;
+    const classified=counts.first_use+counts.reused+counts.unknown_use;
+    const valid=classified===counts.observed;
+    return `<p class="mes-context" data-reuse-partition="${kind}" data-partition-valid="${valid}"><strong>${kind==='pcbas'?t('PCBAs','Boards'):t('Componentes','Components')}:</strong> ${counts.observed} = ${counts.first_use} ${t('em 1º uso','in first use')} + ${counts.reused} ${t('em 2º+ uso','in second+ use')} + ${counts.unknown_use} ${t('indeterminados','unknown')}.${valid?'':` <strong>${t('Inconsistência na contagem — não interpretar indicadores','Count mismatch — do not interpret indicators')}</strong>`}</p>`;
+  }).join('');
+  root.innerHTML=`<h3>${t('Populações observadas de reuso','Observed reuse populations')}</h3>${evidenceWarning}${boardUseDiagnostic}${partitions}<p>${t('Denominador não comprovado. Contagens da amostra investigada; taxa de falha indisponível. Zero observado não prova ausência.','Unproven denominator. Counts from the investigated sample; failure rate unavailable. An observed zero does not prove absence.')}</p>
   <p>${t('SN/CPH filtram ambas as populações; tipo e part number filtram os componentes.','SN/CPH filter both populations; type and part number filter components.')}</p><form data-cohort-filters class="ames-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:end"><label>SN <input name="sn" value="${esc(filters.sn||'')}"></label><label>CPH ${options('product',[...all.pcbas.rows,...all.components.rows].flatMap(r=>r.products))}</label><label>${t('Tipo','Type')} ${options('item_type',all.components.rows.map(r=>r.item_type))}</label><label>Part number ${options('part_number',all.components.rows.flatMap(r=>r.part_numbers))}</label><button type="submit" class="button secondary">${t('Filtrar','Filter')}</button></form>
-  ${['pcbas','components'].map(kind=>`<section data-cohort="${kind}"><h4>${kind==='pcbas'?t('Placas / PCBAs','Boards / PCBAs'):t('Componentes físicos · SN + tipo','Physical components · SN + type')}</h4><div class="ames-reuse-kpis">${Object.entries(names).filter(([key])=>reuseOverviewMetrics[kind].includes(key)).map(([key,label])=>`<button type="button" class="stat ames-kpi-button" data-cohort-kind="${kind}" data-cohort-metric="${key}"><span class="stat-label">${metricLabel(kind,key)}</span><strong class="stat-value">${model[kind].counts[key]??'—'}</strong></button>`).join('')}</div></section>`).join('')}
+  ${['pcbas','components'].map(kind=>`<section data-cohort="${kind}"><h4>${kind==='pcbas'?t('Placas / PCBAs','Boards / PCBAs'):t('Componentes físicos · Material SN + tipo','Physical components · Material SN + type')}</h4>${kind==='components'?`<p class="mes-context" data-component-scope-note>${t('O total identificado conta unidades físicas distintas rastreadas por Material SN + tipo nos dados carregados. Não representa códigos Material ID nem o total produzido. Compare este total com o número de componentes de 2º uso ou mais; a quantidade de PCBAs investigadas aparece acima.','The identified total counts distinct physical units traced by Material SN + type in the loaded data. It is neither a count of Material IDs nor all manufactured parts. Compare it with the number of components on their second or later use; the investigated board count appears above.')}</p>`:''}<div class="ames-reuse-kpis">${Object.entries(names).filter(([key])=>reuseOverviewMetrics[kind].includes(key)).map(([key,label])=>`<button type="button" class="stat ames-kpi-button" data-cohort-kind="${kind}" data-cohort-metric="${key}"><span class="stat-label">${metricLabel(kind,key)}</span><strong class="stat-value">${key==='scope_pcbas'?all.pcbas.counts.observed:model[kind].counts[key]??'—'}</strong></button>`).join('')}</div></section>`).join('')}
   <details class="ames-reuse-coverage" data-cohort-limits><summary>${t('Limites da cobertura e casos inconclusivos','Coverage limits and unresolved outcomes')}</summary>
   <p>${t('Sem registro de falha não comprova ausência de falha. A categoria sem falha só é calculada quando a população e os desfechos têm comprovação integral. Mesma falha = código exato; mesma família = classificação similar, podendo a mesma peça ter históricos dos dois tipos.','No failure record does not prove no failure. No-failure counts require complete population and outcome proof. Exact failure and similar family are different historical comparisons.')}</p>
   ${verifiedEvidence?`<p>${t('Categorias sem falha só podem ser examinadas com comprovante integral de cobertura.','No-failure categories can be examined only with complete coverage proof.')}</p>`:''}
   ${['pcbas','components'].map(kind=>`<button type="button" class="button secondary" data-cohort-kind="${kind}" data-cohort-metric="unknown_outcome">${kind==='pcbas'?t('PCBAs com histórico inconclusivo','Boards with unresolved history'):t('Componentes com histórico inconclusivo','Components with unresolved history')} · ${model[kind].counts.unknown_outcome}</button>`).join('')}
   </details><div data-cohort-detail></div>`;
+  if(failure){
+    // Zero classified PCBAs with an unavailable classifier is NOT evidence
+    // of zero first-use or reused PCBAs. Retain unknown=observed visibly.
+    for(const metric of ['first_use','reused']){
+      const button=root.querySelector(`[data-cohort-kind="pcbas"][data-cohort-metric="${metric}"]`);
+      if(button){const val=button.querySelector?.('.stat-value');if(val)val.textContent='—';button.disabled=true;
+        button.title=t('Classificação não disponível; não interpretar como zero.','Classification unavailable; do not interpret as zero.');}
+    }
+  }
   root.querySelector('form').addEventListener('submit',e=>{e.preventDefault();filters=Object.fromEntries(new FormData(e.currentTarget));selection=null;render();});
   for(const button of root.querySelectorAll('[data-cohort-metric]'))button.addEventListener('click',()=>{
     selection=[button.dataset.cohortKind,button.dataset.cohortMetric];
@@ -40,26 +167,62 @@ export function mountReuseCohorts(root,snapshot){
       metricButton.classList.toggle('active',active);
       metricButton.setAttribute('aria-pressed',String(active));
     }
-    detail(model);
+    detail(model,all);
     // Previously this detail was appended below two full KPI matrices:
     // clicking the first PCBAs card appeared to do nothing.
     root.querySelector('[data-cohort-detail]')?.scrollIntoView?.({behavior:'smooth',block:'start'});
   });
-  if(selection)detail(model);
+  if(selection)detail(model,all);
  }
- function detail(model){
-  const [kind,metric]=selection,rows=model[kind].metrics[metric],host=root.querySelector('[data-cohort-detail]');
+ function detail(model,all){
+  const [kind,metric]=selection,scope=metric==='scope_pcbas',rowKind=scope?'pcbas':kind,
+   rows=scope?all.pcbas.metrics.observed:model[kind].metrics[metric],host=root.querySelector('[data-cohort-detail]');
   if(metric==='verified_no_failure'&&model[kind].counts.verified_no_failure===null){
    host.innerHTML=`<h4>${metricLabel(kind,metric)} · —</h4><p role="status">${t('Indisponível: não existe prova do universo completo dos reutilizados e do desfecho de cada item. Isso não equivale a zero materiais sem falha.','Unavailable: the full reused population and each item outcome have not been verified. This is not zero components without failures.')}</p>`;
    return;
   }
-  host.innerHTML=`<h4>${metricLabel(kind,metric)} · ${rows.length} ${t('itens observados','observed items')}</h4><p>${t('Associação e recorrência não confirmam causa. Horários abaixo são registros MES, não horários de produção comprovados.','Association and recurrence do not confirm cause. Times below are MES records, not proven production times.')}</p>${rows.map(r=>`<details data-cohort-row><summary>${esc(r.sn)} · ${esc(r.item_type||'PCBA')} · ${r.use_index?`${r.use_index}º ${t('uso','use')}`:t('uso não determinado','use unknown')}</summary><p>CPH: ${esc(r.products.join(', ')||'—')} · PN: ${esc(r.part_numbers.join(', ')||'—')} · ${t('PCBAs anteriores','Previous PCBAs')}: ${esc(r.previous_pcbas.join(', ')||'—')}</p><p>${t('Falhas atuais','Current failures')}: ${r.events.length} · ${t('Falhas históricas','Historical failures')}: ${r.prior_events.length} · ${t('Mesma falha','Same failure')}: ${r.same_failure?t('sim','yes'):t('não comprovada','not proven')}${r.use_conflict?' · '+t('Usos divergentes: consultar evidências','Conflicting uses: inspect evidence'):''}</p>
-  <div class="table-wrap"><table><thead><tr><th>PCBA</th><th>${t('Falha','Failure')}</th><th>${t('Registro MES','MES record')}</th><th>${t('Contexto','Context')}</th></tr></thead><tbody>${[...r.events.map(e=>[e,false]),...r.prior_events.map(e=>[e,true])].map(([e,prior])=>`<tr><td>${esc(e.pcba_sn||'—')}</td><td>${esc(e.defect_desc||e.defect_code||'—')} <small>${esc(e.defect_code||'')}</small></td><td>${esc(formatFactoryDateTime(e.defect_time))}</td><td>${prior?t('Anterior','Previous'):t('Atual','Current')}</td></tr>`).join('')}</tbody></table></div>
-  ${kind==='pcbas'&&r.history_2114?.length?`<details data-board-2114-timeline><summary>${t('Histórico completo 2114','Full 2114 history')} · ${r.history_2114.length} ${t('registros','records')} · ${r.history_2114_repeats} ${t('repetições internas da mesma falha','internal exact-failure repeats')}</summary>
-  <p>${t('Sequências da própria PCBA, inclusive Hist Seq 0. Repetição dentro da 2114 não comprova novo uso físico nem associação à falha atual da 3028. Status e análise pertencem a cada linha histórica.','The board’s own history, including Hist Seq 0. Repetition inside 2114 does not prove another physical use or association with the current 3028 failure. Status and analysis belong to each historical row.')}</p>
-  <div class="table-wrap"><table><thead><tr><th>Hist Seq</th><th>${t('Falha 2114','2114 failure')}</th><th>${t('Análise','Analysis')}</th><th>Repair</th><th>${t('Reincidência dentro da 2114','2114 internal recurrence')}</th></tr></thead>
-  <tbody>${r.history_2114.map(h=>`<tr><td>${h.hist_seq===null?'—':esc(String(h.hist_seq))}</td><td>${esc(h.defect_desc||h.defect_code||'—')} <small>${esc(h.defect_code||'')}</small></td><td>${esc(h.defect_type||'—')}</td><td>${esc(h.repair_status||'—')}</td><td>${!h.history_order_proven?t('Ordem não comprovada','Unproven order'):h.repeat_exact_prior_count?t('Mesma falha anterior','Same earlier failure')+' ('+h.repeat_exact_prior_count+')':h.repeat_family_prior_count?t('Mesma família anterior','Same earlier family'):'—'}</td></tr>`).join('')}</tbody></table></div></details>`:''}
-  <p>${kind==='components'?t('Para estado Y/N e horários de vínculo consulte as evidências 3074; vínculo antigo não prova montagem atual.','For Y/N status and binding times inspect 3074 evidence; prior binding does not prove current mounting.'):''}</p>${r.evidence.map(e=>`<details><summary>${esc(e.source_view)} · ${esc(e.source_id||'—')} / ${esc(e.snapshot_id)} / r${esc(e.snapshot_revision||'—')} · ${esc(e.record_id||'—')}</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(JSON.stringify(e.raw,null,2))}</pre></details>`).join('')}</details>`).join('')}`;
+  host.innerHTML=`<h4>${metricLabel(kind,metric)} · ${rows.length} ${t('itens observados','observed items')}</h4><p>${scope?t('Placas distintas da 3028 nesta revisão. A consulta ou cobertura integral dos históricos 3074/2114 precisa de comprovação independente.','Distinct boards in this revision’s 3028. Actual historical query/coverage of 3074/2114 requires separate evidence.'):t('Associação e recorrência não confirmam causa. Horários abaixo são registros MES, não horários de produção comprovados.','Association and recurrence do not confirm cause. Times below are MES records, not proven production times.')}</p>${rows.map(r=>`<details data-cohort-row><summary>${esc(r.sn)} · ${esc(r.item_type||'PCBA')} · ${r.use_index?`${r.use_lower_bound?t('pelo menos ','at least '):''}${r.use_index}º ${t('uso','use')}`:t('uso não determinado','use unknown')}</summary><p>CPH: ${esc(r.products.join(', ')||'—')} · PN: ${esc(r.part_numbers.join(', ')||'—')} · ${t('PCBAs anteriores','Previous PCBAs')}: ${esc(r.previous_pcbas.join(', ')||'—')}</p><p>${t('Falhas atuais','Current failures')}: ${r.events.length} · ${rowKind==='components'?t('Registros de falha nas PCBAs vinculadas','Failure records on linked boards')+': '+r.binding_history.reduce((sum,b)=>sum+b.failures.length,0):t('Falhas históricas','Historical failures')+': '+r.prior_events.length} · ${t('Mesma falha','Same failure')}: ${r.same_failure?t('sim','yes'):t('não comprovada','not proven')}${r.use_conflict?' · '+t('Usos divergentes: consultar evidências','Conflicting uses: inspect evidence'):''}</p>
+  ${rowKind==='pcbas'&&r.use_basis?`<p data-pcba-reuse-proof><strong>${t('Classificação física','Physical classification')}:</strong> ${esc(boardBasisLabel(r))}${r.process_reuse_evidence?.returns.length?' · '+r.process_reuse_evidence.returns.map(x=>esc((x.dismantle_type||'2114')+' → '+(x.production_station||'3022')+' ('+formatFactoryDateTime(x.production_time)+')')).join('; '):''}</p>`:''}
+  ${rowKind==='pcbas'&&r.unproven_use_context?`<p class="mes-context" data-pcba-use-limits>${t('Evidências encontradas para esta PCBA','Evidence found for this board')}: 2114 · ${r.unproven_use_context['2114_records']} ${t('registros','records')} (${r.unproven_use_context['2114_dismantlings']} ${t('desmontagens registradas','dismantling scopes')}); 3022 · ${r.unproven_use_context['3022_process_passages']} ${t('passagens','passages')} / ${r.unproven_use_context['3022_correlations']} ${t('correlações','correlations')}. ${t('Isso não permite afirmar primeiro uso nem segundo uso sem uma montagem comprovada.','These facts alone cannot establish first or second physical use.')}</p>`:''}
+  ${rowKind==='pcbas'?renderBoardComparisonTable(r):''}
+  ${rowKind==='pcbas'&&r.history_2114?.length?`<details data-board-2114-timeline><summary>${t('Histórico completo 2114','Full 2114 history')} · ${r.history_2114.length} ${t('registros','records')} · ${r.history_2114_repeats} ${t('repetições internas da mesma falha','internal exact-failure repeats')}</summary>
+  <p>${t('MainBoard e Phone Disassembly indicam escopos de desmontagem diferentes; Phone Battery Cover indica somente retirada da tampa. Análise vazia não comprova execução. Nenhum deles, isoladamente, comprova um novo ciclo de montagem: para 2º uso é preciso vínculo físico na 3074 ou retorno correlacionado na 3022. Repetição 2114 não atribui falha atual 3028 automaticamente.','MainBoard and Phone Disassembly record different disassembly scopes; Phone Battery Cover is cover-only. Blank analysis does not prove a completed operation. None alone proves reassembly: second use requires a physical 3074 binding or correlated 3022 return. A repeated 2114 entry does not automatically attribute the current 3028 failure.')}</p>
+  <div class="table-wrap ames-component-comparison"><table><thead><tr><th>Hist Seq</th><th>${t('Falha 2114','2114 failure')}</th><th>${t('Horário 2114','2114 time')}</th><th>${t('Análise','Analysis')}</th><th>${t('Interpretação do processo','Process interpretation')}</th><th>Repair</th><th>${t('Reincidência dentro da 2114','2114 internal recurrence')}</th></tr></thead>
+  <tbody>${r.history_2114.map(h=>`<tr><td>${h.hist_seq===null?'—':esc(String(h.hist_seq))}</td><td>${esc(h.defect_desc||h.defect_code||'—')} <small>${esc(h.defect_code||'')}</small></td><td>${h.defect_time?esc(formatFactoryDateTime(h.defect_time)):`<span class="ames-reuse-unproven">${t('Não informado','Not reported')}</span>`}</td><td>${esc(h.defect_type||'—')}</td><td>${esc(scopeLabel(h.analysis_scope))}</td><td>${esc(h.repair_status||'—')}</td><td>${!h.history_order_proven?t('Ordem não comprovada','Unproven order'):h.repeat_exact_prior_count?t('Mesma falha anterior','Same earlier failure')+' ('+h.repeat_exact_prior_count+')':h.repeat_family_prior_count?t('Mesma família anterior','Same earlier family'):'—'}</td></tr>`).join('')}</tbody></table></div></details>`:''}
+  ${rowKind==='components'&&r.binding_history?.length?`<section data-component-binding-history><h5>${t('Todos os vínculos 3074 e históricos 2114 disponíveis','All 3074 bindings and available 2114 histories')} · ${r.binding_history.length} ${t('PCBAs vinculadas/investigadas','linked/investigated boards')}</h5><p class="mes-context" data-component-at-candidate-note>${t('* Dados 3012 são associados por PCBA + falha exata (candidato), não por Hist Seq; horário da falha e horário de reparo ficam separados. Passe o mouse para ver os demais comentários/ATs.','* 3012 data are candidate matches by board + exact fault, not Hist Seq; fault and repair time remain separate. Hover for other comments/technicians.')}</p>
+  <p>${t('Recorrência neste indicador = mesmo código de falha em pelo menos duas PCBAs distintas que tiveram vínculo 3074 com este SN. Repetições na mesma placa contam uma placa; associação não prova causa nem o instante de montagem.','Here recurrence means the same defect code on at least two different boards linked to this physical SN in 3074. Repetitions on one board count once; association does not prove cause or mounting time.')}</p>
+  ${r.cross_board_recurrences?.length?`<p data-component-cross-board-recurrence><strong>${t('Mesma falha em PCBAs distintas','Same failure across different boards')}:</strong> ${r.cross_board_recurrences.map(group=>esc((group.defect_desc||group.defect_code)+' · '+group.pcba_count+' '+t('PCBAs','boards')+' ('+group.pcbas.join(', ')+')')).join(' · ')}</p>`:''}
+  ${renderComponentComparisonTable(consolidateComponentHistory(r.binding_history))}</section>`:''}
+  <p>${kind==='components'?t('Para estado Y/N e horários de vínculo consulte as evidências 3074; vínculo antigo não prova montagem atual.','For Y/N status and binding times inspect 3074 evidence; prior binding does not prove current mounting.'):''}</p>${sourceAudit(r,rowKind)}</details>`).join('')}`;
+  wireReuse3012Columns(host);
+ }
+ const repairCache=new Map();
+ function wireReuse3012Columns(host){
+  for(const detail of host.querySelectorAll('details[data-cohort-row]'))detail.addEventListener('toggle',async()=>{
+   if(!detail.open)return;
+   const panels=[...detail.querySelectorAll('[data-reuse-at-field]')];if(!panels.length)return;
+   const boards=[...new Set(panels.map(p=>p.dataset.pcba).filter(Boolean))];
+   if(typeof cachedRepairHistory!=='function'){
+    panels.forEach(panel=>{panel.innerHTML='<span class="ames-reuse-unproven">—</span>';panel.title=t('Consulta 3012 local indisponível neste agente; não significa ausência de reparo','Local 3012 unavailable; this does not prove no repair');});return;
+   }
+   for(const board of boards){
+    if(!repairCache.has(board))repairCache.set(board,Promise.resolve().then(()=>cachedRepairHistory({sn:board,limit:5000})).then(rows=>({rows:Array.isArray(rows)?rows:[],failed:false})).catch(()=>({rows:[],failed:true})));
+    const {rows:history,failed}=await repairCache.get(board);
+    if(!detail.isConnected)return;
+    const codes=[...new Set(panels.filter(p=>p.dataset.pcba===board).map(p=>p.dataset.defectCode))];
+    for(const code of codes){
+     const matched=code?matchCached3012Repairs([{pcba_sn:board,defect_code:code,defect_desc:code}],history):[];
+     const cells=compact3012CandidateCells(matched);
+     for(const panel of panels.filter(p=>p.dataset.pcba===board&&p.dataset.defectCode===code)){
+      panel.innerHTML=failed?'<span class="ames-reuse-unproven">—</span>':cells[panel.dataset.reuseAtField];
+      panel.dataset.atProof=failed?'unavailable':matched.length?'candidate':'not_found';
+      if(failed)panel.title=t('Falha ao ler cache local da 3012','Local 3012 cache read failed');
+      else if(!matched.length)panel.title=t('Sem registro 3012 da mesma PCBA/falha no cache consultado; ausência não comprovada','No matching board/fault record in queried 3012 cache; absence unproven');
+      else panel.title=t('3012: associação candidata por PCBA + falha; a correspondência exata de Hist Seq não foi comprovada','3012: candidate board/fault association; exact Hist Seq match unproven');
+     }
+    }
+   }
+  });
  }
  render();
 }

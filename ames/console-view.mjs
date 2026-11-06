@@ -168,7 +168,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
       // exact operational read scope with Monitor and Top 3 (never SN lookup).
       pane.innerHTML='<section data-reuse-period-control class="mes-context-panel"></section><section data-reuse-dashboard></section>';
       const scope=pane.querySelector('[data-reuse-period-control]'),content=pane.querySelector('[data-reuse-dashboard]');
-      const primary=withAgentRefresh(withHistoricalTrends(withReuseProvenance(createReuseConsoleView(content,store),content,store),content,store,history),content,store,client,{label:'Atualizar'});
+      const primary=withAgentRefresh(withHistoricalTrends(withReuseProvenance(createReuseConsoleView(content,store,client),content,store),content,store,history),content,store,client,{label:'Atualizar'});
       view={render(){paintReadingPeriod(scope,store,periodController,{onContinueTrace:line=>{
         // Continuation is explicit; opening Rastreabilidade never starts MES.
         // The existing deep-trace gate verifies this exact local revision again

@@ -17,12 +17,13 @@ const result={detected_type:'MATERIAL_SN',material_investigation:{query_material
 test('material report shows bounded cycles, only temporally supported failures and migrant alert',()=>{
   const html=renderMaterialSnInvestigation(result,'pt-BR');
   assert.match(html,/CAM-001/);
-  assert.match(html,/BOARD-A → BOARD-B/);
+  assert.match(html,/BOARD-A/);
+  assert.match(html,/BOARD-B/);
   assert.match(html,/data-sn-open-pcba="BOARD-A"/);
   assert.match(html,/2.*Falhas comprovadas dentro dos vínculos/s);
   assert.match(html,/Earlier camera review/);
   assert.match(html,/associação candidata à ocorrência/);
-  assert.match(html,/causalidade não comprovada/);
+  assert.match(html,/causa não confirmada/);
   assert.match(html,/1 registros 2114 fora do período/);
 });
 

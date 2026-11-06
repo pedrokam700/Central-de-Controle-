@@ -88,7 +88,7 @@ export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
   if(!scopes)return '';
   const en=String(locale).startsWith('en');
   const c=choose.bind(null,en);
-  const current=scopes.current||{},failure=scopes.last_failure||{},diff=scopes.comparison||{};
+  const current=scopes.current||{},failure=scopes.last_failure||{},last=scopes.last_recorded||{},diff=scopes.comparison||{};
   const query=result.trace_3074?.query||{};
   const rawRows=Array.isArray(query.rows)?query.rows:[];
   const counts={Y:0,N:0,other:0};
@@ -140,6 +140,19 @@ export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
     ${c('Nas duas montagens','In both mountings')}: ${(diff.in_both||[]).length}</p>
     <div class="ames-mounting-columns">${currentCard}${failureCard}</div>`;
   const recent=[...history].sort((a,b)=>text(b.bind_time_utc).localeCompare(text(a.bind_time_utc))).slice(0,5);
+  const latestRows=Array.isArray(last.components)?last.components:[];
+  const latestAudit=new Map((last.component_usage||[]).map(x=>[text(x.item_sn),x]));
+  const lastReference=last.status==='historical_batch_observed'&&latestRows.length?`<section class="mes-context-panel" data-sn-3074-last-known>
+    <h4>${c('Última montagem registrada na 3074 (já desvinculada)','Last recorded 3074 mounting (now unbound)')}</h4>
+    <p class="mes-context">${c('Último lote registrado pela própria PCBA. As peças com N aparecem no histórico deste lote, não na montagem atual; isto não comprova presença no instante da falha 2114. Quando só existe Prod Time, o instante exato do vínculo é desconhecido.','Latest batch recorded by the board itself. N parts appear in this historical batch, not in the current assembly; this does not prove presence at the 2114 failure. With Prod Time only, the exact binding instant is unknown.')}</p>
+    <small>${c('Lote','Batch')}: ${esc(display(last.batch_id))} · ${c('Referência temporal PCBA','Board time reference')}: ${esc(display(last.pcba_last_bind_utc))} · ${latestRows.length} ${c('componentes identificados','identified components')}</small>
+    <div class="table-wrap"><table><thead><tr><th>${c('Componente','Component')}</th><th>Material SN</th><th>${c('Status agora','Status now')}</th><th>${c('Usos comprovados','Proven uses')}</th><th>${c('PCBAs anteriores','Previous boards')}</th></tr></thead><tbody>${latestRows.map(item=>{
+      const audit=latestAudit.get(text(item.item_sn));const used=audit?.is_reused;
+      return `<tr><td>${esc(display(item.item_type))}</td><td><button class="button secondary" data-sn-open-material="${esc(item.item_sn)}">${esc(item.item_sn)}</button></td><td>${esc(display(item.iss_status_now))}</td><td>${used===true?esc(display(audit.known_use_count_min)):used===false?c('Sem outro vínculo na cobertura','No other link in coverage'):c('Não comprovado','Unverified')}</td><td>${esc((audit?.other_pcbas||[]).join(', ')||'—')}</td></tr>`;
+    }).join('')}</tbody></table></div>
+    ${last.reused_count!==null&&last.reused_count!==undefined?`<p class="notice warn"><b>${last.reused_count} ${c('materiais reutilizados no último ciclo registrado','reused materials in the last recorded cycle')}</b> · ${c('evidência histórica, sem atribuir causa ou falha atual','historical evidence, no current-failure attribution')}</p>`:''}
+    ${last.incomplete_count?`<p class="notice warn">${last.incomplete_count} ${c('materiais sem comprovação suficiente de histórico','materials without sufficient historical verification')}</p>`:''}
+  </section>`:'';
   const recentReference=recent.length?`<section class="mes-context-panel" data-sn-3074-last-known>
     <h4>${c('Últimos vínculos conhecidos · referência investigativa','Latest known bindings · investigation reference')}</h4>
     <p class="mes-context">${c('Sem montagem Y posterior comprovada. A última montagem conhecida é a referência da investigação; vínculo N atual não prova que a peça continua instalada ou que estava presente na falha sem horário 2114.','No proven later Y assembly. The last known mounting is the investigation reference; an N status today does not prove current physical presence or mounting at a 2114 failure without timestamp.')}</p>
@@ -151,7 +164,7 @@ export function renderSnMountingViews(result={},locale='pt-BR',mode='compare'){
   const reference=hasProvenCurrent?
     scopeCard(c('Montagem do ciclo investigado (3074 · Y)','Investigated cycle mounting (3074 · Y)'),current):
     hasFailureMounting?scopeCard(c('Última montagem da falha comprovada (3074 + 2114)','Last proven failure mounting (3074 + 2114)'),failure):
-    recentReference||`<p class="mes-context">${c('Nenhuma montagem temporalmente comprovada; consulte vínculos da 3074.','No temporally proven mounting; inspect 3074 binding history.')}</p>`;
+    lastReference||recentReference||`<p class="mes-context">${c('Nenhuma montagem temporalmente comprovada; consulte vínculos da 3074.','No temporally proven mounting; inspect 3074 binding history.')}</p>`;
   const inner=hasNewCycle?(mode==='current'?currentCard:mode==='failure'?failureCard:compare):reference;
   return `<section class="mes-context-panel ames-sn-mounting-compare" data-sn-mounting-views data-active-scope="${esc(mode)}" data-no-i18n>
     <div class="section-head"><div><h3>${hasNewCycle?

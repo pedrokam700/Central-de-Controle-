@@ -37,8 +37,8 @@ test('incomplete coverage remains unknown, never proven no reuse',()=>{
  assert.equal(formatFailureLastOccurrence('2026-10-16T01:49:14.000Z'),'15/10/2026 · 22:49');
  const source=fs.readFileSync(new URL('../ames/console-legacy-parity.mjs',import.meta.url),'utf8');
  assert.match(source,/failureGroupReuseSummaries\(snapshot,baseFiltered\)/);
- assert.match(source,/PCBAs c\/ material 2º\+/);
- assert.match(source,/PCBAs distintas observadas nesta falha/);
+ assert.match(source,/Componentes 2º\+ uso/);
+ assert.match(source,/PCBAs distintas afetadas/);
  assert.doesNotMatch(source,/root_cause_confirmed\s*=\s*true/);
 });
 test('ordinal use metrics include 2nd, 3rd, 4th+ and do not borrow material without exact occurrence',()=>{

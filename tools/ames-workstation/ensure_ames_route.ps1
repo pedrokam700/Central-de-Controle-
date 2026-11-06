@@ -62,28 +62,69 @@ function Resolve-WifiInterfaceIndex([object[]]$adapters,[guid]$wlanGuid) {
   return [int]$matched[0].ifIndex
 }
 
+# The earlier factory bundles resolved the A-MES /32 by a live 172.29.x.x
+# IP/gateway. Keep that working recovery path when Windows refuses to expose
+# the SSID, but only for ONE active wireless adapter, never an Ethernet alias
+# or a disconnected adapter retaining DHCP properties from an earlier lease.
+function Resolve-CorporateWifiByAddress([object[]]$adapters,[object[]]$ipconfigs) {
+  $eligible=@()
+  foreach($cfg in $ipconfigs) {
+    if(-not $cfg -or -not $cfg.IPv4Address -or -not $cfg.IPv4DefaultGateway){continue}
+    $addresses=@($cfg.IPv4Address | ForEach-Object {$_.IPAddress})
+    $gateways=@($cfg.IPv4DefaultGateway | ForEach-Object {$_.NextHop})
+    $mesAddresses=@($addresses|Where-Object {$_ -like '172.29.*'})
+    $mesGateways=@($gateways|Where-Object {$_ -like '172.29.*'})
+    if($mesAddresses.Count -eq 0 -or $mesGateways.Count -eq 0){continue}
+    $found=@($adapters | Where-Object {$_.Status -eq 'Up' -and [int]$_.ifIndex -eq [int]$cfg.InterfaceIndex})
+    if($found.Count -ne 1){continue}
+    $a=$found[0]
+    $hint=([string]$a.Name+' '+[string]$a.InterfaceDescription+' '+[string]$a.NdisPhysicalMedium)
+    if($hint -notmatch '(?i)wi-?fi|wlan|wireless|802[.]?11|native802|sem fio'){continue}
+    $eligible+= [pscustomobject]@{Index=[int]$cfg.InterfaceIndex;Gateway=[string]$mesGateways[0];InterfaceAlias=[string]$cfg.InterfaceAlias}
+  }
+  if($eligible.Count -ne 1){throw "Rede A-MES: esperada uma unica interface Wi-Fi ATIVA com IPv4/gateway 172.29.x.x; encontradas $($eligible.Count). Rota nao alterada."}
+  return $eligible[0]
+}
+
 try {
   Write-Host '=== REDE A-MES: Wi-Fi TAXXX_5G + rota persistente /32 ==='
   $wifi=@(netsh wlan show interfaces 2>&1)
-  if(($wifi -join "`n") -match 'WlanQueryInterface'){
-    throw 'Consulta WLAN negada pelo Windows. Verifique a permissao Localizacao ou procure a TI. Nenhuma rota alterada.'
-  }
-  if(-not ($wifi | Where-Object { $_ -match '^\s*SSID\s*:\s*TAXXX_5G\s*$' })){
+  $confirmed=@($wifi | Where-Object { $_ -match '^\s*SSID\s*:\s*TAXXX_5G\s*$' })
+  if(-not $confirmed.Count){
+    # A workstation connected to another SSID must not be silently switched.
+    $alreadyOnOther=@($wifi | Where-Object { $_ -match '^\s*SSID\s*:\s*\S+' })
+    if($alreadyOnOther.Count){throw 'Wi-Fi ligado a outro SSID. Conexao nao alterada; selecione a rede corporativa autorizada.'}
     Write-Host 'TAXXX_5G nao identificado. Tentando perfil ja salvo no Windows...'
     & netsh wlan connect name=$Profile | Out-Null
-    Start-Sleep -Seconds 4
-    $wifi=@(netsh wlan show interfaces 2>&1)
+    if($LASTEXITCODE -eq 0){
+      # Association + DHCP can take more than four seconds on factory notebooks.
+      # Never invent a saved Wi-Fi password or bypass an enterprise profile.
+      for($attempt=0;$attempt -lt 8;$attempt++){
+        Start-Sleep -Seconds 2
+        $wifi=@(netsh wlan show interfaces 2>&1)
+        $confirmed=@($wifi | Where-Object { $_ -match '^\s*SSID\s*:\s*TAXXX_5G\s*$' })
+        if($confirmed.Count){break}
+      }
+    } else {
+      Write-Host 'Perfil TAXXX_5G nao conectou automaticamente. Validando se existe interface corporativa ativa...' -ForegroundColor Yellow
+    }
   }
   if(($wifi -join "`n") -match 'WlanQueryInterface'){
-    throw 'Consulta WLAN negada pelo Windows. Verifique a permissao Localizacao ou procure a TI. Nenhuma rota alterada.'
+    Write-Host 'WlanQueryInterface nao expôs SSID; somente IP/gateway de WLAN ATIVA e unica poderao habilitar a rota.' -ForegroundColor Yellow
   }
-  if(-not ($wifi | Where-Object { $_ -match '^\s*SSID\s*:\s*TAXXX_5G\s*$' })){
-    throw 'TAXXX_5G nao identificado pelo Windows. Conecte pelo Windows com credenciais da TI. Nenhuma senha e distribuida neste pacote.'
+  $adapters=@(Get-NetAdapter -ErrorAction Stop)
+  if($confirmed.Count){
+    # Primary strict path: actual SSID -> WLAN GUID -> active interface.
+    $wlanGuid=Resolve-WlanGuidForSsid $wifi $Profile
+    $wifiIndex=Resolve-WifiInterfaceIndex @(Get-NetAdapter -ErrorAction Stop) $wlanGuid
+    Write-Host 'Interface WLAN confirmada pelo SSID e GUID.'
+  } else {
+    $otherSsid=@($wifi | Where-Object { $_ -match '^\s*SSID\s*:\s*(\S.+?)\s*$' })
+    if($otherSsid.Count){throw 'O Wi-Fi esta conectado a outro SSID. TAXXX_5G nao identificado; rota nao alterada.'}
+    $candidate=Resolve-CorporateWifiByAddress $adapters @(Get-NetIPConfiguration -ErrorAction Stop)
+    $wifiIndex=$candidate.Index
+    Write-Host 'SSID nao exposto pelo Windows; interface Wi-Fi ativa e gateway 172.29.x.x unicos comprovados.' -ForegroundColor Yellow
   }
-  # Prove the SSID and map its WLAN GUID to an active adapter, never to an
-  # arbitrary Windows profile display name or an unrelated Ethernet interface.
-  $wlanGuid=Resolve-WlanGuidForSsid $wifi $Profile
-  $wifiIndex=Resolve-WifiInterfaceIndex @(Get-NetAdapter -ErrorAction Stop) $wlanGuid
   $interfaces=@(Get-NetIPConfiguration -InterfaceIndex $wifiIndex | Where-Object {
     $_.IPv4Address.IPAddress -like '172.29.*' -and $_.IPv4DefaultGateway.NextHop -like '172.29.*'
   })
@@ -94,6 +135,7 @@ try {
   $index=[int]$cfg.InterfaceIndex
   $gateway=[string]$cfg.IPv4DefaultGateway.NextHop
   Write-Host "Rede: $($cfg.InterfaceAlias), IfIndex $index, gateway $gateway"
+  if(-not $confirmed.Count -and $candidate.Gateway -ne $gateway){throw 'Gateway da interface mudou durante validacao; rota nao alterada.'}
   if(-not (Confirm-Route $index $gateway)){
     if(-not (Test-Admin)){
       if($Elevated){throw 'A elevacao de administrador nao foi concedida.'}

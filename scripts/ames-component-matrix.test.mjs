@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {componentMatrix} from '../ames/data/component-matrix.mjs';
-import {componentMatrixHtml} from '../ames/console-component-matrix.mjs';
+import {componentMatrixHtml,renderComponentMatrixTypeDetail} from '../ames/console-component-matrix.mjs';
 const row=(sn,prev=1)=>({'Material SN':sn,'Tipo material':'GENERIC','Reusos anteriores material':prev,'PCBAs desvinculadas':'OLD | OLD','PCBAs com mesma falha':1});
 const fixture=()=>({source_id:'SOURCE',snapshot_id:'S',revision:2,line_id:'TAN10101',insights:{component_types:[{'Tipo material':'GENERIC','Materiais únicos no lote':2,'Reutilizados únicos':2,'2º uso':1,'3º+ uso':1,'Com mesma falha':2}],drilldowns:{component_type_items:[row('M1'),row('M1'),row('M2',2)],material_analysis:[row('M1')]}}});
 test('TIPOS_COMPONENTE reconciles physical kit SNs and exact prior PCBA links',()=>{
@@ -22,6 +22,7 @@ test('conflicting use counts and contradictory aggregates remain unconfirmed',()
 });
 test('HTML evidence escapes raw SN, preserves full labels and PT/EN',()=>{
  const s=fixture();s.insights.drilldowns.component_type_items[0]['Material SN']='<img src=x>';
- globalThis.document={documentElement:{lang:'pt-BR'}};const pt=componentMatrixHtml(s);assert(!pt.includes('<img'));assert.match(pt,/&lt;img/);assert.match(pt,/não comprova defeito físico/);
+ globalThis.document={documentElement:{lang:'pt-BR'}};const pt=componentMatrixHtml(s);assert(!pt.includes('<img'));assert.match(pt,/data-component-matrix-select/);assert.match(pt,/não comprovado, não zero/);
+ const detail=renderComponentMatrixTypeDetail(componentMatrix(s)[0],0);assert(!detail.includes('<img'));assert.match(detail,/&lt;img/);assert.match(detail,/não prova defeito do componente/);
  document.documentElement.lang='en';assert.match(componentMatrixHtml(s),/Physical type/);delete globalThis.document;
 });

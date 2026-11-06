@@ -302,7 +302,60 @@ def bind_3074_target_page(view, verified_page):
         target.target_page = verified_page
 
 
-def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], source_key: str, work_dir: str | Path, line_callback=None, event_callback=None, max_pcbas=0, shared_query_memo=None, performance="balanced") -> Dict[str, Any]:
+def seed_verified_3074_checkpoint(flow, path, source_path, parser_result, records, saved_items):
+    """Resume completed PCBAs across changed partial-retry batch fingerprints.
+
+    CLEAN's native checkpoint resumes an IDENTICAL batch. A selective retry
+    changes the fingerprint and previously lost that cache. Seed its new batch
+    only with independently paged, complete observations whose exact 3028
+    defect keys still match the current selected scope. No MES calls here.
+    """
+    from partial_retry import _bad_page, _has_page_proof
+
+    if not saved_items:
+        return 0
+    groups = flow.agrupar_falhas_por_pcba(records)
+    digest = flow.fingerprint_file(source_path)
+    checkpoint = None
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text(encoding='utf-8'))
+            if loaded.get('version') == '0.8.1' and loaded.get('source_sha256') == digest:
+                checkpoint = loaded
+        except (ValueError, OSError, TypeError):
+            pass
+    if checkpoint is None:
+        checkpoint = flow._new_checkpoint(source_path, parser_result, list(groups), digest)
+    seeded = 0
+    for sn, item in saved_items.items():
+        if sn not in groups or not isinstance(item, dict) or item.get('status') != 'COMPLETE':
+            continue
+        if _bad_page(item) or not _has_page_proof(item):
+            continue
+        existing = (checkpoint.get('pcbas') or {}).get(sn) or {}
+        if existing.get('status') == 'COMPLETE':
+            continue
+        expected = [flow._defect_key(r, n) for n, r in enumerate(groups[sn], 1)]
+        traces = item.get('defect_traces') or []
+        if (len(traces) != len(expected) or
+                {str(t.get('defect_key') or '') for t in traces if isinstance(t, dict)} != set(expected) or
+                any(t.get('status') != 'COMPLETE' for t in traces)):
+            continue
+        base = item.get('base_query')
+        if not isinstance(base, dict) or (base.get('query_sn') and base['query_sn'] != sn):
+            continue
+        checkpoint.setdefault('pcbas', {})[sn] = {
+            'pcba_sn':sn,'status':'COMPLETE','error':None,
+            'current_defects':groups[sn], 'base_query':base,
+            'defect_traces':{str(t['defect_key']):t for t in traces},
+        }
+        seeded += 1
+    if seeded:
+        flow._atomic_json(path, checkpoint)
+    return seeded
+
+
+def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], source_key: str, work_dir: str | Path, line_callback=None, event_callback=None, max_pcbas=0, shared_query_memo=None, performance="balanced", seed_3074_items=None) -> Dict[str, Any]:
     """Run the validated V0.16 3074 -> 2114 pipeline from records already collected by live 3028.
 
     This avoids requiring a manual 3028 Excel export.  The tiny JSON source file is
@@ -355,6 +408,12 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
     }
     checkpoint_3074 = work_dir / f"V020_3074_CHECKPOINT_{digest[:12]}.json"
     checkpoint_2114 = work_dir / f"V020_2114_CHECKPOINT_{digest[:12]}.json"
+
+    seeded_count = seed_verified_3074_checkpoint(
+        fluxo3074_mod, checkpoint_3074, source_path, parser_result,
+        normalized, seed_3074_items or {})
+    if seeded_count and line_callback:
+        line_callback(f"3074 recuperação local: {seeded_count} PCBAs completas reutilizadas sem consulta MES")
 
     settings = {}
     settings_path = engine_dir / "config" / "settings.json"
@@ -835,8 +894,19 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         # Probe a bounded subset in its OWN audit category; never claim a
         # historical component caused the last failure.
         if mounting_views is not None:
-            audit_candidates, audit_total = select_unexamined_3074_materials(
-                raw_components, component_query_cache.keys(), limit=8)
+            # Always examine every distinct component in the *last recorded
+            # PCBA batch* first. The old global cap of eight was excluding
+            # valid parts from the operator's last-assembly investigation.
+            # Keep a separate small audit budget for older, unrelated cycles.
+            latest = mounting_views.get('last_recorded') or {}
+            latest_items = latest.get('components') or []
+            audited_latest, _ = select_unexamined_3074_materials(
+                latest_items, component_query_cache.keys(), limit=len(latest_items))
+            older_audit, audit_total = select_unexamined_3074_materials(
+                raw_components, [*component_query_cache.keys(),
+                                 *(x.get('item_sn') for x in audited_latest)], limit=8)
+            audit_candidates = [*audited_latest, *older_audit]
+            audit_total += len(audited_latest)
             audit_results = []
             for index, comp in enumerate(audit_candidates, 1):
                 material_sn = str(comp.get('item_sn') or '').strip()
@@ -899,6 +969,18 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             mounting_views['historical_probe_total'] = audit_total
             mounting_views['historical_probe_remaining'] = max(
                 0, audit_total-len(audit_results))
+            latest_ids = {str(x.get('item_sn') or '').strip().upper()
+                          for x in latest_items}
+            latest_usage = [x for x in audit_results
+                            if str(x.get('item_sn') or '').strip().upper() in latest_ids]
+            latest['component_usage'] = latest_usage
+            latest['reused_components'] = [x for x in latest_usage
+                                           if x.get('is_reused') is True]
+            latest['incomplete_count'] = len(latest_ids)-sum(
+                x.get('is_reused') is not None for x in latest_usage)
+            latest['reused_count'] = (len(latest['reused_components'])
+                                      if latest_ids and latest['incomplete_count'] == 0
+                                      else None)
 
         # First query 2114 once per PCBA: current board and historical boards
         # reached through ONLY the selected material subset.
@@ -1256,6 +1338,32 @@ def build_trace_insights(engine_dir: Path, integrated_payload: Dict[str, Any], l
     hist_material_rows = list(views.get("hist_material_rows") or [])
     hist_pcba_rows = list(views.get("hist_pcba_rows") or [])
 
+    # Explain recurring 0/0/unknown board KPIs without guessing a physical
+    # mounting from component links. An extraction can be page-complete while
+    # the grid contains no own-PCBA mounting or an unmatchable defect clock.
+    raw_items=[item for item in trace_3074.get('items') or [] if isinstance(item,dict)]
+    if target:
+        raw_items=[item for item in raw_items if any(
+            str((trace.get('defect') or {}).get('line') or
+                (trace.get('defect') or {}).get('line_id') or '')==target
+            for trace in item.get('defect_traces') or [])]
+    own_rows_by_pcba={}
+    for item in raw_items:
+        board=str(item.get('pcba_sn') or '').strip()
+        own_rows_by_pcba[board]=[row for row in ((item.get('base_query') or {}).get('rows') or [])
+            if isinstance(row,dict) and str(row.get('Barcode') or '').strip()==board and
+            (str(row.get('Aut Cmf1') or '').strip().upper()=='PCBA' or
+             'pcba' in str(row.get('Sn Type') or '').lower())]
+    classified=sum(bool(int(row.get('_pcba_use_index') or 0)) for row in pcba_rows)
+    proof_diagnostics={
+        'raw_pcbas_observed':len(own_rows_by_pcba),
+        'raw_pcbas_with_self_rows':sum(bool(rows) for rows in own_rows_by_pcba.values()),
+        'raw_pcbas_missing_self_rows':sum(not rows for rows in own_rows_by_pcba.values()),
+        'pcba_occurrences_analysed':len(pcba_rows),
+        'pcba_occurrences_classified':classified,
+        'pcba_occurrences_without_temporal_use_proof':len(pcba_rows)-classified,
+    }
+
     def iv(v):
         try: return int(v or 0)
         except Exception: return 0
@@ -1353,6 +1461,7 @@ def build_trace_insights(engine_dir: Path, integrated_payload: Dict[str, Any], l
 
     return _insight_json_safe({
         "schema":"ames-insights-v1",
+        "proof_diagnostics":proof_diagnostics,
         "classifier_version":importlib.import_module("core.failure_taxonomy").configuration()["version"],
         "line":target or None,
         "overview_kpis":ind.get("overview_kpis") or [],

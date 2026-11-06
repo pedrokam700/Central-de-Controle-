@@ -1,6 +1,7 @@
 import {compareFailures} from './failure-taxonomy.mjs';
 // Read-only populations. A defect investigation is never a production denominator.
 import {factoryWallMinute} from './history.mjs';
+import {processBackedBoardReuses,contextBackedBoardReuses} from './reuse-cycle-evidence.mjs';
 const value=(r,...keys)=>keys.map(k=>r?.[k]).find(v=>v!==undefined&&v!==null&&v!=='')??null;
 const unique=items=>[...new Set(items.filter(v=>v!==null&&v!==undefined&&v!==''))];
 const list=v=>{if(Array.isArray(v))return v;try{const x=JSON.parse(v);if(Array.isArray(x))return x;}catch{}return typeof v==='string'?v.split(/[|,;\n]/).map(x=>x.trim()).filter(Boolean):[];};
@@ -15,6 +16,15 @@ const sequence=r=>{
  const v=value(r,'hist_seq','Defect Hist Seq');
  return v!==null&&v!==''&&Number.isInteger(Number(v))&&Number(v)>=0?Number(v):null;
 };
+/** A-MES 2114 analysis scope, separate from a verified new assembly cycle. */
+export function analysisScope2114(type){
+ const normalized=String(type||'').trim().toLowerCase().replace(/[_-]/g,' ').replace(/\s+/g,' ');
+ if(!normalized)return 'not_recorded';
+ if(/main\s*board/.test(normalized))return 'board_disassembly';
+ if(/phone\s*disassembly/.test(normalized))return 'phone_disassembly';
+ if(/(?:phone\s*)?(?:battery\s*cover|back\s*cover)/.test(normalized))return 'battery_cover_only';
+ return 'other';
+}
 /** Separate 2114 Hist Seq order from source Defect Time.
  * A repeated exact defect on the same PCBA is evidence of recurrence;
  * it DOES NOT prove this 3028 record happened at a particular 2114 time.
@@ -61,6 +71,7 @@ export function board2114Timeline(board,history=[]){
   earlier.push(row);
   return {hist_seq:seq,defect_code:code(row),defect_desc:value(row,'defect_desc','Defect Description')||null,
    defect_type:value(row,'defect_type','Defect Type')||null,
+   analysis_scope:analysisScope2114(value(row,'defect_type','Defect Type')),
    repair_status:value(row,'repair_status','Repair Status')||null,
    manual_or_auto:value(row,'manual_or_auto','TestTools Auto Defect Or Defect By Hand')||null,
    defect_oper:value(row,'defect_oper','Defect Oper')||null,
@@ -89,13 +100,20 @@ function reference(snapshot,row,source){
   line_id:snapshot.line_id,source_view:source,record_id:row.record_id||null,
   period:snapshot.period||snapshot.canonical?.summary?.period||null,raw:row};
 }
-function finish(map){
+function finish(map,history=[]){
+ const historyByPcba=new Map();
+ for(const row of history){
+  const id=sn(row);if(!id||!code(row))continue;
+  if(!historyByPcba.has(id))historyByPcba.set(id,[]);
+  historyByPcba.get(id).push(row);
+ }
  return [...map.values()].map(row=>{
   row.uses=unique(row.uses);row.use_index=row.uses.length===1?row.uses[0]:null;
   row.use_conflict=row.uses.length>1;
   row.events=[...new Map(row.events.map(e=>[eventKey(e),e])).values()];
   row.prior_events=[...new Map(row.prior_events.map(e=>[eventKey(e),e])).values()];
   row.previous_pcbas=unique(row.previous_pcbas).sort();
+  row.current_pcbas=unique(row.current_pcbas||[]).sort();
   row.products=unique(row.products).sort();row.part_numbers=unique(row.part_numbers).sort();
   row.outcome=row.kind==='pcba'&&row.events.length?'failed':'unknown';
   // Component association alone is never a diagnosed component failure.
@@ -103,6 +121,54 @@ function finish(map){
   row.same_failure=row.prior_events.some(p=>row.events.some(e=>compareFailures(code(e),e.defect_desc,code(p),p.defect_desc).classification==='EXACT'));
   row.same_family=row.prior_events.some(p=>row.events.some(e=>compareFailures(code(e),e.defect_desc,code(p),p.defect_desc,{currentFamily:family(e)??undefined,oldFamily:family(p)??undefined}).classification==='SIMILAR'));
   row.reused=row.use_index>=2;
+  // A material's 3074 physical mounting history and each board's 2114
+  // failures are separate evidence. Never hide three known mountings merely
+  // because only one previous failure passed the temporal KPI gate.
+  row.binding_history=row.kind==='component'
+   ? unique([...row.previous_pcbas,...row.current_pcbas]).map(pcba=>{
+     const historical=row.previous_pcbas.includes(pcba);
+     const seen=new Set();
+     const previousFailures=(historyByPcba.get(pcba)||[]).filter(h=>{
+      const key=JSON.stringify([h.record_id||null,sequence(h),code(h),value(h,'defect_desc','Defect Description'),time(h)]);
+      if(seen.has(key))return false;seen.add(key);return true;
+     }).map(h=>{
+      const exact=row.events.some(e=>compareFailures(code(e),e.defect_desc,code(h),h.defect_desc).classification==='EXACT');
+      const before=row.events.some(e=>time(e)&&time(h)&&time(h)<time(e));
+      return {pcba_sn:pcba,hist_seq:sequence(h),defect_code:code(h),defect_desc:value(h,'defect_desc','Defect Description')||null,
+       defect_time:value(h,'defect_time','Defect Time')||null,defect_type:value(h,'defect_type','Defect Type')||null,
+       repair_status:value(h,'repair_status','Repair Status')||null,record_id:h.record_id||null,source_view:'2114',
+       exact_code_match:exact,chronology_before_current:before};
+     });
+     const currentFailures=row.events.filter(e=>sn(e)===pcba).map(e=>({
+      pcba_sn:pcba,hist_seq:null,defect_code:code(e),defect_desc:e.defect_desc||null,
+      defect_time:e.defect_time||null,defect_type:e.defect_type||null,repair_status:e.repair_status||null,
+      record_id:e.record_id||e.occurrence_id||null,source_view:'3028',exact_code_match:false,
+      chronology_before_current:false}));
+     return {pcba_sn:pcba,role:historical?'previous':'investigated',failures:[...previousFailures,...currentFailures]};
+    }) : [];
+  row.cross_board_recurrences=[];
+  if(row.kind==='component'){
+   // Physical re-use across *different* PCBAs is the unit of comparison.
+   // Several 2114 failures on one board still count as ONE affected board.
+   // The association is historical, not an assertion that the component
+   // caused the defect or was mounted at its exact Defect Time.
+   const groups=[];
+   for(const binding of row.binding_history)for(const failure of binding.failures){
+    if(!failure.defect_code)continue;
+    let group=groups.find(g=>compareFailures(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT');
+    if(!group){group={defect_code:failure.defect_code,defect_desc:failure.defect_desc,pcbas:new Set()};groups.push(group);}
+    group.pcbas.add(binding.pcba_sn);
+   }
+   row.cross_board_recurrences=groups.filter(g=>g.pcbas.size>=2).map(g=>({
+    defect_code:g.defect_code,defect_desc:g.defect_desc,pcbas:[...g.pcbas].sort(),pcba_count:g.pcbas.size
+   }));
+   for(const binding of row.binding_history)for(const failure of binding.failures){
+    failure.recurrence_pcba_count=row.cross_board_recurrences.find(g=>
+     compareFailures(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT')?.pcba_count||0;
+   }
+   row.cross_board_same_failure=row.cross_board_recurrences.length>0;
+   row.same_failure=row.same_failure||row.cross_board_same_failure;
+  }
   return row;
  }).sort((a,b)=>a.id.localeCompare(b.id));
 }
@@ -117,13 +183,14 @@ export function summarizeReusePopulation(rows,proof=null){
   JSON.stringify([...proof.item_ids].sort())===JSON.stringify(ids)&&ids.length>0&&
   reused.every(r=>['failed','verified_no_failure'].includes(r.outcome)&&r.outcome_evidence_id);
  const select=predicate=>rows.filter(predicate);
- const metrics={observed:rows,first_use:select(r=>r.use_index===1),second_use:select(r=>r.use_index===2),
-  third_plus_use:select(r=>r.use_index>=3),unknown_use:select(r=>!r.use_index),
+ const metrics={observed:rows,first_use:select(r=>r.use_index===1&&!r.use_lower_bound),
+  second_use:select(r=>r.use_index===2&&!r.use_lower_bound),
+  third_plus_use:select(r=>r.use_index>=3&&!r.use_lower_bound),unknown_use:select(r=>!r.use_index),
   reused,failed:reused.filter(r=>r.outcome==='failed'),
   associated:reused.filter(r=>r.associated_current_failure),
   // A PCBA's 2114 history may prove recurrence even if its physical
   // mounting/use count is unknown. Components still need proven reuse.
-  prior_failure:select(r=>r.prior_events.length>0&&(r.kind==='pcba'||r.reused)),
+  prior_failure:select(r=>(r.prior_events.length>0||r.kind==='component'&&r.binding_history?.some(b=>b.role==='previous'&&b.failures.some(f=>f.source_view==='2114')))&&(r.kind==='pcba'||r.reused)),
   same_failure:select(r=>r.same_failure&&(r.kind==='pcba'||r.reused)),
   same_family:select(r=>r.same_family&&(r.kind==='pcba'||r.reused)),
   verified_no_failure:proven?reused.filter(r=>r.outcome==='verified_no_failure'):[],
@@ -139,13 +206,31 @@ export function buildReuseCohorts(snapshot={},filters={}){
   if(!id||((row.line_id||row.line||row.Linha)&&String(row.line_id||row.line||row.Linha)!==snapshot.line_id))return;
   if(!map.has(id))map.set(id,{id,kind,sn:kind==='pcba'?sn(row):String(value(row,'item_sn','material_sn','Material SN')),
    item_type:kind==='component'?String(value(row,'item_type','material_type','Tipo material')||''):null,
-   uses:[],events:[],prior_events:[],previous_pcbas:[],products:[],part_numbers:[],evidence:[]});
-  const item=map.get(id),use=useIndex(row,kind);if(use&&event)item.uses.push(use);
+   uses:[],events:[],prior_events:[],previous_pcbas:[],current_pcbas:[],products:[],part_numbers:[],evidence:[]});
+  const item=map.get(id),use=useIndex(row,kind);
+  // The factory report derives the PCBA use index from the board's own 3074
+  // mounting cycles. It is valid physical-use evidence even when its 2114/3074
+  // summary cannot be joined to one exact 3028 defect occurrence. Never turn
+  // the missing occurrence join into "use unknown"; likewise, never use that
+  // independent index to attribute a particular current defect or repair.
+  const boardInScope=kind==='pcba'&&source==='2114/3074'&&occurrences.some(o=>sn(o)===id)&&
+   (!time(row)||occurrences.some(o=>sn(o)===id&&time(o)&&time(o)>=time(row)));
+  // The reused Material SN's physical 3074 mounting index is independently
+  // observable, even when no unique 3028 event can be joined. A later 3074
+  // binding must never be retroactively attached to the present defect.
+  const componentBoard=kind==='component'?occurrences.filter(o=>sn(o)===sn(row)):[];
+  const materialBound=factoryWallMinute(value(row,'bind_time_utc','bind_time','Bind Time'));
+  const materialInScope=kind==='component'&&source==='3074'&&componentBoard.length>0&&
+   (!materialBound||componentBoard.some(o=>time(o)&&time(o)>=materialBound));
+  if(use&&(event||boardInScope||materialInScope))item.uses.push(use);
   item.evidence.push(reference(snapshot,row,source));
   item.products.push(value(row,'product_model','product_key','Modelo')||event?.product_key);
   item.part_numbers.push(value(row,'part_number','Part Number','material_id'));
   const previous=kind==='pcba'?[sn(row)]:list(value(row,'previous_pcbas_json','previous_pcbas','PCBAs desvinculadas'));
-  if(kind==='component')item.previous_pcbas.push(...previous);
+  if(kind==='component'){
+   item.previous_pcbas.push(...previous);
+   if(sn(row))item.current_pcbas.push(sn(row));
+  }
   if(event){item.events.push(event);const cutoff=time(event);
    const priorByClock=history.filter(h=>previous.includes(sn(h))&&time(h)&&cutoff&&time(h)<cutoff&&code(h));
    // Hist Seq is a valid order within one 2114 PCBA, including MES variants
@@ -177,14 +262,41 @@ export function buildReuseCohorts(snapshot={},filters={}){
  const filter=rows=>rows.filter(r=>(!filters.product||r.products.includes(filters.product))&&
   (r.kind==='pcba'||!filters.item_type||r.item_type===filters.item_type)&&(r.kind==='pcba'||!filters.part_number||r.part_numbers.includes(filters.part_number))&&
   (!filters.sn||r.sn.toLowerCase().includes(String(filters.sn).toLowerCase())));
- const pcbaRows=filter(finish(pcbas)),componentRows=filter(finish(components));
+ const pcbaRows=filter(finish(pcbas,history)),componentRows=filter(finish(components,history));
  // A PCBA's full 2114 sequence is always inspectable even when 3074 has
  // insufficient self-mounting evidence to determine a physical use count.
  // Keep it separate from the current 3028-vs-2114 recurrence KPI.
  for(const board of pcbaRows){
   board.history_2114=board2114Timeline(board.sn,history);
   board.history_2114_repeats=board.history_2114.filter(h=>h.repeat_exact_prior_count>0).length;
+  // 3074 physical self-bindings take precedence. When the self-binding report
+  // is absent, corroborated 2114 dismantling + later production 3022 provides
+  // a conservative minimum: never count a 2114 row or 3022 station alone.
+  const processProof=board.events.flatMap(event=>[
+   processBackedBoardReuses(board.sn,event,history,snapshot.process_timeline?.events||[]),
+   contextBackedBoardReuses(board.sn,event,history,snapshot.process_timeline?.contexts||[])
+  ]).filter(proof=>proof.minimum_uses).sort((a,b)=>b.minimum_uses-a.minimum_uses)[0];
+  board.process_reuse_evidence=processProof||null;
+  if(!board.use_index&&board.uses.length===0&&processProof){
+   board.use_index=processProof.minimum_uses;
+   board.reused=board.use_index>=2;
+   board.use_basis=processProof.basis;
+   board.use_lower_bound=true;
+  }else if(board.use_index)board.use_basis='3074_OWN_PCBA_CYCLES';
+  if(!board.use_index){
+   board.use_basis=board.use_conflict?'CONFLICTING_3074_ORDINALS':'INSUFFICIENT_MOUNTING_EVIDENCE';
+   board.unproven_use_context={
+    previous_2114_failures:board.prior_events.length,
+    '2114_records':board.history_2114.length,
+    '2114_dismantlings':board.history_2114.filter(h=>['board_disassembly','phone_disassembly'].includes(h.analysis_scope)).length,
+    '3022_process_passages':(snapshot.process_timeline?.events||[]).filter(e=>sn(e)===board.sn).length,
+    '3022_correlations':(snapshot.process_timeline?.contexts||[]).filter(e=>sn(e)===board.sn).length
+   };
+  }
  }
- return {pcbas:{rows:pcbaRows,...summarizeReusePopulation(pcbaRows)},
+ // Process-correlated reuse must also be reflected in the metrics and KPI
+ // drilldowns; compute only after the auditable cross-source pass above.
+ const pcbaSummary=summarizeReusePopulation(pcbaRows);
+ return {pcbas:{rows:pcbaRows,...pcbaSummary},
   components:{rows:componentRows,...summarizeReusePopulation(componentRows)}};
 }

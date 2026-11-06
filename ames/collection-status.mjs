@@ -11,7 +11,7 @@ const sourceProofLabel=value=>{
   return pair?t(...pair):t('Não comprovada','Unverified');
 };
 
-const stageLabel=x=>({'3074':'3074 · Vínculos físicos','2114':'2114 · Histórico PCBA','3022':'3022 · Processo'})[x]||x;
+const stageLabel=x=>({'3074':'3074 · Vínculos físicos','2114':'2114 · Histórico PCBA','3022':'3022 · Processo','3012':'3012 · Reparo e horários históricos'})[x]||x;
 const friendlyLine=id=>({'TAN10101':'Linha 1','TAN10102':'Linha 2','TAN10103':'Linha 3'})[id]||id||'Linha não informada';
 const pair=(a,b)=>a!=null&&b!=null&&b>0?`${a}/${b}`:'';
 export function liveTraceFeed(job={}){
@@ -104,6 +104,24 @@ function trace3022Summary(row){
   const timing=src.timing||{};
   return `3022 · eventos coletados: ${esc(src.events??'—')} · contextos: ${esc(src.contexts??'—')} · ${esc(state)} · ${esc(src.processed??'—')}/${esc(src.requested??'—')} PCBAs processadas · ${esc(src.errors??0)} erro(s)${timing.query_avg_ms!=null?` · média MES ${esc(timing.query_avg_ms)} ms`:''}`;
 }
+function trace3012Summary(row){
+  const src=row?.['3012'];
+  if(!src)return '';
+  const scope=src.current_target_count!=null?` · ${esc(src.current_target_count)} ${t('atuais','current')} + ${esc(src.historical_target_count??0)} ${t('anteriores','prior')}`:'';
+  const failures=(Array.isArray(src.failed)?src.failed:[]).slice(0,3);
+  return `<br>3012 · ${t('PCBAs do escopo consultadas','In-scope boards queried')}: ${esc(src.completed??0)}/${esc(src.target_count??'—')}${scope} · ${t('janela solicitada','requested window')}: ${esc(src.window_start||'—')} → ${esc(String(src.window_end||'—').slice(0,10))} · ${t('registros encontrados','records found')}: ${esc(src.records_count??0)}${src.omitted?` · ${esc(src.omitted)} ${t('pendentes por limite/erro','pending due to limit/error')}`:''} · ${t('cobertura','coverage')}: ${esc(sourceProofLabel(src.status))}${src.warning?`<br>${esc(src.warning)}`:''}${failures.map(f=>`<br><strong>3012 · ${t('falha na consulta','query failure')}</strong> · ${esc(f.sn||'—')} · ${esc(f.error||'sem diagnóstico')}`).join('')}`;
+}
+
+export function elapsedJobTime(job={},clockMs=Date.now()){
+  const begun=Date.parse(job.started_at||job.created_at||'');
+  const finished=Date.parse(job.finished_at||'');
+  if(!Number.isFinite(begun))return '—';
+  const ending=Number.isFinite(finished)?finished:clockMs;
+  const seconds=Math.max(0,Math.floor((ending-begun)/1000));
+  const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remaining=seconds%60;
+  return hours?`${hours}h ${String(minutes).padStart(2,'0')}min ${String(remaining).padStart(2,'0')}s`:
+    `${minutes}min ${String(remaining).padStart(2,'0')}s`;
+}
 
 export function collectionStatus(state){
   const job=state.job;
@@ -111,17 +129,26 @@ export function collectionStatus(state){
   if(state.submitting)return error+'<p role="status">Iniciando rastreabilidade...</p>';
   if(!job)return error||'<p>Nenhuma coleta iniciada nesta sessão.</p>';
   const mode=job.scope?.trace_mode||job.result?.scope?.trace_mode||'full';
-  const stages=job.kind!=='deep_trace'?Object.keys(job.stage_progress||{}):mode==='process_only'?['3022']:mode==='reuse_only'?['3074','2114']:['3074','2114','3022'];
   const progress=job.stage_progress||{};
   const result=job.result?.deep_trace;
+  // The full and reuse contracts promise 3012. Show it even while queued,
+  // or when an older agent omits include_3012 from its job scope entirely.
+  // Otherwise the missing stage silently disappears from the progress UI.
+  const has3012=['full','reuse_only','history_only'].includes(mode)||job.scope?.include_3012===true||Object.hasOwn(job.result?.stages||{},'3012')||Boolean(progress['3012'])||job.stage==='3012'||Object.values(result||{}).some(r=>Boolean(r?.['3012']));
+  const stages=job.kind!=='deep_trace'?Object.keys(progress):mode==='history_only'?['3012']:mode==='process_only'?['3022']:mode==='reuse_only'?(has3012?['3074','2114','3012']:['3074','2114']):has3012?['3074','2114','3022','3012']:['3074','2114','3022'];
   const completedTrace=job.kind==='deep_trace'&&job.status==='done';
   const sourceStages=job.result?.stages||{};
   const unverified=completedTrace?stages.filter(stage=>sourceStages[stage]!=='done'):[];
   const sourceWarning=unverified.length?`<div class="notice warn" data-trace-source-coverage role="status"><b>${t('Cobertura não comprovada','Coverage not verified')}</b> · ${unverified.map(stage=>`${esc(stage)}: ${esc(sourceProofLabel(sourceStages[stage]))}`).join(' · ')}. ${t('Job finalizado não significa fontes completas.','Finished job does not mean complete sources.')}</div>`:'';
+  const resumeNotice=job.scope?.resumed_from_job?`<div class="notice warn" data-trace-recovery-active><b>${t('Recuperação seletiva automática','Automatic selective recovery')}</b> · ${t('job anterior','previous job')} ${esc(job.scope.resumed_from_job)}. ${t('Lê apenas lacunas verificadas na mesma revisão de origem; dados já comprovados são preservados.','Reads only verified gaps from the same source revision; previously proven data is preserved.')}</div>`:'';
+  const failures3012=completedTrace?Object.entries(result||{}).flatMap(([line,row])=>(Array.isArray(row?.['3012']?.failed)?row['3012'].failed:[]).map(f=>({line,...f}))):[];
+  const periodWarning=failures3012.length?`<div class="notice warn" data-trace-3012-failures role="alert"><b>3012 ${t('interrompida — histórico não coberto até hoje','interrupted — history not covered through today')}</b> · ${esc(failures3012.length)} ${t('consulta(s) com erro','query failure(s)')}. ${failures3012.slice(0,2).map(f=>`<p>${esc(f.line)} · ${esc(f.sn)} · ${esc(f.error||'sem diagnóstico')}</p>`).join('')}${failures3012.length>2?`<small>+${failures3012.length-2} ${t('erro(s) no resultado detalhado','additional errors in details')}</small>`:''}</div>`:'';
+  const overall=job.status==='done'?100:Math.min(99,Math.max(0,Math.round(Number(job.progress)||0)));
   return `${error}<div class="ames-job-head"><b>Job ${esc(job.id)}</b><span>${esc(job.status)}</span></div><p>${esc(job.message||job.error||'Aguardando execução.')}</p>
-    ${sourceWarning}
+    <section class="ames-overall-progress" data-trace-overall-progress><div class="ames-overall-progress-head"><strong>${t('Progresso geral estimado','Estimated overall progress')} · ${overall}%</strong><span>${t('Tempo decorrido','Elapsed time')}: <b data-trace-elapsed>${esc(elapsedJobTime(job))}</b></span></div><progress max="100" value="${overall}" aria-label="${t('Progresso geral da coleta','Overall collection progress')}"></progress><small>${t('Progresso das etapas, não porcentagem de dados comprovados nem previsão de tempo restante.','Stage progress, not a verified-data percentage or remaining-time estimate.')}</small></section>
+    ${resumeNotice}${sourceWarning}${periodWarning}
     ${job.kind==='deep_trace'?`<p>${stages.join(' → ')}</p>`:''}
-    <div class="ames-progress-list">${stages.map(stage=>{const p=progress[stage];return `<article><b>${stage}</b> · <span>${esc(p?.line||'Linha aguardando informação')}</span>${p?`<progress max="100" value="${Math.max(0,Math.min(100,Number(p.line_percent)||0))}"></progress><small>${esc(stageDetail(stage,p))}</small>`:` · ${esc(job.stage===stage?'Em execução':'Aguardando')}`}${completedTrace?`<small data-trace-source-stage="${esc(stage)}"> · ${t('Cobertura','Coverage')}: ${esc(sourceProofLabel(sourceStages[stage]))}</small>`:''}</article>`;}).join('')}</div>
+    <div class="ames-progress-list">${stages.map(stage=>{const p=progress[stage];const disabled=stage==='3012'&&job.scope?.include_3012===false;return `<article><b>${stage}</b> · <span>${esc(p?.line||'Linha aguardando informação')}</span>${p?`<progress max="100" value="${Math.max(0,Math.min(100,Number(p.line_percent)||0))}"></progress><small>${esc(stageDetail(stage,p))}</small>`:` · ${disabled?t('Não programada pelo agente','Not scheduled by agent'):esc(job.stage===stage?'Em execução':'Aguardando')}`}${completedTrace?`<small data-trace-source-stage="${esc(stage)}"> · ${t('Cobertura','Coverage')}: ${esc(sourceProofLabel(sourceStages[stage]))}</small>`:''}</article>`;}).join('')}</div>
     ${liveTraceFeed(job)}
-    ${job.status==='done'&&result?`<section data-trace-result><h4>Resultado da coleta</h4><p>Valores informados pelo job; erro/indisponibilidade de uma fonte nunca é convertido em zero.</p>${Object.entries(result).map(([line,r])=>`<article><b>${esc(line)}</b>${r.skipped?`<p>${esc(r.reason||'Linha sem ocorrências no escopo.')}</p>`:`<p>Escopo consultado: ${esc(r.scope?.records??'—')} ocorrências · ${esc(r.scope?.unique_pcbas??'—')} PCBAs</p><p>${trace3074Summary(r)}<br>3074 · ${t('materiais salvos no snapshot','materials stored in snapshot')}: ${esc(r.enrichment?.material_rows??'—')}<br>${trace2114Summary(r)}<br>${trace3022Summary(r)}</p>${(r['3022']?.warnings||[]).map(w=>`<p class="notice warn">${esc(w)}</p>`).join('')}`}</article>`).join('')}</section>`:''}`;
+    ${job.status==='done'&&result?`<section data-trace-result><h4>Resultado da coleta</h4><p>Valores informados pelo job; erro/indisponibilidade de uma fonte nunca é convertido em zero.</p>${Object.entries(result).map(([line,r])=>`<article><b>${esc(line)}</b>${r.skipped?`<p>${esc(r.reason||'Linha sem ocorrências no escopo.')}</p>`:`<p>Escopo consultado: ${esc(r.scope?.records??'—')} ocorrências · ${esc(r.scope?.unique_pcbas??'—')} PCBAs</p><p>${mode==='history_only'?'':`${trace3074Summary(r)}<br>3074 · ${t('materiais salvos no snapshot','materials stored in snapshot')}: ${esc(r.enrichment?.material_rows??'—')}<br>${trace2114Summary(r)}<br>${trace3022Summary(r)}`}${trace3012Summary(r)}</p>${(r['3022']?.warnings||[]).map(w=>`<p class="notice warn">${esc(w)}</p>`).join('')}`}</article>`).join('')}</section>`:''}`;
 }

@@ -18,7 +18,7 @@ test('factory RED guards preserve mapped 3012 V2 and do not modify production 30
   assert.match(patch,/2114_VISIBLE_PCBA_MISMATCH/);
   assert.match(patch,/QUERY_CONTRACT.*3012-home-mapped-v2/s);
   assert.match(collector3012,/QUERY_CONTRACT = "3012-home-mapped-v2"/);
-  assert.match(collector3012,/SOURCE_3012 = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2"/);
+  assert.match(collector3012,/SOURCE_3012 = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2_PERIOD_VERIFIED_20261105"/);
   assert.match(collector3012,/byItemId\('grdDefectRepair'/);
   assert.match(collector3012,/byItemId\('btnView'/);
   assert.match(collector3012,/applyDateTime\('dteFromDate'/);
@@ -66,7 +66,7 @@ before=live.QUERY_3012_JS
 f._install_3012_field_resolution()
 assert live.QUERY_3012_JS==before, 'legacy fuzzy redfix rewrote mapped V2 collector'
 assert live.QUERY_CONTRACT=='3012-home-mapped-v2'
-assert live.SOURCE_3012=='AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2'
+assert live.SOURCE_3012=='AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2_PERIOD_VERIFIED_20261105'
 for marker in ['txtSnImei','grdDefectRepair','btnView','dteFromDate','dteToDate','STORE_REBOUND_AFTER_VIEW','3012_VIEW_NOT_EXECUTED']:
     assert marker in live.QUERY_3012_JS, marker
 row=live.normalize_3012_row({'lotId':'002527TEST','repairComment':'comentario AT preservado','repairUser':'AT01','repairTime':'2026-10-16 09:10:00'})
@@ -76,7 +76,7 @@ assert row['repair_user']=='AT01'
 import agent_3012_patch as p3012
 start,end=p3012.exact_sn_history_window(datetime(2026,10,16,9,30,0))
 assert start==datetime(2026,1,24,0,0,0)
-assert end==datetime(2026,10,17,23,59,59)
+assert end==datetime(2026,10,16,23,59,59)
 print('factory guards + mapped 3012 V2 contracts OK')
 `;
   const run=spawnSync(py,['-c',code],{cwd:process.cwd(),encoding:'utf8'});
@@ -85,7 +85,7 @@ print('factory guards + mapped 3012 V2 contracts OK')
 
 test('exact-SN 3012 policy is pinned to factory baseline while broad query fallback stays separate',()=>{
   assert.match(agent3012,/EXACT_SN_HISTORY_START = datetime\(2026, 1, 24, 0, 0, 0\)/);
-  assert.match(agent3012,/current \+ timedelta\(days=1\)/);
+  assert.match(agent3012,/current\.replace\(hour=23, minute=59, second=59, microsecond=0\)/);
   assert.match(agent3012,/exact_start, exact_end = exact_sn_history_window\(\)/);
   assert.match(agent3012,/exact_end if exact_targets else datetime\.now\(\)/);
 });

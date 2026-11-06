@@ -3,15 +3,21 @@ import argparse, hashlib, json, os, re, subprocess, tempfile, zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
-SUPPORT_FILES=('START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','KEEP_AGENT_RUNNING.ps1','ISSUE57_RELAUNCH_ENROLLMENT.ps1')
-FIRST_RUN_FILES=('08_PREPARAR_REDE_AMES.bat','01_TROCAR_PARA_PR69_NOVA.bat','TROCAR_PARA_PR69_NOVA.ps1')
+SUPPORT_FILES=('START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','KEEP_AGENT_RUNNING.ps1','ISSUE57_RELAUNCH_ENROLLMENT.ps1',
+ 'SAFE_STATE_TRANSFER.py','issue57_update_preflight.py')
+VERIFIER_FILES=('07_VERIFICAR_VERSAO_CENTRAL.bat','VERIFICAR_VERSAO_CENTRAL.ps1')
+AT_SETUP_FILES=('00_PREPARAR_PENDRIVE_AT.bat','PREPARAR_DEPENDENCIAS_AT.ps1','01_INSTALAR_AT.bat',
+ 'INSTALAR_CENTRAL_AT.ps1','05_ABRIR_CHROME_AMES.bat','02_ABRIR_AT.bat','INICIAR_CENTRAL_AT.ps1')
+FIRST_RUN_FILES=('08_PREPARAR_REDE_AMES.bat','01_TROCAR_PARA_PR69_NOVA.bat','TROCAR_PARA_PR69_NOVA.ps1',
+ '12_APLICAR_ROTA_AMES_PERSISTENTE.bat')
 PACKAGE_DOCS=('INSTRUCOES_INSTALACAO_LIMPA.txt','MANUAL_LOGICA_CAPTURA_E_CRUZAMENTO.md','NOTAS_ALERTAS_SN_PR69.md','NOTAS_CORRECOES_28OUT_RESTAURACAO.md','NOTAS_VALIDACAO_FPY_TOP3_RASTREABILIDADE.md')
 _FORBIDDEN_EXACT={'config.json','local_agent_token','network_health.jsonl','.env','cookies.json','session.json'}
 _FORBIDDEN_SUFFIXES={'.sqlite','.sqlite3','.db','.pyc','.log','.zip','.pem','.key'}
 REQUIRED_FILES={'00_INICIAR_AQUI.bat','ames-agent/agent_entry.py','ames-agent/engine_bridge.py',
  'ames-agent/agent_hardened_entry.py','network/ensure_ames_route.ps1','LOCAL_BUNDLE_MANIFEST.json',
  'frontend/release-build.json','frontend/Central-de-Controle-/sw.js',
- *FIRST_RUN_FILES,*PACKAGE_DOCS,*('suporte/ames-workstation/'+n for n in SUPPORT_FILES)}
+ *FIRST_RUN_FILES,*VERIFIER_FILES,*PACKAGE_DOCS,*('suporte/ames-workstation/'+n for n in SUPPORT_FILES),
+ *('at-setup/'+n for n in AT_SETUP_FILES),'frontend/Central-de-Controle-/ames/at-viewer/index.html'}
 
 def verify_build_identity(z,manifest):
  sha=manifest.get('sha')
@@ -84,6 +90,17 @@ def build(destination, development=False):
   source=ws/name
   if not source.is_file():raise ValueError('Required workstation support file missing: '+name)
   payload['suporte/ames-workstation/'+name]=source.read_bytes()
+ # Keep the AT workstation preparation scripts available, but NEVER label
+ # this bundle an installable AT offline pendrive: the latter needs a separately
+ # assembled, integrity-checked manifest, account bootstrap and vendor wheels.
+ for name in AT_SETUP_FILES:
+  source=ws/'at-setup'/name
+  if not source.is_file():raise ValueError('Required AT preparation script missing: '+name)
+  payload['at-setup/'+name]=source.read_bytes()
+ for name in VERIFIER_FILES:
+  source=ws/name
+  if not source.is_file():raise ValueError('Required read-only version verification file missing: '+name)
+  payload[name]=source.read_bytes()
  for name in ['01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','START_LOCAL_CANDIDATE.ps1']:
   payload[name]=(ws/name).read_bytes()
  for name in FIRST_RUN_FILES:
@@ -115,7 +132,7 @@ def build(destination, development=False):
   raise ValueError('Integrated Central bootstrap missing from CLEAN index')
  if 'src="/Central-de-Controle-/local-entry.mjs"' in html:
   raise ValueError('CLEAN regressed to standalone local Console entry')
- extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat',*FIRST_RUN_FILES,*PACKAGE_DOCS] or k.startswith('suporte/ames-workstation/')}
+ extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/','at-setup/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat',*FIRST_RUN_FILES,*VERIFIER_FILES,*PACKAGE_DOCS] or k.startswith('suporte/ames-workstation/')}
  payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES)},indent=2).encode()
  for doc in (ROOT/'docs/ames').glob('integrated-v5*'):
   if doc.is_file():payload['evidence/'+doc.name]=doc.read_bytes()
@@ -125,6 +142,10 @@ def build(destination, development=False):
  if unified_handoff.exists():payload['evidence/'+unified_handoff.name]=unified_handoff.read_bytes()
  recovery_handoff=ROOT/'docs/ames/handoffs/PR69_RECOVERY_20261030.md'
  payload['evidence/'+recovery_handoff.name]=recovery_handoff.read_bytes()
+ audit_handoff=ROOT/'docs/ames/handoffs/PR69_3012_REUSO_20261106.md'
+ payload['evidence/'+audit_handoff.name]=audit_handoff.read_bytes()
+ prior_audit=ROOT/'docs/ames/handoffs/PR69_AUDITORIA_3012_REUSO_20261105.md'
+ payload['evidence/'+prior_audit.name]=prior_audit.read_bytes()
  payload['LEIA_PRIMEIRO.txt']=(f'''CENTRAL + A-MES — PACOTE CLEAN INTEGRADO (GITHUB / CANDIDATO DE TESTE)
 HEAD: {sha}
 Gate fisico pendente. Nao e uma promocao de producao.
@@ -160,6 +181,12 @@ ESTE PACOTE NAO E UM UPDATER NEM UMA MIGRACAO AUTOMATICA:
 - nao traz banco operacional, senha, cookie, sessao CDP ou token;
 - o A-MES, agente, SQLite, coletores e scheduler continuam locais/offline por padrao;
 - usa um unico frontend local, agente, SQLite e scheduler.
+
+CENTRAL AT SEPARADA:
+- Os scripts em at-setup sao fontes para MONTAR outro pendrive;
+  NAO constituem um instalador AT offline pronto. Faltam o manifesto AT
+  assinado/gerado, as dependencias vendor e as contas locais necessarias.
+- Nao execute esses scripts como se ja fossem uma instalacao de campo.
 
 3012 / HISTORICO:
 - AMES_START_DATE nasce configuravel no posto (default atual do ambiente: {config_example.get('ames_start_date')});

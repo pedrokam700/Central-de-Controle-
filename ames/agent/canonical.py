@@ -192,7 +192,17 @@ def export_revision(store,sid,line,insight_builder=None):
         if not snap:raise ValueError('Snapshot not found')
         epochrow=con.execute('SELECT epoch FROM mes_source_clock WHERE snapshot_id=?',(sid,)).fetchone();epoch=epochrow[0] if epochrow else 0
         previous=con.execute('SELECT * FROM mes_revisions WHERE snapshot_id=? AND line=? ORDER BY revision DESC LIMIT 1',(sid,line)).fetchone()
-        if previous and previous['epoch']==epoch and json.loads(previous['payload']).get('projection_version')==PROJECTION_VERSION:return json.loads(previous['payload'])
+        if previous and previous['epoch']==epoch:
+            cached=json.loads(previous['payload'])
+            if cached.get('projection_version')==PROJECTION_VERSION:
+                # The classifier is a derived, recoverable local projection.
+                # A transient error must not be frozen for the lifetime of an
+                # otherwise unchanged MES source epoch. Rebuild only when a
+                # builder exists and the last persisted insight failed; a
+                # successful unchanged revision remains immutable and cheap.
+                insight=cached.get('insights')
+                if not (insight_builder and (not isinstance(insight,dict) or insight.get('ready') is False)):
+                    return cached
         source=con.execute("SELECT value FROM schema_meta WHERE key='ames_source_id'").fetchone()[0]
         tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         process_contexts=[dict(r) for r in con.execute('SELECT * FROM process_defect_contexts WHERE snapshot_id=? AND line=?',(sid,line))] if 'process_defect_contexts' in tables else []
@@ -315,11 +325,12 @@ def export_revision(store,sid,line,insight_builder=None):
         if insight_builder:
             try:
                 insights=insight_builder(line=line,snapshot_id=sid)
-            except Exception:
+            except Exception as exc:
                 # Do not silently classify missing evidence as zero reuse.
                 # Never expose SNs, SQL, exception text or tokens in the API.
+                reason=('LOCAL_INSIGHT_BUILD_FAILED_'+type(exc).__name__.upper())[:80]
                 insights={"schema":"ames-insights-v1","ready":False,
-                          "reason":"LOCAL_INSIGHT_BUILD_FAILED",
+                          "reason":reason,
                           "message":"Falha na classificação local de reuso; dados MES salvos preservados.",
                           "drilldowns":{},"population_complete":False}
         payload={'projection_version':PROJECTION_VERSION,'schema':SCHEMA,'schema_version':2,'source_id':source,'snapshot_id':str(sid),'line_id':line,'collected_at':snap['collected_at'],'source_view':'3028','source_timestamp':None,'summary':{'period':dict(con.execute('SELECT start_at,end_at,mode FROM analysis_windows WHERE id=?',(snap['window_id'],)).fetchone() or {}),'line':line,'snapshot_id':str(sid),'collected_at':snap['collected_at'],'fpy':m.get('fpy'),'check_fpy':m.get('check_fpy'),'quantity':m.get('quantity'),'defect_rows':len(sets['defects'])},'datasets':sets,'coverage':coverage,'source_coverage':source_coverage,'insights':insights,'process_contexts':process_contexts,'material_candidates':material_candidates,'capabilities':{'process_timeline':bool(sets['process_timeline'])}}

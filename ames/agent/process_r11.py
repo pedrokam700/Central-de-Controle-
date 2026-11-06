@@ -224,7 +224,8 @@ def _persist_legacy_events(store, snapshot_id: int, pcba: str, passages: Iterabl
 
 
 def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], *, snapshot_id: int, line: str,
-                        max_pcbas: int = 0, performance: str = "balanced", line_callback=None, event_callback=None) -> Dict[str, Any]:
+                        max_pcbas: int = 0, performance: str = "balanced", line_callback=None, event_callback=None,
+                        seed_3022_items=None) -> Dict[str, Any]:
     """Collect 3022 in two phases: MES I/O first, local enrichment second.
 
     The previous implementation queried one PCBA and then performed correlation,
@@ -265,9 +266,12 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
 
     entries=[];all_contexts=[];event_count=0;warnings=[]
     captured=[];query_times=[]
+    seed_3022_items=seed_3022_items or {}
 
-    # Phase A — one exclusive MES lease. No SQLite/correlation occurs between
-    # PCBA submissions, so the next SN can be sent as soon as A-MES answers.
+    # Phase A — one exclusive MES lease. Expensive correlation stays outside
+    # this phase. The event callback may save a small durable raw checkpoint
+    # after each confirmed response; this costs a local write but prevents a
+    # restart from requiring another long MES query for the same board.
     browser = session_object(browser_mod.AmesBrowser(engine_dir)).connect()
     try:
         nav = session_object(navigation_mod.AmesNavigation(browser._target))
@@ -279,6 +283,19 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                 nav.ensure_3022()
                 tela._page()
                 for i,pcba in enumerate(targets,1):
+                    if pcba in seed_3022_items:
+                        rr=seed_3022_items[pcba]
+                        diagnostics=(rr or {}).get('query_diagnostics') or {}
+                        if (isinstance(rr.get('rows'),list) and
+                                diagnostics.get('status') in {'CONFIRMED','CONFIRMED_EMPTY'}):
+                            captured.append({'pcba_sn':pcba,'status':'COLLECTED',
+                                             'result':rr,'query_ms':0,'recovered_local':True})
+                            if event_callback:
+                                event_callback({'stage':'3022','kind':'pcba','phase':'mes',
+                                    'current':i,'total':len(targets),'pcba':pcba,
+                                    'status':'CHECKPOINT_COMPLETE','rows':len(rr['rows']),
+                                    'query_ms':0,'recovered_local':True})
+                            continue
                     started=time.perf_counter()
                     if line_callback:
                         line_callback(f"3022 MES [{i}/{len(targets)}] {pcba}")
@@ -291,7 +308,7 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                         query_times.append(query_ms)
                         captured.append({"pcba_sn":pcba,"status":"COLLECTED","result":rr,"query_ms":query_ms})
                         if event_callback:
-                            event_callback({"stage":"3022","kind":"pcba","phase":"mes","current":i,"total":len(targets),"pcba":pcba,"status":"COLLECTED","query_ms":query_ms,"rows":len((rr or {}).get("rows") or []),"query_diagnostics":diagnostics})
+                            event_callback({"stage":"3022","kind":"pcba","phase":"mes","current":i,"total":len(targets),"pcba":pcba,"status":"COLLECTED","query_ms":query_ms,"rows":len((rr or {}).get("rows") or []),"query_diagnostics":diagnostics,"result":rr})
                     except Exception as exc:
                         query_ms=round((time.perf_counter()-started)*1000.0,2)
                         query_times.append(query_ms)

@@ -69,13 +69,64 @@ body.dark .ames-reuse-line-tabs button{background:var(--ames-surface);border-col
 @media(max-width:600px){.ames-legacy-shell details.ames-last-capture-collapsible>summary{flex-wrap:wrap;gap:5px}.ames-legacy-shell details.ames-last-capture-collapsible>summary span{flex-basis:100%;order:3}}
 
 /* Operational reading: preserve PCBA IDs, give descriptions real width, scroll horizontally. */
-.ames-legacy-shell .ames-failure-groups .table-wrap table{min-width:1100px;table-layout:auto}
-.ames-legacy-shell .ames-failure-groups td:first-child{min-width:270px;max-width:420px;white-space:normal;word-break:normal;overflow-wrap:break-word;line-height:1.45}
-.ames-legacy-shell .ames-failure-groups td:first-child button{white-space:normal;text-align:left;line-height:1.45;min-width:245px;max-width:410px;height:auto}
-.ames-legacy-shell .ames-failures-table table{min-width:1670px;table-layout:auto}
-.ames-legacy-shell .ames-failures-table td:first-child{min-width:265px;max-width:420px;white-space:normal;word-break:normal;overflow-wrap:break-word;line-height:1.5}
-.ames-legacy-shell .ames-failures-table .ames-pcba-id{min-width:165px;white-space:nowrap;word-break:normal;overflow-wrap:normal;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
-.ames-legacy-shell .ames-failures-table td{min-width:95px}
+.ames-legacy-shell .ames-failure-groups .table-wrap table{min-width:1150px;table-layout:fixed}
+.ames-legacy-shell .ames-failure-groups th{white-space:normal;line-height:1.4;font-size:9px;vertical-align:middle}
+.ames-legacy-shell .ames-failure-groups th:first-child{width:240px}
+.ames-legacy-shell .ames-failure-groups th:nth-child(2){width:78px}
+.ames-legacy-shell .ames-failure-groups th:nth-child(n+3):nth-child(-n+6){width:128px}
+.ames-legacy-shell .ames-failure-groups th:nth-child(7){width:245px}
+.ames-legacy-shell .ames-failure-groups th:last-child{width:126px}
+.ames-legacy-shell .ames-failure-groups td:first-child{white-space:normal;word-break:normal;overflow-wrap:break-word;line-height:1.45}
+.ames-legacy-shell .ames-failure-groups td:first-child button{width:100%;white-space:normal;text-align:left;line-height:1.45;height:auto}
+.ames-legacy-shell .ames-failure-comment-top{display:flex;align-items:center;gap:6px;width:100%;border:1px solid var(--ames-line2);background:var(--ames-surface);padding:5px 6px;border-radius:7px;cursor:pointer;text-align:left;color:var(--ames-text);font-size:9px;min-width:0}
+.ames-legacy-shell .ames-failure-comment-top:hover{border-color:var(--ames-blue)}
+.ames-legacy-shell .ames-failure-comment-top>span{display:block;min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ames-legacy-shell .ames-failure-comment-top>b{white-space:nowrap;font-variant-numeric:tabular-nums}
+.ames-legacy-shell .ames-failure-comment-top>small{white-space:nowrap;color:var(--ames-muted)}
+.ames-legacy-shell .ames-failures-table table{min-width:1120px;table-layout:fixed}
+.ames-legacy-shell .ames-failures-table th{white-space:normal;line-height:1.35}
+.ames-legacy-shell .ames-failures-table th:first-child{width:235px}
+.ames-legacy-shell .ames-failures-table th:nth-child(2){width:192px}
+.ames-legacy-shell .ames-failures-table th:nth-child(3){width:144px}
+.ames-legacy-shell .ames-failures-table th:nth-child(4){width:112px}
+.ames-legacy-shell .ames-failures-table th:nth-child(5){width:88px}
+.ames-legacy-shell .ames-failures-table th:nth-child(6){width:68px}
+.ames-legacy-shell .ames-failures-table th:nth-child(7){width:235px}
+.ames-legacy-shell .ames-failures-table th:last-child{width:165px}
+.ames-legacy-shell .ames-failures-table td{min-width:0;overflow-wrap:anywhere;vertical-align:middle}
+.ames-legacy-shell .ames-failures-table td:first-child{white-space:normal;word-break:normal;overflow-wrap:break-word;line-height:1.5}
+.ames-legacy-shell .ames-failures-table .ames-pcba-id{white-space:nowrap;word-break:normal;overflow-wrap:normal;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.ames-legacy-shell .ames-failure-row-comment{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ames-legacy-shell .ames-failure-evidence-summary{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px}
+.ames-legacy-shell .ames-failure-evidence-summary .status{font-size:8px;padding:2px 4px}
+.ames-legacy-shell .ames-failure-open-inspector{font-size:9px;padding:5px 8px;white-space:nowrap}
+.ames-legacy-shell dialog.ames-failure-inspector{position:fixed;inset:0;width:min(1040px,calc(100vw - 36px));max-width:none;max-height:calc(100vh - 36px);margin:auto;padding:18px 20px 16px;border:1px solid var(--ames-line);border-radius:12px;background:var(--ames-surface);color:var(--ames-text);overflow-y:auto;box-shadow:0 18px 55px #0004}
+.ames-legacy-shell dialog.ames-failure-inspector::backdrop{background:rgb(12 20 30 / 62%)}
+.ames-legacy-shell .ames-failure-inspector-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--ames-line2);margin-bottom:14px}
+.ames-legacy-shell .ames-failure-inspector-head small{font-size:10px;color:var(--ames-muted)}
+.ames-legacy-shell .ames-failure-inspector-head h3{font-size:17px;line-height:1.4;margin:3px 0 4px;overflow-wrap:anywhere}
+.ames-legacy-shell .ames-failure-inspector-head p{font-size:12px;margin:0;color:var(--ames-muted)}
+.ames-legacy-shell .ames-failure-inspector-head .button{flex:0 0 auto}
+.ames-legacy-shell .ames-failure-inspector-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ames-legacy-shell .ames-failure-inspector-grid>div{display:grid;align-content:start;gap:7px;min-width:0;padding:14px 15px;border:1px solid var(--ames-line2);border-radius:9px;background:var(--ames-soft2)}
+.ames-legacy-shell .ames-failure-inspector-grid>div>small{font-size:10px;color:var(--ames-muted);font-weight:700}
+.ames-legacy-shell .ames-failure-inspector-grid>div>b{font-size:13px;overflow-wrap:anywhere}
+.ames-legacy-shell .ames-failure-inspector-grid>div>span{display:block;font-size:11px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.ames-legacy-shell .ames-failure-inspector-audit{grid-column:1/-1;margin-top:2px;border:1px solid var(--ames-line2);border-radius:8px;min-width:0}
+.ames-legacy-shell .ames-failure-inspector-audit>summary{cursor:pointer;padding:10px 12px;font-size:11px;font-weight:750}
+.ames-legacy-shell .ames-failure-inspector-audit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;padding:11px}
+.ames-legacy-shell .ames-failure-inspector-audit-grid>div{display:grid;gap:5px;padding:10px;border:1px solid var(--ames-line2);border-radius:7px;min-width:0}
+.ames-legacy-shell .ames-failure-inspector-audit-grid span{display:block;overflow-wrap:anywhere;font-size:10px}
+.ames-legacy-shell .ames-failure-inspector-audit-grid small{font-size:9px;color:var(--ames-muted)}
+.ames-legacy-shell .ames-failure-inspector-audit-grid [data-ames-source-provenance]{grid-column:1/-1}
+.ames-legacy-shell .ames-failure-inspector-audit-grid .ames-sn-repair-cycles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.ames-legacy-shell .ames-failure-inspector-note{font-size:10px;line-height:1.5;color:var(--ames-muted);margin:12px 0 0}
+.ames-legacy-shell .ames-failure-comment-dialog>p{font-size:11px;line-height:1.5;color:var(--ames-muted)}
+.ames-legacy-shell .ames-failure-comment-list{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px;max-height:55vh;overflow:auto}
+.ames-legacy-shell .ames-failure-comment-list li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--ames-line2);border-radius:8px;font-size:11px;overflow-wrap:anywhere}
+.ames-legacy-shell .ames-failure-comment-list b{font-size:13px;white-space:nowrap}
+.ames-legacy-shell .ames-failure-comment-list small{font-size:9px;color:var(--ames-muted)}
+@media(max-width:760px){.ames-legacy-shell .ames-failure-inspector-grid,.ames-legacy-shell .ames-failure-inspector-audit-grid{grid-template-columns:1fr}.ames-legacy-shell .ames-failure-inspector-audit-grid .ames-sn-repair-cycles{grid-template-columns:1fr}.ames-legacy-shell dialog.ames-failure-inspector{padding:12px;width:calc(100vw - 18px)}}
 .ames-legacy-shell [data-console-pane="base"] .table-wrap table{min-width:1150px;table-layout:auto}
 .ames-legacy-shell [data-console-pane="base"] .table-wrap td{min-width:105px;line-height:1.45;white-space:normal;word-break:normal;overflow-wrap:break-word}
 .ames-legacy-shell [data-console-pane="base"] .table-wrap td:nth-child(1){min-width:155px;white-space:nowrap;font-variant-numeric:tabular-nums}

@@ -42,11 +42,7 @@ export function renderMaterialSnInvestigation(result={},locale='pt-BR'){
     '<p class="mes-context">'+t(locale,'As contagens representam o retorno investigado; vínculos ou falhas não consultados permanecem desconhecidos. Y/N descreve o vínculo atual, não o passado. Nenhuma correlação prova causa ou erro do AT.',
       'Counts represent investigated evidence; unqueried links and failures remain unknown. Y/N describes current linkage, not the past. No correlation proves cause or technician error.')+
     (omitted?' · '+omitted+' '+t(locale,'PCBAs não investigadas pelo limite seguro','PCBAs beyond the safe query limit'):'')+'</p>'+
-    (recurrences.length?'<div class="notice warn"><strong>'+t(locale,'Alerta · possível recorrência associada ao mesmo material','Alert · possible recurrence associated with the same material')+'</strong><ul>'+
-      recurrences.map(a=>'<li><b>'+esc(a.severity==='high'?'ALTA':'MÉDIA')+'</b> · '+
-        esc(a.earlier?.pcba_sn)+' → '+esc(a.later?.pcba_sn)+' · '+
-        esc(fmt(a.earlier?.history?.['Defect Code']))+' / '+esc(fmt(a.later?.history?.['Defect Code']))+
-        ' · '+esc(a.message||'')+'</li>').join('')+'</ul></div>':'')+
+    (recurrences.length?'<p class="mes-context">'+recurrences.length+' '+t(locale,'recorrência(s) histórica(s) detalhada(s) no alerta principal; aqui permanecem os registros técnicos.','historical recurrence(s) detailed in the primary alert; source records remain available below.')+'</p>':'')+
     '<details open><summary>'+t(locale,'Ciclos de vínculo na 3074','3074 binding cycles')+' ('+cycles.length+')</summary>'+
     '<div class="ames-reuse-list">'+cycles.map(c=>'<article class="ames-evidence-card"><b>'+esc(fmt(c.pcba_sn))+'</b> · '+
       esc(fmt(c.iss_status_now))+' · '+t(locale,'Vínculo','Bind')+': '+esc(dt(c.bind_time_utc))+

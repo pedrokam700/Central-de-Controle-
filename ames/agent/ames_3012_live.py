@@ -13,8 +13,12 @@ ROUTE_3012 = "UAWIP.form.VwDefectRepairView"
 HOME_SURFACE = "/asymes/home"
 OPC_SURFACE = "/asymes/opc"
 QUERY_CONTRACT = "3012-home-mapped-v2"
-SOURCE_3012 = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2"
-CHECKPOINT_CONTRACT = QUERY_CONTRACT
+# The mapped field contract remains V2; the proof level is newer. Only a
+# request that verifies the actual MES from/to dates can certify a zero-row
+# historical window. Previous V2 coverage/checkpoints stay on disk, but must
+# not suppress a retry of the 3012 date-range regression.
+SOURCE_3012 = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2_PERIOD_VERIFIED_20261105"
+CHECKPOINT_CONTRACT = QUERY_CONTRACT + "-period-verified-20261105"
 
 QUERY_3012_JS = r"""
 async (cfg) => {
@@ -74,6 +78,30 @@ async (cfg) => {
     const got=c?.getValue?.();
     return got instanceof Date&&got.getHours()===(hh||0)&&got.getMinutes()===(mm||0);
   };
+  // ExtJS datetime compounds may keep a separate backing value (`__Data`).
+  // Only synchronize a recognized local date representation; never guess
+  // whether an opaque hidden value is UTC, an epoch, or another MES contract.
+  const syncBackingDate=(data,full,day,hour)=>{
+    if(!data||typeof data.setValue!=='function')return;
+    const previous=data.getValue?.();
+    if(previous instanceof Date){
+      data.setValue(full);
+      emit(data,'change',full,previous);
+      data.checkChange?.();
+      return;
+    }
+    const raw=clean(previous);
+    const match=raw.match(/^(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})[ T](\d{1,2}:\d{2})(:\d{2})?$/);
+    if(!match)return;
+    const separator=raw.includes('T')?'T':' ';
+    const dayFormat=match[1].includes('/')?day.replace(/-/g,'/'):day;
+    // Keep backing seconds equal to parent.setValue(full), which has
+    // minute-precision input and therefore second=00.
+    const replacement=dayFormat+separator+hour+(match[3]?':00':'');
+    data.setValue(replacement);
+    emit(data,'change',replacement,previous);
+    data.checkChange?.();
+  };
   const applyDateTime=(root,dateValue,timeValue)=>{
     const parent=byItemId(root,{visibleOnly:true});
     const date=byItemId(root+'__Date',{visibleOnly:true});
@@ -96,6 +124,7 @@ async (cfg) => {
     if(typeof parent.setValue==='function'){
       const old=parent.getValue?.(); parent.setValue(full); emit(parent,'change',full,old); parent.checkChange?.(); emit(parent,'blur');
     }
+    syncBackingDate(data,full,dateValue,timeValue);
     if(!dateMatches(date,dateValue)) throw new Error(`3012_DATE_NOT_APPLIED:${root}`);
     if(!timeMatches(time,timeValue)) throw new Error(`3012_TIME_NOT_APPLIED:${root}`);
     const hiddenRaw=clean(data?.getValue?.()??data?.getRawValue?.());
@@ -115,6 +144,13 @@ async (cfg) => {
   applied.defectCode=setMappedField('cdvDefectCode',cfg.defectCode);
   applied.dateFrom=applyDateTime('dteFromDate',cfg.dateFrom,cfg.timeFrom);
   applied.dateTo=applyDateTime('dteToDate',cfg.dateTo,cfg.timeTo);
+  // Changing one ExtJS datetime compound can silently reset its sibling.
+  // Validate both after setting the end, not only while setting each field.
+  const mappedMatches=(root,day,hour)=>dateMatches(byItemId(root+'__Date',{visibleOnly:true}),day)
+    &&timeMatches(byItemId(root+'__Time',{visibleOnly:true}),hour);
+  if(!mappedMatches('dteFromDate',cfg.dateFrom,cfg.timeFrom)
+    ||!mappedMatches('dteToDate',cfg.dateTo,cfg.timeTo))
+    throw new Error('3012_DATE_RANGE_NOT_APPLIED: datas de início/fim divergentes na interface');
 
   const storeFields=store=>{
     const out=[];
@@ -149,6 +185,20 @@ async (cfg) => {
   const beforeParams=snapshotParams(initialStore);
   const beforeParamsText=JSON.stringify(beforeParams);
   const observed=new Map();
+  // The 3012 Home sometimes submits the form through Ext.Ajax with serialized
+  // `dteFromDate__Data` / `dteToDate__Data` values, while the grid store's
+  // extraParams contains only paging and an SN. Observe the actual outgoing
+  // request instead of requiring invented top-level `fromDate`/`toDate` keys.
+  // No XHR/fetch monkey patch and no request values are placed in errors.
+  const ajaxRequests=[];
+  const ajax=Ext.Ajax||null;
+  const ajaxBefore=(_connection,options)=>{
+    if(!options||typeof options!=='object')return;
+    ajaxRequests.push({params:options.params,jsonData:options.jsonData,
+      rawData:options.rawData,url:options.url});
+    if(ajaxRequests.length>12)ajaxRequests.shift();
+  };
+  try{ajax?.on?.('beforerequest',ajaxBefore);}catch(e){}
   const observe=store=>{
     if(observed.has(store)) return observed.get(store);
     const state={store,token:storeToken(store),before:0,loads:0,changes:0,success:null,requestParams:null};
@@ -160,7 +210,7 @@ async (cfg) => {
     try{store.on?.('datachanged',state.changeFn);}catch(e){}
     observed.set(store,state);return state;
   };
-  const cleanup=()=>{for(const st of observed.values()){try{st.store.un?.('beforeload',st.beforeFn);}catch(e){}try{st.store.un?.('load',st.loadFn);}catch(e){}try{st.store.un?.('datachanged',st.changeFn);}catch(e){}}};
+  const cleanup=()=>{for(const st of observed.values()){try{st.store.un?.('beforeload',st.beforeFn);}catch(e){}try{st.store.un?.('load',st.loadFn);}catch(e){}try{st.store.un?.('datachanged',st.changeFn);}catch(e){}}try{ajax?.un?.('beforerequest',ajaxBefore);}catch(e){}};
   observe(initialStore); initialStore.currentPage=1;
   const physicalElement=()=>{
     for(const root of [viewButton?.btnEl?.dom,viewButton?.el?.dom]){
@@ -216,10 +266,84 @@ async (cfg) => {
     await sleep(70);
   }
   if(!finalState){cleanup();throw new Error('3012_RESPONSE_NOT_CONFIRMED: View executou, mas nenhuma resposta nova da grid foi comprovada.');}
+  if(!mappedMatches('dteFromDate',cfg.dateFrom,cfg.timeFrom)
+    ||!mappedMatches('dteToDate',cfg.dateTo,cfg.timeTo)){
+    cleanup();throw new Error('3012_DATE_RANGE_DRIFT_AFTER_VIEW: a consulta alterou os campos de data');
+  }
   const store=finalState.cur.store;
   const params=snapshotParams(store);
   const finalToken=storeToken(store);
   const proofState=observed.get(store);
+  // A visible field match alone is insufficient. The MES query must receive
+  // two distinct, correct bounds in its actual ExtJS store request. This
+  // refuses the silent Jan-23-to-Jan-23 empty range seen at the workstation.
+  const requestParams=proofState?.requestParams||[...observed.values()].map(x=>x.requestParams).find(Boolean)||{};
+  const normKey=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const findParameter=(root,aliases,depth=0)=>{
+    if(depth>7||root==null)return null;
+    const accepted=new Set(aliases.map(normKey));
+    if(typeof root==='string'){
+      const raw=root.trim();
+      if((raw[0]==='{'||raw[0]==='[')&&raw.length<50000){
+        try{return findParameter(JSON.parse(raw),aliases,depth+1);}catch(e){}
+      }
+      if(raw.includes('=')){
+        const pairs={};
+        for(const item of raw.replace(/^\?/,'').split('&').slice(0,120)){
+          const pos=item.indexOf('=');if(pos<0)continue;
+          try{pairs[decodeURIComponent(item.slice(0,pos).replace(/\+/g,' '))]=decodeURIComponent(item.slice(pos+1).replace(/\+/g,' '));}catch(e){}
+        }
+        return findParameter(pairs,aliases,depth+1);
+      }
+      return null;
+    }
+    if(Array.isArray(root)){
+      for(const item of root){const value=findParameter(item,aliases,depth+1);if(value!=null)return value;}
+      return null;
+    }
+    if(typeof root!=='object')return null;
+    if(accepted.has(normKey(root.name||root.field||root.itemId)) && root.value!=null)return root.value;
+    for(const [key,value] of Object.entries(root)){
+      if(accepted.has(normKey(key))&&value!=null&&value!=='')return value;
+    }
+    for(const value of Object.values(root)){
+      if(typeof value==='object'||typeof value==='string'){
+        const found=findParameter(value,aliases,depth+1);if(found!=null)return found;
+      }
+    }
+    return null;
+  };
+  const fromAliases=['fromDate','dateFrom','defectTimeStart','dteFromDate','dteFromDate__Data'];
+  const toAliases=['toDate','dateTo','defectTimeEnd','dteToDate','dteToDate__Data'];
+  const snAliases=['snImei','lotId','pcbaSn','serialNo'];
+  const requestSources=[...ajaxRequests.map(x=>({name:'ajax_beforerequest',data:x})).reverse(),
+    {name:'store_beforeload',data:requestParams},{name:'proxy',data:params}];
+  const stamp=value=>{
+    const raw=clean(value);
+    const iso=raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})[ T](\d{1,2}):(\d{2})/);
+    const local=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T](\d{1,2}):(\d{2})/);
+    const parts=iso?[+iso[1],+iso[2],+iso[3],+iso[4],+iso[5]]:
+      local?[+local[3],+local[2],+local[1],+local[4],+local[5]]:null;
+    if(!parts)return '';
+    const [year,month,day,hour,minute]=parts;
+    const valid=new Date(Date.UTC(year,month-1,day,hour,minute));
+    if(valid.getUTCFullYear()!==year||valid.getUTCMonth()!==month-1||valid.getUTCDate()!==day||
+      valid.getUTCHours()!==hour||valid.getUTCMinutes()!==minute)return '';
+    return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+  };
+  const expectedFrom=`${cfg.dateFrom} ${cfg.timeFrom}`,expectedTo=`${cfg.dateTo} ${cfg.timeTo}`;
+  let actualFrom='',actualTo='',periodSource='not_observed';
+  for(const source of requestSources){
+    // A background ExtJS request may share the same date fields. Never
+    // certify it as the selected board's request without an exact SN match.
+    if(source.name==='ajax_beforerequest'&&clean(findParameter(source.data,snAliases))!==clean(cfg.sn))continue;
+    const begin=stamp(findParameter(source.data,fromAliases)),end=stamp(findParameter(source.data,toAliases));
+    if(begin&&end){actualFrom=begin;actualTo=end;periodSource=source.name;break;}
+  }
+  if(actualFrom!==expectedFrom||actualTo!==expectedTo){
+    // Dates only: no SN, MES response rows, cookies, tokens or request headers.
+    cleanup();throw new Error(`3012_QUERY_PERIOD_MISMATCH: esperado ${expectedFrom} -> ${expectedTo}; observado ${actualFrom||'AUSENTE'} -> ${actualTo||'AUSENTE'} (${periodSource}); consulta recusada`);
+  }
   const records=[];
   try{for(const r of store.getRange?.()||[])records.push(dataOf(r));}catch(e){try{store.each?.(r=>records.push(dataOf(r)));}catch(_) {}}
   const total=Number(store.getTotalCount?.()??records.length??0);
@@ -235,7 +359,8 @@ async (cfg) => {
   }
   for(let p=2;p<=pages;p++){const rs=await loadPage(p);records.push(...rs);pageResults.push({page:p,count:rs.length});}
   if(records.length!==total){cleanup();throw new Error('3012 incompleta: '+records.length+' / '+total);}
-  const queryProof={contract:CONTRACT,viewAction,viewAttempts,freshness,initialStoreToken:initialToken,finalStoreToken:finalToken,storeRebound:finalToken!==initialToken,requestParams:proofState?.requestParams||null,proxyParams:params};
+  const queryProof={contract:CONTRACT,viewAction,viewAttempts,freshness,initialStoreToken:initialToken,finalStoreToken:finalToken,storeRebound:finalToken!==initialToken,requestParams,proxyParams:params,periodVerified:true,periodSource,
+    requestedWindow:{from:expectedFrom,to:expectedTo},actualWindow:{from:actualFrom,to:actualTo}};
   cleanup();
   return {records,total,pageSize,pages,pageResults,applied,proxyParams:params,beforeParams,storeFields:storeFields(store),gridItemId:finalState.cur.grid?.itemId||null,viewAction,queryProof};
 }
@@ -321,6 +446,29 @@ def _chunks(start: datetime, end: datetime, days: int) -> List[tuple[datetime, d
         chunk_end=min(end, cursor + timedelta(days=days) - timedelta(seconds=1))
         out.append((cursor,chunk_end));cursor=chunk_end + timedelta(seconds=1)
     return out
+
+
+def _verified_checkpoint(loaded: Dict[str, Any] | None) -> Dict[str, Any]:
+    """A prior 'done' without query proof must never skip an MES request."""
+    fresh = {"contract": CHECKPOINT_CONTRACT, "done": [], "rows": [], "chunks": []}
+    if not isinstance(loaded, dict) or loaded.get("contract") != CHECKPOINT_CONTRACT:
+        return fresh
+    done = set(loaded.get("done") or [])
+    if not done and (loaded.get("rows") or loaded.get("chunks")):
+        return fresh
+    verified = []
+    for item in loaded.get("chunks") or []:
+        if not isinstance(item, dict):
+            continue
+        proof = item.get("query_proof") or {}
+        if (proof.get("periodVerified") is True and proof.get("contract") == QUERY_CONTRACT
+                and proof.get("freshness") and proof.get("actualWindow") == proof.get("requestedWindow")
+                and proof.get("actualWindow") == {"from": item.get("from"), "to": item.get("to")}
+                and item.get("key") in done):
+            verified.append(item)
+    if len(verified) != len(done) or {item["key"] for item in verified} != done:
+        return fresh
+    return {**loaded, "done": sorted(done), "chunks": verified}
 
 
 def _url_matches_host(url: str, ames_host: str) -> bool:
@@ -412,19 +560,17 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
     targets=[str(x).strip() for x in (sns or []) if str(x).strip()] or [""]
     chunks=_chunks(start,end,chunk_days)
     checkpoint_path=Path(checkpoint_path) if checkpoint_path else None
-    checkpoint={"contract":CHECKPOINT_CONTRACT,"done":[],"rows":[]}
+    checkpoint=_verified_checkpoint(None)
     if checkpoint_path and checkpoint_path.exists():
         try:
             loaded=json.loads(checkpoint_path.read_text(encoding="utf-8"))
-            # Pre-V2 checkpoints may contain false zero-row successes produced by
-            # the old fuzzy field/store resolver. Never let them suppress a real
-            # mapped V2 MES query.
-            if loaded.get("contract")==CHECKPOINT_CONTRACT:
-                checkpoint=loaded
+            checkpoint=_verified_checkpoint(loaded)
         except Exception:
-            checkpoint={"contract":CHECKPOINT_CONTRACT,"done":[],"rows":[]}
+            checkpoint=_verified_checkpoint(None)
+    # The old checkpoint is left untouched until a verified fresh query saves
+    # a replacement; neither false 'done' keys nor unproved rows are reused.
     done=set(checkpoint.get("done") or []);records=[dict(x) for x in checkpoint.get("rows") or []]
-    diagnostics=[]
+    diagnostics=[{key:value for key,value in item.items() if key!="key"} for item in checkpoint["chunks"]]
 
     with sync_playwright() as pw:
         browser=pw.chromium.connect_over_cdp(cdp_url);page=_select_page(browser,ames_host)
@@ -441,16 +587,21 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
                 normalized=[normalize_3012_row(r) for r in (raw.get("records") or [])]
                 if sn and any(sn not in (r.get('pcba_sn'),r.get('imei')) for r in normalized):
                     raise RuntimeError('3012 retornou outra SN; filtros/grade nao confirmados')
-                records.extend(normalized);done.add(chunk_key)
                 proof=dict(raw.get("queryProof") or {})
-                if proof.get("contract")!=QUERY_CONTRACT or not proof.get("freshness"):
-                    raise RuntimeError("3012 respondeu sem prova do contrato mapeado V2")
-                diagnostics.append({"sn":sn,"from":cfg["dateFrom"]+" "+cfg["timeFrom"],"to":cfg["dateTo"]+" "+cfg["timeTo"],"rows":len(normalized),
+                expected={"from":cfg["dateFrom"]+" "+cfg["timeFrom"],"to":cfg["dateTo"]+" "+cfg["timeTo"]}
+                if (proof.get("contract")!=QUERY_CONTRACT or not proof.get("freshness")
+                        or proof.get("periodVerified") is not True
+                        or proof.get("actualWindow")!=expected or proof.get("requestedWindow")!=expected):
+                    raise RuntimeError("3012 respondeu sem prova do período efetivamente consultado")
+                records.extend(normalized);done.add(chunk_key)
+                item={"key":chunk_key,"sn":sn,"from":expected["from"],"to":expected["to"],"rows":len(normalized),
                                     "total":raw.get("total"),"pages":raw.get("pages"),"fields":raw.get("storeFields"),"applied":raw.get("applied"),"surface":"home",
-                                    "view_action":raw.get("viewAction"),"query_proof":proof,"proxy_params":raw.get("proxyParams")})
+                                    "view_action":raw.get("viewAction"),"query_proof":proof,"proxy_params":raw.get("proxyParams")}
+                diagnostics.append({key:value for key,value in item.items() if key!="key"})
+                checkpoint.setdefault("chunks",[]).append(item)
                 if checkpoint_path:
                     checkpoint_path.parent.mkdir(parents=True,exist_ok=True)
-                    checkpoint_path.write_text(json.dumps({"contract":CHECKPOINT_CONTRACT,"done":sorted(done),"rows":records,"updated_at":datetime.now().isoformat(timespec="seconds")},ensure_ascii=False,indent=2,default=str),encoding="utf-8")
+                    checkpoint_path.write_text(json.dumps({"contract":CHECKPOINT_CONTRACT,"done":sorted(done),"rows":records,"chunks":checkpoint["chunks"],"updated_at":datetime.now().isoformat(timespec="seconds")},ensure_ascii=False,indent=2,default=str),encoding="utf-8")
 
     unique={}
     for row in records:unique[row["row_key"]]=row

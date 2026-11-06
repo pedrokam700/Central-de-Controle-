@@ -16,6 +16,9 @@ import canonical
 import process_r11
 import preflight
 import network_watch
+import partial_retry
+import trace_auto_resume
+from engine_bridge import summarize_3074_capture
 
 process_r11.patch_store(a.STORE)
 
@@ -149,21 +152,62 @@ def _rebase_trace_targets_at_execution(cfg, attempts=3):
     raise last_error or ValueError('Trace revision could not be stabilized')
 
 
+def _trace_overall_progress(mode, line_index, line_total, stage, stage_fraction=0):
+    """Monotonic *estimated work* progress across lines and source stages.
+
+    Per-view requests have different costs, so this is an execution indicator,
+    never proof of source coverage or a prediction of remaining time.
+    """
+    weights = {
+        'full': {'3074': (0, .38), '2114': (.38, .67), '3022': (.67, .82), '3012': (.82, 1)},
+        'reuse_only': {'3074': (0, .43), '2114': (.43, .76), '3012': (.76, 1)},
+        'process_only': {'3022': (0, 1)},
+        'history_only': {'3012': (0, 1)},
+    }
+    start, finish = weights.get(mode, {}).get(stage, (0, 0))
+    fraction = min(1, max(0, float(stage_fraction or 0)))
+    complete = (max(1, line_index) - 1 + start + (finish - start) * fraction) / max(1, line_total)
+    return min(99, max(4, round(4 + 95 * complete)))
+
+
+def _local_integrated_for_scope(snapshot_id, line, records):
+    """Read previously collected MES evidence from this SAME line and scope.
+
+    A snapshot can have multiple 3074 batches, including a different physical
+    line. Looking only at the latest integrated_v016 may silently return the
+    other line; discarding a previous batch on a narrower retry loses good
+    evidence. The existing read-only reconciliation checks exact 3028 facts.
+    """
+    versions = a.STORE.snapshot_payload_history(snapshot_id, 'integrated_v016')
+    if not versions or len(versions) > 512:
+        return None
+    from integrated_snapshot_history import recover_snapshot_line
+    saved = [a.STORE.get_snapshot_payload_revision(
+        snapshot_id, 'integrated_v016', int(row['revision'])) for row in versions]
+    recovered, _ = recover_snapshot_line(saved, line, records)
+    return recovered
+
+
 def _run_deep_trace_job(job_id, cfg):
     mode=str(cfg.get("trace_mode") or "full").strip().lower()
-    if mode not in {"full","process_only","reuse_only"}:
+    repair_partials=bool(cfg.get('repair_partials'))
+    if mode not in {"full","process_only","reuse_only","history_only"}:
         raise ValueError("trace_mode invalido")
     support=_process_support()
     if mode in {"full","process_only"} and not support.get("ready"):
         raise RuntimeError("3022 em lote indisponivel neste motor: "+str(support))
-    job=a._job_update(job_id,status="running",stage="3022" if mode=="process_only" else "3074",progress=4,started_at=a.utc_now(),
+    job=a._job_update(job_id,status="running",stage="3012" if mode=="history_only" else ("3022" if mode=="process_only" else "3074"),progress=4,started_at=a.utc_now(),
                       message="Preparando coleta seletiva",stage_progress={},live_events=[],partial_refresh=0,
-                      scope={"trace_mode":mode})
+                      scope={"trace_mode":mode,"include_3012":bool(cfg.get("include_3012", True)),
+                             "repair_partials":repair_partials,"resumed_from_job":cfg.get('resumed_from_job')})
     a._persist_job(job)
     try:
         ids=_rebase_trace_targets_at_execution(cfg)
+        job=a._job_update(job_id,scope={**job['scope'],'snapshot_ids':ids,
+                      'lines':list(cfg.get('lines') or [])})
+        a._persist_job(job)
         engine=a.ENGINE_DIR or a.discover_engine(a.CONFIG,a.BASE_DIR)
-        if not engine:raise RuntimeError("Motor V0.16 nao encontrado")
+        if not engine and mode!="history_only":raise RuntimeError("Motor V0.16 nao encontrado")
         lines=a.normalize_lines(cfg.get("lines") or a.CONFIG.get("configured_lines") or [])
         codes=[str(x).strip() for x in (cfg.get("defect_codes") or []) if str(x).strip()]
         max_failures=max(0,int(cfg.get("max_failures") or 0));max_pcbas=max(0,int(cfg.get("max_pcbas") or 0))
@@ -177,8 +221,45 @@ def _run_deep_trace_job(job_id, cfg):
                 results[line]={"snapshot_id":sid,"skipped":True,"reason":"Nenhuma falha no escopo selecionado"};continue
             unique=len({str(r.get("pcba_sn") or "").strip() for r in records if str(r.get("pcba_sn") or "").strip()})
             line_result={"snapshot_id":sid,"scope":{"records":len(records),"unique_pcbas":unique,"defect_codes":codes,"max_failures":max_failures,"max_pcbas":max_pcbas,"trace_mode":mode}}
+            repair_plan=None
+            seed_3074_items={}
+            seed_3022_items={}
+            if repair_partials:
+                scope_sns=list(dict.fromkeys(str(r.get('pcba_sn') or '').strip() for r in records))
+                observed=partial_retry.load_captures(a.STORE,sid,line)
+                repair_plan=partial_retry.pending_pcbas(scope_sns,observed)
+                seed_3074_items=partial_retry.verified_3074_items(observed,set(scope_sns))
+                seed_3022_items=partial_retry.verified_3022_items(observed,set(scope_sns))
+                required=('3074','2114') if mode=='reuse_only' else (
+                    ('3022',) if mode=='process_only' else
+                    (() if mode=='history_only' else ('3074','2114','3022')))
+                if required and not any(repair_plan['capture_seen'][source] for source in required):
+                    raise ValueError(f'{line}: sem coleta anterior dessas fontes; execute o modo normal primeiro')
+                line_result['retry_plan']=repair_plan
+                pending=repair_plan['pending']
+                retry3074=set(pending['3074'])|set(pending['2114'])
+                # A crash in the 3022 MES phase can leave confirmed raw rows
+                # not yet correlated into SQLite. Replay their local phase
+                # without re-querying the A-MES screen.
+                retry3022=set(pending['3022'])|set(seed_3022_items)
+                records_reuse=[r for r in records if str(r.get('pcba_sn') or '').strip() in retry3074]
+                records_process=[r for r in records if str(r.get('pcba_sn') or '').strip() in retry3022]
+                job=a._job_update(job_id,message=f'{line}: recuperação parcial · 3074/2114 {len(retry3074)} PCBAs · 3022 {len(retry3022)} PCBAs · 3012 somente lacunas')
+                a._persist_job(job)
+            else:
+                records_reuse=records_process=records
+            previous_integrated=(_local_integrated_for_scope(sid,line,records)
+                                 if repair_partials and mode in {'full','reuse_only','history_only'} else None)
+            if repair_partials and not records_reuse:
+                # Reuse the previously saved source for gap-only 3012 reads.
+                # The independent 3022 retry must not replace 3074/2114.
+                payload=previous_integrated
+                if not payload and mode in {'full','reuse_only'}:
+                    raise RuntimeError(f'{line}: não há lote 3074/2114 reconciliável nesta revisão; não pode pular a fonte')
             last_persist=[0.0]
             partial_journal=source_capture.BoundedPartialJournal(
+                a.STORE,target=cfg['snapshot_targets'][line],line=line,job_id=job_id)
+            durable_journal=source_capture.DurablePCBAJournal(
                 a.STORE,target=cfg['snapshot_targets'][line],line=line,job_id=job_id)
             def event(ev,_line=line,_idx=idx,_sid=sid):
                 nonlocal job
@@ -201,7 +282,20 @@ def _run_deep_trace_job(job_id, cfg):
                     partial_journal.observe(ev)
                 except Exception as journal_error:
                     print('[PARTIAL SOURCE JOURNAL]',type(journal_error).__name__,str(journal_error)[:180])
-                job=a._job_live_event(job_id,ev,_line,_idx,total,_sid)
+                try:
+                    durable_journal.observe(ev)
+                except Exception as journal_error:
+                    print('[DURABLE PCBA JOURNAL]',type(journal_error).__name__,str(journal_error)[:180])
+                # 3022 raw rows belong in the local SQLite source capture,
+                # never in the public live job/console status payload.
+                public_ev={k:v for k,v in (ev or {}).items() if k!='result'}
+                job=a._job_live_event(job_id,public_ev,_line,_idx,total,_sid)
+                if stage in {"3074","2114"}:
+                    cur=int((ev or {}).get("current") or 0)
+                    count=max(0,int((ev or {}).get("total") or 0))
+                    if count:
+                        job=a._job_update(job_id,progress=_trace_overall_progress(
+                            mode,_idx,total,stage,cur/count))
                 if stage=="3022":
                     cur=int((ev or {}).get("current") or 0);count=max(0,int((ev or {}).get("total") or 0))
                     pct=round(cur*100/count,1) if count else 0.0
@@ -211,7 +305,9 @@ def _run_deep_trace_job(job_id, cfg):
                     detail=str((ev or {}).get("pcba") or "")
                     if qms is not None:detail += f" · {qms} ms"
                     sp["3022"]={"current":cur,"total":count,"percent":pct,"line_percent":pct,"line":_line,"line_index":_idx,"line_total":total,"detail":detail,"status":(ev or {}).get("status"),"phase":phase,"query_ms":qms}
-                    job=a._job_update(job_id,stage="3022",stage_progress=sp,message=f"{_line}: 3022 · {phase} · {cur}/{count}")
+                    job=a._job_update(job_id,stage="3022",stage_progress=sp,
+                                      progress=_trace_overall_progress(mode,_idx,total,"3022",cur/count if count else 0),
+                                      message=f"{_line}: 3022 · {phase} · {cur}/{count}")
                 if did_ingest:job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1)
                 now=time.monotonic()
                 if did_ingest or now-last_persist[0]>=1.0:a._persist_job(job);last_persist[0]=now
@@ -221,17 +317,22 @@ def _run_deep_trace_job(job_id, cfg):
                 stage="2114" if msg.startswith("2114") else ("3022" if msg.startswith("3022") else "3074")
                 job=a._job_update(job_id,stage=stage,message=f"{_line}: {msg}");a._persist_job(job)
 
-            if mode in {"full","reuse_only"}:
-                base_progress=6+int((idx-1)*72/total)
+            if mode in {"full","reuse_only"} and records_reuse:
+                base_progress=_trace_overall_progress(mode,idx,total,"3074")
                 job=a._job_update(job_id,stage="3074",progress=base_progress,message=f"{line}: 3074/2114 · {unique} PCBAs / {len(records)} ocorrencias")
                 a._persist_job(job)
                 # One trace execution owns the shared A-MES session across the
                 # complete 3074→2114 interaction. Other MES jobs queue instead of
                 # navigating another view while 2114 is still active.
                 with a.MES.critical():
-                    payload=a.run_deep_v016_records(engine,records,source_key=f"snapshot_{sid}_{line}",work_dir=a.DATA_DIR/"checkpoints",
+                    payload=a.run_deep_v016_records(engine,records_reuse,source_key=f"snapshot_{sid}_{line}",work_dir=a.DATA_DIR/"checkpoints",
                                                     line_callback=text,event_callback=event,max_pcbas=max_pcbas,
-                                                    shared_query_memo=shared_query_memo,performance=performance)
+                                                    shared_query_memo=shared_query_memo,performance=performance,
+                                                    seed_3074_items=seed_3074_items)
+                if repair_partials:
+                    if previous_integrated:
+                        payload=partial_retry.merge_integrated(
+                            previous_integrated,payload,summarize_3074_capture)
                 enrich=a.enrich_snapshot_from_integrated(sid,payload)
                 # Persist each source separately, even if a later stage fails.
                 # This is a local-only raw journal tied to the ORIGINAL selected
@@ -245,29 +346,80 @@ def _run_deep_trace_job(job_id, cfg):
                 line_result.update({"enrichment":enrich,"3074":payload.get("trace_3074",{}),"2114":payload.get("trace_2114",{})})
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
 
-            if mode in {"full","process_only"}:
-                job=a._job_update(job_id,stage="3022",progress=82+int((idx-1)*12/total),message=f"{line}: 3022 · {unique} PCBAs")
+            if mode in {"full","process_only"} and records_process:
+                job=a._job_update(job_id,stage="3022",progress=_trace_overall_progress(mode,idx,total,"3022"),
+                                  message=f"{line}: 3022 · {unique} PCBAs")
                 a._persist_job(job)
-                p=process_r11.collect_and_persist(a.STORE,engine,records,snapshot_id=sid,line=line,max_pcbas=max_pcbas,
-                                                  performance=performance,line_callback=lambda msg:text("3022 "+msg),event_callback=event)
+                p=process_r11.collect_and_persist(a.STORE,engine,records_process,snapshot_id=sid,line=line,max_pcbas=max_pcbas,
+                                                  performance=performance,line_callback=lambda msg:text("3022 "+msg),event_callback=event,
+                                                  seed_3022_items=seed_3022_items)
                 line_result["3022"]=p
                 if p is not None:
                     source_capture.capture_source(a.STORE,target=cfg['snapshot_targets'][line],
                         line=line,job_id=job_id,view='3022',result=p,status=(_source_stage(p.get('source_status') or p.get('status')) if isinstance(p,dict) and _source_stage(p.get('source_status') or p.get('status')) in ('done','partial','error') else 'partial'))
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
+
+            if mode=="history_only":
+                # The operator can fill missing historical hours using the
+                # already-persisted 3074/2114 evidence: no repeat collection.
+                payload=(previous_integrated if repair_partials else
+                         _local_integrated_for_scope(sid,line,records))
+                if not payload or not (payload.get("trace_3074") or payload.get("trace_2114")):
+                    raise RuntimeError("Esta revisão ainda não possui 3074/2114 coletadas; execute Reuso primeiro")
+
+            if mode in {"full","reuse_only","history_only"} and cfg.get("include_3012", True):
+                # 2114 histories commonly have no Defect Time. Query the mapped
+                # Home 3012 screen for historical PCBAs *observed in this
+                # exact 3074/2114 trace*, plus current 3028 PCBAs.
+                # This independent, checkpointed stage uses existing per-SN cache
+                # and never re-runs 3028, 3074 or 2114.
+                import trace_3012_enrichment
+                def progress_3012(current, count, sn, _line=line):
+                    nonlocal job
+                    sp=dict(job.get("stage_progress") or {})
+                    stage_percent=round(current*100/count,1) if count else 0
+                    sp["3012"]={"line":_line,"current":current,"total":count,
+                                "percent":stage_percent,"line_percent":stage_percent,
+                                "detail":sn}
+                    job=a._job_update(job_id,stage="3012",
+                                      progress=_trace_overall_progress(mode,idx,total,"3012",current/count if count else 0),
+                                      message=f"{_line}: 3012 atual e histórica · {current}/{count}",stage_progress=sp)
+                    a._persist_job(job)
+                try:
+                    collected_3012=trace_3012_enrichment.collect_historical_3012(
+                        a,payload,records,job_id=job_id,line=line,progress=progress_3012)
+                except Exception as exc:
+                    collected_3012={"status":"error","source_status":"error",
+                                    "warning":f"3012 indisponível: {type(exc).__name__}: {str(exc)[:180]}",
+                                    "records_count":0}
+                line_result["3012"]=collected_3012
+                job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1)
+                a._persist_job(job)
+            last_stage="3012" if mode in {"full","reuse_only","history_only"} and cfg.get("include_3012", True) else ("3022" if mode in {"full","process_only"} else "2114")
+            job=a._job_update(job_id,progress=_trace_overall_progress(mode,idx,total,last_stage,1))
             results[line]=line_result
 
         stages={"3028":"preserved",
                 "3074":_aggregate_stage(results,"3074") if mode in {"full","reuse_only"} else "not_run",
                 "2114":_aggregate_stage(results,"2114") if mode in {"full","reuse_only"} else "not_run",
-                "3022":_aggregate_stage(results,"3022") if mode in {"full","process_only"} else "not_run"}
-        base_message={"full":"Rastreabilidade 3074/2114/3022 concluída","process_only":"Processo 3022 concluído","reuse_only":"Reuso 3074/2114 concluído"}[mode]
-        expected=("3074","2114","3022") if mode=="full" else (("3022",) if mode=="process_only" else ("3074","2114"))
-        degraded=[name for name in expected if stages.get(name)!="done"]
+                "3022":_aggregate_stage(results,"3022") if mode in {"full","process_only"} else "not_run",
+                "3012":_aggregate_stage(results,"3012") if mode in {"full","reuse_only","history_only"} and cfg.get("include_3012", True) else "not_run"}
+        base_message={"full":"Rastreabilidade 3074/2114/3022/3012 concluída","process_only":"Processo 3022 concluído","reuse_only":"Reuso 3074/2114/3012 concluído","history_only":"Horários históricos 3012 consultados"}[mode]
+        if repair_partials:
+            base_message='Recuperação seletiva concluída; fontes comprovadas antes foram preservadas'
+        expected=("3074","2114","3022") if mode=="full" else (("3022",) if mode=="process_only" else (("3074","2114") if mode=="reuse_only" else ()))
+        if mode in {"full","reuse_only","history_only"} and cfg.get("include_3012", True):expected=(*expected,"3012")
+        if repair_partials:
+            for source in expected:
+                if source=='3012':continue
+                if all(not (r.get('retry_plan') or {}).get('pending',{}).get(source)
+                       for r in results.values() if not r.get('skipped')):
+                    stages[source]='preserved'
+        degraded=[name for name in expected if stages.get(name) not in ('done','preserved')]
         message=("Execução finalizada sem cobertura completa: "+", ".join(degraded)) if degraded else base_message
         job=a._job_update(job_id,status="done",stage="done",progress=100,finished_at=a.utc_now(),
                           message=message,
-                          result={"snapshot_ids":ids,"lines":active,"deep_trace":results,"scope":{"trace_mode":mode,"defect_codes":codes,"max_failures":max_failures,"max_pcbas":max_pcbas,"performance":performance},"stages":stages})
+                          result={"snapshot_ids":ids,"lines":active,"deep_trace":results,"scope":{"trace_mode":mode,"defect_codes":codes,"max_failures":max_failures,"max_pcbas":max_pcbas,"performance":performance,"repair_partials":repair_partials},"stages":stages})
         a._persist_job(job)
     except Exception as exc:
         a._persist_job(a._job_update(job_id,status="error",stage="error",finished_at=a.utc_now(),message=str(exc),error=f"{type(exc).__name__}: {exc}"))
@@ -275,6 +427,27 @@ def _run_deep_trace_job(job_id, cfg):
 
 def start_deep_trace_job(cfg):
     _trace_snapshot_ids(cfg)
+    if not cfg.get('repair_partials') and not cfg.get('force_new_run'):
+        with a.JOBS_LOCK:
+            previous=trace_auto_resume.candidate(cfg,list(a.JOBS.values()))
+        if previous:
+            # A previous job is not itself proof that the source returned data.
+            # Require durable, correctly scoped local capture evidence before
+            # switching the new job to gap-only mode. No MES reads here.
+            mode=str(cfg.get('trace_mode') or 'full')
+            eligible=mode=='history_only'
+            if not eligible:
+                required={'process_only':{'3022'},'reuse_only':{'3074','2114'},
+                          'full':{'3074','2114','3022'}}.get(mode,set())
+                for line in cfg['lines']:
+                    captures=partial_retry.load_captures(a.STORE,
+                        cfg['snapshot_targets'][line]['snapshot_id'],line)
+                    if any(c.get('source_view') in required for c in captures):
+                        eligible=True
+                        break
+            if eligible:
+                cfg['repair_partials']=True
+                cfg['resumed_from_job']=previous['id']
     return a._launch_mes_job("deep_trace",cfg,_run_deep_trace_job)
 
 
@@ -356,12 +529,13 @@ class Handler(a.Handler):
         if u.path=="/api/v1/deep-trace":
             try:
                 body=self._body();mode=str(body.get("trace_mode") or "full")
-                if mode not in {"full","process_only","reuse_only"}:raise ValueError("trace_mode invalido")
+                if mode not in {"full","process_only","reuse_only","history_only"}:raise ValueError("trace_mode invalido")
                 self._send(start_deep_trace_job({"request_id":body.get("request_id"),"lines":body.get("lines") or a.CONFIG.get("configured_lines") or [],
                                                  "snapshot_targets":body.get("snapshot_targets"),
                                                  "defect_codes":body.get("defect_codes") or [],"max_failures":body.get("max_failures") or 0,
                                                  "max_pcbas":body.get("max_pcbas") or 0,"performance":body.get("performance") or a.CONFIG.get("performance") or "balanced",
-                                                 "trace_mode":mode}),202)
+                                                 "trace_mode":mode,"repair_partials":body.get('repair_partials') is True,
+                                                 "force_new_run":body.get('force_new_run') is True}),202)
             except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
             return
         if u.path=="/api/v1/network/repair":
