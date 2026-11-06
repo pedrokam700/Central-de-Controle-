@@ -123,7 +123,6 @@ def test_pr69_clean_retains_supervised_switch_and_first_run_network():
         "TROCAR_PARA_PR69_NOVA.ps1",
         "08_PREPARAR_REDE_AMES.bat",
         "12_APLICAR_ROTA_AMES_PERSISTENTE.bat",
-        "12_APLICAR_ROTA_AMES_TEMPORARIA.bat",
     }
     assert set(builder.PACKAGE_DOCS) == {
         "INSTRUCOES_INSTALACAO_LIMPA.txt",

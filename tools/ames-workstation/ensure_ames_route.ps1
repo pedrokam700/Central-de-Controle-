@@ -1,4 +1,4 @@
-param([switch]$Elevated,[switch]$Temporary)
+param([switch]$Elevated)
 # Only the exact A-MES host route is managed. Never changes default gateway,
 # DNS, proxy, Wi-Fi credentials or any other network route.
 $ErrorActionPreference='Stop'
@@ -9,8 +9,7 @@ $Profile='TAXXX_5G'
 $Root=Split-Path -Parent $PSScriptRoot
 $Logs=Join-Path $Root 'logs'
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
-$mode=if($Temporary){'temporaria'}else{'persistente'}
-$Log=Join-Path $Logs ("rota_ames_${mode}_"+(Get-Date -Format 'yyyyMMdd_HHmmss')+'.txt')
+$Log=Join-Path $Logs ("rota_ames_persistente_"+(Get-Date -Format 'yyyyMMdd_HHmmss')+'.txt')
 Start-Transcript -Path $Log -Force | Out-Null
 
 function Test-Admin {
@@ -23,7 +22,7 @@ function Confirm-Route([int]$index,[string]$gateway) {
     Where-Object { $_.InterfaceIndex -eq $index -and $_.NextHop -eq $gateway })
   $saved=@(Get-NetRoute -DestinationPrefix $Prefix -PolicyStore PersistentStore -ErrorAction SilentlyContinue |
     Where-Object { $_.InterfaceIndex -eq $index -and $_.NextHop -eq $gateway })
-  return ($active.Count -gt 0 -and ($Temporary -or $saved.Count -gt 0))
+  return ($active.Count -gt 0 -and $saved.Count -gt 0)
 }
 function Test-AmesTcp {
   $client=New-Object System.Net.Sockets.TcpClient
@@ -88,7 +87,7 @@ function Resolve-CorporateWifiByAddress([object[]]$adapters,[object[]]$ipconfigs
 }
 
 try {
-  Write-Host ('=== REDE A-MES: Wi-Fi TAXXX_5G + rota '+$(if($Temporary){'temporaria'}else{'persistente'})+' /32 ===')
+  Write-Host '=== REDE A-MES: Wi-Fi TAXXX_5G + rota persistente /32 ==='
   $wifi=@(netsh wlan show interfaces 2>&1)
   $confirmed=@($wifi | Where-Object { $_ -match '^\s*SSID\s*:\s*TAXXX_5G\s*$' })
   if(-not $confirmed.Count){
@@ -143,23 +142,14 @@ try {
       Write-Host 'Solicitando administrador apenas para a rota 172.29.185.215/32...'
       $scriptPath=$MyInvocation.MyCommand.Path
       $arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$scriptPath+'" -Elevated'
-      if($Temporary){$arguments+=' -Temporary'}
       $child=Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Verb RunAs -Wait -PassThru
       if($child.ExitCode -ne 0){throw "Configuracao elevada falhou: codigo $($child.ExitCode)."}
     } else {
       # Only after proving SSID/IP/gateway; never delete broad/default routes.
       $existing=@(Get-NetRoute -DestinationPrefix $Prefix -ErrorAction SilentlyContinue)
-      $persistentExisting=@(Get-NetRoute -DestinationPrefix $Prefix -PolicyStore PersistentStore -ErrorAction SilentlyContinue)
-      if($Temporary -and $persistentExisting.Count -gt 0){
-        throw 'Existe rota persistente anterior. Use a preparacao persistente, nao substitua por temporaria.'
-      }
       if($existing.Count -gt 0){ & route.exe delete $TargetIp mask $Mask *> $null }
-      if($Temporary){
-        New-NetRoute -DestinationPrefix $Prefix -InterfaceIndex $index -NextHop $gateway -RouteMetric 1 -PolicyStore ActiveStore -ErrorAction Stop | Out-Null
-      } else {
-        & route.exe -p add $TargetIp mask $Mask $gateway metric 1 if $index | Out-Host
-        if($LASTEXITCODE -ne 0){throw "Nao foi possivel criar rota /32: codigo $LASTEXITCODE"}
-      }
+      & route.exe -p add $TargetIp mask $Mask $gateway metric 1 if $index | Out-Host
+      if($LASTEXITCODE -ne 0){throw "Nao foi possivel criar rota /32: codigo $LASTEXITCODE"}
     }
   }
   if(-not (Confirm-Route $index $gateway)){

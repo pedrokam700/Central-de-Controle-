@@ -13,7 +13,7 @@ test('PR69 CLEAN inclui utilitario de troca, rede inicial e os 5 documentos perd
   for(const name of [
     '01_TROCAR_PARA_PR69_NOVA.bat','TROCAR_PARA_PR69_NOVA.ps1',
     '08_PREPARAR_REDE_AMES.bat','12_APLICAR_ROTA_AMES_PERSISTENTE.bat',
-    '12_APLICAR_ROTA_AMES_TEMPORARIA.bat','INSTRUCOES_INSTALACAO_LIMPA.txt',
+    'INSTRUCOES_INSTALACAO_LIMPA.txt',
     'MANUAL_LOGICA_CAPTURA_E_CRUZAMENTO.md','NOTAS_ALERTAS_SN_PR69.md',
     'NOTAS_CORRECOES_28OUT_RESTAURACAO.md','NOTAS_VALIDACAO_FPY_TOP3_RASTREABILIDADE.md'
   ])assert.ok(build.includes(name),`Arquivo exigido nao empacotado: ${name}`);
@@ -42,7 +42,7 @@ test('PC virgem deve comprovar rede antes de instalar/iniciar o agente',()=>{
   assert.match(route,/Resolve-WifiInterfaceIndex @\(Get-NetAdapter -ErrorAction Stop\) \$wlanGuid/);
   assert.match(route,/Resolve-CorporateWifiByAddress \$adapters @\(Get-NetIPConfiguration -ErrorAction Stop\)/);
   assert.match(route,/\$_\.Status -eq 'Up'/);
-  assert.match(route,/-Temporary/);
+  assert.doesNotMatch(route,/-Temporary/);
   assert.doesNotMatch(route,/Get-NetConnectionProfile[\s\S]*?\.Name -eq \$Profile/);
   assert.match(route,/Get-NetIPConfiguration -InterfaceIndex \$wifiIndex/);
   assert.doesNotMatch(route,/route\.exe\s+(?:add|change)\s+0\.0\.0\.0/);
