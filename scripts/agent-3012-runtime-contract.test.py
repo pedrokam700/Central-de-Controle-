@@ -96,6 +96,63 @@ def run_fixture(scenario: str) -> dict:
 
 
 class Runtime3012Tests(unittest.TestCase):
+    def test_real_wire_date_shapes_distinguish_blank_epoch_and_unrecognized(self):
+        expected = {'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+
+        class Request:
+            url = 'http://172.29.185.215/asymes/home'
+            resource_type = 'xhr'
+            method = 'POST'
+            def __init__(self, left, right):
+                self.post_data = urlencode({'snImei':'002527TEST',
+                                            'fromDate':left,'toDate':right,'start':0})
+
+        outputs=[]
+        for left, right in [('', ''), ('1762128000000', '1794268740000'),
+                            ('1/1/2026', '9/11/2026')]:
+            probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+            probe.on_request(Request(left,right))
+            result=probe.counters()
+            self.assertEqual((result['http'],result['sn'],result['dates'],result['period']), (1,1,0,0))
+            self.assertEqual((result['from_text'],result['to_text']),(0,0))
+            outputs.append(tuple(result['date_shapes']))
+        self.assertEqual(len(set(outputs)),3,
+                         'Diagnostic must distinguish the physical failure classes')
+        self.assertTrue(any('empty' in v for v in outputs[0]))
+        self.assertTrue(any('numeric_timestamp' in v for v in outputs[1]))
+        self.assertTrue(any('br_day_only' in v for v in outputs[2]))
+
+    def test_http_wire_rejects_conflicting_url_and_body_periods(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        class Request:
+            resource_type='xhr'
+            method='POST'
+            url='http://172.29.185.215/asymes/home?'+urlencode({
+                'snImei':'002527TEST','fromDate':expected['from'],'toDate':expected['to']})
+            post_data=urlencode({'snImei':'002527TEST','fromDate':'', 'toDate':''})
+        req=Request()
+        probe.on_request(req)
+        class Response:
+            status=200
+            request=req
+        probe.on_response(Response())
+        probe.on_finished(req)
+        self.assertFalse(probe.confirmed())
+        self.assertEqual(probe.counters()['ambiguous'],1)
+        self.assertEqual(probe.counters()['date_shapes'],[
+            'body:from=empty','body:to=empty',
+            'url:from=datetime_recognized','url:to=datetime_recognized'])
+        self.assertNotIn('002527TEST',str(probe.counters()))
+        self.assertNotIn('2026-01-01',str(probe.counters()))
+
+    def test_wire_does_not_accept_date_prefix_with_opaque_suffix(self):
+        self.assertEqual(collector._wire_stamp('2026-01-01 00:00UNVERIFIED'), '')
+        self.assertEqual(collector._wire_stamp('2026-01-01T00:00:00Z'), '')
+        self.assertEqual(collector._wire_split_stamp('2026-01-01Z','00:00'), '')
+        self.assertEqual(collector._wire_split_stamp('2026-01-01','00:00UNVERIFIED'), '')
+        self.assertEqual(collector._wire_value_shape('2026-01-01T00:00:00Z'), 'iso_timezone')
+
     def test_store_without_period_is_untrusted_until_http_wire_is_proved(self):
         result = run_fixture('wire-fallback')
         self.assertTrue(result['ok'], result)
@@ -212,6 +269,7 @@ class Runtime3012Tests(unittest.TestCase):
         probe.on_finished(req)
         self.assertTrue(probe.confirmed())
         self.assertEqual(probe.counters()['period'],1)
+        self.assertIn('body:from=day_iso_day_only+time_recognized',probe.counters()['date_shapes'])
 
         wrong=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
         req.post_data=req.post_data.replace('23%3A59','00%3A00')

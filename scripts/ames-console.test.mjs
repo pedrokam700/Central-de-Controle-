@@ -113,4 +113,8 @@ test('agent client asks SN with 3022 and exposes full/process-only/reuse-only tr
   assert.match(source,/process_only/);
   assert.match(source,/reuse_only/);
   assert.match(source,/trace_mode/);
+  assert.match(source,/body\.include_3012=value\.trace_mode==='history_only'/);
+  const view=fs.readFileSync('ames/console-specialized-views.mjs','utf8');
+  assert.match(view,/<input type="checkbox" name="include_3012"/);
+  assert.match(view,/include_3012:data\.has\('include_3012'\)/);
 });

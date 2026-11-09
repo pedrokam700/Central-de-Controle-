@@ -483,9 +483,12 @@ def _wire_find(root: Any, names: Iterable[str], depth: int = 0) -> Any:
 
 def _wire_stamp(value: Any) -> str:
     raw = _clean(value)
-    iso = re.match(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})', raw)
-    local = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})[ T](\d{1,2}):(\d{2})', raw)
-    parts = (tuple(int(x) for x in iso.groups()) if iso else
+    # A date prefix is not period proof. A trailing timezone, suffix or
+    # malformed timestamp needs its own explicit interpretation, never a
+    # silent prefix match against the requested local MES minute.
+    iso = re.fullmatch(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::\d{2}(?:\.\d{1,6})?)?', raw)
+    local = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{4})[ T](\d{1,2}):(\d{2})(?::\d{2}(?:\.\d{1,6})?)?', raw)
+    parts = (tuple(int(iso[i]) for i in range(1, 6)) if iso else
              (int(local[3]), int(local[2]), int(local[1]), int(local[4]), int(local[5]))
              if local else None)
     if not parts:
@@ -496,13 +499,143 @@ def _wire_stamp(value: Any) -> str:
         return ''
 
 
+def _wire_values(root: Any, names: Iterable[str], depth: int = 0) -> List[Any]:
+    """Return *all* matching date fields, including blanks and duplicates.
+
+    A single `_wire_find` collapses duplicate URL-encoded keys and skips empty
+    fields. Both behaviors made very different real MES failures look identical
+    and could prefer a stale URL value over the actual POST body. Values remain
+    in memory and are never returned from diagnostics or written to disk.
+    """
+    if root is None or depth > 8:
+        return []
+    aliases = {_wire_key(name) for name in names}
+    if isinstance(root, str):
+        raw = root.strip()
+        if len(raw) > 250000:
+            return []
+        if raw[:3].lower() in ('%7b', '%5b'):
+            return _wire_values(unquote_plus(raw), names, depth + 1)
+        if raw.startswith(('{', '[')):
+            try:
+                return _wire_values(json.loads(raw), names, depth + 1)
+            except (ValueError, TypeError):
+                return []
+        if '=' in raw:
+            try:
+                pairs = parse_qsl(raw.lstrip('?'), keep_blank_values=True, max_num_fields=500)
+            except (ValueError, TypeError):
+                return []
+            return [value for key, value in pairs if _wire_key(key) in aliases] + [
+                candidate for key, value in pairs if _wire_key(key) not in aliases
+                for candidate in _wire_values(value, names, depth + 1)]
+        return []
+    if isinstance(root, (list, tuple)):
+        values = []
+        for item in root[:500]:
+            values.extend(_wire_values(item, names, depth + 1))
+        return values
+    if not isinstance(root, dict):
+        return []
+    values = []
+    if any(_wire_key(root.get(n)) in aliases for n in ('name', 'field', 'itemId')) and 'value' in root:
+        values.append(root['value'])
+    for key, value in root.items():
+        if _wire_key(key) in aliases:
+            values.append(value)
+        elif isinstance(value, (str, dict, list, tuple)):
+            values.extend(_wire_values(value, names, depth + 1))
+    return values
+
+
+def _wire_value_shape(value: Any) -> str:
+    """Report only a fixed vocabulary, never a field value or credentials."""
+    if value is None:
+        return 'null'
+    if isinstance(value, bool):
+        return 'boolean'
+    if isinstance(value, (int, float)):
+        return 'number'
+    if isinstance(value, (dict, list, tuple)):
+        return 'object'
+    raw = _clean(value)
+    if not raw:
+        return 'empty'
+    if _wire_stamp(raw):
+        return 'datetime_recognized'
+    if re.fullmatch(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', raw):
+        return 'iso_day_only'
+    if re.fullmatch(r'\d{1,2}/\d{1,2}/\d{4}', raw):
+        return 'br_day_only'
+    if re.fullmatch(r'-?\d{10,16}', raw):
+        return 'numeric_timestamp'
+    if re.fullmatch(r'/?Date\(-?\d+(?:[+-]\d+)?\)/?', raw, flags=re.I):
+        return 'dotnet_date'
+    if re.match(r'^\d{4}-\d{2}-\d{2}T', raw) and (raw.endswith('Z') or re.search(r'[+-]\d{2}:?\d{2}$', raw)):
+        return 'iso_timezone'
+    if raw.startswith(('{', '[')):
+        return 'json_wrapped'
+    return 'other_text'
+
+
+def _wire_request_dates(root: Any) -> tuple[list[str], list[str], list[tuple[str, str]]]:
+    """Inspect one request source; never mix unrelated from/to candidates."""
+    from_values = _wire_values(root, _WIRE_3012_ALIASES['from'])[:12]
+    to_values = _wire_values(root, _WIRE_3012_ALIASES['to'])[:12]
+    from_days = _wire_values(root, _WIRE_3012_ALIASES['from_day'])[:4]
+    from_times = _wire_values(root, _WIRE_3012_ALIASES['from_time'])[:4]
+    to_days = _wire_values(root, _WIRE_3012_ALIASES['to_day'])[:4]
+    to_times = _wire_values(root, _WIRE_3012_ALIASES['to_time'])[:4]
+    starts, ends = [], []
+    for raw in from_values:
+        stamp = _wire_stamp(raw)
+        if not stamp:
+            for day in from_days or [raw]:
+                for hour in from_times:
+                    stamp = _wire_split_stamp(day, hour)
+                    if stamp:
+                        break
+                if stamp:
+                    break
+        if stamp:
+            starts.append(stamp)
+    for raw in to_values:
+        stamp = _wire_stamp(raw)
+        if not stamp:
+            for day in to_days or [raw]:
+                for hour in to_times:
+                    stamp = _wire_split_stamp(day, hour)
+                    if stamp:
+                        break
+                if stamp:
+                    break
+        if stamp:
+            ends.append(stamp)
+    # Split Ext.NET date/time fields may omit the combined `fromDate`/`toDate`.
+    if not from_values:
+        starts.extend(filter(None, (_wire_split_stamp(day, hour)
+            for day in from_days for hour in from_times)))
+    if not to_values:
+        ends.extend(filter(None, (_wire_split_stamp(day, hour)
+            for day in to_days for hour in to_times)))
+    def shapes(combined, days, times):
+        if combined:
+            return sorted({_wire_value_shape(v) for v in combined})
+        if not days and not times:
+            return ['absent']
+        return sorted({f'day_{_wire_value_shape(v)}' for v in days} |
+                      {f'time_{"recognized" if re.fullmatch(r"\d{1,2}:\d{2}(?::\d{2})?", _clean(v)) else "unrecognized" if _clean(v) else "empty"}' for v in times})
+    return (shapes(from_values, from_days, from_times),
+            shapes(to_values, to_days, to_times),
+            [(start, end) for start in set(starts) for end in set(ends)])
+
+
 def _wire_split_stamp(day: Any, clock: Any) -> str:
     """Combine only an explicit date field and its matching time field."""
     date_raw, time_raw = _clean(day), _clean(clock)
-    iso = re.match(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\D|$)', date_raw)
-    local = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})(?:\D|$)', date_raw)
-    clock_match = re.search(r'(?:^|[T\s])(\d{1,2}):(\d{2})(?::\d{2})?(?:\D|$)',
-                            ' ' + time_raw)
+    iso = re.fullmatch(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', date_raw)
+    local = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_raw)
+    clock_match = re.fullmatch(r'(\d{1,2}):(\d{2})(?::\d{2})?', time_raw)
     if not clock_match or not (iso or local):
         return ''
     parts = ((int(iso[1]),int(iso[2]),int(iso[3])) if iso else
@@ -606,32 +739,38 @@ class Wire3012Probe:
                 return
             if len(self._requests) >= 50:
                 return
-            query = dict(parse_qsl(url.query, keep_blank_values=True))
+            # Keep the original URL-encoded query to detect duplicate keys.
+            # Turning it into a dict silently discards competing from/to values.
+            query = url.query
             body = request.post_data or ''
             fields = [query, body]
-            def first(names):
-                for item in fields:
-                    found = _wire_find(item, names)
-                    if found is not None:
-                        return found
-                return None
-            sn = first(_WIRE_3012_ALIASES['sn'])
-            start = first(_WIRE_3012_ALIASES['from'])
-            end = first(_WIRE_3012_ALIASES['to'])
-            begin, finish = _wire_stamp(start), _wire_stamp(end)
-            if not begin:
-                begin = _wire_split_stamp(first(_WIRE_3012_ALIASES['from_day']) or start,
-                                          first(_WIRE_3012_ALIASES['from_time']))
-            if not finish:
-                finish = _wire_split_stamp(first(_WIRE_3012_ALIASES['to_day']) or end,
-                                           first(_WIRE_3012_ALIASES['to_time']))
+            sns = [_clean(value) for source in fields
+                   for value in _wire_values(source, _WIRE_3012_ALIASES['sn'])]
+            named_sns = {value for value in sns if value}
+            exact_sn = bool(self.sn and named_sns == {self.sn})
+            inspected = [('url', _wire_request_dates(query)),
+                         ('body', _wire_request_dates(body))]
+            valid_periods = set(pair for _, (_, _, pairs) in inspected for pair in pairs)
+            # Two competing submitted periods cannot certify which one the
+            # server applied. Nor can a complete URL period certify a POST
+            # carrying unrecognizable/empty dates. Retain only a safe bit.
+            incomplete_sources = [location for location, (left, right, pairs) in inspected
+                                  if (left != ['absent'] or right != ['absent']) and not pairs]
+            conflict = len(valid_periods) > 1 or bool(valid_periods and incomplete_sources)
+            exact_period = ((self.expected['from'], self.expected['to']) in valid_periods
+                            and not conflict)
+            date_shapes = [f'{location}:{field}={"+".join(shapes)}'
+                           for location, (from_shapes, to_shapes, _) in inspected
+                           for field, shapes in (('from', from_shapes), ('to', to_shapes))]
             hints = set()
             for field in fields:
                 hints.update(_wire_date_hints(field))
             self._requests[request] = {
-                'exact_sn': bool(self.sn and _clean(sn) == self.sn),
-                'date_pair': bool(begin and finish),
-                'exact_period': bool(begin == self.expected['from'] and finish == self.expected['to']),
+                'exact_sn': exact_sn,
+                'date_pair': bool(valid_periods),
+                'exact_period': exact_period,
+                'ambiguous_period': conflict,
+                'date_shapes': date_shapes,
                 'date_field_hints': sorted(hints)[:12],
                 'from_text': _wire_expected_day_in_payload(fields, self.expected['from']),
                 'to_text': _wire_expected_day_in_payload(fields, self.expected['to']),
@@ -672,7 +811,9 @@ class Wire3012Probe:
                 'http_ok': sum(bool(r['response_ok']) for r in rows),
                 'date_keys': sorted({key for r in exact_sn_rows for key in r['date_field_hints']})[:12],
                 'from_text': int(any(r['from_text'] for r in exact_sn_rows)),
-                'to_text': int(any(r['to_text'] for r in exact_sn_rows))}
+                'to_text': int(any(r['to_text'] for r in exact_sn_rows)),
+                'ambiguous': sum(bool(r['ambiguous_period']) for r in exact_sn_rows),
+                'date_shapes': sorted({shape for r in exact_sn_rows for shape in r['date_shapes']})[:8]}
 
 
 def _keymap(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -916,10 +1057,17 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
                 if sn and any(sn not in (r.get('pcba_sn'),r.get('imei')) for r in normalized):
                     raise RuntimeError('3012 retornou outra SN; filtros/grade nao confirmados')
                 proof=dict(raw.get("queryProof") or {})
-                if proof.get("periodVerified") is not True and wire.confirmed() and proof.get('freshness') in (
+                if wire.confirmed() and proof.get('freshness') in (
                         'STORE_LOAD_CONFIRMED','STORE_DATASET_EVENT'):
                     proof.update(periodVerified=True,periodSource='playwright_http_finished',
                                  actualWindow=expected,wire_counters=wire.counters())
+                else:
+                    # Ext.Ajax/store observations are useful diagnostics, not
+                    # the same as a completed outbound HTTP request with the
+                    # exact SN and period. Do not promote their provisional
+                    # `periodVerified` flag into trusted SQLite coverage.
+                    proof.update(periodVerified=False,periodSource='http_period_unconfirmed',
+                                 actualWindow={'from':'','to':''})
                 if (proof.get("contract")!=QUERY_CONTRACT or not proof.get("freshness")
                         or proof.get("periodVerified") is not True
                         or proof.get("actualWindow")!=expected or proof.get("requestedWindow")!=expected):
@@ -927,11 +1075,12 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
                     # Counts only: the diagnostic never includes request body,
                     # URL, cookies, form values or credentials.
                     date_keys=','.join(counts['date_keys'])[:76] or 'nenhum'
+                    shapes=';'.join(counts['date_shapes'])[:160] or 'nenhum'
                     raise RuntimeError(
                         f"3012_QUERY_PERIOD_MISMATCH: HTTP={counts['http']} SN={counts['sn']} "
                         f"OK={counts['http_ok']} datas={counts['dates']} janela={counts['period']} "
-                        f"texto={counts['from_text']}/{counts['to_text']} "
-                        f"chaves=[{date_keys}]; "
+                        f"texto={counts['from_text']}/{counts['to_text']} ambig={counts['ambiguous']} "
+                        f"formatos=[{shapes}] chaves=[{date_keys}]; "
                         f"esperado {expected['from']} -> {expected['to']}")
                 records.extend(normalized);done.add(chunk_key)
                 item={"key":chunk_key,"sn":sn,"from":expected["from"],"to":expected["to"],"rows":len(normalized),

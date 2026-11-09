@@ -152,7 +152,7 @@ def _rebase_trace_targets_at_execution(cfg, attempts=3):
     raise last_error or ValueError('Trace revision could not be stabilized')
 
 
-def _trace_overall_progress(mode, line_index, line_total, stage, stage_fraction=0):
+def _trace_overall_progress(mode, line_index, line_total, stage, stage_fraction=0, *, include_3012=True):
     """Monotonic *estimated work* progress across lines and source stages.
 
     Per-view requests have different costs, so this is an execution indicator,
@@ -164,6 +164,10 @@ def _trace_overall_progress(mode, line_index, line_total, stage, stage_fraction=
         'process_only': {'3022': (0, 1)},
         'history_only': {'3012': (0, 1)},
     }
+    if not include_3012:
+        # Do not reserve the final 18-24% for a source excluded from this run.
+        weights['full'] = {'3074': (0, .46), '2114': (.46, .81), '3022': (.81, 1)}
+        weights['reuse_only'] = {'3074': (0, .57), '2114': (.57, 1)}
     start, finish = weights.get(mode, {}).get(stage, (0, 0))
     fraction = min(1, max(0, float(stage_fraction or 0)))
     complete = (max(1, line_index) - 1 + start + (finish - start) * fraction) / max(1, line_total)
@@ -190,6 +194,8 @@ def _local_integrated_for_scope(snapshot_id, line, records):
 
 def _run_deep_trace_job(job_id, cfg):
     mode=str(cfg.get("trace_mode") or "full").strip().lower()
+    include_3012=(mode=='history_only' or
+                  (mode in {'full','reuse_only'} and cfg.get('include_3012') is True))
     repair_partials=bool(cfg.get('repair_partials'))
     if mode not in {"full","process_only","reuse_only","history_only"}:
         raise ValueError("trace_mode invalido")
@@ -198,7 +204,7 @@ def _run_deep_trace_job(job_id, cfg):
         raise RuntimeError("3022 em lote indisponivel neste motor: "+str(support))
     job=a._job_update(job_id,status="running",stage="3012" if mode=="history_only" else ("3022" if mode=="process_only" else "3074"),progress=4,started_at=a.utc_now(),
                       message="Preparando coleta seletiva",stage_progress={},live_events=[],partial_refresh=0,
-                      scope={"trace_mode":mode,"include_3012":bool(cfg.get("include_3012", True)),
+                      scope={"trace_mode":mode,"include_3012":include_3012,
                              "repair_partials":repair_partials,"resumed_from_job":cfg.get('resumed_from_job')})
     a._persist_job(job)
     try:
@@ -295,7 +301,7 @@ def _run_deep_trace_job(job_id, cfg):
                     count=max(0,int((ev or {}).get("total") or 0))
                     if count:
                         job=a._job_update(job_id,progress=_trace_overall_progress(
-                            mode,_idx,total,stage,cur/count))
+                            mode,_idx,total,stage,cur/count,include_3012=include_3012))
                 if stage=="3022":
                     cur=int((ev or {}).get("current") or 0);count=max(0,int((ev or {}).get("total") or 0))
                     pct=round(cur*100/count,1) if count else 0.0
@@ -306,7 +312,7 @@ def _run_deep_trace_job(job_id, cfg):
                     if qms is not None:detail += f" · {qms} ms"
                     sp["3022"]={"current":cur,"total":count,"percent":pct,"line_percent":pct,"line":_line,"line_index":_idx,"line_total":total,"detail":detail,"status":(ev or {}).get("status"),"phase":phase,"query_ms":qms}
                     job=a._job_update(job_id,stage="3022",stage_progress=sp,
-                                      progress=_trace_overall_progress(mode,_idx,total,"3022",cur/count if count else 0),
+                                      progress=_trace_overall_progress(mode,_idx,total,"3022",cur/count if count else 0,include_3012=include_3012),
                                       message=f"{_line}: 3022 · {phase} · {cur}/{count}")
                 if did_ingest:job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1)
                 now=time.monotonic()
@@ -318,7 +324,7 @@ def _run_deep_trace_job(job_id, cfg):
                 job=a._job_update(job_id,stage=stage,message=f"{_line}: {msg}");a._persist_job(job)
 
             if mode in {"full","reuse_only"} and records_reuse:
-                base_progress=_trace_overall_progress(mode,idx,total,"3074")
+                base_progress=_trace_overall_progress(mode,idx,total,"3074",include_3012=include_3012)
                 job=a._job_update(job_id,stage="3074",progress=base_progress,message=f"{line}: 3074/2114 · {unique} PCBAs / {len(records)} ocorrencias")
                 a._persist_job(job)
                 # One trace execution owns the shared A-MES session across the
@@ -347,7 +353,7 @@ def _run_deep_trace_job(job_id, cfg):
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1);a._persist_job(job)
 
             if mode in {"full","process_only"} and records_process:
-                job=a._job_update(job_id,stage="3022",progress=_trace_overall_progress(mode,idx,total,"3022"),
+                job=a._job_update(job_id,stage="3022",progress=_trace_overall_progress(mode,idx,total,"3022",include_3012=include_3012),
                                   message=f"{line}: 3022 · {unique} PCBAs")
                 a._persist_job(job)
                 p=process_r11.collect_and_persist(a.STORE,engine,records_process,snapshot_id=sid,line=line,max_pcbas=max_pcbas,
@@ -367,7 +373,7 @@ def _run_deep_trace_job(job_id, cfg):
                 if not payload or not (payload.get("trace_3074") or payload.get("trace_2114")):
                     raise RuntimeError("Esta revisão ainda não possui 3074/2114 coletadas; execute Reuso primeiro")
 
-            if mode in {"full","reuse_only","history_only"} and cfg.get("include_3012", True):
+            if include_3012:
                 # 2114 histories commonly have no Defect Time. Query the mapped
                 # Home 3012 screen for historical PCBAs *observed in this
                 # exact 3074/2114 trace*, plus current 3028 PCBAs.
@@ -382,7 +388,7 @@ def _run_deep_trace_job(job_id, cfg):
                                 "percent":stage_percent,"line_percent":stage_percent,
                                 "detail":sn}
                     job=a._job_update(job_id,stage="3012",
-                                      progress=_trace_overall_progress(mode,idx,total,"3012",current/count if count else 0),
+                                      progress=_trace_overall_progress(mode,idx,total,"3012",current/count if count else 0,include_3012=include_3012),
                                       message=f"{_line}: 3012 atual e histórica · {current}/{count}",stage_progress=sp)
                     a._persist_job(job)
                 try:
@@ -395,20 +401,22 @@ def _run_deep_trace_job(job_id, cfg):
                 line_result["3012"]=collected_3012
                 job=a._job_update(job_id,partial_refresh=int(job.get("partial_refresh") or 0)+1)
                 a._persist_job(job)
-            last_stage="3012" if mode in {"full","reuse_only","history_only"} and cfg.get("include_3012", True) else ("3022" if mode in {"full","process_only"} else "2114")
-            job=a._job_update(job_id,progress=_trace_overall_progress(mode,idx,total,last_stage,1))
+            last_stage="3012" if include_3012 else ("3022" if mode in {"full","process_only"} else "2114")
+            job=a._job_update(job_id,progress=_trace_overall_progress(mode,idx,total,last_stage,1,include_3012=include_3012))
             results[line]=line_result
 
         stages={"3028":"preserved",
                 "3074":_aggregate_stage(results,"3074") if mode in {"full","reuse_only"} else "not_run",
                 "2114":_aggregate_stage(results,"2114") if mode in {"full","reuse_only"} else "not_run",
                 "3022":_aggregate_stage(results,"3022") if mode in {"full","process_only"} else "not_run",
-                "3012":_aggregate_stage(results,"3012") if mode in {"full","reuse_only","history_only"} and cfg.get("include_3012", True) else "not_run"}
-        base_message={"full":"Rastreabilidade 3074/2114/3022/3012 concluída","process_only":"Processo 3022 concluído","reuse_only":"Reuso 3074/2114/3012 concluído","history_only":"Horários históricos 3012 consultados"}[mode]
+                "3012":_aggregate_stage(results,"3012") if include_3012 else "not_run"}
+        base_message={"full":"Rastreabilidade 3074/2114/3022 concluída","process_only":"Processo 3022 concluído","reuse_only":"Reuso 3074/2114 concluído","history_only":"Horários históricos 3012 consultados"}[mode]
+        if include_3012 and mode == 'full':base_message='Rastreabilidade 3074/2114/3022/3012 concluída'
+        if include_3012 and mode == 'reuse_only':base_message='Reuso 3074/2114/3012 concluído'
         if repair_partials:
             base_message='Recuperação seletiva concluída; fontes comprovadas antes foram preservadas'
         expected=("3074","2114","3022") if mode=="full" else (("3022",) if mode=="process_only" else (("3074","2114") if mode=="reuse_only" else ()))
-        if mode in {"full","reuse_only","history_only"} and cfg.get("include_3012", True):expected=(*expected,"3012")
+        if include_3012:expected=(*expected,"3012")
         if repair_partials:
             for source in expected:
                 if source=='3012':continue
@@ -419,7 +427,7 @@ def _run_deep_trace_job(job_id, cfg):
         message=("Execução finalizada sem cobertura completa: "+", ".join(degraded)) if degraded else base_message
         job=a._job_update(job_id,status="done",stage="done",progress=100,finished_at=a.utc_now(),
                           message=message,
-                          result={"snapshot_ids":ids,"lines":active,"deep_trace":results,"scope":{"trace_mode":mode,"defect_codes":codes,"max_failures":max_failures,"max_pcbas":max_pcbas,"performance":performance,"repair_partials":repair_partials},"stages":stages})
+                          result={"snapshot_ids":ids,"lines":active,"deep_trace":results,"scope":{"trace_mode":mode,"include_3012":include_3012,"defect_codes":codes,"max_failures":max_failures,"max_pcbas":max_pcbas,"performance":performance,"repair_partials":repair_partials},"stages":stages})
         a._persist_job(job)
     except Exception as exc:
         a._persist_job(a._job_update(job_id,status="error",stage="error",finished_at=a.utc_now(),message=str(exc),error=f"{type(exc).__name__}: {exc}"))
@@ -534,7 +542,9 @@ class Handler(a.Handler):
                                                  "snapshot_targets":body.get("snapshot_targets"),
                                                  "defect_codes":body.get("defect_codes") or [],"max_failures":body.get("max_failures") or 0,
                                                  "max_pcbas":body.get("max_pcbas") or 0,"performance":body.get("performance") or a.CONFIG.get("performance") or "balanced",
-                                                 "trace_mode":mode,"repair_partials":body.get('repair_partials') is True,
+                                                 "trace_mode":mode,"include_3012":(mode=='history_only' or
+                                                     (mode in {'full','reuse_only'} and body.get('include_3012') is True)),
+                                                 "repair_partials":body.get('repair_partials') is True,
                                                  "force_new_run":body.get('force_new_run') is True}),202)
             except Exception as exc:self._send({"error":type(exc).__name__,"message":str(exc)},500)
             return

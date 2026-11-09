@@ -160,6 +160,35 @@ class TraceTargetTests(unittest.TestCase):
         types.MethodType(self.env['do_POST'],handler)()
         self.assertEqual(response[0][0],202)
         self.assertEqual(self.admissions[0]['snapshot_targets'],self.cfg['snapshot_targets'])
+        self.assertIs(self.admissions[0]['include_3012'],False)
+        optional={**self.cfg,'include_3012':True}
+        handler=types.SimpleNamespace(path='/api/v1/deep-trace',_body=lambda:copy.deepcopy(optional),_send=lambda payload,status:response.append((status,payload)))
+        types.MethodType(self.env['do_POST'],handler)()
+        self.assertIs(self.admissions[1]['include_3012'],True)
+
+    def test_3012_is_independent_and_does_not_block_reuse_by_default(self):
+        self.env['_run_deep_trace_job']('NO_3012',copy.deepcopy(self.cfg))
+        result=self.jobs[-1]
+        self.assertEqual(result['status'],'done')
+        self.assertEqual(result['result']['stages']['3012'],'not_run')
+        self.assertIs(result['result']['scope']['include_3012'],False)
+        self.assertEqual(result['progress'],100)
+        self.assertEqual(len(self.calls),1)
+        self.assertEqual(self.env['_trace_overall_progress']('reuse_only',1,1,'2114',1,include_3012=False),99)
+
+    def test_3012_opt_in_reaches_worker_and_is_marked_unverified_if_it_fails(self):
+        cfg=copy.deepcopy(self.cfg)
+        cfg['include_3012']=True
+        from unittest.mock import patch
+        stub=types.SimpleNamespace(collect_historical_3012=lambda *args,**kwargs:{'status':'error','source_status':'error'})
+        with patch.dict(sys.modules,{'trace_3012_enrichment':stub}):
+            self.env['_run_deep_trace_job']('WITH_3012',cfg)
+        result=self.jobs[-1]
+        self.assertEqual(result['status'],'done')
+        self.assertIs(result['result']['scope']['include_3012'],True)
+        self.assertEqual(result['result']['stages']['3012'],'error')
+        self.assertIn('sem cobertura completa: 3012',result['message'])
+        self.assertEqual(len(self.calls),1)
 
     def test_source_status_unknown_timeout_and_uncollected_never_certify_complete(self):
         stage=self.env['_source_stage'];aggregate=self.env['_aggregate_stage']

@@ -417,6 +417,10 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
           if(!['full','process_only','reuse_only','history_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
           if(value.trace_mode==='process_only'&&store.agent().capabilities?.process_timeline!==true)throw Error('process_only exige coleta 3022 em lote. Conecte um agente 3022-R12+ ou aguarde a incorporação do coletor 3022 no agente canônico.');
           body.trace_mode=value.trace_mode;
+          // Historical 3012 is opt-in during Full/Reuso. The independent
+          // history_only mode always runs 3012 and never repeats other views.
+          body.include_3012=value.trace_mode==='history_only'||
+            (['full','reuse_only'].includes(value.trace_mode)&&value.include_3012===true);
         }
         if(value.repair_partials===true)body.repair_partials=true;
         if(value.force_new_run===true)body.force_new_run=true;
