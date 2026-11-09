@@ -10,6 +10,7 @@ Status: candidata de diagnóstico, **NÃO VALIDADA NO A-MES FÍSICO**. Não prom
 - A tela A-MES mostrava as datas de janeiro a novembro. Data visível na interface não certifica o corpo da requisição.
 - As telas 3074, 2114 e 3022 produziram evidências parciais ou completas distintas. Falha da 3012 não deve obrigar repetição daquelas consultas.
 - `job done` e `100%` representam fim de execução, jamais a confirmação da cobertura de cada fonte. `Uso indeterminado` no painel de PCBAs é outra deficiência de classificação e não pode ser transformado em primeiro uso por suposição.
+- **Novo ensaio físico de 09/11 (16:47):** o job de recuperação seletiva terminou em cerca de 1 segundo, mostrou `3022` apenas em processamento local e `3012: Não programada pelo agente`, com 3074/2114/3022 sem comprovação nesse job. Esse print **não exercitou o parser de timestamps da 3012**; pertence à orquestração/escopo de etapas.
 
 ## Mudança historicamente associada à regressão
 
@@ -23,11 +24,13 @@ O gate de período na 3012 foi endurecido na consolidação `abc87e1` (06/11) e 
 4. O observador passivo de HTTP 3012 compara valores por origem (URL/corpo), preserva duplicidades, distingue formatos de data e rejeita conflitos. A prova final requer **uma mesma requisição de SN e período exatos, resposta HTTP de sucesso e término**. Dados capturados não são substituídos por zero.
    - Após o diagnóstico físico de 15:35, o parser também reconhece Unix timestamps em segundos (10 dígitos), milissegundos (13) ou microssegundos (16), convertidos explicitamente de UTC para `America/Sao_Paulo`, com minutos exatos. Datas numéricas fora da janela, com segundos extras ou deslocadas de fuso continuam reprovadas. Nenhum corpo da requisição foi preservado.
 5. Diagnóstico expõe somente categorias de formato (`empty`, `numeric_timestamp`, `iso_day_only`, `other_text` etc.), nomes filtrados de campos e contadores; não inclui corpo, senha, token, cookies ou SN consultada.
+6. **Regressão de auto-retomada reproduzida e corrigida em código:** a mudança `0cf60ac` introduziu `include_3012=false` em Completo/Reuso, mas `trace_auto_resume.needs_continuation()` ainda considerava o `3012:not_run` como falha. Uma execução completa podia assim gerar um novo job `repair_partials`, fazer apenas trabalho local e terminar com a falsa impressão de coleta completa. O planejador agora calcula as fontes obrigatórias a partir de `trace_mode` + `include_3012`, com compatibilidade conservadora para jobs legados. A tela de progresso também deixa de cobrar uma 3012 explicitamente excluída. Foram incluídos testes para a recuperação legítima de etapas realmente parciais, a exclusão intencional e `history_only`.
 
 ## Não comprovado / próximos gates
 
 - Identificar no A-MES real como o navegador serializa os valores de `dteFromDate`, `dteToDate`, `__Data`, parâmetros aninhados e eventual timezone. **Não alterar a forma de envio com base apenas em simulação.**
 - Validar uma SN real com período comprovado e campos históricos de Defect/Repair; somente então concluir `3012 GREEN`.
+- Confirmar que o usuário selecionou `Horários antigos` quando pretende executar a 3012; o modo `Completo` da candidata deliberadamente não a agenda sem a opção avançada. O print de 16:47 não permite distinguir visualmente qual modo estava selecionado.
 - Validar no posto sem afetar instalação antiga: revisão, 9 views, rota persistente TAXXX_5G, 3074/2114/3022 e reuso (incluindo segunda utilização e alerta). SQLite/WAL, token, identidade/source_id, cache offline e filas anteriores devem permanecer intactos.
 - O teste de navegador com Playwright só é executável num ambiente que tenha a dependência e o navegador; testes de unidade não substituem esse ensaio.
 

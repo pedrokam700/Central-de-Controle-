@@ -438,7 +438,8 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       pendingSubmission ||= {signature,id:crypto.randomUUID(),body};body={...pendingSubmission.body,request_id:pendingSubmission.id};
       if(type==='deep')publish({submitting:true,error:''});
       let job;try{job=await request(path,body);if(!job?.id)throw Error('O agente não retornou um job.');}finally{if(type==='deep')publish({submitting:false});}
-      pendingSubmission=null;publish({job:{id:job.id,kind:job.kind,status:job.status,stage:job.stage,message:job.message,scope:{trace_mode:value.trace_mode}},error:''});
+      pendingSubmission=null;publish({job:{id:job.id,kind:job.kind,status:job.status,stage:job.stage,message:job.message,
+        scope:{trace_mode:value.trace_mode,include_3012:type==='deep'?body.include_3012:undefined}},error:''});
       lastPartial=-1;unschedule(timer);const token=generation;timer=schedule(()=>poll(job.id,token),850);
     }),
     cancel:()=>action(async()=>{check();const job=store.agent().job;if(job)await request('/jobs/'+encodeURIComponent(job.id)+'/cancel',{});}),

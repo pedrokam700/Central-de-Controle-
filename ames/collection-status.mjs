@@ -131,10 +131,12 @@ export function collectionStatus(state){
   const mode=job.scope?.trace_mode||job.result?.scope?.trace_mode||'full';
   const progress=job.stage_progress||{};
   const result=job.result?.deep_trace;
-  // The full and reuse contracts promise 3012. Show it even while queued,
-  // or when an older agent omits include_3012 from its job scope entirely.
-  // Otherwise the missing stage silently disappears from the progress UI.
-  const has3012=['full','reuse_only','history_only'].includes(mode)||job.scope?.include_3012===true||Object.hasOwn(job.result?.stages||{},'3012')||Boolean(progress['3012'])||job.stage==='3012'||Object.values(result||{}).some(r=>Boolean(r?.['3012']));
+  // A newer Full/Reuso job may explicitly exclude historical 3012. Never
+  // display an intentionally skipped source as an incomplete collection.
+  // Legacy jobs with no include_3012 flag did include it by default.
+  const include3012=job.scope?.include_3012??job.result?.scope?.include_3012;
+  const has3012=mode==='history_only'||include3012===true||
+    (include3012==null&&['full','reuse_only'].includes(mode));
   const stages=job.kind!=='deep_trace'?Object.keys(progress):mode==='history_only'?['3012']:mode==='process_only'?['3022']:mode==='reuse_only'?(has3012?['3074','2114','3012']:['3074','2114']):has3012?['3074','2114','3022','3012']:['3074','2114','3022'];
   const completedTrace=job.kind==='deep_trace'&&job.status==='done';
   const sourceStages=job.result?.stages||{};

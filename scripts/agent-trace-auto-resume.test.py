@@ -54,5 +54,35 @@ class ResumeContractTests(unittest.TestCase):
         cfg={**self.cfg,'force_new_run':True}
         self.assertIsNone(candidate(cfg,[self.partial]))
 
+    def test_full_without_3012_does_not_loop_on_intentionally_skipped_history(self):
+        cfg={**self.cfg,'include_3012':False}
+        complete=deepcopy(self.partial)
+        complete['config']=deepcopy(cfg)
+        complete['scope']={'trace_mode':'full','include_3012':False}
+        complete['result']['scope']={'trace_mode':'full','include_3012':False}
+        complete['result']['stages']['3012']='not_run'
+        self.assertFalse(needs_continuation(complete))
+        self.assertIsNone(candidate(cfg,[complete]))
+
+    def test_required_stage_still_recovers_when_3012_is_opted_out(self):
+        cfg={**self.cfg,'include_3012':False}
+        partial=deepcopy(self.partial)
+        partial['config']=deepcopy(cfg)
+        partial['scope']={'trace_mode':'full','include_3012':False}
+        partial['result']['scope']={'trace_mode':'full','include_3012':False}
+        partial['result']['stages'].update({'3022':'partial','3012':'not_run'})
+        self.assertTrue(needs_continuation(partial))
+        self.assertEqual(candidate(cfg,[partial])['id'],'OLD')
+
+    def test_history_only_must_prove_3012_even_if_other_views_not_run(self):
+        cfg={**self.cfg,'trace_mode':'history_only','include_3012':True}
+        job=deepcopy(self.partial)
+        job['config']=cfg
+        job['scope']={'trace_mode':'history_only','include_3012':True}
+        job['result']['stages']={'3074':'not_run','2114':'not_run','3022':'not_run','3012':'done'}
+        self.assertFalse(needs_continuation(job))
+        job['result']['stages']['3012']='error'
+        self.assertTrue(needs_continuation(job))
+
 
 if __name__=='__main__':unittest.main()

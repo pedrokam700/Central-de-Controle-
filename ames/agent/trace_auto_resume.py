@@ -48,10 +48,30 @@ def needs_continuation(job):
         return True
     if status != 'done':
         return False
-    stages = (job.get('result') or {}).get('stages') or {}
-    # A finished job with partial sources is *not* a completed trace.
-    return any(stage in ('partial', 'error', 'not_run') for source, stage in stages.items()
-               if source != '3028')
+    result = job.get('result') or {}
+    stages = result.get('stages') or {}
+    scope = job.get('scope') or {}
+    completed_scope = result.get('scope') or {}
+    config = job.get('config') or {}
+    mode = (scope.get('trace_mode') or completed_scope.get('trace_mode')
+            or config.get('trace_mode') or 'full')
+    required = {
+        'full': {'3074', '2114', '3022'},
+        'reuse_only': {'3074', '2114'},
+        'process_only': {'3022'},
+        'history_only': {'3012'},
+    }.get(mode)
+    if required is None:
+        return True  # Unknown job contract is not proof of completion.
+    # The historic 3012 was intentionally excluded from Full/Reuso by the
+    # explicit opt-in. Its "not_run" status must not trigger another recovery.
+    # Legacy jobs with no flag did include it by default; preserve that scope.
+    include_3012 = next((src['include_3012'] for src in (scope, completed_scope, config)
+                         if 'include_3012' in src), mode in {'full', 'reuse_only', 'history_only'})
+    if include_3012 or mode == 'history_only':
+        required.add('3012')
+    # Missing required stages are unproven, even when the scheduler says done.
+    return any(stages.get(source) not in ('done', 'preserved') for source in required)
 
 
 def candidate(current, jobs):
