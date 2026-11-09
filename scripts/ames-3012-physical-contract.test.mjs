@@ -23,7 +23,8 @@ test('3012 uses the exact mapped composite date/time controls and versioned runt
   assert.match(collector,/3012-home-mapped-v2/);
   assert.match(collector,/AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2/);
   assert.match(collector,/3012_VIEW_NOT_EXECUTED/);
-  assert.match(collector,/STORE_REBOUND_AFTER_VIEW/);
+  assert.match(collector,/No rebound-only success/);
+  assert.match(collector,/Wire3012Probe/);
 });
 
 test('3012 exact SN window remains 24 Jan 2026 through the end of today',()=>{
@@ -38,7 +39,8 @@ test('3012 View proves execution before accepting a response and follows store l
   assert.match(collector,/beforeload/);
   assert.match(collector,/STORE_LOAD_CONFIRMED/);
   assert.match(collector,/STORE_DATASET_EVENT/);
-  assert.match(collector,/STORE_REBOUND_AFTER_VIEW/);
+  assert.doesNotMatch(collector,/freshness='STORE_REBOUND_AFTER_VIEW'/);
+  assert.match(collector,/STORE_DATASET_EVENT/);
 });
 
 test('3012 normalization preserves AT repair comment and repair evidence',()=>{

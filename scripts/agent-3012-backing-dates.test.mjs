@@ -39,7 +39,8 @@ function fixture({wrongRequest=false, requestBrazil=false}={}){
     fireEvent(event){if(event!=='click')return;
       const from=components.find(f=>f.itemId==='dteFromDate__Data').value;
       const to=components.find(f=>f.itemId==='dteToDate__Data').value;
-      const params={fromDate:from,toDate:wrongRequest?'2026-03-31 23:59:59':to};
+      const params={snImei:components.find(f=>f.itemId==='txtSnImei').value,
+        fromDate:from,toDate:wrongRequest?'2026-03-31 23:59:59':to};
       if(requestBrazil){params.fromDate='01/01/2026 00:00';params.toDate='06/11/2026 23:59';}
       store.proxy.extraParams=params;
       store.emit('beforeload',store,{getParams:()=>({...params})});

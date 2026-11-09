@@ -8,6 +8,7 @@ import textwrap
 import unittest
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlencode
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT = ROOT / "ames" / "agent"
@@ -52,8 +53,10 @@ function validDate(){return /^2026-01-24 00:00:00$/.test(String(startData.getVal
 function execute(){
   if(scenario==='stale')return;
   const params={procstep:'x',snImei:simple.txtSnImei.getValue(),fromDate:startData.getValue(),toDate:endData.getValue(),unDisassemble:false};
+  if(scenario==='proxy-only'){activeStore.proxy.extraParams={...params};return;}
   const ajaxForm=scenario==='ajax-form-serialized'||scenario==='ajax-form-dom'||scenario==='ajax-form-dom-wrong-period'||scenario==='ajax-wrong-period'||scenario==='ajax-unrelated-sn';
-  const before=ajaxForm?{procstep:'x',snImei:simple.txtSnImei.getValue()}:params;
+  const before=ajaxForm||scenario==='wire-fallback'?{procstep:'x',snImei:simple.txtSnImei.getValue()}:
+    scenario==='store-no-sn'?{fromDate:startData.getValue(),toDate:endData.getValue()}:params;
   if(ajaxForm){
     const dates=scenario==='ajax-wrong-period'||scenario==='ajax-form-dom-wrong-period'
       ?{'dteFromDate__Data':'2026-01-24 00:00:00','dteToDate__Data':'2026-03-31 23:59:00'}
@@ -75,7 +78,7 @@ const physical={tagName:'A',dispatchEvent(){},click(){if(scenario!=='ext-fallbac
 const view={itemId:'btnView',xtype:'button',text:'View',isButton:true,hidden:false,isVisible(){return true},btnEl:{dom:physical},fireEvent(name){if(name==='click'&&scenario!=='stale')execute();return true},handler(){if(scenario!=='stale')execute()}};
 const components=[...Object.values(simple),startParent,startData,startDate,startTime,endParent,endData,endDate,endTime,grid,view];
 const ctx=vm.createContext({console,setTimeout,clearTimeout,Date,Promise,JSON,globalThis:null,Event:class{constructor(t,o){this.type=t}},MouseEvent:class{constructor(t,o){this.type=t}},document:{querySelectorAll(){return[]},getElementById(){return null}},window:null});ctx.window=ctx;ctx.globalThis=ctx;ctx.Ext={ComponentManager:{all:{items:components}},ComponentQuery:{query(){return components}}};
-(async()=>{try{ctx.Ext.Ajax=ajax;const fn=vm.runInContext('('+querySource+')',ctx);const out=await fn({sn:'002527TEST',line:'',model:'',defectCode:'',repairCode:'',defectType:'',dateFrom:'2026-01-24',timeFrom:'00:00',dateTo:'2026-10-17',timeTo:'23:59'});console.log(JSON.stringify({ok:true,out}));}catch(e){console.log(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exitCode=0}})();
+(async()=>{try{ctx.Ext.Ajax=ajax;const fn=vm.runInContext('('+querySource+')',ctx);const out=await fn({sn:'002527TEST',line:'',model:'',defectCode:'',repairCode:'',defectType:'',dateFrom:'2026-01-24',timeFrom:'00:00',dateTo:'2026-10-17',timeTo:'23:59',allowWirePeriodProof:scenario==='wire-fallback'});console.log(JSON.stringify({ok:true,out}));}catch(e){console.log(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exitCode=0}})();
 '''
 
 
@@ -93,6 +96,65 @@ def run_fixture(scenario: str) -> dict:
 
 
 class Runtime3012Tests(unittest.TestCase):
+    def test_store_without_period_is_untrusted_until_http_wire_is_proved(self):
+        result = run_fixture('wire-fallback')
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(result['out']['total'], 1)
+        self.assertFalse(result['out']['queryProof']['periodVerified'])
+        self.assertEqual(result['out']['queryProof']['periodSource'], 'not_observed')
+
+    def test_store_dates_without_exact_sn_cannot_certify_any_board(self):
+        result = run_fixture('store-no-sn')
+        self.assertFalse(result['ok'], result)
+        self.assertIn('3012_QUERY_PERIOD_MISMATCH', result['error'])
+
+    def test_passive_wire_probe_requires_same_request_sn_dates_and_completion(self):
+        expected={'from':'2026-01-24 00:00','to':'2026-10-17 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        body=urlencode({'queryCondition':json.dumps({'filters':[
+            {'name':'txtSnImei','value':'002527TEST'},
+            {'name':'dteFromDate__Data','value':'2026-01-24 00:00:00'},
+            {'name':'dteToDate__Data','value':'2026-10-17 23:59:00'},
+            {'name':'token','value':'SECRET-MUST-NOT-LEAK'}]})})
+        class FakeRequest:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            post_data=body
+        request=FakeRequest()
+        probe.on_request(request)
+        self.assertEqual(probe.counters(),{'http':1,'sn':1,'dates':1,'period':1,'finished':0,'http_ok':0})
+        self.assertFalse(probe.confirmed(),'outbound request alone is not a completed MES result')
+        probe.on_finished(request)
+        self.assertFalse(probe.confirmed(),'HTTP finish without success status cannot prove coverage')
+        class FakeResponse:
+            status=200
+            def __init__(self, req):
+                self.request=req
+        probe.on_response(FakeResponse(request))
+        self.assertTrue(probe.confirmed())
+        self.assertNotIn('SECRET',repr(probe._requests))
+
+    def test_wire_wrong_dates_other_sn_and_other_host_cannot_prove_coverage(self):
+        expected={'from':'2026-01-24 00:00','to':'2026-10-17 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        class FakeRequest:
+            resource_type='xhr'
+            method='POST'
+            def __init__(self,url,data):
+                self.url=url
+                self.post_data=urlencode(data)
+        for url,data in [
+            ('http://172.29.185.215/asymes/home',{'snImei':'OTHER','fromDate':expected['from'],'toDate':expected['to']}),
+            ('http://172.29.185.215/asymes/home',{'snImei':'002527TEST','fromDate':expected['from'],'toDate':'2026-03-31 23:59'}),
+            ('http://other-host/asymes/home',{'snImei':'002527TEST','fromDate':expected['from'],'toDate':expected['to']}),
+        ]:
+            req=FakeRequest(url,data)
+            probe.on_request(req)
+            probe.on_finished(req)
+        self.assertFalse(probe.confirmed())
+        self.assertEqual(probe.counters()['period'],0)
+
     def test_exact_mapping_and_view_fallback_execute_real_query(self):
         result = run_fixture("ext-fallback")
         self.assertTrue(result["ok"], result)
@@ -111,7 +173,7 @@ class Runtime3012Tests(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         proof = result["out"]["queryProof"]
         self.assertTrue(proof["storeRebound"])
-        self.assertIn(proof["freshness"], {"STORE_LOAD_CONFIRMED", "STORE_DATASET_EVENT", "STORE_REBOUND_AFTER_VIEW"})
+        self.assertIn(proof["freshness"], {"STORE_LOAD_CONFIRMED", "STORE_DATASET_EVENT"})
         self.assertEqual(result["out"]["total"], 1)
 
     def test_nested_ext_ajax_form_fields_prove_period_when_store_has_only_sn(self):
@@ -151,6 +213,11 @@ class Runtime3012Tests(unittest.TestCase):
         result = run_fixture("stale")
         self.assertFalse(result["ok"])
         self.assertIn("3012_VIEW_NOT_EXECUTED", result["error"])
+
+    def test_proxy_parameter_changes_alone_do_not_claim_view_executed(self):
+        result=run_fixture('proxy-only')
+        self.assertFalse(result['ok'],result)
+        self.assertIn('3012_VIEW_NOT_EXECUTED',result['error'])
 
     def test_legacy_false_coverage_does_not_suppress_first_v2_query(self):
         with tempfile.TemporaryDirectory() as td:

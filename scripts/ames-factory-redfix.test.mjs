@@ -67,7 +67,7 @@ f._install_3012_field_resolution()
 assert live.QUERY_3012_JS==before, 'legacy fuzzy redfix rewrote mapped V2 collector'
 assert live.QUERY_CONTRACT=='3012-home-mapped-v2'
 assert live.SOURCE_3012=='AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2_PERIOD_VERIFIED_20261105'
-for marker in ['txtSnImei','grdDefectRepair','btnView','dteFromDate','dteToDate','STORE_REBOUND_AFTER_VIEW','3012_VIEW_NOT_EXECUTED']:
+for marker in ['txtSnImei','grdDefectRepair','btnView','dteFromDate','dteToDate','No rebound-only success','3012_VIEW_NOT_EXECUTED']:
     assert marker in live.QUERY_3012_JS, marker
 row=live.normalize_3012_row({'lotId':'002527TEST','repairComment':'comentario AT preservado','repairUser':'AT01','repairTime':'2026-10-16 09:10:00'})
 assert row['repair_comment']=='comentario AT preservado'

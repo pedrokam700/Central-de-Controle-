@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote_plus, urlsplit, urlunsplit
 
 ROUTE_3012 = "UAWIP.form.VwDefectRepairView"
 HOME_SURFACE = "/asymes/home"
@@ -198,7 +198,7 @@ async (cfg) => {
     // putting its filters in options.params/jsonData. Read only the exact SN
     // and period field names from that form; never copy unrelated fields,
     // credentials or session values into the query proof.
-    const allowed=new Set(['snimei','lotid','pcbasn','serialno',
+    const allowed=new Set(['snimei','txtsnimei','sn','lotid','pcbasn','serialno',
       'fromdate','datefrom','defecttimestart','dtefromdate','dtefromdatedata',
       'todate','dateto','defecttimeend','dtetodate','dtetodatedata']);
     const key=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -260,14 +260,19 @@ async (cfg) => {
     if(rebound&&!reboundAt) reboundAt=Date.now();
     const params=snapshotParams(cur.store);
     const paramsChanged=JSON.stringify(params)!==beforeParamsText;
-    const started=[...observed.values()].some(x=>x.before||x.loads||x.changes)||rebound||paramsChanged;
+    // A rebound store or changed proxy extraParams alone is NOT a completed
+    // View request. These events previously promoted an inert button click to
+    // apparent progress and allowed the stale grid to masquerade as fresh.
+    const started=[...observed.values()].some(x=>x.before||x.loads||x.changes)||ajaxRequests.length>0;
     return {cur,st,token,rebound,params,paramsChanged,started,loading:cur.store?.isLoading?.()===true};
   };
   const viewAttempts=[];
   let viewAction=null;
   for(const mode of ['physical_dom_click','ext_click_event','handler_fallback']){
     try{trigger(mode);viewAttempts.push({mode,status:'invoked'});}catch(e){viewAttempts.push({mode,status:'unavailable',error:String(e?.message||e)});continue;}
-    const until=Date.now()+700;
+    // The first physical click is allowed to initiate a slow ExtJS request;
+    // falling through after 700ms could click View again while it was loading.
+    const until=Date.now()+(mode==='physical_dom_click'?3500:1500);
     while(Date.now()<until){const s=stateNow();if(s.started){viewAction=mode;break;}await sleep(50);}
     if(viewAction) break;
   }
@@ -279,7 +284,7 @@ async (cfg) => {
     if(s.st.success===false){cleanup();throw new Error('3012_STORE_LOAD_FAILED');}
     if(!s.loading&&s.st.loads>0&&s.st.success!==false){finalState=s;freshness='STORE_LOAD_CONFIRMED';break;}
     if(!s.loading&&s.st.changes>0){finalState=s;freshness='STORE_DATASET_EVENT';break;}
-    if(!s.loading&&s.rebound&&reboundAt&&Date.now()-reboundAt>=350){finalState=s;freshness='STORE_REBOUND_AFTER_VIEW';break;}
+    // No rebound-only success: require an observed store completion/event.
     await sleep(70);
   }
   if(!finalState){cleanup();throw new Error('3012_RESPONSE_NOT_CONFIRMED: View executou, mas nenhuma resposta nova da grid foi comprovada.');}
@@ -332,7 +337,7 @@ async (cfg) => {
   };
   const fromAliases=['fromDate','dateFrom','defectTimeStart','dteFromDate','dteFromDate__Data'];
   const toAliases=['toDate','dateTo','defectTimeEnd','dteToDate','dteToDate__Data'];
-  const snAliases=['snImei','lotId','pcbaSn','serialNo'];
+  const snAliases=['snImei','txtSnImei','sn','lotId','pcbaSn','serialNo'];
   const requestSources=[...ajaxRequests.map(x=>({name:'ajax_beforerequest',data:x})).reverse(),
     {name:'store_beforeload',data:requestParams},{name:'proxy',data:params}];
   const stamp=value=>{
@@ -353,11 +358,14 @@ async (cfg) => {
   for(const source of requestSources){
     // A background ExtJS request may share the same date fields. Never
     // certify it as the selected board's request without an exact SN match.
-    if(source.name==='ajax_beforerequest'&&clean(findParameter(source.data,snAliases))!==clean(cfg.sn))continue;
+    // Store and proxy metadata can also belong to another query or keep
+    // stale dates. Require the exact SN in every source of period proof.
+    if(clean(findParameter(source.data,snAliases))!==clean(cfg.sn))continue;
     const begin=stamp(findParameter(source.data,fromAliases)),end=stamp(findParameter(source.data,toAliases));
     if(begin&&end){actualFrom=begin;actualTo=end;periodSource=source.name;break;}
   }
-  if(actualFrom!==expectedFrom||actualTo!==expectedTo){
+  const periodVerified=actualFrom===expectedFrom&&actualTo===expectedTo;
+  if(!periodVerified&&!cfg.allowWirePeriodProof){
     // Dates only: no SN, MES response rows, cookies, tokens or request headers.
     cleanup();throw new Error(`3012_QUERY_PERIOD_MISMATCH: esperado ${expectedFrom} -> ${expectedTo}; observado ${actualFrom||'AUSENTE'} -> ${actualTo||'AUSENTE'} (${periodSource}); consulta recusada`);
   }
@@ -376,7 +384,7 @@ async (cfg) => {
   }
   for(let p=2;p<=pages;p++){const rs=await loadPage(p);records.push(...rs);pageResults.push({page:p,count:rs.length});}
   if(records.length!==total){cleanup();throw new Error('3012 incompleta: '+records.length+' / '+total);}
-  const queryProof={contract:CONTRACT,viewAction,viewAttempts,freshness,initialStoreToken:initialToken,finalStoreToken:finalToken,storeRebound:finalToken!==initialToken,requestParams,proxyParams:params,periodVerified:true,periodSource,
+  const queryProof={contract:CONTRACT,viewAction,viewAttempts,freshness,initialStoreToken:initialToken,finalStoreToken:finalToken,storeRebound:finalToken!==initialToken,requestParams,proxyParams:params,periodVerified,periodSource,
     requestedWindow:{from:expectedFrom,to:expectedTo},actualWindow:{from:actualFrom,to:actualTo}};
   cleanup();
   return {records,total,pageSize,pages,pageResults,applied,proxyParams:params,beforeParams,storeFields:storeFields(store),gridItemId:finalState.cur.grid?.itemId||null,viewAction,queryProof};
@@ -386,6 +394,159 @@ async (cfg) => {
 
 def _clean(value: Any) -> str:
     return "" if value is None else str(value).strip()
+
+
+_WIRE_3012_ALIASES = {
+    'sn': ('snImei', 'txtSnImei', 'sn', 'lotId', 'pcbaSn', 'serialNo'),
+    'from': ('fromDate', 'dateFrom', 'defectTimeStart', 'dteFromDate', 'dteFromDate__Data'),
+    'to': ('toDate', 'dateTo', 'defectTimeEnd', 'dteToDate', 'dteToDate__Data'),
+}
+
+
+def _wire_key(value: Any) -> str:
+    return re.sub(r'[^a-z0-9]', '', str(value or '').lower())
+
+
+def _wire_find(root: Any, names: Iterable[str], depth: int = 0) -> Any:
+    """Read only selected form values, including nested Ext.NET JSON/URL forms.
+
+    This helper may inspect the request payload in RAM. No raw body, URL,
+    cookies, unrelated fields, response, or SN is ever persisted/logged.
+    """
+    if root is None or depth > 8:
+        return None
+    aliases = {_wire_key(name) for name in names}
+    if isinstance(root, str):
+        raw = root.strip()
+        if len(raw) > 250000:
+            return None
+        if raw[:3].lower() in ('%7b', '%5b'):
+            return _wire_find(unquote_plus(raw), names, depth + 1)
+        if raw.startswith(('{', '[')):
+            try:
+                return _wire_find(json.loads(raw), names, depth + 1)
+            except (ValueError, TypeError):
+                return None
+        if '=' in raw:
+            try:
+                return _wire_find(dict(parse_qsl(raw.lstrip('?'), keep_blank_values=True,
+                                                max_num_fields=500)), names, depth + 1)
+            except (ValueError, TypeError):
+                return None
+        return None
+    if isinstance(root, (list, tuple)):
+        for item in root:
+            found = _wire_find(item, names, depth + 1)
+            if found is not None:
+                return found
+        return None
+    if not isinstance(root, dict):
+        return None
+    for name in ('name', 'field', 'itemId'):
+        if _wire_key(root.get(name)) in aliases and root.get('value') not in (None, ''):
+            return root['value']
+    for key, value in root.items():
+        if _wire_key(key) in aliases and value not in (None, ''):
+            return value
+    for value in root.values():
+        if isinstance(value, (str, dict, list, tuple)):
+            found = _wire_find(value, names, depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
+def _wire_stamp(value: Any) -> str:
+    raw = _clean(value)
+    iso = re.match(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})', raw)
+    local = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})[ T](\d{1,2}):(\d{2})', raw)
+    parts = (tuple(int(x) for x in iso.groups()) if iso else
+             (int(local[3]), int(local[2]), int(local[1]), int(local[4]), int(local[5]))
+             if local else None)
+    if not parts:
+        return ''
+    try:
+        return datetime(*parts).strftime('%Y-%m-%d %H:%M')
+    except ValueError:
+        return ''
+
+
+class Wire3012Probe:
+    """Passive Playwright HTTP proof of the exact submitted SN and period.
+
+    No route interception, request modification or broad network capture. The
+    only durable output is a handful of counters; request bodies are dropped
+    immediately after examining permitted fields in memory.
+    """
+
+    def __init__(self, host: str, sn: str, expected: Dict[str, str]):
+        self.host = str(host or '').lower()
+        self.sn = str(sn or '').strip()
+        self.expected = expected
+        self._requests = {}
+
+    def on_request(self, request):
+        try:
+            url = urlsplit(str(request.url))
+            if (url.hostname or '').lower() != self.host:
+                return
+            kind = str(request.resource_type or '').lower()
+            method = str(request.method or '').upper()
+            if kind not in ('xhr', 'fetch') and method != 'POST':
+                return
+            if len(self._requests) >= 50:
+                return
+            query = dict(parse_qsl(url.query, keep_blank_values=True))
+            body = request.post_data or ''
+            fields = [query, body]
+            def first(names):
+                for item in fields:
+                    found = _wire_find(item, names)
+                    if found is not None:
+                        return found
+                return None
+            sn = first(_WIRE_3012_ALIASES['sn'])
+            start = first(_WIRE_3012_ALIASES['from'])
+            end = first(_WIRE_3012_ALIASES['to'])
+            begin, finish = _wire_stamp(start), _wire_stamp(end)
+            self._requests[request] = {
+                'exact_sn': bool(self.sn and _clean(sn) == self.sn),
+                'date_pair': bool(begin and finish),
+                'exact_period': bool(begin == self.expected['from'] and finish == self.expected['to']),
+                'finished': False,
+                'failed': False,
+                'response_ok': False,
+            }
+        except Exception:
+            # Diagnostic must never interfere with the live MES query.
+            return
+
+    def on_finished(self, request):
+        if request in self._requests:
+            self._requests[request]['finished'] = True
+
+    def on_failed(self, request):
+        if request in self._requests:
+            self._requests[request]['failed'] = True
+
+    def on_response(self, response):
+        request = response.request
+        if request in self._requests:
+            self._requests[request]['response_ok'] = 200 <= int(response.status) < 300
+
+    def confirmed(self) -> bool:
+        return any(row['exact_sn'] and row['date_pair'] and row['exact_period']
+                   and row['finished'] and row['response_ok'] and not row['failed']
+                   for row in self._requests.values())
+
+    def counters(self) -> Dict[str, int]:
+        rows = list(self._requests.values())
+        return {'http': len(rows),
+                'sn': sum(bool(r['exact_sn']) for r in rows),
+                'dates': sum(bool(r['date_pair']) for r in rows),
+                'period': sum(bool(r['exact_sn'] and r['date_pair'] and r['exact_period']) for r in rows),
+                'finished': sum(bool(r['finished']) for r in rows),
+                'http_ok': sum(bool(r['response_ok']) for r in rows)}
 
 
 def _keymap(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -599,17 +760,52 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
                 if chunk_key in done:continue
                 cfg={"sn":sn,"line":line,"model":model,"defectCode":defect_code,"repairCode":repair_code,"defectType":defect_type,
                      "dateFrom":chunk_start.strftime("%Y-%m-%d"),"timeFrom":chunk_start.strftime("%H:%M"),
-                     "dateTo":chunk_end.strftime("%Y-%m-%d"),"timeTo":chunk_end.strftime("%H:%M")}
-                raw=page.evaluate(QUERY_3012_JS,cfg)
+                     "dateTo":chunk_end.strftime("%Y-%m-%d"),"timeTo":chunk_end.strftime("%H:%M"),
+                     "allowWirePeriodProof":True}
+                expected={"from":cfg["dateFrom"]+" "+cfg["timeFrom"],"to":cfg["dateTo"]+" "+cfg["timeTo"]}
+                # Ext.NET can send the View request outside the grid store or
+                # Ext.Ajax options. Read the actual Playwright HTTP request
+                # passively, without routing, patching XHR or storing its body.
+                wire=Wire3012Probe(ames_host,sn,expected)
+                handlers=(("request",wire.on_request),
+                          ("response",wire.on_response),
+                          ("requestfinished",wire.on_finished),
+                          ("requestfailed",wire.on_failed))
+                for event,handler in handlers:
+                    page.on(event,handler)
+                try:
+                    raw=page.evaluate(QUERY_3012_JS,cfg)
+                finally:
+                    for event,handler in handlers:
+                        try:
+                            page.remove_listener(event,handler)
+                        except AttributeError:
+                            try:
+                                page.off(event,handler)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
                 normalized=[normalize_3012_row(r) for r in (raw.get("records") or [])]
                 if sn and any(sn not in (r.get('pcba_sn'),r.get('imei')) for r in normalized):
                     raise RuntimeError('3012 retornou outra SN; filtros/grade nao confirmados')
                 proof=dict(raw.get("queryProof") or {})
-                expected={"from":cfg["dateFrom"]+" "+cfg["timeFrom"],"to":cfg["dateTo"]+" "+cfg["timeTo"]}
+                if proof.get("periodVerified") is not True and wire.confirmed() and proof.get('freshness') in (
+                        'STORE_LOAD_CONFIRMED','STORE_DATASET_EVENT'):
+                    proof.update(periodVerified=True,periodSource='playwright_http_finished',
+                                 actualWindow=expected,wire_counters=wire.counters())
                 if (proof.get("contract")!=QUERY_CONTRACT or not proof.get("freshness")
                         or proof.get("periodVerified") is not True
                         or proof.get("actualWindow")!=expected or proof.get("requestedWindow")!=expected):
-                    raise RuntimeError("3012 respondeu sem prova do período efetivamente consultado")
+                    counts=wire.counters()
+                    # Counts only: the diagnostic never includes request body,
+                    # URL, cookies, form values or credentials.
+                    raise RuntimeError(
+                        f"3012_QUERY_PERIOD_MISMATCH: esperado {expected['from']} -> {expected['to']}; "
+                        f"observado sem prova no envio; HTTP {counts['http']} requisicoes, "
+                        f"SN exata {counts['sn']}, datas {counts['dates']}, "
+                        f"janela exata {counts['period']}, respostas terminadas {counts['finished']}, "
+                        f"HTTP sucesso {counts['http_ok']}")
                 records.extend(normalized);done.add(chunk_key)
                 item={"key":chunk_key,"sn":sn,"from":expected["from"],"to":expected["to"],"rows":len(normalized),
                                     "total":raw.get("total"),"pages":raw.get("pages"),"fields":raw.get("storeFields"),"applied":raw.get("applied"),"surface":"home",
