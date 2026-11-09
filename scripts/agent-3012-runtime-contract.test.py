@@ -123,7 +123,13 @@ class Runtime3012Tests(unittest.TestCase):
             post_data=body
         request=FakeRequest()
         probe.on_request(request)
-        self.assertEqual(probe.counters(),{'http':1,'sn':1,'dates':1,'period':1,'finished':0,'http_ok':0})
+        counts=probe.counters()
+        self.assertEqual({k:counts[k] for k in ('http','sn','dates','period','finished','http_ok')},
+                         {'http':1,'sn':1,'dates':1,'period':1,'finished':0,'http_ok':0})
+        self.assertEqual(counts['from_text'], 1)
+        self.assertEqual(counts['to_text'], 1)
+        self.assertIn('dtefromdatedata',counts['date_keys'])
+        self.assertNotIn('token',str(counts))
         self.assertFalse(probe.confirmed(),'outbound request alone is not a completed MES result')
         probe.on_finished(request)
         self.assertFalse(probe.confirmed(),'HTTP finish without success status cannot prove coverage')
@@ -154,6 +160,55 @@ class Runtime3012Tests(unittest.TestCase):
             probe.on_finished(req)
         self.assertFalse(probe.confirmed())
         self.assertEqual(probe.counters()['period'],0)
+
+    def test_wire_unknown_date_keys_expose_schema_without_promoting_coverage(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        class FakeRequest:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            post_data=urlencode({'snImei':'002527TEST',
+                'defectBeginCustom':'2026-01-01 00:00',
+                'defectEndCustom':'2026-11-09 23:59',
+                'sessionToken':'SHOULD-NOT-APPEAR',
+                'password':'SHOULD-NOT-APPEAR'})
+        req=FakeRequest()
+        probe.on_request(req)
+        counts=probe.counters()
+        self.assertEqual(counts['sn'],1)
+        self.assertEqual(counts['dates'],0)
+        self.assertEqual(counts['date_keys'],['defectbegincustom','defectendcustom'])
+        self.assertEqual((counts['from_text'],counts['to_text']),(1,1))
+        self.assertFalse(probe.confirmed())
+        self.assertNotIn('SHOULD-NOT-APPEAR',str(counts))
+
+    def test_wire_split_extnet_date_and_time_fields_prove_actual_period(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        class Request:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            post_data=urlencode({'txtSnImei':'002527TEST',
+                'dteFromDate__Date':'2026-01-01','dteFromDate__Time':'00:00',
+                'dteToDate__Date':'2026-11-09','dteToDate__Time':'23:59'})
+        class Response:
+            status=200
+            def __init__(self,request):self.request=request
+        req=Request()
+        probe.on_request(req)
+        probe.on_response(Response(req))
+        probe.on_finished(req)
+        self.assertTrue(probe.confirmed())
+        self.assertEqual(probe.counters()['period'],1)
+
+        wrong=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        req.post_data=req.post_data.replace('23%3A59','00%3A00')
+        wrong.on_request(req)
+        wrong.on_response(Response(req))
+        wrong.on_finished(req)
+        self.assertFalse(wrong.confirmed())
 
     def test_exact_mapping_and_view_fallback_execute_real_query(self):
         result = run_fixture("ext-fallback")

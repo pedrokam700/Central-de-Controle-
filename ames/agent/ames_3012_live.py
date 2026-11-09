@@ -400,6 +400,12 @@ _WIRE_3012_ALIASES = {
     'sn': ('snImei', 'txtSnImei', 'sn', 'lotId', 'pcbaSn', 'serialNo'),
     'from': ('fromDate', 'dateFrom', 'defectTimeStart', 'dteFromDate', 'dteFromDate__Data'),
     'to': ('toDate', 'dateTo', 'defectTimeEnd', 'dteToDate', 'dteToDate__Data'),
+    # Ext.NET compound fields can send date and time as two distinct inputs;
+    # the previous probe required a single datetime and therefore missed both.
+    'from_day': ('dteFromDate__Date', 'defectTimeStartDate'),
+    'from_time': ('dteFromDate__Time', 'defectTimeStartTime'),
+    'to_day': ('dteToDate__Date', 'defectTimeEndDate'),
+    'to_time': ('dteToDate__Time', 'defectTimeEndTime'),
 }
 
 
@@ -471,6 +477,91 @@ def _wire_stamp(value: Any) -> str:
         return ''
 
 
+def _wire_split_stamp(day: Any, clock: Any) -> str:
+    """Combine only an explicit date field and its matching time field."""
+    date_raw, time_raw = _clean(day), _clean(clock)
+    iso = re.match(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\D|$)', date_raw)
+    local = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})(?:\D|$)', date_raw)
+    clock_match = re.search(r'(?:^|[T\s])(\d{1,2}):(\d{2})(?::\d{2})?(?:\D|$)',
+                            ' ' + time_raw)
+    if not clock_match or not (iso or local):
+        return ''
+    parts = ((int(iso[1]),int(iso[2]),int(iso[3])) if iso else
+             (int(local[3]),int(local[2]),int(local[1])))
+    try:
+        return datetime(*parts, int(clock_match[1]), int(clock_match[2])).strftime('%Y-%m-%d %H:%M')
+    except ValueError:
+        return ''
+
+
+def _wire_date_hints(root: Any, depth: int = 0) -> set[str]:
+    """Inspect field *names* only; never expose submitted values or headers.
+
+    Ext.NET may serialize date fields under its own names rather than the
+    mapped component IDs. This evidence distinguishes an unknown field name
+    from dates absent from the outgoing HTTP payload.
+    """
+    if root is None or depth > 8:
+        return set()
+    if isinstance(root, str):
+        raw = root.strip()
+        if len(raw) > 250000:
+            return set()
+        if raw[:3].lower() in ('%7b', '%5b'):
+            return _wire_date_hints(unquote_plus(raw), depth + 1)
+        if raw.startswith(('{', '[')):
+            try:
+                return _wire_date_hints(json.loads(raw), depth + 1)
+            except (ValueError, TypeError):
+                return set()
+        if '=' in raw:
+            try:
+                return _wire_date_hints(dict(parse_qsl(raw.lstrip('?'), keep_blank_values=True,
+                                                     max_num_fields=500)), depth + 1)
+            except (ValueError, TypeError):
+                return set()
+        return set()
+    if isinstance(root, (list, tuple)):
+        result = set()
+        for item in root[:500]:
+            result.update(_wire_date_hints(item, depth + 1))
+        return result
+    if not isinstance(root, dict):
+        return set()
+    result = set()
+    candidates = list(root.keys())
+    if root.get('name') is not None:
+        candidates.append(root.get('name'))
+    if root.get('field') is not None:
+        candidates.append(root.get('field'))
+    for name in candidates:
+        # These are normalized technical keys, never the raw field name.
+        key = _wire_key(name)[:48]
+        if (key and any(part in key for part in ('date', 'time', 'from', 'begin', 'start', 'end'))
+                and not any(part in key for part in ('password', 'token', 'secret', 'cookie', 'session', 'auth'))):
+            result.add(key)
+    for value in root.values():
+        if isinstance(value, (str, dict, list, tuple)):
+            result.update(_wire_date_hints(value, depth + 1))
+    return result
+
+
+def _wire_expected_day_in_payload(fields: list[Any], expected: str) -> bool:
+    """Diagnostic hint only; an unnamed date literal is never period proof."""
+    try:
+        day = datetime.strptime(expected[:10], '%Y-%m-%d')
+        patterns = (day.strftime('%Y-%m-%d'), day.strftime('%Y/%m/%d'),
+                    day.strftime('%d/%m/%Y'))
+        for field in fields:
+            raw = json.dumps(field, default=str, ensure_ascii=False) if not isinstance(field, str) else field
+            decoded = unquote_plus(raw[:250000])
+            if any(pattern in decoded for pattern in patterns):
+                return True
+    except (ValueError, TypeError):
+        pass
+    return False
+
+
 class Wire3012Probe:
     """Passive Playwright HTTP proof of the exact submitted SN and period.
 
@@ -509,10 +600,22 @@ class Wire3012Probe:
             start = first(_WIRE_3012_ALIASES['from'])
             end = first(_WIRE_3012_ALIASES['to'])
             begin, finish = _wire_stamp(start), _wire_stamp(end)
+            if not begin:
+                begin = _wire_split_stamp(first(_WIRE_3012_ALIASES['from_day']) or start,
+                                          first(_WIRE_3012_ALIASES['from_time']))
+            if not finish:
+                finish = _wire_split_stamp(first(_WIRE_3012_ALIASES['to_day']) or end,
+                                           first(_WIRE_3012_ALIASES['to_time']))
+            hints = set()
+            for field in fields:
+                hints.update(_wire_date_hints(field))
             self._requests[request] = {
                 'exact_sn': bool(self.sn and _clean(sn) == self.sn),
                 'date_pair': bool(begin and finish),
                 'exact_period': bool(begin == self.expected['from'] and finish == self.expected['to']),
+                'date_field_hints': sorted(hints)[:12],
+                'from_text': _wire_expected_day_in_payload(fields, self.expected['from']),
+                'to_text': _wire_expected_day_in_payload(fields, self.expected['to']),
                 'finished': False,
                 'failed': False,
                 'response_ok': False,
@@ -539,14 +642,18 @@ class Wire3012Probe:
                    and row['finished'] and row['response_ok'] and not row['failed']
                    for row in self._requests.values())
 
-    def counters(self) -> Dict[str, int]:
+    def counters(self) -> Dict[str, Any]:
         rows = list(self._requests.values())
+        exact_sn_rows = [r for r in rows if r['exact_sn']]
         return {'http': len(rows),
                 'sn': sum(bool(r['exact_sn']) for r in rows),
                 'dates': sum(bool(r['date_pair']) for r in rows),
                 'period': sum(bool(r['exact_sn'] and r['date_pair'] and r['exact_period']) for r in rows),
                 'finished': sum(bool(r['finished']) for r in rows),
-                'http_ok': sum(bool(r['response_ok']) for r in rows)}
+                'http_ok': sum(bool(r['response_ok']) for r in rows),
+                'date_keys': sorted({key for r in exact_sn_rows for key in r['date_field_hints']})[:12],
+                'from_text': int(any(r['from_text'] for r in exact_sn_rows)),
+                'to_text': int(any(r['to_text'] for r in exact_sn_rows))}
 
 
 def _keymap(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -800,12 +907,13 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
                     counts=wire.counters()
                     # Counts only: the diagnostic never includes request body,
                     # URL, cookies, form values or credentials.
+                    date_keys=','.join(counts['date_keys'])[:76] or 'nenhum'
                     raise RuntimeError(
-                        f"3012_QUERY_PERIOD_MISMATCH: esperado {expected['from']} -> {expected['to']}; "
-                        f"observado sem prova no envio; HTTP {counts['http']} requisicoes, "
-                        f"SN exata {counts['sn']}, datas {counts['dates']}, "
-                        f"janela exata {counts['period']}, respostas terminadas {counts['finished']}, "
-                        f"HTTP sucesso {counts['http_ok']}")
+                        f"3012_QUERY_PERIOD_MISMATCH: HTTP={counts['http']} SN={counts['sn']} "
+                        f"OK={counts['http_ok']} datas={counts['dates']} janela={counts['period']} "
+                        f"texto={counts['from_text']}/{counts['to_text']} "
+                        f"chaves=[{date_keys}]; "
+                        f"esperado {expected['from']} -> {expected['to']}")
                 records.extend(normalized);done.add(chunk_key)
                 item={"key":chunk_key,"sn":sn,"from":expected["from"],"to":expected["to"],"rows":len(normalized),
                                     "total":raw.get("total"),"pages":raw.get("pages"),"fields":raw.get("storeFields"),"applied":raw.get("applied"),"surface":"home",
