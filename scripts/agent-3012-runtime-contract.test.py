@@ -6,9 +6,10 @@ import sys
 import tempfile
 import textwrap
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT = ROOT / "ames" / "agent"
@@ -108,12 +109,13 @@ class Runtime3012Tests(unittest.TestCase):
                                             'fromDate':left,'toDate':right,'start':0})
 
         outputs=[]
-        for left, right in [('', ''), ('1762128000000', '1794268740000'),
-                            ('1/1/2026', '9/11/2026')]:
+        for index,(left, right) in enumerate([('', ''), ('1762128000000', '1794268740000'),
+                            ('1/1/2026', '9/11/2026')]):
             probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
             probe.on_request(Request(left,right))
             result=probe.counters()
-            self.assertEqual((result['http'],result['sn'],result['dates'],result['period']), (1,1,0,0))
+            self.assertEqual((result['http'],result['sn'],result['dates'],result['period']),
+                             (1,1,1 if index == 1 else 0,0))
             self.assertEqual((result['from_text'],result['to_text']),(0,0))
             outputs.append(tuple(result['date_shapes']))
         self.assertEqual(len(set(outputs)),3,
@@ -121,6 +123,44 @@ class Runtime3012Tests(unittest.TestCase):
         self.assertTrue(any('empty' in v for v in outputs[0]))
         self.assertTrue(any('numeric_timestamp' in v for v in outputs[1]))
         self.assertTrue(any('br_day_only' in v for v in outputs[2]))
+
+    def test_physical_numeric_unix_date_wire_proves_only_exact_local_mes_window(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+        local=ZoneInfo('America/Sao_Paulo')
+        def epoch_ms(iso, zone=local):
+            return str(int(datetime.fromisoformat(iso).replace(tzinfo=zone).timestamp())*1000)
+        left=epoch_ms('2026-01-01T00:00')
+        right=epoch_ms('2026-11-09T23:59')
+        class Request:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            def __init__(self,a,b):
+                self.post_data=urlencode({'snImei':'002527TEST','fromDate':a,'toDate':b})
+        class Response:
+            status=200
+            def __init__(self,req):self.request=req
+        def run_probe(a,b):
+            probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+            req=Request(a,b)
+            probe.on_request(req)
+            probe.on_response(Response(req))
+            probe.on_finished(req)
+            return probe
+        good=run_probe(left,right)
+        self.assertTrue(good.confirmed())
+        self.assertEqual((good.counters()['dates'],good.counters()['period']),(1,1))
+        self.assertIn('body:from=numeric_timestamp',good.counters()['date_shapes'])
+        self.assertNotIn(left,str(good.counters()))
+        self.assertNotIn(right,str(good.counters()))
+        self.assertFalse(run_probe(left,str(int(right)-60000)).confirmed(), 'one minute early is not exact')
+        self.assertFalse(run_probe(left,str(int(right)+1000)).confirmed(), 'sub-minute timestamp is not exact')
+        self.assertFalse(run_probe(epoch_ms('2026-01-01T00:00',timezone.utc),right).confirmed(),
+                         'UTC midnight cannot masquerade as São Paulo midnight')
+        self.assertEqual(collector._wire_stamp(str(int(left)*1000)),expected['from'],
+                         'microsecond Unix representation must use integer-safe conversion')
+        self.assertEqual(collector._wire_stamp(str(int(left)//1000)),expected['from'],
+                         'second Unix representation must remain unambiguous')
 
     def test_http_wire_rejects_conflicting_url_and_body_periods(self):
         expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 from urllib.parse import parse_qsl, unquote_plus, urlsplit, urlunsplit
+from zoneinfo import ZoneInfo
 
 ROUTE_3012 = "UAWIP.form.VwDefectRepairView"
 HOME_SURFACE = "/asymes/home"
@@ -483,6 +484,22 @@ def _wire_find(root: Any, names: Iterable[str], depth: int = 0) -> Any:
 
 def _wire_stamp(value: Any) -> str:
     raw = _clean(value)
+    # The physical 3012 View serializes its Ext.NET date values as numeric
+    # Unix timestamps. Parse only explicit seconds/milliseconds/microseconds,
+    # in the production MES timezone. Do not use the executor machine's local
+    # timezone or silently round a fractional minute into a coverage proof.
+    if re.fullmatch(r'-?\d{10}|-?\d{13}|-?\d{16}', raw):
+        try:
+            unit = {10: 1, 13: 1_000, 16: 1_000_000}[len(raw.lstrip('-'))]
+            epoch = int(raw)
+            seconds, subsecond = divmod(epoch, unit)
+            stamp = (datetime.fromtimestamp(seconds, tz=ZoneInfo('America/Sao_Paulo'))
+                     + timedelta(microseconds=subsecond * (1_000_000 // unit)))
+            if not (2000 <= stamp.year <= 2100 and stamp.second == 0 and stamp.microsecond == 0):
+                return ''
+            return stamp.strftime('%Y-%m-%d %H:%M')
+        except (ValueError, OverflowError, OSError, KeyError):
+            return ''
     # A date prefix is not period proof. A trailing timezone, suffix or
     # malformed timestamp needs its own explicit interpretation, never a
     # silent prefix match against the requested local MES minute.
@@ -561,14 +578,14 @@ def _wire_value_shape(value: Any) -> str:
     raw = _clean(value)
     if not raw:
         return 'empty'
+    if re.fullmatch(r'-?\d{10,16}', raw):
+        return 'numeric_timestamp'
     if _wire_stamp(raw):
         return 'datetime_recognized'
     if re.fullmatch(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', raw):
         return 'iso_day_only'
     if re.fullmatch(r'\d{1,2}/\d{1,2}/\d{4}', raw):
         return 'br_day_only'
-    if re.fullmatch(r'-?\d{10,16}', raw):
-        return 'numeric_timestamp'
     if re.fullmatch(r'/?Date\(-?\d+(?:[+-]\d+)?\)/?', raw, flags=re.I):
         return 'dotnet_date'
     if re.match(r'^\d{4}-\d{2}-\d{2}T', raw) and (raw.endswith('Z') or re.search(r'[+-]\d{2}:?\d{2}$', raw)):
