@@ -41,7 +41,7 @@ function field(itemId,xtype,name=''){
 }
 const startParent=field('dteFromDate','udc_datetimefield','fromDate'),startData=field('dteFromDate__Data','hiddenfield','fromDate'),startDate=field('dteFromDate__Date','datefield','_fromDate__Date'),startTime=field('dteFromDate__Time','timefield','_fromDate__Time');
 const endParent=field('dteToDate','udc_datetimefield','toDate'),endData=field('dteToDate__Data','hiddenfield','toDate'),endDate=field('dteToDate__Date','datefield','_toDate__Date'),endTime=field('dteToDate__Time','timefield','_toDate__Time');
-for(const [parent,data] of [[startParent,startData],[endParent,endData]]){const base=parent.setValue.bind(parent);parent.setValue=v=>{base(v);if(v instanceof Date)data.setValue(`${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')} ${String(v.getHours()).padStart(2,'0')}:${String(v.getMinutes()).padStart(2,'0')}:00`);else data.setValue(v)}}
+for(const [parent,data] of [[startParent,startData],[endParent,endData]]){const base=parent.setValue.bind(parent);parent.setValue=v=>{base(v);if(scenario==='backing-empty')return;if(v instanceof Date)data.setValue(`${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')} ${String(v.getHours()).padStart(2,'0')}:${String(v.getMinutes()).padStart(2,'0')}:00`);else data.setValue(v)}}
 const simpleIds=[['txtSnImei','textfield','snImei'],['cdvDefectType','codeviewfieldx','defectType'],['cdvRepairedCode','codeviewfieldx','repairedCode'],['cdvDepartmentNew','codeviewfieldx','department'],['cdvAreaNew','codeviewfieldx','area'],['cdvLineCodeNew','codeviewfieldx','lineCode'],['cdvProdModel','codeviewfieldx','prodModel'],['cdvDefectCode','codeviewfieldx','defectCode']];
 const simple=Object.fromEntries(simpleIds.map(([id,xt,n])=>[id,field(id,xt,n)]));
 let activeStore=makeStore([]);
@@ -107,6 +107,16 @@ class Runtime3012Tests(unittest.TestCase):
         result = run_fixture('store-no-sn')
         self.assertFalse(result['ok'], result)
         self.assertIn('3012_QUERY_PERIOD_MISMATCH', result['error'])
+
+    def test_empty_hidden_extnet_datetime_is_initialized_before_physical_view(self):
+        # Production bug: visible dates change but parent.setValue does not
+        # populate the __Data backing input. Earlier fixtures assumed it did.
+        result = run_fixture('backing-empty')
+        self.assertTrue(result['ok'], result)
+        applied = result['out']['applied']
+        self.assertEqual(applied['dateFrom']['data']['raw'], '2026-01-24 00:00:00')
+        self.assertEqual(applied['dateTo']['data']['raw'], '2026-10-17 23:59:00')
+        self.assertTrue(result['out']['queryProof']['periodVerified'])
 
     def test_passive_wire_probe_requires_same_request_sn_dates_and_completion(self):
         expected={'from':'2026-01-24 00:00','to':'2026-10-17 23:59'}

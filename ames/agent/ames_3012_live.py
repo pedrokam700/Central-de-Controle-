@@ -91,6 +91,17 @@ async (cfg) => {
       return;
     }
     const raw=clean(previous);
+    if(!raw){
+      // In the live Ext.NET form the visible Date/Time pair may update while
+      // the hidden __Data field remains empty. An empty backing field is
+      // submitted as fromDate/toDate with no usable date; the previous mock
+      // always filled it, concealing this production-only regression.
+      const replacement=day+' '+hour+':00';
+      data.setValue(replacement);
+      emit(data,'change',replacement,previous);
+      data.checkChange?.();
+      return;
+    }
     const match=raw.match(/^(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})[ T](\d{1,2}:\d{2})(:\d{2})?$/);
     if(!match)return;
     const separator=raw.includes('T')?'T':' ';
@@ -114,6 +125,14 @@ async (cfg) => {
       parent.setValue(full); emit(parent,'change',full,parentOld); parent.checkChange?.();
     }
     const dateOld=date.getValue?.(); date.setValue(dateOnly); emit(date,'select',dateOnly); emit(date,'change',dateOnly,dateOld); date.checkChange?.(); emit(date,'blur');
+    try {
+      const input=date?.inputEl?.dom;
+      if(input){
+        input.value=clean(date.getRawValue?.())||dateValue;
+        input.dispatchEvent(new Event('input',{bubbles:true}));
+        input.dispatchEvent(new Event('change',{bubbles:true}));
+      }
+    } catch(e) {}
     const timeOld=time.getValue?.(); time.setValue(timeValue);
     if(!timeMatches(time,timeValue)&&typeof time.setRawValue==='function') time.setRawValue(timeValue);
     try {
