@@ -69,7 +69,10 @@ export function createReuseConsoleView(root,store,client){
       const empty=root.querySelector('.ames-empty-large');
       if(empty){
         empty.querySelector('h3').textContent=t('Classificação de reuso indisponível nesta revisão','Reuse classification unavailable for this revision');
-        empty.querySelector('p').textContent=snapshot.insight_status.message||t('Verifique as evidências locais antes de repetir a coleta.','Inspect local evidence before recollecting.');
+        const status=snapshot.insight_status;
+        const safeCode=/^LOCAL_INSIGHT_BUILD_FAILED_[A-Z0-9_]{1,60}$/.test(status.reason||'')?status.reason:'';
+        empty.querySelector('p').textContent=(status.message||t('Verifique as evidências locais antes de repetir a coleta.','Inspect local evidence before recollecting.'))
+          +(safeCode?' Código de diagnóstico: '+safeCode:'');
       }
     }
     // Preserve all detailed source KPI values and drill-downs, but collapse

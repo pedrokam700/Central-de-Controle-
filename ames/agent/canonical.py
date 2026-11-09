@@ -21,6 +21,16 @@ FIELDS = ('line','pcba_sn','current_pcba_sn','historical_pcba','current_pcba','p
 def encoded(value):
     return json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),default=str)
 def digest(value):return hashlib.sha256(encoded(value).encode()).hexdigest()
+def insight_failure_code(exc):
+    """Safe, actionable classifier failure site without leaking MES/SQLite data."""
+    frame=getattr(exc,'__traceback__',None)
+    while frame and frame.tb_next:frame=frame.tb_next
+    site=(frame.tb_frame.f_code.co_name if frame else 'unknown').upper()
+    site=''.join(c for c in site if c.isascii() and (c.isalnum() or c=='_'))[:32]
+    line=int(frame.tb_lineno) if frame else 0
+    kind=type(exc).__name__.upper()
+    kind=''.join(c for c in kind if c.isascii() and (c.isalnum() or c=='_'))[:20]
+    return f'LOCAL_INSIGHT_BUILD_FAILED_{kind}_{site}_L{line}'[:80]
 def cph(value):
     import re
     value=''.join(str(value or '').upper().split())
@@ -328,7 +338,7 @@ def export_revision(store,sid,line,insight_builder=None):
             except Exception as exc:
                 # Do not silently classify missing evidence as zero reuse.
                 # Never expose SNs, SQL, exception text or tokens in the API.
-                reason=('LOCAL_INSIGHT_BUILD_FAILED_'+type(exc).__name__.upper())[:80]
+                reason=insight_failure_code(exc)
                 insights={"schema":"ames-insights-v1","ready":False,
                           "reason":reason,
                           "message":"Falha na classificação local de reuso; dados MES salvos preservados.",

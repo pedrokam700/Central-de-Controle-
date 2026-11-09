@@ -51,6 +51,16 @@ class FakeStore:
 
 
 class FailedInsightRetryTests(unittest.TestCase):
+    def test_classifier_failure_code_does_not_include_sensitive_exception_text(self):
+        def fail_projection():
+            raise KeyError('A-MES-SENSITIVE-PCBA-SECRET')
+        try:
+            fail_projection()
+        except KeyError as exc:
+            code=canonical.insight_failure_code(exc)
+        self.assertIn('KEYERROR_FAIL_PROJECTION_L',code)
+        self.assertNotIn('SENSITIVE',code)
+
     def cached(self, ready):
         return {'projection_version': canonical.PROJECTION_VERSION,
                 'insights': {'schema': 'ames-insights-v1', 'ready': ready}}

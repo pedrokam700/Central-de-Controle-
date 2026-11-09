@@ -38,6 +38,13 @@ test('2114 partial state and 3022 MES/local phase remain visible',()=>{
   assert.match(html,/média MES 3100 ms/);
 });
 
+test('3022 local phase explains why the A-MES screen does not move',()=>{
+  const state=doneState({status:'complete',source_status:'COMPLETE'});
+  state.job.stage_progress['3022'].phase='local';
+  const html=collectionStatus(state);
+  assert.match(html,/processamento dos dados já coletados \(sem nova consulta A-MES\)/);
+});
+
 test('confirmed complete 2114 may report a real zero only with completed source evidence',()=>{
   const html=collectionStatus(doneState({
     status:'complete',source_status:'COMPLETE',requested_pcba_count:2,processed_pcba_count:2,pcba_error_count:0,pcba_no_data_count:2

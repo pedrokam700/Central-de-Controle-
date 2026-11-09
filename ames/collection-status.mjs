@@ -39,7 +39,7 @@ function stageDetail(stage,p){
   if(!p)return '';
   const bits=[`${p.current??'—'}/${p.total??'—'}`];
   if(p.status)bits.push(String(p.status));
-  if(p.phase)bits.push(p.phase==='mes'?'leitura A-MES':p.phase==='local'?'processamento local':String(p.phase));
+  if(p.phase)bits.push(p.phase==='mes'?'leitura A-MES':p.phase==='local'?'processamento dos dados já coletados (sem nova consulta A-MES)':String(p.phase));
   if(p.detail)bits.push(String(p.detail));
   return bits.join(' · ');
 }

@@ -194,8 +194,25 @@ async (cfg) => {
   const ajax=Ext.Ajax||null;
   const ajaxBefore=(_connection,options)=>{
     if(!options||typeof options!=='object')return;
+    // Some ExtJS installations submit the query as an HTML form instead of
+    // putting its filters in options.params/jsonData. Read only the exact SN
+    // and period field names from that form; never copy unrelated fields,
+    // credentials or session values into the query proof.
+    const allowed=new Set(['snimei','lotid','pcbasn','serialno',
+      'fromdate','datefrom','defecttimestart','dtefromdate','dtefromdatedata',
+      'todate','dateto','defecttimeend','dtetodate','dtetodatedata']);
+    const key=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    let form=options.form?.dom||options.form||null;
+    if(typeof form==='string')form=document.getElementById?.(form)||null;
+    const formFields=[];
+    try{
+      for(const field of Array.from(form?.elements||[]).slice(0,300)){
+        const name=String(field?.name||'');
+        if(allowed.has(key(name)))formFields.push({name,value:field.value});
+      }
+    }catch(e){}
     ajaxRequests.push({params:options.params,jsonData:options.jsonData,
-      rawData:options.rawData,url:options.url});
+      rawData:options.rawData,url:options.url,formFields});
     if(ajaxRequests.length>12)ajaxRequests.shift();
   };
   try{ajax?.on?.('beforerequest',ajaxBefore);}catch(e){}

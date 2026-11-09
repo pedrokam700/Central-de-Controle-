@@ -52,15 +52,16 @@ function validDate(){return /^2026-01-24 00:00:00$/.test(String(startData.getVal
 function execute(){
   if(scenario==='stale')return;
   const params={procstep:'x',snImei:simple.txtSnImei.getValue(),fromDate:startData.getValue(),toDate:endData.getValue(),unDisassemble:false};
-  const ajaxForm=scenario==='ajax-form-serialized'||scenario==='ajax-wrong-period'||scenario==='ajax-unrelated-sn';
+  const ajaxForm=scenario==='ajax-form-serialized'||scenario==='ajax-form-dom'||scenario==='ajax-form-dom-wrong-period'||scenario==='ajax-wrong-period'||scenario==='ajax-unrelated-sn';
   const before=ajaxForm?{procstep:'x',snImei:simple.txtSnImei.getValue()}:params;
   if(ajaxForm){
-    const dates=scenario==='ajax-wrong-period'
+    const dates=scenario==='ajax-wrong-period'||scenario==='ajax-form-dom-wrong-period'
       ?{'dteFromDate__Data':'2026-01-24 00:00:00','dteToDate__Data':'2026-03-31 23:59:00'}
       :{'dteFromDate__Data':startData.getValue(),'dteToDate__Data':endData.getValue()};
-    ajax.emit({params:{queryCondition:JSON.stringify({filters:[
-      {name:'snImei',value:scenario==='ajax-unrelated-sn'?'DIFFERENT-PCBA':simple.txtSnImei.getValue()},
-      ...Object.entries(dates).map(([name,value])=>({name,value}))]})}});
+    const formFields=[{name:'snImei',value:scenario==='ajax-unrelated-sn'?'DIFFERENT-PCBA':simple.txtSnImei.getValue()},
+      ...Object.entries(dates).map(([name,value])=>({name,value})),{name:'password',value:'must-not-leak'}];
+    if(scenario.startsWith('ajax-form-dom'))ajax.emit({form:{dom:{elements:formFields}}});
+    else ajax.emit({params:{queryCondition:JSON.stringify({filters:formFields.filter(f=>f.name!=='password')})}});
   }
   const rows=validDate()?[record({lotId:'002527TEST',defectCode:'X1',defectDesc:'x',repairCode:'R1',repairComment:'OK',repairTime:'2026-10-16 12:00:00',repairUser:'AT1'})]:[];
   if(scenario==='rebind'){
@@ -119,6 +120,20 @@ class Runtime3012Tests(unittest.TestCase):
         proof = result['out']['queryProof']
         self.assertEqual(proof['periodSource'], 'ajax_beforerequest')
         self.assertEqual(proof['actualWindow'], proof['requestedWindow'])
+
+    def test_ext_ajax_html_form_proves_period_without_unrelated_password(self):
+        result = run_fixture('ajax-form-dom')
+        self.assertTrue(result['ok'], result)
+        proof = result['out']['queryProof']
+        self.assertEqual(proof['periodSource'], 'ajax_beforerequest')
+        self.assertEqual(proof['actualWindow'], proof['requestedWindow'])
+        self.assertNotIn('must-not-leak', json.dumps(result))
+
+    def test_ext_ajax_html_form_with_wrong_period_is_blocked(self):
+        result = run_fixture('ajax-form-dom-wrong-period')
+        self.assertFalse(result['ok'], result)
+        self.assertIn('3012_QUERY_PERIOD_MISMATCH', result['error'])
+        self.assertIn('2026-03-31', result['error'])
 
     def test_outgoing_ajax_period_mismatch_fails_even_if_visible_dates_look_right(self):
         result = run_fixture('ajax-wrong-period')
