@@ -13,6 +13,13 @@ def test_operator_fields():
     assert operator_evidence({'Tran User Id':'BRM00021'})['operator_name'] is None
     assert operator_evidence({'Tran User Id':'BRM00021','Some Memo':'John Doe'})['operator_name'] is None
     assert operator_evidence({'Tran User Id':'BRM00021','Operator Name':'Ana','Operator Name__2':'Luiza'})['operator_name']=='Ana'
+    # The actual factory 3022 grid uses "Tran User", without "Name".
+    exact=operator_evidence({'Tran User Id':'BRM00081','Tran User':'MARIA ALINE DE MIRANDA',
+                             'Working Oper Code':'A6900','Tran Time':'2026-11-09 10:32:02'})
+    assert exact['operator_id']=='BRM00081'
+    assert exact['operator_name']=='MARIA ALINE DE MIRANDA'
+    assert exact['operator_fields']['operator_name']=='Tran User'
+    assert operator_evidence({'Tran User Id':'BRM00081','Unrelated Comment':'MARIA ALINE DE MIRANDA'})['operator_name'] is None
     print('PASS explicit 3022 AT name, no inferred person')
 
 if __name__=='__main__':test_operator_fields()

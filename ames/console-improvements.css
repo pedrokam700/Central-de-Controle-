@@ -127,6 +127,8 @@ body.dark .ames-legacy-shell .ames-health-agent.unknown{background:var(--ames-so
 [data-reuse-cohorts] .ames-component-comparison td small{display:block;margin-top:3px;color:#64748b;font-size:11px;line-height:1.45}
 [data-reuse-cohorts] .ames-reuse-at-cell{min-width:112px;max-width:185px;line-height:1.5}
 [data-reuse-cohorts] .ames-reuse-at-cell .ames-reuse-cell-clipped{display:block;max-width:175px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-reuse-cohorts] .ames-reuse-at-cell[data-reuse-at-field="technician"]{min-width:175px;max-width:245px}
+[data-reuse-cohorts] .ames-reuse-at-cell[data-reuse-at-field="technician"] .ames-reuse-cell-clipped{max-width:none;white-space:normal;overflow-wrap:anywhere}
 [data-reuse-cohorts] .ames-reuse-at-cell small{display:block;font-size:10px;white-space:nowrap;color:#53697b}
 [data-reuse-cohorts] .ames-reuse-unproven{font-size:11px;color:#63768b;font-style:italic}
 [data-reuse-cohorts] .ames-reuse-time-line{display:block;white-space:nowrap;font-variant-numeric:tabular-nums}

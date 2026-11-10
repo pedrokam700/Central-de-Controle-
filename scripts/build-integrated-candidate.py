@@ -128,7 +128,7 @@ def build(destination, development=False):
  # IMPORTANT: the CLEAN must preserve the same integrated Central shell produced
  # by build-static. Older packaging replaced offline-bootstrap with local-entry,
  # creating a second Console-only mini-app and a second auth/navigation context.
- if 'src="/Central-de-Controle-/offline-bootstrap.mjs?v=15.1.13.51"' not in html:
+ if 'src="/Central-de-Controle-/offline-bootstrap.mjs?v=15.1.13.52"' not in html:
   raise ValueError('Integrated Central bootstrap missing from CLEAN index')
  if 'src="/Central-de-Controle-/local-entry.mjs"' in html:
   raise ValueError('CLEAN regressed to standalone local Console entry')

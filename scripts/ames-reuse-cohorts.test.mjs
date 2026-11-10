@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildReuseCohorts,summarizeReusePopulation,boardHistSeqRecurrence,board2114Timeline} from '../ames/data/reuse-cohorts.mjs';
+import {renderComponentComparisonTable,compact2114Analysis,compact3012CandidateCells,enrichReuseRepairTechnicians,matchCached3012Repairs} from '../ames/console-reuse-cohorts.mjs';
 const event={pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-19 10:00:00',defect_key:'K1',record_id:'D1',product_key:'CPH1',failure_family:'DISPLAY'};
 function fixture(){return {source_id:'A',snapshot_id:'S',revision:2,line_id:'TAN10101',occurrences:[event],
  pcba_history:{records:[{pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-17 08:00:00',failure_family:'DISPLAY',record_id:'H1'},
@@ -131,4 +132,44 @@ test('duplicate same Hist Seq and missing sequence do not fabricate recurrence o
  assert.equal(timeline[0].repeat_exact_prior_count,0);
  assert.equal(timeline[1].history_order_proven,false);
  assert.equal(timeline[1].repeat_exact_prior_count,0);
+});
+
+test('component comparison replaces duplicate timestamp with genuine 2114 analysis, retaining time in source drilldown',()=>{
+ const oldDocument=globalThis.document;
+ globalThis.document={documentElement:{lang:'pt-BR'}};
+ try{
+  const obs=[
+   {pcba_sn:'PCB-A',source_view:'2114',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_type:'MainBoard',defect_time:'2026-10-22 08:07:30',hist_seq:1},
+   {pcba_sn:'PCB-A',source_view:'2114',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_type:'Phone Disassembly',defect_time:'2026-10-23 09:07:30',hist_seq:2},
+   {pcba_sn:'PCB-A',source_view:'3028',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_type:'Not a 2114 analysis',defect_time:'2026-11-09 10:00:38'},
+  ];
+  const groups=[{pcba_sn:'PCB-A',role:'investigated',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',recurrence_pcba_count:3,observations:obs}];
+  const html=renderComponentComparisonTable(groups);
+  assert.match(html,/Análise 2114/);
+  assert.doesNotMatch(html,/Horário 2114 \/ 3028/);
+  assert.match(html,/<td><span class="ames-reuse-time-line">MainBoard<\/span><span class="ames-reuse-time-line">Phone Disassembly<\/span><\/td>/);
+  assert.match(html,/22\/10\/2026 08:07:30/);
+  assert.match(html,/09\/11\/2026 10:00:38/);
+  assert.ok(!compact2114Analysis([obs[2]]).includes('Not a 2114 analysis'));
+  assert.match(compact2114Analysis([{source_view:'2114',defect_type:'<img src=x onerror=alert(1)>'}]),/&lt;img/);
+ }finally{globalThis.document=oldDocument;}
+});
+
+test('reuse technician names use only exact 3012 PCBA + repair ID supported by canonical 3022 fields',()=>{
+ const oldDocument=globalThis.document;
+ globalThis.document={documentElement:{lang:'pt-BR'}};
+ try{
+  const repairs=[{pcba_sn:'PCB-A',repair_user:'BRM00081',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_time:'2026-11-09 10:00:38'}];
+  const events=[{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{operator_id:'BRM00081',operator_name:'MARIA ALINE DE MIRANDA'}}}}];
+  const named=enrichReuseRepairTechnicians(repairs,events);
+  assert.equal(named[0].repair_technician_name,'MARIA ALINE DE MIRANDA');
+  assert.match(compact3012CandidateCells(named).technician,/MARIA ALINE DE MIRANDA \(BRM00081\)/);
+  assert.equal(repairs[0].repair_technician_name,undefined,'original 3012 source remains immutable');
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{...events[0],pcba_sn:'PCB-B'}])[0].repair_technician_name,null);
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{provenance:{adapter:{operator_evidence:{operator_id:'BRM00081',operator_name:'UNSCOPED'}}}}])[0].repair_technician_name,null);
+  assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{operator_id:'BRM00081',operator_name:'OTHER PERSON'}}}}])[0].repair_technician_name,null);
+  assert.match(compact3012CandidateCells(enrichReuseRepairTechnicians(repairs,[])).technician,/BRM00081/);
+  const matching=matchCached3012Repairs([{pcba_sn:'PCB-A',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception'}],repairs);
+  assert.equal(matching.length,1,'3012 exact candidate still resolves without altered matching contract');
+ }finally{globalThis.document=oldDocument;}
 });

@@ -13,7 +13,7 @@ const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(proces
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'central-nav-'));
 execFileSync(process.execPath,['scripts/build-static.mjs'],{env:{...process.env,CENTRAL_STATIC_OUT:tmp},stdio:'pipe'});
 const deployedIndex=fs.readFileSync(path.join(tmp,'Central-de-Controle-/index.html'),'utf8');
-assert.match(deployedIndex,/offline-bootstrap\.mjs\?v=15\.1\.13\.51/,'static Central must keep integrated bootstrap');
+assert.match(deployedIndex,/offline-bootstrap\.mjs\?v=15\.1\.13\.52/,'static Central must keep integrated bootstrap');
 assert.doesNotMatch(deployedIndex,/src="\/Central-de-Controle-\/local-entry\.mjs"/,'static Central must not boot standalone Console');
 const packager=fs.readFileSync('scripts/build-integrated-candidate.py','utf8');
 assert.doesNotMatch(packager,/html=html\.replace\([^\n]*local-entry\.mjs/,'CLEAN packager must not replace integrated bootstrap');
