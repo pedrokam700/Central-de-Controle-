@@ -96,6 +96,37 @@ def install(a, BaseHandler, canonical):
             fallback_chunk_days=max(1, int(a.CONFIG.get("3012_sn_chunk_days", 90) or 90)),
         )
 
+    def attach_repair_candidates(result, rows):
+        """Keep same-PCBA 3012 evidence visible without asserting an occurrence match."""
+        by_pcba = {}
+        for row in rows:
+            by_pcba.setdefault(str(row.get("pcba_sn") or ""), []).append(row)
+        for material in (result.get("trace_3074") or {}).get("reused_components") or []:
+            for evidence in material.get("previous_pcba_evidence") or []:
+                pcba = str(evidence.get("pcba_sn") or "")
+                evidence["repair_evidence_3012"] = [
+                    {**row, "source_view": "3012", "association": "same_pcba_candidate"}
+                    for row in by_pcba.get(pcba, [])
+                ]
+
+    def local_repair_history(targets):
+        """Read saved rows only; never certify a failed MES query via local cache."""
+        rows_by_key = {}
+        capped = []
+        for target in targets:
+            # Bound the result of a degraded live lookup. The full local history
+            # remains available through /api/v1/local/sn and /3012/history.
+            saved = repair_3012.history(a.STORE, sn=target, limit=201)
+            if len(saved) > 200:
+                capped.append(target)
+            for row in saved[:200]:
+                key = str(row.get("row_key") or "").strip()
+                if key:
+                    rows_by_key[key] = row
+        rows = list(rows_by_key.values())
+        rows.sort(key=lambda row: str(row.get("defect_time") or row.get("repair_time") or ""), reverse=True)
+        return rows, capped
+
     def run_sn_lookup(job_id, cfg):
         sn = str(cfg.get("sn") or "").strip()
         include_3022 = bool(cfg.get("include_3022", True))
@@ -149,6 +180,7 @@ def install(a, BaseHandler, canonical):
                 start, end = individual_window(result)
                 job = a._job_update(job_id, stage="3012", progress=88, message=f"3012 · histórico/cache de {len(targets)} PCBA(s)")
                 a._persist_job(job)
+                failed_3012 = False
                 try:
                     repair_3012_capture.begin(a.STORE, job_id, "sn_lookup",
                         {"sn":sn,"include_3012":include_3012,"include_3022":include_3022},
@@ -162,23 +194,40 @@ def install(a, BaseHandler, canonical):
                         repair_3012_capture.fail(a.STORE,job_id)
                         raise
                     result["trace_3012"] = payload
-                    by_pcba = {}
-                    for row in payload.get("rows") or []:
-                        by_pcba.setdefault(str(row.get("pcba_sn") or ""), []).append(row)
-                    for material in (result.get("trace_3074") or {}).get("reused_components") or []:
-                        for evidence in material.get("previous_pcba_evidence") or []:
-                            pcba = str(evidence.get("pcba_sn") or "")
-                            evidence["repair_evidence_3012"] = [
-                                {**r, "source_view": "3012", "association": "same_pcba_candidate"}
-                                for r in by_pcba.get(pcba, [])
-                            ]
+                    attach_repair_candidates(result, payload.get("rows") or [])
                     summary = dict(result.get("summary") or {})
                     summary["3012_rows"] = payload.get("records_count", 0)
                     summary["3012_cache_covered"] = (payload.get("cache") or {}).get("covered", 0)
                     summary["3012_ranges_queried"] = (payload.get("cache") or {}).get("queried", 0)
                     result["summary"] = summary
                 except Exception as exc:
+                    failed_3012 = True
                     warnings.append(f"3012 ainda não validada neste posto: {type(exc).__name__}: {exc}")
+                    try:
+                        saved, capped = local_repair_history(targets)
+                        result["trace_3012"] = {
+                            "source": "LOCAL_SQLITE_3012_UNVERIFIED",
+                            "status": "partial" if saved else "error",
+                            "error": "3012_LIVE_QUERY_UNVERIFIED",
+                            "rows": saved,
+                            "records_count": len(saved) if saved else None,
+                            "query": {"sns": targets, "start_at": start.isoformat(), "end_at": end.isoformat()},
+                        }
+                        if saved:
+                            attach_repair_candidates(result, saved)
+                            warnings.append(
+                                f"3012: exibindo {len(saved)} registro(s) anteriores do SQLite local; "
+                                "a consulta atual ao A-MES falhou e a cobertura histórica NÃO está comprovada."
+                            )
+                        if capped:
+                            warnings.append(
+                                "3012: histórico local limitado a 200 registros por PCBA nesta resposta; "
+                                "consulte a base local para ver o restante."
+                            )
+                    except Exception as cache_exc:
+                        result["trace_3012"] = {"source": "LOCAL_SQLITE_3012_UNAVAILABLE", "status": "error",
+                                                "error": "3012_LIVE_AND_CACHE_UNAVAILABLE", "rows": []}
+                        warnings.append(f"3012: leitura do histórico local falhou: {type(cache_exc).__name__}")
             if include_3022:
                 # Recalculate after 3012 has yielded its actual Defect Time
                 # (not Repair Time) and uniquely match PCBA + defect code.
@@ -188,7 +237,9 @@ def install(a, BaseHandler, canonical):
                 except Exception as exc:
                     warnings.append(f"3022: correlação após 3012 indisponível: {type(exc).__name__}: {exc}")
             result["warnings"] = warnings
-            a._persist_job(a._job_update(job_id, status="done", stage="done", progress=100, finished_at=a.utc_now(), message=f"Consulta individual concluída · {sn}", result=result))
+            message = (f"Consulta parcial · 3012 não comprovada · {sn}" if include_3012 and failed_3012
+                       else f"Consulta individual concluída · {sn}")
+            a._persist_job(a._job_update(job_id, status="done", stage="done", progress=100, finished_at=a.utc_now(), message=message, result=result))
             a.STORE.record_audit(
                 "SN_LOOKUP",
                 workstation=a.WORKSTATION,

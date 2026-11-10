@@ -61,6 +61,28 @@ test('failed 3074 live query does not erase 2114 evidence or report zero materia
   assert.equal(provenance.find(r=>r.view==='3074').observed_count,null);
 });
 
+test('failed 3012 with legacy SQLite repairs is partial, not a live success or an empty result',()=>{
+  const result=lookup();
+  const row={row_key:'CACHE-OLD',pcba_sn:'PCBA-A',defect_code:'F1',
+    defect_time:'2026-10-17 10:30:00',repair_time:'2026-10-17 12:30:00',
+    repair_comment:'comentário local anterior'};
+  result.trace_3012={status:'partial',error:'3012_LIVE_QUERY_UNVERIFIED',
+    source:'LOCAL_SQLITE_3012_UNVERIFIED',rows:[row]};
+  const model=buildLiveSnForensics(result);
+  assert.equal(model.source_states['3012'],'partial');
+  assert.equal(model.repairs.length,1);
+  const provenance=snLiveSourceProvenance(result,model).find(r=>r.view==='3012');
+  assert.equal(provenance.state,'partial');
+  assert.equal(provenance.observed_count,1);
+  assert.equal(provenance.has_error,true);
+  assert.equal(provenance.period_start,null,'requested window is not MES-proven coverage');
+  assert.equal(model.source_states['2114'],'ok','2114 source remains independent');
+
+  const empty={...result,trace_3012:{status:'error',error:'3012_LIVE_QUERY_UNVERIFIED',rows:[]}};
+  assert.equal(buildLiveSnForensics(empty).source_states['3012'],'error');
+  assert.notEqual(buildLiveSnForensics(empty).source_states['3012'],'zero');
+});
+
 test('3074 zero requires direct query proof; legacy empty arrays are incomplete',()=>{
   const old=lookup();
   old.trace_3074={status:'complete',reused_components:[],component_usage:[]};
@@ -104,6 +126,7 @@ test('live SN UI adds the source details without invoking a new MES request',()=
   assert.match(summary,/countVisible\?model\.materials\.length:'—'/);
   assert.match(specialized,/queryConfirmed3074/);
   assert.match(specialized,/fullyCollected3074/);
+  assert.match(specialized,/data-sn-3012-partial/,'3012 live failure must be prominent in SN lookup');
 });
 
 test('SN operator summary never presents missing or failed 3074/3022/3012 as confirmed zero',()=>{
