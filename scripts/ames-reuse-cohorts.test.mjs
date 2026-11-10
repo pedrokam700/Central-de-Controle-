@@ -159,16 +159,16 @@ test('reuse technician names use only exact 3012 PCBA + repair ID supported by c
  const oldDocument=globalThis.document;
  globalThis.document={documentElement:{lang:'pt-BR'}};
  try{
-  const repairs=[{pcba_sn:'PCB-A',repair_user:'BRM00081',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_time:'2026-11-09 10:00:38'}];
-  const events=[{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{operator_id:'BRM00081',operator_name:'MARIA ALINE DE MIRANDA'}}}}];
+  const repairs=[{pcba_sn:'PCB-A',repair_user:'BRM00999',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_time:'2026-11-09 10:00:38'}];
+  const events=[{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{operator_id:'BRM00999',operator_name:'TECNICA MES EXEMPLO'}}}}];
   const named=enrichReuseRepairTechnicians(repairs,events);
-  assert.equal(named[0].repair_technician_name,'MARIA ALINE DE MIRANDA');
-  assert.match(compact3012CandidateCells(named).technician,/MARIA ALINE DE MIRANDA \(BRM00081\)/);
+  assert.equal(named[0].repair_technician_name,'TECNICA MES EXEMPLO');
+  assert.match(compact3012CandidateCells(named).technician,/TECNICA MES EXEMPLO \(BRM00999\)/);
   assert.equal(repairs[0].repair_technician_name,undefined,'original 3012 source remains immutable');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{...events[0],pcba_sn:'PCB-B'}])[0].repair_technician_name,null);
-  assert.equal(enrichReuseRepairTechnicians(repairs,[{provenance:{adapter:{operator_evidence:{operator_id:'BRM00081',operator_name:'UNSCOPED'}}}}])[0].repair_technician_name,null);
-  assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{operator_id:'BRM00081',operator_name:'OTHER PERSON'}}}}])[0].repair_technician_name,null);
-  assert.match(compact3012CandidateCells(enrichReuseRepairTechnicians(repairs,[])).technician,/BRM00081/);
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{provenance:{adapter:{operator_evidence:{operator_id:'BRM00999',operator_name:'UNSCOPED'}}}}])[0].repair_technician_name,null);
+  assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{operator_id:'BRM00999',operator_name:'OTHER PERSON'}}}}])[0].repair_technician_name,null);
+  assert.match(compact3012CandidateCells(enrichReuseRepairTechnicians(repairs,[])).technician,/BRM00999/);
   const matching=matchCached3012Repairs([{pcba_sn:'PCB-A',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception'}],repairs);
   assert.equal(matching.length,1,'3012 exact candidate still resolves without altered matching contract');
  }finally{globalThis.document=oldDocument;}
