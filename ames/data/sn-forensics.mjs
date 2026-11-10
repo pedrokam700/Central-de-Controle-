@@ -197,6 +197,47 @@ function liveBindings(trace,item,currentPcba){
   for(const r of trace?.query?.rows||[])if(same(r.Barcode,item.item_sn))out.push(binding(r,currentPcba,true));
   return uniq(out);
 }
+// The latest 3074 PCBA batch remains an investigative reference after its
+// materials have become N.  It is NOT the current physical mounting, and
+// only a batch anchored by the PCBA's own 3074 row may supply this fallback.
+// Reuse must still be independently proven by querying the Material SN.
+export function lastRecordedMaterialReference(result={}){
+  if(result.detected_type!=='PCBA')return null;
+  const trace=result.trace_3074||{},selection=trace.material_selection||{};
+  if(['current_mounting_new_cycle','current_mounting_unanchored'].includes(selection.status)||
+     selection.cycle_state==='current_same_cycle'||
+     selection.basis==='ambiguous_current_y'||
+     (trace.candidate_components||[]).some(item=>text(item.iss_status_now).toUpperCase()==='Y'))return null;
+  const recorded=trace.mounting_views?.last_recorded;
+  const last=recorded?.status==='historical_batch_observed'?recorded:
+    trace.mounting_views?.last_individual_links;
+  if(!['historical_batch_observed','last_individual_links_observed'].includes(last?.status)||
+     !Array.isArray(last.components)||!last.components.length)return null;
+  const audited=new Map((last.component_usage||[]).map(row=>[text(row.item_sn),row]));
+  const components=uniq(last.components.map(row=>text(row.item_sn)).filter(Boolean));
+  const materials=components.map(itemSn=>{
+    const part=last.components.find(row=>text(row.item_sn)===itemSn),audit=audited.get(itemSn);
+    if(!audit||audit.is_reused!==true||audit.current_pcba_link_proven!==true||
+      audit.source_partial||!Array.isArray(audit.other_pcbas)||!audit.other_pcbas.length)return null;
+    const previous=audit.other_pcbas.map(text).filter(pcba=>pcba&&pcba!==text(result.sn));
+    if(!previous.length||!Number.isInteger(audit.known_use_count_min)||audit.known_use_count_min<2)return null;
+    const history=(audit.previous_pcba_failures_2114||[])
+      .filter(row=>previous.includes(text(row.pcba_sn)))
+      .flatMap(row=>(row.failures||[]).map(failure=>({pcba_sn:row.pcba_sn,
+        relation:failure.relation_to_board_reference||'SEM_HISTORICO',
+        failure:failure,source:'2114'})));
+    return {item_sn:itemSn,item_type:part.item_type||audit.item_type,
+      known_use_count:audit.known_use_count_min,reuse_count:previous.length,
+      previous_pcbas:previous,history,
+      current_pcba_confirmed:true,is_reused:true,
+      reference_scope:'last_recorded_3074',
+      bind_time_utc:part.bind_time_utc,unbind_time_utc:part.unbind_time_utc};
+  }).filter(Boolean);
+  return {scope:'last_recorded_3074',batch_id:last.batch_id||null,
+    evidence_basis:last.basis||null,reference_time:last.pcba_last_bind_utc||null,
+    materials,checked:components.length,
+    incomplete:components.length-(last.component_usage||[]).filter(row=>row?.is_reused!==null&&row?.is_reused!==undefined).length};
+}
 function localBindings(item){
   const raw=rawObject(item);
   return [binding(item,item.current_pcba_sn),...(raw.all_pcba_history||[]).map(r=>binding(r,r.pcba_sn))];
@@ -339,9 +380,21 @@ export function buildLiveSnForensics(result={}){
   const chosen=['selected_at_latest_2114_candidate','current_mounting_new_cycle',
     'current_mounting_unanchored'].includes(trace3074?.material_selection?.status);
   const reused=new Map((trace3074?.reused_components||[]).map(item=>[text(item.item_sn),item]));
-  const scopedItems=chosen?(trace3074?.component_usage||[]):(trace3074?.reused_components||[]);
+  const lastReference=lastRecordedMaterialReference(result);
+  // If no current Y mounting is proven, use the last *board-batch* links for
+  // the operator's historical reference.  An old N link must not vanish from
+  // the SN summary merely because it is no longer an active Y link.  Never
+  // apply this fallback to a proven current Y mounting/new cycle.
+  const referenceIsLast=Boolean(lastReference?.materials.length);
+  const scopedItems=referenceIsLast?lastReference.materials:
+    chosen?(trace3074?.component_usage||[]):(trace3074?.reused_components||[]);
   const materials=scopedItems.map(sourceItem=>{
-    const item=chosen?{...(reused.get(text(sourceItem.item_sn))||{}),...sourceItem}:sourceItem;
+    const item=referenceIsLast?{
+      ...sourceItem,
+      previous_pcba_evidence:(sourceItem.history||[]).map(h=>({
+        pcba_sn:h.pcba_sn,relation:h.relation,history:h.failure,
+      })),
+    }:chosen?{...(reused.get(text(sourceItem.item_sn))||{}),...sourceItem}:sourceItem;
     const previous=uniq([...(item.previous_pcbas||[]),...(item.previous_pcba_evidence||[]).map(ev=>ev.pcba_sn)].map(text).filter(Boolean));
     const grouped=new Map();
     for(const ev of item.previous_pcba_evidence||[]){const p=text(ev.pcba_sn);if(!p)continue;if(!grouped.has(p))grouped.set(p,[]);grouped.get(p).push(ev);}
@@ -354,7 +407,7 @@ export function buildLiveSnForensics(result={}){
       if(rawRows.length){const seed=evidence[0]||{};for(const row of rawRows){history.push({pcba_sn:pcba,relation_source:'aggregate',relation:seed.relation||item.relation_to_current_failure||'HISTORICO_PCBA',reason:seed.reason||'Histórico 2114 retornado diretamente para esta PCBA anterior',failure:failureEntry(row,{pcba,repairs,process,source:'2114-raw'})});}}
       else history.push({pcba_sn:pcba,relation:item.relation_to_current_failure||'SEM_HISTORICO',reason:null,failure:null,repairs:repairsFor(repairs,{pcba}),analysis_event:preferredAnalysisEvent(process,pcba)});
     }
-    return {bindings:liveBindings(trace3074,item,queryPcba),item_sn:item.item_sn||null,item_type:item.item_type||null,known_use_count:item.known_use_count??null,reuse_count:item.reuse_count??null,relation:item.relation_to_current_failure||null,previous_pcbas:previous,history,error:item.error||null,source:'3074',raw:item};
+    return {bindings:liveBindings(trace3074,item,queryPcba),item_sn:item.item_sn||null,item_type:item.item_type||null,known_use_count:item.known_use_count??null,reuse_count:item.reuse_count??null,relation:item.relation_to_current_failure||null,previous_pcbas:previous,history,error:item.error||null,source:'3074',reference_scope:referenceIsLast?'last_recorded_3074':'selected_mounting',raw:item};
   });
   const rawHistoryCount=[...rawByPcba.values()].reduce((sum,rows)=>sum+rows.length,0);
   const gridRows=trace3074?.query?.rows;
@@ -377,6 +430,8 @@ export function buildLiveSnForensics(result={}){
   };
   const model={board_failure_reference:currentCycleUnfailed?lastKnown:null,
     board_reference_is_historical:currentCycleUnfailed,
+    material_reference_scope:referenceIsLast?'last_recorded_3074':'selected_mounting',
+    last_recorded_reference:referenceIsLast?lastReference:null,
     material_selection:trace3074?.material_selection||null,
     candidate_materials:(trace3074?.candidate_components||[]).map(row=>({item_sn:row.item_sn,item_type:row.item_type,
       temporal_reason:row.temporal_reason||'insufficient_binding_evidence',source:'3074'})),

@@ -59,7 +59,8 @@ function forensicView(result){
   const model=buildLiveSnForensics(result);
   const state3074=model.source_states['3074'];
   const countProven=provenPcbaReuseCount(result,state3074);
-  const observedPositive=result.detected_type==='PCBA'&&['ok','partial'].includes(state3074)&&model.materials.length>0;
+  const observedPositive=result.detected_type==='PCBA'&&
+    (['ok','partial'].includes(state3074)||model.material_reference_scope==='last_recorded_3074')&&model.materials.length>0;
   const countVisible=countProven||observedPositive;
   const materialEmpty=countProven||state3074==='partial'
     ?t('Ausência nesta resposta não prova zero global.','Absence in this response does not prove a global zero.')
@@ -74,7 +75,9 @@ export function operatorSummary(result,rows){
   const current=has2114?trace2114.current_failure||null:null,previous=has2114?trace2114.previous_failures:[],
     observedReused=Array.isArray(trace3074?.reused_components)?trace3074.reused_components:[],
     hasObservedReused=result.detected_type==='PCBA'&&['ok','partial'].includes(model.source_states['3074'])&&observedReused.length>0,
-    canShowReused=has3074||hasObservedReused,reused=canShowReused?observedReused:[];
+    lastRecorded=model.material_reference_scope==='last_recorded_3074',
+    canShowReused=has3074||hasObservedReused||lastRecorded,
+    reused=lastRecorded?model.materials:canShowReused?observedReused:[];
   const contexts=result.local_snapshot?.process_contexts||[];
   const confirmed=state=>['ok','zero'].includes(state);
   const buckets=[trace3022?.process_passages,trace3022?.rows,trace3022?.operator_evidence].filter(Array.isArray);
@@ -99,11 +102,20 @@ export function operatorSummary(result,rows){
     :materialState==='not_collected'?t('3074 não coletada: não é possível concluir sobre reuso.','3074 not collected: reuse cannot be determined.')
     :t('3074 sem cobertura integral de reuso para esta montagem; zero não comprovado.','3074 lacks complete reuse coverage for this assembly; zero unproven.');
   const previousPcba=new Set(reused.flatMap(item=>item.previous_pcbas||[]).filter(Boolean));
-  const sameFailure=reused.filter(item=>item.relation_to_current_failure==='MESMA_FALHA').length;
+  const sameFailure=reused.filter(item=>lastRecorded?
+    (item.history||[]).some(h=>h.relation==='MESMA_FALHA'):
+    item.relation_to_current_failure==='MESMA_FALHA').length;
   const currentDesc=current?value(current,'Defect Description','defect_desc')||t('Descrição não informada','Description not provided'):'';
   const currentTime=current?value(current,'Defect Time','defect_time'):'';
   const currentMode=current?value(current,'Manual/Automatic','manual_or_auto'):'';
-  const materialPreview=reused.slice(0,4).map(item=>{const raw=String(value(item,'item_type')||t('Material','Material')),label=componentLabel(raw,document.documentElement.lang)||raw,detail=raw!==label?`${raw} · ${relationLabel(item.relation_to_current_failure)}`:relationLabel(item.relation_to_current_failure);return `<li><b>${esc(label)}</b><span>${esc(value(item,'item_sn')||'—')}</span><small>${esc(detail)}</small></li>`;}).join('');
+  const materialPreview=reused.slice(0,4).map(item=>{
+    const raw=String(value(item,'item_type')||t('Material','Material'));
+    const label=componentLabel(raw,document.documentElement.lang)||raw;
+    const relation=lastRecorded?(item.history||[]).some(h=>h.relation==='MESMA_FALHA')?
+      'MESMA_FALHA':'SEM_HISTORICO':item.relation_to_current_failure;
+    const detail=raw!==label?`${raw} · ${relationLabel(relation)}`:relationLabel(relation);
+    return `<li><b>${esc(label)}</b><span>${esc(value(item,'item_sn')||'—')}</span><small>${esc(detail)}</small></li>`;
+  }).join('');
   const production=contexts.map(trustedProductionEvidence).find(item=>item.trusted)||trustedProductionEvidence({});
   const station=production.station||'—',eventTime=production.event_time||null,productionShift=production.shift||'—';
   const nav=(tab,label,value)=>`<div role="button" tabindex="0" data-sn-open-tab="${tab}" aria-label="${esc(label)}"><small>${esc(label)}</small><b>${esc(value)}</b></div>`;
@@ -111,10 +123,22 @@ export function operatorSummary(result,rows){
 }
 function activateTab(shell,id){for(const button of shell.querySelectorAll('[data-sn-tab]')){const active=button.dataset.snTab===id;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));}for(const panel of shell.querySelectorAll('[data-sn-tab-panel]'))panel.hidden=panel.dataset.snTabPanel!==id;}
 function openSummaryTarget(shell,target){const id=target?.dataset?.snOpenTab;if(!id)return;activateTab(shell,id);queueMicrotask(()=>shell.querySelector(`[data-sn-tab-panel="${id}"]`)?.scrollIntoView?.({block:'start',behavior:'smooth'}));}
+function lastRecordedReferenceNote(result){
+  const model=buildLiveSnForensics(result);
+  if(model.material_reference_scope!=='last_recorded_3074')return '';
+  const checked=model.last_recorded_reference?.checked||0;
+  return `<p class="notice warn" data-sn-last-recorded-reference>${t(
+    'Último vínculo/lote 3074 conhecido, sem nova montagem Y comprovada.',
+    'Last known 3074 link/batch, without a proven new Y mounting.')} ${model.materials.length}/${checked} ${t(
+    'componentes reutilizados identificados neste vínculo histórico. Isso não prova que continuam fisicamente instalados; uma nova montagem comprovada passa a ser a referência.',
+    'reused components identified on this historical link. Their physical presence now is unproven; a newly proven mounting becomes the reference.')}</p>`;
+}
 function organizeResult(root,result,repairSection,rows){
   const host=root.querySelector('[data-sn-result]');if(!host||host.querySelector('[data-sn-operator-shell]'))return;const summary=host.querySelector('.ames-sn-summary'),investigation=host.querySelector('.ames-investigation-grid');const currentFailure=investigation?.children?.[0]||null,previousFailures=investigation?.children?.[1]||null;const process=host.querySelector('.ames-process-evidence');const directPanels=[...host.children].filter(node=>node.matches?.('.mes-context-panel'));const materials=directPanels.find(node=>node!==process&&node!==repairSection&&!node.querySelector('h3')?.textContent?.includes('Operador'))||null;const operator=directPanels.find(node=>node!==process&&node!==materials&&node!==repairSection&&node.querySelector('h3')?.textContent?.includes('Operador'))||null;const warnings=[...host.children].filter(node=>node.matches?.('.notice'));
   const shell=document.createElement('section');shell.dataset.snOperatorShell='1';shell.className='ames-sn-operator-shell';shell.setAttribute('data-no-i18n','');shell.innerHTML=`${operatorSummary(result,rows)}<nav class="ames-sn-tabs" role="tablist" aria-label="${t('Detalhes da consulta por SN','SN query details')}"><button type="button" class="active" role="tab" aria-selected="true" data-sn-tab="story">${t('História completa','Complete story')}</button><button type="button" role="tab" aria-selected="false" data-sn-tab="summary">${t('Resumo','Summary')}</button><button type="button" role="tab" aria-selected="false" data-sn-tab="failure">${t('Falha da PCBA','PCBA failure')}</button><button type="button" role="tab" aria-selected="false" data-sn-tab="materials">${t('Materiais 2º+ uso','2nd+ materials')}</button><button type="button" role="tab" aria-selected="false" data-sn-tab="history">${t('Histórico 2114','2114 history')}</button><button type="button" role="tab" aria-selected="false" data-sn-tab="process">${t('Processo 3022','3022 process')}</button><button type="button" role="tab" aria-selected="false" data-sn-tab="repair">${t('Reparo 3012','3012 repair')}</button><button type="button" role="tab" aria-selected="false" data-sn-tab="technical">${t('Técnico','Technical')}</button></nav>`;
-  const story=document.createElement('div');story.dataset.snTabPanel='story';story.className='ames-sn-tab-panel ames-sn-forensic-panel';story.innerHTML=forensicView(result);
+  const note=lastRecordedReferenceNote(result);
+  if(note)shell.querySelector('.ames-sn-tabs')?.insertAdjacentHTML('beforebegin',note);
+  const story=document.createElement('div');story.dataset.snTabPanel='story';story.className='ames-sn-tab-panel ames-sn-forensic-panel';story.innerHTML=note+forensicView(result);
   const summaryPanel=document.createElement('div');summaryPanel.dataset.snTabPanel='summary';summaryPanel.className='ames-sn-tab-panel ames-sn-summary-panel';summaryPanel.innerHTML=`<div class="ames-sn-digest-grid">${operatorSummary(result,rows).split('<div class="ames-sn-digest-grid">')[1]?.replace(/<\/div>\s*$/,'')||''}</div>`;
   const failurePanel=document.createElement('div');failurePanel.dataset.snTabPanel='failure';failurePanel.className='ames-sn-tab-panel';if(currentFailure)failurePanel.append(currentFailure);else failurePanel.innerHTML=emptyCard(t('Falha da PCBA','PCBA failure'),t('Sem evidência 2114 disponível.','No 2114 evidence available.'));
   const materialsPanel=document.createElement('div');materialsPanel.dataset.snTabPanel='materials';materialsPanel.className='ames-sn-tab-panel';if(materials)materialsPanel.append(materials);else materialsPanel.innerHTML=emptyCard(t('Materiais 2º+ uso','2nd+ materials'),t('Sem evidência 3074 disponível.','No 3074 evidence available.'));

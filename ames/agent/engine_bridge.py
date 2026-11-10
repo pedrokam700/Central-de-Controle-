@@ -898,10 +898,20 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             # PCBA batch* first. The old global cap of eight was excluding
             # valid parts from the operator's last-assembly investigation.
             # Keep a separate small audit budget for older, unrelated cycles.
-            latest = mounting_views.get('last_recorded') or {}
+            recorded = mounting_views.get('last_recorded') or {}
+            individual = mounting_views.get('last_individual_links') or {}
+            # Some 3074 PCBA queries contain only component rows, with NO
+            # self-PCBA Batch Id.  Keep the latest individually observed links
+            # as a separate historical reference; never promote them into a
+            # proven current mounting or a proven full PCBA bill of materials.
+            latest = (recorded if recorded.get('status') == 'historical_batch_observed'
+                      else individual if selection['state'] not in (
+                          'current_new_cycle', 'current_same_cycle', 'current_cycle_unanchored')
+                          and individual.get('status') == 'last_individual_links_observed'
+                      else recorded)
             latest_items = latest.get('components') or []
             audited_latest, _ = select_unexamined_3074_materials(
-                latest_items, component_query_cache.keys(), limit=len(latest_items))
+                latest_items, [], limit=len(latest_items))
             older_audit, audit_total = select_unexamined_3074_materials(
                 raw_components, [*component_query_cache.keys(),
                                  *(x.get('item_sn') for x in audited_latest)], limit=8)
@@ -924,9 +934,12 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                     if line_callback:
                         line_callback('3074', min(74, 55 + int(15*index/max(1, len(audit_candidates)))),
                                       f'Historico 3074 {index}/{len(audit_candidates)} · {material_sn}')
-                    bind_3074_target_page(tela3074, nav.ensure_3074())
-                    item_query = tela3074.consultar(material_sn)
-                    component_query_cache[material_sn] = item_query
+                    if material_sn in component_query_cache:
+                        item_query = component_query_cache[material_sn]
+                    else:
+                        bind_3074_target_page(tela3074, nav.ensure_3074())
+                        item_query = tela3074.consultar(material_sn)
+                        component_query_cache[material_sn] = item_query
                     timeline = temporal3074.historico_completo_pcbas_do_item(
                         item_query.get('rows') or [])
                     all_links = timeline.get('associations') or []

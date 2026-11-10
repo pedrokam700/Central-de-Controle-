@@ -314,6 +314,58 @@ def ultima_montagem_registrada(rows, pcba_sn):
             'current_mounting_proven': False, 'failure_mounting_proven': False}
 
 
+def ultimos_vinculos_individuais(rows, pcba_sn):
+    """Last known component links when 3074 omits the PCBA's own batch row.
+
+    A common explicit Batch Id groups observed links, but without the PCBA
+    self-row it does NOT prove a complete mounting. The material's independent
+    3074 reverse query must confirm every claimed reuse afterwards.
+    """
+    observed = []
+    for row in rows or []:
+        if not isinstance(row, dict) or not _is_component_row(row, pcba_sn):
+            continue
+        bound = grid_time_to_utc(row.get('Bind Time'))
+        if bound is None:
+            continue
+        unbound = grid_time_to_utc(row.get('Unbind Time'))
+        if unbound is not None and unbound < bound:
+            continue
+        observed.append((bound, str(row.get('Batch Id') or '').strip(), {
+            'item_sn': normalizar_sn(row.get('Barcode')),
+            'item_type': str(row.get('Sn Type') or '').strip(),
+            'bind_time_utc': _iso(bound), 'unbind_time_utc': _iso(unbound),
+            'iss_status_now': str(row.get('Iss Status') or '').strip().upper(),
+            'binding_operation': str(row.get('Operation') or '').strip(),
+            'row': row,
+        }))
+    if not observed:
+        return {'status': 'unverified', 'basis': 'no_timestamped_component_links',
+                'components': [], 'candidates': []}
+    newest, latest_batch, _ = max(observed, key=lambda entry: entry[0])
+    # No common batch? The most recent single link is still an observed link,
+    # but we must not combine it with arbitrary older physical mountings.
+    selected = [entry for entry in observed if entry[1] == latest_batch] if latest_batch else [
+        entry for entry in observed if entry[0] == newest]
+    by_sn = {}
+    candidates = []
+    for _, _, item in selected:
+        key = item['item_sn']
+        if key not in by_sn:
+            by_sn[key] = item
+        elif by_sn[key]['bind_time_utc'] != item['bind_time_utc']:
+            candidates.append(item)
+            candidates.append(by_sn.pop(key))
+    for candidate in candidates:
+        by_sn.pop(candidate['item_sn'], None)
+    return {'status': 'last_individual_links_observed',
+            'basis': '3074_component_batch_only' if latest_batch else '3074_latest_individual_bind_only',
+            'batch_id': latest_batch or None, 'pcba_last_bind_utc': _iso(newest),
+            'components': list(by_sn.values()), 'candidates': candidates,
+            'current_mounting_proven': False, 'failure_mounting_proven': False,
+            'complete_mounting_proven': False}
+
+
 def montagens_atual_e_ultima_falha(rows, pcba_sn, defect_time):
     """Independent 3074 mounting scopes for an individual PCBA investigation.
 
@@ -349,6 +401,7 @@ def montagens_atual_e_ultima_falha(rows, pcba_sn, defect_time):
                        'only_last_failure': sorted(failure_ids - live_ids),
                        'in_both': sorted(live_ids & failure_ids)},
         'last_recorded': ultima_montagem_registrada(rows, pcba_sn),
+        'last_individual_links': ultimos_vinculos_individuais(rows, pcba_sn),
     }
 
 

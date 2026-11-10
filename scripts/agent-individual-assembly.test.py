@@ -49,6 +49,10 @@ class Screen3074:
         if self.response_mode=="confirmed_empty":return {"rows":[],"no_data":True}
         if self.response_mode=="components_only" and sn=="CUR":
             return {"rows":[r("M2","2026-10-19T16:00:00Z","","Y")]}
+        if self.response_mode=="last_links_n_only" and sn=="CUR":
+            last=r("M1","2026-10-19T12:00:00Z","2026-10-19T14:00:00Z","N")
+            last['Batch Id']='BATCH-LAST'
+            return {"rows":[last]}
         if sn=="CUR":return {"rows":[
           r("M1","2026-10-19T12:00:00Z","2026-10-19T14:00:00Z","N"),
           r("M2","2026-10-19T16:00:00Z","","Y"),
@@ -190,6 +194,19 @@ class IndividualAssemblyTests(unittest.TestCase):
         self.assertEqual(output["trace_3074"]["component_usage"][0]["station_3022_evidence"]["status"],"unavailable")
         self.assertEqual(output["summary"]["raw_historical_component_candidates"],3)
         self.assertEqual(output["summary"]["serialized_components"],1)
+    def test_component_only_n_latest_link_reuse_is_probed_without_a_y_mounting(self):
+        Screen3074.response_mode='last_links_n_only'
+        Screen2114.anchor=False
+        output=self.lookup()
+        scopes=output['trace_3074']['mounting_views']
+        self.assertEqual(scopes['last_recorded']['status'],'unverified')
+        self.assertEqual(scopes['last_individual_links']['status'],
+                         'last_individual_links_observed')
+        last=scopes['last_individual_links']
+        self.assertEqual(last['reused_count'],1)
+        self.assertEqual(last['reused_components'][0]['other_pcbas'],['OLD'])
+        self.assertEqual(output['trace_3074']['components'],[],
+                         'historical links must never pretend to be a current Y mounting')
     def test_component_3074_query_returns_after_3022_navigation(self):
         out=self.lookup(include_3022=True)
         self.assertEqual(Screen3022.calls,['CUR'])

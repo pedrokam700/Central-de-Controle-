@@ -5,7 +5,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.temporal_3074 import (montagem_principal_da_consulta,
     ciclos_fisicos_do_material, falhas_durante_vinculos_do_material,
-    montagens_atual_e_ultima_falha, ultima_montagem_registrada)
+    montagens_atual_e_ultima_falha, ultima_montagem_registrada,
+    ultimos_vinculos_individuais)
 
 
 DEFECT = "2026-10-22 10:00:00"  # factory -03:00 -> 13:00 UTC
@@ -17,6 +18,33 @@ def component(sn, bind, unbind="", status="N"):
 
 
 class MountingCycles(unittest.TestCase):
+    def test_last_link_when_3074_grid_has_only_component_rows(self):
+        first = component('SCREEN-4TH', '2026-11-09 09:00:00',
+                          '2026-11-09 12:00:00')
+        second = component('CAMERA-2ND', '2026-11-09 09:15:00',
+                           '2026-11-09 12:00:00')
+        older = component('OCTOBER-SCREEN', '2026-10-22 09:00:00',
+                          '2026-10-22 15:00:00')
+        first['Batch Id'] = second['Batch Id'] = 'LAST-LINK-BATCH'
+        older['Batch Id'] = 'OLD-BATCH'
+        records = [older, first, second]
+        self.assertEqual(ultima_montagem_registrada(records, 'BOARD')['status'],
+                         'unverified', 'no PCBA self row means no full mounting proof')
+        links = ultimos_vinculos_individuais(records, 'BOARD')
+        self.assertEqual(links['status'], 'last_individual_links_observed')
+        self.assertFalse(links['complete_mounting_proven'])
+        self.assertEqual({x['item_sn'] for x in links['components']},
+                         {'SCREEN-4TH', 'CAMERA-2ND'})
+        self.assertNotIn('OCTOBER-SCREEN',
+                         {x['item_sn'] for x in links['components']})
+
+    def test_no_batch_does_not_combine_unrelated_old_links(self):
+        older = component('OLD', '2026-10-10 08:00:00', '2026-10-10 09:00:00')
+        newest = component('LAST', '2026-11-09 08:00:00', '2026-11-09 09:00:00')
+        links = ultimos_vinculos_individuais([older, newest], 'BOARD')
+        self.assertEqual([c['item_sn'] for c in links['components']], ['LAST'])
+        self.assertEqual(links['basis'], '3074_latest_individual_bind_only')
+
     def test_all_unlinked_reconstructs_last_failure_not_empty(self):
         old = component("CAM-OLD", "2026-10-22 09:00:00", "2026-10-22 15:00:00")
         result = montagem_principal_da_consulta([old], "BOARD", DEFECT)
