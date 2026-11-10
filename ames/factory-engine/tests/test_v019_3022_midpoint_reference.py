@@ -59,12 +59,50 @@ class MidpointReferenceTests(unittest.TestCase):
         r=correlate(rows,record("Camera impurity","CAM-IMP"))
         self.assertEqual(r["reference_process"]["operation_code"],"A5117")
         self.assertEqual(r["reference_rule_id"],"DIRECT_DEFECT_AT_ASSEMBLY_STATION")
-    def test_no_assembly_stop_assumption_from_last_endlot_only(self):
+    def test_before_mapped_station_uses_last_completed_assembly_not_assumed_target(self):
         rows=[passage("A5130","2026-10-20 14:45:00+00:00",1)]
         r=correlate(rows)
-        self.assertEqual(r["reference_stations"],["A5150"])
+        self.assertEqual(r["reference_stations"],["A5130"])
+        self.assertEqual(r["reference_process"]["operation_code"],"A5130")
+        self.assertEqual(r["reference_process"]["evidence_kind"],"last_completed_assembly_before_defect")
+        self.assertEqual(r["reference_rule_id"],"LAST_COMPLETED_ASSEMBLY_BEFORE_DEFECT")
+        self.assertEqual(r["reference_confidence"],"OBSERVED_ASSEMBLY_PASSAGE_NOT_CAUSE")
+        self.assertEqual(r["status"],"COMPLETE_ASSEMBLY_FALLBACK")
+    def test_fallback_excludes_at_repair_test_future_and_other_line(self):
+        rows=[
+            {**passage("A5120","2026-10-20 14:40:00+00:00",1),"Line Code":"TAN10103"},
+            {**passage("A5130","2026-10-20 14:43:00+00:00",2),"Line Code":"TAN10102"},
+            {**passage("A5100","2026-10-20 14:44:00+00:00",3),"Tran User Id":"BRM00075"},
+            {**passage("A5110","2026-10-20 14:45:00+00:00",4),"Working Oper":"Export Repair"},
+            {**passage("A5162","2026-10-20 15:15:00+00:00",5)},
+            {**passage("A5100","2026-10-20 14:58:00+00:00",6),"Tran Desc":"REPAIR END"},
+            passage("A5265","2026-10-20 14:54:00+00:00",7),
+        ]
+        r=correlate(rows,{**record(),"line":"TAN10103"})
+        self.assertEqual(r["reference_process"]["operation_code"],"A5120")
+        self.assertEqual(r["reference_process"]["hist_seq"],1)
+        self.assertEqual(r["reference_selection"]["prior_count"],1)
+    def test_when_only_at_events_exist_origin_remains_unproven(self):
+        rows=[{**passage("A5100","2026-10-20 14:40:00+00:00",1),"Tran Desc":"REPAIR END"},
+              {**passage("A5162","2026-10-20 14:45:00+00:00",2),"Tran User Id":"BRM00081"},
+              passage("A5265","2026-10-20 14:50:00+00:00",3)]
+        r=correlate(rows)
         self.assertIsNone(r["reference_process"])
         self.assertEqual(r["status"],"NO_PRIOR_REFERENCE_PASSAGE")
+    def test_new_actual_assembly_cycle_after_old_a5700_is_not_discarded_as_packing(self):
+        rows=[passage("A5700","2026-10-20 13:15:00+00:00",1),
+              passage("A5120","2026-10-20 14:40:00+00:00",2),
+              {**passage("A5100","2026-10-20 14:45:00+00:00",3),"Tran Desc":"REPAIR END"}]
+        r=correlate(rows)
+        self.assertEqual(r["reference_process"]["operation_code"],"A5120")
+        self.assertEqual(r["reference_selection"]["status"],"FALLBACK_COMPLETED_ASSEMBLY")
+    def test_unmapped_mechanical_fault_can_use_confirmed_assembly_context_without_claiming_cause(self):
+        rows=[passage("A5150","2026-10-20 14:10:00+00:00",1),
+              passage("A5162","2026-10-20 14:15:00+00:00",2)]
+        r=correlate(rows,record("Middle frame cracks","FRAME"))
+        self.assertEqual(r["reference_process"]["operation_code"],"A5162")
+        self.assertEqual(r["reference_rule_id"],"LAST_COMPLETED_ASSEMBLY_BEFORE_DEFECT")
+        self.assertEqual(r["status"],"COMPLETE_ASSEMBLY_FALLBACK")
     def test_future_a5150_not_selected_and_rework_can_select_latest_before(self):
         rows=[passage("A5150","2026-10-20 11:00:00+00:00",1),
               passage("A5150","2026-10-20 14:15:00+00:00",2),

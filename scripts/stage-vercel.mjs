@@ -15,7 +15,7 @@ const source=path.join(stage,'build-source');
 for(const name of names){const file=path.join(source,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,git('show',`${sha}:${name}`));if(name.endsWith('.mjs'))overrides['Central-de-Controle-/'+name]={contentType:'text/javascript; charset=utf-8'};}
 execFileSync(process.execPath,[path.join(source,'scripts/build-static.mjs')],{cwd:source,env:{...process.env,CENTRAL_STATIC_OUT:path.join(out,'static'),VERCEL:'1',VERCEL_GIT_COMMIT_SHA:sha,VERCEL_GIT_COMMIT_REF:git('branch','--show-current').toString().trim()},stdio:'pipe'});
 fs.writeFileSync(path.join(out,'config.json'),JSON.stringify({version:3,routes:[
- {src:'/(.*)',headers:{'X-Central-Commit':sha,'X-Central-Build':'15.1.13.50'},continue:true},
+ {src:'/(.*)',headers:{'X-Central-Commit':sha,'X-Central-Build':'15.1.13.51'},continue:true},
  {src:'/',status:307,headers:{Location:'/Central-de-Controle-/'}},
  {src:'/Central-de-Controle-',status:307,headers:{Location:'/Central-de-Controle-/'}},
  {src:'/Central-de-Controle-/',dest:'/Central-de-Controle-/index.html'},

@@ -589,6 +589,67 @@ def selecionar_passagem_referencia(eventos, defect_time, postos, *, defect_local
     }
 
 
+def selecionar_ultima_montagem_antes_falha(eventos, defect_time, *, line="", policy=None,
+                                           defect_local_offset_hours=-3, event_naive_offset_hours=0):
+    """Last *completed assembly* passage, never the last arbitrary 3022/AT row.
+
+    Used only when a configured reference station has no passage before this
+    defect (or no rule exists). A REPAIR END at A5100, a CHANGE CMF, a test
+    station or an event after the defect must never become a generation time.
+    This is a time-of-last-assembly reference, not proof of defect origin.
+    """
+    policy = policy or {}
+    low = str(policy.get("assembly_stop_min") or "A5100").strip().upper()
+    high = str(policy.get("assembly_stop_max") or "A5162").strip().upper()
+    if not re.fullmatch(r"A\d{4}", low) or not re.fullmatch(r"A\d{4}", high):
+        return {"status":"INVALID_ASSEMBLY_BOUNDS", "process":None, "prior_count":0}
+    bounds = (int(low[1:]), int(high[1:]))
+    if bounds[0] > bounds[1]:
+        return {"status":"INVALID_ASSEMBLY_BOUNDS", "process":None, "prior_count":0}
+    defect_utc = defect_time_to_utc(defect_time, defect_local_offset_hours)
+    if defect_utc is None:
+        return {"status":"INVALID_DEFECT_TIME", "process":None, "prior_count":0}
+    expected_line = str(line or "").strip().upper()
+    eligible = []
+    for passage in extrair_passagens_processo(eventos):
+        # The completed operation is Working Oper, NOT Current Oper or Station.
+        code = str(passage.get("operation_code") or "").strip().upper()
+        if not re.fullmatch(r"A\d{4}", code) or not bounds[0] <= int(code[1:]) <= bounds[1]:
+            continue
+        # A second production cycle can legitimately revisit A51xx after an
+        # earlier A5700, before the next A5700 completion. The coarse
+        # POS_A5700_PACKING label alone must not discard that real END LOT;
+        # the exact completed Working Oper A51xx and transaction type win.
+        raw = normalizar_evento_3022(passage.get("raw") or {})
+        observed_line = str(raw.get("line_code") or "").strip().upper()
+        if expected_line and observed_line and observed_line != expected_line:
+            continue
+        # Repair/AT may use an A51xx Current Oper; END LOT and a genuine
+        # assembly Working Oper are necessary, but exclude explicitly labelled
+        # repair/disassembly activity and AT operator events as well.
+        description = _norm_rule_text(" ".join(str(raw.get(k) or "") for k in
+                                            ("working_oper", "operation_name", "tran_cmf3")))
+        if any(word in description for word in ("repair", "disassembly", "rework", "desmontagem")):
+            continue
+        operator = str(raw.get("tran_user_id") or "").strip().upper()
+        if operator.startswith("BRM"):
+            continue
+        dt = grid_time_to_utc(passage.get("event_time"), event_naive_offset_hours)
+        if dt is None or dt > defect_utc:
+            continue
+        seq = passage.get("hist_seq") if passage.get("hist_seq") is not None else -1
+        eligible.append((dt, seq, passage))
+    eligible.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    selected = dict(eligible[0][2]) if eligible else None
+    if selected:
+        selected["event_time_utc"] = eligible[0][0].isoformat()
+        selected["evidence_kind"] = "last_completed_assembly_before_defect"
+        selected["completion_confirmed"] = True
+    return {"status":"FALLBACK_COMPLETED_ASSEMBLY" if selected else "NO_PRIOR_ASSEMBLY_PASSAGE",
+            "defect_time_utc":defect_utc.isoformat(), "process":selected,
+            "prior_count":len(eligible), "future_count":0}
+
+
 def _is_defect_registration_event(ev):
     raw_text = " ".join(str(ev.get(k) or "") for k in ("tran_desc", "tran_desc_english", "tran_cmf3"))
     text = _norm_rule_text(raw_text)
@@ -704,6 +765,7 @@ def correlacionar_falha_3022(base_dir, eventos, defect_record, *, registration_v
             "reason":"A 3022 registrou a falha no proprio posto da montagem A5100-A5162. "
                      "Referencia temporal do registro comprovado, nao prova de causa ou inicio do defeito.",
         }
+    configured_stations = list(rule.get("reference_stations") or [])
     refsel = selecionar_passagem_referencia(
         eventos, rec.get("defect_time"), rule.get("reference_stations") or [],
         defect_local_offset_hours=defect_local_offset_hours, event_naive_offset_hours=event_naive_offset_hours,
@@ -712,12 +774,41 @@ def correlacionar_falha_3022(base_dir, eventos, defect_record, *, registration_v
         # This marker is NOT an END LOT. Keep its kind separate from a
         # confirmed completed station passage.
         refsel = {**refsel,"process":stop,"status":"DEFECT_RECORDED_AT_ASSEMBLY"}
+    elif refsel.get("process") is None:
+        # The unit may fail before reaching A5150/A5162. Preserve the mapped
+        # rule for audit, then use the last PROVEN assembly END LOT, not the
+        # latest arbitrary 3022 event or an AT repair/return timestamp.
+        fallback = selecionar_ultima_montagem_antes_falha(
+            eventos, rec.get("defect_time"), line=rec.get("line"),
+            policy=matrix.get("functional_reference_policy") or {},
+            defect_local_offset_hours=defect_local_offset_hours,
+            event_naive_offset_hours=event_naive_offset_hours,
+        )
+        if fallback.get("process") is not None:
+            chosen_station = fallback["process"]["operation_code"]
+            rule = {**rule,
+                "rule_id":"LAST_COMPLETED_ASSEMBLY_BEFORE_DEFECT",
+                "mapped_reference_rule_id":rule.get("rule_id"),
+                "analysis_kind":"FALLBACK_LAST_COMPLETED_ASSEMBLY",
+                "reference_confidence":"OBSERVED_ASSEMBLY_PASSAGE_NOT_CAUSE",
+                "reference_stations":[chosen_station],
+                "reason":(
+                    f"Posto previsto ({', '.join(configured_stations) or 'não mapeado'}) "
+                    f"não possui passagem concluída anterior à falha. "
+                    f"Usada última passagem END LOT comprovada na montagem {chosen_station}, "
+                    "antes do Defect Time e fora de REPAIR/AT. "
+                    "Horário de referência operacional, não causa nem posto exato da origem da falha."
+                ),
+            }
+            refsel = fallback
     cycle = analisar_ciclo_reparo_apos_falha(
-        eventos, rec.get("defect_time"), reference_stations=rule.get("reference_stations") or [],
+        eventos, rec.get("defect_time"), reference_stations=configured_stations,
         defect_local_offset_hours=defect_local_offset_hours, event_naive_offset_hours=event_naive_offset_hours,
     )
     if rule.get("reference_stations"):
-        status = ("DIRECT_DEFECT_RECORDED_IN_ASSEMBLY" if stop is not None else "COMPLETE_REFERENCE") if refsel.get("process") else refsel.get("status")
+        status = ("DIRECT_DEFECT_RECORDED_IN_ASSEMBLY" if stop is not None else
+                  "COMPLETE_ASSEMBLY_FALLBACK" if refsel.get("status") == "FALLBACK_COMPLETED_ASSEMBLY" else
+                  "COMPLETE_REFERENCE") if refsel.get("process") else refsel.get("status")
     else:
         status = "GENERIC_ONLY_RULE_NOT_MAPPED" if generic.get("process") else generic.get("status")
     return {
