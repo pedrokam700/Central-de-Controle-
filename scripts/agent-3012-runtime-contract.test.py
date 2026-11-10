@@ -42,7 +42,9 @@ function field(itemId,xtype,name=''){
 }
 const startParent=field('dteFromDate','udc_datetimefield','fromDate'),startData=field('dteFromDate__Data','hiddenfield','fromDate'),startDate=field('dteFromDate__Date','datefield','_fromDate__Date'),startTime=field('dteFromDate__Time','timefield','_fromDate__Time');
 const endParent=field('dteToDate','udc_datetimefield','toDate'),endData=field('dteToDate__Data','hiddenfield','toDate'),endDate=field('dteToDate__Date','datefield','_toDate__Date'),endTime=field('dteToDate__Time','timefield','_toDate__Time');
-for(const [parent,data] of [[startParent,startData],[endParent,endData]]){const base=parent.setValue.bind(parent);parent.setValue=v=>{base(v);if(scenario==='backing-empty')return;if(v instanceof Date)data.setValue(`${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')} ${String(v.getHours()).padStart(2,'0')}:${String(v.getMinutes()).padStart(2,'0')}:00`);else data.setValue(v)}}
+for(const [parent,data] of [[startParent,startData],[endParent,endData]]){const base=parent.setValue.bind(parent);parent.setValue=v=>{base(v);if(['backing-empty','numeric-backing','numeric-backing-epoch'].includes(scenario))return;if(v instanceof Date)data.setValue(`${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')} ${String(v.getHours()).padStart(2,'0')}:${String(v.getMinutes()).padStart(2,'0')}:00`);else data.setValue(v)}}
+if(scenario==='numeric-backing'){startData.setValue('20260123000000');endData.setValue('20260123000000')}
+if(scenario==='numeric-backing-epoch'){startData.setValue('1769126400000');endData.setValue('1769126400000')}
 const simpleIds=[['txtSnImei','textfield','snImei'],['cdvDefectType','codeviewfieldx','defectType'],['cdvRepairedCode','codeviewfieldx','repairedCode'],['cdvDepartmentNew','codeviewfieldx','department'],['cdvAreaNew','codeviewfieldx','area'],['cdvLineCodeNew','codeviewfieldx','lineCode'],['cdvProdModel','codeviewfieldx','prodModel'],['cdvDefectCode','codeviewfieldx','defectCode']];
 const simple=Object.fromEntries(simpleIds.map(([id,xt,n])=>[id,field(id,xt,n)]));
 let activeStore=makeStore([]);
@@ -50,7 +52,7 @@ const ajaxListeners=new Map();
 const ajax={on(name,fn){ajaxListeners.set(name,fn)},un(name,fn){if(ajaxListeners.get(name)===fn)ajaxListeners.delete(name)},
   emit(options){ajaxListeners.get('beforerequest')?.(ajax,options)}};
 const grid={itemId:'grdDefectRepair',xtype:'gridpanel',hidden:false,isVisible(){return true},getStore(){return activeStore}};
-function validDate(){return /^2026-01-24 00:00:00$/.test(String(startData.getValue()))&&/^2026-10-17 23:59:00$/.test(String(endData.getValue()))&&simple.txtSnImei.getValue()==='002527TEST'}
+function validDate(){const start=String(startData.getValue()),end=String(endData.getValue());return ((/^2026-01-24 00:00:00$/.test(start)&&/^2026-10-17 23:59:00$/.test(end))||(scenario==='numeric-backing'&&start==='20260124000000'&&end==='20261017235900')||(scenario==='numeric-backing-epoch'&&start===String(new Date(2026,0,24,0,0).getTime())&&end===String(new Date(2026,9,17,23,59).getTime())))&&simple.txtSnImei.getValue()==='002527TEST'}
 function execute(){
   if(scenario==='stale')return;
   const params={procstep:'x',snImei:simple.txtSnImei.getValue(),fromDate:startData.getValue(),toDate:endData.getValue(),unDisassemble:false};
@@ -79,7 +81,7 @@ const physical={tagName:'A',dispatchEvent(){},click(){if(scenario!=='ext-fallbac
 const view={itemId:'btnView',xtype:'button',text:'View',isButton:true,hidden:false,isVisible(){return true},btnEl:{dom:physical},fireEvent(name){if(name==='click'&&scenario!=='stale')execute();return true},handler(){if(scenario!=='stale')execute()}};
 const components=[...Object.values(simple),startParent,startData,startDate,startTime,endParent,endData,endDate,endTime,grid,view];
 const ctx=vm.createContext({console,setTimeout,clearTimeout,Date,Promise,JSON,globalThis:null,Event:class{constructor(t,o){this.type=t}},MouseEvent:class{constructor(t,o){this.type=t}},document:{querySelectorAll(){return[]},getElementById(){return null}},window:null});ctx.window=ctx;ctx.globalThis=ctx;ctx.Ext={ComponentManager:{all:{items:components}},ComponentQuery:{query(){return components}}};
-(async()=>{try{ctx.Ext.Ajax=ajax;const fn=vm.runInContext('('+querySource+')',ctx);const out=await fn({sn:'002527TEST',line:'',model:'',defectCode:'',repairCode:'',defectType:'',dateFrom:'2026-01-24',timeFrom:'00:00',dateTo:'2026-10-17',timeTo:'23:59',allowWirePeriodProof:scenario==='wire-fallback'});console.log(JSON.stringify({ok:true,out}));}catch(e){console.log(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exitCode=0}})();
+(async()=>{try{ctx.Ext.Ajax=ajax;const fn=vm.runInContext('('+querySource+')',ctx);const out=await fn({sn:'002527TEST',line:'',model:'',defectCode:'',repairCode:'',defectType:'',dateFrom:'2026-01-24',timeFrom:'00:00',dateTo:'2026-10-17',timeTo:'23:59',allowWirePeriodProof:['wire-fallback','numeric-backing','numeric-backing-epoch'].includes(scenario)});console.log(JSON.stringify({ok:true,out}));}catch(e){console.log(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exitCode=0}})();
 '''
 
 
@@ -121,7 +123,7 @@ class Runtime3012Tests(unittest.TestCase):
         self.assertEqual(len(set(outputs)),3,
                          'Diagnostic must distinguish the physical failure classes')
         self.assertTrue(any('empty' in v for v in outputs[0]))
-        self.assertTrue(any('numeric_timestamp' in v for v in outputs[1]))
+        self.assertTrue(any('numeric_13_digits' in v for v in outputs[1]))
         self.assertTrue(any('br_day_only' in v for v in outputs[2]))
 
     def test_physical_numeric_unix_date_wire_proves_only_exact_local_mes_window(self):
@@ -150,17 +152,59 @@ class Runtime3012Tests(unittest.TestCase):
         good=run_probe(left,right)
         self.assertTrue(good.confirmed())
         self.assertEqual((good.counters()['dates'],good.counters()['period']),(1,1))
-        self.assertIn('body:from=numeric_timestamp',good.counters()['date_shapes'])
+        self.assertIn('body:from=numeric_13_digits',good.counters()['date_shapes'])
         self.assertNotIn(left,str(good.counters()))
         self.assertNotIn(right,str(good.counters()))
         self.assertFalse(run_probe(left,str(int(right)-60000)).confirmed(), 'one minute early is not exact')
         self.assertFalse(run_probe(left,str(int(right)+1000)).confirmed(), 'sub-minute timestamp is not exact')
+        self.assertTrue(run_probe(left,str(int(right)+59000)).confirmed(),
+                        'inclusive 23:59:59 is the same full-minute end boundary')
+        self.assertFalse(run_probe(str(int(left)+59000),right).confirmed(),
+                         'the start of the range cannot skip its first 59 seconds')
         self.assertFalse(run_probe(epoch_ms('2026-01-01T00:00',timezone.utc),right).confirmed(),
                          'UTC midnight cannot masquerade as São Paulo midnight')
         self.assertEqual(collector._wire_stamp(str(int(left)*1000)),expected['from'],
                          'microsecond Unix representation must use integer-safe conversion')
         self.assertEqual(collector._wire_stamp(str(int(left)//1000)),expected['from'],
                          'second Unix representation must remain unambiguous')
+        self.assertEqual(collector._wire_stamp('2026-11-09 23:59:59',end_bound=True),expected['to'])
+        self.assertEqual(collector._wire_stamp('2026-11-09 23:59:58',end_bound=True),'')
+        self.assertEqual(collector._wire_stamp('2026-01-01 00:00:59'),'')
+
+    def test_compact_numeric_mes_dates_prove_only_valid_full_minutes(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-10 23:59'}
+        class Request:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            def __init__(self, start, end):
+                self.post_data=urlencode({'snImei':'002527TEST',
+                                          'fromDate':start,'toDate':end})
+        class Response:
+            status=200
+            def __init__(self,request):self.request=request
+        for first,last in [('202601010000','202611102359'),
+                           ('20260101000000','20261110235900'),
+                           ('20260101000000','20261110235959')]:
+            request=Request(first,last)
+            proof=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+            proof.on_request(request)
+            proof.on_response(Response(request))
+            proof.on_finished(request)
+            self.assertTrue(proof.confirmed(),(first,last))
+            self.assertIn('body:from=numeric_12_digits' if len(first)==12 else
+                          'body:from=numeric_14_digits',proof.counters()['date_shapes'])
+            self.assertNotIn(first,str(proof.counters()))
+        for malformed in ['202602300000', '202601012400', '20261110235901',
+                          '202601010000000']:
+            self.assertEqual(collector._wire_stamp(malformed), '',malformed)
+        wrong=Request('20260101000000','20261110235800')
+        proof=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        proof.on_request(wrong)
+        proof.on_response(Response(wrong))
+        proof.on_finished(wrong)
+        self.assertFalse(proof.confirmed())
+        self.assertEqual((proof.counters()['dates'],proof.counters()['period']),(1,0))
 
     def test_http_wire_rejects_conflicting_url_and_body_periods(self):
         expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
@@ -191,6 +235,10 @@ class Runtime3012Tests(unittest.TestCase):
         self.assertEqual(collector._wire_stamp('2026-01-01T00:00:00Z'), '')
         self.assertEqual(collector._wire_split_stamp('2026-01-01Z','00:00'), '')
         self.assertEqual(collector._wire_split_stamp('2026-01-01','00:00UNVERIFIED'), '')
+        self.assertEqual(collector._wire_split_stamp('2026-11-09','23:59:59',end_bound=True),
+                         '2026-11-09 23:59')
+        self.assertEqual(collector._wire_split_stamp('2026-11-09','23:59:58',end_bound=True),'')
+        self.assertEqual(collector._wire_split_stamp('2026-01-01','00:00:59'),'')
         self.assertEqual(collector._wire_value_shape('2026-01-01T00:00:00Z'), 'iso_timezone')
 
     def test_store_without_period_is_untrusted_until_http_wire_is_proved(self):
@@ -214,6 +262,34 @@ class Runtime3012Tests(unittest.TestCase):
         self.assertEqual(applied['dateFrom']['data']['raw'], '2026-01-24 00:00:00')
         self.assertEqual(applied['dateTo']['data']['raw'], '2026-10-17 23:59:00')
         self.assertTrue(result['out']['queryProof']['periodVerified'])
+
+    def test_numeric_backing_field_is_resynchronized_before_view(self):
+        # The original fixture always converted __Data to text when its parent
+        # changed. The production form can retain a stale 14-digit value while
+        # showing the correct calendar controls. The View must submit the NEW
+        # value in the same representation, or the MES queries the wrong dates.
+        result=run_fixture('numeric-backing')
+        self.assertTrue(result['ok'],result)
+        self.assertEqual(result['out']['total'],1)
+        self.assertEqual(result['out']['applied']['dateFrom']['data']['raw'],'20260124000000')
+        self.assertEqual(result['out']['applied']['dateTo']['data']['raw'],'20261017235900')
+        params=result['out']['queryProof']['requestParams']
+        self.assertEqual((params['fromDate'],params['toDate']),
+                         ('20260124000000','20261017235900'))
+        self.assertFalse(result['out']['queryProof']['periodVerified'],
+                         'JS alone cannot certify calendar wire; actual HTTP probe must')
+
+    def test_numeric_epoch_backing_field_is_not_left_on_previous_date(self):
+        result=run_fixture('numeric-backing-epoch')
+        self.assertTrue(result['ok'],result)
+        self.assertEqual(result['out']['total'],1)
+        params=result['out']['queryProof']['requestParams']
+        self.assertNotEqual(params['fromDate'],'1769126400000')
+        self.assertNotEqual(params['toDate'],'1769126400000')
+        self.assertRegex(params['fromDate'],r'^\d{13}$')
+        self.assertRegex(params['toDate'],r'^\d{13}$')
+        self.assertEqual(result['out']['applied']['dateFrom']['data']['raw'],
+                         params['fromDate'])
 
     def test_passive_wire_probe_requires_same_request_sn_dates_and_completion(self):
         expected={'from':'2026-01-24 00:00','to':'2026-10-17 23:59'}

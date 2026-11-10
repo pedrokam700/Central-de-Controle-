@@ -80,8 +80,10 @@ async (cfg) => {
     return got instanceof Date&&got.getHours()===(hh||0)&&got.getMinutes()===(mm||0);
   };
   // ExtJS datetime compounds may keep a separate backing value (`__Data`).
-  // Only synchronize a recognized local date representation; never guess
-  // whether an opaque hidden value is UTC, an epoch, or another MES contract.
+  // Synchronize it using its EXISTING representation, even when it is numeric.
+  // Otherwise the visible controls show the newly selected period while the
+  // outgoing View request still sends a previous numeric date. An unknown
+  // backing representation is rejected, never blindly overwritten.
   const syncBackingDate=(data,full,day,hour)=>{
     if(!data||typeof data.setValue!=='function')return;
     const previous=data.getValue?.();
@@ -92,6 +94,22 @@ async (cfg) => {
       return;
     }
     const raw=clean(previous);
+    const padded=day.replace(/-/g,'')+hour.replace(':','');
+    let numeric='';
+    if(/^\d{10}$/.test(raw))numeric=String(Math.floor(full.getTime()/1000));
+    else if(/^\d{13}$/.test(raw))numeric=String(full.getTime());
+    else if(/^\d{16}$/.test(raw))numeric=String(full.getTime())+'000';
+    else if(/^\d{12}$/.test(raw))numeric=padded;
+    else if(/^\d{14}$/.test(raw))numeric=padded+'00';
+    if(numeric){
+      const replacement=typeof previous==='number'?Number(numeric):numeric;
+      // Microsecond Unix values exceed JS's safe integer range; preserve the
+      // exact digits as a string rather than rounding in Number(...).
+      data.setValue(raw.length===16?numeric:replacement);
+      emit(data,'change',data.getValue?.(),previous);
+      data.checkChange?.();
+      return;
+    }
     if(!raw){
       // In the live Ext.NET form the visible Date/Time pair may update while
       // the hidden __Data field remains empty. An empty backing field is
@@ -104,7 +122,9 @@ async (cfg) => {
       return;
     }
     const match=raw.match(/^(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})[ T](\d{1,2}:\d{2})(:\d{2})?$/);
-    if(!match)return;
+    if(!match){
+      throw new Error(`3012_BACKING_DATE_UNKNOWN:${data.itemId||'__Data'}`);
+    }
     const separator=raw.includes('T')?'T':' ';
     const dayFormat=match[1].includes('/')?day.replace(/-/g,'/'):day;
     // Keep backing seconds equal to parent.setValue(full), which has
@@ -482,8 +502,26 @@ def _wire_find(root: Any, names: Iterable[str], depth: int = 0) -> Any:
     return None
 
 
-def _wire_stamp(value: Any) -> str:
+def _wire_stamp(value: Any, *, end_bound: bool = False) -> str:
     raw = _clean(value)
+    def valid_seconds(instant: datetime) -> bool:
+        # A-MES date-time controls display minutes. The inclusive upper
+        # boundary may be submitted at :59 seconds; the start must be :00.
+        # All other seconds/fractions are a different, unverified query.
+        return instant.microsecond == 0 and instant.second in ((0, 59) if end_bound else (0,))
+    # MES integrations can serialize a local calendar instant as a compact
+    # number instead of a Unix timestamp. Unlike epoch milliseconds, these
+    # values have twelve/fourteen digits and MUST be checked as a complete
+    # calendar value. A malformed value can never certify coverage.
+    if re.fullmatch(r'\d{12}(?:\d{2})?', raw):
+        try:
+            instant = datetime.strptime(raw, '%Y%m%d%H%M%S' if len(raw) == 14
+                                        else '%Y%m%d%H%M')
+            if not (2000 <= instant.year <= 2100 and valid_seconds(instant)):
+                return ''
+            return instant.strftime('%Y-%m-%d %H:%M')
+        except ValueError:
+            return ''
     # The physical 3012 View serializes its Ext.NET date values as numeric
     # Unix timestamps. Parse only explicit seconds/milliseconds/microseconds,
     # in the production MES timezone. Do not use the executor machine's local
@@ -495,7 +533,7 @@ def _wire_stamp(value: Any) -> str:
             seconds, subsecond = divmod(epoch, unit)
             stamp = (datetime.fromtimestamp(seconds, tz=ZoneInfo('America/Sao_Paulo'))
                      + timedelta(microseconds=subsecond * (1_000_000 // unit)))
-            if not (2000 <= stamp.year <= 2100 and stamp.second == 0 and stamp.microsecond == 0):
+            if not (2000 <= stamp.year <= 2100 and valid_seconds(stamp)):
                 return ''
             return stamp.strftime('%Y-%m-%d %H:%M')
         except (ValueError, OverflowError, OSError, KeyError):
@@ -503,15 +541,19 @@ def _wire_stamp(value: Any) -> str:
     # A date prefix is not period proof. A trailing timezone, suffix or
     # malformed timestamp needs its own explicit interpretation, never a
     # silent prefix match against the requested local MES minute.
-    iso = re.fullmatch(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::\d{2}(?:\.\d{1,6})?)?', raw)
-    local = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{4})[ T](\d{1,2}):(\d{2})(?::\d{2}(?:\.\d{1,6})?)?', raw)
+    iso = re.fullmatch(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?', raw)
+    local = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{4})[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?', raw)
     parts = (tuple(int(iso[i]) for i in range(1, 6)) if iso else
              (int(local[3]), int(local[2]), int(local[1]), int(local[4]), int(local[5]))
              if local else None)
     if not parts:
         return ''
     try:
-        return datetime(*parts).strftime('%Y-%m-%d %H:%M')
+        match = iso or local
+        secs = int(match[6] or 0)
+        micros = int((match[7] or '').ljust(6, '0') or '0')
+        instant = datetime(*parts, secs, micros)
+        return instant.strftime('%Y-%m-%d %H:%M') if valid_seconds(instant) else ''
     except ValueError:
         return ''
 
@@ -579,7 +621,10 @@ def _wire_value_shape(value: Any) -> str:
     if not raw:
         return 'empty'
     if re.fullmatch(r'-?\d{10,16}', raw):
-        return 'numeric_timestamp'
+        # Exposing only the number of digits lets factory evidence distinguish
+        # Unix epoch (10/13/16) from compact calendar (12/14) without leaking
+        # any timestamp or potentially sensitive request payload.
+        return f'numeric_{len(raw.lstrip("-"))}_digits'
     if _wire_stamp(raw):
         return 'datetime_recognized'
     if re.fullmatch(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', raw):
@@ -617,11 +662,11 @@ def _wire_request_dates(root: Any) -> tuple[list[str], list[str], list[tuple[str
         if stamp:
             starts.append(stamp)
     for raw in to_values:
-        stamp = _wire_stamp(raw)
+        stamp = _wire_stamp(raw, end_bound=True)
         if not stamp:
             for day in to_days or [raw]:
                 for hour in to_times:
-                    stamp = _wire_split_stamp(day, hour)
+                    stamp = _wire_split_stamp(day, hour, end_bound=True)
                     if stamp:
                         break
                 if stamp:
@@ -633,7 +678,7 @@ def _wire_request_dates(root: Any) -> tuple[list[str], list[str], list[tuple[str
         starts.extend(filter(None, (_wire_split_stamp(day, hour)
             for day in from_days for hour in from_times)))
     if not to_values:
-        ends.extend(filter(None, (_wire_split_stamp(day, hour)
+        ends.extend(filter(None, (_wire_split_stamp(day, hour, end_bound=True)
             for day in to_days for hour in to_times)))
     def shapes(combined, days, times):
         if combined:
@@ -647,18 +692,21 @@ def _wire_request_dates(root: Any) -> tuple[list[str], list[str], list[tuple[str
             [(start, end) for start in set(starts) for end in set(ends)])
 
 
-def _wire_split_stamp(day: Any, clock: Any) -> str:
+def _wire_split_stamp(day: Any, clock: Any, *, end_bound: bool = False) -> str:
     """Combine only an explicit date field and its matching time field."""
     date_raw, time_raw = _clean(day), _clean(clock)
     iso = re.fullmatch(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', date_raw)
     local = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_raw)
-    clock_match = re.fullmatch(r'(\d{1,2}):(\d{2})(?::\d{2})?', time_raw)
+    clock_match = re.fullmatch(r'(\d{1,2}):(\d{2})(?::(\d{2}))?', time_raw)
     if not clock_match or not (iso or local):
         return ''
     parts = ((int(iso[1]),int(iso[2]),int(iso[3])) if iso else
              (int(local[3]),int(local[2]),int(local[1])))
     try:
-        return datetime(*parts, int(clock_match[1]), int(clock_match[2])).strftime('%Y-%m-%d %H:%M')
+        seconds = int(clock_match[3] or 0)
+        if seconds not in ((0, 59) if end_bound else (0,)):
+            return ''
+        return datetime(*parts, int(clock_match[1]), int(clock_match[2]), seconds).strftime('%Y-%m-%d %H:%M')
     except ValueError:
         return ''
 
