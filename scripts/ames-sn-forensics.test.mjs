@@ -30,6 +30,7 @@ assert.equal(story.materials[0].history[0].failure.repairs[0].repair_comment,'ol
 assert.equal(story.materials[0].history[0].failure.analysis_event.operator_id,'BRM00111');
 assert.equal(story.materials[0].history[0].failure.analysis_event.operator_name,null,'operator name must not be invented from ID');
 assert.equal(preferredAnalysisEvent([{pcba_sn:'P',station:'A5200',operation_name:'Assembly',operator_id:'X'},{pcba_sn:'P',station:'A6900',operation_name:'Export Repair'}],'P').station,'A6900','A6900 / Export Repair must be preferred when present');
+assert.equal(preferredAnalysisEvent([{pcba_sn:'P',station:'A5265',operation_name:'Export Repair',operator_id:'ROUTING'}],'P'),null,'a repair routing step at another station must not be presented as an A6900 analyst');
 assert.equal(preferredAnalysisEvent([{station:'A6900',operation_name:'Export Repair',operator_id:'CURRENT'}],'PCBA-OLD'),null,'3022 evidence without explicit historical PCBA identity must not leak to another board');
 assert.equal(preferredAnalysisEvent([{pcba_sn:'PCBA-CURRENT',station:'A6900',operation_name:'Export Repair',operator_id:'CURRENT'}],'PCBA-OLD'),null,'3022 evidence from the current PCBA must not be attached to an old PCBA');
 

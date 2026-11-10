@@ -4,6 +4,7 @@ import {escapeHtml as esc} from './evidence-view.mjs';
 import {pcbaUsageEvidence} from './console-sn-history-detail.mjs';
 import {parseFailureInstant,productionEvidenceForOccurrence} from './data/production-evidence.mjs';
 import {provenRepairUserName} from './console-sn-repair-evidence.mjs';
+import {a6900ForSnRepair} from './data/a6900-technician.mjs';
 
 const text=value=>String(value??'').trim();
 const t=(locale,pt,en)=>String(locale||'pt-BR').startsWith('en')?en:pt;
@@ -68,11 +69,13 @@ function proof2114(label,f,locale){
  </div>`;
 }
 function proof3012(repair,locale,label,result={},currentPcba=''){
-  const id=text(repair.repair_user),name=provenRepairUserName(repair,result,currentPcba);
-  const actor=name?name+' ('+id+')':t(locale,'Nome não comprovado · código','Name unproven · ID')+' '+fmt(id);
+  const id=text(repair.repair_user),technician=a6900ForSnRepair(repair,result,currentPcba),name=provenRepairUserName(repair,result,currentPcba);
+  const actor=technician?technician.name+' ('+technician.id+')':t(locale,'Técnico da falha na A6900 não comprovado','Fault technician at A6900 not proven');
   return `<div class="ames-sn-smart-proof"><small>${esc(label)}</small>
     <b>${esc(actor)}</b>
-    <span>${esc(t(locale,'Horário da análise','Analysis time'))}: ${esc(repair.repair_time?time(repair.repair_time):'—')}</span>
+    <small>${esc(t(locale,'Técnico da falha · 3022 A6900','Fault technician · 3022 A6900'))}</small>
+    <small>${esc(t(locale,'Usuário do reparo 3012 (papel distinto)','3012 repair user (different role)'))}: ${esc(name?name+' ('+id+')':fmt(id))}</small>
+    <span>${esc(t(locale,'Horário do reparo 3012','3012 repair time'))}: ${esc(repair.repair_time?time(repair.repair_time):'—')}</span>
     <small>${esc(t(locale,'Comentário do AT (3012)','Technician comment (3012)'))}</small>
     <span style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(fmt(repair.repair_comment))}</span>
   </div>`;
@@ -259,10 +262,10 @@ function shortTechnicianEvidence(alerts,locale,result,currentPcba){
   const rows=[...entries.values()].sort((a,b)=>String(a.repair.repair_time||'').localeCompare(String(b.repair.repair_time||'')));
   if(!rows.length)return '';
   const evidence=({repair,label})=>{
-    const id=text(repair.repair_user),name=provenRepairUserName(repair,result,currentPcba);
-    const person=name?name+(id?' ('+id+')':''):(id?t(locale,'Nome não comprovado · ','Name not proven · ')+id:'—');
+    const id=text(repair.repair_user),name=provenRepairUserName(repair,result,currentPcba),technician=a6900ForSnRepair(repair,result,currentPcba);
+    const person=technician?`${technician.name} (${technician.id})`:t(locale,'Técnico da falha A6900 não comprovado','A6900 fault technician unproven');
     return '<div class="ames-sn-alert-tech-preview" data-sn-alert-repair-row><div class="ames-sn-alert-tech-id">'+
-      '<small>'+esc(label)+'</small><b>'+esc(person)+'</b><time>'+esc(repair.repair_time?time(repair.repair_time):'—')+'</time></div>'+
+      '<small>'+esc(label)+' · 3022 A6900</small><b>'+esc(person)+'</b><small>'+esc(t(locale,'Usuário do reparo 3012','3012 repair user'))+': '+esc(name?name+' ('+id+')':id||'—')+'</small><time>'+esc(repair.repair_time?time(repair.repair_time):'—')+'</time></div>'+
       '<p>'+esc(fmt(repair.repair_comment))+'</p></div>';
   };
   const maxVisible=3;
@@ -537,8 +540,8 @@ function materialHistoricalProof(history,result,locale){
     }).join('');
     const comments=repairs.map(r=>{
       const normalized={...r,pcba_sn:board.pcba_sn,repair_user:r.repair_user||r['Repair User'],repair_time:r.repair_time||r['Repair Time'],repair_comment:r.repair_comment||r['Repair Comment']};
-      const name=provenRepairUserName(normalized,result,board.pcba_sn),id=text(normalized.repair_user);
-      return '<div class="ames-sn-smart-proof" data-sn-material-history-repair><small>3012 · '+esc(t(locale,'atendimento registrado nesta PCBA','repair record on this board'))+'</small><b>'+esc(name?name+(id?' ('+id+')':''):id||t(locale,'Responsável não identificado','Unidentified technician'))+'</b><span>'+esc(normalized.repair_time?time(normalized.repair_time):'—')+'</span><small>'+esc([r.repair_code||r['Repair Code'],r.repair_desc||r['Repair Description']].filter(Boolean).join(' · ')||t(locale,'Finalização não informada','Completion not provided'))+'</small><span style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(normalized.repair_comment||t(locale,'Sem comentário disponível','No comment available'))+'</span></div>';
+      const name=provenRepairUserName(normalized,result,board.pcba_sn),id=text(normalized.repair_user),technician=a6900ForSnRepair(normalized,result,board.pcba_sn);
+      return '<div class="ames-sn-smart-proof" data-sn-material-history-repair><small>3012 · '+esc(t(locale,'atendimento registrado nesta PCBA','repair record on this board'))+'</small><b>'+esc(technician?`${technician.name} (${technician.id})`:t(locale,'Técnico da falha A6900 não comprovado','A6900 fault technician unproven'))+'</b><small>3022 · A6900</small><small>'+esc(t(locale,'Usuário de reparo 3012','3012 repair user'))+': '+esc(name?name+(id?' ('+id+')':''):id||'—')+'</small><span>'+esc(normalized.repair_time?time(normalized.repair_time):'—')+'</span><small>'+esc([r.repair_code||r['Repair Code'],r.repair_desc||r['Repair Description']].filter(Boolean).join(' · ')||t(locale,'Finalização não informada','Completion not provided'))+'</small><span style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(normalized.repair_comment||t(locale,'Sem comentário disponível','No comment available'))+'</span></div>';
     }).join('');
     const passages=processRows.filter(p=>text(p.pcba_sn||p.PCBA)===board.pcba_sn&&text(p.event_time||p['Event Time'])).slice(0,4);
     return '<details '+(i===0?'open ':'')+'data-sn-material-history-board><summary>'+esc(board.pcba_sn)+' · '+board.failures.length+' '+esc(t(locale,'falha(s) 2114','2114 failure(s)'))+' · '+repairs.length+' '+esc(t(locale,'registro(s) 3012','3012 repair(s)'))+'</summary><div class="ames-sn-alert-evidence-grid">'+failures+'</div>'+

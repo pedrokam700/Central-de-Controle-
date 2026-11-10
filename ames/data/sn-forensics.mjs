@@ -122,7 +122,10 @@ function processFor(all,pcba){
 }
 export function preferredAnalysisEvent(rows,pcba){
   const list=processFor(rows,pcba);if(!list.length)return null;
-  return list.find(p=>text(p.station).toUpperCase().startsWith('A6900')||text(p.operation_name).toUpperCase().includes('EXPORT REPAIR'))||list.find(p=>p.operator_id||p.operator_name)||null;
+  // "Export Repair" also appears while another station hands a board off.
+  // That hand-off operator is not the A6900 failure analyst. Without an
+  // A6900 station record, there is no technician to prefer here.
+  return list.find(p=>text(p.station).toUpperCase()==='A6900')||null;
 }
 
 function failureEntry(row,{pcba,repairs=[],process=[],source='2114'}={}){

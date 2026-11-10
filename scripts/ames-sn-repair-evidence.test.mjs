@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {provenRepairUserName,projectRepairTechnicianNames} from '../ames/console-sn-repair-evidence.mjs';
+import {a6900TechnicianFor,a6900ForSnRepair} from '../ames/data/a6900-technician.mjs';
 
 const repair=(overrides={})=>({pcba_sn:'PCB-A',repair_user:'BRM00068',repair_comment:'linha 1\nlinha 2',...overrides});
 const base=()=>({sn:'PCB-A',detected_type:'PCBA',trace_3022:{operator_evidence:[]}});
@@ -77,4 +78,18 @@ test('unconfirmed or conflicting 3022 identities never fabricate an AT name',()=
    {pcba_sn:'PCB-A','Tran User ID':'BRM00061','Tran User':'Nome A'},
    {pcba_sn:'PCB-A','Tran User ID':'BRM00061','Tran User':'Nome B'}
  ])[0].repair_technician_name,null);
+});
+
+test('A6900 analyst is not chosen from matching BRM at a different station or from another failure day',()=>{
+ const row=repair({defect_time:'2026-11-04 09:00:00',repair_time:'2026-11-04 11:00:00'});
+ const events=[
+  {pcba_sn:'PCB-A',station:'A5265',event_time:'2026-11-04 10:00:00',operator_id:'BRM00068',operator_name:'Export Operator'},
+  {pcba_sn:'PCB-A',station:'A6900',event_time:'2026-11-04 10:10:00',operator_id:'BRM00099',operator_name:'Actual Fault Technician'},
+  {pcba_sn:'PCB-A',station:'A6900',event_time:'2026-11-05 10:10:00',operator_id:'BRM00055',operator_name:'Next Day Operator'},
+  {pcba_sn:'PCB-B',station:'A6900',event_time:'2026-11-04 10:10:00',operator_id:'BRM00055',operator_name:'Different Board'},
+ ];
+ assert.deepEqual(a6900TechnicianFor(row,events),{name:'Actual Fault Technician',id:'BRM00099',station:'A6900'});
+ assert.deepEqual(a6900ForSnRepair(row,{sn:'PCB-A',trace_3022:{operator_evidence:events}},'PCB-A'),
+  {name:'Actual Fault Technician',id:'BRM00099',station:'A6900'});
+ assert.equal(a6900TechnicianFor(row,events.filter(event=>event.station!=='A6900'||event.pcba_sn==='PCB-B')),null);
 });

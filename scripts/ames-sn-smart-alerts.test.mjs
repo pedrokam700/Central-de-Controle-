@@ -151,6 +151,25 @@ test('one physical technician comment in multiple alerts appears once, with no i
   assert.equal(JSON.stringify(m.alerts),before,'UI must never mutate model evidence');
 });
 
+test('SN alert attributes the fault to A6900 rather than the later 3012 routing operator',()=>{
+  const m=model(),repair={pcba_sn:'PCB-A',row_key:'ANALYSIS-1',defect_code:'F1',
+    defect_time:'2026-10-10 10:00:00',repair_time:'2026-10-10 11:00:00',
+    repair_user:'BRM90001',repair_comment:'Analysed faulty connector'};
+  m.alerts[0].evidence.repairs=[repair];
+  const result={...reusedResult,trace_3022:{operator_evidence:[
+    {pcba_sn:'PCB-A',station:'A5265',event_time:'2026-10-10 10:40:00',operator_id:'BRM90001',operator_name:'Routing Operator'},
+    {pcba_sn:'PCB-A',station:'A6900',event_time:'2026-10-10 10:30:00',operator_id:'BRM90002',operator_name:'Fault Analyst'},
+    {pcba_sn:'PCB-FOREIGN',station:'A6900',event_time:'2026-10-10 10:35:00',operator_id:'BRM90003',operator_name:'Wrong Board'},
+  ]}};
+  const html=renderSmartSnAlerts(m,result,'pt-BR');
+  assert.match(html,/Fault Analyst \(BRM90002\)/);
+  assert.match(html,/Usuário do reparo 3012/);
+  assert.match(html,/Routing Operator \(BRM90001\)/);
+  assert.doesNotMatch(html,/Wrong Board/);
+  const noA6900={...result,trace_3022:{operator_evidence:result.trace_3022.operator_evidence.filter(e=>e.station!=='A6900')}};
+  assert.match(renderSmartSnAlerts(m,noA6900,'pt-BR'),/Técnico da falha A6900 não comprovado/);
+});
+
 
 test('prior component board facts show 2114 failure, time, and only exact-PCBA 3012 technician',()=>{
   const m=model(),component=m.alerts.find(a=>a.item_sn==='LCM-1');
