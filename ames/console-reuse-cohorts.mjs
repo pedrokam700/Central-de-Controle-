@@ -75,20 +75,38 @@ export function compact2114Analysis(observations=[]){
  const render=label=>`<span class="ames-reuse-time-line">${esc(label)}</span>`;
  return values.slice(0,2).map(render).join('')+(values.length>2?`<details class="ames-reuse-compact-more"><summary>+${values.length-2} ${t('análise(s)','analyses')}</summary>${values.slice(2).map(render).join('')}</details>`:'');
 }
-// Exact board + exact MES employee ID. A name is never inferred from the BRM
-// code alone. Keep the original 3012 rows and canonical 3022 data unchanged.
+// Names are explicit 3022 Tran User fields, never guesses from BRM numbers.
+// A uniquely named MES employee ID can identify that person across PCBAs,
+// while the repair/failure itself remains a 3012 board+defect candidate.
+// Conflicting names for one ID fail closed even when one board matches.
 export function enrichReuseRepairTechnicians(repairs=[],processEvents=[]){
  const operators=(processEvents||[]).flatMap(event=>{
   const adapter=event?.provenance?.adapter||{};
   const evidence=[adapter.operator_evidence,...(adapter.operator_events||[])].filter(item=>item&&typeof item==='object');
-  // Local traces can also contain already-projected operator fields.
-  if(event.operator_id||event['Tran User Id'])evidence.push(event);
+  // Local SQLite contains original 3022 raw fields, including older captures.
+  if(event.operator_id||event['Tran User Id']||event['Tran User ID']||event.raw)evidence.push(event);
   return evidence.flatMap(item=>{
    const pcba=String(event.pcba_sn||item.pcba_sn||'').trim();
    return pcba?[{...item,pcba_sn:pcba}]:[]; // Never attach an unscoped event to an arbitrary queried board.
   });
  });
- return (repairs||[]).map(repair=>({...repair,repair_technician_name:provenRepairUserName(repair,{trace_3022:{operator_evidence:operators}},repair.pcba_sn)}));
+ const identities=new Map();
+ for(const item of operators){
+  const raw=item.raw&&typeof item.raw==='object'?item.raw:{};
+  const id=String(item.operator_id||item['Tran User Id']||item['Tran User ID']||raw['Tran User Id']||raw['Tran User ID']||'').trim();
+  const name=String(item.operator_name||item['Tran User Name']||item['Tran User']||raw['Tran User Name']||raw['Tran User']||'').trim();
+  if(!id||!name||id.toLocaleUpperCase('pt-BR')===name.toLocaleUpperCase('pt-BR'))continue;
+  if(!identities.has(id))identities.set(id,new Map());
+  const normalized=name.normalize('NFKC').replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
+  identities.get(id).set(normalized,name);
+ }
+ return (repairs||[]).map(repair=>{
+  const id=String(repair.repair_user||'').trim(),known=identities.get(id);
+  const sameBoard=provenRepairUserName(repair,{trace_3022:{operator_evidence:operators}},repair.pcba_sn);
+  // Do not assert a name if evidence from two boards disagrees on the person.
+  const name=known?.size>1?null:(sameBoard||(known?.size===1?[...known.values()][0]:null));
+  return {...repair,repair_technician_name:name};
+ });
 }
 const candidateAtHeaders=()=>`<th title="${t('Horário da falha registrado na 3012; a associação é candidata por PCBA e código de falha, não por Hist Seq','3012 defect time; candidate association by board and failure code, not Hist Seq')}">${t('Falha 3012*','3012 fault*')}</th><th>${t('Técnico AT*','AT technician*')}</th><th>${t('Reparo 3012*','3012 repair*')}</th><th>${t('Comentário AT*','AT comment*')}</th>`;
 function candidateAtCells(pcba,code){
@@ -97,18 +115,22 @@ function candidateAtCells(pcba,code){
 }
 export function compact3012CandidateCells(repairs=[]){
  const dates=distinctText(repairs.map(row=>row.defect_time)).map(formatFactoryDateTime);
- const technicians=distinctText(repairs.map(row=>{
+ const namedTechnicians=[...new Map(repairs.map(row=>{
   const id=String(row.repair_user||'').trim(),name=String(row.repair_technician_name||'').trim();
-  return name&&name!==id?`${name}${id?` (${id})`:''}`:id;
- }));
+  return name&&name!==id?[`${name}\u0000${id}`,{name,id}]:[null,null];
+ }).filter(([key])=>key)).values()];
+ const technicianCodes=distinctText(repairs.map(row=>row.repair_user));
  const finishes=distinctText(repairs.map(row=>row.repair_time)).map(formatFactoryDateTime);
  const comments=repairs.map(row=>String(row.repair_comment||'').trim()).filter(Boolean);
  const frequency=new Map();for(const comment of comments)frequency.set(comment,(frequency.get(comment)||0)+1);
  const ranked=[...frequency].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
  const compact=(items,empty)=>items.length?`<span class="ames-reuse-cell-clipped" title="${esc(items.join('\n'))}">${esc(items[0])}</span>${items.length>1?`<small title="${esc(items.join('\n'))}">+${items.length-1}</small>`:''}`:`<span class="ames-reuse-unproven" title="${esc(empty)}">—</span>`;
+ const technicianTooltip=namedTechnicians.map(({name,id})=>`${name} · 3022: ${id||'—'}`).join('\n');
+ const technicianCell=namedTechnicians.length?`<span class="ames-reuse-cell-clipped" title="${esc(technicianTooltip)}">${esc(namedTechnicians[0].name)}</span>${namedTechnicians.length>1?`<small title="${esc(technicianTooltip)}">+${namedTechnicians.length-1}</small>`:''}`:
+  `<span class="ames-reuse-unproven" title="${esc(t('Nome real não comprovado pela 3022','Real name not proven by 3022')+(technicianCodes.length?' · '+technicianCodes.join(', '):''))}">—</span>`;
  return {
   fault:compact(dates,t('Sem Defect Time 3012 associado','No associated 3012 Defect Time')),
-  technician:compact(technicians,t('Sem técnico 3012 associado','No associated 3012 technician')),
+  technician:technicianCell,
   repair:compact(finishes,t('Sem Repair Time 3012 associado','No associated 3012 Repair Time')),
   comment:ranked.length?`<span class="ames-reuse-cell-clipped" title="${esc(ranked.map(([value,n])=>`${value} ×${n}`).join('\n'))}">${esc(ranked[0][0])}</span><small>×${ranked[0][1]}${ranked.length>1?` · +${ranked.length-1}`:''}</small>`:compact([],t('Sem comentário 3012 associado','No associated 3012 comment'))
  };
@@ -136,9 +158,9 @@ export function renderComponentComparisonTable(groups=[]){
 }
 export function renderBoardComparisonTable(board={}){
  const rows=[...(board.events||[]).map(e=>[e,false]),...(board.prior_events||[]).map(e=>[e,true])];
- return `<p class="mes-context" data-board-at-candidate-note>${t('* 3012: técnico, horário e comentário são candidatos por PCBA + código exato de falha, salvo vínculo individual comprovado. Horário 3028/2114 e horário de reparo 3012 não são intercambiáveis. Passe o mouse para ver outros valores.','* 3012: technician, time and comment are candidates matched by board + exact failure code unless individual linkage is proven. 3028/2114 fault time differs from 3012 repair time. Hover to see other values.')}</p><div class="table-wrap ames-component-comparison ames-board-comparison"><table><thead><tr><th>PCBA</th><th>${t('Falha','Failure')}</th><th>${t('Horário 3028 / 2114','3028 / 2114 time')}</th>${candidateAtHeaders()}<th>${t('Contexto','Context')}</th></tr></thead><tbody>${rows.map(([e,prior])=>`<tr data-board-failure-row><td class="ames-component-compare-pcba">${esc(e.pcba_sn||board.sn)}</td><td>${esc(e.defect_desc||e.defect_code||'—')} <small>${esc(e.defect_code||'')}</small></td><td>${compactEvidenceTimes([{...e,source_view:prior?'2114':'3028'}])}</td>${candidateAtCells(e.pcba_sn||board.sn,e.defect_code)}<td>${prior?t('Anterior','Previous'):t('Atual','Current')}</td></tr>`).join('')}</tbody></table></div>`;
+ return `<p class="mes-context" data-board-at-candidate-note>${t('* 3012: técnico, horário e comentário são candidatos por PCBA + código exato de falha, salvo vínculo individual comprovado. Horários originais 2114/3028 permanecem no histórico de auditoria.','* 3012: technician, time and comment are candidates matched by board + exact failure code unless individual linkage is proven. Original 2114/3028 times remain in the audit history.')}</p><div class="table-wrap ames-component-comparison ames-board-comparison"><table><thead><tr><th>PCBA</th><th>${t('Falha','Failure')}</th><th>${t('Análise 2114','2114 analysis')}</th>${candidateAtHeaders()}<th>${t('Contexto','Context')}</th></tr></thead><tbody>${rows.map(([e,prior])=>`<tr data-board-failure-row><td class="ames-component-compare-pcba">${esc(e.pcba_sn||board.sn)}</td><td>${esc(e.defect_desc||e.defect_code||'—')} <small>${esc(e.defect_code||'')}</small></td><td>${compact2114Analysis(prior?[{...e,source_view:'2114'}]:[])}</td>${candidateAtCells(e.pcba_sn||board.sn,e.defect_code)}<td>${prior?t('Anterior','Previous'):t('Atual','Current')}</td></tr>`).join('')}</tbody></table></div>`;
 }
-export function mountReuseCohorts(root,snapshot,{cachedRepairHistory}={}){
+export function mountReuseCohorts(root,snapshot,{cachedRepairHistory,cached3022Operators}={}){
  let selection=null,filters={};
  const all=buildReuseCohorts(snapshot),options=(key,values)=>`<select name="${key}"><option value="">${t('Todos','All')}</option>${[...new Set(values.filter(Boolean))].sort().map(v=>`<option${filters[key]===v?' selected':''} value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`;
  function render(){
@@ -223,7 +245,7 @@ export function mountReuseCohorts(root,snapshot,{cachedRepairHistory}={}){
   <p>${kind==='components'?t('Para estado Y/N e horários de vínculo consulte as evidências 3074; vínculo antigo não prova montagem atual.','For Y/N status and binding times inspect 3074 evidence; prior binding does not prove current mounting.'):''}</p>${sourceAudit(r,rowKind)}</details>`).join('')}`;
   wireReuse3012Columns(host);
  }
- const repairCache=new Map();
+ const repairCache=new Map(),operatorCache=new Map();
  function wireReuse3012Columns(host){
   for(const detail of host.querySelectorAll('details[data-cohort-row]'))detail.addEventListener('toggle',async()=>{
    if(!detail.open)return;
@@ -234,12 +256,20 @@ export function mountReuseCohorts(root,snapshot,{cachedRepairHistory}={}){
    }
    for(const board of boards){
     if(!repairCache.has(board))repairCache.set(board,Promise.resolve().then(()=>cachedRepairHistory({sn:board,limit:5000})).then(rows=>({rows:Array.isArray(rows)?rows:[],failed:false})).catch(()=>({rows:[],failed:true})));
-    const {rows:history,failed}=await repairCache.get(board);
+    if(typeof cached3022Operators==='function'&&!operatorCache.has(board))operatorCache.set(board,
+      Promise.resolve().then(()=>cached3022Operators({sn:board,limit:5000})).then(rows=>Array.isArray(rows)?rows:[]).catch(()=>[]));
+   }
+   // Resolve employee identities across all related historical PCBAs before
+   // painting any row, regardless of whether the first board has a 3022 name.
+   const saved3022=(await Promise.all(boards.map(board=>operatorCache.get(board)||Promise.resolve([])))).flat();
+   const repairResults=await Promise.all(boards.map(board=>repairCache.get(board)));
+   for(const [boardIndex,board] of boards.entries()){
+    const {rows:history,failed}=repairResults[boardIndex];
     if(!detail.isConnected)return;
     const codes=[...new Set(panels.filter(p=>p.dataset.pcba===board).map(p=>p.dataset.defectCode))];
     for(const code of codes){
      const matched=code?matchCached3012Repairs([{pcba_sn:board,defect_code:code,defect_desc:code}],history):[];
-     const cells=compact3012CandidateCells(enrichReuseRepairTechnicians(matched,snapshot.process_timeline?.events||[]));
+     const cells=compact3012CandidateCells(enrichReuseRepairTechnicians(matched,[...(snapshot.process_timeline?.events||[]),...saved3022]));
      for(const panel of panels.filter(p=>p.dataset.pcba===board&&p.dataset.defectCode===code)){
       panel.innerHTML=failed?'<span class="ames-reuse-unproven">—</span>':cells[panel.dataset.reuseAtField];
       panel.dataset.atProof=failed?'unavailable':matched.length?'candidate':'not_found';

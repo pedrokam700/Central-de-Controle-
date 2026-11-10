@@ -6,6 +6,24 @@ import {collectionScope,normalizeAgentRead,SCHEDULER_POLICY} from '../ames/data/
 import {productFixture,canonicalAgentFixture,canonicalResponse} from './ames-fixtures.mjs';
 
 const line='TAN10101',scope={lines:[line],performance:'fast',max_failures:0,max_pcbas:0,defect_codes:[]};
+test('reuse reads only stored 3022 from the existing local SN endpoint, scoped to the requested PCBA',async()=>{
+ const calls=[];
+ const client=createAgentClient({agent:()=>({status:'connected'}),setLocalConnected(){},updateAgent(){}},{agentToken:'synthetic-test-token',fetcher:async(url,options)=>{
+  calls.push({url,options});return {ok:true,status:200,json:async()=>({process_events:[
+   {pcba_sn:'PCB-A',operator_id:'BRM00999',operator_name:'TECNICA MES EXEMPLO'},
+   {pcba_sn:'PCB-B',operator_id:'BRM00999',operator_name:'WRONG BOARD'}]})};
+ }});
+ const records=await client.cached3022Operators({sn:'PCB-A'});
+ assert.equal(records.length,1);
+ assert.equal(records[0].operator_name,'TECNICA MES EXEMPLO');
+ assert.equal(calls.length,1);
+ assert.match(calls[0].url,/\/local\/sn\?sn=PCB-A/);
+ assert.equal(calls[0].options.method,'GET');
+ assert.equal(calls[0].options.body,undefined);
+ assert.deepEqual(await client.cached3022Operators({sn:''}),[]);
+ assert.equal(calls.length,1,'invalid SN must never trigger an agent request');
+ client.clear();
+});
 function fixture(){
   const legacy=productFixture().payload;
   legacy.defects.forEach(row=>row.snapshot_id=legacy.summary.snapshot_id);

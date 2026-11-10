@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildReuseCohorts,summarizeReusePopulation,boardHistSeqRecurrence,board2114Timeline} from '../ames/data/reuse-cohorts.mjs';
-import {renderComponentComparisonTable,compact2114Analysis,compact3012CandidateCells,enrichReuseRepairTechnicians,matchCached3012Repairs} from '../ames/console-reuse-cohorts.mjs';
+import {renderComponentComparisonTable,renderBoardComparisonTable,compact2114Analysis,compact3012CandidateCells,enrichReuseRepairTechnicians,matchCached3012Repairs} from '../ames/console-reuse-cohorts.mjs';
 const event={pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-19 10:00:00',defect_key:'K1',record_id:'D1',product_key:'CPH1',failure_family:'DISPLAY'};
 function fixture(){return {source_id:'A',snapshot_id:'S',revision:2,line_id:'TAN10101',occurrences:[event],
  pcba_history:{records:[{pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-17 08:00:00',failure_family:'DISPLAY',record_id:'H1'},
@@ -155,7 +155,7 @@ test('component comparison replaces duplicate timestamp with genuine 2114 analys
  }finally{globalThis.document=oldDocument;}
 });
 
-test('reuse technician names use only exact 3012 PCBA + repair ID supported by canonical 3022 fields',()=>{
+test('reuse shows the real 3022 technician name only, keeping BRM ID in provenance',()=>{
  const oldDocument=globalThis.document;
  globalThis.document={documentElement:{lang:'pt-BR'}};
  try{
@@ -163,13 +163,30 @@ test('reuse technician names use only exact 3012 PCBA + repair ID supported by c
   const events=[{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{operator_id:'BRM00999',operator_name:'TECNICA MES EXEMPLO'}}}}];
   const named=enrichReuseRepairTechnicians(repairs,events);
   assert.equal(named[0].repair_technician_name,'TECNICA MES EXEMPLO');
-  assert.match(compact3012CandidateCells(named).technician,/TECNICA MES EXEMPLO \(BRM00999\)/);
+  const cell=compact3012CandidateCells(named).technician;
+  assert.match(cell,/>TECNICA MES EXEMPLO<\/span>/);
+  assert.doesNotMatch(cell,/>BRM00999<\/span>/);
+  assert.match(cell,/title="TECNICA MES EXEMPLO · 3022: BRM00999"/);
   assert.equal(repairs[0].repair_technician_name,undefined,'original 3012 source remains immutable');
-  assert.equal(enrichReuseRepairTechnicians(repairs,[{...events[0],pcba_sn:'PCB-B'}])[0].repair_technician_name,null);
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{...events[0],pcba_sn:'PCB-B'}])[0].repair_technician_name,'TECNICA MES EXEMPLO','proven MES employee IDs are valid across other boards');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{provenance:{adapter:{operator_evidence:{operator_id:'BRM00999',operator_name:'UNSCOPED'}}}}])[0].repair_technician_name,null);
   assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{operator_id:'BRM00999',operator_name:'OTHER PERSON'}}}}])[0].repair_technician_name,null);
-  assert.match(compact3012CandidateCells(enrichReuseRepairTechnicians(repairs,[])).technician,/BRM00999/);
+  assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-B',provenance:{adapter:{operator_evidence:{operator_id:'BRM00999',operator_name:'OTHER PERSON'}}}}])[0].repair_technician_name,null,'cross-board conflict must fail closed');
+  const unnamed=compact3012CandidateCells(enrichReuseRepairTechnicians(repairs,[])).technician;
+  assert.match(unnamed,/Nome real não comprovado pela 3022/);
+  assert.doesNotMatch(unnamed,/>BRM00999<\/span>/);
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{pcba_sn:'PCB-A',raw:{'Tran User Id':'BRM00999','Tran User':'TECNICA MES EXEMPLO'}}])[0].repair_technician_name,'TECNICA MES EXEMPLO','old SQLite raw 3022 event is sufficient without MES recapture');
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{pcba_sn:'PCB-A',raw:{'Tran User Id':'BRM00999','Other comment':'TECNICA MES EXEMPLO'}}])[0].repair_technician_name,null,'names must come from an explicit name field');
   const matching=matchCached3012Repairs([{pcba_sn:'PCB-A',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception'}],repairs);
   assert.equal(matching.length,1,'3012 exact candidate still resolves without altered matching contract');
  }finally{globalThis.document=oldDocument;}
+});
+test('the separate PCBA comparison also removes duplicate 3028/2114 time and keeps 2114 analysis',()=>{
+ const prior=globalThis.document;globalThis.document={documentElement:{lang:'pt-BR'}};
+ try{
+  const html=renderBoardComparisonTable({sn:'PCB-A',events:[{pcba_sn:'PCB-A',defect_code:'GN-1',defect_time:'2026-11-09 08:00:00'}],prior_events:[{pcba_sn:'PCB-A',defect_code:'GN-1',defect_type:'MainBoard',defect_time:'2026-11-01 08:00:00'}]});
+  assert.doesNotMatch(html,/Horário 3028 \/ 2114/);
+  assert.match(html,/Análise 2114/);
+  assert.match(html,/>MainBoard<\/span>/);
+ }finally{globalThis.document=prior;}
 });

@@ -488,6 +488,16 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const data=await request('/3012/history?'+new URLSearchParams(params));
       return Array.isArray(data?.rows)?data.rows:[];
     },
+    // Recover 3022's explicit Tran User Id/Tran User pair from old SQLite
+    // raw_json via the already-existing read-only SN route. No MES navigation,
+    // new collection, or write to the sensitive 3012 cache is required.
+    cached3022Operators:async({sn='',limit=5000}={})=>{
+      check();const exact=String(sn).trim();
+      if(!exact||exact.length>128)return [];
+      const data=await request('/local/sn?'+new URLSearchParams({sn:exact,limit:String(boundedLimit(limit,5000,5000))}));
+      return Array.isArray(data?.process_events)?data.process_events.filter(row=>
+        String(row?.pcba_sn||'').trim()===exact):[];
+    },
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
     clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;refreshSettled=null;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',connection_error:null,config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
   });

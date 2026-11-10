@@ -13,18 +13,21 @@ export function withHistoricalTrends(view,root,store,history){
   return {line,endDate:end?(end.endsWith('T07:00')?shiftDay(end.slice(0,10),-1):end.slice(0,10)):start?.slice(0,10),snapshot};};
  function renderPanel(){
   const c=context(),key=JSON.stringify([c.line,c.endDate,c.snapshot?.source_id]);
-  if(key!==scope){scope=key;generation++;result=null;error='';busy=false;autoStarted=false;source=c.snapshot?.source_id||'';filters={};}
+  // A current snapshot UUID is not a historian filter: prior production days
+  // may come from a different workstation/source. Read all saved origins by
+  // default and let the reader mark same-day origin conflicts without summing.
+  if(key!==scope){scope=key;generation++;result=null;error='';busy=false;autoStarted=false;source='';filters={};}
   const nextPaint=JSON.stringify([scope,generation,busy,error,days,source,filters,fullOnly,document.documentElement.lang]);
   if(host&&root.contains(host)&&nextPaint===paintKey)return;paintKey=nextPaint;
   if(!host||!root.contains(host)){host=document.createElement('section');host.className='mes-context-panel';host.dataset.historyTrends='';host.setAttribute('data-no-i18n','');root.append(host);}
   const sources=[...new Set([source,...(result?.sources||[])].filter(Boolean))];
   host.innerHTML=`<h3>${t('Tendências do histórico salvo','Stored history trends')}</h3><p>${t('Leitura sem MES. Por linha e dia, prioriza a última revisão FULL comprovada; se não existir, mostra a última parcial como observação, sem tratá-la como fechamento. As revisões originais continuam no histórico.','Read without MES. For each line and day, prefer the latest proven FULL revision; otherwise show the latest partial as an observation, not a closure. Original revisions remain in history.')}</p>
   <form data-history-trend-form class="ames-toolbar" style="display:flex;flex-wrap:wrap;gap:12px;align-items:end"><label>${t('Janela','Window')} <select name="days">${[7,30,93].map(n=>`<option value="${n}"${days===n?' selected':''}>${n} ${t('dias','days')}</option>`).join('')}</select></label>
-  <label>${t('Origem','Source')} <select name="source"><option value="">${t('Detectar conflitos','Detect conflicts')}</option>${sources.map(s=>`<option value="${esc(s)}"${source===s?' selected':''}>${esc(s)}</option>`).join('')}</select></label>
+  <label>${t('Origem','Source')} <select name="source"><option value="">${t('Todas as origens · detectar conflitos','All sources · detect conflicts')}</option>${sources.map(s=>`<option value="${esc(s)}"${source===s?' selected':''}>${esc(s)}</option>`).join('')}</select></label>
   ${[['product','CPH'],['sn','Material SN'],['part_number','Part number'],['item_type',t('Tipo','Type')]].map(([name,label])=>`<label>${label}<input name="${name}" value="${esc(filters[name]||'')}"></label>`).join('')}
   <label><input type="checkbox" name="fullOnly"${fullOnly?' checked':''}> ${t('Somente fechamentos FULL comprovados','Proven FULL closures only')}</label>
   <button class="button secondary" type="submit"${busy?' disabled':''}>${busy?t('Lendo…','Reading…'):t('Ver histórico salvo','Read stored history')}</button></form>
-  <p class="mes-context">${t('Dia final da janela selecionada','Selected window end date')}: ${esc(c.endDate?formatFactoryDate(c.endDate):'—')} · ${t('Uma única revisão por linha/dia; capturas repetidas não são somadas.','One revision per line/day; repeated captures are not added together.')}</p>
+  <p class="mes-context">${t('Dia final da janela selecionada','Selected window end date')}: ${esc(c.endDate?formatFactoryDate(c.endDate):'—')} · ${t('Uma única revisão por linha/dia; capturas repetidas não são somadas. Datas com origens incompatíveis ficam em conflito, sem inventar valores.','One revision per line/day; repeated captures are not added together. Dates with conflicting origins are flagged, not combined.')}</p>
   ${error?`<p role="alert">${esc(error)}</p>`:''}<div data-history-trend-result></div>`;
   async function readHistory(){
    const token=++generation;busy=true;error='';renderPanel();
