@@ -77,13 +77,21 @@ def selecionar_ocorrencia_atual(current_code, current_desc, histories):
 
 def classificar_historicos(current_code, current_desc, histories):
     details = []
-    counts = {"MESMA_FALHA": 0, "FALHA_SIMILAR": 0, "FALHA_DIFERENTE": 0}
+    # UNKNOWN is a first-class taxonomy outcome (negation, ambiguous subtype,
+    # absent evidence). A single undecidable 2114 row must not abort reuse
+    # classification for all PCBAs in the line or count as a different fault.
+    counts = {"MESMA_FALHA": 0, "FALHA_SIMILAR": 0, "FALHA_DIFERENTE": 0, "INDETERMINADA": 0}
     for hist in histories or []:
         cmp = comparar_falhas(
             current_code, current_desc,
             hist.get("Defect Code", ""), hist.get("Defect Description", ""),
         )
-        counts[cmp["relation"]] += 1
+        relation = cmp["relation"]
+        if relation not in counts:
+            # Future taxonomy relations are unproven until explicitly mapped.
+            relation = "INDETERMINADA"
+            cmp = {**cmp, "relation": relation}
+        counts[relation] += 1
         details.append({"history": hist, **cmp})
 
     if counts["MESMA_FALHA"]:
@@ -92,6 +100,8 @@ def classificar_historicos(current_code, current_desc, histories):
         strongest = "FALHA_SIMILAR"
     elif counts["FALHA_DIFERENTE"]:
         strongest = "FALHA_DIFERENTE"
+    elif counts["INDETERMINADA"]:
+        strongest = "INDETERMINADA"
     else:
         strongest = "SEM_HISTORICO"
 
@@ -100,6 +110,7 @@ def classificar_historicos(current_code, current_desc, histories):
         "same_count": counts["MESMA_FALHA"],
         "similar_count": counts["FALHA_SIMILAR"],
         "different_count": counts["FALHA_DIFERENTE"],
+        "unknown_count": counts["INDETERMINADA"],
         "details": details,
     }
 
@@ -117,9 +128,11 @@ def analisar_historico_pcba_atual(current_code, current_desc, histories):
     result["same_count"] = all_result["same_count"]
     result["similar_count"] = all_result["similar_count"]
     result["different_count"] = all_result["different_count"]
+    result["unknown_count"] = all_result["unknown_count"]
     result["prior_same_count"] = prior_result["same_count"]
     result["prior_similar_count"] = prior_result["similar_count"]
     result["prior_different_count"] = prior_result["different_count"]
+    result["prior_unknown_count"] = prior_result["unknown_count"]
     result["same_repetitions"] = prior_result["same_count"]
     result["total"] = len(histories or [])
     result["previous_total"] = len(selection["prior_histories"])

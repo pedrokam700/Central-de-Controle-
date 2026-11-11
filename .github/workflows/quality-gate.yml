@@ -32,6 +32,11 @@ jobs:
       - name: Install test-only Excel reader
         run: python3 -m pip install openpyxl==3.1.5
 
+      - name: Verify factory history taxonomy and reuse classification
+        env:
+          PYTHONPATH: ames/factory-engine
+        run: python3 -m unittest discover -s ames/factory-engine/tests -p 'test_*.py' -q
+
       - name: Run database and snapshot hardening tests
         run: python3 scripts/agent-hardening.test.py
 
