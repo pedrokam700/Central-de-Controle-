@@ -93,6 +93,7 @@ jobs:
 
       - name: Run updater Python contract
         run: |
+          python3 scripts/ames-pr70-state-transfer.test.py
           python3 scripts/agent-pr69-code-patch.test.py
           python3 scripts/agent-update.test.py
           python3 scripts/agent-issue57-update-preflight.test.py

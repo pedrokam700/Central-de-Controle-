@@ -57,7 +57,7 @@ test('Troca supervisionada exige versao assinada, confirmacao e protecao de guar
   }
   assert.doesNotMatch(switcher,/Read-Host 'Para continuar, digite TROCAR'/);
   assert.ok(switcher.indexOf('if($answer -ne 6)')>switcher.indexOf('Nenhum agente/guardian antigo identificado'));
-  assert.ok(switcher.indexOf('if($answer -ne 6)')<switcher.indexOf('if($oldRun){WriteRun $null}'));
+  assert.ok(switcher.indexOf('if($answer -ne 6)')<switcher.indexOf('if($oldRun){WriteRun $null;$registrationChanged=$true}'));
 });
 
 test('Troca reconhece o launcher canonico antigo e espera sua saida sem encerrar PID desconhecido',()=>{

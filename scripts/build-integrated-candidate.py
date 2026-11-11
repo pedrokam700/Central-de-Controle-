@@ -8,7 +8,7 @@ SUPPORT_FILES=('START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','KEEP_AGENT_R
 VERIFIER_FILES=('07_VERIFICAR_VERSAO_CENTRAL.bat','VERIFICAR_VERSAO_CENTRAL.ps1')
 AT_SETUP_FILES=('00_PREPARAR_PENDRIVE_AT.bat','PREPARAR_DEPENDENCIAS_AT.ps1','01_INSTALAR_AT.bat',
  'INSTALAR_CENTRAL_AT.ps1','05_ABRIR_CHROME_AMES.bat','02_ABRIR_AT.bat','INICIAR_CENTRAL_AT.ps1')
-FIRST_RUN_FILES=('08_PREPARAR_REDE_AMES.bat','01_TROCAR_PARA_PR69_NOVA.bat','TROCAR_PARA_PR69_NOVA.ps1',
+FIRST_RUN_FILES=('08_PREPARAR_REDE_AMES.bat','01_TROCAR.bat','01_TROCAR_PARA_PR69_NOVA.bat','TROCAR_PARA_PR69_NOVA.ps1',
  '12_APLICAR_ROTA_AMES_PERSISTENTE.bat')
 PACKAGE_DOCS=('INSTRUCOES_INSTALACAO_LIMPA.txt','MANUAL_LOGICA_CAPTURA_E_CRUZAMENTO.md','NOTAS_ALERTAS_SN_PR69.md','NOTAS_CORRECOES_28OUT_RESTAURACAO.md','NOTAS_VALIDACAO_FPY_TOP3_RASTREABILIDADE.md')
 _FORBIDDEN_EXACT={'config.json','local_agent_token','network_health.jsonl','.env','cookies.json','session.json'}
@@ -154,11 +154,14 @@ INSTALACAO / TESTE — LEIA ANTES DE EXECUTAR:
 1. PC COM 0.5.39 OU OUTRO GUARDIAN EM EXECUCAO: NAO EXECUTE 00_INICIAR_AQUI.bat.
    Esse launcher ainda NAO substitui o guardian antigo. O guardian antigo pode
    reiniciar o agente enquanto a candidata tenta assumir a mesma porta 8765.
-   Primeiro faça o INVENTARIO READ-ONLY do guardian/instalacoes, confira
-   coletas/sincronizacoes pendentes e aguarde o plano supervisionado de transicao.
+   Primeiro finalize as coletas/sincronizacoes, feche coletas no navegador e
+   use SOMENTE 01_TROCAR.bat da pasta nova. O assistente exige inventario de
+   guardian/instalacoes, dependencias prontas e confirmacao expressa.
    Nenhuma deteccao automatica deste ZIP autoriza o desligamento do guardian.
-2. Guarde intactas a pasta, o SQLite, a configuracao e o guardian da 0.5.39.
-   Backup e rollback devem ser comprovados ANTES de liberar a mudanca.
+2. Guarde intacta a pasta anterior. O 01_TROCAR.bat faz backup privado,
+   ensaio de restauracao e transfere SQLite/config/token/historico para a pasta
+   nova apos parar somente o agente comprovado. Se houver erro, tenta reiniciar
+   automaticamente o antigo. NUNCA apague a pasta ou o backup anterior.
 3. Extraia ESTE ZIP em uma pasta NOVA e independente, sem sobrescrever a antiga.
 4. SOMENTE em posto sem guardian anterior, ou APOS a migracao supervisionada
    e a liberacao expressa, execute 00_INICIAR_AQUI.bat.
@@ -171,10 +174,17 @@ INSTALACAO / TESTE — LEIA ANTES DE EXECUTAR:
 7. Console MES e uma view interna da Central: entrar/sair nao abre outra aplicacao nem exige um segundo login.
 8. O primeiro login da Central pode exigir internet. Depois, Auth/Firestore usam persistencia/cache do navegador quando disponiveis.
 
-ESTE PACOTE NAO E UM UPDATER NEM UMA MIGRACAO AUTOMATICA:
-- O arquivo 01_TROCAR_PARA_PR69_NOVA.bat oferece TROCA SUPERVISIONADA
-  opcional, com confirmacao expressa e sem migracao de dados. Ele so pode
-  parar um agente/guardian antigo reconhecido; bloqueios nao devem ser forcados.
+ATUALIZACAO EXISTENTE — 01_TROCAR.bat:
+- Troca supervisionada com transferencia verificada de dados e backup privado.
+- Faz preflight, instala dependencias sem criar SQLite, confirma guardian/porta
+  e ausencia de coletas observadas; solicita confirmacao para prosseguir.
+- A fila de sincronizacao do navegador NAO pode ser comprovada pelo agente:
+  finalize/verifique manualmente antes de clicar Sim. Nao coletar durante troca.
+- Se bloquear, NAO execute 00_INICIAR nem desative guardian/antivirus para forcar.
+- Se falhar apos parar o antigo, tenta rollback com a instalacao original;
+  se retornar ROLLBACK_ANTIGO=MANUAL, preserve as pastas e solicite ajuda.
+- NAO eh validacao fisica GREEN nem instalador de producao geral; teste
+  primeiro no posto conhecido, com aceite local e historico intacto.
 - INSTRUCOES_INSTALACAO_LIMPA.txt e o procedimento atualizado do SHA acima.
 - Manuais/notas PR69 adicionais sao HISTORICOS e podem citar SHAs anteriores.
 - nao sobrepoe CLEAN V3;
