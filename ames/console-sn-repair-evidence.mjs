@@ -6,8 +6,10 @@ const operatorName=row=>text(value(row,'operator_name','tran_user_name','Operato
 
 function processRows(result={}){
   const trace=result.trace_3022||{};
+  const local=(result.local_snapshot?.process_events||[]).filter(row=>pcbaOf(row)||pcbaOf(row?.raw));
   return [...(trace.operator_evidence||[]),...(trace.process_passages||[]),...(trace.rows||[]),
-    ...(trace.pcbas||[]).flatMap(entry=>(entry?.result?.rows||[]).map(row=>({...row,pcba_sn:row.pcba_sn||entry.pcba_sn})))];
+    ...(trace.pcbas||[]).flatMap(entry=>(entry?.result?.rows||[]).map(row=>({...row,pcba_sn:row.pcba_sn||entry.pcba_sn}))),
+    ...local];
 }
 
 export function provenRepairUserName(repair={},result={},currentPcba=''){

@@ -4,7 +4,7 @@ import {escapeHtml as esc} from './evidence-view.mjs';
 import {pcbaUsageEvidence} from './console-sn-history-detail.mjs';
 import {parseFailureInstant,productionEvidenceForOccurrence} from './data/production-evidence.mjs';
 import {provenRepairUserName} from './console-sn-repair-evidence.mjs';
-import {a6900ForSnRepair} from './data/a6900-technician.mjs';
+import {a6900ForSnRepair,a6900ObservedForSn} from './data/a6900-technician.mjs';
 
 const text=value=>String(value??'').trim();
 const t=(locale,pt,en)=>String(locale||'pt-BR').startsWith('en')?en:pt;
@@ -71,9 +71,10 @@ function proof2114(label,f,locale){
 function proof3012(repair,locale,label,result={},currentPcba=''){
   const id=text(repair.repair_user),technician=a6900ForSnRepair(repair,result,currentPcba),name=provenRepairUserName(repair,result,currentPcba);
   const actor=technician?technician.name+' ('+technician.id+')':t(locale,'Técnico da falha na A6900 não comprovado','Fault technician at A6900 not proven');
+  const qualified=technician?.confidence==='nearby_repair_clock';
   return `<div class="ames-sn-smart-proof"><small>${esc(label)}</small>
     <b>${esc(actor)}</b>
-    <small>${esc(t(locale,'Técnico da falha · 3022 A6900','Fault technician · 3022 A6900'))}</small>
+    <small>${esc(qualified?t(locale,'A6900 observada próxima ao reparo · vínculo com a falha não comprovado','A6900 observed near repair · fault link unproven'):t(locale,'Técnico da falha · 3022 A6900','Fault technician · 3022 A6900'))}</small>
     <small>${esc(t(locale,'Usuário do reparo 3012 (papel distinto)','3012 repair user (different role)'))}: ${esc(name?name+' ('+id+')':fmt(id))}</small>
     <span>${esc(t(locale,'Horário do reparo 3012','3012 repair time'))}: ${esc(repair.repair_time?time(repair.repair_time):'—')}</span>
     <small>${esc(t(locale,'Comentário do AT (3012)','Technician comment (3012)'))}</small>
@@ -236,12 +237,12 @@ function uniqueBoardProof(alerts,model,locale,currentPcba){
       (c.version?' · '+esc(t(locale,'Regra','Rule'))+' '+esc(c.version):'')).join(' · ')+'</p>':'')+
     uniqueRest.join('')+
     '<small class="ames-sn-alert-muted">'+esc(t(locale,
-      'Comentários 3012 já aparecem acima, sem repetição. Uma correlação não confirma a causa raiz.',
-      '3012 comments are shown above without duplication. Correlation does not establish root cause.'))+'</small>'+
+      'Comentários 3012, quando disponíveis, aparecem acima sem repetição. Uma correlação não confirma a causa raiz.',
+      '3012 comments appear above when available without duplication. Correlation does not establish root cause.'))+'</small>'+
     '</div>';
 }
 
-function shortTechnicianEvidence(alerts,locale,result,currentPcba){
+function shortTechnicianEvidence(alerts,locale,result,currentPcba,boardRepairs=[]){
   const entries=new Map();
   const add=(repair,label)=>{
     const id=text(repair?.repair_user),comment=text(repair?.repair_comment);
@@ -259,26 +260,62 @@ function shortTechnicianEvidence(alerts,locale,result,currentPcba){
     for(const item of proof.ambiguous_3012||[])add(item,'3012 · não atribuído à sequência 2114');
     for(const item of proof.candidates_3012||[])add(item,'3012 · registro candidato');
   }
+  // A low-risk, different-failure alert often has no correlation proof carrying
+  // 3012 rows. Keep same-board repair context visible without assigning it to
+  // any 2114 Hist Seq or claiming it caused the alert.
+  for(const repair of boardRepairs)if(text(repair.pcba_sn)===text(currentPcba))
+    add(repair,'3012 · contexto da PCBA sem associação individual comprovada');
   const rows=[...entries.values()].sort((a,b)=>String(a.repair.repair_time||'').localeCompare(String(b.repair.repair_time||'')));
-  if(!rows.length)return '';
+  const observations=a6900ObservedForSn(result,currentPcba);
+  if(!rows.length&&!observations.length)return '';
+  const seenTimes=new Map();
+  for(const {repair} of rows){
+    const stamp=text(repair.repair_time),id=text(repair.repair_user);
+    if(!stamp)continue;
+    const key=JSON.stringify([text(repair.pcba_sn),stamp,id]);
+    seenTimes.set(key,(seenTimes.get(key)||0)+1);
+  }
+  const repeated=[...seenTimes.values()].filter(n=>n>1);
   const evidence=({repair,label})=>{
     const id=text(repair.repair_user),name=provenRepairUserName(repair,result,currentPcba),technician=a6900ForSnRepair(repair,result,currentPcba);
     const person=technician?`${technician.name} (${technician.id})`:t(locale,'Técnico da falha A6900 não comprovado','A6900 fault technician unproven');
+    const stationLabel=technician?.confidence==='nearby_repair_clock'?t(locale,
+      '3022 A6900 próximo ao horário 3012; possível diferença de relógio, vínculo com esta falha não comprovado',
+      '3022 A6900 near 3012 time; possible clock discrepancy, fault link unproven'):'3022 A6900';
     return '<div class="ames-sn-alert-tech-preview" data-sn-alert-repair-row><div class="ames-sn-alert-tech-id">'+
-      '<small>'+esc(label)+' · 3022 A6900</small><b>'+esc(person)+'</b><small>'+esc(t(locale,'Usuário do reparo 3012','3012 repair user'))+': '+esc(name?name+' ('+id+')':id||'—')+'</small><time>'+esc(repair.repair_time?time(repair.repair_time):'—')+'</time></div>'+
+      '<small>'+esc(label)+' · '+esc(stationLabel)+'</small><b>'+esc(person)+'</b><small>'+esc(t(locale,'Usuário do reparo 3012','3012 repair user'))+': '+esc(name?name+' ('+id+')':id||'—')+'</small><time>'+esc(repair.repair_time?time(repair.repair_time):'—')+'</time></div>'+
       '<p>'+esc(fmt(repair.repair_comment))+'</p></div>';
   };
   const maxVisible=3;
+  const observedRow=event=>'<div class="ames-sn-alert-tech-preview" data-sn-alert-3022-a6900><div class="ames-sn-alert-tech-id">'+
+    '<small>3022 · '+esc(t(locale,'A6900 observada nesta PCBA','A6900 observed on this board'))+'</small><b>'+esc(event.name)+' ('+esc(event.id)+')</b><time>'+esc(time(event.event_time))+'</time></div>'+
+    '<p>'+esc(t(locale,'Evento MES comprovado; vínculo com uma ocorrência 2114 ou um reparo 3012 não é automático.',
+      'MES event proven; association with a specific 2114 failure or 3012 repair is not automatic.'))+'</p></div>';
+  const direct3022=observations.slice(0,3).map(observedRow).join('')+
+    (observations.length>3?'<details class="ames-sn-alert-extra-a6900"><summary>'+esc(t(locale,
+      'Outras passagens A6900','More A6900 events'))+' ('+(observations.length-3)+')</summary>'+
+      observations.slice(3).map(observedRow).join('')+'</details>':'');
+  if(!rows.length)return '<section data-sn-alert-technician-preview class="ames-sn-alert-white ames-sn-alert-technicians">'+
+    '<div class="ames-sn-alert-evidence-head"><b>'+esc(t(locale,'Técnicos observados · 3022 A6900','Observed technicians · 3022 A6900'))+
+    '</b><span>'+observations.length+' '+esc(t(locale,'registro(s)','record(s)'))+'</span></div>'+
+    '<p class="ames-sn-alert-muted">'+esc(t(locale,'Comentário 3012 não disponível nesta consulta. A6900 identifica uma passagem MES, sem vínculo individual automático com a falha 2114.',
+      '3012 comment unavailable in this query. A6900 identifies a MES event, without automatic attribution to a 2114 failure.'))+'</p>'+direct3022+'</section>';
   return '<section data-sn-alert-technician-preview class="ames-sn-alert-white ames-sn-alert-technicians">'+
     '<div class="ames-sn-alert-evidence-head"><b>'+esc(t(locale,'ATs e comentários · 3012','Technicians and comments · 3012'))+
     '</b><span>'+rows.length+' '+esc(t(locale,'registro(s)','record(s)'))+'</span></div>'+
     '<p class="ames-sn-alert-muted">'+esc(t(locale,
       'Contexto 3012 da PCBA investigada. Nomes somente quando comprovados; registros sem vínculo temporal não são atribuídos individualmente à sequência 2114 nem ao risco deste alerta.',
       '3012 context for the investigated PCBA. Names appear only with evidence; rows without temporal linkage are not assigned to a 2114 sequence or to this alert.'))+'</p>'+
+    (repeated.length?'<p class="ames-sn-alert-rule-note" data-sn-alert-duplicate-repair-clock>'+esc(t(locale,
+      'A 3012 retornou '+repeated.reduce((a,b)=>a+b,0)+' registros com horário e usuário repetidos; isso não comprova intervenções distintas. Os registros originais permanecem na auditoria.',
+      '3012 returned repeated repair times and users; this does not prove distinct interventions. Raw records remain available for audit.'))+'</p>':'')+
     '<div class="ames-sn-alert-technician-list">'+rows.slice(0,maxVisible).map(evidence).join('')+'</div>'+
     (rows.length>maxVisible?'<details class="ames-sn-alert-extra-repairs"><summary>'+
       esc(t(locale,'Outros comentários 3012','Other 3012 comments'))+' ('+(rows.length-maxVisible)+')</summary>'+
       rows.slice(maxVisible).map(evidence).join('')+'</details>':'')+
+    (observations.length?'<details class="ames-sn-alert-observed-a6900"><summary>'+esc(t(locale,
+      'Passagens A6900 observadas na 3022 (sem atribuição individual)',
+      'A6900 events observed in 3022 (without individual attribution)'))+' ('+observations.length+')</summary>'+direct3022+'</details>':'')+
     '</section>';
 }
 
@@ -762,12 +799,13 @@ export function renderSmartSnAlerts(model={},result={},locale='pt-BR'){
       ({critical:'muito alta',high:'alta',medium:'média',low:'baixa'})[level],
       ({critical:'very high',high:'high',medium:'medium',low:'low'})[level])).join(' · ');
   const allProofs=alerts.flatMap(group=>group.alerts);
-  const sharedTechnicians=shortTechnicianEvidence(allProofs,locale,result,model.current_pcba);
+  const sharedTechnicians=shortTechnicianEvidence(allProofs,locale,result,model.current_pcba,model.repairs||[]);
   let boardHighlightsShown=false;
+  const firstBoardIndex=alerts.findIndex(alert=>alert.id.startsWith('pcba-')||alert.id.startsWith('mainboard-'));
   const cards=alerts.map((alert,i)=>{
     const firstBoard=alert.id.startsWith('pcba-')&&!boardHighlightsShown;
     if(firstBoard)boardHighlightsShown=true;
-    return card(alert,locale,result,model.current_pcba,model,i===0?sharedTechnicians:'',firstBoard);
+    return card(alert,locale,result,model.current_pcba,model,i===(firstBoardIndex<0?0:firstBoardIndex)?sharedTechnicians:'',firstBoard);
   });
   return `<section class="ames-sn-smart-alerts" data-sn-smart-alerts data-has-smart-alerts="true" style="display:grid;gap:8px"><div class="ames-sn-history-detail-head"><div><h3>${esc(t(locale,'Alertas inteligentes da Consulta por SN','Smart Query-by-SN alerts'))}</h3><p>${esc(t(locale,'Prioriza relações de reuso, recorrência e reparo que merecem investigação. Cada alerta abre a evidência que o sustenta.','Prioritizes reuse, recurrence and repair relationships that deserve investigation. Each alert opens its supporting evidence.'))}</p></div><span class="status warn">${esc(`${alerts.length}${summary?` · ${summary}`:''}`)}</span></div>${cards.join('')}</section>`;
 }

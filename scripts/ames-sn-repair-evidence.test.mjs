@@ -61,6 +61,16 @@ test('3022 Tran User ID + Tran User name resolves 3012 Repair User in the querie
  assert.equal(provenRepairUserName(repair(),result,'PCB-A'),null);
 });
 
+test('historical names in saved 3022 process events resolve only their original PCBA and matching BRM',()=>{
+ const result=base();
+ result.local_snapshot={process_events:[
+  {pcba_sn:'PCB-A',station:'A6900',operator_id:'BRM00068',operator_name:'Historical Operator',event_time:'2026-11-09 09:12:18'},
+  {pcba_sn:'PCB-B',station:'A6900',operator_id:'BRM00068',operator_name:'Unrelated Operator',event_time:'2026-11-09 09:12:18'}
+ ]};
+ assert.equal(provenRepairUserName(repair(),result,'PCB-A'),'Historical Operator');
+ assert.equal(provenRepairUserName(repair({pcba_sn:'PCB-C'}),result,'PCB-A'),null);
+});
+
 test('same 3012 Repair User resolves 3022 Tran User ID and Tran User name in any supported table',()=>{
  const rows=[{pcba_sn:'PCB-A',repair_user:'BRM00061',repair_comment:'Comentario 1'},
    {pcba_sn:'PCB-B',repair_user:'BRM00061',repair_comment:'Comentario 2'}];
@@ -92,4 +102,18 @@ test('A6900 analyst is not chosen from matching BRM at a different station or fr
  assert.deepEqual(a6900ForSnRepair(row,{sn:'PCB-A',trace_3022:{operator_evidence:events}},'PCB-A'),
   {name:'Actual Fault Technician',id:'BRM00099',station:'A6900'});
  assert.equal(a6900TechnicianFor(row,events.filter(event=>event.station!=='A6900'||event.pcba_sn==='PCB-B')),null);
+});
+
+test('historical A6900 operator remains visible as a qualified candidate when 3012 and 3022 clocks differ by one hour',()=>{
+ const row=repair({repair_user:'BRM00151',defect_time:'2026-11-09 10:11:00',repair_time:'2026-11-09 10:12:09'});
+ const old={pcba_sn:'PCB-A',station:'A6900',event_time:'2026-11-09 09:12:18',operator_id:'BRM00151',operator_name:'Jamile Maria'};
+ const latest={pcba_sn:'PCB-A',station:'A6900',event_time:'2026-11-10 16:54:05',operator_id:'BRM00075',operator_name:'Jonathan Pires'};
+ const candidate=a6900TechnicianFor(row,[old,latest]);
+ assert.deepEqual(candidate,{name:'Jamile Maria',id:'BRM00151',station:'A6900',confidence:'nearby_repair_clock',event_time:old.event_time});
+ assert.deepEqual(a6900ForSnRepair(row,{sn:'PCB-A',trace_3022:{operator_evidence:[latest]},
+  local_snapshot:{process_events:[old]}},'PCB-A'),candidate,'the saved exact-board 3022 event is reusable without recollecting');
+ assert.equal(a6900TechnicianFor(row,[{...old,operator_id:'BRM00999'},latest]),null,
+  'the 3012 Repair User cannot authenticate a different A6900 operator in the fallback window');
+ assert.equal(a6900TechnicianFor(row,[old,{...old,operator_id:'BRM00777',operator_name:'Another Operator'}]),null,
+  'two different A6900 people in the same nearby window are ambiguous');
 });

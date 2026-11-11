@@ -95,3 +95,46 @@ test('fourth distinct 3012 row stays available in nested detail without hijackin
  assert.match(code,/querySelector\(':scope > details'\)/);
  assert.match(code,/key\+':extra'/);
 });
+
+test('low-risk distinct-failure alert shows available 3022 A6900 technician even with no 3012 comment',()=>{
+ const result=evidence();
+ result.trace_2114.pcbas[0].result.rows[0]['Defect Code']='CAM-1';
+ result.trace_2114.pcbas[0].result.rows[0]['Defect Description']='Camera: front camera failed';
+ result.trace_2114.previous_failures=[result.trace_2114.pcbas[0].result.rows[0]];
+ result.trace_2114.current_failure=result.trace_2114.pcbas[0].result.rows[2];
+ result.trace_3012={status:'COMPLETE',rows:[]};
+ result.trace_3022.operator_evidence=[{pcba_sn:board,station:'A6900',
+  event_time:'2026-10-21 09:15:00',operator_id:'BRM00088',operator_name:'Irlane dos Santos'}];
+ const model=buildLiveSnForensics(result),html=renderSmartSnAlerts(model,result);
+ assert.match(html,/data-smart-alert="pcba-diverse-history"/);
+ assert.match(html,/Irlane dos Santos/);
+ assert.match(html,/Comentário 3012 não disponível/);
+ assert.match(html,/A6900 observada nesta PCBA/);
+});
+
+test('low-risk card keeps board 3012 repair comments as unassigned context even without alert proof repairs',()=>{
+ const result=evidence();
+ result.trace_2114.pcbas[0].result.rows[0]['Defect Code']='CAM-1';
+ result.trace_2114.pcbas[0].result.rows[0]['Defect Description']='Camera: front camera failed';
+ result.trace_2114.previous_failures=[result.trace_2114.pcbas[0].result.rows[0]];
+ result.trace_2114.current_failure=result.trace_2114.pcbas[0].result.rows[2];
+ result.trace_3012.rows=[repair('BRM00061','Reparo histórico preservado',
+  '2026-10-21T11:30:00-03:00','history-1')];
+ const html=renderSmartSnAlerts(buildLiveSnForensics(result),result);
+ assert.match(html,/data-smart-alert="pcba-diverse-history"/);
+ assert.match(html,/Reparo histórico preservado/);
+ assert.match(html,/contexto da PCBA|Contexto 3012 da PCBA/);
+});
+
+test('two 3012 rows with the same repair clock stay auditable without counting two proven interventions',()=>{
+ const result=evidence();
+ result.trace_3012.rows=[
+  repair('BRM00151','Swap feito e falha migra com a placa','2026-11-09 10:12:09','MES-1'),
+  repair('BRM00151','Swap feito e falha migra com a placa','2026-11-09 10:12:09','MES-2'),
+ ];
+ const html=renderSmartSnAlerts(buildLiveSnForensics(result),result);
+ assert.match(html,/data-sn-alert-duplicate-repair-clock/);
+ assert.match(html,/não comprova intervenções distintas/);
+ assert.equal((html.match(/data-sn-alert-repair-row/g)||[]).length,2,
+  'do not erase distinct original MES records just because their time and user coincide');
+});
