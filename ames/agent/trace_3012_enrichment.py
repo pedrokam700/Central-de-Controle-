@@ -84,7 +84,9 @@ def collect_historical_3012(a, payload, records, *, job_id, line, progress=None,
     collect = collector or a.mes_call(ames_3012_live.collect_live_3012)
     start = configured_3012_start(a.CONFIG)
     result['window_start'] = start.date().isoformat()
-    end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=0)
+    # Identical minute precision to individual SN lookups. Do not regenerate
+    # a 23:59:01 -> 23:59:59 cache tail on repeated captures the same day.
+    end = ames_3012_strategy.mes_day_end()
     result['window_end'] = end.isoformat(timespec='seconds')
     consecutive_failures = 0
     for index, sn in enumerate(selected, 1):

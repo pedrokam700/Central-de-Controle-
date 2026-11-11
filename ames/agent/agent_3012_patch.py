@@ -21,9 +21,9 @@ def exact_sn_history_window(now=None):
     if current.tzinfo:
         current = current.replace(tzinfo=None)
     start = EXACT_SN_HISTORY_START
-    # End on the workstation's *current day*, not the history start day and
-    # not tomorrow. Never silently query an obsolete, collapsed date range.
-    end = current.replace(hour=23, minute=59, second=59, microsecond=0)
+    # Share the exact 3012 minute bound with full multi-PCBA captures. A
+    # hidden 23:59:59 here would manufacture an artificial 59-second cache gap.
+    end = ames_3012_strategy.mes_day_end(current)
     return start, end
 
 

@@ -29,7 +29,7 @@ test('3012 uses the exact mapped composite date/time controls and versioned runt
 
 test('3012 exact SN window remains 24 Jan 2026 through the end of today',()=>{
   assert.match(patch,/EXACT_SN_HISTORY_START = datetime\(2026, 1, 24, 0, 0, 0\)/);
-  assert.match(patch,/current\.replace\(hour=23, minute=59, second=59/);
+  assert.match(patch,/ames_3012_strategy\.mes_day_end\(current\)/);
 });
 
 test('3012 View proves execution before accepting a response and follows store lifecycle',()=>{

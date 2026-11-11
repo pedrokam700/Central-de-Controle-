@@ -22,6 +22,19 @@ NON_RETRYABLE_3012_ERRORS = (
 )
 
 
+def mes_day_end(now: datetime | None = None) -> datetime:
+    """The A-MES 3012's last selectable minute of a workstation-local day.
+
+    One common bound is required for daily trace, SN lookup and SQLite cache.
+    A hidden :59-second suffix creates an artificial same-minute gap on the
+    next collection even though the 3012 form only sends HH:MM.
+    """
+    current = now or datetime.now()
+    if current.tzinfo:
+        current = current.replace(tzinfo=None)
+    return current.replace(hour=23, minute=59, second=0, microsecond=0)
+
+
 def _fatal_contract_error(exc: Exception) -> bool:
     return any(marker in str(exc) for marker in NON_RETRYABLE_3012_ERRORS)
 

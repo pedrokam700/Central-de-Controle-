@@ -5,10 +5,12 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import types
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +18,9 @@ AGENT = ROOT / "ames" / "agent"
 sys.path.insert(0, str(AGENT))
 
 import ames_3012_live as collector  # noqa: E402
+import agent_3012_patch  # noqa: E402
 import repair_3012  # noqa: E402
+import trace_3012_enrichment  # noqa: E402
 from store import Store  # noqa: E402
 
 
@@ -99,6 +103,56 @@ def run_fixture(scenario: str) -> dict:
 
 
 class Runtime3012Tests(unittest.TestCase):
+    def test_today_exact_history_window_does_not_create_a_2359_only_cache_gap(self):
+        # 11/11 at 08:03: the old policy asked for 23:59:59, even though
+        # the physical 3012 form can only send 23:59. With earlier trusted
+        # coverage ending at 23:59:00, the cache then queried the leftover
+        # 23:59:01-23:59:59 as a misleading 23:59 -> 23:59 window.
+        start, end = agent_3012_patch.exact_sn_history_window(datetime(2026, 11, 11, 8, 3))
+        self.assertEqual(start, datetime(2026, 1, 24, 0, 0))
+        self.assertEqual(end, datetime(2026, 11, 11, 23, 59))
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / 'local.sqlite3')
+            store.initialize()
+            repair_3012.ensure_schema(store)
+            with store.connect() as connection:
+                connection.execute(
+                    'INSERT INTO repair_coverage_3012(sn,start_at,end_at,source,completed_at) VALUES(?,?,?,?,?)',
+                    ('PCB-MINUTE', start.isoformat(timespec='seconds'), end.isoformat(timespec='seconds'),
+                     repair_3012.TRUSTED_COVERAGE_SOURCE, '2026-11-11T08:03:00'),
+                )
+            self.assertEqual(repair_3012.missing_windows(store, 'PCB-MINUTE', start, end), [])
+            legacy_end = end + timedelta(seconds=59)
+            prior_gap = repair_3012.missing_windows(store, 'PCB-MINUTE', start, legacy_end)
+            self.assertEqual(prior_gap, [(end + timedelta(seconds=1), legacy_end)])
+            self.assertEqual([moment.strftime('%Y-%m-%d %H:%M') for moment in prior_gap[0]],
+                             ['2026-11-11 23:59', '2026-11-11 23:59'])
+
+    def test_bulk_3012_trace_reuses_the_same_minute_end_policy(self):
+        # The full trace used to have a *second* independent 23:59:59 bound.
+        # A SN lookup fix alone did not prevent the next mass collection from
+        # recreating the same collapsed 23:59 window.
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            store = Store(folder / 'local.sqlite3')
+            store.initialize()
+            agent = types.SimpleNamespace(
+                CONFIG={'ames_start_date': '2026-01-24'}, STORE=store,
+                DATA_DIR=folder, WORKSTATION='SYNTHETIC-POSTO',
+                mes_call=lambda collector: collector,
+            )
+            with patch.object(trace_3012_enrichment.ames_3012_strategy, 'collect_exact_sn_cached',
+                              return_value={'rows': [], 'cache': {'queried': 0}}) as capture:
+                result = trace_3012_enrichment.collect_historical_3012(
+                    agent, {}, [{'pcba_sn': 'PCB-EXEMPLO'}],
+                    job_id='SYNTHETIC-JOB', line='TAN10102', collector=lambda **kwargs: None,
+                )
+            self.assertEqual(result['status'], 'done')
+            self.assertEqual(result['window_end'].split('T')[1], '23:59:00')
+            sent = capture.call_args.kwargs
+            self.assertEqual(sent['start_at'], datetime(2026, 1, 24))
+            self.assertEqual(sent['end_at'].time().isoformat(), '23:59:00')
+
     def test_real_wire_date_shapes_distinguish_blank_epoch_and_unrecognized(self):
         expected = {'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
 
