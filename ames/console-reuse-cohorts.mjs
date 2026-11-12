@@ -31,21 +31,20 @@ const boardBasisLabel=r=>r.use_basis==='3074_OWN_PCBA_CYCLES'
 export const reuseOverviewMetrics={pcbas:['observed','first_use','reused','prior_failure','same_failure','unknown_use'],components:['observed','first_use','reused','prior_failure','same_failure','unknown_use']};
 // Display one fault per PCBA and exact MES failure identity, but retain every
 // underlying 2114 Hist Seq / 3028 occurrence in the expandable evidence.
+// Each 2114 Hist Seq or 3028 occurrence gets its own historical row.
 export function consolidateComponentHistory(bindings=[]){
  const rows=[];
  for(const binding of bindings){
-  const grouped=[];
-  for(const failure of binding.failures||[]){
-   let group=grouped.find(g=>Boolean(g.defect_code&&failure.defect_code&&
-     String(g.defect_code).trim().toUpperCase()===String(failure.defect_code).trim().toUpperCase())||
-     compareFailures(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT');
-   if(!group){group={pcba_sn:binding.pcba_sn,role:binding.role,defect_code:failure.defect_code,
-     defect_desc:failure.defect_desc,recurrence_pcba_count:failure.recurrence_pcba_count||0,observations:[]};grouped.push(group);}
-   group.recurrence_pcba_count=Math.max(group.recurrence_pcba_count,failure.recurrence_pcba_count||0);
-   group.observations.push(failure);
+  const seen=new Set(),failures=[];
+  for(const f of binding.failures||[]){
+   const key=JSON.stringify([f.source_view,f.record_id||null,f.hist_seq??null,f.defect_code,f.defect_time,f.defect_type]);
+   if(seen.has(key))continue;
+   seen.add(key);failures.push(f);
   }
-  if(grouped.length)rows.push(...grouped);
-  else rows.push({pcba_sn:binding.pcba_sn,role:binding.role,observations:[]});
+  if(!failures.length)rows.push({pcba_sn:binding.pcba_sn,role:binding.role,observations:[]});
+  for(const f of failures)rows.push({pcba_sn:binding.pcba_sn,role:binding.role,
+   defect_code:f.defect_code,defect_desc:f.defect_desc,
+   recurrence_pcba_count:f.recurrence_pcba_count||0,observations:[f]});
  }
  return rows;
 }
@@ -89,27 +88,26 @@ function candidateAtCells(pcba,code){
  const attrs=`data-pcba="${esc(pcba||'')}" data-defect-code="${esc(code||'')}"`;
  return ['fault','technician','repair','comment'].map(field=>`<td class="ames-reuse-at-cell" data-reuse-at-field="${field}" ${attrs}><span class="ames-reuse-unproven">${t('Consultar cache 3012','Check 3012 cache')}</span></td>`).join('');
 }
+// Render complete values per source record: no "first value +N" or hover-only evidence.
 export function compact3012CandidateCells(repairs=[]){
- const dates=distinctText(repairs.map(row=>row.defect_time)).map(formatFactoryDateTime);
- const namedTechnicians=[...new Map(repairs.map(row=>{
-  const id=String(row.a6900_technician_id||'').trim(),name=String(row.a6900_technician_name||'').trim();
-  return name&&name!==id?[`${name}\u0000${id}`,{name,id}]:[null,null];
- }).filter(([key])=>key)).values()];
- const technicianCodes=distinctText(repairs.map(row=>row.repair_user));
- const finishes=distinctText(repairs.map(row=>row.repair_time)).map(formatFactoryDateTime);
- const comments=repairs.map(row=>String(row.repair_comment||'').trim()).filter(Boolean);
- const frequency=new Map();for(const comment of comments)frequency.set(comment,(frequency.get(comment)||0)+1);
- const ranked=[...frequency].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
- const compact=(items,empty)=>items.length?`<span class="ames-reuse-cell-clipped" title="${esc(items.join('\n'))}">${esc(items[0])}</span>${items.length>1?`<small title="${esc(items.join('\n'))}">+${items.length-1}</small>`:''}`:`<span class="ames-reuse-unproven" title="${esc(empty)}">—</span>`;
- const technicianTooltip=namedTechnicians.map(({name,id})=>`${name} · 3022 A6900: ${id||'—'}`).join('\n');
- const technicianCell=namedTechnicians.length?`<span class="ames-reuse-cell-clipped" title="${esc(technicianTooltip)}">${esc(namedTechnicians[0].name)}</span>${namedTechnicians.length>1?`<small title="${esc(technicianTooltip)}">+${namedTechnicians.length-1}</small>`:''}`:
-  `<span class="ames-reuse-unproven" title="${esc(t('Técnico da falha não comprovado na estação A6900 da 3022; Repair User 3012 é um papel diferente','Fault technician not proven at 3022 A6900; 3012 Repair User is a different role')+(technicianCodes.length?' · Repair User: '+technicianCodes.join(', '):''))}">—</span>`;
- return {
-  fault:compact(dates,t('Sem Defect Time 3012 associado','No associated 3012 Defect Time')),
-  technician:technicianCell,
-  repair:compact(finishes,t('Sem Repair Time 3012 associado','No associated 3012 Repair Time')),
-  comment:ranked.length?`<span class="ames-reuse-cell-clipped" title="${esc(ranked.map(([value,n])=>`${value} ×${n}`).join('\n'))}">${esc(ranked[0][0])}</span><small>×${ranked[0][1]}${ranked.length>1?` · +${ranked.length-1}`:''}</small>`:compact([],t('Sem comentário 3012 associado','No associated 3012 comment'))
- };
+ const entries=(repairs||[]).map(r=>{
+  const atName=String(r.a6900_technician_name||'').trim();
+  const atId=String(r.a6900_technician_id||'').trim();
+  const repairName=String(r.repair_user_name||r.repair_technician_name||'').trim();
+  const repairId=String(r.repair_user||'').trim();
+  const technician=atName&&atName!==atId
+   ?`<span class="ames-reuse-visible-value">${esc(atName)}</span><small>3022 · A6900${atId?' · '+esc(atId):''}</small>`
+   :repairName&&repairName!==repairId
+    ?`<span class="ames-reuse-visible-value">${esc(repairName)}</span><small>${t('Reparo 3012','3012 repair')}${repairId?' · '+esc(repairId):''}</small>`
+    :repairId
+     ?`<span class="ames-reuse-visible-value">${esc(repairId)}</span><small>${t('ID do usuário do reparo 3012 · nome não comprovado','3012 repair user ID · name unverified')}</small>`
+     :'<span class="ames-reuse-unproven">—</span>';
+  return {fault:r.defect_time?esc(formatFactoryDateTime(r.defect_time)):'—',
+    technician,repair:r.repair_time?esc(formatFactoryDateTime(r.repair_time)):'—',
+    comment:r.repair_comment?`<span class="ames-reuse-visible-comment">${esc(r.repair_comment)}</span>`:'—'};
+ });
+ const field=key=>entries.length?entries.map(e=>`<div class="ames-reuse-separate-evidence">${e[key]}</div>`).join(''):'<span class="ames-reuse-unproven">—</span>';
+ return {fault:field('fault'),technician:field('technician'),repair:field('repair'),comment:field('comment')};
 }
 function sourceAudit(r,rowKind){
  const uniqueEvidence=[...new Map((r.evidence||[]).map(e=>[
