@@ -250,35 +250,72 @@ export function mountReuseCohorts(root,snapshot,{cachedRepairHistory,cached3022O
  function wireReuse3012Columns(host){
   for(const detail of host.querySelectorAll('details[data-cohort-row]'))detail.addEventListener('toggle',async()=>{
    if(!detail.open)return;
-   const panels=[...detail.querySelectorAll('[data-reuse-at-field]')];if(!panels.length)return;
-   const boards=[...new Set(panels.map(p=>p.dataset.pcba).filter(Boolean))];
+   const timelines=[...detail.querySelectorAll('[data-reuse-3012-history]')];
+   if(!timelines.length)return;
    if(typeof cachedRepairHistory!=='function'){
-    panels.forEach(panel=>{panel.innerHTML='<span class="ames-reuse-unproven">—</span>';panel.title=t('Consulta 3012 local indisponível neste agente; não significa ausência de reparo','Local 3012 unavailable; this does not prove no repair');});return;
+    timelines.forEach(target=>target.innerHTML=`<p class="ames-reuse-unproven">${t('Consulta 3012 local indisponível; isso não comprova ausência de reparos.','Local 3012 history unavailable; absence of repairs not proven.')}</p>`);
+    return;
    }
+   const sourceGroups=timelines.map(target=>({target,
+    rows:[...(target.previousElementSibling?.querySelectorAll('[data-reuse-source-row]')||[])]}));
+   const boards=[...new Set(sourceGroups.flatMap(group=>group.rows.map(row=>row.dataset.pcba)).filter(Boolean))];
    for(const board of boards){
-    if(!repairCache.has(board))repairCache.set(board,Promise.resolve().then(()=>cachedRepairHistory({sn:board,limit:5000})).then(rows=>({rows:Array.isArray(rows)?rows:[],failed:false})).catch(()=>({rows:[],failed:true})));
+    if(!repairCache.has(board))repairCache.set(board,Promise.resolve().then(()=>cachedRepairHistory({sn:board,limit:5000}))
+     .then(rows=>({rows:Array.isArray(rows)?rows:[],failed:false})).catch(()=>({rows:[],failed:true})));
     if(typeof cached3022Operators==='function'&&!operatorCache.has(board))operatorCache.set(board,
-      Promise.resolve().then(()=>cached3022Operators({sn:board,limit:5000})).then(rows=>Array.isArray(rows)?rows:[]).catch(()=>[]));
+     Promise.resolve().then(()=>cached3022Operators({sn:board,limit:5000}))
+      .then(rows=>Array.isArray(rows)?rows:[]).catch(()=>[]));
    }
-   // Resolve employee identities across all related historical PCBAs before
-   // painting any row, regardless of whether the first board has a 3022 name.
-   const saved3022=(await Promise.all(boards.map(board=>operatorCache.get(board)||Promise.resolve([])))).flat();
-   const repairResults=await Promise.all(boards.map(board=>repairCache.get(board)));
-   for(const [boardIndex,board] of boards.entries()){
-    const {rows:history,failed}=repairResults[boardIndex];
-    if(!detail.isConnected)return;
-    const codes=[...new Set(panels.filter(p=>p.dataset.pcba===board).map(p=>p.dataset.defectCode))];
-    for(const code of codes){
-     const matched=code?matchCached3012Repairs([{pcba_sn:board,defect_code:code,defect_desc:code}],history):[];
-     const cells=compact3012CandidateCells(enrichReuseRepairTechnicians(matched,[...(snapshot.process_timeline?.events||[]),...saved3022]));
-     for(const panel of panels.filter(p=>p.dataset.pcba===board&&p.dataset.defectCode===code)){
-      panel.innerHTML=failed?'<span class="ames-reuse-unproven">—</span>':cells[panel.dataset.reuseAtField];
-      panel.dataset.atProof=failed?'unavailable':matched.length?'candidate':'not_found';
-      if(failed)panel.title=t('Falha ao ler cache local da 3012','Local 3012 cache read failed');
-      else if(!matched.length)panel.title=t('Sem registro 3012 da mesma PCBA/falha no cache consultado; ausência não comprovada','No matching board/fault record in queried 3012 cache; absence unproven');
-      else panel.title=t('3012: associação candidata por PCBA + falha; a correspondência exata de Hist Seq não foi comprovada','3012: candidate board/fault association; exact Hist Seq match unproven');
-     }
+   const results=await Promise.all(boards.map(board=>repairCache.get(board)));
+   const operators=(await Promise.all(boards.map(board=>operatorCache.get(board)||Promise.resolve([])))).flat();
+   if(!detail.isConnected)return;
+   const byBoard=new Map(boards.map((board,i)=>[board,results[i]]));
+   for(const {target,rows} of sourceGroups){
+    const codesByBoard=new Map();
+    for(const row of rows){
+     const board=row.dataset.pcba,code=row.dataset.defectCode;
+     if(!board||!code)continue;
+     if(!codesByBoard.has(board))codesByBoard.set(board,new Set());
+     codesByBoard.get(board).add(code);
     }
+    let failed=false,repairs=[];
+    for(const [board,codes] of codesByBoard){
+     const result=byBoard.get(board);
+     if(result?.failed){failed=true;continue;}
+     // This lookup is solely to discover relevant 3012 records. Each record is
+     // displayed ONCE below; it is NOT copied to any 2114/3028 occurrence row.
+     const observed=[...codes].map(code=>({pcba_sn:board,defect_code:code,defect_desc:code}));
+     repairs.push(...matchCached3012Repairs(observed,result?.rows||[]));
+    }
+    const unique=new Map();
+    for(const r of repairs){
+     const key=r.row_key||JSON.stringify([r.pcba_sn,r.defect_code,r.defect_time,r.repair_time,r.repair_user,r.repair_comment]);
+     if(!unique.has(key))unique.set(key,r);
+    }
+    repairs=enrichReuseRepairTechnicians([...unique.values()],[...(snapshot.process_timeline?.events||[]),...operators])
+     .sort((a,b)=>String(a.defect_time||'').localeCompare(String(b.defect_time||''))||
+      String(a.repair_time||'').localeCompare(String(b.repair_time||'')));
+    const tableRows=repairs.map(r=>{
+     const cells=compact3012CandidateCells([r]);
+     return `<tr data-reuse-3012-occurrence data-pcba="${esc(r.pcba_sn||'')}" data-defect-code="${esc(r.defect_code||'')}" data-defect-time="${esc(r.defect_time||'')}">
+      <td class="ames-component-compare-pcba">${esc(r.pcba_sn||'—')}</td>
+      <td><strong>${esc(r.defect_desc||r.defect_code||'—')}</strong><small>${esc(r.defect_code||'')}</small></td>
+      <td>${cells.fault}</td><td class="ames-reuse-at-cell" data-reuse-at-field="technician">${cells.technician}</td>
+      <td>${cells.repair}</td><td class="ames-reuse-at-cell">${cells.comment}</td>
+      <td>3012<small>${t('Registro próprio','Own record')}</small></td></tr>`;
+    }).join('');
+    const note=t('Cada linha é um atendimento registrado na 3012. Não atribuímos esse reparo a uma Hist Seq 2114 apenas porque a PCBA e o código coincidem. O responsável pelo reparo 3012 e o operador A6900 da 3022 podem ser pessoas diferentes.',
+     'Every row is one 3012 repair record. It is not attached to 2114 Hist Seq by board and code alone. The 3012 repair user and 3022 A6900 operator can be different people.');
+    target.innerHTML=`<section data-reuse-3012-timeline>
+     <h5>${t('Histórico de reparos 3012 · por atendimento','3012 repair history · per visit')} · ${repairs.length}</h5>
+     <p class="mes-context">${note}</p>
+     ${tableRows?`<div class="table-wrap ames-component-comparison"><table><thead><tr>
+      <th>PCBA</th><th>${t('Falha','Failure')}</th><th>${t('Falha 3012','3012 defect time')}</th>
+      <th>${t('Técnico','Technician')}</th><th>${t('Reparo 3012','3012 repair time')}</th>
+      <th>${t('Comentário AT','AT comment')}</th><th>${t('Origem','Source')}</th>
+      </tr></thead><tbody>${tableRows}</tbody></table></div>`
+      :`<p class="ames-reuse-unproven">${failed?t('Leitura parcial ou indisponível do cache 3012; não concluir ausência de reparo.','3012 cache partially unavailable; do not infer absence of repairs.'):t('Nenhum reparo 3012 desta PCBA/falha foi localizado no cache consultado; ausência não comprovada.','No matching 3012 repair found in local cache; absence unproven.')}</p>`}
+    </section>`;
    }
   });
  }
