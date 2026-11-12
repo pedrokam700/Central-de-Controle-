@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildReuseCohorts,summarizeReusePopulation,boardHistSeqRecurrence,board2114Timeline} from '../ames/data/reuse-cohorts.mjs';
-import {renderComponentComparisonTable,renderBoardComparisonTable,compact2114Analysis,compact3012CandidateCells,enrichReuseRepairTechnicians,matchCached3012Repairs} from '../ames/console-reuse-cohorts.mjs';
+import {renderComponentComparisonTable,renderBoardComparisonTable,compact2114Analysis,compact3012CandidateCells,enrichReuseRepairTechnicians,matchCached3012Repairs,consolidateComponentHistory} from '../ames/console-reuse-cohorts.mjs';
 const event={pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-19 10:00:00',defect_key:'K1',record_id:'D1',product_key:'CPH1',failure_family:'DISPLAY'};
 function fixture(){return {source_id:'A',snapshot_id:'S',revision:2,line_id:'TAN10101',occurrences:[event],
  pcba_history:{records:[{pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-17 08:00:00',failure_family:'DISPLAY',record_id:'H1'},
@@ -147,7 +147,10 @@ test('component comparison replaces duplicate timestamp with genuine 2114 analys
   const html=renderComponentComparisonTable(groups);
   assert.match(html,/Análise 2114/);
   assert.doesNotMatch(html,/Horário 2114 \/ 3028/);
-  assert.match(html,/<td><span class="ames-reuse-time-line">MainBoard<\/span><span class="ames-reuse-time-line">Phone Disassembly<\/span><\/td>/);
+  assert.equal(html.split('data-reuse-source-row').length-1,3,'two 2114 passages and one 3028 passage stay separate');
+  assert.ok(html.includes('Hist Seq 1')&&html.includes('Hist Seq 2'));
+  assert.ok(html.includes('MainBoard')&&html.includes('Phone Disassembly'));
+  assert.ok(html.includes('data-reuse-3012-history'),'3012 keeps a separate timeline');
   assert.match(html,/22\/10\/2026 08:07:30/);
   assert.match(html,/09\/11\/2026 10:00:38/);
   assert.ok(!compact2114Analysis([obs[2]]).includes('Not a 2114 analysis'));
@@ -167,15 +170,15 @@ test('reuse shows the real 3022 technician name only, keeping BRM ID in provenan
   const cell=compact3012CandidateCells(named).technician;
   assert.match(cell,/>TECNICA MES EXEMPLO<\/span>/);
   assert.doesNotMatch(cell,/>BRM00999<\/span>/);
-  assert.match(cell,/title="TECNICA MES EXEMPLO · 3022 A6900: BRM00123"/);
+  assert.ok(cell.includes('3022 · A6900 · BRM00123'),'operator source is displayed without hover');
   assert.equal(repairs[0].repair_technician_name,undefined,'original 3012 source remains immutable');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{...events[0],pcba_sn:'PCB-B'}])[0].a6900_technician_name,null,'identity from another board cannot prove that the old board was handled by this operator');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{provenance:{adapter:{operator_evidence:{station:'A6900',operator_id:'BRM00123',operator_name:'UNSCOPED'}}}}])[0].a6900_technician_name,null);
   assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{station:'A6900',event_time:'2026-11-09 10:42:38',operator_id:'BRM00124',operator_name:'OTHER PERSON'}}}}])[0].a6900_technician_name,null,'two people during one interval must remain ambiguous');
   assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-B',provenance:{adapter:{operator_evidence:{station:'A6900',event_time:'2026-11-09 10:42:38',operator_id:'BRM00124',operator_name:'OTHER PERSON'}}}}])[0].a6900_technician_name,'TECNICA MES EXEMPLO','other board does not change this evidence');
   const unnamed=compact3012CandidateCells(enrichReuseRepairTechnicians(repairs,[])).technician;
-  assert.match(unnamed,/Técnico da falha não comprovado na estação A6900/);
-  assert.doesNotMatch(unnamed,/>BRM00999<\/span>/);
+  assert.ok(unnamed.includes('ID do usuário do reparo 3012 · nome não comprovado'));
+  assert.ok(unnamed.includes('BRM00999'),'a 3012 repair-user ID is visible, never misreported as a name');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{pcba_sn:'PCB-A',raw:{'Working Oper Code':'A6900','Tran Time':'2026-11-09 10:45:38','Tran User Id':'BRM00123','Tran User':'TECNICA MES EXEMPLO'}}])[0].a6900_technician_name,'TECNICA MES EXEMPLO','old SQLite raw 3022 A6900 event is sufficient without MES recapture');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{pcba_sn:'PCB-A',raw:{'Working Oper Code':'A6900','Tran Time':'2026-11-09 10:45:38','Tran User Id':'BRM00123','Other comment':'TECNICA MES EXEMPLO'}}])[0].a6900_technician_name,null,'names must come from an explicit name field');
   const matching=matchCached3012Repairs([{pcba_sn:'PCB-A',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception'}],repairs);
@@ -189,5 +192,32 @@ test('the separate PCBA comparison also removes duplicate 3028/2114 time and kee
   assert.doesNotMatch(html,/Horário 3028 \/ 2114/);
   assert.match(html,/Análise 2114/);
   assert.match(html,/>MainBoard<\/span>/);
+ }finally{globalThis.document=prior;}
+});
+
+test('one PCBA, two historical 2114 visits and two 3012 repair users do not collapse into one value',()=>{
+ const prior=globalThis.document;globalThis.document={documentElement:{lang:'pt-BR'}};
+ try{
+  const failures=[
+   {pcba_sn:'PCB-1',source_view:'2114',defect_code:'D1',defect_type:'Phone Disassembly',hist_seq:1,defect_time:'2026-08-01 08:00:00'},
+   {pcba_sn:'PCB-1',source_view:'2114',defect_code:'D1',defect_type:'MainBoard',hist_seq:2,defect_time:'2026-11-11 08:00:00'},
+   {pcba_sn:'PCB-1',source_view:'3028',defect_code:'D1',defect_time:'2026-11-11 08:00:00'}
+  ];
+  const grouped=consolidateComponentHistory([{pcba_sn:'PCB-1',role:'previous',failures}]);
+  assert.equal(grouped.length,3);
+  const components=renderComponentComparisonTable(grouped);
+  assert.equal(components.split('data-reuse-source-row').length-1,3);
+  assert.ok(components.includes('Hist Seq 1')&&components.includes('Hist Seq 2'));
+  assert.ok(!components.includes('Técnico AT · A6900*'));
+  const board=renderBoardComparisonTable({sn:'PCB-1',events:[failures[2]],history_2114:failures.slice(0,2)});
+  assert.equal(board.split('data-board-failure-row').length-1,3);
+  assert.ok(board.includes('data-reuse-3012-history'));
+  const cells=compact3012CandidateCells([
+   {defect_time:'2026-08-01 08:00:00',repair_comment:'Primeiro reparo',repair_user:'BRM0001'},
+   {defect_time:'2026-11-11 08:00:00',repair_comment:'Segundo reparo',repair_user:'BRM0002'}
+  ]);
+  assert.ok(cells.comment.includes('Primeiro reparo')&&cells.comment.includes('Segundo reparo'));
+  assert.ok(cells.technician.includes('BRM0001')&&cells.technician.includes('BRM0002'));
+  assert.ok(!cells.comment.includes('title=')&&!cells.technician.includes('+1'));
  }finally{globalThis.document=prior;}
 });
