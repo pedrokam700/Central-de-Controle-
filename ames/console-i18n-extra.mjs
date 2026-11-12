@@ -226,4 +226,5 @@ Solicitar recuperação seletiva manualmente|Request selective recovery manually
 Para recuperar lacunas existentes mesmo sem job anterior visível; exige evidência local capturada.|Recover existing gaps even without a visible previous job; requires saved local evidence.
 Forçar nova coleta integral (avançado)|Force a new full collection (advanced)
 Somente se precisar reconsultar todas as fontes. Pode repetir trabalho já feito; não exclui o histórico salvo.|Only use this to query every source again. It may repeat previous work; saved history is preserved.
+Ao iniciar novamente a MESMA linha, revisão, período, modo e filtros após uma interrupção, o agente retoma automaticamente somente as fontes e PCBAs sem comprovação. A 3012 reutiliza intervalos já salvos. Nenhuma leitura 3028 é apagada.|When restarting with the SAME line, revision, period, mode and filters after an interruption, the agent automatically resumes only unverified sources and PCBAs. The 3012 reuses saved intervals. No 3028 reading is deleted.
 `.trim().split('\n').map(line=>{const i=line.indexOf('|');return [line.slice(0,i),line.slice(i+1)];}));
