@@ -88,7 +88,7 @@ test('fourth distinct 3012 row remains directly visible without hiding comments 
  result.trace_3012.rows.push(repair('BRM00061','Fourth unique technician note',
    '2026-10-21T17:25:00-03:00','AT-4'));
  const model=buildLiveSnForensics(result),html=renderSmartSnAlerts(model,result);
- assert.match(html,/ames-sn-alert-extra-repairs/);
+ assert.doesNotMatch(html,/ames-sn-alert-extra-repairs/,'all 3012 technician and comment records are directly visible');
  assert.equal((html.match(/data-sn-alert-repair-row/g)||[]).length,4);
  assert.match(html,/Fourth unique technician note/);
  const code=fs.readFileSync(new URL('../ames/console-sn-smart-alerts.mjs',import.meta.url),'utf8');
