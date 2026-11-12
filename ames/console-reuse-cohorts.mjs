@@ -1,5 +1,6 @@
 import {buildReuseCohorts} from './data/reuse-cohorts.mjs';
 import {a6900TechnicianFor} from './data/a6900-technician.mjs';
+import {projectRepairTechnicianNames} from './console-sn-repair-evidence.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
 import {compareFailures} from './data/failure-taxonomy.mjs';
@@ -89,13 +90,15 @@ export function compact3012CandidateCells(repairs=[]){
   const atId=String(r.a6900_technician_id||'').trim();
   const repairName=String(r.repair_user_name||r.repair_technician_name||'').trim();
   const repairId=String(r.repair_user||'').trim();
-  const technician=atName&&atName!==atId
-   ?`<span class="ames-reuse-visible-value">${esc(atName)}</span><small>3022 · A6900${atId?' · '+esc(atId):''}</small>`
-   :repairName&&repairName!==repairId
+  // Prefer the *repair* technician identified from 3012 Repair User + the
+  // same PCBA/BRM in 3022, at ANY station. An A6900 analyst is another role.
+  const technician=repairName&&repairName!==repairId
     ?`<span class="ames-reuse-visible-value">${esc(repairName)}</span><small>${t('Reparo 3012','3012 repair')}${repairId?' · '+esc(repairId):''}</small>`
-    :repairId
-     ?`<span class="ames-reuse-visible-value">${esc(repairId)}</span><small>${t('ID do usuário do reparo 3012 · nome não comprovado','3012 repair user ID · name unverified')}</small>`
-     :'<span class="ames-reuse-unproven">—</span>';
+    :atName&&atName!==atId
+     ?`<span class="ames-reuse-visible-value">${esc(atName)}</span><small>${t('Operador observado na 3022 · A6900; responsável pelo reparo não comprovado','Observed 3022 A6900 operator; repair user unproven')}${atId?' · '+esc(atId):''}</small>`
+     :repairId
+      ?`<span class="ames-reuse-visible-value">${esc(repairId)}</span><small>${t('ID do usuário do reparo 3012 · nome não comprovado','3012 repair user ID · name unverified')}</small>`
+      :'<span class="ames-reuse-unproven">—</span>';
   return {fault:r.defect_time?esc(formatFactoryDateTime(r.defect_time)):'—',
     technician,repair:r.repair_time?esc(formatFactoryDateTime(r.repair_time)):'—',
     comment:r.repair_comment?`<span class="ames-reuse-visible-comment">${esc(r.repair_comment)}</span>`:'—'};
@@ -292,7 +295,7 @@ export function mountReuseCohorts(root,snapshot,{cachedRepairHistory,cached3022O
      const key=r.row_key||JSON.stringify([r.pcba_sn,r.defect_code,r.defect_time,r.repair_time,r.repair_user,r.repair_comment]);
      if(!unique.has(key))unique.set(key,r);
     }
-    repairs=enrichReuseRepairTechnicians([...unique.values()],[...(snapshot.process_timeline?.events||[]),...operators])
+    repairs=enrichReuseRepairTechnicians(projectRepairTechnicianNames([...unique.values()],[...(snapshot.process_timeline?.events||[]),...operators]),[...(snapshot.process_timeline?.events||[]),...operators])
      .sort((a,b)=>String(a.defect_time||'').localeCompare(String(b.defect_time||''))||
       String(a.repair_time||'').localeCompare(String(b.repair_time||'')));
     const tableRows=repairs.map(r=>{
