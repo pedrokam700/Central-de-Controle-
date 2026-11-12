@@ -431,23 +431,19 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
         if line_callback:
             line_callback("3074 preparando view A-MES")
         page3074 = navigator.ensure_3074()
-        if line_callback:
-            line_callback("2114 preparando OPC / view")
-        page2114 = navigator.ensure_2114()
+        # Do not navigate/open OPC 2114 before the potentially long 3074
+        # source pass. The MES session may replace that tab during material
+        # tracing; an early 2114 failure must never discard independent 3074.
         raw3074 = tela3074_mod.Tela3074(browser._target, engine_dir)
         # SessionObject does not delegate __setattr__; bind Home on the real
         # collector BEFORE wrapping to avoid silently using the OPC/2114 tab.
         raw3074.target_page = page3074
         tela3074 = session_object(raw3074)
-        tela2114 = session_object(tela2114_mod.Tela2114(browser._target, engine_dir))
-        # Fail fast with the exact missing real-world prerequisite instead of
-        # silently consulting a stale/wrong tab.
+        raw2114 = tela2114_mod.Tela2114(browser._target, engine_dir)
+        tela2114 = session_object(raw2114)
+        # Only verify 3074 now. The independent OPC source is opened after
+        # its material observations are checkpointed.
         tela3074._page()
-        tela2114._page()
-        # The 2114 source itself retries/marks an unconfirmed Shift as partial.
-        # Avoid a duplicate lookup here and do not discard successful 3074
-        # capture merely because this independent source is unavailable.
-        shift = tela2114.turno_atual()
 
         def pcba_progress(i, total, sn, failures, status):
             if line_callback:
@@ -491,6 +487,16 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
             if event_callback:
                 event_callback({"stage":"2114","kind":"pcba","current":i,"total":total,"pcba":pcba,"status":status,"state":state if status in {"COMPLETE","ERROR"} else None})
 
+        # Late, bounded OPC navigation. Failure here is represented as
+        # 2114 PARTIAL by turno_atual()/executar_fluxo_2114, not a fatal
+        # exception that loses the already collected 3074 source.
+        if line_callback:
+            line_callback("2114 preparando OPC / view após 3074")
+        try:
+            raw2114.target_page = navigator.ensure_2114(timeout_s=12.0)
+        except Exception as exc:
+            if line_callback:
+                line_callback(f"2114 OPC indisponível: {type(exc).__name__}: {str(exc)[:160]}")
         result_2114 = fluxo2114_mod.executar_fluxo_2114(
             result_3074, tela2114, source_sha256=result_3074.get("source_sha256", digest),
             checkpoint_path=checkpoint_2114, progress=hist_progress, pause_s=pause_2114,
@@ -504,7 +510,7 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "source_3028": "LIVE_3028",
             "source_fingerprint": digest,
-            "shift_2114": shift,
+            "shift_2114": result_2114.get("shift"),
             "trace_3074": result_3074,
             "trace_2114": result_2114,
         }
