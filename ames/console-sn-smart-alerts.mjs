@@ -263,8 +263,12 @@ function shortTechnicianEvidence(alerts,locale,result,currentPcba,boardRepairs=[
   // A low-risk, different-failure alert often has no correlation proof carrying
   // 3012 rows. Keep same-board repair context visible without assigning it to
   // any 2114 Hist Seq or claiming it caused the alert.
-  for(const repair of boardRepairs)if(text(repair.pcba_sn)===text(currentPcba))
-    add(repair,'3012 · contexto da PCBA sem associação individual comprovada');
+  for(const entry of boardRepairs){
+    const repair={...entry,pcba_sn:entry.pcba_sn||entry.PCBA,
+      repair_user:entry.repair_user||entry['Repair User'],repair_time:entry.repair_time||entry['Repair Time'],
+      repair_comment:entry.repair_comment||entry['Repair Comment'],defect_code:entry.defect_code||entry['Defect Code']};
+    if(text(repair.pcba_sn)===text(currentPcba))add(repair,'3012 · contexto da PCBA sem associação individual comprovada');
+  }
   const rows=[...entries.values()].sort((a,b)=>String(a.repair.repair_time||'').localeCompare(String(b.repair.repair_time||'')));
   const observations=a6900ObservedForSn(result,currentPcba);
   if(!rows.length&&!observations.length)return '';
@@ -286,15 +290,12 @@ function shortTechnicianEvidence(alerts,locale,result,currentPcba,boardRepairs=[
       '<small>'+esc(label)+' · '+esc(stationLabel)+'</small><b>'+esc(person)+'</b><small>'+esc(t(locale,'Usuário do reparo 3012','3012 repair user'))+': '+esc(name?name+' ('+id+')':id||'—')+'</small><time>'+esc(repair.repair_time?time(repair.repair_time):'—')+'</time></div>'+
       '<p>'+esc(fmt(repair.repair_comment))+'</p></div>';
   };
-  const maxVisible=3;
+  const maxVisible=rows.length; // Every available 3012 repair/technician/comment stays visible.
   const observedRow=event=>'<div class="ames-sn-alert-tech-preview" data-sn-alert-3022-a6900><div class="ames-sn-alert-tech-id">'+
     '<small>3022 · '+esc(t(locale,'A6900 observada nesta PCBA','A6900 observed on this board'))+'</small><b>'+esc(event.name)+' ('+esc(event.id)+')</b><time>'+esc(time(event.event_time))+'</time></div>'+
     '<p>'+esc(t(locale,'Evento MES comprovado; vínculo com uma ocorrência 2114 ou um reparo 3012 não é automático.',
       'MES event proven; association with a specific 2114 failure or 3012 repair is not automatic.'))+'</p></div>';
-  const direct3022=observations.slice(0,3).map(observedRow).join('')+
-    (observations.length>3?'<details class="ames-sn-alert-extra-a6900"><summary>'+esc(t(locale,
-      'Outras passagens A6900','More A6900 events'))+' ('+(observations.length-3)+')</summary>'+
-      observations.slice(3).map(observedRow).join('')+'</details>':'');
+  const direct3022=observations.map(observedRow).join('');
   if(!rows.length)return '<section data-sn-alert-technician-preview class="ames-sn-alert-white ames-sn-alert-technicians">'+
     '<div class="ames-sn-alert-evidence-head"><b>'+esc(t(locale,'Técnicos observados · 3022 A6900','Observed technicians · 3022 A6900'))+
     '</b><span>'+observations.length+' '+esc(t(locale,'registro(s)','record(s)'))+'</span></div>'+
@@ -627,7 +628,10 @@ function card({id,title,summary,severity='medium',alerts=[],usage=null,materialH
   // 2114/3012/3022, timestamps and candidate limits open under one control.
   return '<article class="ames-sn-smart-alert ames-sn-alert-level-'+esc(severity)+'" data-smart-alert="'+esc(id)+'" data-sn-alert-severity="'+esc(severity)+'" style="border:1px solid color-mix(in srgb,'+
     tone+' 35%,transparent);border-left:6px solid '+tone+';background:'+background+';border-radius:10px;padding:13px 14px">'+
-    header+coverageNote+highlights+sharedTechnicians+
+    header+coverageNote+highlights+(severity==='low'
+      ?shortTechnicianEvidence(alerts,locale,result,currentPcba,
+        (model.repairs||[]).length?model.repairs:result.trace_3012?.rows||[])
+      :sharedTechnicians)+
     '<details style="margin-top:8px"><summary>'+esc(t(locale,'Ver evidências ('+alerts.length+')','View evidence ('+alerts.length+')'))+
     '</summary>'+historicalNote+production+
     '<div class="ames-sn-alert-proof-body">'+proof+'</div>'+
