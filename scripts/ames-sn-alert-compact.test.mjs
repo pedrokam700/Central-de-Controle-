@@ -83,7 +83,7 @@ test('2114 operational table omits technical code and never invents an assigned 
  assert.match(css,/High-priority SN alert/);
 });
 
-test('fourth distinct 3012 row stays available in nested detail without hijacking 2114 expander',()=>{
+test('fourth distinct 3012 row remains directly visible without hiding comments or hijacking 2114 expander',()=>{
  const result=evidence();
  result.trace_3012.rows.push(repair('BRM00061','Fourth unique technician note',
    '2026-10-21T17:25:00-03:00','AT-4'));
