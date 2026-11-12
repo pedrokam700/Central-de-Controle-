@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {provenRepairUserName,projectRepairTechnicianNames} from '../ames/console-sn-repair-evidence.mjs';
+import {provenRepairUserName,projectRepairTechnicianNames,normalize3022OperatorRows} from '../ames/console-sn-repair-evidence.mjs';
 import {a6900TechnicianFor,a6900ForSnRepair} from '../ames/data/a6900-technician.mjs';
 
 const repair=(overrides={})=>({pcba_sn:'PCB-A',repair_user:'BRM00068',repair_comment:'linha 1\nlinha 2',...overrides});
@@ -116,4 +116,27 @@ test('historical A6900 operator remains visible as a qualified candidate when 30
   'the 3012 Repair User cannot authenticate a different A6900 operator in the fallback window');
  assert.equal(a6900TechnicianFor(row,[old,{...old,operator_id:'BRM00777',operator_name:'Another Operator'}]),null,
   'two different A6900 people in the same nearby window are ambiguous');
+});
+
+test('old 3022 nested adapter identifies the historic Repair User on the SAME board without MES requery',()=>{
+ const old={pcba_sn:'002527005C1635F300002313',provenance:{adapter:{
+   operator_evidence:{station:'A6900',operator_id:'BRM00151',operator_name:'Jamile Maria',event_time:'2026-11-09 09:12:18'}
+ }}};
+ const query={sn:old.pcba_sn,trace_3022:{rows:[]},local_snapshot:{process_events:[old]}};
+ const repair={pcba_sn:old.pcba_sn,repair_user:'BRM00151',defect_time:'2026-11-09 10:11:00',repair_time:'2026-11-09 10:12:09'};
+ assert.equal(provenRepairUserName(repair,query,old.pcba_sn),'Jamile Maria');
+ const projected=projectRepairTechnicianNames([repair],[old]);
+ assert.equal(projected[0].repair_technician_name,'Jamile Maria');
+ assert.equal(normalize3022OperatorRows([old]).length,1);
+ assert.equal(normalize3022OperatorRows([old])[0].event_time,'2026-11-09 09:12:18');
+});
+test('nested adapter does not let another PCBA, conflicting operator names, or a nameless ID invent a technician',()=>{
+ const row={pcba_sn:'PCB-A',repair_user:'BRM1'};
+ const nested=name=>({pcba_sn:'PCB-A',provenance:{adapter:{
+   operator_evidence:{station:'A6900',operator_id:'BRM1',operator_name:name,event_time:'2026-11-09 09:12:18'}}}});
+ assert.equal(projectRepairTechnicianNames([row],[{...nested('Wrong Board'),pcba_sn:'PCB-B'}])[0].repair_technician_name,null);
+ assert.equal(projectRepairTechnicianNames([row],[nested('Name A'),nested('Name B')])[0].repair_technician_name,null);
+ assert.equal(projectRepairTechnicianNames([row],[nested('')])[0].repair_technician_name,null);
+ const queried={sn:'PCB-A',trace_3022:{operator_evidence:[nested('Wrong Board')]},local_snapshot:{process_events:[]}};
+ assert.equal(provenRepairUserName({...row,pcba_sn:'PCB-C'},queried,'PCB-C'),null);
 });
