@@ -31,7 +31,8 @@ const boundedOffset=(value,max=100000)=>{const n=Number(value);return Number.isI
 
 // Transport belongs to the existing session; all operational data lives in store.
 export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
-  let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false,refreshSettled=null,lastPartial=-1,lastRefresh=0,pendingSubmission=null;
+  let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false,refreshSettled=null,lastPartial=-1,lastRefresh=0,lastLiveRefreshAttempt=0,pendingSubmission=null;
+  const LIVE_DATA_REFRESH_INTERVAL_MS=15000; // progress still polls every 850 ms
   const workstationToken=bootstrapAgentToken(agentToken);
   // Keep API requests same-origin when a user pastes the local Central URL into
   // another tab. Fetch Metadata proves same-origin even when Origin is omitted
@@ -42,7 +43,9 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
   const canOpenOfficial=()=>!!workstationToken&&globalThis.location?.protocol==='http:'&&['127.0.0.1','localhost'].includes(globalThis.location?.hostname)&&globalThis.location?.port==='8765';
   const canPairFromOfficial=()=>globalThis.location?.origin==='https://pedrokam700.github.io' && globalThis.location?.pathname.startsWith('/Central-de-Controle-/');
 
-  const publish=patch=>{store.updateAgent(patch);changed();};
+  // Distinguish a lightweight progress tick from a data/revision change.
+  // MES polling must not trigger Firestore capture or full dashboard redraw.
+  const publish=(patch,kind='data')=>{store.updateAgent(patch);changed(kind);};
   async function request(path,body,blob=false) {
     const token=generation;
     const headers={};
@@ -157,9 +160,10 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       // without copying MES evidence into the source-selection receipt.
       const trace_receipt=raw.kind==='deep_trace'&&collected&&Object.keys(collected).length
         ?{snapshot_ids:collected}:null;
-      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,created_at:raw.created_at,started_at:raw.started_at,finished_at:raw.finished_at,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
+      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,created_at:raw.created_at,started_at:raw.started_at,finished_at:raw.finished_at,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}}, ['done','error','cancelled','skipped'].includes(raw.status)?'job-finished':'job-poll');
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
-      if(done||(partial!==lastPartial&&now()-lastRefresh>2200)){
+      if(done||(partial!==lastPartial&&now()-Math.max(lastRefresh,lastLiveRefreshAttempt)>=LIVE_DATA_REFRESH_INTERVAL_MS)){
+        lastLiveRefreshAttempt=now(); // retry budget even when a slow SQLite/HTTP read fails
         try{await refresh({afterJob:raw.status==='done'&&['analysis','deep_trace'].includes(raw.kind)});lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
       }
       // /v2/snapshots intentionally exposes TODAY only. A completed 3028
@@ -499,6 +503,6 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         String(row?.pcba_sn||'').trim()===exact):[];
     },
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
-    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;refreshSettled=null;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',connection_error:null,config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
+    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;refreshSettled=null;lastPartial=-1;lastRefresh=0;lastLiveRefreshAttempt=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',connection_error:null,config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
   });
 }
