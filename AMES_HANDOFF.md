@@ -1,5 +1,12 @@
 # Central de Trabalho + A-MES — ponto canônico de retomada
 
+> **RETOMADA ATIVA — 12/11/2026:** leia primeiro [o handoff consolidado da PR #70](docs/ames/handoffs/PR70_CONTINUIDADE_20261112.md), confirme a [PR #70 DRAFT](https://github.com/pedrokam700/Central-de-Controle-/pull/70), o HEAD remoto e os gates do mesmo SHA. A release oficial da main continua 0.5.39; **o candidato PR70 ainda NÃO está homologado no A-MES físico**. Não retomar pela PR #27 nem interpretar registros de outubro como status atual. Não fazer merge, instalar sobre dados/guardian ativos ou repetir coletas grandes antes de identificar estágio e cobertura.
+
+---
+
+## Arquivo histórico a partir deste ponto (checkpoint de outubro de 2026)
+
+
 > Este arquivo é um **checkpoint**, não uma fonte eternamente atual. Antes de qualquer alteração, revalide o GitHub. A fonte de verdade é: Roadmap #28 + PR ativo #27 + HEAD remoto + workflows/gates do HEAD exato.
 
 ## Bloco 4 em andamento — 2026-10-15
