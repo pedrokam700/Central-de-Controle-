@@ -41,6 +41,16 @@ class StateTransferTest(unittest.TestCase):
             db.execute("INSERT INTO schema_meta VALUES ('ames_source_id','fixture-persistent-source')")
             db.execute("CREATE TABLE jobs(id INTEGER PRIMARY KEY, status TEXT)")
             db.execute("INSERT INTO jobs(status) VALUES ('done')")
+            # A real workstation can have historical revisions with seven
+            # physical PCBA mountings. An upgrade must preserve every one.
+            db.execute("CREATE TABLE snapshot_payloads(snapshot_id INTEGER,kind TEXT,payload_json TEXT,created_at TEXT,PRIMARY KEY(snapshot_id,kind))")
+            db.execute("CREATE TABLE snapshot_payload_revisions(snapshot_id INTEGER,kind TEXT,revision INTEGER,payload_json TEXT,created_at TEXT,PRIMARY KEY(snapshot_id,kind,revision))")
+            fixture = json.dumps({"trace_3074":{"items":[{"pcba_sn":"SYNTHETIC-BOARD","base_query":{
+                "rows":[{"Barcode":"SYNTHETIC-BOARD","Aut Cmf1":"PCBA",
+                    "Bind Time":"2026-11-01 08:00:00","Aut Cmf7":str(i)} for i in range(1,8)]}}]}},
+                sort_keys=True)
+            db.execute("INSERT INTO snapshot_payloads VALUES (7,'integrated_v016',?,'2026-11-11')",(fixture,))
+            db.execute("INSERT INTO snapshot_payload_revisions VALUES (7,'integrated_v016',4,?,'2026-11-11')",(fixture,))
             db.commit()
         checkpoint = data / "checkpoints/2114/last.json"
         checkpoint.parent.mkdir(parents=True)
@@ -66,6 +76,15 @@ class StateTransferTest(unittest.TestCase):
             self.assertEqual(db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0], 1)
             self.assertEqual(db.execute("SELECT value FROM schema_meta WHERE key='ames_source_id'").fetchone()[0],
                              "fixture-persistent-source")
+        # The on-disk historical source evidence is the regression gate:
+        # source, backup and destination have the same revisions and row count.
+        for root in (self.old, self.new):
+            with closing(sqlite3.connect(root / "ames-agent/data/ames_local.sqlite3")) as db:
+                payload = db.execute("SELECT payload_json FROM snapshot_payloads WHERE snapshot_id=7 AND kind='integrated_v016'").fetchone()[0]
+                revision = db.execute("SELECT payload_json FROM snapshot_payload_revisions WHERE snapshot_id=7 AND kind='integrated_v016' AND revision=4").fetchone()[0]
+                self.assertEqual(payload,revision)
+                self.assertEqual(len(json.loads(payload)["trace_3074"]["items"][0]["base_query"]["rows"]),7,
+                                 "upgrade must not lose the source's seven PCBA mountings")
         self.assertTrue((self.backup / "runtime-backup-manifest.json").is_file())
         self.assertNotIn("fixture-token-", json.dumps(receipt))
         with self.assertRaisesRegex(ValueError, "candidate_already_has_operational_state"):
