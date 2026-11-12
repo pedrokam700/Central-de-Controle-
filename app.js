@@ -2367,9 +2367,17 @@ import { buildDailyAdminInsights } from './core/daily-admin-insights.mjs';
     let consoleMesView;
     let mesSync;
     let mesIntegration;
+    let lastMesJobPaint=0;
     function startMesSync(uid){
-      mesIntegration ||= createMesIntegration(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction,query,where}),{changed(){
+      mesIntegration ||= createMesIntegration(state.ames,firestoreTransport({db,auth,doc,collection,getDoc,getDocs,setDoc,onSnapshot,runTransaction,query,where}),{changed(kind){
         if(!currentAuthUser)return;
+        if(kind==='job-poll'){
+          // No snapshot changed: repaint only the visible job progress, not all
+          // dashboards/reuse indexes/graphs for every 850ms HTTP poll.
+          const time=Date.now();
+          if(activeView==='mesConsole'&&time-lastMesJobPaint>=1600){lastMesJobPaint=time;renderConsoleMes();}
+          return;
+        }
         renderDashboardMes();renderProductMes();renderFailuresMes();renderDailyMes();renderCoraMes();renderConsoleMes();
       }});
       mesSync=mesIntegration.sync;
