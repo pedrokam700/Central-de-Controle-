@@ -125,11 +125,16 @@ body.dark .ames-legacy-shell .ames-health-agent.unknown{background:var(--ames-so
 [data-reuse-cohorts] .ames-component-compare-pcba{font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:150px;max-width:230px}
 [data-reuse-cohorts] .ames-component-comparison td strong{font-size:12px;line-height:1.45}
 [data-reuse-cohorts] .ames-component-comparison td small{display:block;margin-top:3px;color:#64748b;font-size:11px;line-height:1.45}
-[data-reuse-cohorts] .ames-reuse-at-cell{min-width:112px;max-width:185px;line-height:1.5}
-[data-reuse-cohorts] .ames-reuse-at-cell .ames-reuse-cell-clipped{display:block;max-width:175px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-[data-reuse-cohorts] .ames-reuse-at-cell[data-reuse-at-field="technician"]{min-width:175px;max-width:245px}
-[data-reuse-cohorts] .ames-reuse-at-cell[data-reuse-at-field="technician"] .ames-reuse-cell-clipped{max-width:none;white-space:normal;overflow-wrap:anywhere}
-[data-reuse-cohorts] .ames-reuse-at-cell small{display:block;font-size:10px;white-space:nowrap;color:#53697b}
+/* Reuse drilldowns: source evidence is directly readable, never truncated behind hover. */
+[data-reuse-cohorts] [data-reuse-3012-timeline]{margin-top:16px;padding-top:10px;border-top:1px solid #d9e3eb}
+[data-reuse-cohorts] [data-reuse-3012-timeline] h5{font-size:13px;margin:2px 0 8px}
+[data-reuse-cohorts] .ames-reuse-at-cell{min-width:160px;max-width:360px;line-height:1.5;overflow-wrap:anywhere;white-space:normal}
+[data-reuse-cohorts] .ames-reuse-at-cell[data-reuse-at-field="technician"]{min-width:185px;max-width:285px}
+[data-reuse-cohorts] .ames-reuse-at-cell small{display:block;font-size:11px;white-space:normal;color:#53697b;overflow-wrap:anywhere}
+[data-reuse-cohorts] .ames-reuse-visible-value{display:block;white-space:normal;overflow-wrap:anywhere}
+[data-reuse-cohorts] .ames-reuse-visible-comment{display:block;white-space:pre-wrap;overflow-wrap:anywhere;max-width:45ch}
+[data-reuse-cohorts] .ames-reuse-separate-evidence+ .ames-reuse-separate-evidence{border-top:1px solid #e2e8f0;padding-top:6px;margin-top:6px}
+[data-reuse-cohorts] [data-reuse-source-row] td{overflow-wrap:anywhere}
 [data-reuse-cohorts] .ames-reuse-unproven{font-size:11px;color:#63768b;font-style:italic}
 [data-reuse-cohorts] .ames-reuse-time-line{display:block;white-space:nowrap;font-variant-numeric:tabular-nums}
 [data-reuse-cohorts] .ames-reuse-compact-more{font-size:11px}
