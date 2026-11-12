@@ -83,13 +83,15 @@ test('health and manual backup keep recovery metadata without paths or secrets i
   assert.deepEqual(h.store.agent().auxiliary.result.backup,result.backup);
   state=JSON.stringify(h.store.agent());assert.equal(state.includes('C:/Users/private'),false);assert.equal(state.includes('secret'),false);
 });
-test('real payloads, persistent config, 850ms progress and >2200ms changed partial refresh',async()=>{
+test('real payloads, persistent config, 850ms lightweight polls, 15s partial refresh and immediate completion',async()=>{
   const h=harness();await h.client.connect();assert.equal(h.store.read(line).source,'local');assert.deepEqual(h.calls.slice(0,2).map(c=>c.key),['ready','health']);assert.equal(h.store.agent().config.production_day_start,'07:00');
   await h.client.saveConfig({...scope,lines:[line,'TAN10102']});assert.deepEqual(h.calls.find(c=>c.key==='config'&&c.body).body,{configured_lines:[line,'TAN10102'],performance:'fast'});
   await h.client.collect('deep',{...scope,defect_codes:['D1','D2']});assert.deepEqual(h.calls.find(c=>c.key==='deep-trace').body,{...scope,defect_codes:['D1','D2'],snapshot_targets:{[line]:{source_id:'test-source',snapshot_id:'17',snapshot_revision:1,content_hash:'test-hash-1',period:h.f.legacy.summary.period}},request_id:h.calls.find(c=>c.key==='deep-trace').body.request_id});assert.equal(h.pending[0].ms,850);
   const count=()=>h.calls.filter(c=>c.key==='v2/snapshots').length,before=count();await h.tick();assert.equal(count(),before);assert.equal(h.store.agent().job.stage_progress['3074'].current,1);
-  h.routes['jobs/J'].partial_refresh=1;await h.tick(2300);assert.equal(count(),before+1);await h.tick(3000);assert.equal(count(),before+1);
-  h.routes['jobs/J'].status='done';await h.tick();assert.equal(h.pending.length,0);
+  h.routes['jobs/J'].partial_refresh=1;await h.tick(2300);assert.equal(count(),before,'an early partial update must not reload every snapshot');
+  await h.tick(3000);assert.equal(count(),before,'frequent progress polls remain lightweight');
+  await h.tick(12000);assert.equal(count(),before+1,'changed partial evidence may be reloaded after the 15s interval');
+  h.routes['jobs/J'].status='done';await h.tick();assert.equal(count(),before+2,'a finished job refreshes even before the next 15s window');assert.equal(h.pending.length,0);
   await h.client.collect('today',scope);assert.deepEqual(h.calls.find(c=>c.key==='runs').body,{preset:'today',lines:[line],performance:'fast',request_id:h.calls.find(c=>c.key==='runs').body.request_id});
   await h.client.cancel();assert(h.calls.some(c=>c.key==='jobs/J/cancel'));h.client.clear();assert.equal(h.pending.length,0);
 });
