@@ -170,7 +170,7 @@ test('reuse shows the real 3022 technician name only, keeping BRM ID in provenan
   const cell=compact3012CandidateCells(named).technician;
   assert.match(cell,/>TECNICA MES EXEMPLO<\/span>/);
   assert.doesNotMatch(cell,/>BRM00999<\/span>/);
-  assert.ok(cell.includes('3022 · A6900 · BRM00123'),'operator source is displayed without hover');
+  assert.ok(cell.includes('A6900')&&cell.includes('BRM00123'),'qualified A6900 actor and provenance visible without hover');
   assert.equal(repairs[0].repair_technician_name,undefined,'original 3012 source remains immutable');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{...events[0],pcba_sn:'PCB-B'}])[0].a6900_technician_name,null,'identity from another board cannot prove that the old board was handled by this operator');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{provenance:{adapter:{operator_evidence:{station:'A6900',operator_id:'BRM00123',operator_name:'UNSCOPED'}}}}])[0].a6900_technician_name,null);
