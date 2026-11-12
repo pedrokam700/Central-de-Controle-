@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildReuseCohorts,summarizeReusePopulation,boardHistSeqRecurrence,board2114Timeline} from '../ames/data/reuse-cohorts.mjs';
+import {projectRepairTechnicianNames} from '../ames/console-sn-repair-evidence.mjs';
 import {renderComponentComparisonTable,renderBoardComparisonTable,compact2114Analysis,compact3012CandidateCells,enrichReuseRepairTechnicians,matchCached3012Repairs,consolidateComponentHistory} from '../ames/console-reuse-cohorts.mjs';
 const event={pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-19 10:00:00',defect_key:'K1',record_id:'D1',product_key:'CPH1',failure_family:'DISPLAY'};
 function fixture(){return {source_id:'A',snapshot_id:'S',revision:2,line_id:'TAN10101',occurrences:[event],
@@ -168,14 +169,21 @@ test('reuse shows the real 3022 technician name only, keeping BRM ID in provenan
   assert.equal(named[0].a6900_technician_name,'TECNICA MES EXEMPLO');
   assert.equal(named[0].a6900_technician_id,'BRM00123','A6900 actor can differ from 3012 Repair User');
   const cell=compact3012CandidateCells(named).technician;
-  assert.match(cell,/>TECNICA MES EXEMPLO<\/span>/);
-  assert.doesNotMatch(cell,/>BRM00999<\/span>/);
-  assert.ok(cell.includes('A6900')&&cell.includes('BRM00123'),'qualified A6900 actor and provenance visible without hover');
+  assert.ok(cell.includes('TECNICA MES EXEMPLO'),'A6900 observation remains visible as a separately qualified actor');
+  assert.ok(cell.includes('BRM00999'),'3012 Repair User remains the repair technician ID when no name is proven');
+  assert.ok(cell.includes('não prova autoria do reparo')&&cell.includes('BRM00123'),'A6900 must not be mislabeled as repair technician');
   assert.equal(repairs[0].repair_technician_name,undefined,'original 3012 source remains immutable');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{...events[0],pcba_sn:'PCB-B'}])[0].a6900_technician_name,null,'identity from another board cannot prove that the old board was handled by this operator');
   assert.equal(enrichReuseRepairTechnicians(repairs,[{provenance:{adapter:{operator_evidence:{station:'A6900',operator_id:'BRM00123',operator_name:'UNSCOPED'}}}}])[0].a6900_technician_name,null);
   assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{station:'A6900',event_time:'2026-11-09 10:42:38',operator_id:'BRM00124',operator_name:'OTHER PERSON'}}}}])[0].a6900_technician_name,null,'two people during one interval must remain ambiguous');
   assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-B',provenance:{adapter:{operator_evidence:{station:'A6900',event_time:'2026-11-09 10:42:38',operator_id:'BRM00124',operator_name:'OTHER PERSON'}}}}])[0].a6900_technician_name,'TECNICA MES EXEMPLO','other board does not change this evidence');
+  const repairNamed=projectRepairTechnicianNames(repairs,[{pcba_sn:'PCB-A',operator_id:'BRM00999',operator_name:'TECNICO REPARO PROVADO',station:'A7600'}]);
+  assert.equal(repairNamed[0].repair_technician_name,'TECNICO REPARO PROVADO','same PCBA and exact 3012 Repair User ID proves the name outside A6900');
+  const rendered=compact3012CandidateCells(enrichReuseRepairTechnicians(repairNamed,events)).technician;
+  assert.ok(rendered.includes('TECNICO REPARO PROVADO'));
+  assert.ok(rendered.includes('TECNICA MES EXEMPLO'),'different A6900 analyst remains visible but does not override repair author');
+  assert.ok(rendered.indexOf('TECNICO REPARO PROVADO')<rendered.indexOf('TECNICA MES EXEMPLO'));
+  assert.equal(projectRepairTechnicianNames(repairs,[{pcba_sn:'PCB-B',operator_id:'BRM00999',operator_name:'WRONG BOARD'}])[0].repair_technician_name,null);
   const unnamed=compact3012CandidateCells(enrichReuseRepairTechnicians(repairs,[])).technician;
   assert.ok(unnamed.includes('ID do usuário do reparo 3012 · nome não comprovado'));
   assert.ok(unnamed.includes('BRM00999'),'a 3012 repair-user ID is visible, never misreported as a name');
