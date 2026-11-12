@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+      - work/ames-3012-reuso-auditado-20261106
   workflow_dispatch:
 
 permissions:
@@ -84,6 +85,9 @@ jobs:
 
       - name: Run A-MES Node contract suites
         run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
+
+      - name: Run PR70 live job polling regression
+        run: node ames/tests/pr70_job_poll_test.mjs
 
       - name: Run scheduler Python contract
         run: python3 scripts/agent-scheduler.test.py
