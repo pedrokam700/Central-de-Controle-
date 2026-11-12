@@ -90,15 +90,16 @@ export function compact3012CandidateCells(repairs=[]){
   const atId=String(r.a6900_technician_id||'').trim();
   const repairName=String(r.repair_user_name||r.repair_technician_name||'').trim();
   const repairId=String(r.repair_user||'').trim();
-  // Prefer the *repair* technician identified from 3012 Repair User + the
-  // same PCBA/BRM in 3022, at ANY station. An A6900 analyst is another role.
+  // The 3012 Repair User is the technician field for this repair.
+  // A6900 identifies a different actor and must not silently replace them.
+  const a6900Note=atName&&atName!==atId
+   ?`<small>${t('Operador observado na 3022/A6900 (não prova autoria do reparo)','Observed 3022/A6900 operator (not proof of repair)')}: ${esc(atName)}${atId?' · '+esc(atId):''}</small>`
+   :'';
   const technician=repairName&&repairName!==repairId
-    ?`<span class="ames-reuse-visible-value">${esc(repairName)}</span><small>${t('Reparo 3012','3012 repair')}${repairId?' · '+esc(repairId):''}</small>`
-    :atName&&atName!==atId
-     ?`<span class="ames-reuse-visible-value">${esc(atName)}</span><small>${t('Operador observado na 3022 · A6900; responsável pelo reparo não comprovado','Observed 3022 A6900 operator; repair user unproven')}${atId?' · '+esc(atId):''}</small>`
-     :repairId
-      ?`<span class="ames-reuse-visible-value">${esc(repairId)}</span><small>${t('ID do usuário do reparo 3012 · nome não comprovado','3012 repair user ID · name unverified')}</small>`
-      :'<span class="ames-reuse-unproven">—</span>';
+   ?`<span class="ames-reuse-visible-value">${esc(repairName)}</span><small>${t('Reparo 3012','3012 repair')}${repairId?' · '+esc(repairId):''}</small>${a6900Note}`
+   :repairId
+    ?`<span class="ames-reuse-visible-value">${esc(repairId)}</span><small>${t('ID do usuário do reparo 3012 · nome não comprovado','3012 repair user ID · name unverified')}</small>${a6900Note}`
+    :`<span class="ames-reuse-unproven">—</span>${a6900Note}`;
   return {fault:r.defect_time?esc(formatFactoryDateTime(r.defect_time)):'—',
     technician,repair:r.repair_time?esc(formatFactoryDateTime(r.repair_time)):'—',
     comment:r.repair_comment?`<span class="ames-reuse-visible-comment">${esc(r.repair_comment)}</span>`:'—'};
