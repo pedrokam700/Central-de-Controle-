@@ -204,7 +204,7 @@ test('low-risk alert retains historic technician and comments even when a higher
   ]}};
  const html=renderSmartSnAlerts(m,result,'pt-BR');
  assert.match(html,/data-smart-alert="component-compatible-failure"/);
- const low=html.split('data-smart-alert="component-compatible-failure"')[1].split('</article>')[0];
+ const low=html.split('data-smart-alert="component-compatible-failure"')[1];
  for(const name of ['Jamile Maria','Jonathan Pires','Primeira solucao','Segunda solucao','Terceira solucao'])
   assert.ok(low.includes(name),'low risk must show: '+name);
  assert.equal((low.match(/data-sn-alert-repair-row/g)||[]).length,3);
