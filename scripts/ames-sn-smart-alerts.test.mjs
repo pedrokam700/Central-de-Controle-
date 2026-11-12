@@ -186,3 +186,27 @@ test('prior component board facts show 2114 failure, time, and only exact-PCBA 3
   assert.doesNotMatch(componentCard.split('</div></div>')[0],/Foreign board note/,
     'a foreign 3012 repair must never be attributed to the reused component');
 });
+
+test('low-risk alert retains historic technician and comments even when a higher-priority PCBA card exists',()=>{
+ const m=model(),board='PCB-A';
+ const repairs=[
+  {pcba_sn:board,row_key:'R-1',defect_code:'F1',defect_time:'2026-11-09 10:11:00',repair_time:'2026-11-09 10:12:09',repair_user:'BRM00151',repair_comment:'Primeira solucao'},
+  {pcba_sn:board,row_key:'R-2',defect_code:'F1',defect_time:'2026-11-09 10:11:00',repair_time:'2026-11-09 10:12:09',repair_user:'BRM00151',repair_comment:'Segunda solucao'},
+  {pcba_sn:board,row_key:'R-3',defect_code:'F1',defect_time:'2026-11-10 16:50:00',repair_time:'2026-11-10 16:54:05',repair_user:'BRM00075',repair_comment:'Terceira solucao'}
+ ];
+ m.repairs=repairs;
+ m.alerts.push({kind:'COMPONENT_TYPE_COMPATIBLE',item_type:'LCM',item_sn:'COMP-1',pcba_sn:board,sources:['3074','2114'],
+  evidence:{failure:failure(board),current_failure:failure(board)}});
+ const result={...reusedResult,trace_3012:{rows:repairs},
+  trace_3022:{operator_evidence:[
+   {pcba_sn:board,station:'A6900',event_time:'2026-11-09 09:12:18',operator_id:'BRM00151',operator_name:'Jamile Maria'},
+   {pcba_sn:board,station:'A6900',event_time:'2026-11-10 16:54:05',operator_id:'BRM00075',operator_name:'Jonathan Pires'},
+  ]}};
+ const html=renderSmartSnAlerts(m,result,'pt-BR');
+ assert.match(html,/data-smart-alert="component-compatible-failure"/);
+ const low=html.split('data-smart-alert="component-compatible-failure"')[1].split('</article>')[0];
+ for(const name of ['Jamile Maria','Jonathan Pires','Primeira solucao','Segunda solucao','Terceira solucao'])
+  assert.ok(low.includes(name),'low risk must show: '+name);
+ assert.equal((low.match(/data-sn-alert-repair-row/g)||[]).length,3);
+ assert.ok(!low.includes('Outros comentários 3012'));
+});
