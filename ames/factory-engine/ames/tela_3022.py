@@ -1138,7 +1138,22 @@ class Tela3022:
         # Dispatch the MES query ONCE. A failed actual click is not retried:
         # even without a confirmed response we cannot prove it was not sent.
         mark("submit")
-        view.click(timeout=5000)
+        try:
+            view.click(timeout=5000)
+        except Exception as exc:
+            # Even after a non-mutating trial, ExtJS can raise a fresh x-mask
+            # between the trial and the real click. Do not click twice: the
+            # browser may already have dispatched the query before the error.
+            reason = str(exc).lower()
+            if "x-mask" in reason or "intercepts pointer events" in reason:
+                telemetry["view_blocked"] = True
+                telemetry["view_click_race"] = True
+                telemetry["status"] = "BLOCKED_VIEW_MASK"
+                raise RuntimeError(
+                    "3022 Views voltou a ser bloqueado por máscara ExtJS. "
+                    "Envio não confirmado: não repetir clique nem reutilizar grade anterior."
+                ) from exc
+            raise
         mark("view_clicked")
 
         inicio = time.time()
