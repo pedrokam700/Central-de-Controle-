@@ -14,6 +14,10 @@ const useIndex=(r,kind)=>index(kind==='pcba'?value(r,'_pcba_use_index','pcba_use
 // Physical self-PCBA cycles proven by 3074 are independent of the use index at
 // a particular 3028 defect. Never coerce one into the other.
 const knownPcbaCycles=r=>index(value(r,'Usos conhecidos da PCBA','pcba_known_use_count','known_use_count'));
+// Source 3074 may retain material reuse history even if it cannot be placed on
+// the current 3028 defect clock. This is a distinct physical counter.
+const knownMaterialCycles=r=>index(value(r,'Usos conhecidos material','known_use_count','total_pcba_count_known_now'));
+
 
 const eventKey=r=>JSON.stringify([sn(r),code(r),time(r),r.occurrence_id||r.record_id||null]);
 const sequence=r=>{
@@ -114,8 +118,8 @@ function finish(map,history=[]){
  return [...map.values()].map(row=>{
   row.uses=unique(row.uses);row.use_index=row.uses.length===1?row.uses[0]:null;
   row.known_cycle_candidates=unique(row.known_cycle_candidates||[]);
-  row.known_mounting_cycles=row.kind==='pcba'&&row.known_cycle_candidates.length===1?row.known_cycle_candidates[0]:null;
-  row.known_cycle_conflict=row.kind==='pcba'&&row.known_cycle_candidates.length>1;
+  row.known_mounting_cycles=row.known_cycle_candidates.length===1?row.known_cycle_candidates[0]:null;
+  row.known_cycle_conflict=row.known_cycle_candidates.length>1;
   row.use_conflict=row.uses.length>1;
   row.events=[...new Map(row.events.map(e=>[eventKey(e),e])).values()];
   row.prior_events=[...new Map(row.prior_events.map(e=>[eventKey(e),e])).values()];
@@ -191,8 +195,8 @@ export function summarizeReusePopulation(rows,proof=null){
   reused.every(r=>['failed','verified_no_failure'].includes(r.outcome)&&r.outcome_evidence_id);
  const select=predicate=>rows.filter(predicate);
  const metrics={observed:rows,
-  known_mountings:select(r=>r.kind==='pcba'&&r.known_mounting_cycles>=1),
-  known_reused_mountings:select(r=>r.kind==='pcba'&&r.known_mounting_cycles>=2),
+  known_mountings:select(r=>r.known_mounting_cycles>=1),
+  known_reused_mountings:select(r=>r.known_mounting_cycles>=2),
   first_use:select(r=>r.use_index===1&&!r.use_lower_bound),
   second_use:select(r=>r.use_index===2&&!r.use_lower_bound),
   third_plus_use:select(r=>r.use_index>=3&&!r.use_lower_bound),unknown_use:select(r=>!r.use_index),
@@ -219,8 +223,8 @@ export function buildReuseCohorts(snapshot={},filters={}){
    uses:[],known_cycle_candidates:[],events:[],prior_events:[],previous_pcbas:[],current_pcbas:[],products:[],part_numbers:[],evidence:[]});
   const item=map.get(id),use=useIndex(row,kind);
   // Known mounting counts belong to the physical 3074 report only, not 2114 or 3022.
-  if(kind==='pcba'&&source==='2114/3074'){
-   const known=knownPcbaCycles(row);
+  if((kind==='pcba'&&source==='2114/3074')||(kind==='component'&&source==='3074')){
+   const known=kind==='pcba'?knownPcbaCycles(row):knownMaterialCycles(row);
    if(known)item.known_cycle_candidates.push(known);
   }
   // The factory report derives the PCBA use index from the board's own 3074
