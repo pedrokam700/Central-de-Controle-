@@ -42,6 +42,21 @@ class Locator:
                     'Timeout waiting for button Views: <div class="x-mask"> intercepts pointer events'
                 )
             return
+        # A real Playwright locator has native actionability waiting. Unlike
+        # the removed trial=True preflight, this is its one actual View click.
+        if self.fixture.clock < self.fixture.trial_not_ready_until_s:
+            self.fixture.advance(min(float(kwargs.get('timeout',12000))/1000,
+                                     self.fixture.trial_not_ready_until_s-self.fixture.clock))
+            if self.fixture.clock < self.fixture.trial_not_ready_until_s:
+                raise TimeoutError(
+                    'Locator.click: Timeout ' + str(kwargs.get('timeout',12000))
+                    + 'ms exceeded. Call log: waiting for element to be visible, enabled and stable'
+                )
+        if self.fixture.clock < self.fixture.mask_until_s:
+            self.fixture.advance(min(float(kwargs.get('timeout',12000))/1000,
+                                     self.fixture.mask_until_s-self.fixture.clock))
+            if self.fixture.clock < self.fixture.mask_until_s:
+                raise TimeoutError('Locator.click: Timeout while x-mask intercepts pointer events')
         if self.fixture.mask_on_actual_click:
             self.fixture.mask_on_actual_click = False
             raise RuntimeError('Locator.click Timeout: <div class="x-mask"> intercepts pointer events')
