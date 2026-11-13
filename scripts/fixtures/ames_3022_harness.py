@@ -17,14 +17,27 @@ class Locator:
     def wait_for(self, **kwargs): pass
     def fill(self, value, **kwargs): self.fixture.call(op='fill', value=value)
     def input_value(self, **kwargs): return self.fixture.call(op='value')
-    def click(self, **kwargs): self.fixture.call(op='click')
+    def click(self, **kwargs):
+        if kwargs.get('trial'):
+            # Playwright's trial click checks pointer actionability, but MUST
+            # NOT dispatch a new MES request. Model the 3022 ExtJS mask.
+            self.fixture.trial_attempts += 1
+            if self.fixture.clock < self.fixture.mask_until_s:
+                self.fixture.advance(min(float(kwargs.get('timeout',650))/1000,
+                                         self.fixture.mask_until_s-self.fixture.clock))
+                raise RuntimeError(
+                    'Timeout waiting for button Views: <div class="x-mask"> intercepts pointer events'
+                )
+            return
+        self.fixture.call(op='click')
     def inner_text(self, **kwargs): return 'AWIP3022 View Lot History'
 
 
 class Ext3022Fixture:
     url = 'http://fixture/AWIP3022/VwViewLotHistoryView'
-    def __init__(self, collector, plans, rows=(), hidden=()):
+    def __init__(self, collector, plans, rows=(), hidden=(), mask_until_s=0.0):
         self.collector, self.clock = collector, 0.0
+        self.mask_until_s, self.trial_attempts = float(mask_until_s), 0
         self.process = subprocess.Popen(['node', str(ROOT/'scripts/fixtures/ames-3022-ext.cjs')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8')
         self.frames = [self]
         self.call(op='setup', plans=plans, rows=list(rows), hidden=list(hidden))
