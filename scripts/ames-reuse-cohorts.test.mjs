@@ -229,3 +229,49 @@ test('one PCBA, two historical 2114 visits and two 3012 repair users do not coll
   assert.ok(!cells.comment.includes('title=')&&!cells.technician.includes('+1'));
  }finally{globalThis.document=prior;}
 });
+
+test('regression: 3074 known self-cycles remain visible even if the 3028 use-at-defect is unknown',()=>{
+ const s=fixture();s.insights.drilldowns.pcba_analysis=[{
+  PCBA:'P1','Defect Code':'D1','Defect Time':event.defect_time,
+  '_pcba_use_index':0,'Usos conhecidos da PCBA':7,
+  'Falhas registradas 2114':3
+ }];
+ const data=buildReuseCohorts(s);
+ assert.equal(data.pcbas.counts.observed,1);
+ assert.equal(data.pcbas.counts.known_mountings,1);
+ assert.equal(data.pcbas.counts.known_reused_mountings,1);
+ assert.equal(data.pcbas.rows[0].known_mounting_cycles,7);
+ assert.equal(data.pcbas.counts.first_use,0);
+ assert.equal(data.pcbas.counts.second_use,0);
+ assert.equal(data.pcbas.counts.unknown_use,1,
+  '7 known physical cycles DO NOT prove the ordinal on the day of the defect');
+ assert.equal(data.pcbas.rows[0].use_basis,'KNOWN_3074_CYCLES_DEFECT_INTERVAL_UNPROVEN');
+});
+test('known 3074 count of one is not silently relabeled first use at the failure',()=>{
+ const s=fixture();s.insights.drilldowns.pcba_analysis=[{
+  PCBA:'P1','Defect Code':'D1','Defect Time':event.defect_time,
+  '_pcba_use_index':0,'Usos conhecidos da PCBA':1}];
+ const data=buildReuseCohorts(s);
+ assert.equal(data.pcbas.counts.known_mountings,1);
+ assert.equal(data.pcbas.counts.known_reused_mountings,0);
+ assert.equal(data.pcbas.counts.first_use,0);
+ assert.equal(data.pcbas.counts.unknown_use,1);
+});
+test('a 2114 fault or conflicting physical cycle counts never manufacture 3074 mounting use',()=>{
+ const s=fixture();s.insights.drilldowns.pcba_analysis=[
+  {PCBA:'P1','Defect Code':'D1','Defect Time':event.defect_time,
+   '_pcba_use_index':0,'Usos conhecidos da PCBA':7},
+  {PCBA:'P1','Defect Code':'D1','Defect Time':event.defect_time,
+   '_pcba_use_index':0,'Usos conhecidos da PCBA':4}];
+ const m=buildReuseCohorts(s);
+ assert.equal(m.pcbas.rows[0].known_cycle_conflict,true);
+ assert.equal(m.pcbas.rows[0].known_mounting_cycles,null);
+ assert.equal(m.pcbas.counts.known_mountings,0);
+ assert.equal(m.pcbas.counts.unknown_use,1);
+ const t=fixture();t.insights.drilldowns.pcba_analysis=[];
+ t.pcba_history.records.push({pcba_sn:'P1','Usos conhecidos da PCBA':7,
+  defect_code:'D1',hist_seq:5});
+ const clean=buildReuseCohorts(t);
+ assert.equal(clean.pcbas.counts.known_mountings,0,
+  '2114 may have many failures, but is not proof of seven mounting cycles');
+});
