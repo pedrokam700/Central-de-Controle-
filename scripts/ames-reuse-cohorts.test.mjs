@@ -275,3 +275,27 @@ test('a 2114 fault or conflicting physical cycle counts never manufacture 3074 m
  assert.equal(clean.pcbas.counts.known_mountings,0,
   '2114 may have many failures, but is not proof of seven mounting cycles');
 });
+
+test('material SN with known 3074 physical reuse stays visible even if use-at-defect is unproven',()=>{
+ const s=fixture(),row=s.insights.drilldowns.material_analysis[0];
+ delete row['Uso material na falha'];
+ row['Usos conhecidos material']=3;
+ const m=buildReuseCohorts(s);
+ assert.equal(m.components.counts.observed,1);
+ assert.equal(m.components.counts.known_mountings,1);
+ assert.equal(m.components.counts.known_reused_mountings,1);
+ assert.equal(m.components.rows[0].known_mounting_cycles,3);
+ assert.equal(m.components.counts.reused,0);
+ assert.equal(m.components.counts.unknown_use,1);
+});
+test('material physical reuse cannot be inferred from 2114 failure count or from a conflicting summary',()=>{
+ const s=fixture();
+ s.insights.drilldowns.material_analysis=[{...s.insights.drilldowns.material_analysis[0],
+  'Uso material na falha':null,'Usos conhecidos material':3},
+  {...s.insights.drilldowns.material_analysis[0],
+  'Uso material na falha':null,'Usos conhecidos material':2}];
+ const model=buildReuseCohorts(s);
+ assert.equal(model.components.rows[0].known_cycle_conflict,true);
+ assert.equal(model.components.counts.known_reused_mountings,0);
+ assert.equal(model.components.counts.unknown_use,1);
+});
