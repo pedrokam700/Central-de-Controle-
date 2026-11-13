@@ -153,6 +153,21 @@ class Canonical3022QueryTests(unittest.TestCase):
                              'trial clicks never submit the same board twice')
             self.assertEqual(f.call(op='state')['listeners'],0)
 
+    def test_extjs_mask_race_after_trial_still_fails_closed_without_second_click(self):
+        with self.fixture([{'rows':history_rows('not-submitted')}],
+                          mask_on_actual_click=True) as f:
+            with self.assertRaisesRegex(RuntimeError,
+                                        'Views voltou a ser bloqueado por máscara'):
+                f.tela.consultar('B')
+            diag=f.tela.last_query_diagnostics
+            self.assertEqual(diag['status'],'BLOCKED_VIEW_MASK')
+            self.assertTrue(diag['view_click_race'])
+            self.assertTrue(diag['view_blocked'])
+            self.assertIn('view_actionable',diag['milestones_ms'])
+            self.assertNotIn('view_clicked',diag['milestones_ms'])
+            self.assertEqual(f.call(op='state')['submitted'],[])
+            self.assertEqual(f.call(op='state')['listeners'],0)
+
     def test_stuck_extjs_mask_fails_closed_without_clicking_or_accepting_old_grid(self):
         with self.fixture([{'rows':history_rows('SHOULD_NOT_BE_QUERIED')}],
                           rows=history_rows('stale-previous'),mask_until_s=120) as f:
