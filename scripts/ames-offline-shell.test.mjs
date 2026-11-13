@@ -55,7 +55,7 @@ test('a new waiting PWA update cannot be hidden by a previous pending marker',()
     location:{reload(){}},
   };
   vm.runInNewContext(app.slice(begin,finish)+
-    '\\nofferCentralWebUpdate("pending",{waiting:{postMessage(){}}});',sandbox);
+    '\nofferCentralWebUpdate("pending",{waiting:{postMessage(){}}});',sandbox);
   assert.equal(shown.length,1,'a new waiting worker must show its update prompt despite old localStorage pending');
   assert.equal(shown[0].dataset.centralUpdateReady,'');
 });
