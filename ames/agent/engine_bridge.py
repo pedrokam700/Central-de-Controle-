@@ -302,7 +302,60 @@ def bind_3074_target_page(view, verified_page):
         target.target_page = verified_page
 
 
-def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], source_key: str, work_dir: str | Path, line_callback=None, event_callback=None, max_pcbas=0, shared_query_memo=None, performance="balanced") -> Dict[str, Any]:
+def seed_verified_3074_checkpoint(flow, path, source_path, parser_result, records, saved_items):
+    """Resume completed PCBAs across changed partial-retry batch fingerprints.
+
+    CLEAN's native checkpoint resumes an IDENTICAL batch. A selective retry
+    changes the fingerprint and previously lost that cache. Seed its new batch
+    only with independently paged, complete observations whose exact 3028
+    defect keys still match the current selected scope. No MES calls here.
+    """
+    from partial_retry import _bad_page, _has_page_proof
+
+    if not saved_items:
+        return 0
+    groups = flow.agrupar_falhas_por_pcba(records)
+    digest = flow.fingerprint_file(source_path)
+    checkpoint = None
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text(encoding='utf-8'))
+            if loaded.get('version') == '0.8.1' and loaded.get('source_sha256') == digest:
+                checkpoint = loaded
+        except (ValueError, OSError, TypeError):
+            pass
+    if checkpoint is None:
+        checkpoint = flow._new_checkpoint(source_path, parser_result, list(groups), digest)
+    seeded = 0
+    for sn, item in saved_items.items():
+        if sn not in groups or not isinstance(item, dict) or item.get('status') != 'COMPLETE':
+            continue
+        if _bad_page(item) or not _has_page_proof(item):
+            continue
+        existing = (checkpoint.get('pcbas') or {}).get(sn) or {}
+        if existing.get('status') == 'COMPLETE':
+            continue
+        expected = [flow._defect_key(r, n) for n, r in enumerate(groups[sn], 1)]
+        traces = item.get('defect_traces') or []
+        if (len(traces) != len(expected) or
+                {str(t.get('defect_key') or '') for t in traces if isinstance(t, dict)} != set(expected) or
+                any(t.get('status') != 'COMPLETE' for t in traces)):
+            continue
+        base = item.get('base_query')
+        if not isinstance(base, dict) or (base.get('query_sn') and base['query_sn'] != sn):
+            continue
+        checkpoint.setdefault('pcbas', {})[sn] = {
+            'pcba_sn':sn,'status':'COMPLETE','error':None,
+            'current_defects':groups[sn], 'base_query':base,
+            'defect_traces':{str(t['defect_key']):t for t in traces},
+        }
+        seeded += 1
+    if seeded:
+        flow._atomic_json(path, checkpoint)
+    return seeded
+
+
+def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], source_key: str, work_dir: str | Path, line_callback=None, event_callback=None, max_pcbas=0, shared_query_memo=None, performance="balanced", seed_3074_items=None) -> Dict[str, Any]:
     """Run the validated V0.16 3074 -> 2114 pipeline from records already collected by live 3028.
 
     This avoids requiring a manual 3028 Excel export.  The tiny JSON source file is
@@ -356,6 +409,12 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
     checkpoint_3074 = work_dir / f"V020_3074_CHECKPOINT_{digest[:12]}.json"
     checkpoint_2114 = work_dir / f"V020_2114_CHECKPOINT_{digest[:12]}.json"
 
+    seeded_count = seed_verified_3074_checkpoint(
+        fluxo3074_mod, checkpoint_3074, source_path, parser_result,
+        normalized, seed_3074_items or {})
+    if seeded_count and line_callback:
+        line_callback(f"3074 recuperação local: {seeded_count} PCBAs completas reutilizadas sem consulta MES")
+
     settings = {}
     settings_path = engine_dir / "config" / "settings.json"
     try:
@@ -372,23 +431,19 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
         if line_callback:
             line_callback("3074 preparando view A-MES")
         page3074 = navigator.ensure_3074()
-        if line_callback:
-            line_callback("2114 preparando OPC / view")
-        page2114 = navigator.ensure_2114()
+        # Do not navigate/open OPC 2114 before the potentially long 3074
+        # source pass. The MES session may replace that tab during material
+        # tracing; an early 2114 failure must never discard independent 3074.
         raw3074 = tela3074_mod.Tela3074(browser._target, engine_dir)
         # SessionObject does not delegate __setattr__; bind Home on the real
         # collector BEFORE wrapping to avoid silently using the OPC/2114 tab.
         raw3074.target_page = page3074
         tela3074 = session_object(raw3074)
-        tela2114 = session_object(tela2114_mod.Tela2114(browser._target, engine_dir))
-        # Fail fast with the exact missing real-world prerequisite instead of
-        # silently consulting a stale/wrong tab.
+        raw2114 = tela2114_mod.Tela2114(browser._target, engine_dir)
+        tela2114 = session_object(raw2114)
+        # Only verify 3074 now. The independent OPC source is opened after
+        # its material observations are checkpointed.
         tela3074._page()
-        tela2114._page()
-        # The 2114 source itself retries/marks an unconfirmed Shift as partial.
-        # Avoid a duplicate lookup here and do not discard successful 3074
-        # capture merely because this independent source is unavailable.
-        shift = tela2114.turno_atual()
 
         def pcba_progress(i, total, sn, failures, status):
             if line_callback:
@@ -432,6 +487,16 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
             if event_callback:
                 event_callback({"stage":"2114","kind":"pcba","current":i,"total":total,"pcba":pcba,"status":status,"state":state if status in {"COMPLETE","ERROR"} else None})
 
+        # Late, bounded OPC navigation. Failure here is represented as
+        # 2114 PARTIAL by turno_atual()/executar_fluxo_2114, not a fatal
+        # exception that loses the already collected 3074 source.
+        if line_callback:
+            line_callback("2114 preparando OPC / view após 3074")
+        try:
+            raw2114.target_page = navigator.ensure_2114(timeout_s=12.0)
+        except Exception as exc:
+            if line_callback:
+                line_callback(f"2114 OPC indisponível: {type(exc).__name__}: {str(exc)[:160]}")
         result_2114 = fluxo2114_mod.executar_fluxo_2114(
             result_3074, tela2114, source_sha256=result_3074.get("source_sha256", digest),
             checkpoint_path=checkpoint_2114, progress=hist_progress, pause_s=pause_2114,
@@ -445,7 +510,7 @@ def run_deep_v016_records(engine_dir: Path, records: List[Dict[str, Any]], sourc
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "source_3028": "LIVE_3028",
             "source_fingerprint": digest,
-            "shift_2114": shift,
+            "shift_2114": result_2114.get("shift"),
             "trace_3074": result_3074,
             "trace_2114": result_2114,
         }
@@ -835,8 +900,29 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
         # Probe a bounded subset in its OWN audit category; never claim a
         # historical component caused the last failure.
         if mounting_views is not None:
-            audit_candidates, audit_total = select_unexamined_3074_materials(
-                raw_components, component_query_cache.keys(), limit=8)
+            # Always examine every distinct component in the *last recorded
+            # PCBA batch* first. The old global cap of eight was excluding
+            # valid parts from the operator's last-assembly investigation.
+            # Keep a separate small audit budget for older, unrelated cycles.
+            recorded = mounting_views.get('last_recorded') or {}
+            individual = mounting_views.get('last_individual_links') or {}
+            # Some 3074 PCBA queries contain only component rows, with NO
+            # self-PCBA Batch Id.  Keep the latest individually observed links
+            # as a separate historical reference; never promote them into a
+            # proven current mounting or a proven full PCBA bill of materials.
+            latest = (recorded if recorded.get('status') == 'historical_batch_observed'
+                      else individual if selection['state'] not in (
+                          'current_new_cycle', 'current_same_cycle', 'current_cycle_unanchored')
+                          and individual.get('status') == 'last_individual_links_observed'
+                      else recorded)
+            latest_items = latest.get('components') or []
+            audited_latest, _ = select_unexamined_3074_materials(
+                latest_items, [], limit=len(latest_items))
+            older_audit, audit_total = select_unexamined_3074_materials(
+                raw_components, [*component_query_cache.keys(),
+                                 *(x.get('item_sn') for x in audited_latest)], limit=8)
+            audit_candidates = [*audited_latest, *older_audit]
+            audit_total += len(audited_latest)
             audit_results = []
             for index, comp in enumerate(audit_candidates, 1):
                 material_sn = str(comp.get('item_sn') or '').strip()
@@ -854,9 +940,12 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
                     if line_callback:
                         line_callback('3074', min(74, 55 + int(15*index/max(1, len(audit_candidates)))),
                                       f'Historico 3074 {index}/{len(audit_candidates)} · {material_sn}')
-                    bind_3074_target_page(tela3074, nav.ensure_3074())
-                    item_query = tela3074.consultar(material_sn)
-                    component_query_cache[material_sn] = item_query
+                    if material_sn in component_query_cache:
+                        item_query = component_query_cache[material_sn]
+                    else:
+                        bind_3074_target_page(tela3074, nav.ensure_3074())
+                        item_query = tela3074.consultar(material_sn)
+                        component_query_cache[material_sn] = item_query
                     timeline = temporal3074.historico_completo_pcbas_do_item(
                         item_query.get('rows') or [])
                     all_links = timeline.get('associations') or []
@@ -899,6 +988,18 @@ def run_individual_lookup(engine_dir: Path, sn: str, include_3022: bool = True, 
             mounting_views['historical_probe_total'] = audit_total
             mounting_views['historical_probe_remaining'] = max(
                 0, audit_total-len(audit_results))
+            latest_ids = {str(x.get('item_sn') or '').strip().upper()
+                          for x in latest_items}
+            latest_usage = [x for x in audit_results
+                            if str(x.get('item_sn') or '').strip().upper() in latest_ids]
+            latest['component_usage'] = latest_usage
+            latest['reused_components'] = [x for x in latest_usage
+                                           if x.get('is_reused') is True]
+            latest['incomplete_count'] = len(latest_ids)-sum(
+                x.get('is_reused') is not None for x in latest_usage)
+            latest['reused_count'] = (len(latest['reused_components'])
+                                      if latest_ids and latest['incomplete_count'] == 0
+                                      else None)
 
         # First query 2114 once per PCBA: current board and historical boards
         # reached through ONLY the selected material subset.
@@ -1256,6 +1357,32 @@ def build_trace_insights(engine_dir: Path, integrated_payload: Dict[str, Any], l
     hist_material_rows = list(views.get("hist_material_rows") or [])
     hist_pcba_rows = list(views.get("hist_pcba_rows") or [])
 
+    # Explain recurring 0/0/unknown board KPIs without guessing a physical
+    # mounting from component links. An extraction can be page-complete while
+    # the grid contains no own-PCBA mounting or an unmatchable defect clock.
+    raw_items=[item for item in trace_3074.get('items') or [] if isinstance(item,dict)]
+    if target:
+        raw_items=[item for item in raw_items if any(
+            str((trace.get('defect') or {}).get('line') or
+                (trace.get('defect') or {}).get('line_id') or '')==target
+            for trace in item.get('defect_traces') or [])]
+    own_rows_by_pcba={}
+    for item in raw_items:
+        board=str(item.get('pcba_sn') or '').strip()
+        own_rows_by_pcba[board]=[row for row in ((item.get('base_query') or {}).get('rows') or [])
+            if isinstance(row,dict) and str(row.get('Barcode') or '').strip()==board and
+            (str(row.get('Aut Cmf1') or '').strip().upper()=='PCBA' or
+             'pcba' in str(row.get('Sn Type') or '').lower())]
+    classified=sum(bool(int(row.get('_pcba_use_index') or 0)) for row in pcba_rows)
+    proof_diagnostics={
+        'raw_pcbas_observed':len(own_rows_by_pcba),
+        'raw_pcbas_with_self_rows':sum(bool(rows) for rows in own_rows_by_pcba.values()),
+        'raw_pcbas_missing_self_rows':sum(not rows for rows in own_rows_by_pcba.values()),
+        'pcba_occurrences_analysed':len(pcba_rows),
+        'pcba_occurrences_classified':classified,
+        'pcba_occurrences_without_temporal_use_proof':len(pcba_rows)-classified,
+    }
+
     def iv(v):
         try: return int(v or 0)
         except Exception: return 0
@@ -1353,6 +1480,7 @@ def build_trace_insights(engine_dir: Path, integrated_payload: Dict[str, Any], l
 
     return _insight_json_safe({
         "schema":"ames-insights-v1",
+        "proof_diagnostics":proof_diagnostics,
         "classifier_version":importlib.import_module("core.failure_taxonomy").configuration()["version"],
         "line":target or None,
         "overview_kpis":ind.get("overview_kpis") or [],

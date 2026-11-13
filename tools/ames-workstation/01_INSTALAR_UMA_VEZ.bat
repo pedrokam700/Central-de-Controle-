@@ -6,6 +6,11 @@ color 0F
 
 set "AUTO_MODE=0"
 if /I "%~1"=="/auto" set "AUTO_MODE=1"
+set "PREPARE_MODE=0"
+if /I "%~1"=="/prepare" (
+  set "AUTO_MODE=1"
+  set "PREPARE_MODE=1"
+)
 
 echo ============================================================
 echo   CENTRAL + A-MES CLEAN INTEGRADA - INSTALACAO UNICA
@@ -13,6 +18,7 @@ echo ============================================================
 echo.
 echo Esta instalacao prepara SOMENTE esta pasta nova.
 echo Nao altera a CLEAN V3 e nao migra banco automaticamente.
+if "%PREPARE_MODE%"=="1" echo Modo PREPARAR: sem criar config, token ou SQLite.
 echo O Google Chrome instalado no PC sera usado via CDP.
 echo.
 
@@ -69,10 +75,14 @@ if exist "vendor\wheels\*.whl" (
 )
 
 echo [4/7] Criando configuracao e SQLite LOCAIS desta CLEAN...
-if not exist "ames-agent\config.example.json" goto :config_error
-if not exist "ames-agent\config.json" copy /Y "ames-agent\config.example.json" "ames-agent\config.json" >nul
-if not exist "ames-agent\data" mkdir "ames-agent\data" >nul 2>nul
-"%VPY%" -c "from pathlib import Path; import sys; agent=Path.cwd()/'ames-agent'; sys.path.insert(0,str(agent)); import store; s=store.Store(agent/'data'/'ames_local.sqlite3'); s.initialize(); print('[OK] SQLite local inicializado / migrado nesta pasta')" || goto :db_error
+if "%PREPARE_MODE%"=="1" (
+  echo       [OK] Estado operacional nao tocado no preparo.
+) else (
+  if not exist "ames-agent\config.example.json" goto :config_error
+  if not exist "ames-agent\config.json" copy /Y "ames-agent\config.example.json" "ames-agent\config.json" >nul
+  if not exist "ames-agent\data" mkdir "ames-agent\data" >nul 2>nul
+  "%VPY%" -c "from pathlib import Path; import sys; agent=Path.cwd()/'ames-agent'; sys.path.insert(0,str(agent)); import store; s=store.Store(agent/'data'/'ames_local.sqlite3'); s.initialize(); print('[OK] SQLite local inicializado / migrado nesta pasta')" || goto :db_error
+)
 
 echo [5/7] Verificando Google Chrome...
 set "CHROME=C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -98,6 +108,12 @@ echo       [OK] Chrome: %CHROME%
 
 echo [6/7] Autoteste de dependencias...
 "%VPY%" -c "import pandas,openpyxl,playwright,pyautogui,pyperclip; from zoneinfo import ZoneInfo; ZoneInfo('America/Sao_Paulo'); print('[OK] Dependencias Python')" || goto :dep_error
+
+if "%PREPARE_MODE%"=="1" (
+  echo [7/7] Selftest do agente reservado para DEPOIS do backup e transferencia.
+  echo [OK] Dependencias preparadas sem SQLite/config/token na pasta candidata.
+  exit /b 0
+)
 
 echo [7/7] Teste real do agente local em porta isolada...
 "%VPY%" "ames-agent\selftest_runtime.py" || goto :agent_error

@@ -38,6 +38,8 @@ def reconstruir_usos_pcba(rows, pcba_sn, defect_time=None, defect_local_offset_h
     da própria PCBA. Para registros modernos Aut Cmf7 identifica o ciclo. Para
     históricos antigos sem Aut Cmf7, o mesmo Unbind Time é usado como fronteira
     do ciclo. Registros ativos sem Unbind são agrupados como o ciclo ativo atual.
+    Se a linha da PCBA possui Batch Id + Prod Time mas não Bind Time, o lote
+    documenta uma montagem histórica, sem provar o horário exato do vínculo.
     """
     pcba = normalizar_sn(pcba_sn)
     self_rows = []
@@ -50,8 +52,14 @@ def reconstruir_usos_pcba(rows, pcba_sn, defect_time=None, defect_local_offset_h
         if aut != "PCBA" and "pcba" not in sn_type:
             continue
         bind = _parse(row.get("Bind Time"), grid_naive_offset_hours)
+        batch = str(row.get("Batch Id") or "").strip()
+        prod = _parse(row.get("Prod Time"), grid_naive_offset_hours) if batch else None
+        start = bind or prod
         unbind = _parse(row.get("Unbind Time"), grid_naive_offset_hours)
-        self_rows.append({"row": row, "bind": bind, "unbind": unbind})
+        self_rows.append({"row": row, "bind": bind, "prod": prod,
+                          "start": start,
+                          "start_basis": "bind" if bind else "pcba_batch_prod" if prod else None,
+                          "unbind": unbind})
 
     groups = {}
     for item in self_rows:
@@ -61,6 +69,10 @@ def reconstruir_usos_pcba(rows, pcba_sn, defect_time=None, defect_local_offset_h
             key = ("CMF7", cmf7)
         elif item["unbind"] is not None:
             key = ("UNBIND", _iso(item["unbind"]))
+        elif item["start_basis"] == "pcba_batch_prod":
+            # Multiple operations in the same PCBA batch are one mounting.
+            key = ("PCBA_BATCH", str(row.get("Batch Id") or "").strip(),
+                   str(row.get("Order Id") or ""), str(row.get("Product Id") or ""))
         else:
             # A 3074 normalmente deixa apenas um ciclo ativo sem Unbind.
             key = ("ACTIVE", str(row.get("Product Id") or ""), str(row.get("Order Id") or ""))
@@ -68,12 +80,15 @@ def reconstruir_usos_pcba(rows, pcba_sn, defect_time=None, defect_local_offset_h
 
     cycles = []
     for _, items in groups.items():
-        binds = [x["bind"] for x in items if x["bind"]]
+        binds = [x["start"] for x in items if x["start"]]
         unbinds = [x["unbind"] for x in items if x["unbind"]]
         if not binds:
             continue
         start = min(binds)
         end = max(unbinds) if unbinds else None
+        if end is not None and end < start:
+            # Contradictory clocks cannot be used as a physical use count.
+            continue
         rows_g = [x["row"] for x in items]
         statuses = {str(r.get("Iss Status") or "").strip().upper() for r in rows_g}
         active = "Y" in statuses and end is None
@@ -91,6 +106,7 @@ def reconstruir_usos_pcba(rows, pcba_sn, defect_time=None, defect_local_offset_h
             "lines": lines,
             "operations": operations,
             "row_count": len(rows_g),
+            "time_basis": "pcba_batch_prod" if all(x["start_basis"] == "pcba_batch_prod" for x in items) else "bind",
         })
 
     cycles.sort(key=lambda x: x.get("start_utc") or "")
@@ -113,7 +129,11 @@ def reconstruir_usos_pcba(rows, pcba_sn, defect_time=None, defect_local_offset_h
             if prior:
                 use_at_defect = prior[-1]
 
-    use_index = use_at_defect.get("use_index") if use_at_defect else (cycles[-1]["use_index"] if cycles else 0)
+    # A query can be performed days after the 3028 failure. If every verified
+    # self-binding starts *after* that failure, the latest mounting is future
+    # evidence, not proof of the board's use at the earlier defect. Likewise,
+    # no defect clock means there is no defensible use index AT the defect.
+    use_index = use_at_defect.get("use_index") if use_at_defect else None
     return {
         "pcba_sn": pcba,
         "cycles": cycles,
@@ -122,4 +142,5 @@ def reconstruir_usos_pcba(rows, pcba_sn, defect_time=None, defect_local_offset_h
         "use_index_at_defect": use_index,
         "reuses_before_defect": max(0, int(use_index or 0) - 1),
         "cycle_at_defect": use_at_defect,
+        "use_time_basis": use_at_defect.get("time_basis") if use_at_defect else None,
     }

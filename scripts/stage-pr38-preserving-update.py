@@ -89,7 +89,7 @@ def stage(destination: Path, *, expected_sha: str | None = None) -> dict:
                 payload["frontend/" + p.relative_to(builddir).as_posix()] = p.read_bytes()
 
     index = payload["frontend/Central-de-Controle-/index.html"].decode("utf-8")
-    if "offline-bootstrap.mjs?v=15.1.13.49" not in index or "local-entry.mjs" in index:
+    if "offline-bootstrap.mjs?v=15.1.13.54" not in index or "local-entry.mjs" in index:
         raise ValueError("Integrated central frontend identity was lost")
     release = json.loads(payload["frontend/release-build.json"])
     if release.get("sha") != sha:

@@ -138,6 +138,144 @@ class Canonical3022QueryTests(unittest.TestCase):
                 self.assertEqual(f.call(op='state')['listeners'],0)
             self.assertEqual(f.call(op='state')['submitted'],['A','B'])
 
+    def test_transient_extjs_mask_delays_but_does_not_duplicate_view_submission(self):
+        # Reproduce factory: the button exists, but ExtJS x-mask intercepts it.
+        with self.fixture([{'rows':history_rows('new'),'delay':240}],
+                          mask_until_s=1.65) as f:
+            result=f.tela.consultar('B')
+            diag=result['query_diagnostics']
+            self.assertEqual(diag['status'],'CONFIRMED')
+            self.assertIn('view_clicked',diag['milestones_ms'])
+            self.assertGreaterEqual(diag['milestones_ms']['view_clicked'],1650)
+            self.assertEqual(f.trial_attempts,0, 'the removed 650ms trial must never return')
+            self.assertLess(diag['total_ms'],4500, 'normal 3022 path must not wait 5 seconds')
+            self.assertEqual(f.call(op='state')['submitted'],['B'],
+                             'native Playwright actionability wait must dispatch View exactly once')
+            self.assertEqual(f.call(op='state')['listeners'],0)
+
+    def test_extjs_mask_blocking_input_is_bounded_and_classified_as_recoverable(self):
+        with self.fixture([{'rows':history_rows('must-not-submit')}],
+                          mask_until_s=120,mask_blocks_input=True) as f:
+            with self.assertRaisesRegex(RuntimeError,
+                                        '3022 SN/IMEI bloqueado pela máscara'):
+                f.tela.consultar('B')
+            d=f.tela.last_query_diagnostics
+            self.assertEqual(d['status'],'BLOCKED_VIEW_MASK')
+            self.assertTrue(d['input_mask_observed'])
+            self.assertTrue(d['view_blocked'])
+            self.assertGreater(d['input_retries'],0)
+            self.assertNotIn('view_clicked',d['milestones_ms'])
+            self.assertEqual(f.call(op='state')['submitted'],[])
+            self.assertEqual(f.call(op='state')['listeners'],0)
+            self.assertLessEqual(d['total_ms'],6500)
+
+    def test_mask_on_real_view_click_fails_closed_without_second_click(self):
+        with self.fixture([{'rows':history_rows('not-submitted')}],
+                          mask_on_actual_click=True) as f:
+            with self.assertRaisesRegex(RuntimeError,
+                                        '3022 View não confirmou clique'):
+                f.tela.consultar('B')
+            diag=f.tela.last_query_diagnostics
+            self.assertEqual(diag['status'],'BLOCKED_VIEW_MASK')
+            self.assertTrue(diag['view_click_unconfirmed'])
+            self.assertTrue(diag['view_blocked'])
+            self.assertIn('submit',diag['milestones_ms'])
+            self.assertNotIn('view_clicked',diag['milestones_ms'])
+            self.assertEqual(f.call(op='state')['submitted'],[])
+            self.assertEqual(f.call(op='state')['listeners'],0)
+
+    def test_real_factory_button_not_ready_for_2_seconds_recovers_via_native_click(self):
+        # The 13/11 log had 72 occurrences of this exact Playwright shape,
+        # Native Playwright click waits for button stability; the removed 650ms trial did not.
+        with self.fixture([{'rows':history_rows('B'),'delay':240}],
+                          trial_not_ready_until_s=2.4) as f:
+            rr=f.tela.consultar('B')
+            d=rr['query_diagnostics']
+            self.assertEqual(d['status'],'CONFIRMED')
+            self.assertGreaterEqual(d['milestones_ms']['view_clicked'],2400)
+            self.assertFalse(d.get('view_click_unconfirmed',False))
+            self.assertEqual(f.call(op='state')['submitted'],['B'])
+            self.assertEqual(f.call(op='state')['listeners'],0)
+
+    def test_generic_playwright_actionability_timeout_is_not_mislabeled_as_mask(self):
+        with self.fixture([{'rows':history_rows('stale')}],
+                          trial_not_ready_until_s=120) as f:
+            with self.assertRaisesRegex(RuntimeError,'View não liberado'):
+                f.tela.consultar('B')
+            d=f.tela.last_query_diagnostics
+            self.assertEqual(d['status'],'BLOCKED_VIEW_NOT_READY')
+            self.assertEqual(d['view_not_ready_reason'],'EXTJS_VIEW_CLICK_UNCONFIRMED')
+            self.assertTrue(d['view_click_unconfirmed'])
+            self.assertNotIn('view_clicked',d['milestones_ms'])
+            self.assertEqual(f.call(op='state')['submitted'],[])
+            self.assertLessEqual(d['total_ms'],6000,
+                                 'a stuck View should consume at most the original 5s click budget')
+            self.assertEqual(f.call(op='state')['listeners'],0)
+
+    def test_generic_timeout_storm_breaker_preserves_prior_sqlite_and_skips_remaining_boards(self):
+        from ames import browser, navigation
+        from store import Store
+        with tempfile.TemporaryDirectory() as td:
+            store=Store(Path(td)/'ames.sqlite3');store.initialize();process_r11.patch_store(store)
+            wid=store.ensure_window('today','2026-10-16T07:30:00','2026-10-16T18:00:00',None,['TAN10101'])
+            sid=store.create_snapshot(window_id=wid,source_kind='test')
+            boards=('A','B','C','D')
+            records=[{'line':'TAN10101','pcba_sn':sn,'defect_key':'defect-'+sn,
+                      'product_model':'CPH2859','defect_code':'E1',
+                      'defect_desc':'Camera impurity','defect_time':'2026-10-16 10:32:00',
+                      'manual_or_auto':'MANUAL'} for sn in boards]
+            store.ingest_defects(sid,records,reconcile_window=False)
+            plans=[{'rows':history_rows(sn,3),'delay':240,'mode':'loadData'} for sn in boards]
+            with self.fixture(plans,trial_not_ready_after_submits=1,
+                              trial_not_ready_duration_s=120) as f, \
+                 patch.object(browser,'AmesBrowser',return_value=f), \
+                 patch.object(navigation.AmesNavigation,'ensure_3022'):
+                out=process_r11.collect_and_persist(store,ROOT/'ames/factory-engine',records,
+                    snapshot_id=sid,line='TAN10101',performance='fast')
+                self.assertEqual(f.call(op='state')['submitted'],['A'])
+                self.assertEqual(f.call(op='state')['listeners'],0)
+            self.assertEqual(out['status'],'partial')
+            self.assertEqual(out['collected'],1)
+            self.assertEqual(out['processed'],1)
+            self.assertEqual(out['errors'],3)
+            self.assertEqual(out['pcbas'][0]['status'],'COMPLETE')
+            self.assertEqual(out['pcbas'][1]['query_diagnostics']['status'],'BLOCKED_VIEW_NOT_READY')
+            self.assertEqual(out['pcbas'][2]['query_diagnostics']['status'],'BLOCKED_VIEW_NOT_READY')
+            self.assertEqual(out['pcbas'][3]['query_diagnostics']['status'],'SKIPPED_VIEW_NOT_READY')
+            self.assertTrue(out['pcbas'][3]['query_diagnostics']['no_mes_request_sent'])
+            with store.connect() as con:
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM process_raw_events WHERE pcba_sn='A'").fetchone()[0],3)
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM process_raw_events WHERE pcba_sn!='A'").fetchone()[0],0)
+
+    def test_stuck_extjs_mask_fails_closed_without_clicking_or_accepting_old_grid(self):
+        with self.fixture([{'rows':history_rows('SHOULD_NOT_BE_QUERIED')}],
+                          rows=history_rows('stale-previous'),mask_until_s=120) as f:
+            with self.assertRaisesRegex(RuntimeError,
+                                        '3022 View não liberado pela interface A-MES'):
+                f.tela.consultar('B')
+            diag=f.tela.last_query_diagnostics
+            self.assertEqual(diag['status'],'BLOCKED_VIEW_MASK')
+            self.assertTrue(diag['view_blocked'])
+            self.assertTrue(diag['view_click_unconfirmed'])
+            self.assertNotIn('view_clicked',diag['milestones_ms'])
+            self.assertNotIn('parse_completed',diag['milestones_ms'])
+            self.assertEqual(f.call(op='state')['submitted'],[])
+            self.assertEqual(f.call(op='state')['listeners'],0,
+                             'listeners are cleaned even when the mask never clears')
+            self.assertLessEqual(diag['total_ms'],6000,
+                                 'a stuck mask must have a bounded wait, not an infinite job')
+
+    def test_mask_on_second_pcba_preserves_first_confirmed_response(self):
+        with self.fixture([{'rows':history_rows('first')},{'rows':history_rows('second')}]) as f:
+            first=f.tela.consultar('A')
+            self.assertEqual(first['query_diagnostics']['status'],'CONFIRMED')
+            f.mask_until_s=f.clock+120
+            with self.assertRaisesRegex(RuntimeError,'bloqueado por máscara ExtJS'):
+                f.tela.consultar('B')
+            self.assertEqual(f.call(op='state')['submitted'],['A'])
+            self.assertEqual(first['rows'][0]['Tran User Id'],'first')
+            self.assertEqual(f.call(op='state')['listeners'],0)
+
     def test_unchanged_previous_grid_is_not_accepted_for_next_sn(self):
         with self.fixture([{'rows':history_rows('A')},{'mode':'stale'}]) as f:
             f.tela.consultar('A')
@@ -247,6 +385,44 @@ class Canonical3022QueryTests(unittest.TestCase):
                     self.assertTrue(all(json.loads(r[0])['Tran User Id']==sn for r in raw))
                     for table in ('process_events','process_defect_contexts','mes_process_timeline'):
                         self.assertGreater(con.execute(f'SELECT COUNT(*) FROM {table} WHERE pcba_sn=?',(sn,)).fetchone()[0],0,table)
+
+
+    def test_mask_circuit_breaker_preserves_first_checkpoint_and_skips_later_mes_requests(self):
+        from ames import browser, navigation
+        from store import Store
+        with tempfile.TemporaryDirectory() as td:
+            store=Store(Path(td)/'ames.sqlite3');store.initialize();process_r11.patch_store(store)
+            wid=store.ensure_window('today','2026-10-16T07:30:00','2026-10-16T18:00:00',None,['TAN10101'])
+            sid=store.create_snapshot(window_id=wid,source_kind='test')
+            boards=('A','B','C','D')
+            records=[{'line':'TAN10101','pcba_sn':sn,'defect_key':'defect-'+sn,
+                      'product_model':'CPH2859','defect_code':'E1',
+                      'defect_desc':'Camera impurity','defect_time':'2026-10-16 10:32:00',
+                      'manual_or_auto':'MANUAL'} for sn in boards]
+            store.ingest_defects(sid,records,reconcile_window=False)
+            plans=[{'rows':history_rows(sn,3),'delay':240,'mode':'loadData'} for sn in boards]
+            with self.fixture(plans,mask_after_submits=1,mask_duration_s=120) as f, \
+                 patch.object(browser,'AmesBrowser',return_value=f), \
+                 patch.object(navigation.AmesNavigation,'ensure_3022'):
+                output=process_r11.collect_and_persist(
+                    store,ROOT/'ames/factory-engine',records,
+                    snapshot_id=sid,line='TAN10101',performance='fast')
+                self.assertEqual(f.call(op='state')['submitted'],['A'],
+                                 'once the mask stays up, no further PCBA Views may be sent')
+                self.assertEqual(f.call(op='state')['listeners'],0)
+            self.assertEqual(output['status'],'partial',output)
+            self.assertEqual(output['requested'],4)
+            self.assertEqual(output['collected'],1)
+            self.assertEqual(output['processed'],1)
+            self.assertEqual(output['errors'],3)
+            self.assertEqual(output['pcbas'][0]['status'],'COMPLETE')
+            self.assertEqual(output['pcbas'][1]['query_diagnostics']['status'],'BLOCKED_VIEW_MASK')
+            self.assertEqual(output['pcbas'][2]['query_diagnostics']['status'],'BLOCKED_VIEW_MASK')
+            self.assertEqual(output['pcbas'][3]['query_diagnostics']['status'],'SKIPPED_VIEW_NOT_READY')
+            self.assertTrue(output['pcbas'][3]['query_diagnostics']['no_mes_request_sent'])
+            with store.connect() as con:
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM process_raw_events WHERE pcba_sn='A'").fetchone()[0],3)
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM process_raw_events WHERE pcba_sn!='A'").fetchone()[0],0)
 
 
 if __name__ == '__main__':

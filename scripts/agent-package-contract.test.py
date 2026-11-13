@@ -103,6 +103,8 @@ def test_integrated_clean_support_files_are_explicit():
         "DIAGNOSTICO_POSTO.ps1",
         "KEEP_AGENT_RUNNING.ps1",
         "ISSUE57_RELAUNCH_ENROLLMENT.ps1",
+        "SAFE_STATE_TRANSFER.py",
+        "issue57_update_preflight.py",
     )
     source = (ROOT / "scripts" / "build-integrated-candidate.py").read_text(encoding="utf-8")
     assert "for p in ws.iterdir()" not in source
@@ -117,9 +119,11 @@ def test_integrated_clean_support_files_are_explicit():
 def test_pr69_clean_retains_supervised_switch_and_first_run_network():
     builder = integrated_builder_module()
     assert set(builder.FIRST_RUN_FILES) == {
+        "01_TROCAR.bat",
         "01_TROCAR_PARA_PR69_NOVA.bat",
         "TROCAR_PARA_PR69_NOVA.ps1",
         "08_PREPARAR_REDE_AMES.bat",
+        "12_APLICAR_ROTA_AMES_PERSISTENTE.bat",
     }
     assert set(builder.PACKAGE_DOCS) == {
         "INSTRUCOES_INSTALACAO_LIMPA.txt",
@@ -146,12 +150,15 @@ def test_pr69_clean_retains_supervised_switch_and_first_run_network():
     assert "Read-Host 'Para continuar, digite TROCAR'" not in switch
     assert "New-Object -ComObject WScript.Shell" in switch
     assert switch.index("if($answer -ne 6)") > switch.index("Nenhum agente/guardian antigo identificado")
-    assert switch.index("if($answer -ne 6)") < switch.index("if($oldRun){WriteRun $null}")
+    assert switch.index("if($answer -ne 6)") < switch.index("if($oldRun){WriteRun $null;$registrationChanged=$true}")
     assert "Get-NetTCPConnection -LocalPort 8765" in switch
     assert "StopKnown" in switch
     assert "START_LOCAL_CANDIDATE.ps1" in switch
     assert "WriteRun $oldRun" in switch
     assert "ames-agent\\data\\local_agent_token" in switch
+    assert "Invoke-StateTransfer 'preflight'" in switch
+    assert "Invoke-StateTransfer 'stage'" in switch
+    assert "ROLLBACK_ANTIGO=SUCCESS" in switch
 
 
 def test_integrated_clean_builder_rejects_runtime_private_files():

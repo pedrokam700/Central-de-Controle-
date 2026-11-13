@@ -18,8 +18,12 @@ test('o pacote exige migracao supervisionada quando existe guardian anterior',()
   const builder=readFileSync('scripts/build-integrated-candidate.py','utf8');
   assert.match(builder,/PC COM 0\.5\.39 OU OUTRO GUARDIAN/);
   assert.match(builder,/NAO EXECUTE 00_INICIAR_AQUI\.bat/);
-  assert.match(builder,/ESTE PACOTE NAO E UM UPDATER NEM UMA MIGRACAO AUTOMATICA/);
+  assert.match(builder,/ATUALIZACAO EXISTENTE — 01_TROCAR\.bat/);
+  assert.match(builder,/backup privado,\s+ensaio de restauracao e transfere SQLite/);
   assert.doesNotMatch(builder,/volte a usar a CLEAN V3 intacta/);
   assert.match(builder,/instalacao oficial anterior comprovada \(0\.5\.39/);
   assert.match(builder,/nao copie nem substitua SQLite, WAL, token, configuracao, source_id ou filas/);
+  for(const name of ['VERIFIER_FILES','SAFE_STATE_TRANSFER.py','issue57_update_preflight.py','AT_SETUP_FILES']){
+    assert.ok(builder.includes(name),`required previous-package support must survive repackaging: ${name}`);
+  }
 });

@@ -7,6 +7,80 @@ import {withHistoricalTrends} from '../ames/console-history-trends.mjs';
 test('historical trend UI module parses before its browser initializer runs',()=>{
  assert.equal(typeof withHistoricalTrends,'function');
 });
+test('history UI defaults to every origin, showing distinct saved days without duplicating revisions',async()=>{
+ const priorDocument=globalThis.document;
+ const resultNode={innerHTML:'',prepend(){},querySelector(selector){
+  if(selector==='[data-history-chart-metric]')return {addEventListener(){}};
+  if(selector==='[data-history-chart]')return {set innerHTML(value){resultNode.chart=value;}};
+  return null;
+ },querySelectorAll(){return [];}};
+ class Element{
+  constructor(){this.dataset={};this.children=[];this.innerHTML='';}
+  setAttribute(){}
+  append(child){this.children.push(child);}
+  contains(child){return this.children.includes(child);}
+  querySelector(selector){
+   if(selector==='form')return {addEventListener(){}};
+   if(selector==='[data-history-trend-result]')return resultNode;
+   if(selector==='[data-history-chart]')return {set innerHTML(value){resultNode.chart=value;}};
+   return null;
+  }
+ }
+ const dayA=fixture('2026-10-18',{id:'18',source:'WORKSTATION-A'}),dayB=fixture('2026-10-19',{id:'19',source:'WORKSTATION-B'});
+ const history=source([dayA,dayB]);
+ const root=new Element();root.dataset.consolePane='daily';
+ const store={context:()=>({line_id:'TAN10101'}),preferredLine:()=> 'TAN10101',
+  read:()=>({snapshot:{source_id:'WORKSTATION-B'}}),readingPeriod:()=>({start:'2026-10-19T07:00:00-03:00',end:'2026-10-20T07:00:00-03:00'})};
+ globalThis.document={documentElement:{lang:'pt-BR'},createElement:()=>new Element()};
+ try{
+  const panel=withHistoricalTrends({render(){}},root,store,history);panel.render();
+  for(let i=0;i<15&&!resultNode.innerHTML;i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.match(resultNode.innerHTML,/2\/30 dias com dados/,'default includes separate dates from different sources');
+  assert.equal(history.opens(),2,'each stored day opens exactly once');
+  assert.match(root.children.at(-1).innerHTML,/<option value="">Todas as origens · detectar conflitos<\/option>/);
+  assert.doesNotMatch(root.children.at(-1).innerHTML,/<option value="WORKSTATION-B" selected>/);
+  panel.clear();
+ }finally{if(priorDocument===undefined)delete globalThis.document;else globalThis.document=priorDocument;}
+});
+test('history panel really reads saved days with its scoped period (not just parsing successfully)',async()=>{
+ const priorDocument=globalThis.document;
+ const resultNode={innerHTML:'',prepend(){},querySelector(selector){
+  if(selector==='[data-history-chart-metric]')return {addEventListener(){}};
+  if(selector==='[data-history-chart]')return {set innerHTML(value){resultNode.chart=value;}};
+  return null;
+ },querySelectorAll(){return [];}};
+ class Element{
+  constructor(){this.dataset={};this.children=[];this.innerHTML='';this.className='';}
+  setAttribute(){}
+  append(child){this.children.push(child);}
+  contains(child){return this.children.includes(child);}
+  querySelector(selector){
+   if(selector==='form')return {addEventListener(){}};
+   if(selector==='[data-history-trend-result]')return resultNode;
+   if(selector==='[data-history-chart]')return {set innerHTML(value){resultNode.chart=value;}};
+   return null;
+  }
+ }
+ let requestedLine='';
+ const p=fixture('2026-10-19',{source:'A'});
+ const history={list:async line=>{requestedLine=line;return [entry(p)];},open:async()=>p};
+ const root=new Element();root.dataset.consolePane='daily';
+ const store={context:()=>({line_id:'TAN10101'}),preferredLine:()=> 'TAN10101',
+  read:()=>({snapshot:{source_id:'A'}}),readingPeriod:()=>({start:'2026-10-19T07:00:00-03:00',end:'2026-10-20T07:00:00-03:00'})};
+ globalThis.document={documentElement:{lang:'pt-BR'},createElement:()=>new Element()};
+ try{
+  const panel=withHistoricalTrends({render(){}},root,store,history);
+  panel.render();
+  for(let i=0;i<8&&!requestedLine;i++)await new Promise(resolve=>setImmediate(resolve));
+  for(let i=0;i<8&&!resultNode.innerHTML;i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(requestedLine,'TAN10101','automatic history read must actually call storage');
+  assert.match(resultNode.innerHTML,/1\/30 dias com dados/);
+  assert.match(resultNode.innerHTML,/Capturas no dia/);
+  assert.match(resultNode.innerHTML,/não há dois dias distintos carregados/);
+  assert.match(resultNode.chart,/<circle /);
+  panel.clear();
+ }finally{if(priorDocument===undefined)delete globalThis.document;else globalThis.document=priorDocument;}
+});
 function fixture(date,{id=date,source='A',revision=1,mode='previous_day',end='12:00',fpy=98,complete=false}={}){
  const p=canonicalAgentFixture(productFixture('TAN10101',2));p.snapshot_id=id;p.summary.snapshot_id=id;p.source_id=source;p.snapshot_revision=revision;
  p.summary.period={start_at:date+'T07:00-03:00',end_at:date+'T'+end+'-03:00',mode};p.summary.fpy=fpy;

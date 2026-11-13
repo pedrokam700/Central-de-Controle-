@@ -4,12 +4,43 @@ const pcbaOf=row=>text(value(row,'pcba_sn','PCBA','Lot Id','current_pcba_sn'));
 const operatorId=row=>text(value(row,'operator_id','Operator ID','Tran User Id','Tran User ID','Transaction User Id','Employee ID','User Id'));
 const operatorName=row=>text(value(row,'operator_name','tran_user_name','Operator Name','Tran User Name','Tran User','Transaction User Name','Employee Name','User Name','Tran User Desc','User Full Name'));
 
-function processRows(result={}){
-  const trace=result.trace_3022||{};
-  return [...(trace.operator_evidence||[]),...(trace.process_passages||[]),...(trace.rows||[]),
-    ...(trace.pcbas||[]).flatMap(entry=>(entry?.result?.rows||[]).map(row=>({...row,pcba_sn:row.pcba_sn||entry.pcba_sn})))];
+// Older 3022 records can store named staff inside the source adapter. A
+// technician name is recovered from that same row, never from a global BRM map.
+export function normalize3022OperatorRows(rows=[],{currentPcba='',allowCurrentScope=false}={}){
+ const normalized=[],seen=new Set();
+ for(const wrapper of rows||[]){
+  if(!wrapper||typeof wrapper!=='object')continue;
+  const adapter=wrapper.provenance?.adapter||{};
+  const nested=[wrapper,wrapper.raw,adapter.operator_evidence,...(adapter.operator_events||[])];
+  for(const entry of nested){
+   if(!entry||typeof entry!=='object')continue;
+   const raw=entry.raw?.raw&&typeof entry.raw.raw==='object'?entry.raw.raw:entry.raw||{};
+   const explicit=pcbaOf(entry)||pcbaOf(raw)||pcbaOf(wrapper)||pcbaOf(wrapper.raw);
+   const pcba=explicit||(allowCurrentScope?text(currentPcba):'');
+   const id=operatorId(entry)||operatorId(raw),name=operatorName(entry)||operatorName(raw);
+   if(!pcba||!id||!name||id.toUpperCase()===name.toUpperCase())continue;
+   const station=text(value(raw,'Working Oper Code','Station Code','Station')||
+    value(entry,'station','operation_code','Working Oper Code')||
+    value(wrapper,'station','operation_code'));
+   const eventTime=text(value(raw,'Tran Time','Transaction Time','Event Time')||
+    value(entry,'event_time','Tran Time','Event Time')||value(wrapper,'event_time'));
+   const key=JSON.stringify([pcba,id,name,station,eventTime]);
+   if(seen.has(key))continue;seen.add(key);
+   normalized.push({pcba_sn:pcba,operator_id:id,operator_name:name,
+    station,event_time:eventTime,source_view:'3022'});
+  }
+ }
+ return normalized;
 }
-
+function processRows(result={}){
+ const trace=result.trace_3022||{},current=text(result.sn||result.query_sn);
+ const live=[...(trace.operator_evidence||[]),...(trace.process_passages||[]),...(trace.rows||[]),
+  ...(trace.pcbas||[]).flatMap(entry=>(entry?.result?.rows||[]).map(row=>({
+   ...row,pcba_sn:pcbaOf(row)||entry.pcba_sn})))];
+ const local=(result.local_snapshot?.process_events||[]).filter(row=>pcbaOf(row)||pcbaOf(row?.raw));
+ return [...normalize3022OperatorRows(live,{currentPcba:current,allowCurrentScope:true}),
+  ...normalize3022OperatorRows(local)];
+}
 export function provenRepairUserName(repair={},result={},currentPcba=''){
   const id=text(repair.repair_user),pcba=text(repair.pcba_sn);if(!id||!pcba)return null;
   // A name is trustworthy only if it is an explicit field belonging to this
@@ -36,9 +67,8 @@ export function provenRepairUserName(repair={},result={},currentPcba=''){
 // original 3012 rows. Conflicting 3022 names intentionally stay unknown.
 export function projectRepairTechnicianNames(repairs=[],events=[]){
  const identities=new Map();
- for(const row of events||[]){
-   const raw=row?.raw||row,pcba=pcbaOf(row)||pcbaOf(raw);
-   const id=operatorId(row)||operatorId(raw),name=operatorName(row)||operatorName(raw);
+ for(const row of normalize3022OperatorRows(events)){
+  const pcba=pcbaOf(row),id=operatorId(row),name=operatorName(row);
    if(!pcba||!id||!name||name===id)continue;
    const key=pcba+'|'+id;
    if(!identities.has(key))identities.set(key,new Set());

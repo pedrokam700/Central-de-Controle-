@@ -11,6 +11,7 @@ BASE=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(BASE/"ames"/"agent"))
 sys.path.insert(0,str(BASE/"ames"/"factory-engine"))
 import production_shift
+import process_r11
 from ames import tela_3022
 
 def make_result(rows_2114=None,rows_3012=None,rows_3028=None):
@@ -41,6 +42,30 @@ def fake_correlation(engine,events,record,**kwargs):
             'repair_cycle':{},'previous_process':{}}
 
 class OriginTests(unittest.TestCase):
+    def test_factory_3022_before_predetermined_station_provides_context_not_at_time(self):
+        rows=[
+            {'Working Oper Code':'A5100','Working Oper':'Assemble the PCBA',
+             'Current Oper Code':'A5130','Tran Desc':'END LOT',
+             'Line Code':'TAN10103','Tran User Id':'TAN10103',
+             'Tran Time':'2026-11-09 11:55:00+00:00','Hist Seq':'1'},
+            {'Working Oper Code':'A5100','Working Oper':'Assemble the PCBA',
+             'Current Oper Code':'A6900','Tran Desc':'REPAIR END',
+             'Line Code':'TAN10103','Tran User Id':'BRM00075',
+             'Tran Time':'2026-11-09 12:15:00+00:00','Hist Seq':'2'},
+        ]
+        rec={'line':'TAN10103','pcba_sn':'00252700692535F300212015',
+             'product_model':'CPH2819BR','defect_code':'SIM','defect_desc':'SIM card anomaly',
+             'defect_time':'2026-11-09 09:30:00','manual_or_auto':'Manual'}
+        correlated=tela_3022.correlacionar_falha_3022(
+            BASE/'ames'/'factory-engine',rows,rec)
+        ctx=process_r11._context_from_correlation(rec,correlated)
+        self.assertEqual(ctx['reference_station_code'],'A5100')
+        self.assertEqual(ctx['reference_rule_id'],'LAST_COMPLETED_ASSEMBLY_BEFORE_DEFECT')
+        self.assertEqual(ctx['reference_status'],'FALLBACK_COMPLETED_ASSEMBLY')
+        self.assertEqual(ctx['production_shift_source'],'3022')
+        self.assertEqual(ctx['production_shift_basis'],'reference_process')
+        self.assertEqual(ctx['production_operational_date'],'2026-11-09')
+        self.assertEqual(ctx['reference_event_time'],'2026-11-09T11:55:00+00:00')
     def test_2114_missing_time_uses_exact_3012_defect_registration_not_repair_time(self):
         r=make_result(rows_3012=[{'pcba_sn':'PCB','defect_code':'CAM',
                                  'defect_time':'2026-10-19 10:30:00',

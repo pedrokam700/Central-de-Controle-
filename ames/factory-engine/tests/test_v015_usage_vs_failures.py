@@ -1,7 +1,19 @@
 import unittest
-from reports.relatorio_v015 import _material_evidence, _build_indicators
+from reports.relatorio_v015 import _material_evidence, _build_indicators, _reuse_analysis
 
 class V015UsageVsFailuresTests(unittest.TestCase):
+    def test_unknown_old_failure_is_not_misreported_as_no_2114_history(self):
+        reused = {"PCBAs antigas": "SYNTH-OLD", "Defect Code": "GN14-KZ01",
+                  "Defect Desc": "SIM card recognition exception"}
+        old = {"SYNTH-OLD": {"status": "COMPLETE", "result": {"rows": [
+            {"Defect Hist Seq": "0", "Defect Code": "", "Defect Description": ""}
+        ]}}}
+        analysis = _reuse_analysis(reused, old)
+        self.assertEqual(analysis["history_occurrences"], 1)
+        self.assertEqual(analysis["no_history_pcbas"], 0)
+        self.assertEqual(analysis["strongest"], "INDETERMINADA")
+        self.assertEqual(_material_evidence(analysis), "HISTÓRICO 2114 NÃO CLASSIFICADO")
+
     def test_reused_material_without_old_failure_is_explicit(self):
         ra={"history_occurrences":0,"same_pcbas":0,"similar_pcbas":0,"different_pcbas":0}
         self.assertEqual(_material_evidence(ra), "REUSO SEM FALHA ANTERIOR REGISTRADA")

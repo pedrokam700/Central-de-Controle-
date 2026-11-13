@@ -14,6 +14,9 @@ export function paintReadingPeriod(root,store,controller,{onContinueTrace,onColl
   const samePeriod=root.dataset.readingScopeKey===JSON.stringify(p);
   const draftStart=samePeriod&&oldForm?.elements.start.value||p?.start||'';
   const draftEnd=samePeriod&&oldForm?.elements.end.value||p?.end||'';
+  // Keep the editor open while the same range is being edited, but never
+  // carry a pending custom-tab highlight into a different committed period.
+  if(!samePeriod&&p?.mode!=='custom')root.dataset.readingEditorOpen='false';
   const editing=root.dataset.readingEditorOpen==='true'||p?.mode==='custom';
   root.dataset.readingScopeKey=JSON.stringify(p);
   const loaded=LINE_IDS.filter(line=>!!store.read(line).snapshot);

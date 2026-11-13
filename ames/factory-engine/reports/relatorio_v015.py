@@ -41,6 +41,7 @@ def _relation_label(v):
         "MESMA_FALHA": "MESMA FALHA",
         "FALHA_SIMILAR": "MESMA FAMÍLIA",
         "FALHA_DIFERENTE": "FALHA DIFERENTE",
+        "INDETERMINADA": "RELAÇÃO INDETERMINADA",
         "SEM_HISTORICO": "SEM HISTÓRICO 2114",
         "SEM_HISTORICO_2114": "SEM HISTÓRICO 2114",
     }.get(v, str(v or ""))
@@ -116,11 +117,15 @@ def _reuse_analysis(row, pcba_map):
         same_occ = sum(1 for _, cmp in local if cmp.get("relation") == "MESMA_FALHA")
         sim_occ = sum(1 for _, cmp in local if cmp.get("relation") == "FALHA_SIMILAR")
         diff_occ = sum(1 for _, cmp in local if cmp.get("relation") == "FALHA_DIFERENTE")
-        strongest = "MESMA_FALHA" if same_occ else ("FALHA_SIMILAR" if sim_occ else ("FALHA_DIFERENTE" if diff_occ else "SEM_HISTORICO_2114"))
+        unknown_occ = sum(1 for _, cmp in local if cmp.get("relation") == "INDETERMINADA")
+        # A real historical row with undecidable relation is not an absent
+        # 2114 history and cannot be counted as a no-failure/unknown-history PCBA.
+        strongest = "MESMA_FALHA" if same_occ else ("FALHA_SIMILAR" if sim_occ else ("FALHA_DIFERENTE" if diff_occ else "INDETERMINADA"))
         summary = {
             "pcba": pcba, "use_index": use_index, "state": state,
             "failure_count": len(histories), "relation": strongest,
             "same_occurrences": same_occ, "similar_occurrences": sim_occ, "different_occurrences": diff_occ,
+            "unknown_occurrences": unknown_occ,
         }
         pcba_summaries.append(summary)
         for hist, cmp in local:
@@ -132,19 +137,22 @@ def _reuse_analysis(row, pcba_map):
     same_pcbas = sum(1 for x in pcba_summaries if x.get("relation") == "MESMA_FALHA")
     similar_pcbas = sum(1 for x in pcba_summaries if x.get("relation") == "FALHA_SIMILAR")
     different_pcbas = sum(1 for x in pcba_summaries if x.get("relation") == "FALHA_DIFERENTE")
+    unknown_pcbas = sum(1 for x in pcba_summaries if x.get("relation") == "INDETERMINADA")
     no_hist_pcbas = sum(1 for x in pcba_summaries if x.get("relation") == "SEM_HISTORICO_2114")
     same_occ = sum(x.get("same_occurrences", 0) for x in pcba_summaries)
     similar_occ = sum(x.get("similar_occurrences", 0) for x in pcba_summaries)
     different_occ = sum(x.get("different_occurrences", 0) for x in pcba_summaries)
+    unknown_occ = sum(x.get("unknown_occurrences", 0) for x in pcba_summaries)
     hist_occurrences = sum(x.get("failure_count", 0) for x in pcba_summaries)
-    strongest = "MESMA_FALHA" if same_pcbas else ("FALHA_SIMILAR" if similar_pcbas else ("FALHA_DIFERENTE" if different_pcbas else "SEM_HISTORICO_2114"))
+    strongest = "MESMA_FALHA" if same_pcbas else ("FALHA_SIMILAR" if similar_pcbas else ("FALHA_DIFERENTE" if different_pcbas else ("INDETERMINADA" if unknown_pcbas else "SEM_HISTORICO_2114")))
     return {
         "old_pcbas": old_pcbas, "details": details, "pcba_summaries": pcba_summaries,
         "old_pcba_count": len(old_pcbas),
         "same_pcbas": same_pcbas, "similar_pcbas": similar_pcbas,
-        "different_pcbas": different_pcbas, "no_history_pcbas": no_hist_pcbas,
+        "different_pcbas": different_pcbas, "unknown_pcbas": unknown_pcbas, "no_history_pcbas": no_hist_pcbas,
         "same_occurrences": same_occ, "similar_occurrences": similar_occ,
-        "different_occurrences": different_occ, "history_occurrences": hist_occurrences,
+        "different_occurrences": different_occ, "unknown_occurrences": unknown_occ,
+        "history_occurrences": hist_occurrences,
         # Compatibilidade com nomes V0.13.
         "same": same_occ, "similar": similar_occ, "different": different_occ,
         "strongest": strongest,

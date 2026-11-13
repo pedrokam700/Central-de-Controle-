@@ -6,6 +6,7 @@ import { createAmesStore } from '../ames/data/store.mjs';
 import { selectDashboard } from '../ames/data/dashboard.mjs';
 import { occurrenceList } from '../ames/evidence-view.mjs';
 import { normalizeAgentRead, r12CompatibleBuild } from '../ames/data/agent-contract.mjs';
+import { collectionStatus } from '../ames/collection-status.mjs';
 import { productFixture } from './ames-fixtures.mjs';
 const line_id = 'TAN10101';
 function setup() {
@@ -113,4 +114,20 @@ test('agent client asks SN with 3022 and exposes full/process-only/reuse-only tr
   assert.match(source,/process_only/);
   assert.match(source,/reuse_only/);
   assert.match(source,/trace_mode/);
+  assert.match(source,/body\.include_3012=value\.trace_mode==='history_only'/);
+  const view=fs.readFileSync('ames/console-specialized-views.mjs','utf8');
+  assert.match(view,/<input type="checkbox" name="include_3012"/);
+  assert.match(view,/include_3012:data\.has\('include_3012'\)/);
+});
+
+test('trace progress excludes unrequested 3012 and does not falsely warn on its not_run stage', () => {
+  const job={id:'DONE',kind:'deep_trace',status:'done',stage:'done',progress:100,
+    message:'3074/2114/3022 concluídos',scope:{trace_mode:'full',include_3012:false},
+    result:{scope:{trace_mode:'full',include_3012:false},stages:{3074:'done',2114:'done',3022:'done',3012:'not_run'},deep_trace:{}}};
+  const html=collectionStatus({job});
+  assert.doesNotMatch(html,/Não programada pelo agente/);
+  assert.doesNotMatch(html,/Cobertura não comprovada/);
+  assert.doesNotMatch(html,/<b>3012<\/b>/);
+  job.scope.include_3012=true;
+  assert.match(collectionStatus({job}),/Cobertura não comprovada/);
 });

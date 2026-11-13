@@ -26,7 +26,8 @@ test('3012 mapped V2 uses real load records contract and refuses unconfirmed sta
  assert.match(js,/store\.on\?\.\('load',state\.loadFn\)/);
  assert.match(js,/STORE_LOAD_CONFIRMED/);
  assert.match(js,/STORE_DATASET_EVENT/);
- assert.match(js,/STORE_REBOUND_AFTER_VIEW/);
+ assert.doesNotMatch(js,/freshness='STORE_REBOUND_AFTER_VIEW'/);
+ assert.match(js,/No rebound-only success/);
  assert.match(js,/3012_RESPONSE_NOT_CONFIRMED/);
  assert.match(js,/3012_VIEW_NOT_EXECUTED/);
  assert.match(js,/byItemId\('grdDefectRepair'/);

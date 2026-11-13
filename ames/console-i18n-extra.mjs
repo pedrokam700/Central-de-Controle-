@@ -216,4 +216,15 @@ snapshot não carregado|snapshot not loaded
 coverage indisponível|coverage unavailable
 cobertura indisponível|coverage unavailable
 Consultas anteriores, armazenadas no SQLite. O horário da busca não determina o dia de produção e não altera Hoje.|Previous queries stored in SQLite. Query time does not establish the production day or change Today.
+não identificada|not identified
+3074 + 2114, preservando históricos já armazenados.|3074 + 2114, preserving previously saved history.
+Horários antigos|Historical timestamps
+Completa a 3012 das PCBAs atuais e anteriores já rastreadas. Não repete 3028/3074/2114/3022.|Completes 3012 history for current and previously traced PCBAs. Does not repeat 3028/3074/2114/3022.
+Incluir também a 3012 no Completo/Reuso (avançado)|Also include 3012 in Full/Reuse (advanced)
+Desmarcada por padrão: a 3012 em validação não deve comprometer a coleta principal. Em Horários antigos ela é executada independentemente desta opção.|Off by default: 3012 is still under validation and must not compromise the main collection. Historical timestamps runs independently of this option.
+Solicitar recuperação seletiva manualmente|Request selective recovery manually
+Para recuperar lacunas existentes mesmo sem job anterior visível; exige evidência local capturada.|Recover existing gaps even without a visible previous job; requires saved local evidence.
+Forçar nova coleta integral (avançado)|Force a new full collection (advanced)
+Somente se precisar reconsultar todas as fontes. Pode repetir trabalho já feito; não exclui o histórico salvo.|Only use this to query every source again. It may repeat previous work; saved history is preserved.
+Ao iniciar novamente a MESMA linha, revisão, período, modo e filtros após uma interrupção, o agente retoma automaticamente somente as fontes e PCBAs sem comprovação. A 3012 reutiliza intervalos já salvos. Nenhuma leitura 3028 é apagada.|When restarting with the SAME line, revision, period, mode and filters after an interruption, the agent automatically resumes only unverified sources and PCBAs. The 3012 reuses saved intervals. No 3028 reading is deleted.
 `.trim().split('\n').map(line=>{const i=line.indexOf('|');return [line.slice(0,i),line.slice(i+1)];}));

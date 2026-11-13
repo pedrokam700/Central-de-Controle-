@@ -151,6 +151,25 @@ test('one physical technician comment in multiple alerts appears once, with no i
   assert.equal(JSON.stringify(m.alerts),before,'UI must never mutate model evidence');
 });
 
+test('SN alert attributes the fault to A6900 rather than the later 3012 routing operator',()=>{
+  const m=model(),repair={pcba_sn:'PCB-A',row_key:'ANALYSIS-1',defect_code:'F1',
+    defect_time:'2026-10-10 10:00:00',repair_time:'2026-10-10 11:00:00',
+    repair_user:'BRM90001',repair_comment:'Analysed faulty connector'};
+  m.alerts[0].evidence.repairs=[repair];
+  const result={...reusedResult,trace_3022:{operator_evidence:[
+    {pcba_sn:'PCB-A',station:'A5265',event_time:'2026-10-10 10:40:00',operator_id:'BRM90001',operator_name:'Routing Operator'},
+    {pcba_sn:'PCB-A',station:'A6900',event_time:'2026-10-10 10:30:00',operator_id:'BRM90002',operator_name:'Fault Analyst'},
+    {pcba_sn:'PCB-FOREIGN',station:'A6900',event_time:'2026-10-10 10:35:00',operator_id:'BRM90003',operator_name:'Wrong Board'},
+  ]}};
+  const html=renderSmartSnAlerts(m,result,'pt-BR');
+  assert.match(html,/Fault Analyst \(BRM90002\)/);
+  assert.match(html,/Usuário do reparo 3012/);
+  assert.match(html,/Routing Operator \(BRM90001\)/);
+  assert.doesNotMatch(html,/Wrong Board/);
+  const noA6900={...result,trace_3022:{operator_evidence:result.trace_3022.operator_evidence.filter(e=>e.station!=='A6900')}};
+  assert.match(renderSmartSnAlerts(m,noA6900,'pt-BR'),/Técnico da falha A6900 não comprovado/);
+});
+
 
 test('prior component board facts show 2114 failure, time, and only exact-PCBA 3012 technician',()=>{
   const m=model(),component=m.alerts.find(a=>a.item_sn==='LCM-1');
@@ -166,4 +185,28 @@ test('prior component board facts show 2114 failure, time, and only exact-PCBA 3
   assert.match(componentCard,/Reconnected display cable/);
   assert.doesNotMatch(componentCard.split('</div></div>')[0],/Foreign board note/,
     'a foreign 3012 repair must never be attributed to the reused component');
+});
+
+test('low-risk alert retains historic technician and comments even when a higher-priority PCBA card exists',()=>{
+ const m=model(),board='PCB-A';
+ const repairs=[
+  {pcba_sn:board,row_key:'R-1',defect_code:'F1',defect_time:'2026-11-09 10:11:00',repair_time:'2026-11-09 10:12:09',repair_user:'BRM00151',repair_comment:'Primeira solucao'},
+  {pcba_sn:board,row_key:'R-2',defect_code:'F1',defect_time:'2026-11-09 10:11:00',repair_time:'2026-11-09 10:12:09',repair_user:'BRM00151',repair_comment:'Segunda solucao'},
+  {pcba_sn:board,row_key:'R-3',defect_code:'F1',defect_time:'2026-11-10 16:50:00',repair_time:'2026-11-10 16:54:05',repair_user:'BRM00075',repair_comment:'Terceira solucao'}
+ ];
+ m.repairs=repairs;
+ m.alerts.push({kind:'COMPONENT_TYPE_COMPATIBLE',item_type:'LCM',item_sn:'COMP-1',pcba_sn:board,sources:['3074','2114'],
+  evidence:{failure:failure(board),current_failure:failure(board)}});
+ const result={...reusedResult,trace_3012:{rows:repairs},
+  trace_3022:{operator_evidence:[
+   {pcba_sn:board,station:'A6900',event_time:'2026-11-09 09:12:18',operator_id:'BRM00151',operator_name:'Jamile Maria'},
+   {pcba_sn:board,station:'A6900',event_time:'2026-11-10 16:54:05',operator_id:'BRM00075',operator_name:'Jonathan Pires'},
+  ]}};
+ const html=renderSmartSnAlerts(m,result,'pt-BR');
+ assert.match(html,/data-smart-alert="component-compatible-failure"/);
+ const low=html.split('data-smart-alert="component-compatible-failure"')[1];
+ for(const name of ['Jamile Maria','Jonathan Pires','Primeira solucao','Segunda solucao','Terceira solucao'])
+  assert.ok(low.includes(name),'low risk must show: '+name);
+ assert.equal((low.match(/data-sn-alert-repair-row/g)||[]).length,3);
+ assert.ok(!low.includes('Outros comentários 3012'));
 });

@@ -99,51 +99,80 @@ class Tela2114:
         self.browser = browser
         self.base_dir = Path(base_dir)
 
+    @staticmethod
+    def _is_valid_2114_page(page):
+        """Require the actual OPC 2114 query field and view identity.
+
+        A browser tab being open, focused or named A-MES does not prove that
+        its ExtJS 2114 content is still usable after session/navigation changes.
+        """
+        try:
+            if page.is_closed():
+                return False
+        except (AttributeError, TypeError):
+            pass  # Small historical test doubles may not expose is_closed.
+        try:
+            sn = page.locator('input[name="snImei"]:visible')
+            if sn.count() != 1:
+                return False
+            marker = f"{page.url} {page.title()}".lower()
+            if 'trdefectlotbyhand' in marker or 'awip2114' in marker:
+                return True
+            body = page.locator('body').inner_text(timeout=700)[:2500].lower()
+            return 'awip2114-tr defect lot by hand' in body
+        except Exception:
+            return False
+
     def _page(self):
-        # A 2114 roda dentro do OPC e o usuario pode ter mais de uma aba do MES
-        # aberta. Nao aceitamos silenciosamente uma aba errada/stale.
+        # The caller may pin an explicitly navigation-verified OPC page. This
+        # avoids switching to a different, focused/duplicated A-MES tab midway
+        # through a large batch (and avoids rechecking all tabs unnecessarily).
+        pinned = getattr(self, 'target_page', None)
+        if pinned is not None and self._is_valid_2114_page(pinned):
+            return pinned
+
         candidates = []
         for page in self.browser.pages:
-            try:
-                sn = page.locator('input[name="snImei"]:visible')
-                if sn.count() != 1:
-                    continue
-                marker = f"{page.url} {page.title()}".lower()
-                # O hash/DOM da pagina real contém TrDefectLotByHand/AWIP2114.
-                if ("trdefectlotbyhand" not in marker and "awip2114" not in marker):
-                    try:
-                        body = page.locator('body').inner_text(timeout=700)[:2500].lower()
-                    except Exception:
-                        body = ""
-                    if "awip2114-tr defect lot by hand" not in body:
-                        continue
-                try:
-                    focused = bool(page.evaluate("document.hasFocus()"))
-                except Exception:
-                    focused = False
-                candidates.append((page, focused))
-            except Exception:
+            if not self._is_valid_2114_page(page):
                 continue
+            try:
+                focused = bool(page.evaluate('document.hasFocus()'))
+            except Exception:
+                focused = False
+            candidates.append((page, focused))
 
         if not candidates:
-            raise RuntimeError(
-                "Nenhuma aba valida da AWIP2114 foi encontrada. "
-                "Abra OPC > AWIP2114-Tr Defect Lot By Hand e tente novamente."
-            )
+            # A-MES can close/replace the OPC view while 3074 is traversing
+            # materials. Recover only the missing *read-only* view, with one
+            # bounded navigation attempt. Do not type credentials or treat a
+            # login screen as a valid 2114 query.
+            try:
+                from ames.navigation import AmesNavigation
+                recovered = AmesNavigation(self.browser).ensure_2114(timeout_s=12.0)
+            except Exception as exc:
+                raise RuntimeError(
+                    f'2114_VIEW_RECOVERY_FAILED: {type(exc).__name__}: {exc}'
+                ) from exc
+            if not self._is_valid_2114_page(recovered):
+                raise RuntimeError('2114_VIEW_NOT_CONFIRMED_AFTER_RECOVERY')
+            self.target_page = recovered
+            return recovered
 
         if len(candidates) == 1:
+            self.target_page = candidates[0][0]
             return candidates[0][0]
 
         focused = [page for page, is_focused in candidates if is_focused]
         if len(focused) == 1:
+            self.target_page = focused[0]
             return focused[0]
 
-        # Melhor falhar de forma clara do que consultar uma das abas duplicadas.
-        urls = " | ".join(page.url for page, _ in candidates)
+        # Ambiguous duplicate tabs are not silently assigned to a PCBA.
+        urls = ' | '.join(page.url for page, _ in candidates)
         raise RuntimeError(
-            f"Foram encontradas {len(candidates)} abas 2114 validas. "
-            "Feche as abas duplicadas e deixe somente a 2114 que deseja automatizar. "
-            f"Abas: {urls}"
+            f'Foram encontradas {len(candidates)} abas 2114 validas. '
+            'Feche as abas duplicadas e deixe somente a 2114 que deseja automatizar. '
+            f'Abas: {urls}'
         )
 
     def turno_confirmado(self):
@@ -152,19 +181,16 @@ class Tela2114:
         return _safe_input_value(page, "desc")
 
     def turno_atual(self):
-        """Return a committed Shift, making one bounded real selection attempt.
+        """Read real Shift and recover once; unavailable view stays PARTIAL.
 
-        The composite flow used to inspect the field after an earlier best-effort
-        navigation attempt. If that first attempt was transient, 2114 was marked
-        unavailable without ever retrying at the moment the source actually ran.
-        This method now retries the real lookup once and still degrades explicitly
-        to SHIFT_UNCONFIRMED instead of fabricating a value.
+        A disappearing OPC tab must not abort a separately completed 3074
+        batch. Never fabricate a Shift or query a PCBA before it is confirmed.
         """
-        confirmed = self.turno_confirmado()
-        if confirmed:
-            self.last_shift_error = None
-            return confirmed
         try:
+            confirmed = self.turno_confirmado()
+            if confirmed:
+                self.last_shift_error = None
+                return confirmed
             from ames.shift_2114 import ensure_shift
             selected = ensure_shift(self._page(), timeout_s=8.0)
             confirmed = self.turno_confirmado()

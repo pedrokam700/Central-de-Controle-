@@ -38,6 +38,13 @@ test('2114 partial state and 3022 MES/local phase remain visible',()=>{
   assert.match(html,/média MES 3100 ms/);
 });
 
+test('3022 local phase explains why the A-MES screen does not move',()=>{
+  const state=doneState({status:'complete',source_status:'COMPLETE'});
+  state.job.stage_progress['3022'].phase='local';
+  const html=collectionStatus(state);
+  assert.match(html,/processamento dos dados já coletados \(sem nova consulta A-MES\)/);
+});
+
 test('confirmed complete 2114 may report a real zero only with completed source evidence',()=>{
   const html=collectionStatus(doneState({
     status:'complete',source_status:'COMPLETE',requested_pcba_count:2,processed_pcba_count:2,pcba_error_count:0,pcba_no_data_count:2
@@ -69,7 +76,7 @@ test('a source stage missing from an older job stays unverified, never implicitl
 
 test('complete source coverage has no warning and degraded source is translated to English',()=>{
   const state=doneState({status:'complete',source_status:'COMPLETE'});
-  state.job.result.stages={'3074':'done','2114':'done','3022':'done'};
+  state.job.result.stages={'3074':'done','2114':'done','3022':'done','3012':'done'};
   assert.doesNotMatch(collectionStatus(state),/data-trace-source-coverage/);
   const prior=globalThis.document;
   try{
@@ -106,7 +113,7 @@ test('3074 partial collection names real query and pagination gaps, never equate
 });
 test('a verified 3074 COMPLETE is not mislabeled partial or missing',()=>{
  const state=doneState({status:'complete',source_status:'COMPLETE'});
- state.job.result.stages={'3074':'done','2114':'done','3022':'done'};
+ state.job.result.stages={'3074':'done','2114':'done','3022':'done','3012':'done'};
  state.job.result.deep_trace.TAN10103['3074']={source_status:'COMPLETE',
    coverage_diagnostic:{requested_pcbas:3,processed_pcbas:3,pcba_errors:0,partial_page_count:0}};
  const html=collectionStatus(state);

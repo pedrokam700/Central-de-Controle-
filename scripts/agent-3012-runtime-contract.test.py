@@ -5,16 +5,22 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import types
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlencode
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT = ROOT / "ames" / "agent"
 sys.path.insert(0, str(AGENT))
 
 import ames_3012_live as collector  # noqa: E402
+import agent_3012_patch  # noqa: E402
 import repair_3012  # noqa: E402
+import trace_3012_enrichment  # noqa: E402
 from store import Store  # noqa: E402
 
 
@@ -40,28 +46,46 @@ function field(itemId,xtype,name=''){
 }
 const startParent=field('dteFromDate','udc_datetimefield','fromDate'),startData=field('dteFromDate__Data','hiddenfield','fromDate'),startDate=field('dteFromDate__Date','datefield','_fromDate__Date'),startTime=field('dteFromDate__Time','timefield','_fromDate__Time');
 const endParent=field('dteToDate','udc_datetimefield','toDate'),endData=field('dteToDate__Data','hiddenfield','toDate'),endDate=field('dteToDate__Date','datefield','_toDate__Date'),endTime=field('dteToDate__Time','timefield','_toDate__Time');
-for(const [parent,data] of [[startParent,startData],[endParent,endData]]){const base=parent.setValue.bind(parent);parent.setValue=v=>{base(v);if(v instanceof Date)data.setValue(`${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')} ${String(v.getHours()).padStart(2,'0')}:${String(v.getMinutes()).padStart(2,'0')}:00`);else data.setValue(v)}}
+for(const [parent,data] of [[startParent,startData],[endParent,endData]]){const base=parent.setValue.bind(parent);parent.setValue=v=>{base(v);if(['backing-empty','numeric-backing','numeric-backing-epoch'].includes(scenario))return;if(v instanceof Date)data.setValue(`${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')} ${String(v.getHours()).padStart(2,'0')}:${String(v.getMinutes()).padStart(2,'0')}:00`);else data.setValue(v)}}
+if(scenario==='numeric-backing'){startData.setValue('20260123000000');endData.setValue('20260123000000')}
+if(scenario==='numeric-backing-epoch'){startData.setValue('1769126400000');endData.setValue('1769126400000')}
 const simpleIds=[['txtSnImei','textfield','snImei'],['cdvDefectType','codeviewfieldx','defectType'],['cdvRepairedCode','codeviewfieldx','repairedCode'],['cdvDepartmentNew','codeviewfieldx','department'],['cdvAreaNew','codeviewfieldx','area'],['cdvLineCodeNew','codeviewfieldx','lineCode'],['cdvProdModel','codeviewfieldx','prodModel'],['cdvDefectCode','codeviewfieldx','defectCode']];
 const simple=Object.fromEntries(simpleIds.map(([id,xt,n])=>[id,field(id,xt,n)]));
 let activeStore=makeStore([]);
+const ajaxListeners=new Map();
+const ajax={on(name,fn){ajaxListeners.set(name,fn)},un(name,fn){if(ajaxListeners.get(name)===fn)ajaxListeners.delete(name)},
+  emit(options){ajaxListeners.get('beforerequest')?.(ajax,options)}};
 const grid={itemId:'grdDefectRepair',xtype:'gridpanel',hidden:false,isVisible(){return true},getStore(){return activeStore}};
-function validDate(){return /^2026-01-24 00:00:00$/.test(String(startData.getValue()))&&/^2026-10-17 23:59:00$/.test(String(endData.getValue()))&&simple.txtSnImei.getValue()==='002527TEST'}
+function validDate(){const start=String(startData.getValue()),end=String(endData.getValue());return ((/^2026-01-24 00:00:00$/.test(start)&&/^2026-10-17 23:59:00$/.test(end))||(scenario==='numeric-backing'&&start==='20260124000000'&&end==='20261017235900')||(scenario==='numeric-backing-epoch'&&start===String(new Date(2026,0,24,0,0).getTime())&&end===String(new Date(2026,9,17,23,59).getTime())))&&simple.txtSnImei.getValue()==='002527TEST'}
 function execute(){
   if(scenario==='stale')return;
   const params={procstep:'x',snImei:simple.txtSnImei.getValue(),fromDate:startData.getValue(),toDate:endData.getValue(),unDisassemble:false};
+  if(scenario==='proxy-only'){activeStore.proxy.extraParams={...params};return;}
+  const ajaxForm=scenario==='ajax-form-serialized'||scenario==='ajax-form-dom'||scenario==='ajax-form-dom-wrong-period'||scenario==='ajax-wrong-period'||scenario==='ajax-unrelated-sn';
+  const before=ajaxForm||scenario==='wire-fallback'?{procstep:'x',snImei:simple.txtSnImei.getValue()}:
+    scenario==='store-no-sn'?{fromDate:startData.getValue(),toDate:endData.getValue()}:params;
+  if(ajaxForm){
+    const dates=scenario==='ajax-wrong-period'||scenario==='ajax-form-dom-wrong-period'
+      ?{'dteFromDate__Data':'2026-01-24 00:00:00','dteToDate__Data':'2026-03-31 23:59:00'}
+      :{'dteFromDate__Data':startData.getValue(),'dteToDate__Data':endData.getValue()};
+    const formFields=[{name:'snImei',value:scenario==='ajax-unrelated-sn'?'DIFFERENT-PCBA':simple.txtSnImei.getValue()},
+      ...Object.entries(dates).map(([name,value])=>({name,value})),{name:'password',value:'must-not-leak'}];
+    if(scenario.startsWith('ajax-form-dom'))ajax.emit({form:{dom:{elements:formFields}}});
+    else ajax.emit({params:{queryCondition:JSON.stringify({filters:formFields.filter(f=>f.name!=='password')})}});
+  }
   const rows=validDate()?[record({lotId:'002527TEST',defectCode:'X1',defectDesc:'x',repairCode:'R1',repairComment:'OK',repairTime:'2026-10-16 12:00:00',repairUser:'AT1'})]:[];
   if(scenario==='rebind'){
     const fresh=makeStore(rows);fresh.proxy.extraParams={...params};activeStore=fresh;
-    setTimeout(()=>{fresh.loading=true;fresh.emit('beforeload',fresh,{getParams:()=>params});setTimeout(()=>{fresh.rows=rows;fresh.loading=false;fresh.emit('load',fresh,rows,true);fresh.emit('datachanged',fresh)},90)},20);
+    setTimeout(()=>{fresh.loading=true;fresh.emit('beforeload',fresh,{getParams:()=>before});setTimeout(()=>{fresh.rows=rows;fresh.loading=false;fresh.emit('load',fresh,rows,true);fresh.emit('datachanged',fresh)},90)},20);
   }else{
-    const s=activeStore;s.proxy.extraParams={...params};s.loading=true;s.emit('beforeload',s,{getParams:()=>params});setTimeout(()=>{s.rows=rows;s.loading=false;s.emit('load',s,rows,true);s.emit('datachanged',s)},80);
+    const s=activeStore;s.proxy.extraParams={...before};s.loading=true;s.emit('beforeload',s,{getParams:()=>before});setTimeout(()=>{s.rows=rows;s.loading=false;s.emit('load',s,rows,true);s.emit('datachanged',s)},80);
   }
 }
 const physical={tagName:'A',dispatchEvent(){},click(){if(scenario!=='ext-fallback'&&scenario!=='stale')execute()}};
 const view={itemId:'btnView',xtype:'button',text:'View',isButton:true,hidden:false,isVisible(){return true},btnEl:{dom:physical},fireEvent(name){if(name==='click'&&scenario!=='stale')execute();return true},handler(){if(scenario!=='stale')execute()}};
 const components=[...Object.values(simple),startParent,startData,startDate,startTime,endParent,endData,endDate,endTime,grid,view];
 const ctx=vm.createContext({console,setTimeout,clearTimeout,Date,Promise,JSON,globalThis:null,Event:class{constructor(t,o){this.type=t}},MouseEvent:class{constructor(t,o){this.type=t}},document:{querySelectorAll(){return[]},getElementById(){return null}},window:null});ctx.window=ctx;ctx.globalThis=ctx;ctx.Ext={ComponentManager:{all:{items:components}},ComponentQuery:{query(){return components}}};
-(async()=>{try{const fn=vm.runInContext('('+querySource+')',ctx);const out=await fn({sn:'002527TEST',line:'',model:'',defectCode:'',repairCode:'',defectType:'',dateFrom:'2026-01-24',timeFrom:'00:00',dateTo:'2026-10-17',timeTo:'23:59'});console.log(JSON.stringify({ok:true,out}));}catch(e){console.log(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exitCode=0}})();
+(async()=>{try{ctx.Ext.Ajax=ajax;const fn=vm.runInContext('('+querySource+')',ctx);const out=await fn({sn:'002527TEST',line:'',model:'',defectCode:'',repairCode:'',defectType:'',dateFrom:'2026-01-24',timeFrom:'00:00',dateTo:'2026-10-17',timeTo:'23:59',allowWirePeriodProof:['wire-fallback','numeric-backing','numeric-backing-epoch'].includes(scenario)});console.log(JSON.stringify({ok:true,out}));}catch(e){console.log(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exitCode=0}})();
 '''
 
 
@@ -79,6 +103,351 @@ def run_fixture(scenario: str) -> dict:
 
 
 class Runtime3012Tests(unittest.TestCase):
+    def test_today_exact_history_window_does_not_create_a_2359_only_cache_gap(self):
+        # 11/11 at 08:03: the old policy asked for 23:59:59, even though
+        # the physical 3012 form can only send 23:59. With earlier trusted
+        # coverage ending at 23:59:00, the cache then queried the leftover
+        # 23:59:01-23:59:59 as a misleading 23:59 -> 23:59 window.
+        start, end = agent_3012_patch.exact_sn_history_window(datetime(2026, 11, 11, 8, 3))
+        self.assertEqual(start, datetime(2026, 1, 24, 0, 0))
+        self.assertEqual(end, datetime(2026, 11, 11, 23, 59))
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / 'local.sqlite3')
+            store.initialize()
+            repair_3012.ensure_schema(store)
+            with store.connect() as connection:
+                connection.execute(
+                    'INSERT INTO repair_coverage_3012(sn,start_at,end_at,source,completed_at) VALUES(?,?,?,?,?)',
+                    ('PCB-MINUTE', start.isoformat(timespec='seconds'), end.isoformat(timespec='seconds'),
+                     repair_3012.TRUSTED_COVERAGE_SOURCE, '2026-11-11T08:03:00'),
+                )
+            self.assertEqual(repair_3012.missing_windows(store, 'PCB-MINUTE', start, end), [])
+            legacy_end = end + timedelta(seconds=59)
+            prior_gap = repair_3012.missing_windows(store, 'PCB-MINUTE', start, legacy_end)
+            self.assertEqual(prior_gap, [(end + timedelta(seconds=1), legacy_end)])
+            self.assertEqual([moment.strftime('%Y-%m-%d %H:%M') for moment in prior_gap[0]],
+                             ['2026-11-11 23:59', '2026-11-11 23:59'])
+
+    def test_bulk_3012_trace_reuses_the_same_minute_end_policy(self):
+        # The full trace used to have a *second* independent 23:59:59 bound.
+        # A SN lookup fix alone did not prevent the next mass collection from
+        # recreating the same collapsed 23:59 window.
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            store = Store(folder / 'local.sqlite3')
+            store.initialize()
+            agent = types.SimpleNamespace(
+                CONFIG={'ames_start_date': '2026-01-24'}, STORE=store,
+                DATA_DIR=folder, WORKSTATION='SYNTHETIC-POSTO',
+                mes_call=lambda collector: collector,
+            )
+            with patch.object(trace_3012_enrichment.ames_3012_strategy, 'collect_exact_sn_cached',
+                              return_value={'rows': [], 'cache': {'queried': 0}}) as capture:
+                result = trace_3012_enrichment.collect_historical_3012(
+                    agent, {}, [{'pcba_sn': 'PCB-EXEMPLO'}],
+                    job_id='SYNTHETIC-JOB', line='TAN10102', collector=lambda **kwargs: None,
+                )
+            self.assertEqual(result['status'], 'done')
+            self.assertEqual(result['window_end'].split('T')[1], '23:59:00')
+            sent = capture.call_args.kwargs
+            self.assertEqual(sent['start_at'], datetime(2026, 1, 24))
+            self.assertEqual(sent['end_at'].time().isoformat(), '23:59:00')
+
+    def test_real_wire_date_shapes_distinguish_blank_epoch_and_unrecognized(self):
+        expected = {'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+
+        class Request:
+            url = 'http://172.29.185.215/asymes/home'
+            resource_type = 'xhr'
+            method = 'POST'
+            def __init__(self, left, right):
+                self.post_data = urlencode({'snImei':'002527TEST',
+                                            'fromDate':left,'toDate':right,'start':0})
+
+        outputs=[]
+        for index,(left, right) in enumerate([('', ''), ('1762128000000', '1794268740000'),
+                            ('1/1/2026', '9/11/2026')]):
+            probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+            probe.on_request(Request(left,right))
+            result=probe.counters()
+            self.assertEqual((result['http'],result['sn'],result['dates'],result['period']),
+                             (1,1,1 if index == 1 else 0,0))
+            self.assertEqual((result['from_text'],result['to_text']),(0,0))
+            outputs.append(tuple(result['date_shapes']))
+        self.assertEqual(len(set(outputs)),3,
+                         'Diagnostic must distinguish the physical failure classes')
+        self.assertTrue(any('empty' in v for v in outputs[0]))
+        self.assertTrue(any('numeric_13_digits' in v for v in outputs[1]))
+        self.assertTrue(any('br_day_only' in v for v in outputs[2]))
+
+    def test_physical_numeric_unix_date_wire_proves_only_exact_local_mes_window(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+        local=ZoneInfo('America/Sao_Paulo')
+        def epoch_ms(iso, zone=local):
+            return str(int(datetime.fromisoformat(iso).replace(tzinfo=zone).timestamp())*1000)
+        left=epoch_ms('2026-01-01T00:00')
+        right=epoch_ms('2026-11-09T23:59')
+        class Request:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            def __init__(self,a,b):
+                self.post_data=urlencode({'snImei':'002527TEST','fromDate':a,'toDate':b})
+        class Response:
+            status=200
+            def __init__(self,req):self.request=req
+        def run_probe(a,b):
+            probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+            req=Request(a,b)
+            probe.on_request(req)
+            probe.on_response(Response(req))
+            probe.on_finished(req)
+            return probe
+        good=run_probe(left,right)
+        self.assertTrue(good.confirmed())
+        self.assertEqual((good.counters()['dates'],good.counters()['period']),(1,1))
+        self.assertIn('body:from=numeric_13_digits',good.counters()['date_shapes'])
+        self.assertNotIn(left,str(good.counters()))
+        self.assertNotIn(right,str(good.counters()))
+        self.assertFalse(run_probe(left,str(int(right)-60000)).confirmed(), 'one minute early is not exact')
+        self.assertFalse(run_probe(left,str(int(right)+1000)).confirmed(), 'sub-minute timestamp is not exact')
+        self.assertTrue(run_probe(left,str(int(right)+59000)).confirmed(),
+                        'inclusive 23:59:59 is the same full-minute end boundary')
+        self.assertFalse(run_probe(str(int(left)+59000),right).confirmed(),
+                         'the start of the range cannot skip its first 59 seconds')
+        self.assertFalse(run_probe(epoch_ms('2026-01-01T00:00',timezone.utc),right).confirmed(),
+                         'UTC midnight cannot masquerade as São Paulo midnight')
+        self.assertEqual(collector._wire_stamp(str(int(left)*1000)),expected['from'],
+                         'microsecond Unix representation must use integer-safe conversion')
+        self.assertEqual(collector._wire_stamp(str(int(left)//1000)),expected['from'],
+                         'second Unix representation must remain unambiguous')
+        self.assertEqual(collector._wire_stamp('2026-11-09 23:59:59',end_bound=True),expected['to'])
+        self.assertEqual(collector._wire_stamp('2026-11-09 23:59:58',end_bound=True),'')
+        self.assertEqual(collector._wire_stamp('2026-01-01 00:00:59'),'')
+
+    def test_compact_numeric_mes_dates_prove_only_valid_full_minutes(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-10 23:59'}
+        class Request:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            def __init__(self, start, end):
+                self.post_data=urlencode({'snImei':'002527TEST',
+                                          'fromDate':start,'toDate':end})
+        class Response:
+            status=200
+            def __init__(self,request):self.request=request
+        for first,last in [('202601010000','202611102359'),
+                           ('20260101000000','20261110235900'),
+                           ('20260101000000','20261110235959')]:
+            request=Request(first,last)
+            proof=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+            proof.on_request(request)
+            proof.on_response(Response(request))
+            proof.on_finished(request)
+            self.assertTrue(proof.confirmed(),(first,last))
+            self.assertIn('body:from=numeric_12_digits' if len(first)==12 else
+                          'body:from=numeric_14_digits',proof.counters()['date_shapes'])
+            self.assertNotIn(first,str(proof.counters()))
+        for malformed in ['202602300000', '202601012400', '20261110235901',
+                          '202601010000000']:
+            self.assertEqual(collector._wire_stamp(malformed), '',malformed)
+        wrong=Request('20260101000000','20261110235800')
+        proof=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        proof.on_request(wrong)
+        proof.on_response(Response(wrong))
+        proof.on_finished(wrong)
+        self.assertFalse(proof.confirmed())
+        self.assertEqual((proof.counters()['dates'],proof.counters()['period']),(1,0))
+
+    def test_http_wire_rejects_conflicting_url_and_body_periods(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        class Request:
+            resource_type='xhr'
+            method='POST'
+            url='http://172.29.185.215/asymes/home?'+urlencode({
+                'snImei':'002527TEST','fromDate':expected['from'],'toDate':expected['to']})
+            post_data=urlencode({'snImei':'002527TEST','fromDate':'', 'toDate':''})
+        req=Request()
+        probe.on_request(req)
+        class Response:
+            status=200
+            request=req
+        probe.on_response(Response())
+        probe.on_finished(req)
+        self.assertFalse(probe.confirmed())
+        self.assertEqual(probe.counters()['ambiguous'],1)
+        self.assertEqual(probe.counters()['date_shapes'],[
+            'body:from=empty','body:to=empty',
+            'url:from=datetime_recognized','url:to=datetime_recognized'])
+        self.assertNotIn('002527TEST',str(probe.counters()))
+        self.assertNotIn('2026-01-01',str(probe.counters()))
+
+    def test_wire_does_not_accept_date_prefix_with_opaque_suffix(self):
+        self.assertEqual(collector._wire_stamp('2026-01-01 00:00UNVERIFIED'), '')
+        self.assertEqual(collector._wire_stamp('2026-01-01T00:00:00Z'), '')
+        self.assertEqual(collector._wire_split_stamp('2026-01-01Z','00:00'), '')
+        self.assertEqual(collector._wire_split_stamp('2026-01-01','00:00UNVERIFIED'), '')
+        self.assertEqual(collector._wire_split_stamp('2026-11-09','23:59:59',end_bound=True),
+                         '2026-11-09 23:59')
+        self.assertEqual(collector._wire_split_stamp('2026-11-09','23:59:58',end_bound=True),'')
+        self.assertEqual(collector._wire_split_stamp('2026-01-01','00:00:59'),'')
+        self.assertEqual(collector._wire_value_shape('2026-01-01T00:00:00Z'), 'iso_timezone')
+
+    def test_store_without_period_is_untrusted_until_http_wire_is_proved(self):
+        result = run_fixture('wire-fallback')
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(result['out']['total'], 1)
+        self.assertFalse(result['out']['queryProof']['periodVerified'])
+        self.assertEqual(result['out']['queryProof']['periodSource'], 'not_observed')
+
+    def test_store_dates_without_exact_sn_cannot_certify_any_board(self):
+        result = run_fixture('store-no-sn')
+        self.assertFalse(result['ok'], result)
+        self.assertIn('3012_QUERY_PERIOD_MISMATCH', result['error'])
+
+    def test_empty_hidden_extnet_datetime_is_initialized_before_physical_view(self):
+        # Production bug: visible dates change but parent.setValue does not
+        # populate the __Data backing input. Earlier fixtures assumed it did.
+        result = run_fixture('backing-empty')
+        self.assertTrue(result['ok'], result)
+        applied = result['out']['applied']
+        self.assertEqual(applied['dateFrom']['data']['raw'], '2026-01-24 00:00:00')
+        self.assertEqual(applied['dateTo']['data']['raw'], '2026-10-17 23:59:00')
+        self.assertTrue(result['out']['queryProof']['periodVerified'])
+
+    def test_numeric_backing_field_is_resynchronized_before_view(self):
+        # The original fixture always converted __Data to text when its parent
+        # changed. The production form can retain a stale 14-digit value while
+        # showing the correct calendar controls. The View must submit the NEW
+        # value in the same representation, or the MES queries the wrong dates.
+        result=run_fixture('numeric-backing')
+        self.assertTrue(result['ok'],result)
+        self.assertEqual(result['out']['total'],1)
+        self.assertEqual(result['out']['applied']['dateFrom']['data']['raw'],'20260124000000')
+        self.assertEqual(result['out']['applied']['dateTo']['data']['raw'],'20261017235900')
+        params=result['out']['queryProof']['requestParams']
+        self.assertEqual((params['fromDate'],params['toDate']),
+                         ('20260124000000','20261017235900'))
+        self.assertFalse(result['out']['queryProof']['periodVerified'],
+                         'JS alone cannot certify calendar wire; actual HTTP probe must')
+
+    def test_numeric_epoch_backing_field_is_not_left_on_previous_date(self):
+        result=run_fixture('numeric-backing-epoch')
+        self.assertTrue(result['ok'],result)
+        self.assertEqual(result['out']['total'],1)
+        params=result['out']['queryProof']['requestParams']
+        self.assertNotEqual(params['fromDate'],'1769126400000')
+        self.assertNotEqual(params['toDate'],'1769126400000')
+        self.assertRegex(params['fromDate'],r'^\d{13}$')
+        self.assertRegex(params['toDate'],r'^\d{13}$')
+        self.assertEqual(result['out']['applied']['dateFrom']['data']['raw'],
+                         params['fromDate'])
+
+    def test_passive_wire_probe_requires_same_request_sn_dates_and_completion(self):
+        expected={'from':'2026-01-24 00:00','to':'2026-10-17 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        body=urlencode({'queryCondition':json.dumps({'filters':[
+            {'name':'txtSnImei','value':'002527TEST'},
+            {'name':'dteFromDate__Data','value':'2026-01-24 00:00:00'},
+            {'name':'dteToDate__Data','value':'2026-10-17 23:59:00'},
+            {'name':'token','value':'SECRET-MUST-NOT-LEAK'}]})})
+        class FakeRequest:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            post_data=body
+        request=FakeRequest()
+        probe.on_request(request)
+        counts=probe.counters()
+        self.assertEqual({k:counts[k] for k in ('http','sn','dates','period','finished','http_ok')},
+                         {'http':1,'sn':1,'dates':1,'period':1,'finished':0,'http_ok':0})
+        self.assertEqual(counts['from_text'], 1)
+        self.assertEqual(counts['to_text'], 1)
+        self.assertIn('dtefromdatedata',counts['date_keys'])
+        self.assertNotIn('token',str(counts))
+        self.assertFalse(probe.confirmed(),'outbound request alone is not a completed MES result')
+        probe.on_finished(request)
+        self.assertFalse(probe.confirmed(),'HTTP finish without success status cannot prove coverage')
+        class FakeResponse:
+            status=200
+            def __init__(self, req):
+                self.request=req
+        probe.on_response(FakeResponse(request))
+        self.assertTrue(probe.confirmed())
+        self.assertNotIn('SECRET',repr(probe._requests))
+
+    def test_wire_wrong_dates_other_sn_and_other_host_cannot_prove_coverage(self):
+        expected={'from':'2026-01-24 00:00','to':'2026-10-17 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        class FakeRequest:
+            resource_type='xhr'
+            method='POST'
+            def __init__(self,url,data):
+                self.url=url
+                self.post_data=urlencode(data)
+        for url,data in [
+            ('http://172.29.185.215/asymes/home',{'snImei':'OTHER','fromDate':expected['from'],'toDate':expected['to']}),
+            ('http://172.29.185.215/asymes/home',{'snImei':'002527TEST','fromDate':expected['from'],'toDate':'2026-03-31 23:59'}),
+            ('http://other-host/asymes/home',{'snImei':'002527TEST','fromDate':expected['from'],'toDate':expected['to']}),
+        ]:
+            req=FakeRequest(url,data)
+            probe.on_request(req)
+            probe.on_finished(req)
+        self.assertFalse(probe.confirmed())
+        self.assertEqual(probe.counters()['period'],0)
+
+    def test_wire_unknown_date_keys_expose_schema_without_promoting_coverage(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        class FakeRequest:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            post_data=urlencode({'snImei':'002527TEST',
+                'defectBeginCustom':'2026-01-01 00:00',
+                'defectEndCustom':'2026-11-09 23:59',
+                'sessionToken':'SHOULD-NOT-APPEAR',
+                'password':'SHOULD-NOT-APPEAR'})
+        req=FakeRequest()
+        probe.on_request(req)
+        counts=probe.counters()
+        self.assertEqual(counts['sn'],1)
+        self.assertEqual(counts['dates'],0)
+        self.assertEqual(counts['date_keys'],['defectbegincustom','defectendcustom'])
+        self.assertEqual((counts['from_text'],counts['to_text']),(1,1))
+        self.assertFalse(probe.confirmed())
+        self.assertNotIn('SHOULD-NOT-APPEAR',str(counts))
+
+    def test_wire_split_extnet_date_and_time_fields_prove_actual_period(self):
+        expected={'from':'2026-01-01 00:00','to':'2026-11-09 23:59'}
+        probe=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        class Request:
+            url='http://172.29.185.215/asymes/home'
+            resource_type='xhr'
+            method='POST'
+            post_data=urlencode({'txtSnImei':'002527TEST',
+                'dteFromDate__Date':'2026-01-01','dteFromDate__Time':'00:00',
+                'dteToDate__Date':'2026-11-09','dteToDate__Time':'23:59'})
+        class Response:
+            status=200
+            def __init__(self,request):self.request=request
+        req=Request()
+        probe.on_request(req)
+        probe.on_response(Response(req))
+        probe.on_finished(req)
+        self.assertTrue(probe.confirmed())
+        self.assertEqual(probe.counters()['period'],1)
+        self.assertIn('body:from=day_iso_day_only+time_recognized',probe.counters()['date_shapes'])
+
+        wrong=collector.Wire3012Probe('172.29.185.215','002527TEST',expected)
+        req.post_data=req.post_data.replace('23%3A59','00%3A00')
+        wrong.on_request(req)
+        wrong.on_response(Response(req))
+        wrong.on_finished(req)
+        self.assertFalse(wrong.confirmed())
+
     def test_exact_mapping_and_view_fallback_execute_real_query(self):
         result = run_fixture("ext-fallback")
         self.assertTrue(result["ok"], result)
@@ -97,13 +466,51 @@ class Runtime3012Tests(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         proof = result["out"]["queryProof"]
         self.assertTrue(proof["storeRebound"])
-        self.assertIn(proof["freshness"], {"STORE_LOAD_CONFIRMED", "STORE_DATASET_EVENT", "STORE_REBOUND_AFTER_VIEW"})
+        self.assertIn(proof["freshness"], {"STORE_LOAD_CONFIRMED", "STORE_DATASET_EVENT"})
         self.assertEqual(result["out"]["total"], 1)
+
+    def test_nested_ext_ajax_form_fields_prove_period_when_store_has_only_sn(self):
+        result = run_fixture('ajax-form-serialized')
+        self.assertTrue(result['ok'], result)
+        proof = result['out']['queryProof']
+        self.assertEqual(proof['periodSource'], 'ajax_beforerequest')
+        self.assertEqual(proof['actualWindow'], proof['requestedWindow'])
+
+    def test_ext_ajax_html_form_proves_period_without_unrelated_password(self):
+        result = run_fixture('ajax-form-dom')
+        self.assertTrue(result['ok'], result)
+        proof = result['out']['queryProof']
+        self.assertEqual(proof['periodSource'], 'ajax_beforerequest')
+        self.assertEqual(proof['actualWindow'], proof['requestedWindow'])
+        self.assertNotIn('must-not-leak', json.dumps(result))
+
+    def test_ext_ajax_html_form_with_wrong_period_is_blocked(self):
+        result = run_fixture('ajax-form-dom-wrong-period')
+        self.assertFalse(result['ok'], result)
+        self.assertIn('3012_QUERY_PERIOD_MISMATCH', result['error'])
+        self.assertIn('2026-03-31', result['error'])
+
+    def test_outgoing_ajax_period_mismatch_fails_even_if_visible_dates_look_right(self):
+        result = run_fixture('ajax-wrong-period')
+        self.assertFalse(result['ok'], result)
+        self.assertIn('3012_QUERY_PERIOD_MISMATCH', result['error'])
+        self.assertIn('2026-03-31', result['error'])
+
+    def test_unrelated_ajax_request_never_certifies_selected_sn_period(self):
+        result = run_fixture('ajax-unrelated-sn')
+        self.assertFalse(result['ok'], result)
+        self.assertIn('3012_QUERY_PERIOD_MISMATCH', result['error'])
+        self.assertIn('AUSENTE', result['error'])
 
     def test_view_that_never_starts_is_rejected(self):
         result = run_fixture("stale")
         self.assertFalse(result["ok"])
         self.assertIn("3012_VIEW_NOT_EXECUTED", result["error"])
+
+    def test_proxy_parameter_changes_alone_do_not_claim_view_executed(self):
+        result=run_fixture('proxy-only')
+        self.assertFalse(result['ok'],result)
+        self.assertIn('3012_VIEW_NOT_EXECUTED',result['error'])
 
     def test_legacy_false_coverage_does_not_suppress_first_v2_query(self):
         with tempfile.TemporaryDirectory() as td:
