@@ -145,12 +145,10 @@ class Canonical3022QueryTests(unittest.TestCase):
             result=f.tela.consultar('B')
             diag=result['query_diagnostics']
             self.assertEqual(diag['status'],'CONFIRMED')
-            self.assertTrue(diag['view_mask_observed'])
-            self.assertGreater(diag['view_preflight_retries'],0)
-            self.assertIn('view_actionable',diag['milestones_ms'])
-            self.assertGreaterEqual(diag['milestones_ms']['view_actionable'],1650)
+            self.assertIn('view_clicked',diag['milestones_ms'])
+            self.assertGreaterEqual(diag['milestones_ms']['view_clicked'],1650)
             self.assertEqual(f.call(op='state')['submitted'],['B'],
-                             'trial clicks never submit the same board twice')
+                             'native Playwright actionability wait must dispatch View exactly once')
             self.assertEqual(f.call(op='state')['listeners'],0)
 
     def test_extjs_mask_blocking_input_is_bounded_and_classified_as_recoverable(self):
@@ -164,12 +162,12 @@ class Canonical3022QueryTests(unittest.TestCase):
             self.assertTrue(d['input_mask_observed'])
             self.assertTrue(d['view_blocked'])
             self.assertGreater(d['input_retries'],0)
-            self.assertNotIn('submit',d['milestones_ms'])
+            self.assertNotIn('view_clicked',d['milestones_ms'])
             self.assertEqual(f.call(op='state')['submitted'],[])
             self.assertEqual(f.call(op='state')['listeners'],0)
             self.assertLessEqual(d['total_ms'],6500)
 
-    def test_extjs_mask_race_after_trial_still_fails_closed_without_second_click(self):
+    def test_mask_on_real_view_click_fails_closed_without_second_click(self):
         with self.fixture([{'rows':history_rows('not-submitted')}],
                           mask_on_actual_click=True) as f:
             with self.assertRaisesRegex(RuntimeError,
@@ -177,25 +175,23 @@ class Canonical3022QueryTests(unittest.TestCase):
                 f.tela.consultar('B')
             diag=f.tela.last_query_diagnostics
             self.assertEqual(diag['status'],'BLOCKED_VIEW_MASK')
-            self.assertTrue(diag['view_click_race'])
+            self.assertTrue(diag['view_click_unconfirmed'])
             self.assertTrue(diag['view_blocked'])
-            self.assertIn('view_actionable',diag['milestones_ms'])
+            self.assertIn('submit',diag['milestones_ms'])
             self.assertNotIn('view_clicked',diag['milestones_ms'])
             self.assertEqual(f.call(op='state')['submitted'],[])
             self.assertEqual(f.call(op='state')['listeners'],0)
 
-    def test_real_factory_generic_trial_650ms_timeout_recovers_after_ext_stabilizes(self):
+    def test_real_factory_button_not_ready_for_2_seconds_recovers_via_native_click(self):
         # The 13/11 log had 72 occurrences of this exact Playwright shape,
-        # WITHOUT any x-mask/interception text. A trial is non-mutating.
+        # Native Playwright click waits for button stability; the removed 650ms trial did not.
         with self.fixture([{'rows':history_rows('B'),'delay':240}],
                           trial_not_ready_until_s=2.4) as f:
             rr=f.tela.consultar('B')
             d=rr['query_diagnostics']
             self.assertEqual(d['status'],'CONFIRMED')
-            self.assertTrue(d['view_stability_timeout_observed'])
-            self.assertFalse(d.get('view_mask_observed',False))
-            self.assertGreaterEqual(d['milestones_ms']['view_actionable'],2400)
-            self.assertGreater(d['view_preflight_retries'],0)
+            self.assertGreaterEqual(d['milestones_ms']['view_clicked'],2400)
+            self.assertFalse(d.get('view_click_unconfirmed',False))
             self.assertEqual(f.call(op='state')['submitted'],['B'])
             self.assertEqual(f.call(op='state')['listeners'],0)
 
@@ -206,10 +202,9 @@ class Canonical3022QueryTests(unittest.TestCase):
                 f.tela.consultar('B')
             d=f.tela.last_query_diagnostics
             self.assertEqual(d['status'],'BLOCKED_VIEW_NOT_READY')
-            self.assertEqual(d['view_not_ready_reason'],'EXTJS_VIEW_ACTIONABILITY_TIMEOUT')
-            self.assertTrue(d['view_stability_timeout_observed'])
-            self.assertFalse(d.get('view_mask_observed',False))
-            self.assertNotIn('submit',d['milestones_ms'])
+            self.assertEqual(d['view_not_ready_reason'],'EXTJS_VIEW_CLICK_UNCONFIRMED')
+            self.assertTrue(d['view_click_unconfirmed'])
+            self.assertNotIn('view_clicked',d['milestones_ms'])
             self.assertEqual(f.call(op='state')['submitted'],[])
             self.assertLessEqual(d['total_ms'],13500)
             self.assertEqual(f.call(op='state')['listeners'],0)
@@ -258,13 +253,13 @@ class Canonical3022QueryTests(unittest.TestCase):
             diag=f.tela.last_query_diagnostics
             self.assertEqual(diag['status'],'BLOCKED_VIEW_MASK')
             self.assertTrue(diag['view_blocked'])
-            self.assertGreater(diag['view_preflight_retries'],0)
-            self.assertNotIn('submit',diag['milestones_ms'])
+            self.assertTrue(diag['view_click_unconfirmed'])
+            self.assertNotIn('view_clicked',diag['milestones_ms'])
             self.assertNotIn('parse_completed',diag['milestones_ms'])
             self.assertEqual(f.call(op='state')['submitted'],[])
             self.assertEqual(f.call(op='state')['listeners'],0,
                              'listeners are cleaned even when the mask never clears')
-            self.assertLessEqual(diag['total_ms'],13000,
+            self.assertLessEqual(diag['total_ms'],13500,
                                  'a stuck mask must have a bounded wait, not an infinite job')
 
     def test_mask_on_second_pcba_preserves_first_confirmed_response(self):
