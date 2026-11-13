@@ -15,7 +15,12 @@ class Locator:
     def count(self): return 1 if self.kind != 'table' else 0
     def is_visible(self, **kwargs): return True
     def wait_for(self, **kwargs): pass
-    def fill(self, value, **kwargs): self.fixture.call(op='fill', value=value)
+    def fill(self, value, **kwargs):
+        if self.fixture.mask_blocks_input and self.fixture.clock < self.fixture.mask_until_s:
+            self.fixture.advance(min(float(kwargs.get('timeout',1200))/1000,
+                                     self.fixture.mask_until_s-self.fixture.clock))
+            raise RuntimeError('Timeout waiting for input: <div class="x-mask"> intercepts pointer events')
+        self.fixture.call(op='fill', value=value)
     def input_value(self, **kwargs): return self.fixture.call(op='value')
     def click(self, **kwargs):
         if kwargs.get('trial'):
@@ -36,6 +41,7 @@ class Locator:
         if (self.fixture.mask_after_submits is not None and
                 len(self.fixture.call(op='state')['submitted']) >= self.fixture.mask_after_submits):
             self.fixture.mask_until_s = self.fixture.clock + self.fixture.mask_duration_s
+            self.fixture.mask_blocks_input = True
             self.fixture.mask_after_submits = None
     def inner_text(self, **kwargs): return 'AWIP3022 View Lot History'
 
@@ -44,12 +50,13 @@ class Ext3022Fixture:
     url = 'http://fixture/AWIP3022/VwViewLotHistoryView'
     def __init__(self, collector, plans, rows=(), hidden=(), mask_until_s=0.0,
                  mask_after_submits=None, mask_duration_s=0.0,
-                 mask_on_actual_click=False):
+                 mask_on_actual_click=False, mask_blocks_input=False):
         self.collector, self.clock = collector, 0.0
         self.mask_until_s, self.trial_attempts = float(mask_until_s), 0
         self.mask_after_submits = mask_after_submits
         self.mask_duration_s = float(mask_duration_s)
         self.mask_on_actual_click = bool(mask_on_actual_click)
+        self.mask_blocks_input = bool(mask_blocks_input)
         self.process = subprocess.Popen(['node', str(ROOT/'scripts/fixtures/ames-3022-ext.cjs')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8')
         self.frames = [self]
         self.call(op='setup', plans=plans, rows=list(rows), hidden=list(hidden))
