@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
+import vm from 'node:vm';
 
 const root=path.resolve('.');
 
@@ -38,4 +39,23 @@ test('rules permitem bootstrap do próprio perfil sem abrir listagem pública',(
   assert.match(rules,/allow get:\s*if \(signedIn\(\) && request\.auth\.uid == userId\) \|\| activeUser\(\);/);
   assert.match(rules,/allow list:\s*if activeUser\(\);/);
   assert.match(rules,/allow create:\s*if signedIn\(\)[\s\S]*request\.auth\.uid == userId/);
+});
+
+test('a new waiting PWA update cannot be hidden by a previous pending marker',()=>{
+  const app=fs.readFileSync(path.join(root,'app.js'),'utf8');
+  const begin=app.indexOf('function offerCentralWebUpdate(');
+  const finish=app.indexOf('function registerOfflineSupport(',begin);
+  assert.ok(begin>=0&&finish>begin,'update UI function must exist');
+  const shown=[];
+  const node=()=>({dataset:{},style:{},setAttribute(){},addEventListener(){},append(){}});
+  const sandbox={
+    document:{querySelector(){return null;},createElement:node,body:{append(item){shown.push(item);}}},
+    localStorage:{getItem(){return 'pending';},setItem(){}},
+    navigator:{serviceWorker:{controller:true}},
+    location:{reload(){}},
+  };
+  vm.runInNewContext(app.slice(begin,finish)+
+    '\\nofferCentralWebUpdate("pending",{waiting:{postMessage(){}}});',sandbox);
+  assert.equal(shown.length,1,'a new waiting worker must show its update prompt despite old localStorage pending');
+  assert.equal(shown[0].dataset.centralUpdateReady,'');
 });
