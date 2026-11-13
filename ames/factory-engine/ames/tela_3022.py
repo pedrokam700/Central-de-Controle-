@@ -1022,74 +1022,6 @@ class Tela3022:
             telemetry["total_ms"] = round((time.perf_counter() - started) * 1000, 2)
             self.last_query_diagnostics = telemetry
 
-    def _wait_view_actionable(self, page, query_frame, view, timeout_s, telemetry, mark):
-        """Wait for ExtJS masks to stop intercepting View, BEFORE any submit.
-
-        Playwright trial=True verifies pointer actionability without dispatching
-        a new MES query. Never use force=True or click repeatedly after a
-        possibly dispatched submission (which could mix two PCBA results).
-        """
-        wait_budget = min(12.0, max(3.0, float(timeout_s) * 0.66))
-        telemetry["view_actionable_wait_budget_s"] = wait_budget
-        deadline = time.perf_counter() + wait_budget
-        # Playwright may time out *before* it discovers an x-mask: under ExtJS
-        # churn it can spend the entire trial waiting for visible/enabled/stable.
-        # A trial click cannot submit to MES, so both generic and mask timeouts
-        # may safely be rechecked within one bounded preflight window.
-        retryable = ("intercepts pointer events", "x-mask", "element is not attached",
-                     "element is detached", "element is not stable",
-                     "timeout", "timed out", "waiting for element to be visible")
-        last_error = None
-        while time.perf_counter() < deadline:
-            try:
-                # 650ms is shorter than the normal ExtJS layout/stability
-                # cycle under heavy MES load; it created 72 spurious failures.
-                # The enclosing 12s budget still bounds a persistent stall.
-                view.click(trial=True, timeout=1800)
-                mark("view_actionable")
-                return view
-            except Exception as exc:
-                message = str(exc).lower()
-                if not any(hint in message for hint in retryable):
-                    # Do not turn arbitrary Playwright failures into repeat clicks.
-                    raise
-                last_error = exc
-                telemetry["view_preflight_retries"] = telemetry.get("view_preflight_retries", 0) + 1
-                if "x-mask" in message or "intercepts pointer events" in message:
-                    telemetry["view_mask_observed"] = True
-                elif "timeout" in message or "waiting for element" in message:
-                    telemetry["view_stability_timeout_observed"] = True
-                # ExtJS may destroy/recreate its button while the mask is shown.
-                # Only retain a new locator from the SAME view frame; otherwise
-                # the input and the grid response listener would point elsewhere.
-                try:
-                    new_frame, new_view, _ = find_button(
-                        page, texts=self.cfg["view_texts"],
-                        frame_hints=("3022", "View Lot History"))
-                    if new_frame is not query_frame:
-                        raise RuntimeError("3022 View mudou de frame; consulta não enviada")
-                    view = new_view
-                except RuntimeError as locate_exc:
-                    if "mudou de frame" in str(locate_exc):
-                        raise
-                except Exception:
-                    pass
-                if time.perf_counter() < deadline:
-                    time.sleep(min(0.12, deadline - time.perf_counter()))
-        telemetry["view_blocked"] = True
-        masked = bool(telemetry.get("view_mask_observed"))
-        telemetry["status"] = "BLOCKED_VIEW_MASK" if masked else "BLOCKED_VIEW_NOT_READY"
-        telemetry["no_mes_request_sent"] = True
-        # Preserve diagnosis in structured telemetry rather than flooding the
-        # operator with hundreds of repeated Playwright call logs.
-        telemetry["view_not_ready_reason"] = (
-            "EXTJS_MASK" if masked else "EXTJS_VIEW_ACTIONABILITY_TIMEOUT")
-        raise RuntimeError(
-            "3022 View não liberado pela interface A-MES"
-            + (" (máscara de carregamento)." if masked else " (instabilidade do botão).")
-            + " Consulta não enviada; retomar apenas as PCBAs pendentes."
-        )
-
     def _consultar(self, pcba_sn, timeout_s, empty_confirm_s, telemetry, mark):
         pcba_sn = normalizar_sn(pcba_sn)
         if not pcba_sn:
@@ -1160,28 +1092,32 @@ class Tela3022:
         response_token = f"q-{time.perf_counter_ns()}"
         self._active_response = (query_frame, response_token)
         self._history_response(query_frame, grid_id, "arm", response_token)
-        view = self._wait_view_actionable(page, query_frame, view, timeout_s, telemetry, mark)
-        # Dispatch the MES query ONCE. A failed actual click is not retried:
-        # even without a confirmed response we cannot prove it was not sent.
+        # Restore the single native View click that worked in older packages.
+        # Playwright itself waits for actionability (visible/enabled/stable
+        # without an ExtJS overlay). The extra 650ms trial click introduced in
+        # 16980FB5 caused new pre-submit failures even with no x-mask present.
+        # Never click a second time after an uncertain first click.
         mark("submit")
         try:
-            view.click(timeout=5000)
+            view.click(timeout=12000)
         except Exception as exc:
-            # Even after a non-mutating trial, ExtJS can raise a fresh x-mask
-            # between the trial and the real click. Do not click twice: the
-            # browser may already have dispatched the query before the error.
             reason = str(exc).lower()
-            if ("x-mask" in reason or "intercepts pointer events" in reason
-                    or "timeout" in reason or "timed out" in reason):
+            if any(term in reason for term in (
+                    "timeout", "timed out", "intercepts pointer events",
+                    "x-mask", "element is not attached", "element is detached",
+                    "element is not stable")):
                 telemetry["view_blocked"] = True
-                telemetry["view_click_race"] = True
+                telemetry["view_click_unconfirmed"] = True
                 masked = "x-mask" in reason or "intercepts pointer events" in reason
                 telemetry["status"] = "BLOCKED_VIEW_MASK" if masked else "BLOCKED_VIEW_NOT_READY"
                 telemetry["view_not_ready_reason"] = (
-                    "EXTJS_MASK_AFTER_TRIAL" if masked else "EXTJS_VIEW_ACTUAL_CLICK_TIMEOUT")
+                    "EXTJS_MASK" if masked else "EXTJS_VIEW_CLICK_UNCONFIRMED")
+                # The real click may have reached MES before Playwright timed
+                # out: do not promise no request was sent or accept old rows.
                 raise RuntimeError(
-                    "3022 View não confirmou clique na interface A-MES. "
-                    "Envio incerto: não repetir clique nem reutilizar grade anterior."
+                    "3022 View não confirmou clique no A-MES. "
+                    "Envio incerto; preservar resultados anteriores e retomar "
+                    "somente PCBAs pendentes."
                 ) from exc
             raise
         mark("view_clicked")
