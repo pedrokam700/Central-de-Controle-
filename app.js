@@ -3027,7 +3027,9 @@ const aiPilot = {
 function offerCentralWebUpdate(cacheRevision,registration=null){
   // Versioned PWA shell is already fully staged. Never reload a live MES task.
   const revision=String(cacheRevision||'available');
-  if(revision===localStorage.getItem('cora.sw.loaded'))return;
+  // The literal "pending" is a transient waiting-worker state, not a build ID.
+  // A previous update must never hide a different installed candidate.
+  if(revision!=='pending' && revision===localStorage.getItem('cora.sw.loaded'))return;
   if(document.querySelector('[data-central-update-ready]'))return;
   const panel=document.createElement('aside');
   panel.dataset.centralUpdateReady='';
