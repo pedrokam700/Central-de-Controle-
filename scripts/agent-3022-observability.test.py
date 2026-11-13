@@ -138,6 +138,50 @@ class Canonical3022QueryTests(unittest.TestCase):
                 self.assertEqual(f.call(op='state')['listeners'],0)
             self.assertEqual(f.call(op='state')['submitted'],['A','B'])
 
+    def test_transient_extjs_mask_delays_but_does_not_duplicate_view_submission(self):
+        # Reproduce factory: the button exists, but ExtJS x-mask intercepts it.
+        with self.fixture([{'rows':history_rows('new'),'delay':240}],
+                          mask_until_s=1.65) as f:
+            result=f.tela.consultar('B')
+            diag=result['query_diagnostics']
+            self.assertEqual(diag['status'],'CONFIRMED')
+            self.assertTrue(diag['view_mask_observed'])
+            self.assertGreater(diag['view_preflight_retries'],0)
+            self.assertIn('view_actionable',diag['milestones_ms'])
+            self.assertGreaterEqual(diag['milestones_ms']['view_actionable'],1650)
+            self.assertEqual(f.call(op='state')['submitted'],['B'],
+                             'trial clicks never submit the same board twice')
+            self.assertEqual(f.call(op='state')['listeners'],0)
+
+    def test_stuck_extjs_mask_fails_closed_without_clicking_or_accepting_old_grid(self):
+        with self.fixture([{'rows':history_rows('SHOULD_NOT_BE_QUERIED')}],
+                          rows=history_rows('stale-previous'),mask_until_s=120) as f:
+            with self.assertRaisesRegex(RuntimeError,
+                                        '3022 Views bloqueado por máscara ExtJS'):
+                f.tela.consultar('B')
+            diag=f.tela.last_query_diagnostics
+            self.assertEqual(diag['status'],'BLOCKED_VIEW_MASK')
+            self.assertTrue(diag['view_blocked'])
+            self.assertGreater(diag['view_preflight_retries'],0)
+            self.assertNotIn('submit',diag['milestones_ms'])
+            self.assertNotIn('parse_completed',diag['milestones_ms'])
+            self.assertEqual(f.call(op='state')['submitted'],[])
+            self.assertEqual(f.call(op='state')['listeners'],0,
+                             'listeners are cleaned even when the mask never clears')
+            self.assertLessEqual(diag['total_ms'],13000,
+                                 'a stuck mask must have a bounded wait, not an infinite job')
+
+    def test_mask_on_second_pcba_preserves_first_confirmed_response(self):
+        with self.fixture([{'rows':history_rows('first')},{'rows':history_rows('second')}]) as f:
+            first=f.tela.consultar('A')
+            self.assertEqual(first['query_diagnostics']['status'],'CONFIRMED')
+            f.mask_until_s=f.clock+120
+            with self.assertRaisesRegex(RuntimeError,'bloqueado por máscara ExtJS'):
+                f.tela.consultar('B')
+            self.assertEqual(f.call(op='state')['submitted'],['A'])
+            self.assertEqual(first['rows'][0]['Tran User Id'],'first')
+            self.assertEqual(f.call(op='state')['listeners'],0)
+
     def test_unchanged_previous_grid_is_not_accepted_for_next_sn(self):
         with self.fixture([{'rows':history_rows('A')},{'mode':'stale'}]) as f:
             f.tela.consultar('A')
