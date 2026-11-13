@@ -1022,6 +1022,58 @@ class Tela3022:
             telemetry["total_ms"] = round((time.perf_counter() - started) * 1000, 2)
             self.last_query_diagnostics = telemetry
 
+    def _wait_view_actionable(self, page, query_frame, view, timeout_s, telemetry, mark):
+        """Wait for ExtJS masks to stop intercepting View, BEFORE any submit.
+
+        Playwright trial=True verifies pointer actionability without dispatching
+        a new MES query. Never use force=True or click repeatedly after a
+        possibly dispatched submission (which could mix two PCBA results).
+        """
+        wait_budget = min(12.0, max(3.0, float(timeout_s) * 0.66))
+        telemetry["view_actionable_wait_budget_s"] = wait_budget
+        deadline = time.perf_counter() + wait_budget
+        retryable = ("intercepts pointer events", "x-mask", "element is not attached",
+                     "element is detached", "element is not stable")
+        last_error = None
+        while time.perf_counter() < deadline:
+            try:
+                view.click(trial=True, timeout=650)
+                mark("view_actionable")
+                return view
+            except Exception as exc:
+                message = str(exc).lower()
+                if not any(hint in message for hint in retryable):
+                    # Do not turn arbitrary Playwright failures into repeat clicks.
+                    raise
+                last_error = exc
+                telemetry["view_preflight_retries"] = telemetry.get("view_preflight_retries", 0) + 1
+                if "x-mask" in message or "intercepts pointer events" in message:
+                    telemetry["view_mask_observed"] = True
+                # ExtJS may destroy/recreate its button while the mask is shown.
+                # Only retain a new locator from the SAME view frame; otherwise
+                # the input and the grid response listener would point elsewhere.
+                try:
+                    new_frame, new_view, _ = find_button(
+                        page, texts=self.cfg["view_texts"],
+                        frame_hints=("3022", "View Lot History"))
+                    if new_frame is not query_frame:
+                        raise RuntimeError("3022 View mudou de frame; consulta não enviada")
+                    view = new_view
+                except RuntimeError as locate_exc:
+                    if "mudou de frame" in str(locate_exc):
+                        raise
+                except Exception:
+                    pass
+                if time.perf_counter() < deadline:
+                    time.sleep(min(0.12, deadline - time.perf_counter()))
+        telemetry["view_blocked"] = True
+        telemetry["status"] = "BLOCKED_VIEW_MASK"
+        raise RuntimeError(
+            "3022 Views bloqueado por máscara ExtJS; nenhuma nova consulta enviada. "
+            "Dados anteriores preservados; aguarde liberação da tela antes de retomar. "
+            f"Último bloqueio: {str(last_error)[:160]}"
+        )
+
     def _consultar(self, pcba_sn, timeout_s, empty_confirm_s, telemetry, mark):
         pcba_sn = normalizar_sn(pcba_sn)
         if not pcba_sn:
@@ -1082,6 +1134,9 @@ class Tela3022:
         response_token = f"q-{time.perf_counter_ns()}"
         self._active_response = (query_frame, response_token)
         self._history_response(query_frame, grid_id, "arm", response_token)
+        view = self._wait_view_actionable(page, query_frame, view, timeout_s, telemetry, mark)
+        # Dispatch the MES query ONCE. A failed actual click is not retried:
+        # even without a confirmed response we cannot prove it was not sent.
         mark("submit")
         view.click(timeout=5000)
         mark("view_clicked")
