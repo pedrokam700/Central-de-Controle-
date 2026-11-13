@@ -1106,11 +1106,21 @@ class Tela3022:
                 break
             except Exception as exc:
                 last_input_error = exc
+                reason = str(exc).lower()
+                if "x-mask" in reason or "intercepts pointer events" in reason:
+                    telemetry["input_mask_observed"] = True
                 telemetry["input_retries"] += 1
                 if time.time() >= input_deadline:
                     break
                 time.sleep(0.10)
         if last_input_error is not None:
+            if telemetry.get("input_mask_observed"):
+                telemetry["status"] = "BLOCKED_VIEW_MASK"
+                telemetry["view_blocked"] = True
+                raise RuntimeError(
+                    "3022 SN/IMEI bloqueado pela máscara de carregamento ExtJS; "
+                    "View não foi enviado. Evidências anteriores permanecem válidas."
+                ) from last_input_error
             raise RuntimeError(f"3022 não encontrou um campo SN/IMEI visível e estável: {last_input_error}")
 
         # Resolve View only after the field is stable. The same Ext transition that
