@@ -266,6 +266,10 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
 
     entries=[];all_contexts=[];event_count=0;warnings=[]
     captured=[];query_times=[]
+    # A stuck ExtJS mask is an environmental screen lock, not 200 unrelated
+    # PCBA failures. After two sequential proven mask blocks, stop submitting
+    # further MES requests; preserve prior checkpoints and mark rest incomplete.
+    consecutive_mask_blocks=0
     seed_3022_items=seed_3022_items or {}
 
     # Phase A — one exclusive MES lease. Expensive correlation stays outside
@@ -296,12 +300,25 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                                     'status':'CHECKPOINT_COMPLETE','rows':len(rr['rows']),
                                     'query_ms':0,'recovered_local':True})
                             continue
+                    if consecutive_mask_blocks >= 2:
+                        diagnostic={"status":"SKIPPED_VIEW_MASK_BLOCKED","no_mes_request_sent":True,
+                                    "source":"3022","requires_resume":True}
+                        reason=("3022 não consultada: Views bloqueado pela máscara ExtJS "
+                                "em duas PCBAs consecutivas; retomar após liberação do A-MES")
+                        captured.append({"pcba_sn":pcba,"status":"ERROR","error":reason,
+                                         "query_ms":0,"query_diagnostics":diagnostic})
+                        if event_callback:
+                            event_callback({"stage":"3022","kind":"pcba","phase":"mes","current":i,
+                                "total":len(targets),"pcba":pcba,"status":"SKIPPED_RETRYABLE",
+                                "error":reason,"query_diagnostics":diagnostic})
+                        continue
                     started=time.perf_counter()
                     if line_callback:
                         line_callback(f"3022 MES [{i}/{len(targets)}] {pcba}")
                     try:
                         rr=tela.consultar(pcba)
                         diagnostics=(rr or {}).get("query_diagnostics") or {}
+                        consecutive_mask_blocks=0
                         if diagnostics.get("status") not in {"CONFIRMED", "CONFIRMED_EMPTY"}:
                             raise RuntimeError("3022 sem confirmação do coletor; resposta anterior não será reutilizada")
                         query_ms=round((time.perf_counter()-started)*1000.0,2)
@@ -314,6 +331,10 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                         query_times.append(query_ms)
                         err=f"{type(exc).__name__}: {exc}"
                         diagnostics=getattr(exc,"query_diagnostics",{})
+                        if diagnostics.get("status") == "BLOCKED_VIEW_MASK":
+                            consecutive_mask_blocks += 1
+                        else:
+                            consecutive_mask_blocks=0
                         captured.append({"pcba_sn":pcba,"status":"ERROR","error":err,"query_ms":query_ms,"query_diagnostics":diagnostics})
                         warnings.append(f"3022 {pcba}: {err}")
                         if event_callback:
