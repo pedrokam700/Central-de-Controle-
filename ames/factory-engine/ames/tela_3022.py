@@ -1093,13 +1093,13 @@ class Tela3022:
         self._active_response = (query_frame, response_token)
         self._history_response(query_frame, grid_id, "arm", response_token)
         # Restore the single native View click that worked in older packages.
-        # Playwright itself waits for actionability (visible/enabled/stable
-        # without an ExtJS overlay). The extra 650ms trial click introduced in
-        # 16980FB5 caused new pre-submit failures even with no x-mask present.
+        # Match the original 5-second MAXIMUM for this single click; healthy
+        # clicks return immediately and do not incur an artificial delay.
+        # The 16980FB5 650ms trial actionability check is deliberately removed.
         # Never click a second time after an uncertain first click.
         mark("submit")
         try:
-            view.click(timeout=12000)
+            view.click(timeout=5000)
         except Exception as exc:
             reason = str(exc).lower()
             if any(term in reason for term in (
