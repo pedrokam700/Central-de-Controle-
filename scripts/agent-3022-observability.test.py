@@ -147,6 +147,8 @@ class Canonical3022QueryTests(unittest.TestCase):
             self.assertEqual(diag['status'],'CONFIRMED')
             self.assertIn('view_clicked',diag['milestones_ms'])
             self.assertGreaterEqual(diag['milestones_ms']['view_clicked'],1650)
+            self.assertEqual(f.trial_attempts,0, 'the removed 650ms trial must never return')
+            self.assertLess(diag['total_ms'],4500, 'normal 3022 path must not wait 5 seconds')
             self.assertEqual(f.call(op='state')['submitted'],['B'],
                              'native Playwright actionability wait must dispatch View exactly once')
             self.assertEqual(f.call(op='state')['listeners'],0)
@@ -206,7 +208,8 @@ class Canonical3022QueryTests(unittest.TestCase):
             self.assertTrue(d['view_click_unconfirmed'])
             self.assertNotIn('view_clicked',d['milestones_ms'])
             self.assertEqual(f.call(op='state')['submitted'],[])
-            self.assertLessEqual(d['total_ms'],13500)
+            self.assertLessEqual(d['total_ms'],6000,
+                                 'a stuck View should consume at most the original 5s click budget')
             self.assertEqual(f.call(op='state')['listeners'],0)
 
     def test_generic_timeout_storm_breaker_preserves_prior_sqlite_and_skips_remaining_boards(self):
@@ -259,7 +262,7 @@ class Canonical3022QueryTests(unittest.TestCase):
             self.assertEqual(f.call(op='state')['submitted'],[])
             self.assertEqual(f.call(op='state')['listeners'],0,
                              'listeners are cleaned even when the mask never clears')
-            self.assertLessEqual(diag['total_ms'],13500,
+            self.assertLessEqual(diag['total_ms'],6000,
                                  'a stuck mask must have a bounded wait, not an infinite job')
 
     def test_mask_on_second_pcba_preserves_first_confirmed_response(self):
