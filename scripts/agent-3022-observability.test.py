@@ -153,6 +153,22 @@ class Canonical3022QueryTests(unittest.TestCase):
                              'trial clicks never submit the same board twice')
             self.assertEqual(f.call(op='state')['listeners'],0)
 
+    def test_extjs_mask_blocking_input_is_bounded_and_classified_as_recoverable(self):
+        with self.fixture([{'rows':history_rows('must-not-submit')}],
+                          mask_until_s=120,mask_blocks_input=True) as f:
+            with self.assertRaisesRegex(RuntimeError,
+                                        '3022 SN/IMEI bloqueado pela máscara'):
+                f.tela.consultar('B')
+            d=f.tela.last_query_diagnostics
+            self.assertEqual(d['status'],'BLOCKED_VIEW_MASK')
+            self.assertTrue(d['input_mask_observed'])
+            self.assertTrue(d['view_blocked'])
+            self.assertGreater(d['input_retries'],0)
+            self.assertNotIn('submit',d['milestones_ms'])
+            self.assertEqual(f.call(op='state')['submitted'],[])
+            self.assertEqual(f.call(op='state')['listeners'],0)
+            self.assertLessEqual(d['total_ms'],6500)
+
     def test_extjs_mask_race_after_trial_still_fails_closed_without_second_click(self):
         with self.fixture([{'rows':history_rows('not-submitted')}],
                           mask_on_actual_click=True) as f:
