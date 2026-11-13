@@ -29,6 +29,9 @@ class Locator:
                     'Timeout waiting for button Views: <div class="x-mask"> intercepts pointer events'
                 )
             return
+        if self.fixture.mask_on_actual_click:
+            self.fixture.mask_on_actual_click = False
+            raise RuntimeError('Locator.click Timeout: <div class="x-mask"> intercepts pointer events')
         self.fixture.call(op='click')
         if (self.fixture.mask_after_submits is not None and
                 len(self.fixture.call(op='state')['submitted']) >= self.fixture.mask_after_submits):
@@ -40,11 +43,13 @@ class Locator:
 class Ext3022Fixture:
     url = 'http://fixture/AWIP3022/VwViewLotHistoryView'
     def __init__(self, collector, plans, rows=(), hidden=(), mask_until_s=0.0,
-                 mask_after_submits=None, mask_duration_s=0.0):
+                 mask_after_submits=None, mask_duration_s=0.0,
+                 mask_on_actual_click=False):
         self.collector, self.clock = collector, 0.0
         self.mask_until_s, self.trial_attempts = float(mask_until_s), 0
         self.mask_after_submits = mask_after_submits
         self.mask_duration_s = float(mask_duration_s)
+        self.mask_on_actual_click = bool(mask_on_actual_click)
         self.process = subprocess.Popen(['node', str(ROOT/'scripts/fixtures/ames-3022-ext.cjs')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8')
         self.frames = [self]
         self.call(op='setup', plans=plans, rows=list(rows), hidden=list(hidden))
