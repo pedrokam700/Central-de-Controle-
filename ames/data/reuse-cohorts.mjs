@@ -11,6 +11,10 @@ const time=r=>factoryWallMinute(value(r,'defect_time','Defect Time','Defect Time
 const family=r=>value(r,'defect_family','failure_family','Família falha');
 const index=v=>{const m=/^([1-9]\d*)(?:[ºoª]?\s*uso)?$/i.exec(String(v??'').trim());return m?Number(m[1]):null;};
 const useIndex=(r,kind)=>index(kind==='pcba'?value(r,'_pcba_use_index','pcba_use_index','Uso da PCBA na falha'):value(r,'material_use_index','Uso material na falha'));
+// Physical self-PCBA cycles proven by 3074 are independent of the use index at
+// a particular 3028 defect. Never coerce one into the other.
+const knownPcbaCycles=r=>index(value(r,'Usos conhecidos da PCBA','pcba_known_use_count','known_use_count'));
+
 const eventKey=r=>JSON.stringify([sn(r),code(r),time(r),r.occurrence_id||r.record_id||null]);
 const sequence=r=>{
  const v=value(r,'hist_seq','Defect Hist Seq');
@@ -109,6 +113,9 @@ function finish(map,history=[]){
  }
  return [...map.values()].map(row=>{
   row.uses=unique(row.uses);row.use_index=row.uses.length===1?row.uses[0]:null;
+  row.known_cycle_candidates=unique(row.known_cycle_candidates||[]);
+  row.known_mounting_cycles=row.kind==='pcba'&&row.known_cycle_candidates.length===1?row.known_cycle_candidates[0]:null;
+  row.known_cycle_conflict=row.kind==='pcba'&&row.known_cycle_candidates.length>1;
   row.use_conflict=row.uses.length>1;
   row.events=[...new Map(row.events.map(e=>[eventKey(e),e])).values()];
   row.prior_events=[...new Map(row.prior_events.map(e=>[eventKey(e),e])).values()];
@@ -183,7 +190,10 @@ export function summarizeReusePopulation(rows,proof=null){
   JSON.stringify([...proof.item_ids].sort())===JSON.stringify(ids)&&ids.length>0&&
   reused.every(r=>['failed','verified_no_failure'].includes(r.outcome)&&r.outcome_evidence_id);
  const select=predicate=>rows.filter(predicate);
- const metrics={observed:rows,first_use:select(r=>r.use_index===1&&!r.use_lower_bound),
+ const metrics={observed:rows,
+  known_mountings:select(r=>r.kind==='pcba'&&r.known_mounting_cycles>=1),
+  known_reused_mountings:select(r=>r.kind==='pcba'&&r.known_mounting_cycles>=2),
+  first_use:select(r=>r.use_index===1&&!r.use_lower_bound),
   second_use:select(r=>r.use_index===2&&!r.use_lower_bound),
   third_plus_use:select(r=>r.use_index>=3&&!r.use_lower_bound),unknown_use:select(r=>!r.use_index),
   reused,failed:reused.filter(r=>r.outcome==='failed'),
@@ -206,8 +216,13 @@ export function buildReuseCohorts(snapshot={},filters={}){
   if(!id||((row.line_id||row.line||row.Linha)&&String(row.line_id||row.line||row.Linha)!==snapshot.line_id))return;
   if(!map.has(id))map.set(id,{id,kind,sn:kind==='pcba'?sn(row):String(value(row,'item_sn','material_sn','Material SN')),
    item_type:kind==='component'?String(value(row,'item_type','material_type','Tipo material')||''):null,
-   uses:[],events:[],prior_events:[],previous_pcbas:[],current_pcbas:[],products:[],part_numbers:[],evidence:[]});
+   uses:[],known_cycle_candidates:[],events:[],prior_events:[],previous_pcbas:[],current_pcbas:[],products:[],part_numbers:[],evidence:[]});
   const item=map.get(id),use=useIndex(row,kind);
+  // Known mounting counts belong to the physical 3074 report only, not 2114 or 3022.
+  if(kind==='pcba'&&source==='2114/3074'){
+   const known=knownPcbaCycles(row);
+   if(known)item.known_cycle_candidates.push(known);
+  }
   // The factory report derives the PCBA use index from the board's own 3074
   // mounting cycles. It is valid physical-use evidence even when its 2114/3074
   // summary cannot be joined to one exact 3028 defect occurrence. Never turn
@@ -284,7 +299,9 @@ export function buildReuseCohorts(snapshot={},filters={}){
    board.use_lower_bound=true;
   }else if(board.use_index)board.use_basis='3074_OWN_PCBA_CYCLES';
   if(!board.use_index){
-   board.use_basis=board.use_conflict?'CONFLICTING_3074_ORDINALS':'INSUFFICIENT_MOUNTING_EVIDENCE';
+   board.use_basis=board.use_conflict?'CONFLICTING_3074_ORDINALS':board.known_cycle_conflict
+    ?'CONFLICTING_3074_KNOWN_CYCLE_COUNTS':board.known_mounting_cycles
+    ?'KNOWN_3074_CYCLES_DEFECT_INTERVAL_UNPROVEN':'INSUFFICIENT_MOUNTING_EVIDENCE';
    board.unproven_use_context={
     previous_2114_failures:board.prior_events.length,
     '2114_records':board.history_2114.length,
