@@ -229,8 +229,8 @@ class Canonical3022QueryTests(unittest.TestCase):
             store.ingest_defects(sid,records,reconcile_window=False)
             plans=[{'rows':history_rows(sn,3),'delay':240,'mode':'loadData'} for sn in boards]
             with self.fixture(plans,trial_not_ready_after_submits=1,
-                              trial_not_ready_duration_s=120) as f, \\
-                 patch.object(browser,'AmesBrowser',return_value=f), \\
+                              trial_not_ready_duration_s=120) as f, \
+                 patch.object(browser,'AmesBrowser',return_value=f), \
                  patch.object(navigation.AmesNavigation,'ensure_3022'):
                 out=process_r11.collect_and_persist(store,ROOT/'ames/factory-engine',records,
                     snapshot_id=sid,line='TAN10101',performance='fast')
