@@ -293,5 +293,43 @@ class Canonical3022QueryTests(unittest.TestCase):
                         self.assertGreater(con.execute(f'SELECT COUNT(*) FROM {table} WHERE pcba_sn=?',(sn,)).fetchone()[0],0,table)
 
 
+    def test_mask_circuit_breaker_preserves_first_checkpoint_and_skips_later_mes_requests(self):
+        from ames import browser, navigation
+        from store import Store
+        with tempfile.TemporaryDirectory() as td:
+            store=Store(Path(td)/'ames.sqlite3');store.initialize();process_r11.patch_store(store)
+            wid=store.ensure_window('today','2026-10-16T07:30:00','2026-10-16T18:00:00',None,['TAN10101'])
+            sid=store.create_snapshot(window_id=wid,source_kind='test')
+            boards=('A','B','C','D')
+            records=[{'line':'TAN10101','pcba_sn':sn,'defect_key':'defect-'+sn,
+                      'product_model':'CPH2859','defect_code':'E1',
+                      'defect_desc':'Camera impurity','defect_time':'2026-10-16 10:32:00',
+                      'manual_or_auto':'MANUAL'} for sn in boards]
+            store.ingest_defects(sid,records,reconcile_window=False)
+            plans=[{'rows':history_rows(sn,3),'delay':240,'mode':'loadData'} for sn in boards]
+            with self.fixture(plans,mask_after_submits=1,mask_duration_s=120) as f, \
+                 patch.object(browser,'AmesBrowser',return_value=f), \
+                 patch.object(navigation.AmesNavigation,'ensure_3022'):
+                output=process_r11.collect_and_persist(
+                    store,ROOT/'ames/factory-engine',records,
+                    snapshot_id=sid,line='TAN10101',performance='fast')
+                self.assertEqual(f.call(op='state')['submitted'],['A'],
+                                 'once the mask stays up, no further PCBA Views may be sent')
+                self.assertEqual(f.call(op='state')['listeners'],0)
+            self.assertEqual(output['status'],'partial',output)
+            self.assertEqual(output['requested'],4)
+            self.assertEqual(output['collected'],1)
+            self.assertEqual(output['processed'],1)
+            self.assertEqual(output['errors'],3)
+            self.assertEqual(output['pcbas'][0]['status'],'COMPLETE')
+            self.assertEqual(output['pcbas'][1]['query_diagnostics']['status'],'BLOCKED_VIEW_MASK')
+            self.assertEqual(output['pcbas'][2]['query_diagnostics']['status'],'BLOCKED_VIEW_MASK')
+            self.assertEqual(output['pcbas'][3]['query_diagnostics']['status'],'SKIPPED_VIEW_MASK_BLOCKED')
+            self.assertTrue(output['pcbas'][3]['query_diagnostics']['no_mes_request_sent'])
+            with store.connect() as con:
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM process_raw_events WHERE pcba_sn='A'").fetchone()[0],3)
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM process_raw_events WHERE pcba_sn!='A'").fetchone()[0],0)
+
+
 if __name__ == '__main__':
     unittest.main()
