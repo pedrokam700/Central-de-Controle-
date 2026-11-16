@@ -1,0 +1,265 @@
+{
+  "audit_source_sha": "fddc75438796cdfcc8a133eb8193d08fa1d9b783",
+  "date": "2026-11-16",
+  "environment": {
+    "node": "v24.22.1",
+    "python": "3.12.14",
+    "os": "Linux"
+  },
+  "no_production_changes": true,
+  "factory_gate": "RED/PENDING",
+  "executions": [
+    {
+      "command": "python3 scripts/audit/ames_navigation_readiness_red.py",
+      "tests": 3,
+      "pass": 0,
+      "fail": 3,
+      "exit_code": 1,
+      "purpose": "existing intentional RED"
+    },
+    {
+      "command": "node --test scripts/audit/codex_cross_contracts_red.mjs",
+      "tests": 10,
+      "pass": 2,
+      "fail": 8,
+      "exit_code": 1,
+      "purpose": "independent intentional RED"
+    },
+    {
+      "command": "python3 scripts/audit/codex_recovery_names_red.py",
+      "tests": 4,
+      "pass": 0,
+      "fail": 4,
+      "exit_code": 1,
+      "purpose": "independent intentional RED"
+    },
+    {
+      "command": "python3 scripts/agent-3022-observability.test.py",
+      "tests": 29,
+      "pass": 26,
+      "fail": 3,
+      "exit_code": 1,
+      "failure_kind": "stale error-message regex"
+    },
+    {
+      "command": "node --test scripts/ames-sn-repair-evidence.test.mjs scripts/ames-reuse-drilldown.test.mjs scripts/ames-sn-temporal-proof.test.mjs scripts/ames-trace-scope.test.mjs scripts/ames-production-evidence-analytics.test.mjs",
+      "tests": 34,
+      "pass": 34,
+      "fail": 0,
+      "exit_code": 0
+    },
+    {
+      "command": "node --test scripts/ames-reuse-cohorts.test.mjs scripts/ames-sn-history-detail.test.mjs scripts/ames-sn-smart-alerts.test.mjs scripts/ames-sn-source-provenance.test.mjs",
+      "tests": 48,
+      "pass": 48,
+      "fail": 0,
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/agent-trace-target.test.py",
+      "tests": 12,
+      "pass": 12,
+      "fail": 0,
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/agent-source-capture.test.py",
+      "tests": 7,
+      "pass": 7,
+      "fail": 0,
+      "exit_code": 0
+    },
+    {
+      "command": "python3 scripts/agent-sn-3012-fallback.test.py",
+      "tests": 3,
+      "pass": 3,
+      "fail": 0,
+      "exit_code": 0
+    }
+  ],
+  "latency_method": "virtual clock, existing ExtJS fixture, actual historical collector JavaScript; not real factory latency",
+  "latency_scenarios": [
+    {
+      "ref": "c1b13d",
+      "case": "healthy",
+      "virtual_ms": 240,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "c1b13d",
+      "case": "unstable_2_4s",
+      "virtual_ms": 2640,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "c1b13d",
+      "case": "stuck",
+      "virtual_ms": 5000,
+      "trial_attempts": 0,
+      "submitted": 0,
+      "status": "TimeoutError: Locator.click: Timeout 5000ms exceeded. Call log: waiting for element "
+    },
+    {
+      "ref": "f22e344",
+      "case": "healthy",
+      "virtual_ms": 240,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "f22e344",
+      "case": "unstable_2_4s",
+      "virtual_ms": 2640,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "f22e344",
+      "case": "stuck",
+      "virtual_ms": 5000,
+      "trial_attempts": 0,
+      "submitted": 0,
+      "status": "TimeoutError: Locator.click: Timeout 5000ms exceeded. Call log: waiting for element "
+    },
+    {
+      "ref": "f78ce7cb",
+      "case": "healthy",
+      "virtual_ms": 240,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "f78ce7cb",
+      "case": "unstable_2_4s",
+      "virtual_ms": 2640,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "f78ce7cb",
+      "case": "stuck",
+      "virtual_ms": 5000,
+      "trial_attempts": 0,
+      "submitted": 0,
+      "status": "TimeoutError: Locator.click: Timeout 5000ms exceeded. Call log: waiting for element "
+    },
+    {
+      "ref": "60ecef60",
+      "case": "healthy",
+      "virtual_ms": 240,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "60ecef60",
+      "case": "unstable_2_4s",
+      "virtual_ms": 2640,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "60ecef60",
+      "case": "stuck",
+      "virtual_ms": 5000,
+      "trial_attempts": 0,
+      "submitted": 0,
+      "status": "TimeoutError: Locator.click: Timeout 5000ms exceeded. Call log: waiting for element "
+    },
+    {
+      "ref": "16980fb5",
+      "case": "healthy",
+      "virtual_ms": 240,
+      "trial_attempts": 1,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "16980fb5",
+      "case": "unstable_2_4s",
+      "virtual_ms": 650,
+      "trial_attempts": 1,
+      "submitted": 0,
+      "status": "TimeoutError: Locator.click: Timeout 650ms exceeded.\\nCall log: - attempting click a"
+    },
+    {
+      "ref": "16980fb5",
+      "case": "stuck",
+      "virtual_ms": 650,
+      "trial_attempts": 1,
+      "submitted": 0,
+      "status": "TimeoutError: Locator.click: Timeout 650ms exceeded.\\nCall log: - attempting click a"
+    },
+    {
+      "ref": "7e49cc45",
+      "case": "healthy",
+      "virtual_ms": 240,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "7e49cc45",
+      "case": "unstable_2_4s",
+      "virtual_ms": 2640,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "7e49cc45",
+      "case": "stuck",
+      "virtual_ms": 12000,
+      "trial_attempts": 0,
+      "submitted": 0,
+      "status": "RuntimeError: 3022 View não confirmou clique no A-MES. Envio incerto; preservar resu"
+    },
+    {
+      "ref": "eedacc65",
+      "case": "healthy",
+      "virtual_ms": 240,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "eedacc65",
+      "case": "unstable_2_4s",
+      "virtual_ms": 2640,
+      "trial_attempts": 0,
+      "submitted": 1,
+      "status": "CONFIRMED"
+    },
+    {
+      "ref": "eedacc65",
+      "case": "stuck",
+      "virtual_ms": 5000,
+      "trial_attempts": 0,
+      "submitted": 0,
+      "status": "RuntimeError: 3022 View não confirmou clique no A-MES. Envio incerto; preservar resu"
+    }
+  ],
+  "test_sha256": {
+    "scripts/audit/codex_cross_contracts_red.mjs": "e348b8c73c83f4199c7753055a3e91d22a6cc0badb87c4f2b49938cdebf959ec",
+    "scripts/audit/codex_recovery_names_red.py": "87d23640f75f36d5f28429caed42cec7806a355abd7e41b40c4ae00f34a8563f",
+    "scripts/audit/codex_latency_compare.py": "8033af380543de7d404466342df52d026eb8d6a97de65ce328c6f9419b4b3190"
+  },
+  "key_failures": {
+    "N1": "raw 3012 explicit name returned by story resolver; null in table projection",
+    "N4": "1 raw row, 1 canonical operator row with synthetic name, local SN process_events does not expose it",
+    "R1": "AUDIT_CDP_UNAVAILABLE before seed replay",
+    "R2": "third board UNCONFIRMED rather than SKIPPED_VIEW_NOT_READY; zero submitted",
+    "R3": "pending list empty despite absence of query proof",
+    "S1": "conflicting explicit scope still trusted in helper; upstream canonical guards not bypassed in this test",
+    "U1": "primary 2114 comparison plus second full 2114 history"
+  }
+}
