@@ -3,6 +3,37 @@ const value=(row,...keys)=>keys.map(key=>row?.[key]).find(item=>item!==undefined
 const pcbaOf=row=>text(value(row,'pcba_sn','PCBA','Lot Id','current_pcba_sn'));
 const operatorId=row=>text(value(row,'operator_id','Operator ID','Tran User Id','Tran User ID','Transaction User Id','Employee ID','User Id'));
 const operatorName=row=>text(value(row,'operator_name','tran_user_name','Operator Name','Tran User Name','Tran User','Transaction User Name','Employee Name','User Name','Tran User Desc','User Full Name'));
+const scopeOf=row=>({
+ source_id:text(value(row,'source_id')??value(row?.provenance,'source_id')),
+ line_id:text(value(row,'line_id','line')??value(row?.provenance,'line_id','line'))
+});
+// Explicit conflicts are rejection evidence; absent metadata in historical MES
+// events is not proof of another source, and is not automatically a conflict.
+const sameExplicitScope=(left={},right={})=>['source_id','line_id'].every(key=>
+ !left[key]||!right[key]||left[key]===right[key]);
+const explicitRepairName=repair=>{
+ const id=text(value(repair,'repair_user','Repair User'));
+ const raw=repair?.raw?.raw&&typeof repair.raw.raw==='object'?repair.raw.raw:repair?.raw||{};
+ const direct=text(value(repair,'repair_user_name','Repair User Name','RepairUserName',
+  'repairUserName')||value(raw,'repairUserName','Repair User Name','repair_user_name','RepairUserName'));
+ return direct&&direct!==id?direct:null;
+};
+function resolvedRepairName(repair,operators=[]){
+ const id=text(value(repair,'repair_user','Repair User')),pcba=pcbaOf(repair);
+ if(!id||!pcba)return null;
+ // Direct 3012 fields are proof of the repairer's name independently of
+ // the 3022 event used only as a possible identity source.
+ const direct=explicitRepairName(repair);if(direct)return direct;
+ const names=new Set(),scope=scopeOf(repair);
+ for(const row of operators){
+  if(pcbaOf(row)!==pcba||operatorId(row)!==id||
+     !sameExplicitScope(scope,scopeOf(row)))continue;
+  const name=operatorName(row);
+  if(name&&name!==id)names.add(name);
+ }
+ return names.size===1?[...names][0]:null;
+}
+
 
 // Older 3022 records can store named staff inside the source adapter. A
 // technician name is recovered from that same row, never from a global BRM map.
@@ -24,10 +55,14 @@ export function normalize3022OperatorRows(rows=[],{currentPcba='',allowCurrentSc
     value(wrapper,'station','operation_code'));
    const eventTime=text(value(raw,'Tran Time','Transaction Time','Event Time')||
     value(entry,'event_time','Tran Time','Event Time')||value(wrapper,'event_time'));
-   const key=JSON.stringify([pcba,id,name,station,eventTime]);
+   const wrapperScope=scopeOf(wrapper),entryScope=scopeOf(entry);
+   if(!sameExplicitScope(wrapperScope,entryScope))continue;
+   const source_id=wrapperScope.source_id||entryScope.source_id;
+   const line_id=wrapperScope.line_id||entryScope.line_id;
+   const key=JSON.stringify([pcba,id,name,station,eventTime,source_id,line_id]);
    if(seen.has(key))continue;seen.add(key);
    normalized.push({pcba_sn:pcba,operator_id:id,operator_name:name,
-    station,event_time:eventTime,source_view:'3022'});
+    station,event_time:eventTime,source_view:'3022',source_id,line_id});
   }
  }
  return normalized;
@@ -42,45 +77,18 @@ function processRows(result={}){
   ...normalize3022OperatorRows(local)];
 }
 export function provenRepairUserName(repair={},result={},currentPcba=''){
-  const id=text(repair.repair_user),pcba=text(repair.pcba_sn);if(!id||!pcba)return null;
-  // A name is trustworthy only if it is an explicit field belonging to this
-  // same 3012 repair row, or comes from a 3022 row with the identical user ID
-  // and PCBA. A bare BRM code is never reverse-guessed into a human name.
-  const raw=repair.raw?.raw&&typeof repair.raw.raw==='object'?repair.raw.raw:repair.raw||{};
-  const candidates=['repairUserName','Repair User Name','repair_user_name','RepairUserName'];
-  const rawName=candidates.map(key=>text(raw[key])).find(name=>name&&name!==id);
-  if(rawName)return rawName;
-  const direct=text(repair.repair_user_name);
-  if(direct&&direct!==id)return direct;
-  const current=text(currentPcba||result.sn),names=new Set();
-  for(const row of processRows(result)){
-    const explicit=pcbaOf(row),rowPcba=explicit||current;
-    // Rows without a board identity may only belong to the currently queried PCBA.
-    if(rowPcba!==pcba||operatorId(row)!==id)continue;
-    const name=operatorName(row)||operatorName(row?.raw);if(name&&name!==id)names.add(name);
-  }
-  return names.size===1?[...names][0]:null;
+ // Same resolver as the 3012 table; current-PCBA scoping is only allowed
+ // for raw 3022 rows attached to this exact SN query, not other boards.
+ return resolvedRepairName(repair,processRows({...result,
+  sn:result.sn||result.query_sn||currentPcba}));
 }
 
-// Read-only operator directory per explicitly identified PCBA + MES employee ID.
-// No global BRM-to-person guess, no storing names remotely, no change to the
-// original 3012 rows. Conflicting 3022 names intentionally stay unknown.
+// Both the SN story and the 3012 table resolve from identical explicit 3012
+// names or an exactly matching PCBA+MES ID, rejecting source/line conflicts.
 export function projectRepairTechnicianNames(repairs=[],events=[]){
- const identities=new Map();
- for(const row of normalize3022OperatorRows(events)){
-  const pcba=pcbaOf(row),id=operatorId(row),name=operatorName(row);
-   if(!pcba||!id||!name||name===id)continue;
-   const key=pcba+'|'+id;
-   if(!identities.has(key))identities.set(key,new Set());
-   identities.get(key).add(name);
- }
- return (repairs||[]).map(repair=>{
-   const id=text(value(repair,'repair_user','Repair User')),pcba=pcbaOf(repair);
-   const direct=text(value(repair,'repair_user_name','Repair User Name','RepairUserName'));
-   const possible=identities.get(pcba+'|'+id);
-   const name=direct&&direct!==id?direct:possible?.size===1?[...possible][0]:null;
-   return {...repair,repair_technician_name:name||null};
- });
+ const operators=normalize3022OperatorRows(events);
+ return (repairs||[]).map(repair=>({...repair,
+  repair_technician_name:resolvedRepairName(repair,operators)}));
 }
 
 const exactRepair=repairs=>(repairs||[]).find(repair=>repair?.association==='exact_occurrence')||null;
