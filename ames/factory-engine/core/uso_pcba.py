@@ -122,12 +122,15 @@ def reconstruir_usos_pcba(rows, pcba_sn, defect_time=None, defect_local_offset_h
             end = _parse(c.get("end_utc"), 0)
             if start and start <= defect_utc and (end is None or defect_utc <= end):
                 candidates.append(c)
-        if candidates:
+        # A known mounting is not proof of use after its Unbind. Conflicting
+        # overlapping sessions also cannot establish one ordinal at this clock.
+        if len(candidates) == 1:
+            use_at_defect = candidates[0]
+        elif candidates and all(c.get("time_basis") == "pcba_batch_prod" and not c.get("end_utc") for c in candidates):
+            # Preserve the V013 historical batch chronology contract: these
+            # are dated successive batches, not contradictory Bind intervals.
+            # Keep its explicit weaker time_basis; never invent an Unbind.
             use_at_defect = candidates[-1]
-        else:
-            prior = [c for c in cycles if _parse(c.get("start_utc"), 0) and _parse(c.get("start_utc"), 0) <= defect_utc]
-            if prior:
-                use_at_defect = prior[-1]
 
     # A query can be performed days after the 3028 failure. If every verified
     # self-binding starts *after* that failure, the latest mounting is future
@@ -140,7 +143,7 @@ def reconstruir_usos_pcba(rows, pcba_sn, defect_time=None, defect_local_offset_h
         "known_use_count": len(cycles),
         "reuse_count_known": max(0, len(cycles) - 1),
         "use_index_at_defect": use_index,
-        "reuses_before_defect": max(0, int(use_index or 0) - 1),
+        "reuses_before_defect": use_index - 1 if use_index is not None else None,
         "cycle_at_defect": use_at_defect,
         "use_time_basis": use_at_defect.get("time_basis") if use_at_defect else None,
     }

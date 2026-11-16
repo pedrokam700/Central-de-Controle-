@@ -40,7 +40,7 @@ function lineageValue(value){
   if(typeof value==='object')return JSON.stringify(value);
   return text(value);
 }
-function compatibleExplicitLineage(a={},b={}){
+export function compatibleExplicitLineage(a={},b={}){
   for(const aliases of lineageFields){
     const values=row=>[...new Set(aliases.map(key=>lineageValue(row?.[key])).filter(Boolean))];
     const left=values(a),right=values(b);

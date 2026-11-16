@@ -15,6 +15,7 @@ from core.uso_pcba import reconstruir_usos_pcba
 from core.temporal_3074 import pcbas_do_item_ate_a_falha, historico_completo_pcbas_do_item
 from reports.relatorio_3028_3074 import extrair_linhas
 from engine_bridge import build_trace_insights
+from core.varredura_3074 import executar_varredura
 
 LINE = 'TAN10103'
 DEFECT = {'pcba_sn': 'P', 'line': LINE, 'defect_code': 'D',
@@ -38,6 +39,47 @@ def capture(rows, defect=None, results=None):
 
 def payload(*items):
     return {'trace_3074': {'items': list(items)}, 'trace_2114': {'pcbas': []}}
+
+
+def export_synthetic_fixture():
+    """Raw 3074 -> scanner -> SQLite -> insights -> canonical, no live source."""
+    with tempfile.TemporaryDirectory() as directory:
+        store = Store(Path(directory) / 'fixture.sqlite')
+        store.initialize()
+        sid = store.create_snapshot(window_id=None, source_kind='synthetic')
+        items = []
+        for count in (1, 2, 3, 4):
+            pcba, material = f'P{count}', f'M{count}'
+            defect = {**DEFECT, 'pcba_sn': pcba, 'product_model': 'CPH-SYNTHETIC'}
+            self_rows = [{**mounting(n, 'Y' if n == 3 else 'N'), 'Barcode': pcba}
+                         for n in ([3] if count == 1 else [1, 3] if count == 2 else [1, 2, 3])]
+            base = {'query_sn': pcba, 'query_confirmation': 'EXACT_QUERY_ROW', 'rows': self_rows + [
+                {'Barcode': material, 'Sn Type': 'Camera', 'Bind Time': '2026-11-03 10:00:00Z', 'Iss Status': 'Y'}]}
+            reverse = [{**mounting(n, 'Y' if n == count else 'N'),
+                        'Barcode': pcba if n == count else f'OLD{count}-{n}'}
+                       for n in range(1, min(count, 3) + 1)]
+            if count == 4:
+                # History exists, but reverse query has no current-PCBA binding.
+                reverse = reverse[:2]
+            class Synthetic3074:
+                def consultar(self, sn):
+                    assert sn == material
+                    return {'query_sn': sn, 'query_confirmation': 'EXACT_QUERY_ROW',
+                            'store_total_count': len(reverse), 'rows': deepcopy(reverse)}
+            trace = executar_varredura(Synthetic3074(), pcba, defect['defect_time'], base_query=base, pause_s=0)
+            item = capture(self_rows, defect)
+            item.update(pcba_sn=pcba, base_query=base)
+            item['defect_traces'][0]['trace_3074'] = trace
+            items.append(item)
+            store.ingest_defects(sid, [defect])
+        data = payload(*items)
+        store.save_snapshot_payload(sid, 'integrated_v016', data)
+        store.ingest_material_reuse(sid, data['trace_3074'])
+        stored = store.get_snapshot_payload(sid, ['integrated_v016'])
+        def insights(**kw):
+            return {**build_trace_insights(ROOT / 'ames/factory-engine', stored, line=LINE),
+                    'ready': True, 'snapshot_id': sid}
+        return canonical.export_revision(store, sid, LINE, insights)
 
 
 class Physical3074(unittest.TestCase):
@@ -109,6 +151,12 @@ class Physical3074(unittest.TestCase):
             self.assertIsNone(materials[0]['Usos ate a falha'])
             self.assertIsNone(materials[0]['Reusos anteriores a falha'])
 
+    def test_legacy_missing_current_confirmation_cannot_add_an_unproven_current_use(self):
+        r = {'item_sn': 'M', 'previous_pcba_count': 0, 'previous_pcbas': []}
+        _, materials, _ = extrair_linhas(payload(capture([], results=[r]))['trace_3074'])
+        self.assertIsNone(materials[0]['Usos ate a falha'])
+        self.assertIsNone(materials[0]['Usos totais conhecidos'])
+
     def test_known_component_history_without_temporal_proof_stays_unknown_in_insights(self):
         r = {'item_sn': 'M', 'item_type': 'Camera', 'previous_pcba_count': None,
              'current_pcba_confirmed': False, 'total_pcba_count_known_now': 2,
@@ -163,4 +211,7 @@ class Physical3074(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    if sys.argv[1:] == ['--fixture']:
+        print(json.dumps(export_synthetic_fixture()))
+    else:
+        unittest.main()

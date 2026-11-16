@@ -427,7 +427,7 @@ def pcbas_do_item_ate_a_falha(
     for row in rows or []:
         tipo = normalizar_texto(row.get("Sn Type") or "")
         barcode = normalizar_sn(row.get("Barcode"))
-        if not barcode or "pcba" not in tipo:
+        if not barcode or ("pcba" not in tipo and str(row.get("Aut Cmf1") or "").strip().upper() != "PCBA"):
             continue
         bind = grid_time_to_utc(row.get("Bind Time"), grid_naive_offset_hours)
         unbind = grid_time_to_utc(row.get("Unbind Time"), grid_naive_offset_hours)
@@ -491,7 +491,7 @@ def historico_completo_pcbas_do_item(rows, grid_naive_offset_hours=0):
     for row in rows or []:
         tipo = normalizar_texto(row.get("Sn Type") or "")
         barcode = normalizar_sn(row.get("Barcode"))
-        if not barcode or "pcba" not in tipo:
+        if not barcode or ("pcba" not in tipo and str(row.get("Aut Cmf1") or "").strip().upper() != "PCBA"):
             continue
         bind = grid_time_to_utc(row.get("Bind Time"), grid_naive_offset_hours)
         unbind = grid_time_to_utc(row.get("Unbind Time"), grid_naive_offset_hours)
@@ -550,7 +550,7 @@ def ciclos_fisicos_do_material(rows):
     for row in rows or []:
         tipo = normalizar_texto(row.get("Sn Type") or "")
         pcba = normalizar_sn(row.get("Barcode"))
-        if not pcba or "pcba" not in tipo:
+        if not pcba or ("pcba" not in tipo and str(row.get("Aut Cmf1") or "").strip().upper() != "PCBA"):
             continue
         bind = grid_time_to_utc(row.get("Bind Time"))
         unbind = grid_time_to_utc(row.get("Unbind Time"))

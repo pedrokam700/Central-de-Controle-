@@ -776,6 +776,7 @@ class Store:
                         # never a fabricated first-use row.
                         if (type(previous_count) is not int or previous_count<0 or
                             r.get('current_pcba_confirmed') is False or
+                            (previous_count==0 and (r.get('coverage') or {}).get('status')=='incomplete_page') or
                             (previous_count==0 and r.get('current_pcba_confirmed') is not True)):
                             continue
                         count += 1
