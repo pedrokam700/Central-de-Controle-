@@ -28,11 +28,34 @@ export function trustedProductionEvidence(row={}){
   });
 }
 
+// Fail closed on contradictory *explicit* lineage. An older context can lack
+// optional fields; absence alone does not authenticate or contradict evidence.
+// Aliases are compared together to prevent line_id/revision wrapper bypasses.
+const lineageFields=[
+  ['source_id'],['line','line_id'],['snapshot_id'],
+  ['snapshot_revision','revision'],['period']
+];
+function lineageValue(value){
+  if(value===null||value===undefined)return '';
+  if(typeof value==='object')return JSON.stringify(value);
+  return text(value);
+}
+function compatibleExplicitLineage(a={},b={}){
+  for(const aliases of lineageFields){
+    const values=row=>[...new Set(aliases.map(key=>lineageValue(row?.[key])).filter(Boolean))];
+    const left=values(a),right=values(b);
+    if(left.length>1||right.length>1)return false;
+    if(left.length&&right.length&&left[0]!==right[0])return false;
+  }
+  return true;
+}
+
 export function sameFailureOccurrence(a={},b={}){
   // A defect_key can be local to a collector, line, or snapshot. Matching keys
   // alone must never borrow 3022 evidence from a different (or unknown) PCBA.
   const board=pcba(a);
   if(!board||board!==pcba(b))return false;
+  if(!compatibleExplicitLineage(a,b))return false;
   if(a.defect_key&&b.defect_key){
     if(text(a.defect_key)!==text(b.defect_key))return false;
     // Even if the keys match, reject conflicting explicit occurrence fields.
