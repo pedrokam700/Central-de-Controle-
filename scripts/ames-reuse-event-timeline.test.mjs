@@ -92,3 +92,12 @@ test('U1b: nested observation keeps its explicit origin and legacy operator fiel
  assert.equal(event.source_id,f.scope.source_id);assert.equal(event.snapshot_revision,16);
  assert.equal(event.actors[0].name,'Pessoa legada');
 });
+test('U1b: canonical and local copies of the same explicit 3022 event are shown once',()=>{
+ const f=reuseTimelineFixture(),canonical={...f.operators[0],record_id:'CANONICAL-O0'};
+ const local={...f.operators[0],snapshot_id:11,source_id:undefined,snapshot_revision:undefined,operator_role:'observed_process_operator'};
+ let events=buildReuseHistoryTimeline({failures:f.board.history_2114,operators:[canonical,local]});
+ assert.equal(events.filter(e=>e.source_view==='3022').length,1);
+ assert.equal(events.find(e=>e.source_view==='3022').record_id,'CANONICAL-O0');
+ events=buildReuseHistoryTimeline({failures:f.board.history_2114,operators:[canonical,{...local,snapshot_revision:17}]});
+ assert.equal(events.filter(e=>e.source_view==='3022').length,2,'explicitly different revisions remain different observations');
+});

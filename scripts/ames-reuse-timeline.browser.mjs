@@ -12,7 +12,7 @@ qa.show=(lang='pt-BR',dark=false,mode='ok')=>{
  document.documentElement.lang=lang;document.body.classList.toggle('dark',dark);qa.calls={repairs:0,operators:0};
  mountReuseCohorts(document.querySelector('#root'),fixture.snapshot,{
  cachedRepairHistory:async()=>{qa.calls.repairs++;if(mode==='repair-error')throw Error('synthetic read failure');return fixture.repairs;},
- cached3022Operators:async()=>{qa.calls.operators++;if(mode==='operator-error')throw Error('synthetic read failure');return fixture.operators;}});
+ cached3022Operators:async()=>{qa.calls.operators++;if(mode==='operator-error')throw Error('synthetic read failure');return fixture.operators.map(e=>({...e,snapshot_id:Number(e.snapshot_id),source_id:undefined,snapshot_revision:undefined,operator_role:'observed_process_operator'}));}});
 };qa.show();`;
 const root=process.cwd(),server=http.createServer((req,res)=>{
  const name=new URL(req.url,'http://local').pathname;

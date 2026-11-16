@@ -35,7 +35,7 @@ export function reuseHistoryIdentity(row={}){
   row.usage_status??null,row.bind_time_utc??null,row.unbind_time_utc??null,row.role??null]);
 }
 function processObservations(rows){
- return rows.flatMap(wrapper=>{
+ const observations=rows.flatMap(wrapper=>{
   const adapter=wrapper.provenance?.adapter||{};
   const entries=[wrapper,adapter.operator_evidence,...(adapter.operator_events||[])].filter(Boolean);
   const staff=entries.filter(e=>read(e,...operatorIds)||read(e,...operatorNames));
@@ -53,6 +53,28 @@ function processObservations(rows){
    station:read(entry,'station','operation_code','Working Oper Code')??wrapper.station,
   }));
  });
+ // /local/sn can return the SAME durable event_id without the canonical
+ // transport's record_id/revision. Coalesce only that explicit event identity
+ // and compatible facts; never use a PCBA/code/time heuristic for this.
+ const result=[],byId=new Map();
+ const compatible=(a,b)=>{
+  const left=meta(a),right=meta(b);
+  const identityValue=(key,value)=>['snapshot_id','snapshot_revision'].includes(key)?String(value):JSON.stringify(value);
+  if(Object.keys(left).some(k=>left[k]!==null&&right[k]!==null&&identityValue(k,left[k])!==identityValue(k,right[k])))return false;
+  return ['record_id','operator_id','operator_name','operator_role','station','event_time'].every(k=>
+   !text(a[k])||!text(b[k])||text(a[k])===text(b[k]));
+ };
+ for(const row of observations){
+  const key=row.event_id?JSON.stringify([pcba(row),row.event_id]):null;
+  const previous=key?(byId.get(key)||[]).find(old=>compatible(old,row)):null;
+  if(previous){
+   for(const [k,v] of Object.entries(row))if(previous[k]===undefined||previous[k]===null||previous[k]==='')previous[k]=v;
+   continue;
+  }
+  result.push(row);
+  if(key){if(!byId.has(key))byId.set(key,[]);byId.get(key).push(row);}
+ }
+ return result;
 }
 export function buildReuseHistoryTimeline({failures=[],repairs=[],operators=[],bindings=[],pcbas=[]}={}){
  const boards=new Set((pcbas.length?pcbas:[...failures,...bindings,...repairs].map(pcba)).filter(Boolean));
