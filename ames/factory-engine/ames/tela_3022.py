@@ -5,6 +5,7 @@ import time
 import fnmatch
 import unicodedata
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from ames.ui_helpers import find_text_input, find_button, extract_extjs_store_grid, extract_best_grid  # diagnostic API
 from core.normalizacao import normalizar_sn, normalizar_texto, parse_datetime
@@ -841,6 +842,25 @@ class Tela3022:
         self.cfg = cfg["3022"]
 
     def _page(self):
+        # A real CDP browser exposes its open pages. Require the canonical Home
+        # route rather than trusting a tab title, a hidden old panel, or the
+        # browser helper's last-page fallback. The legacy fixture adapter has
+        # no .pages; its existing single-page path remains unchanged.
+        pages = getattr(self.browser, "pages", None)
+        if pages is not None:
+            matches = []
+            for page in list(pages):
+                try:
+                    u = urlsplit(page.url or "")
+                    if (u.path.lower().rstrip("/") == "/asymes/home" and
+                            u.fragment.lower() == "uawip.form.vwviewlothistoryview"):
+                        matches.append(page)
+                except Exception:
+                    continue
+            if not matches:
+                raise RuntimeError(
+                    "VIEW_3022_NOT_READY: nenhuma aba Home 3022 canônica no Chrome dedicado.")
+            return matches[-1]
         for hint in ("VwViewLotHistoryView", "AWIP3022", "3022"):
             try:
                 p = self.browser.choose_active_page(hint)
@@ -855,6 +875,40 @@ class Tela3022:
             except Exception:
                 pass
         return self.browser.choose_active_page("3022")
+
+    def ensure_ready_3022(self, timeout_s=5.0):
+        """One pre-batch readiness check; do not submit or change the SN.
+
+        A Home hash alone is not the ExtJS view. The live SN field must be
+        attached, visible and tied to a currently rendered ExtJS component.
+        The normal per-PCBA readback/one-click/response proof stays in consultar.
+        """
+        deadline = time.monotonic() + max(0.0, float(timeout_s))
+        last_error = None
+        while True:
+            try:
+                page = self._page()
+                ext_ready = False
+                for frame in page.frames:
+                    try:
+                        if frame.evaluate("() => Boolean(window.Ext && Ext.ComponentQuery)"):
+                            ext_ready = True
+                            break
+                    except Exception:
+                        continue
+                if ext_ready:
+                    field = self._query_control(page)
+                    if field is not None:
+                        field.wait_for(state="visible", timeout=350)
+                        return page
+            except Exception as exc:
+                last_error = exc
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.10)
+        raise RuntimeError(
+            "VIEW_3022_NOT_READY: Home 3022 sem campo SN/IMEI ExtJS utilizável; "
+            "não enviar View, retomar somente PCBAs pendentes.") from last_error
 
     def _query_control(self, page):
         """Return the current visible 3022 query input, never a stale Ext fallback.
