@@ -7,6 +7,8 @@ engine that does not expose the temporal-correlation contract proven in R11.
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import hashlib
 import importlib
 import json
@@ -271,36 +273,48 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
     # After two consecutive failed actionability attempts, stop MES I/O and
     # leave all other PCBAs retryable; verified raw checkpoints remain valid.
     consecutive_view_blocks=0
-    seed_3022_items=seed_3022_items or {}
+    seed_3022_items=seed_3022_items if isinstance(seed_3022_items,dict) else {}
+
+    def confirmed_seed(pcba):
+        # A saved query is reusable only with its own MES response proof; a
+        # generic per-board COMPLETE flag cannot certify a 3022 response.
+        rr=seed_3022_items.get(pcba)
+        return (isinstance(rr,dict) and isinstance(rr.get('rows'),list) and
+                (rr.get('query_diagnostics') or {}).get('status') in
+                {'CONFIRMED','CONFIRMED_EMPTY'})
+
+    # No CDP/browser or MES lease is needed if every target has a confirmed
+    # durable response and the only remaining work is local SQLite replay.
+    needs_mes=any(not confirmed_seed(pcba) for pcba in targets)
 
     # Phase A — one exclusive MES lease. Expensive correlation stays outside
     # this phase. The event callback may save a small durable raw checkpoint
     # after each confirmed response; this costs a local write but prevents a
     # restart from requiring another long MES query for the same board.
-    browser = session_object(browser_mod.AmesBrowser(engine_dir)).connect()
+    browser=None
     try:
-        nav = session_object(navigation_mod.AmesNavigation(browser._target))
-        tela = session_object(tela3022_mod.Tela3022(browser._target, engine_dir)) if targets else None
+        if needs_mes:
+            browser=session_object(browser_mod.AmesBrowser(engine_dir)).connect()
+            nav=session_object(navigation_mod.AmesNavigation(browser._target))
+            tela=session_object(tela3022_mod.Tela3022(browser._target, engine_dir))
         if targets:
-            with MES.critical():
-                if line_callback:
-                    line_callback("3022 preparando AWIP3022 / View Lot History")
-                nav.ensure_3022()
-                tela._page()
+            with (MES.critical() if needs_mes else nullcontext()):
+                if needs_mes:
+                    if line_callback:
+                        line_callback("3022 preparando AWIP3022 / View Lot History")
+                    nav.ensure_3022()
+                    tela._page()
                 for i,pcba in enumerate(targets,1):
-                    if pcba in seed_3022_items:
+                    if confirmed_seed(pcba):
                         rr=seed_3022_items[pcba]
-                        diagnostics=(rr or {}).get('query_diagnostics') or {}
-                        if (isinstance(rr.get('rows'),list) and
-                                diagnostics.get('status') in {'CONFIRMED','CONFIRMED_EMPTY'}):
-                            captured.append({'pcba_sn':pcba,'status':'COLLECTED',
-                                             'result':rr,'query_ms':0,'recovered_local':True})
-                            if event_callback:
-                                event_callback({'stage':'3022','kind':'pcba','phase':'mes',
-                                    'current':i,'total':len(targets),'pcba':pcba,
-                                    'status':'CHECKPOINT_COMPLETE','rows':len(rr['rows']),
-                                    'query_ms':0,'recovered_local':True})
-                            continue
+                        captured.append({'pcba_sn':pcba,'status':'COLLECTED',
+                                         'result':rr,'query_ms':0,'recovered_local':True})
+                        if event_callback:
+                            event_callback({'stage':'3022','kind':'pcba','phase':'mes',
+                                'current':i,'total':len(targets),'pcba':pcba,
+                                'status':'CHECKPOINT_COMPLETE','rows':len(rr['rows']),
+                                'query_ms':0,'recovered_local':True})
+                        continue
                     if consecutive_view_blocks >= 2:
                         diagnostic={"status":"SKIPPED_VIEW_NOT_READY","no_mes_request_sent":True,
                                     "source":"3022","requires_resume":True}
@@ -343,7 +357,8 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                     if inter_query_pause and i < len(targets):
                         time.sleep(inter_query_pause)
     finally:
-        browser.disconnect()
+        if browser is not None:
+            browser.disconnect()
 
     # Phase B — local-only enrichment. It intentionally runs after releasing MES,
     # so database/correlation cost cannot delay the next physical PCBA query.
