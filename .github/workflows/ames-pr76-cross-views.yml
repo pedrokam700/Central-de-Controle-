@@ -11,6 +11,7 @@ on:
       - work/ames-pr81-mes-navigation-readiness-20261116
       - work/ames-pr82-production-scope-isolation-20261116
       - work/ames-pr83-cdp-home-recovery-20261116
+      - work/ames-pr84-3022-extjs-preflight-20261116
   workflow_dispatch:
 
 permissions:
@@ -52,6 +53,8 @@ jobs:
           python3 scripts/agent-trace-target.test.py
           python3 scripts/agent-trace-auto-resume.test.py
           python3 scripts/agent-sn-3012-fallback.test.py
+      - name: F2 3022 strict Home and ExtJS preflight
+        run: python3 scripts/agent-3022-real-view-preflight.test.py
       - name: F1 existing OPC/CDP session Home recovery safety
         run: python3 scripts/agent-home-cdp-recovery.test.py
       - name: A-MES navigation route, visibility and OPC readiness
