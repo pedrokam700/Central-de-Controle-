@@ -1,0 +1,36 @@
+name: A-MES PR74 Historical 3022 Operator Read
+
+on:
+  push:
+    branches:
+      - work/ames-pr74-3022-local-operator-evidence-20261116
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+      - name: Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install test-only dependencies
+        run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
+      - name: Historical operator identity and no production inference
+        run: python3 scripts/agent-local-sn-operator-evidence.test.py
+      - name: Former RED audit N4 should now be GREEN
+        run: python3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_N4_saved_non_END_LOT_operator_reaches_local_SN_cache
+      - name: Preserve source capture and independent SN coverage
+        run: |
+          python3 scripts/agent-source-capture.test.py
+          python3 scripts/agent-sn-3012-fallback.test.py
+      - name: Preserve name projection frontend contracts
+        run: node --test scripts/ames-sn-repair-evidence.test.mjs scripts/ames-sn-source-provenance.test.mjs
+
+# No build, deployment, installer, MES, CDP, network or operational DB actions.

@@ -1,0 +1,75 @@
+name: A-MES PR76 Cross Module Validation (no installer)
+
+on:
+  push:
+    branches:
+      - work/ames-pr76-cross-integration-20261116
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-contracts:
+    name: 3022, identity, SQLite and Console contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install disposable parser test dependencies
+        run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
+      - name: Local confirmed and mixed replay
+        run: |
+          python3 scripts/agent-3022-local-replay.test.py
+          python3 scripts/agent-3022-mixed-replay.test.py
+      - name: Historical names, proven source and negative cases
+        run: |
+          python3 scripts/agent-local-sn-operator-evidence.test.py
+          python3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_N4_saved_non_END_LOT_operator_reaches_local_SN_cache
+      - name: Missing 3022 input now stops after two attempts
+        run: python3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_R2_missing_extjs_input_stops_after_two_recoverable_failures
+      - name: Preserve factory engine and raw capture/recovery contracts
+        env:
+          PYTHONPATH: ames/factory-engine
+        run: |
+          python3 -m unittest discover -s ames/factory-engine/tests -p 'test_*.py' -q
+          python3 scripts/agent-source-capture.test.py
+          python3 scripts/agent-trace-target.test.py
+          python3 scripts/agent-trace-auto-resume.test.py
+          python3 scripts/agent-sn-3012-fallback.test.py
+      - name: All Central Node contracts across nine views
+        run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
+      - name: Pairing and authentication unaffected
+        run: |
+          node --test scripts/ames-auth-hardening.test.mjs
+          node --test scripts/ames-agent-pairing.test.mjs
+
+  visual-smoke:
+    name: Nine views browser regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install isolated browser test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/console-tests" playwright@1.62.1
+          "$RUNNER_TEMP/console-tests/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify all Console views and sync reload
+        run: |
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/console-tests/node_modules/playwright/index.mjs"
+          export BROWSER_OUTPUT="$RUNNER_TEMP/console-evidence"
+          node scripts/ames-experience.browser.mjs
+          node scripts/ames-sync-reload.browser.mjs
+          node scripts/ames-pairing.browser.mjs
+          node scripts/ames-3028-completion.browser.mjs
+
+# No build, upload, merge, deployment, factory CDP, network MES, or installer.
