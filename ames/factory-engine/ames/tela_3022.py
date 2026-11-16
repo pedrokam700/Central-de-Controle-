@@ -1062,14 +1062,26 @@ class Tela3022:
                     break
                 time.sleep(0.10)
         if last_input_error is not None:
+            # A hidden/recreated/missing SN control is an unavailable 3022 view,
+            # not a separate defect for every board. No View query was sent.
+            # Keep the original 5s input budget, never increase a healthy
+            # board's latency or infer any process passage from a stale grid.
+            telemetry["view_blocked"] = True
+            telemetry["requires_resume"] = True
+            telemetry["no_mes_request_sent"] = True
             if telemetry.get("input_mask_observed"):
                 telemetry["status"] = "BLOCKED_VIEW_MASK"
-                telemetry["view_blocked"] = True
+                telemetry["view_not_ready_reason"] = "EXTJS_INPUT_MASKED"
                 raise RuntimeError(
                     "3022 SN/IMEI bloqueado pela máscara de carregamento ExtJS; "
                     "View não foi enviado. Evidências anteriores permanecem válidas."
                 ) from last_input_error
-            raise RuntimeError(f"3022 não encontrou um campo SN/IMEI visível e estável: {last_input_error}")
+            telemetry["status"] = "BLOCKED_VIEW_NOT_READY"
+            telemetry["view_not_ready_reason"] = "EXTJS_INPUT_NOT_ACTIONABLE"
+            raise RuntimeError(
+                "3022 campo SN/IMEI não ficou disponível no A-MES; "
+                "View não enviado. Retomar somente PCBAs pendentes."
+            ) from last_input_error
 
         # Resolve View only after the field is stable. The same Ext transition that
         # recreates the input can also invalidate a button locator discovered early.

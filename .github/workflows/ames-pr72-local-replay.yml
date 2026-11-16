@@ -5,6 +5,7 @@ on:
     branches:
       - work/ames-pr72-3022-local-replay-20261116
       - work/ames-pr73-3022-mixed-offline-recovery-20261116
+      - work/ames-pr75-3022-input-circuit-20261116
   workflow_dispatch:
 
 permissions:
@@ -27,6 +28,8 @@ jobs:
         run: python3 scripts/agent-3022-local-replay.test.py
       - name: Run mixed offline CDP and Home failure regression
         run: python3 scripts/agent-3022-mixed-replay.test.py
+      - name: Former RED R2 missing input must now become GREEN
+        run: python3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_R2_missing_extjs_input_stops_after_two_recoverable_failures
       - name: Preserve V0.16 factory engine regressions
         env:
           PYTHONPATH: ames/factory-engine
