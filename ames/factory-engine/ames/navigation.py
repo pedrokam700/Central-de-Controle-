@@ -35,10 +35,22 @@ class AmesNavigation:
 
     @staticmethod
     def _has_visible(page, selector: str) -> bool:
+        """Require a visible live control, not merely a DOM match.
+
+        Hidden ExtJS copies can survive view transitions. Bound the number of
+        matches inspected so an old large page cannot stall navigation.
+        """
         for frame in page.frames:
             try:
-                if frame.locator(selector).count():
-                    return True
+                locator = frame.locator(selector)
+                for index in range(min(locator.count(), 12)):
+                    try:
+                        if locator.nth(index).is_visible(timeout=350):
+                            return True
+                    except Exception:
+                        # A control can be detached/recreated between count and
+                        # is_visible; never treat that transition as readiness.
+                        continue
             except Exception:
                 pass
         return False
@@ -82,12 +94,12 @@ class AmesNavigation:
             if self._is_login(page):
                 raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES e tente novamente.")
             try:
+                # A field in another ExtJS view is never proof that this
+                # requested route has loaded, even when the name is identical.
                 if route_low in (page.url or "").lower() and (not selector or self._has_visible(page, selector)):
                     return page
             except Exception:
                 pass
-            if selector and self._has_visible(page, selector):
-                return page
             time.sleep(0.35)
         raise RuntimeError(f"A-MES não confirmou a view {route} dentro de {timeout_s:.0f}s.")
 
@@ -158,7 +170,9 @@ class AmesNavigation:
         route = self.ROUTES["2114"]
         for p in reversed(self.browser.pages):
             try:
-                if route.lower() in (p.url or "").lower() and self._has_visible(p, 'input[name="snImei"]:visible'):
+                # 2114 is canonical on OPC. The same hash/control
+                # found on Home must not be reused as an OPC session.
+                if "/asymes/opc" in (p.url or "").lower() and route.lower() in (p.url or "").lower() and self._has_visible(p, 'input[name="snImei"]:visible'):
                     if self._is_login(p):
                         raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES/OPC e tente novamente.")
                     return p
