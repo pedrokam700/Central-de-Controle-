@@ -292,18 +292,38 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
     # after each confirmed response; this costs a local write but prevents a
     # restart from requiring another long MES query for the same board.
     browser=None
+    preflight_failure=None
+    preflight_stage="cdp_connect"
     try:
         if needs_mes:
-            browser=session_object(browser_mod.AmesBrowser(engine_dir)).connect()
-            nav=session_object(navigation_mod.AmesNavigation(browser._target))
-            tela=session_object(tela3022_mod.Tela3022(browser._target, engine_dir))
+            try:
+                browser=session_object(browser_mod.AmesBrowser(engine_dir)).connect()
+                preflight_stage="view_adapter"
+                nav=session_object(navigation_mod.AmesNavigation(browser._target))
+                tela=session_object(tela3022_mod.Tela3022(browser._target, engine_dir))
+            except Exception as exc:
+                # Chrome/login/view can be unavailable even when 3022 responses
+                # are already durably confirmed. Preserve these responses for
+                # local replay; never mark unqueried PCBAs complete or zero.
+                preflight_failure=exc
         if targets:
-            with (MES.critical() if needs_mes else nullcontext()):
-                if needs_mes:
-                    if line_callback:
-                        line_callback("3022 preparando AWIP3022 / View Lot History")
-                    nav.ensure_3022()
-                    tela._page()
+            with (MES.critical() if needs_mes and preflight_failure is None else nullcontext()):
+                if needs_mes and preflight_failure is None:
+                    try:
+                        if line_callback:
+                            line_callback("3022 preparando AWIP3022 / View Lot History")
+                        preflight_stage="view_navigation"
+                        nav.ensure_3022()
+                        preflight_stage="view_ready"
+                        tela._page()
+                    except Exception as exc:
+                        preflight_failure=exc
+                if preflight_failure is not None:
+                    warnings.append(
+                        "3022 sessão não preparada ("
+                        +preflight_stage+"): "
+                        +type(preflight_failure).__name__+": "
+                        +str(preflight_failure)[:160])
                 for i,pcba in enumerate(targets,1):
                     if confirmed_seed(pcba):
                         rr=seed_3022_items[pcba]
@@ -314,6 +334,21 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                                 'current':i,'total':len(targets),'pcba':pcba,
                                 'status':'CHECKPOINT_COMPLETE','rows':len(rr['rows']),
                                 'query_ms':0,'recovered_local':True})
+                        continue
+                    if preflight_failure is not None:
+                        diagnostic={"status":"SESSION_NOT_READY","source":"3022",
+                                    "requires_resume":True,"no_mes_request_sent":True,
+                                    "phase":"preflight","preflight_stage":preflight_stage,
+                                    "error_type":type(preflight_failure).__name__}
+                        reason=("3022 sem sessão A-MES preparada ("+preflight_stage+
+                                "); somente esta PCBA permanece pendente")
+                        captured.append({"pcba_sn":pcba,"status":"ERROR","error":reason,
+                                         "query_ms":0,"query_diagnostics":diagnostic})
+                        if event_callback:
+                            event_callback({"stage":"3022","kind":"pcba","phase":"mes",
+                                "current":i,"total":len(targets),"pcba":pcba,
+                                "status":"SKIPPED_RETRYABLE","error":reason,
+                                "query_diagnostics":diagnostic})
                         continue
                     if consecutive_view_blocks >= 2:
                         diagnostic={"status":"SKIPPED_VIEW_NOT_READY","no_mes_request_sent":True,
