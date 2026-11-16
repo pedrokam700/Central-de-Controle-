@@ -61,18 +61,25 @@ class TestLocalReplay(unittest.TestCase):
                 with self.subTest(bad=bad):
                     with patch.object(browser.AmesBrowser,'connect',
                         side_effect=RuntimeError('CDP UNAVAILABLE')) as connect:
-                        with self.assertRaisesRegex(RuntimeError,'CDP UNAVAILABLE'):
-                            process_r11.collect_and_persist(store,ENGINE,records,
-                                snapshot_id=sid,line='TAN10101',
-                                seed_3022_items={'P-A':bad})
+                        result=process_r11.collect_and_persist(store,ENGINE,records,
+                            snapshot_id=sid,line='TAN10101',
+                            seed_3022_items={'P-A':bad})
                         connect.assert_called_once()
+                        self.assertEqual((result['status'],result['processed'],result['errors']),
+                                         ('error',0,1))
+                        self.assertEqual(result['pcbas'][0]['query_diagnostics']['status'],
+                                         'SESSION_NOT_READY')
+                        self.assertTrue(result['pcbas'][0]['query_diagnostics']['requires_resume'])
             with patch.object(browser.AmesBrowser,'connect',
                 side_effect=RuntimeError('CDP UNAVAILABLE')) as connect:
-                with self.assertRaisesRegex(RuntimeError,'CDP UNAVAILABLE'):
-                    process_r11.collect_and_persist(store,ENGINE,records,
-                        snapshot_id=sid,line='TAN10101',
-                        seed_3022_items={'P-FOREIGN':confirmed_empty()})
+                result=process_r11.collect_and_persist(store,ENGINE,records,
+                    snapshot_id=sid,line='TAN10101',
+                    seed_3022_items={'P-FOREIGN':confirmed_empty()})
                 connect.assert_called_once()
+                self.assertEqual((result['status'],result['processed'],result['errors']),
+                                 ('error',0,1))
+                self.assertEqual(result['pcbas'][0]['query_diagnostics']['status'],
+                                 'SESSION_NOT_READY')
 
     def test_mixed_only_queries_missing_board(self):
         class FakeBrowser:
