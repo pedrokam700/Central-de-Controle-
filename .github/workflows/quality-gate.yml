@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+      - work/ames-3012-reuso-auditado-20261106
   workflow_dispatch:
 
 permissions:
@@ -29,8 +30,13 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Install test-only Excel reader
-        run: python3 -m pip install openpyxl==3.1.5
+      - name: Install test-only Excel reader and factory parser dependency
+        run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
+
+      - name: Verify factory history taxonomy and reuse classification
+        env:
+          PYTHONPATH: ames/factory-engine
+        run: python3 -m unittest discover -s ames/factory-engine/tests -p 'test_*.py' -q
 
       - name: Run database and snapshot hardening tests
         run: python3 scripts/agent-hardening.test.py
@@ -40,6 +46,7 @@ jobs:
           python3 scripts/agent-source-capture.test.py
           python3 scripts/agent-capture-manifest.test.py
           python3 scripts/agent-trace-target.test.py
+          python3 scripts/agent-trace-auto-resume.test.py
           python3 scripts/agent-3074-coverage-summary.test.py
           python3 scripts/agent-package-contract.test.py
           python3 scripts/agent-integrated-v5.test.py
@@ -79,6 +86,9 @@ jobs:
       - name: Run A-MES Node contract suites
         run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
 
+      - name: Run PR70 live job polling regression
+        run: node ames/tests/pr70_job_poll_test.mjs
+
       - name: Run scheduler Python contract
         run: python3 scripts/agent-scheduler.test.py
 
@@ -87,6 +97,7 @@ jobs:
 
       - name: Run updater Python contract
         run: |
+          python3 scripts/ames-pr70-state-transfer.test.py
           python3 scripts/agent-pr69-code-patch.test.py
           python3 scripts/agent-update.test.py
           python3 scripts/agent-issue57-update-preflight.test.py

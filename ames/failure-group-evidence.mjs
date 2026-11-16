@@ -2,7 +2,8 @@
 // A reported association needs the same PCBA + defect code + MES defect instant;
 // a PCBAs-only join must not borrow an unrelated occurrence's correlation.
 import {parseFailureInstant,sameFailureOccurrence} from './data/production-evidence.mjs';
-import {boardHistSeqRecurrence} from './data/reuse-cohorts.mjs';
+import {boardHistSeqRecurrence,buildReuseCohorts} from './data/reuse-cohorts.mjs';
+import {processBackedBoardReuses,contextBackedBoardReuses} from './data/reuse-cycle-evidence.mjs';
 import {compareFailures} from './data/failure-taxonomy.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
 import {knownDescription} from './defect-label.mjs';
@@ -59,18 +60,36 @@ const observed=set=>({count:set.size,observed:true,population_complete:false});
 export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailureName){
  const boardReused=new Set(keysOf(snapshot,['pcba_second_use','pcba_3plus_use','pcba_reused_with_prior_failure']).map(pcba).filter(Boolean));
  for(const row of named(snapshot,'pcba_analysis'))if(pcba(row)&&boardUse(row)>=2)boardReused.add(pcba(row));
+ // Dashboard and Falhas share one historical classification. This cohort
+ // includes independently corroborated 2114→3022 returns, whereas exact
+ // current-component attribution remains governed by exactEvent/boundAtFailure.
+ const scopes=buildReuseCohorts({...snapshot,line_id:snapshot?.line_id||rows.find(e=>e.line_id)?.line_id||'',occurrences:rows});
+ for(const board of scopes.pcbas.rows)if(board.reused)boardReused.add(board.sn);
+ const processOnlyBoards=new Set(scopes.pcbas.rows.filter(row=>row.use_lower_bound===true).map(row=>row.sn));
+ const historicalComponents=scopes.components.rows.filter(row=>row.reused&&row.cross_board_same_failure);
  const history=snapshot?.pcba_history?.records||[];
  const components=[...(snapshot?.material_trace?.records||[]),...named(snapshot,'material_analysis')];
  const grouped=new Map();
- for(const e of rows){const group=nameOf(e);if(!grouped.has(group))grouped.set(group,{events:[],b:new Set(),bSame:new Set(),materialBoards:new Set(),materialSame:new Set()});if(e.pcba_sn)grouped.get(group).events.push(e);}
+ for(const e of rows){const group=nameOf(e);if(!grouped.has(group))grouped.set(group,{events:[],b:new Set(),bSame:new Set(),bHistoricalSame:new Set(),materialBoards:new Set(),materialSame:new Set(),materialHistoricalSame:new Set()});if(e.pcba_sn)grouped.get(group).events.push(e);}
  for(const g of grouped.values())for(const e of g.events){
   const board=nonempty(e.pcba_sn);
-  if(boardReused.has(board)){
+  const boardHistorySame=history.some(h=>pcba(h)===board&&earlier(h,e)&&exactFailure(h,e))||
+   boardHistSeqRecurrence(e,history).some(h=>exactFailure(h,e));
+  if(boardHistorySame)g.bHistoricalSame.add(board);
+  const reusedForThisEvent=boardReused.has(board)&&(!processOnlyBoards.has(board)||
+   (processBackedBoardReuses(board,e,history,snapshot?.process_timeline?.events||[]).minimum_uses||0)>=2||
+   (contextBackedBoardReuses(board,e,history,snapshot?.process_timeline?.contexts||[]).minimum_uses||0)>=2);
+  if(reusedForThisEvent){
    g.b.add(board);
-   if(history.some(h=>pcba(h)===board&&earlier(h,e)&&exactFailure(h,e))||
-      boardHistSeqRecurrence(e,history).some(h=>exactFailure(h,e))||
+   if(boardHistorySame||
       keysOf(snapshot,['pcba_same_failure','pcba_second_use_same_failure']).some(h=>exactEvent(h,e)))g.bSame.add(board);
   }
+  // Linked physical SNs with this defect on two *different* PCBAs are
+  // historical recurrence, even when the binding's exact present instant is
+  // unavailable. It does not populate the stricter current-correlation KPI.
+  if(historicalComponents.some(item=>item.current_pcbas.includes(board)&&item.cross_board_recurrences.some(recurrence=>
+   compareFailures(code(e),e.defect_desc,recurrence.defect_code,recurrence.defect_desc).classification==='EXACT')))
+   g.materialHistoricalSame.add(board);
   const links=components.filter(r=>material(r)&&materialUse(r)>=2&&exactEvent(r,e)&&boundAtFailure(r,e));
   if(!links.length)continue;
   g.materialBoards.add(board);
@@ -84,6 +103,8 @@ export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailur
  }
  const out={};
  for(const [name,g] of grouped)out[name]={pcbaReuse:observed(g.b),pcbaSameFailure:observed(g.bSame),
-  componentAffected:observed(g.materialBoards),componentSameFailureAffected:observed(g.materialSame)};
+  pcbaHistoricalSameFailure:observed(g.bHistoricalSame),
+  componentAffected:observed(g.materialBoards),componentSameFailureAffected:observed(g.materialSame),
+  componentHistoricalSameFailure:observed(g.materialHistoricalSame)};
  return out;
 }

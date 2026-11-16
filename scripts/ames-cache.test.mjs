@@ -40,7 +40,7 @@ test('offline native imports and versioned CSS resolve canonical static precache
   // Primeiro install válido é online para permitir o cache dos SDKs Firebase exatos;
   // a opção offline abaixo representa a perda de internet depois desse bootstrap.
   const h=harness({offline:true});await h.lifecycle('install');assert.equal(h.activated(),false,'new shell waits for operator approval');
-  for(const path of ['', 'app.js?v=15.1.13.49','ames/console-view.mjs','ames/data/capabilities.mjs','mobile.css?v=15.1.13.49','ames/releases/latest/release.json']){
+  for(const path of ['', 'app.js?v=15.1.13.54','ames/console-view.mjs','ames/data/capabilities.mjs','mobile.css?v=15.1.13.54','ames/releases/latest/release.json']){
     const res=await h.request(base+path);assert.equal(res.status,200);assert.match(await res.text(),/^cached/);
   }
   h.entries.delete(base+'ames/console-view.mjs');const missing=await h.request(base+'ames/console-view.mjs');assert.equal(missing.status,504);assert.doesNotMatch(await missing.text(),/index.html/);
@@ -58,9 +58,9 @@ test('cache excludes user URLs, unknown versions, API requests, other origins an
 });
 test('HTTP errors, redirected login and HTML masquerading as JS never poison cached modules',async()=>{
   for(const options of [{status:404},{type:'text/html'},{redirected:true}]){
-    const h=harness(options);await h.lifecycle('install');await h.request(base+'app.js?v=15.1.13.49');assert.deepEqual(h.puts,[]);assert.match(await h.entries.get(base+'app.js').text(),/^cached/);
+    const h=harness(options);await h.lifecycle('install');await h.request(base+'app.js?v=15.1.13.54');assert.deepEqual(h.puts,[]);assert.match(await h.entries.get(base+'app.js').text(),/^cached/);
   }
-  const good=harness();await good.request(base+'app.js?v=15.1.13.49');assert.deepEqual(good.puts,[base+'app.js']);
+  const good=harness();await good.request(base+'app.js?v=15.1.13.54');assert.deepEqual(good.puts,[base+'app.js']);
 });
 
 // Follow actual static module dependencies, so a new import cannot silently
@@ -81,7 +81,7 @@ test('offline cache covers the actual transitive application import graph',async
 });
 test('an installed shell does not mix modules from a newer deployment',async()=>{
   const h=harness();await h.lifecycle('install');
-  const response=await h.request(base+'app.js?v=15.1.13.49');assert.match(await response.text(),/^cached/);assert.deepEqual(h.puts,[]);
+  const response=await h.request(base+'app.js?v=15.1.13.54');assert.match(await response.text(),/^cached/);assert.deepEqual(h.puts,[]);
 });
 
 test('web update is notified but never reloads while MES is operating',async()=>{

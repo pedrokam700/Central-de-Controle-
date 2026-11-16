@@ -5,6 +5,7 @@ import json
 import pathlib
 import sys
 import tempfile
+import threading
 import time
 import types
 import unittest
@@ -16,6 +17,7 @@ sys.path.insert(0,str(ROOT/'ames/agent'))
 from store import Store
 import canonical
 import source_capture
+import trace_auto_resume
 
 LINE='TAN10101';OTHER='TAN10102'
 
@@ -39,11 +41,13 @@ class TraceTargetTests(unittest.TestCase):
             _persist_job=lambda job:self.jobs.append(job),_select_trace_records=lambda rows,**kw:rows,MES=types.SimpleNamespace(critical=nullcontext),
             _job_live_event=lambda jid,ev,line,idx,total,sid:{'id':jid,'stage':ev.get('stage'),'event':ev.get('kind')},
             run_deep_v016_records=collect,enrich_snapshot_from_integrated=enrich,
-            _launch_mes_job=lambda kind,cfg,worker:self.admissions.append(cfg) or {'id':'J'})
+            _launch_mes_job=lambda kind,cfg,worker:self.admissions.append(cfg) or {'id':'J'},
+            JOBS_LOCK=threading.Lock(),JOBS={})
         source=ast.parse((ROOT/'ames/agent/agent_entry.py').read_text())
-        names={'_trace_snapshot_ids','_rebase_trace_targets_at_execution','_run_deep_trace_job','start_deep_trace_job','_source_stage','_aggregate_stage'}
+        names={'_trace_snapshot_ids','_rebase_trace_targets_at_execution','_run_deep_trace_job','start_deep_trace_job','_source_stage','_aggregate_stage','_trace_overall_progress'}
         nodes=[n for n in source.body if isinstance(n,ast.FunctionDef) and n.name in names]
-        self.env={'a':a,'canonical':canonical,'json':json,'time':time,'_process_support':lambda:{'ready':True},'urlparse':urlparse,'source_capture':source_capture}
+        self.env={'a':a,'canonical':canonical,'json':json,'time':time,'_process_support':lambda:{'ready':True},'urlparse':urlparse,'source_capture':source_capture,
+                  'trace_auto_resume':trace_auto_resume,'partial_retry':__import__('partial_retry')}
         exec(compile(ast.Module(body=nodes,type_ignores=[]),'<actual trace functions>','exec'),self.env)
         cls=next(n for n in source.body if isinstance(n,ast.ClassDef) and n.name=='Handler')
         method=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='do_POST')
@@ -134,12 +138,57 @@ class TraceTargetTests(unittest.TestCase):
         self.store.ingest_defects(newer,[{'line':LINE,'pcba_sn':'OTHER-PCBA','defect_code':'D9'}])
         self.assertEqual(source_capture.capture_index(self.store,newer,LINE),[])
 
+    def test_restart_after_partial_2114_automatically_uses_durable_local_captures(self):
+        def stopped(engine,records,**kwargs):
+            kwargs['event_callback']({'stage':'3074','kind':'pcba_result','sn':'SAME-PCBA',
+              'item':{'pcba_sn':'SAME-PCBA','status':'COMPLETE',
+                      'base_coverage':{'reported_total':1,'returned':1},'base_query':{'rows':[{'id':1}]}}})
+            raise RuntimeError('2114 was interrupted')
+        self.env['a'].run_deep_v016_records=stopped
+        self.env['_run_deep_trace_job']('STOPPED',copy.deepcopy(self.cfg))
+        self.assertEqual(self.jobs[-1]['status'],'error')
+        cfg=copy.deepcopy(self.cfg)
+        self.env['a'].JOBS['STOPPED']={'id':'STOPPED','kind':'deep_trace','status':'error',
+            'created_at':'2026-11-06T10:00:00','config':copy.deepcopy(self.cfg)}
+        self.env['start_deep_trace_job'](cfg)
+        self.assertTrue(self.admissions[-1]['repair_partials'])
+        self.assertEqual(self.admissions[-1]['resumed_from_job'],'STOPPED')
+
     def test_handler_preserves_snapshot_target_contract(self):
         response=[]
         handler=types.SimpleNamespace(path='/api/v1/deep-trace',_body=lambda:copy.deepcopy(self.cfg),_send=lambda payload,status:response.append((status,payload)))
         types.MethodType(self.env['do_POST'],handler)()
         self.assertEqual(response[0][0],202)
         self.assertEqual(self.admissions[0]['snapshot_targets'],self.cfg['snapshot_targets'])
+        self.assertIs(self.admissions[0]['include_3012'],False)
+        optional={**self.cfg,'include_3012':True}
+        handler=types.SimpleNamespace(path='/api/v1/deep-trace',_body=lambda:copy.deepcopy(optional),_send=lambda payload,status:response.append((status,payload)))
+        types.MethodType(self.env['do_POST'],handler)()
+        self.assertIs(self.admissions[1]['include_3012'],True)
+
+    def test_3012_is_independent_and_does_not_block_reuse_by_default(self):
+        self.env['_run_deep_trace_job']('NO_3012',copy.deepcopy(self.cfg))
+        result=self.jobs[-1]
+        self.assertEqual(result['status'],'done')
+        self.assertEqual(result['result']['stages']['3012'],'not_run')
+        self.assertIs(result['result']['scope']['include_3012'],False)
+        self.assertEqual(result['progress'],100)
+        self.assertEqual(len(self.calls),1)
+        self.assertEqual(self.env['_trace_overall_progress']('reuse_only',1,1,'2114',1,include_3012=False),99)
+
+    def test_3012_opt_in_reaches_worker_and_is_marked_unverified_if_it_fails(self):
+        cfg=copy.deepcopy(self.cfg)
+        cfg['include_3012']=True
+        from unittest.mock import patch
+        stub=types.SimpleNamespace(collect_historical_3012=lambda *args,**kwargs:{'status':'error','source_status':'error'})
+        with patch.dict(sys.modules,{'trace_3012_enrichment':stub}):
+            self.env['_run_deep_trace_job']('WITH_3012',cfg)
+        result=self.jobs[-1]
+        self.assertEqual(result['status'],'done')
+        self.assertIs(result['result']['scope']['include_3012'],True)
+        self.assertEqual(result['result']['stages']['3012'],'error')
+        self.assertIn('sem cobertura completa: 3012',result['message'])
+        self.assertEqual(len(self.calls),1)
 
     def test_source_status_unknown_timeout_and_uncollected_never_certify_complete(self):
         stage=self.env['_source_stage'];aggregate=self.env['_aggregate_stage']

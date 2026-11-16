@@ -92,12 +92,22 @@ export function renderSnCompactContext(model={},result={},locale='pt-BR'){
 
 function decorate(root,result,mountingMode='compare'){
   const evidence=snLiveSummaryEvidence(result);
-  root.querySelector('[data-sn-mounting-views]')?.remove();
+  root.querySelector('[data-sn-technical-investigation]')?.remove();
   const mountingMarkup=renderSnMountingViews(result,lang(),mountingMode);
-  if(mountingMarkup)root.querySelector('[data-sn-result]')?.insertAdjacentHTML('afterbegin',mountingMarkup);
-  root.querySelector('[data-material-sn-investigation]')?.remove();
   const investigation=renderMaterialSnInvestigation(result,lang());
-  if(investigation)root.querySelector('[data-sn-result]')?.insertAdjacentHTML('afterbegin',investigation);
+  // The red smart alert is the primary operator report. Keep 3074/mounting
+  // details accessible, but collapsed as one optional technical investigation.
+  // Rendering two independent reports above the alert made the same evidence
+  // appear duplicated, especially when querying a physical Material SN.
+  const resultHost=root.querySelector('[data-sn-result]');
+  const technical=resultHost?.ownerDocument.createElement('details');
+  if(technical&&(mountingMarkup||investigation)){
+    technical.dataset.snTechnicalInvestigation='1';
+    technical.className='mes-context-panel ames-sn-technical-investigation';
+    technical.innerHTML='<summary>'+t('Detalhes técnicos · 3074 e rastreabilidade','Technical details · 3074 and traceability')+'</summary>'+
+      mountingMarkup+investigation;
+    resultHost.append(technical);
+  }
   // Show the reference of the investigated mounting. A 2114 latest-failure
   // fallback must never silently look like an exact 3028 occurrence.
   root.querySelector('[data-sn-assembly-scope]')?.remove();
@@ -140,7 +150,7 @@ function decorate(root,result,mountingMode='compare'){
           esc(item.item_sn||'—')+' · '+esc(item.temporal_reason)+'</li>').join('')+'</ul>';
       section.append(candidateBlock);
     }
-    root.prepend(section);
+    (technical?.isConnected?technical:root).append(section);
   }
   if(evidence.has2114){
     setKpi(root,/^(Falha atual|Current failure)$/i,evidence.current?1:0,'2114');

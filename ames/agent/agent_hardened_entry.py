@@ -12,6 +12,8 @@ from pathlib import Path
 
 import agent_entry as entry
 import agent_3012_patch
+import at_offline_package
+import at_profiles
 import base_paging_backend
 import candidate_config
 import hardening
@@ -34,6 +36,8 @@ sn_lookup_context.install(entry.a)
 if operational_calendar.migrate_config(entry.a.CONFIG):
     entry.a.write_config(entry.a.CONFIG)
 AGENT_TOKEN, AGENT_TOKEN_PATH = local_security.ensure_token(entry.a.BASE_DIR)
+AT_ADMIN_PROFILES = at_profiles.AtProfiles(entry.a.DATA_DIR / 'at_user_profiles.json')
+AT_ADMIN_GATE = at_profiles.AtAdminGate(entry.a.DATA_DIR / 'at_admin_auth.json')
 
 # Layer 3012 after the canonical R11/R12 entry has loaded and before the security
 # handler subclasses it. This preserves all validated 3028/3074/2114/3022 code.
@@ -96,6 +100,39 @@ class HardenedHandler(entry.Handler):
             401,
         )
 
+    def _at_admin_local(self, *, mutation=False):
+        # Provisioning/password verifiers are never available over the public
+        # GitHub Pages cross-origin connection or to LAN hosts.
+        host = str(self.headers.get('Host') or '').lower()
+        expected = {f'127.0.0.1:{self._active_port()}', f'localhost:{self._active_port()}'}
+        origin = str(self.headers.get('Origin') or '').rstrip('/').lower()
+        site = str(self.headers.get('Sec-Fetch-Site') or '').lower()
+        if host not in expected or origin and origin != 'http://' + host:
+            return False
+        if not origin and site != 'same-origin':
+            return False
+        return not mutation or self.headers.get('X-AT-Admin-Request') == '1'
+
+    def _at_admin_session(self):
+        for cookie in self.headers.get('Cookie', '').split(';'):
+            key, _, value = cookie.strip().partition('=')
+            if key == 'central_at_admin_session':
+                return value
+        return ''
+
+    def _at_admin_reply(self, payload, *, status=200, cookie=None):
+        import json
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        if cookie:
+            self.send_header('Set-Cookie', cookie)
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _cors(self):
         origin = self.headers.get("Origin")
         allowed = origin_policy.allowed_origins(entry.a.CONFIG, self._active_port())
@@ -120,6 +157,50 @@ class HardenedHandler(entry.Handler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/api/v1/at-admin/session':
+            if not self._at_admin_local() or not self._authorized(path):
+                return self._reject_unauthorized()
+            return self._at_admin_reply({'configured': AT_ADMIN_GATE.configured(),
+                                         'authorized': AT_ADMIN_GATE.current(self._at_admin_session())})
+        if path in {'/api/v1/at-admin/users', '/api/v1/at-admin/accounts-export',
+                    '/api/v1/at-admin/offline-package'}:
+            if not self._at_admin_local() or not self._authorized(path) or not AT_ADMIN_GATE.current(self._at_admin_session()):
+                return self._reject_unauthorized()
+            try:
+                if path.endswith('/users'):
+                    return self._send({'ok': True, 'users': AT_ADMIN_PROFILES.list_public()})
+                if path.endswith('/offline-package'):
+                    import tempfile
+                    from pathlib import Path
+                    import shutil
+                    base = entry.a.BASE_DIR.parent
+                    with tempfile.TemporaryDirectory(prefix='at-package-', dir=entry.a.DATA_DIR) as temporary:
+                        output = Path(temporary) / 'Central_AT_OFFLINE.zip'
+                        report = at_offline_package.build_at_package(
+                            base, base / 'vendor-at', AT_ADMIN_PROFILES.export_for_at(), output)
+                        self.send_response(200)
+                        self.send_header('Cache-Control', 'no-store')
+                        self.send_header('Content-Type', 'application/zip')
+                        self.send_header('Content-Disposition', 'attachment; filename="Central_AT_OFFLINE.zip"')
+                        self.send_header('X-Content-Type-Options', 'nosniff')
+                        self.send_header('Content-Length', str(report['size']))
+                        self.end_headers()
+                        with output.open('rb') as reader:
+                            shutil.copyfileobj(reader, self.wfile, length=1024 * 1024)
+                        return
+                blob = AT_ADMIN_PROFILES.export_for_at()
+                self.send_response(200)
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Disposition', 'attachment; filename="at_offline_accounts.json"')
+                self.send_header('X-Content-Type-Options', 'nosniff')
+                self.send_header('Content-Length', str(len(blob)))
+                self.end_headers()
+                return self.wfile.write(blob)
+            except at_offline_package.AtPackageUnavailable as exc:
+                return self._send({'error': 'offline_package_unavailable', 'message': str(exc)}, 409)
+            except (ValueError, OSError) as exc:
+                return self._send({'error': type(exc).__name__}, 400)
         if path == workstation_pairing.PAIR_PATH:
             if not workstation_pairing.local_address(self.headers, self.client_address[0], self._active_port()):
                 self._pair_response(403)
@@ -326,6 +407,44 @@ class HardenedHandler(entry.Handler):
 
     def _post_admitted(self):
         path = urlparse(self.path).path
+        if path in {'/api/v1/at-admin/setup', '/api/v1/at-admin/login', '/api/v1/at-admin/logout'}:
+            if not self._at_admin_local(mutation=True) or not self._authorized(path):
+                return self._reject_unauthorized()
+            try:
+                length = int(self.headers.get('Content-Length') or '0')
+                if not 0 < length <= 1024 or self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json':
+                    raise ValueError('Invalid request')
+                body = self._body()
+                if not isinstance(body, dict):
+                    raise ValueError('Invalid JSON')
+                if path.endswith('/logout'):
+                    if body:
+                        raise ValueError('Invalid logout')
+                    AT_ADMIN_GATE.logout(self._at_admin_session())
+                    return self._at_admin_reply({'ok': True}, cookie='central_at_admin_session=; HttpOnly; SameSite=Strict; Path=/api/v1; Max-Age=0')
+                if set(body) != {'password'}:
+                    raise ValueError('Invalid fields')
+                if path.endswith('/setup'):
+                    AT_ADMIN_GATE.setup(body['password'])
+                token = AT_ADMIN_GATE.login(body['password'])
+                if not token:
+                    return self._at_admin_reply({'error': 'invalid_credentials'}, status=401)
+                return self._at_admin_reply({'ok': True}, cookie='central_at_admin_session='+token+'; HttpOnly; SameSite=Strict; Path=/api/v1; Max-Age=3600')
+            except (TypeError, ValueError, OSError):
+                return self._at_admin_reply({'error': 'invalid_admin_request'}, status=400)
+        if path == '/api/v1/at-admin/users':
+            if not self._at_admin_local(mutation=True) or not self._authorized(path) or not AT_ADMIN_GATE.current(self._at_admin_session()):
+                return self._reject_unauthorized()
+            try:
+                size = int(self.headers.get('Content-Length', '0'))
+                if not 0 < size <= 2048:
+                    return self._send({'error': 'invalid_user_payload'}, 400)
+                body = self._body()
+                if not isinstance(body, dict) or set(body) - {'username', 'name', 'password', 'permissions', 'enabled', 'role'}:
+                    return self._send({'error': 'invalid_user_payload'}, 400)
+                return self._send({'ok': True, 'user': AT_ADMIN_PROFILES.save_user(**body)})
+            except (TypeError, ValueError) as exc:
+                return self._send({'error': 'invalid_user_payload', 'message': str(exc)}, 400)
         if path == workstation_pairing.PAIR_PATH:
             if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/x-www-form-urlencoded":
                 self._pair_response(415)

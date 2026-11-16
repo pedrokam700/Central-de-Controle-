@@ -149,6 +149,26 @@ test('older N with no later Y is one investigative reference, not a current-Y pr
  assert.doesNotMatch(html,/data-sn-mounting-mode="compare"/);
 });
 
+test('component-only 3074 last link is visible with its 4th use without claiming full mounting',()=>{
+  const data=structuredClone(sample);
+  data.trace_3074.mounting_views.current={status:'not_proven',components:[]};
+  data.trace_3074.mounting_views.last_failure={status:'no_2114_anchor',components:[]};
+  data.trace_3074.mounting_views.last_recorded={status:'unverified',components:[]};
+  data.trace_3074.mounting_views.last_individual_links={
+    status:'last_individual_links_observed',batch_id:'LAST-BATCH',
+    components:[{item_sn:'SCREEN-4TH',item_type:'Screen',iss_status_now:'N'}],
+    component_usage:[{item_sn:'SCREEN-4TH',item_type:'Screen',is_reused:true,
+      known_use_count_min:4,other_pcbas:['OLD1','OLD2','OLD3']}],
+    reused_count:1,
+  };
+  const html=renderSnMountingViews(data);
+  assert.match(html,/Últimos vínculos individuais conhecidos/);
+  assert.match(html,/4/);
+  assert.match(html,/OLD1, OLD2, OLD3/);
+  assert.match(html,/conjunto completo da montagem.*não estão comprovados/);
+  assert.doesNotMatch(html,/Montagem atual comprovada/);
+});
+
 test('historical material 2nd-use shows previous PCBA 2114 failures as context, not a causal alert',()=>{
  const data=structuredClone(sample);
  data.trace_3074.mounting_views.historical_material_reuse=[{

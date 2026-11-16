@@ -30,11 +30,29 @@ class IntegratedTests(unittest.TestCase):
  def test_3012_exact_sn_coverage_returns_only_missing_ranges(self):
   with tempfile.TemporaryDirectory() as tmp:
    store=Store(Path(tmp)/'coverage.db');store.initialize();repair_3012.ensure_schema(store)
-   repair_3012.ingest(store,{'source':repair_3012.TRUSTED_COVERAGE_SOURCE,'query':{'sns':['PCBA-1'],'start_at':'2026-01-01T00:00:00','end_at':'2026-03-31T23:59:59'},'rows':[]})
-   gaps=repair_3012.missing_windows(store,'PCBA-1',datetime.fromisoformat('2026-01-01T00:00:00'),datetime.fromisoformat('2026-06-30T23:59:59'))
-   self.assertEqual(len(gaps),1);self.assertEqual(gaps[0][0].isoformat(timespec='seconds'),'2026-04-01T00:00:00');self.assertEqual(gaps[0][1].isoformat(timespec='seconds'),'2026-06-30T23:59:59')
-   repair_3012.ingest(store,{'source':repair_3012.TRUSTED_COVERAGE_SOURCE,'query':{'sns':['PCBA-1'],'start_at':'2026-04-01T00:00:00','end_at':'2026-06-30T23:59:59'},'rows':[]})
-   self.assertEqual(repair_3012.missing_windows(store,'PCBA-1',datetime.fromisoformat('2026-01-01T00:00:00'),datetime.fromisoformat('2026-06-30T23:59:59')),[])
+   first='2026-01-01T00:00:00';march='2026-03-31T23:59:59'
+   april='2026-04-01T00:00:00';june='2026-06-30T23:59:59'
+   def window(a,b):
+    return datetime.fromisoformat(a),datetime.fromisoformat(b)
+   def verified(a,b):
+    requested={'from':a,'to':b}
+    return {'source':repair_3012.TRUSTED_COVERAGE_SOURCE,'contract':'3012-home-mapped-v2',
+      'query':{'sns':['PCBA-1'],'start_at':a,'end_at':b},'rows':[],
+      'chunks':[{'sn':'PCBA-1','from':a,'to':b,'query_proof':{
+        'contract':'3012-home-mapped-v2','periodVerified':True,
+        'freshness':'http_2xx_completed','requestedWindow':requested,'actualWindow':dict(requested)}}]}
+   # Source label alone must NOT certify an empty MES window: without the
+   # HTTP/SN/period proof, a later forensic query still has the full gap.
+   repair_3012.ingest(store,{'source':repair_3012.TRUSTED_COVERAGE_SOURCE,
+     'query':{'sns':['PCBA-1'],'start_at':first,'end_at':march},'rows':[]})
+   self.assertEqual(repair_3012.coverage(store,'PCBA-1'),[])
+   self.assertEqual(repair_3012.missing_windows(store,'PCBA-1',*window(first,june)),[window(first,june)])
+   # Fully verified request/response chunks may be reused as cache coverage.
+   repair_3012.ingest(store,verified(first,march))
+   gaps=repair_3012.missing_windows(store,'PCBA-1',*window(first,june))
+   self.assertEqual(gaps,[window(april,june)])
+   repair_3012.ingest(store,verified(april,june))
+   self.assertEqual(repair_3012.missing_windows(store,'PCBA-1',*window(first,june)),[])
    self.assertEqual(repair_3012.stats(store)['coverage_sns'],1)
  def test_guardian_cannot_repair_ethernet_when_wifi_missing(self):
   with self.assertRaises(ValueError):network_watch.repair_host_route('8.8.8.8')

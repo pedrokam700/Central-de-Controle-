@@ -15,16 +15,81 @@ class Locator:
     def count(self): return 1 if self.kind != 'table' else 0
     def is_visible(self, **kwargs): return True
     def wait_for(self, **kwargs): pass
-    def fill(self, value, **kwargs): self.fixture.call(op='fill', value=value)
+    def fill(self, value, **kwargs):
+        if self.fixture.mask_blocks_input and self.fixture.clock < self.fixture.mask_until_s:
+            self.fixture.advance(min(float(kwargs.get('timeout',1200))/1000,
+                                     self.fixture.mask_until_s-self.fixture.clock))
+            raise RuntimeError('Timeout waiting for input: <div class="x-mask"> intercepts pointer events')
+        self.fixture.call(op='fill', value=value)
     def input_value(self, **kwargs): return self.fixture.call(op='value')
-    def click(self, **kwargs): self.fixture.call(op='click')
+    def click(self, **kwargs):
+        if kwargs.get('trial'):
+            # Playwright's trial click checks pointer actionability, but MUST
+            # NOT dispatch a new MES request. Model the 3022 ExtJS mask.
+            self.fixture.trial_attempts += 1
+            if self.fixture.clock < self.fixture.trial_not_ready_until_s:
+                self.fixture.advance(min(float(kwargs.get('timeout',1800))/1000,
+                                         self.fixture.trial_not_ready_until_s-self.fixture.clock))
+                raise TimeoutError(
+                    'Locator.click: Timeout ' + str(kwargs.get('timeout',1800))
+                    + 'ms exceeded.\\nCall log: - attempting click action (trial run)'
+                    + ' - waiting for element to be visible, enabled and stable'
+                )
+            if self.fixture.clock < self.fixture.mask_until_s:
+                self.fixture.advance(min(float(kwargs.get('timeout',650))/1000,
+                                         self.fixture.mask_until_s-self.fixture.clock))
+                raise RuntimeError(
+                    'Timeout waiting for button Views: <div class="x-mask"> intercepts pointer events'
+                )
+            return
+        # A real Playwright locator has native actionability waiting. Unlike
+        # the removed trial=True preflight, this is its one actual View click.
+        if self.fixture.clock < self.fixture.trial_not_ready_until_s:
+            self.fixture.advance(min(float(kwargs.get('timeout',12000))/1000,
+                                     self.fixture.trial_not_ready_until_s-self.fixture.clock))
+            if self.fixture.clock < self.fixture.trial_not_ready_until_s:
+                raise TimeoutError(
+                    'Locator.click: Timeout ' + str(kwargs.get('timeout',12000))
+                    + 'ms exceeded. Call log: waiting for element to be visible, enabled and stable'
+                )
+        if self.fixture.clock < self.fixture.mask_until_s:
+            self.fixture.advance(min(float(kwargs.get('timeout',12000))/1000,
+                                     self.fixture.mask_until_s-self.fixture.clock))
+            if self.fixture.clock < self.fixture.mask_until_s:
+                raise TimeoutError('Locator.click: Timeout while x-mask intercepts pointer events')
+        if self.fixture.mask_on_actual_click:
+            self.fixture.mask_on_actual_click = False
+            raise RuntimeError('Locator.click Timeout: <div class="x-mask"> intercepts pointer events')
+        self.fixture.call(op='click')
+        if (self.fixture.trial_not_ready_after_submits is not None and
+                len(self.fixture.call(op='state')['submitted']) >= self.fixture.trial_not_ready_after_submits):
+            self.fixture.trial_not_ready_until_s = (
+                self.fixture.clock + self.fixture.trial_not_ready_duration_s)
+            self.fixture.trial_not_ready_after_submits = None
+        if (self.fixture.mask_after_submits is not None and
+                len(self.fixture.call(op='state')['submitted']) >= self.fixture.mask_after_submits):
+            self.fixture.mask_until_s = self.fixture.clock + self.fixture.mask_duration_s
+            self.fixture.mask_blocks_input = True
+            self.fixture.mask_after_submits = None
     def inner_text(self, **kwargs): return 'AWIP3022 View Lot History'
 
 
 class Ext3022Fixture:
     url = 'http://fixture/AWIP3022/VwViewLotHistoryView'
-    def __init__(self, collector, plans, rows=(), hidden=()):
+    def __init__(self, collector, plans, rows=(), hidden=(), mask_until_s=0.0,
+                 mask_after_submits=None, mask_duration_s=0.0,
+                 mask_on_actual_click=False, mask_blocks_input=False,
+                 trial_not_ready_until_s=0.0, trial_not_ready_after_submits=None,
+                 trial_not_ready_duration_s=0.0):
         self.collector, self.clock = collector, 0.0
+        self.mask_until_s, self.trial_attempts = float(mask_until_s), 0
+        self.mask_after_submits = mask_after_submits
+        self.mask_duration_s = float(mask_duration_s)
+        self.mask_on_actual_click = bool(mask_on_actual_click)
+        self.mask_blocks_input = bool(mask_blocks_input)
+        self.trial_not_ready_until_s=float(trial_not_ready_until_s)
+        self.trial_not_ready_after_submits=trial_not_ready_after_submits
+        self.trial_not_ready_duration_s=float(trial_not_ready_duration_s)
         self.process = subprocess.Popen(['node', str(ROOT/'scripts/fixtures/ames-3022-ext.cjs')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8')
         self.frames = [self]
         self.call(op='setup', plans=plans, rows=list(rows), hidden=list(hidden))

@@ -23,4 +23,19 @@ class V013ViewsTests(unittest.TestCase):
         self.assertEqual(v['hist_material_rows'][0]['Relação com falha atual'],'MESMA FAMÍLIA')
         ind=_build_indicators(v); self.assertEqual(next(x[1] for x in ind['kpis'] if x[0]=='PCBA em 2º uso'),1)
 
+    def test_previous_all_n_batches_without_bind_time_reach_pcba_kpi(self):
+        t,r=self.sample()
+        t['items'][0]['base_query']['rows']=[
+            {'Barcode':'CUR','Sn Type':'PCBA','Batch Id':'OLD',
+             'Prod Time':'2026-10-01 10:00:00','Iss Status':'N'},
+            {'Barcode':'CUR','Sn Type':'PCBA','Batch Id':'NEW',
+             'Prod Time':'2026-10-02 10:00:00','Iss Status':'N'},
+        ]
+        views=_build_views(t,r)
+        board=views['analise_rows'][0]
+        self.assertEqual(board['_pcba_use_index'],2)
+        self.assertEqual(board['Usos conhecidos da PCBA'],2)
+        metrics=_build_indicators(views)['kpis']
+        self.assertEqual(next(value for name,value in metrics if name=='PCBA em 2º uso'),1)
+
 if __name__=='__main__': unittest.main()

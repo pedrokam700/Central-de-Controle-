@@ -6,11 +6,20 @@ import { LINE_IDS } from './data/contract.mjs';
 import { coverageState } from './data/history.mjs';
 import { selectDashboard } from './data/dashboard.mjs';
 import {failureGroupReuseSummaries,evidenceCountLabel,formatFailureLastOccurrence} from './failure-group-evidence.mjs';
+import {failureGroupCommentSummaries,candidate3012CommentsByOccurrence,candidate3012GroupCommentSummaries,failureOccurrenceCommentKey} from './failure-group-comments.mjs';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const number=v=>v===null||v===undefined?'—':String(v);
 const pct=v=>v===null||v===undefined?'—':`${v}%`;
 const lineOptions=(selected)=>LINE_IDS.map((id,i)=>`<option value="${id}"${id===selected?' selected':''}>Linha ${i+1} · ${id}</option>`).join('');
+
+// The custom-window button uses the same agent collection contract as Today.
+// Missing numeric limits are invalid (Number(undefined) is NaN); zero means
+// unrestricted, not an empty collection or zero allowed occurrences.
+export const customPeriodCaptureScope=(line,start,end,performance='balanced')=>({
+  lines:[line],performance,max_failures:0,max_pcbas:0,defect_codes:[],
+  start_at:start,end_at:end
+});
 
 export function createLineOverview(root,store,client,periodController,history=null){
   let line=store.preferredLine?.()||LINE_IDS[0],last='',latestPreview=null;
@@ -30,7 +39,10 @@ export function createLineOverview(root,store,client,periodController,history=nu
     const models=LINE_IDS.map(id=>selectDashboard(store,{line_id:id}));
     const en=document.documentElement.lang.startsWith('en');
     const busy=['starting','queued','running','in_progress','cancelling'].includes(String(store.agent().job?.status||'').toLowerCase());
-    const key=JSON.stringify([store.contextRevision?.(),document.documentElement.lang,store.agent().period_read,line,...models.map((m,i)=>[m.snapshot?.snapshot_id,m.snapshot?.snapshot_revision,m.snapshot?.content_hash,m.snapshot?.collected_at,m.source,m.freshness,m.sample_metric?.value,store.read(LINE_IDS[i]).saved_today]),store.agent().status,store.agent().job?.id,store.agent().job?.status]);
+    // The period can change without a new snapshot, context revision or MES
+    // job (e.g. opening a stored custom range). Repaint the selected tab too.
+    const reading=store.readingPeriod?.();
+    const key=JSON.stringify([store.contextRevision?.(),document.documentElement.lang,reading?.mode,reading?.start,reading?.end,store.agent().period_read,line,...models.map((m,i)=>[m.snapshot?.snapshot_id,m.snapshot?.snapshot_revision,m.snapshot?.content_hash,m.snapshot?.collected_at,m.source,m.freshness,m.sample_metric?.value,store.read(LINE_IDS[i]).saved_today]),store.agent().status,store.agent().job?.id,store.agent().job?.status]);
     if(key===last){latestPreview?.render();return;}last=key;const preservedPreview=root.querySelector('[data-latest-capture-preview]');preservedPreview?.remove();const preservedPeriod=root.querySelector('[data-global-reading-period]');preservedPeriod?.remove();const model=models.find(m=>m.scope.line_id===line)||models.find(m=>m.snapshot)||models[0];
     root.innerHTML=`<section class="mes-context-panel ames-line-center ames-monitor-overview"><div class="section-head ames-monitor-overview-head"><div><span class="ames-monitor-eyebrow">${en?'OPERATIONS OVERVIEW':'PAINEL OPERACIONAL'}</span><h2>Central das Linhas</h2><p>${en?'Production overview by line and operational day. Source and revision remain identifiable.':'Seu resumo de produção, por linha e dia. Histórico e revisão sempre identificados.'}</p></div><div class="mes-pagination ames-monitor-read-actions"><button class="button secondary" data-line-all${store.agent().status==='connected'&&!busy?'':' disabled'}>Atualizar todas</button><button class="button secondary" data-line-refresh${store.agent().status==='connected'?'':' disabled'}>Atualizar leitura</button></div></div><section data-global-reading-period></section><div class="ames-line-tabs" role="group" aria-label="${en?'Select production line':'Selecionar linha de produção'}">${LINE_IDS.map((id,i)=>`<button class="button ${id===line?'primary':'secondary'}" type="button" aria-pressed="${id===line}" data-line-tab="${id}">Linha ${i+1} · ${id}</button>`).join('')}</div><div class="ames-summary-grid ames-line-summary" aria-label="${en?'Selected period indicators':'Indicadores do período selecionado'}"><div class="stat"><span class="stat-label">FPY</span><strong class="stat-value">${esc(pct(metric(model,'fpy')))}</strong></div><div class="stat"><span class="stat-label">Check FPY</span><strong class="stat-value">${esc(pct(metric(model,'check_fpy')))}</strong></div><div class="stat"><span class="stat-label">Quantity</span><strong class="stat-value">${esc(number(metric(model,'quantity')))}</strong></div><div class="stat"><span class="stat-label">Falhas</span><strong class="stat-value">${esc(number(model.sample_metric?.value))}</strong></div></div><div class="ames-monitor-evidence-strip" data-monitor-provenance><div class="stat"><span class="stat-label">Snapshot</span><strong class="stat-value ames-small-value">${esc(model.snapshot?.snapshot_id||'—')}</strong></div><div class="stat"><span class="stat-label">Origem</span><strong class="stat-value ames-small-value">${esc(model.source==='none'?(en?'Not identified':'Não identificada'):model.source==='remote'?(en?'Shared':'Compartilhada'):model.source==='local_cache'?(en?'Local cache':'Cache local'):model.source||'—')}</strong></div></div><section data-latest-capture-preview></section><div class="mes-pagination ames-monitor-inline-action"><button class="button secondary" data-line-one${store.agent().status==='connected'&&!busy?'':' disabled'}>Atualizar esta linha</button></div></section>`;
     if(periodController){
@@ -39,8 +51,8 @@ export function createLineOverview(root,store,client,periodController,history=nu
       paintReadingPeriod(preservedPeriod||target,store,periodController,{onCollectCustom:async({start,end})=>{
         // A deliberate period collection is always scoped to the selected
         // line; a historical read remains separate from today's live head.
-        await client.collect('custom',{lines:[line],performance:store.agent().config?.performance||'balanced',
-          start_at:start,end_at:end});
+        await client.collect('custom',customPeriodCaptureScope(
+          line,start,end,store.agent().config?.performance||'balanced'));
         await periodController.select('custom',{start,end});
       }});
     }
@@ -115,23 +127,60 @@ export function sortFailureGroups(groups,sort='count_desc'){
   return rows.sort((a,b)=>b.count-a.count||compareFailureName(a,b));
 }
 
+function failureCommentCell(name,comments=[]){
+  if(!comments.length)return '<span class="ames-failure-unknown" title="Nenhum comentário de AT associado de maneira comprovada às ocorrências desta falha">—</span>';
+  const [top]=comments;
+  const others=comments.length-1;
+  const tooltip=comments.map(item=>`${item.comment} × ${item.count} (${item.source})`).join('\n');
+  return `<button class="ames-failure-comment-top" type="button" data-failure-comment-group="${esc(name)}" title="${esc(tooltip)}" aria-label="Ver ${comments.length} comentário(s) da AT para ${esc(name)}"><span>${esc(top.comment)}</span><b>×${top.count}</b><small>${top.candidate?'3012 · candidato':'3028/3012 · comprovado'}${others?` · +${others} outro(s)`:''}</small></button>`;
+}
+
+function failureCommentDialog(name,comments=[]){
+  return `<dialog class="ames-failure-inspector ames-failure-comment-dialog" data-failure-comment-dialog aria-label="Comentários da AT"><div class="ames-failure-inspector-head"><div><small>3028/3012 comprovados · 3012 de base local marcado como candidato</small><h3>${esc(name)}</h3></div><button type="button" class="button secondary" data-close-failure-comments>Fechar</button></div><p>Frequência por ocorrência observada nesta leitura. Candidato 3012 coincide em PCBA, código e Defect Time, mas não comprova qual atendimento reparou a falha. Registros repetidos da mesma ocorrência não são somados.</p><ol class="ames-failure-comment-list">${comments.map(item=>`<li><span>${esc(item.comment)}</span><b>× ${item.count}</b><small>${esc(item.source)}</small></li>`).join('')}</ol></dialog>`;
+}
+
+function groupedFailuresTable(groups,selected,evidence,comments){
+  const headers=[
+    ['Falha','Modo de falha agrupado'],['Ocorrências','Registros de falha observados'],
+    ['Componentes 2º+ uso','Quantidade de PCBAs desta falha com ao menos um Material SN reutilizado, vinculado no instante comprovado da ocorrência; não é a contagem de materiais'],
+    ['Componentes 2º+ · mesma falha','PCBAs desta falha com Material SN reutilizado, vínculo temporal comprovado e mesma falha anterior em outra PCBA'],
+    ['PCBAs 2º+ uso','Quantidade de PCBAs distintas com remontagem física ou retorno de produção comprovado'],
+    ['PCBAs 2º+ · mesma falha','PCBAs reutilizadas com a mesma falha no histórico anterior comprovado'],
+    ['Comentário AT mais comum','Comentário associado à ocorrência; abra para ver as demais frequências'],
+    ['Última ocorrência','Último registro de falha observado no MES']
+  ];
+  return `<div class="table-wrap"><table class="ames-failure-groups-table"><thead><tr>${headers.map(([name,help])=>`<th title="${esc(help)}">${esc(name)}</th>`).join('')}</tr></thead><tbody>${groups.map(item=>{
+    const metric=evidence[item.name]||{};
+    return `<tr${item.name===selected?' data-selected="true"':''}><td><button type="button" class="button secondary" data-failure-group="${esc(item.name)}">${esc(item.name)}</button></td><td><b>${item.count}</b></td><td>${esc(evidenceCountLabel(metric.componentAffected))}</td><td>${esc(evidenceCountLabel(metric.componentSameFailureAffected))}</td><td>${esc(evidenceCountLabel(metric.pcbaReuse))}</td><td>${esc(evidenceCountLabel(metric.pcbaSameFailure))}</td><td data-failure-comment-cell="${esc(item.name)}">${failureCommentCell(item.name,comments[item.name])}</td><td title="${esc(item.latest||'')}">${esc(formatFailureLastOccurrence(item.latest||''))}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
+function failureOccurrencesTable(rows,line,failureName){
+  return `<div class="table-wrap ames-failures-table"><table><thead><tr><th>Falha</th><th>PCBA</th><th>Registro da falha (MES)</th><th>Turno (3022)</th><th>Presença</th><th>Reparo</th><th title="Comentário registrado na ocorrência 3028; não substitui a auditoria 3012">Comentário da AT · 3028</th></tr></thead><tbody>${rows.slice(0,2500).map(r=>{
+    const comment=String(r.repair_comment||'').trim();
+    return `<tr data-occurrence-code="${esc(r.defect_code||'')}" data-occurrence-pcba="${esc(r.pcba_sn||'')}" data-occurrence-time="${esc(r.defect_time||'')}"><td><b>${esc(failureName(r))}</b></td><td class="ames-pcba-id">${esc(r.pcba_sn)}</td><td>${esc(formatFactoryDateTime(r.defect_time))}</td><td>${esc(r.production_shift||'—')}</td><td>${r.present_in_3028===false?'Histórica / removida':'Atual'}</td><td>${esc(r.repair_status||'—')}</td><td data-failure-occurrence-comment-key="${esc(comment?'':failureOccurrenceCommentKey(r))}"><span class="ames-failure-row-comment" title="${esc(comment||'Sem comentário 3028 associado')}">${esc(comment||'—')}</span></td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
 export function createFailuresParityView(root,store,client){
   let line=store.preferredLine?.()||LINE_IDS[0],q='',status='',shift=store.context?.().shift||'',sort='count_desc',group='',last='',lastSnapshot=null;
+  let renderSerial=0;
+  const repairReads=new Map();
   const failureName=r=>knownDescription(r?.defect_desc)||String(r?.defect_code||'').trim()||'Falha não identificada';
   function render(){
     const shared=store.context?.()||{};if(shared.line_id&&shared.line_id!==line){line=shared.line_id;group='';last='';lastSnapshot=null;}if((shared.shift||'')!==shift){shift=shared.shift||'';group='';last='';}
     const read=store.read(line),snapshot=read.snapshot,currentRows=[...(snapshot?.occurrences||[])],removedAvailable=snapshot?.removed_occurrences_status==='available',removedRows=removedAvailable?[...(snapshot?.removed_occurrences||[])]:[],rows=[...currentRows,...removedRows];
     const needle=q.trim().toLowerCase();
     const baseFiltered=rows.filter(r=>{const removed=r.present_in_3028===false,s=String(r.repair_status||'').toUpperCase();const statusOk=!status||(status==='REMOVED'?removed:status==='N'?!removed&&(s==='N'||s==='OPEN'):status==='Y'?!removed&&(s==='Y'||s==='CLOSED'||s==='FINALIZADO'):true);const text=[r.pcba_sn,r.defect_code,r.defect_desc,r.repair_comment,r.repair_user,r.defect_type,r.product_model].join(' ').toLowerCase();return statusOk&&(!shift||r.production_shift===shift)&&(!needle||text.includes(needle));});
-    const grouped=new Map();for(const r of baseFiltered){const name=failureName(r),entry=grouped.get(name)||{name,count:0,codes:new Set(),latest:''};entry.count++;if(r.defect_code)entry.codes.add(String(r.defect_code));const when=String(r.defect_time||'');if(when>entry.latest)entry.latest=when;grouped.set(name,entry);}const groups=sortFailureGroups([...grouped.values()],sort);const groupEvidence=failureGroupReuseSummaries(snapshot,baseFiltered);
+    const grouped=new Map();for(const r of baseFiltered){const name=failureName(r),entry=grouped.get(name)||{name,count:0,codes:new Set(),latest:''};entry.count++;if(r.defect_code)entry.codes.add(String(r.defect_code));const when=String(r.defect_time||'');if(when>entry.latest)entry.latest=when;grouped.set(name,entry);}const groups=sortFailureGroups([...grouped.values()],sort);const groupEvidence=failureGroupReuseSummaries(snapshot,baseFiltered);const groupComments=failureGroupCommentSummaries(baseFiltered,failureName);
     const groupRank=new Map(groups.map((item,index)=>[item.name,index]));
     let filtered=group?baseFiltered.filter(r=>failureName(r)===group):baseFiltered;
     filtered=[...filtered].sort((a,b)=>{const nameOrder=(groupRank.get(failureName(a))??Number.MAX_SAFE_INTEGER)-(groupRank.get(failureName(b))??Number.MAX_SAFE_INTEGER);if(nameOrder)return nameOrder;return String(b.defect_time||'').localeCompare(String(a.defect_time||''));});
     const key=JSON.stringify([line,q,status,shift,sort,group,store.agent().status,store.contextRevision?.()]);if(key===last&&snapshot===lastSnapshot)return;last=key;lastSnapshot=snapshot;
     const known=Boolean(snapshot),nCount=known?currentRows.filter(r=>['N','OPEN'].includes(String(r.repair_status||'').toUpperCase())).length:null,yCount=known?currentRows.filter(r=>['Y','CLOSED','FINALIZADO'].includes(String(r.repair_status||'').toUpperCase())).length:null,removedCount=removedRows.length;
     const removedUnavailable=status==='REMOVED'&&!removedAvailable,shiftUnclassified=Boolean(shift&&known&&currentRows.length&&currentRows.every(r=>!r.production_shift));
-    const groupedBlock=known&&baseFiltered.length?`<section class="mes-context-panel ames-failure-groups" data-failure-groups><div class="section-head"><div><h3>Falhas agrupadas</h3><p>Primeiro veja o nome da falha e a quantidade. O código técnico permanece nos dados para correlação, mas não ocupa uma coluna da operação. Clique numa falha para ver suas ocorrências. * Reuso/correlação: quantidade de PCBAs distintas observadas nesta falha; a cobertura pode estar incompleta. — é desconhecido, não significa zero; a associação não comprova causa.</p></div>${group?`<button type="button" class="button secondary" data-failure-group-clear>Mostrar todas</button>`:''}</div><div class="table-wrap"><table><thead><tr><th>Falha</th><th>Ocorrências</th><th title="Somente evidência observada · não é taxa ou população completa">PCBAs 2º+*</th><th title="PCBA reutilizada com falha anterior do mesmo código">PCBAs 2º+ · mesma falha*</th><th title="PCBAs distintas com material reutilizado vinculado no instante da falha">PCBAs c/ material 2º+*</th><th title="PCBAs distintas com material reutilizado e histórico anterior da mesma falha exata">PCBAs c/ material 2º+ · mesma falha*</th><th>Última ocorrência</th></tr></thead><tbody>${groups.map(item=>`<tr${item.name===group?' data-selected="true"':''}><td><button type="button" class="button secondary" data-failure-group="${esc(item.name)}">${esc(item.name)}</button></td><td><b>${item.count}</b></td><td>${esc(evidenceCountLabel(groupEvidence[item.name]?.pcbaReuse))}</td><td>${esc(evidenceCountLabel(groupEvidence[item.name]?.pcbaSameFailure))}</td><td>${esc(evidenceCountLabel(groupEvidence[item.name]?.componentAffected))}</td><td>${esc(evidenceCountLabel(groupEvidence[item.name]?.componentSameFailureAffected))}</td><td title="${esc(item.latest||'')}">${esc(formatFailureLastOccurrence(item.latest||''))}</td></tr>`).join('')}</tbody></table></div></section>`:'';
-    const body=!known?'<div class="notice warn"><b>Não coletado.</b><br>Esta linha não possui snapshot carregado; ausência de dados não é zero.</div>':shiftUnclassified?'<div class="notice warn"><b>Turno não classificado.</b><br>Há falhas carregadas, mas a 3022 não classificou o turno nesta leitura. As falhas não foram convertidas em zero.</div>':removedUnavailable?'<div class="notice warn"><b>Removidas do export indisponíveis nesta leitura.</b><br>O agente não expôs esta dimensão; ausência de dataset não equivale a zero removidas.</div>':filtered.length?`<div class="table-wrap ames-failures-table"><table><thead><tr><th>Falha</th><th>PCBA</th><th>Defect Time</th><th>Turno de produção</th><th>Data operacional</th><th>Presença</th><th>Linha</th><th>CPH</th><th>Repair</th><th>Log</th><th>Defect Type</th><th title="Valor da coluna Repair Comment da ocorrência 3028; não é comentário do AT 3012">Comentário 3028</th></tr></thead><tbody>${filtered.slice(0,2500).map(r=>`<tr data-occurrence-code="${esc(r.defect_code||'')}" data-occurrence-pcba="${esc(r.pcba_sn||'')}" data-occurrence-time="${esc(r.defect_time||'')}"><td><b>${esc(failureName(r))}</b></td><td class="ames-pcba-id">${esc(r.pcba_sn)}</td><td>${esc(formatFactoryDateTime(r.defect_time))}</td><td>${esc(r.production_shift||'—')}</td><td>${esc(r.production_operational_date||'—')}</td><td>${r.present_in_3028===false?'Removida do export':'Atual'}</td><td>${esc(r.line_id||line)}</td><td>${esc(r.product_model)}</td><td>${esc(r.repair_status)}</td><td>${esc(r.registration_mode||r['Manual/Automatic']||'')}</td><td>${esc(r.defect_type)}</td><td>${esc(r.repair_comment)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="mes-context-panel"><p>Nenhum registro para os filtros. Ausência na lista parcial não significa ausência de falha.</p></div>';
+    const groupedBlock=known&&baseFiltered.length?`<section class="mes-context-panel ames-failure-groups" data-failure-groups><div class="section-head"><div><h3>Falhas agrupadas</h3><p>Quatro indicadores de reuso: 2º uso ou mais e repetição da mesma falha, separados para componentes e PCBAs. Os números contam <b>PCBAs distintas afetadas</b>, não linhas de componentes. Use o botão da falha para filtrar; clique no comentário para ver todas as observações da AT. — significa não comprovado (cobertura pode estar incompleta).</p></div>${group?`<button type="button" class="button secondary" data-failure-group-clear>Mostrar todas</button>`:''}</div>${groupedFailuresTable(groups,group,groupEvidence,groupComments)}</section>`:'';
+    const body=!known?'<div class="notice warn"><b>Não coletado.</b><br>Esta linha não possui snapshot carregado; ausência de dados não é zero.</div>':shiftUnclassified?'<div class="notice warn"><b>Turno não classificado.</b><br>Há falhas carregadas, mas a 3022 não classificou o turno nesta leitura. As falhas não foram convertidas em zero.</div>':removedUnavailable?'<div class="notice warn"><b>Removidas do export indisponíveis nesta leitura.</b><br>O agente não expôs esta dimensão; ausência de dataset não equivale a zero removidas.</div>':filtered.length?failureOccurrencesTable(filtered,line,failureName):'<div class="mes-context-panel"><p>Nenhum registro para os filtros. Ausência na lista parcial não significa ausência de falha.</p></div>';
     root.innerHTML=`<section class="mes-context-panel ames-failure-toolbar"><div class="mes-filters"><label>Linha<select data-failure-line>${lineOptions(line)}</select></label><label>Pesquisar<input data-failure-search value="${esc(q)}" placeholder="SN, código, descrição, reparo..."></label><label>Turno de produção<select data-failure-shift><option value="">Todos</option><option value="1st Shift"${shift==='1st Shift'?' selected':''}>1º Turno</option><option value="2nd Shift"${shift==='2nd Shift'?' selected':''}>2º Turno</option></select></label><label>Status<select data-failure-status><option value=""${!status?' selected':''}>Todos os estados</option><option value="N"${status==='N'?' selected':''}>Repair N</option><option value="Y"${status==='Y'?' selected':''}>Repair Y</option><option value="REMOVED"${status==='REMOVED'?' selected':''}${removedAvailable?'':' disabled'}>Removida do export${removedAvailable?'':' · indisponível'}</option></select></label><label>Ordenar falhas<select data-failure-sort><option value="count_desc"${sort==='count_desc'?' selected':''}>Ocorrências: maior → menor</option><option value="count_asc"${sort==='count_asc'?' selected':''}>Ocorrências: menor → maior</option><option value="failure_asc"${sort==='failure_asc'?' selected':''}>Falha: A → Z</option><option value="failure_desc"${sort==='failure_desc'?' selected':''}>Falha: Z → A</option></select></label></div><div class="ames-failure-summary"><span><b>${known?currentRows.length:'—'}</b> atuais</span><span><b>${number(nCount)}</b> Repair N</span><span><b>${number(yCount)}</b> Repair Y</span><span><b>${removedAvailable?removedCount:'—'}</b> removidas${removedAvailable?'':' · dimensão indisponível'}</span><span>${esc(snapshot?.snapshot_id||'não coletado')}</span><button class="button secondary" data-failure-reload${store.agent().status==='connected'?'':' disabled'}>Recarregar</button></div></section>${groupedBlock}${body}`;
     root.querySelector('[data-failure-line]')?.addEventListener('change',e=>{line=e.target.value;group='';store.updateContext?.({line_id:line});last='';lastSnapshot=null;render();});
     root.querySelector('[data-failure-shift]')?.addEventListener('change',e=>{shift=e.target.value;group='';store.updateContext?.({shift:shift||null});last='';render();});
@@ -141,8 +190,53 @@ export function createFailuresParityView(root,store,client){
     root.querySelector('[data-failure-search]')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();q=e.target.value;group='';last='';render();}});
     root.querySelector('[data-failure-search]')?.addEventListener('change',e=>{q=e.target.value;group='';last='';render();});
     root.querySelectorAll('[data-failure-group]').forEach(button=>button.addEventListener('click',()=>{group=button.dataset.failureGroup||'';last='';render();}));
+    let displayedGroupComments=groupComments;
+    root.querySelector('[data-failure-groups]')?.addEventListener('click',event=>{
+      const button=event.target?.closest?.('[data-failure-comment-group]');
+      if(!button)return;
+      const name=button.dataset.failureCommentGroup||'',comments=displayedGroupComments[name]||[];
+      root.querySelector('[data-failure-comment-dialog]')?.remove();
+      root.insertAdjacentHTML('beforeend',failureCommentDialog(name,comments));
+      const dialog=root.querySelector('[data-failure-comment-dialog]');
+      dialog.querySelector('[data-close-failure-comments]')?.addEventListener('click',()=>dialog.close());
+      dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+      if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');
+    });
     root.querySelector('[data-failure-group-clear]')?.addEventListener('click',()=>{group='';last='';render();});
     root.querySelector('[data-failure-reload]')?.addEventListener('click',()=>client.refresh().catch(e=>store.updateAgent({error:e.message})));
+    // An offline/read-only 3012 lookup enriches the *visible* 3028 reading.
+    // Never start an A-MES job just to display a comment. Candidate evidence
+    // is strictly PCBA + defect code + timestamp; it is not a confirmed AT.
+    const serial=++renderSerial;
+    const days=baseFiltered.map(r=>String(r.defect_time||'').slice(0,10)).filter(v=>/^\d{4}-\d{2}-\d{2}$/.test(v));
+    if(known&&days.length&&typeof client?.cachedRepairHistory==='function'&&store.agent().status==='connected'){
+      const start_at=days.sort()[0];
+      const readKey=JSON.stringify([line,start_at,snapshot?.snapshot_id,snapshot?.snapshot_revision,snapshot?.content_hash]);
+      if(!repairReads.has(readKey)){
+        const request=Promise.resolve().then(()=>client.cachedRepairHistory({start_at,limit:5000}));
+        repairReads.set(readKey,request);
+        request.catch(()=>repairReads.delete(readKey));
+        if(repairReads.size>8)repairReads.delete(repairReads.keys().next().value);
+      }
+      repairReads.get(readKey).then(history=>{
+        if(serial!==renderSerial||!root.isConnected||!Array.isArray(history))return;
+        const candidateGroups=candidate3012GroupCommentSummaries(baseFiltered,history,failureName);
+        const candidateOccurrences=candidate3012CommentsByOccurrence(baseFiltered,history);
+        displayedGroupComments=Object.fromEntries(groups.map(item=>[
+          item.name,[...(groupComments[item.name]||[]),...(candidateGroups[item.name]||[])]
+        ]));
+        root.querySelectorAll('[data-failure-comment-cell]').forEach(cell=>{
+          const name=cell.dataset.failureCommentCell||'';
+          cell.innerHTML=failureCommentCell(name,displayedGroupComments[name]);
+        });
+        root.querySelectorAll('[data-failure-occurrence-comment-key]').forEach(cell=>{
+          const key=cell.dataset.failureOccurrenceCommentKey;
+          const candidate=candidateOccurrences.get(key)?.[0];
+          if(!candidate)return;
+          cell.innerHTML=`<span class="ames-failure-row-comment" title="${esc(candidate.source)}">${esc(candidate.comment)} <small>3012 · candidato</small></span>`;
+        });
+      }).catch(()=>{/* 3012 local unavailable: preserve the 3028-only result. */});
+    }
   }
-  return {render,clear(){root?.replaceChildren();last='';lastSnapshot=null;}};
+  return {render,clear(){++renderSerial;root?.replaceChildren();last='';lastSnapshot=null;repairReads.clear();}};
 }

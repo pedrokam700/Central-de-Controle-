@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pcbaUsageEvidence,renderSnHistoryDetail} from '../ames/console-sn-history-detail.mjs';
+import {pcbaUsageEvidence,renderSnHistoryDetail,historic3022OperatorPanel} from '../ames/console-sn-history-detail.mjs';
 
 const repair=(overrides={})=>({
   association:'exact_occurrence',pcba_sn:'PCB-A',defect_code:'F1',defect_time:'2026-10-10T10:00:00-03:00',
@@ -89,4 +89,29 @@ test('history detail remains bilingual while preserving raw technical identifier
   assert.match(html,/Binding timeline/);
   assert.match(html,/BRM00075/);
   assert.match(html,/LCM-001/);
+});
+
+test('the three historical A6900 technicians remain visible independently of 2114 Hist Seq attribution',()=>{
+ const board='002527005C1635F300002313',m=model();m.current_pcba=board;
+ m.current.pcba_sn=board;m.own_history[0].pcba_sn=board;
+ m.repairs=[
+  {pcba_sn:board,row_key:'AT-1',repair_user:'BRM00151',defect_code:'GN1',defect_time:'2026-11-09 10:11:00',repair_time:'2026-11-09 10:12:09',repair_comment:'Solucao A'},
+  {pcba_sn:board,row_key:'AT-2',repair_user:'BRM00151',defect_code:'GN1',defect_time:'2026-11-09 10:11:00',repair_time:'2026-11-09 10:12:09',repair_comment:'Solucao B'},
+  {pcba_sn:board,row_key:'AT-3',repair_user:'BRM00075',defect_code:'GN1',defect_time:'2026-11-10 16:50:00',repair_time:'2026-11-10 16:54:05',repair_comment:'Solucao C'},
+ ];
+ const saved={pcba_sn:board,provenance:{adapter:{operator_evidence:{
+  station:'A6900',operator_id:'BRM00151',operator_name:'Jamile Maria',event_time:'2026-11-09 09:12:18'}}}};
+ const recent={pcba_sn:board,station:'A6900',operator_id:'BRM00075',operator_name:'Jonathan Pires',event_time:'2026-11-10 16:54:05'};
+ const result={sn:board,trace_3022:{operator_evidence:[recent]},local_snapshot:{process_events:[saved]}};
+ const html=renderSnHistoryDetail(m,result);
+ assert.match(html,/data-sn-historical-3022-operators/);
+ assert.match(html,/Jamile Maria/);assert.match(html,/Jonathan Pires/);
+ assert.equal((html.match(/data-sn-historical-technician/g)||[]).length,2);
+ assert.equal((html.match(/data-sn-unlinked-3012-row/g)||[]).length,3);
+ for(const msg of ['Solucao A','Solucao B','Solucao C'])assert.match(html,new RegExp(msg));
+ assert.match(html,/sem vínculo individual comprovado/);
+ assert.equal((html.match(/data-sn-unlinked-3012-row/g)||[]).length,3,
+  'same repair clocks with different source row keys remain separate');
+ const noForeign=historic3022OperatorPanel({...result,local_snapshot:{process_events:[{...saved,pcba_sn:'OTHER'}]}},board);
+ assert.doesNotMatch(noForeign,/Jamile Maria/);
 });

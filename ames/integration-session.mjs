@@ -5,12 +5,18 @@ import {createMesSync} from './sync.mjs';
 // Central session, not a view. This only reads SQLite snapshots; it never starts MES jobs.
 export function createMesIntegration(store, remote, {changed=()=>{}, transport={}, syncOptions={}, schedule=setTimeout, unschedule=clearTimeout, interval=15000}={}) {
   let active=false, uid=null, generation=0, timer,historyBusy=false,historyCursor=null,lastHistoryScan=0,lastLocalProbe=0;
-  const notify=()=>{if(active)changed();};
+  const notify=kind=>{if(active)changed(kind);};
   const sync=createMesSync(store,remote,{...syncOptions,changed:notify});
   const capture=()=>sync.capture().catch(error=>{
     if(active){store.updateAgent({sync:{...store.agent().sync,status:'error',error:error.message}});notify();}
   });
-  const client=createAgentClient(store,{...transport,changed(){if(active){notify();void capture();}}});
+  const client=createAgentClient(store,{...transport,changed(kind){
+    if(!active)return;
+    // Polling is not new MES evidence. Capturing the same canonical snapshot
+    // every 850 ms adds IndexedDB/Firestore traffic and renderer churn.
+    notify(kind);
+    if(kind!=='job-poll')void capture();
+  }});
   async function reconcileHistory(g){
     if(historyBusy||!active||g!==generation||store.agent().status!=='connected')return;
     historyBusy=true;

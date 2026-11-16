@@ -100,6 +100,54 @@ MAX_EVENT_BYTES = 12 * 1024
 MAX_PARTIAL_WRITES = 4
 
 
+class DurablePCBAJournal:
+    """Crash-safe 3074/3022 observations, one local entry per completed PCBA.
+
+    The small bounded progress journal below is useful for an audit trail but
+    cannot be a restart checkpoint: after 12 items it stops persisting data.
+    This journal keeps *each* completed 3074 PCBA separately, so an interrupted
+    100-PCBA read can be resumed without querying the first 88 again. A saved
+    item remains only an observation, never a full-source coverage certificate.
+    """
+
+    def __init__(self, store, *, target, line, job_id):
+        self.store, self.target, self.line, self.job_id = store, target, line, job_id
+
+    def observe(self, event):
+        if not isinstance(event, dict):
+            return False
+        if (event.get('stage')=='3022' and event.get('kind')=='pcba' and
+                event.get('phase')=='mes' and event.get('status')=='COLLECTED'):
+            rr=event.get('result')
+            diagnostics=(rr or {}).get('query_diagnostics') or {}
+            sn=str(event.get('pcba') or '').strip()
+            if (not sn or len(sn)>180 or not isinstance(rr,dict) or
+                    diagnostics.get('status') not in ('CONFIRMED','CONFIRMED_EMPTY')):
+                return False
+            suffix=hashlib.sha256(sn.encode('utf-8')).hexdigest()[:24]
+            capture_source(self.store,target=self.target,line=self.line,
+                job_id=f'{self.job_id}_P{suffix}',view='3022',status='partial',
+                result={'checkpoint_kind':'per_pcba_complete_v1','population_complete':False,
+                        'pcbas':[{'pcba_sn':sn,'status':'COMPLETE','result':rr}]})
+            return True
+        if event.get('stage') != '3074' or event.get('kind') != 'pcba_result':
+            return False
+        item = event.get('item')
+        if not isinstance(item, dict) or str(item.get('status') or '').upper() != 'COMPLETE':
+            return False
+        sn = str(item.get('pcba_sn') or '').strip()
+        if not sn or len(sn) > 180:
+            return False
+        # A bounded, collision-resistant name; never interpolate MES serials
+        # directly into SQLite kind names or expose them in the capture index.
+        suffix = hashlib.sha256(sn.encode('utf-8')).hexdigest()[:24]
+        capture_source(self.store, target=self.target, line=self.line,
+            job_id=f'{self.job_id}_P{suffix}', view='3074', status='partial',
+            result={'checkpoint_kind':'per_pcba_complete_v1',
+                    'population_complete':False,'items':[item]})
+        return True
+
+
 class BoundedPartialJournal:
     """Save a few real partial checkpoints, never one SQLite write per event.
 

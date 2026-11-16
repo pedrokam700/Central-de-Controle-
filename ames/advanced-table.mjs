@@ -3,7 +3,7 @@ import {escapeHtml as esc} from './evidence-view.mjs';
 import {createDebouncedAction} from './ui-scheduler.mjs';
 import {displayValue} from './data/time-display.mjs';
 const text=v=>v==null?'':Array.isArray(v)?v.join(', '):typeof v==='object'?JSON.stringify(v):String(v);
-const exactKeys=new Set(['line','product','product_model','family','component_group','usage','production_shift']);
+const exactKeys=new Set(['line','product','product_model','family','component_group','usage','production_shift','recurrence_historical']);
 const PAGE_SIZES=Object.freeze([50,100,250,500]);
 const norm=v=>text(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 function searchableText(row,cache){

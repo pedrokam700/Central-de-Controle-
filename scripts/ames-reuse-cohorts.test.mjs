@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildReuseCohorts,summarizeReusePopulation,boardHistSeqRecurrence,board2114Timeline} from '../ames/data/reuse-cohorts.mjs';
+import {projectRepairTechnicianNames} from '../ames/console-sn-repair-evidence.mjs';
+import {renderComponentComparisonTable,renderBoardComparisonTable,compact2114Analysis,compact3012CandidateCells,enrichReuseRepairTechnicians,matchCached3012Repairs,consolidateComponentHistory} from '../ames/console-reuse-cohorts.mjs';
 const event={pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-19 10:00:00',defect_key:'K1',record_id:'D1',product_key:'CPH1',failure_family:'DISPLAY'};
 function fixture(){return {source_id:'A',snapshot_id:'S',revision:2,line_id:'TAN10101',occurrences:[event],
  pcba_history:{records:[{pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-17 08:00:00',failure_family:'DISPLAY',record_id:'H1'},
@@ -131,4 +133,169 @@ test('duplicate same Hist Seq and missing sequence do not fabricate recurrence o
  assert.equal(timeline[0].repeat_exact_prior_count,0);
  assert.equal(timeline[1].history_order_proven,false);
  assert.equal(timeline[1].repeat_exact_prior_count,0);
+});
+
+test('component comparison replaces duplicate timestamp with genuine 2114 analysis, retaining time in source drilldown',()=>{
+ const oldDocument=globalThis.document;
+ globalThis.document={documentElement:{lang:'pt-BR'}};
+ try{
+  const obs=[
+   {pcba_sn:'PCB-A',source_view:'2114',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_type:'MainBoard',defect_time:'2026-10-22 08:07:30',hist_seq:1},
+   {pcba_sn:'PCB-A',source_view:'2114',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_type:'Phone Disassembly',defect_time:'2026-10-23 09:07:30',hist_seq:2},
+   {pcba_sn:'PCB-A',source_view:'3028',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_type:'Not a 2114 analysis',defect_time:'2026-11-09 10:00:38'},
+  ];
+  const groups=[{pcba_sn:'PCB-A',role:'investigated',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',recurrence_pcba_count:3,observations:obs}];
+  const html=renderComponentComparisonTable(groups);
+  assert.match(html,/Análise 2114/);
+  assert.doesNotMatch(html,/Horário 2114 \/ 3028/);
+  assert.equal(html.split('data-reuse-source-row').length-1,3,'two 2114 passages and one 3028 passage stay separate');
+  assert.ok(html.includes('Hist Seq 1')&&html.includes('Hist Seq 2'));
+  assert.ok(html.includes('MainBoard')&&html.includes('Phone Disassembly'));
+  assert.ok(html.includes('data-reuse-3012-history'),'3012 keeps a separate timeline');
+  assert.match(html,/22\/10\/2026 08:07:30/);
+  assert.match(html,/09\/11\/2026 10:00:38/);
+  assert.ok(!compact2114Analysis([obs[2]]).includes('Not a 2114 analysis'));
+  assert.match(compact2114Analysis([{source_view:'2114',defect_type:'<img src=x onerror=alert(1)>'}]),/&lt;img/);
+ }finally{globalThis.document=oldDocument;}
+});
+
+test('reuse shows the real 3022 technician name only, keeping BRM ID in provenance',()=>{
+ const oldDocument=globalThis.document;
+ globalThis.document={documentElement:{lang:'pt-BR'}};
+ try{
+  const repairs=[{pcba_sn:'PCB-A',repair_user:'BRM00999',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception',defect_time:'2026-11-09 10:00:38',repair_time:'2026-11-09 11:00:38'}];
+  const events=[{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{station:'A6900',event_time:'2026-11-09 10:35:38',operator_id:'BRM00123',operator_name:'TECNICA MES EXEMPLO'}}}}];
+  const named=enrichReuseRepairTechnicians(repairs,events);
+  assert.equal(named[0].a6900_technician_name,'TECNICA MES EXEMPLO');
+  assert.equal(named[0].a6900_technician_id,'BRM00123','A6900 actor can differ from 3012 Repair User');
+  const cell=compact3012CandidateCells(named).technician;
+  assert.ok(cell.includes('TECNICA MES EXEMPLO'),'A6900 observation remains visible as a separately qualified actor');
+  assert.ok(cell.includes('BRM00999'),'3012 Repair User remains the repair technician ID when no name is proven');
+  assert.ok(cell.includes('não prova autoria do reparo')&&cell.includes('BRM00123'),'A6900 must not be mislabeled as repair technician');
+  assert.equal(repairs[0].repair_technician_name,undefined,'original 3012 source remains immutable');
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{...events[0],pcba_sn:'PCB-B'}])[0].a6900_technician_name,null,'identity from another board cannot prove that the old board was handled by this operator');
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{provenance:{adapter:{operator_evidence:{station:'A6900',operator_id:'BRM00123',operator_name:'UNSCOPED'}}}}])[0].a6900_technician_name,null);
+  assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-A',provenance:{adapter:{operator_evidence:{station:'A6900',event_time:'2026-11-09 10:42:38',operator_id:'BRM00124',operator_name:'OTHER PERSON'}}}}])[0].a6900_technician_name,null,'two people during one interval must remain ambiguous');
+  assert.equal(enrichReuseRepairTechnicians(repairs,[events[0],{pcba_sn:'PCB-B',provenance:{adapter:{operator_evidence:{station:'A6900',event_time:'2026-11-09 10:42:38',operator_id:'BRM00124',operator_name:'OTHER PERSON'}}}}])[0].a6900_technician_name,'TECNICA MES EXEMPLO','other board does not change this evidence');
+  const repairNamed=projectRepairTechnicianNames(repairs,[{pcba_sn:'PCB-A',operator_id:'BRM00999',operator_name:'TECNICO REPARO PROVADO',station:'A7600'}]);
+  assert.equal(repairNamed[0].repair_technician_name,'TECNICO REPARO PROVADO','same PCBA and exact 3012 Repair User ID proves the name outside A6900');
+  const rendered=compact3012CandidateCells(enrichReuseRepairTechnicians(repairNamed,events)).technician;
+  assert.ok(rendered.includes('TECNICO REPARO PROVADO'));
+  assert.ok(rendered.includes('TECNICA MES EXEMPLO'),'different A6900 analyst remains visible but does not override repair author');
+  assert.ok(rendered.indexOf('TECNICO REPARO PROVADO')<rendered.indexOf('TECNICA MES EXEMPLO'));
+  assert.equal(projectRepairTechnicianNames(repairs,[{pcba_sn:'PCB-B',operator_id:'BRM00999',operator_name:'WRONG BOARD'}])[0].repair_technician_name,null);
+  const unnamed=compact3012CandidateCells(enrichReuseRepairTechnicians(repairs,[])).technician;
+  assert.ok(unnamed.includes('ID do usuário do reparo 3012 · nome não comprovado'));
+  assert.ok(unnamed.includes('BRM00999'),'a 3012 repair-user ID is visible, never misreported as a name');
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{pcba_sn:'PCB-A',raw:{'Working Oper Code':'A6900','Tran Time':'2026-11-09 10:45:38','Tran User Id':'BRM00123','Tran User':'TECNICA MES EXEMPLO'}}])[0].a6900_technician_name,'TECNICA MES EXEMPLO','old SQLite raw 3022 A6900 event is sufficient without MES recapture');
+  assert.equal(enrichReuseRepairTechnicians(repairs,[{pcba_sn:'PCB-A',raw:{'Working Oper Code':'A6900','Tran Time':'2026-11-09 10:45:38','Tran User Id':'BRM00123','Other comment':'TECNICA MES EXEMPLO'}}])[0].a6900_technician_name,null,'names must come from an explicit name field');
+  const matching=matchCached3012Repairs([{pcba_sn:'PCB-A',defect_code:'GN14-KZ01',defect_desc:'SIM card recognition exception'}],repairs);
+  assert.equal(matching.length,1,'3012 exact candidate still resolves without altered matching contract');
+ }finally{globalThis.document=oldDocument;}
+});
+test('the separate PCBA comparison also removes duplicate 3028/2114 time and keeps 2114 analysis',()=>{
+ const prior=globalThis.document;globalThis.document={documentElement:{lang:'pt-BR'}};
+ try{
+  const html=renderBoardComparisonTable({sn:'PCB-A',events:[{pcba_sn:'PCB-A',defect_code:'GN-1',defect_time:'2026-11-09 08:00:00'}],prior_events:[{pcba_sn:'PCB-A',defect_code:'GN-1',defect_type:'MainBoard',defect_time:'2026-11-01 08:00:00'}]});
+  assert.doesNotMatch(html,/Horário 3028 \/ 2114/);
+  assert.match(html,/Análise 2114/);
+  assert.match(html,/>MainBoard<\/span>/);
+ }finally{globalThis.document=prior;}
+});
+
+test('one PCBA, two historical 2114 visits and two 3012 repair users do not collapse into one value',()=>{
+ const prior=globalThis.document;globalThis.document={documentElement:{lang:'pt-BR'}};
+ try{
+  const failures=[
+   {pcba_sn:'PCB-1',source_view:'2114',defect_code:'D1',defect_type:'Phone Disassembly',hist_seq:1,defect_time:'2026-08-01 08:00:00'},
+   {pcba_sn:'PCB-1',source_view:'2114',defect_code:'D1',defect_type:'MainBoard',hist_seq:2,defect_time:'2026-11-11 08:00:00'},
+   {pcba_sn:'PCB-1',source_view:'3028',defect_code:'D1',defect_time:'2026-11-11 08:00:00'}
+  ];
+  const grouped=consolidateComponentHistory([{pcba_sn:'PCB-1',role:'previous',failures}]);
+  assert.equal(grouped.length,3);
+  const components=renderComponentComparisonTable(grouped);
+  assert.equal(components.split('data-reuse-source-row').length-1,3);
+  assert.ok(components.includes('Hist Seq 1')&&components.includes('Hist Seq 2'));
+  assert.ok(!components.includes('Técnico AT · A6900*'));
+  const board=renderBoardComparisonTable({sn:'PCB-1',events:[failures[2]],history_2114:failures.slice(0,2)});
+  assert.equal(board.split('data-board-failure-row').length-1,3);
+  assert.ok(board.includes('data-reuse-3012-history'));
+  const cells=compact3012CandidateCells([
+   {defect_time:'2026-08-01 08:00:00',repair_comment:'Primeiro reparo',repair_user:'BRM0001'},
+   {defect_time:'2026-11-11 08:00:00',repair_comment:'Segundo reparo',repair_user:'BRM0002'}
+  ]);
+  assert.ok(cells.comment.includes('Primeiro reparo')&&cells.comment.includes('Segundo reparo'));
+  assert.ok(cells.technician.includes('BRM0001')&&cells.technician.includes('BRM0002'));
+  assert.ok(!cells.comment.includes('title=')&&!cells.technician.includes('+1'));
+ }finally{globalThis.document=prior;}
+});
+
+test('regression: 3074 known self-cycles remain visible even if the 3028 use-at-defect is unknown',()=>{
+ const s=fixture();s.insights.drilldowns.pcba_analysis=[{
+  PCBA:'P1','Defect Code':'D1','Defect Time':event.defect_time,
+  '_pcba_use_index':0,'Usos conhecidos da PCBA':7,
+  'Falhas registradas 2114':3
+ }];
+ const data=buildReuseCohorts(s);
+ assert.equal(data.pcbas.counts.observed,1);
+ assert.equal(data.pcbas.counts.known_mountings,1);
+ assert.equal(data.pcbas.counts.known_reused_mountings,1);
+ assert.equal(data.pcbas.rows[0].known_mounting_cycles,7);
+ assert.equal(data.pcbas.counts.first_use,0);
+ assert.equal(data.pcbas.counts.second_use,0);
+ assert.equal(data.pcbas.counts.unknown_use,1,
+  '7 known physical cycles DO NOT prove the ordinal on the day of the defect');
+ assert.equal(data.pcbas.rows[0].use_basis,'KNOWN_3074_CYCLES_DEFECT_INTERVAL_UNPROVEN');
+});
+test('known 3074 count of one is not silently relabeled first use at the failure',()=>{
+ const s=fixture();s.insights.drilldowns.pcba_analysis=[{
+  PCBA:'P1','Defect Code':'D1','Defect Time':event.defect_time,
+  '_pcba_use_index':0,'Usos conhecidos da PCBA':1}];
+ const data=buildReuseCohorts(s);
+ assert.equal(data.pcbas.counts.known_mountings,1);
+ assert.equal(data.pcbas.counts.known_reused_mountings,0);
+ assert.equal(data.pcbas.counts.first_use,0);
+ assert.equal(data.pcbas.counts.unknown_use,1);
+});
+test('a 2114 fault or conflicting physical cycle counts never manufacture 3074 mounting use',()=>{
+ const s=fixture();s.insights.drilldowns.pcba_analysis=[
+  {PCBA:'P1','Defect Code':'D1','Defect Time':event.defect_time,
+   '_pcba_use_index':0,'Usos conhecidos da PCBA':7},
+  {PCBA:'P1','Defect Code':'D1','Defect Time':event.defect_time,
+   '_pcba_use_index':0,'Usos conhecidos da PCBA':4}];
+ const m=buildReuseCohorts(s);
+ assert.equal(m.pcbas.rows[0].known_cycle_conflict,true);
+ assert.equal(m.pcbas.rows[0].known_mounting_cycles,null);
+ assert.equal(m.pcbas.counts.known_mountings,0);
+ assert.equal(m.pcbas.counts.unknown_use,1);
+ const t=fixture();t.insights.drilldowns.pcba_analysis=[];
+ t.pcba_history.records.push({pcba_sn:'P1','Usos conhecidos da PCBA':7,
+  defect_code:'D1',hist_seq:5});
+ const clean=buildReuseCohorts(t);
+ assert.equal(clean.pcbas.counts.known_mountings,0,
+  '2114 may have many failures, but is not proof of seven mounting cycles');
+});
+
+test('material SN with known 3074 physical reuse stays visible even if use-at-defect is unproven',()=>{
+ const s=fixture(),row=s.insights.drilldowns.material_analysis[0];
+ delete row['Uso material na falha'];
+ row['Usos conhecidos material']=3;
+ const m=buildReuseCohorts(s);
+ assert.equal(m.components.counts.observed,1);
+ assert.equal(m.components.counts.known_mountings,1);
+ assert.equal(m.components.counts.known_reused_mountings,1);
+ assert.equal(m.components.rows[0].known_mounting_cycles,3);
+ assert.equal(m.components.counts.reused,0);
+ assert.equal(m.components.counts.unknown_use,1);
+});
+test('material physical reuse cannot be inferred from 2114 failure count or from a conflicting summary',()=>{
+ const s=fixture();
+ s.insights.drilldowns.material_analysis=[{...s.insights.drilldowns.material_analysis[0],
+  'Uso material na falha':null,'Usos conhecidos material':3},
+  {...s.insights.drilldowns.material_analysis[0],
+  'Uso material na falha':null,'Usos conhecidos material':2}];
+ const model=buildReuseCohorts(s);
+ assert.equal(model.components.rows[0].known_cycle_conflict,true);
+ assert.equal(model.components.counts.known_reused_mountings,0);
+ assert.equal(model.components.counts.unknown_use,1);
 });

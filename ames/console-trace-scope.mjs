@@ -16,9 +16,13 @@ export function loadedFailures(store,lines){
   return [...groups.values()].sort((a,b)=>b.count-a.count||a.code.localeCompare(b.code));
 }
 
-function humanTraceError(raw){
+export function humanTraceError(raw){
   const text=String(raw||'').trim(),low=text.toLowerCase();
   if(!text)return null;
+  if(/3012_(?:QUERY_PERIOD_MISMATCH|CONTRACT_BLOCKED|DATE_RANGE_DRIFT_AFTER_VIEW|DATE_NOT_APPLIED|TIME_NOT_APPLIED|VIEW_NOT_EXECUTED)/i.test(text)){
+    return t('A 3012 interrompeu a consulta histórica por divergência entre a data solicitada e a requisição comprovada. Os resultados das outras fontes permanecem válidos; tente a recuperação após corrigir o contrato 3012.',
+      'The 3012 query was blocked because the requested period did not match the proven request. Other source results remain valid; resume once the 3012 contract has been corrected.');
+  }
   if(low.includes('2114')&&(low.includes('shift')||low.includes('turno')||low.includes('unconfirmed')||low.includes('não confirmado'))){
     return t('2114 aguardando confirmação de turno. A etapa não deve ser tratada como concluída enquanto o turno não estiver confirmado; as demais fontes continuam independentes quando houver evidência.','2114 is waiting for shift confirmation. The stage must not be treated as complete until the shift is confirmed; other sources remain independent when evidence is available.');
   }

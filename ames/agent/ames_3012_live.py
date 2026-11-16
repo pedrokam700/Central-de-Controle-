@@ -7,14 +7,19 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote_plus, urlsplit, urlunsplit
+from zoneinfo import ZoneInfo
 
 ROUTE_3012 = "UAWIP.form.VwDefectRepairView"
 HOME_SURFACE = "/asymes/home"
 OPC_SURFACE = "/asymes/opc"
 QUERY_CONTRACT = "3012-home-mapped-v2"
-SOURCE_3012 = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2"
-CHECKPOINT_CONTRACT = QUERY_CONTRACT
+# The mapped field contract remains V2; the proof level is newer. Only a
+# request that verifies the actual MES from/to dates can certify a zero-row
+# historical window. Previous V2 coverage/checkpoints stay on disk, but must
+# not suppress a retry of the 3012 date-range regression.
+SOURCE_3012 = "AWIP3012_HOME_DIRECT_EXTJS_MAPPED_V2_PERIOD_VERIFIED_20261105"
+CHECKPOINT_CONTRACT = QUERY_CONTRACT + "-period-verified-20261105"
 
 QUERY_3012_JS = r"""
 async (cfg) => {
@@ -74,6 +79,61 @@ async (cfg) => {
     const got=c?.getValue?.();
     return got instanceof Date&&got.getHours()===(hh||0)&&got.getMinutes()===(mm||0);
   };
+  // ExtJS datetime compounds may keep a separate backing value (`__Data`).
+  // Synchronize it using its EXISTING representation, even when it is numeric.
+  // Otherwise the visible controls show the newly selected period while the
+  // outgoing View request still sends a previous numeric date. An unknown
+  // backing representation is rejected, never blindly overwritten.
+  const syncBackingDate=(data,full,day,hour)=>{
+    if(!data||typeof data.setValue!=='function')return;
+    const previous=data.getValue?.();
+    if(previous instanceof Date){
+      data.setValue(full);
+      emit(data,'change',full,previous);
+      data.checkChange?.();
+      return;
+    }
+    const raw=clean(previous);
+    const padded=day.replace(/-/g,'')+hour.replace(':','');
+    let numeric='';
+    if(/^\d{10}$/.test(raw))numeric=String(Math.floor(full.getTime()/1000));
+    else if(/^\d{13}$/.test(raw))numeric=String(full.getTime());
+    else if(/^\d{16}$/.test(raw))numeric=String(full.getTime())+'000';
+    else if(/^\d{12}$/.test(raw))numeric=padded;
+    else if(/^\d{14}$/.test(raw))numeric=padded+'00';
+    if(numeric){
+      const replacement=typeof previous==='number'?Number(numeric):numeric;
+      // Microsecond Unix values exceed JS's safe integer range; preserve the
+      // exact digits as a string rather than rounding in Number(...).
+      data.setValue(raw.length===16?numeric:replacement);
+      emit(data,'change',data.getValue?.(),previous);
+      data.checkChange?.();
+      return;
+    }
+    if(!raw){
+      // In the live Ext.NET form the visible Date/Time pair may update while
+      // the hidden __Data field remains empty. An empty backing field is
+      // submitted as fromDate/toDate with no usable date; the previous mock
+      // always filled it, concealing this production-only regression.
+      const replacement=day+' '+hour+':00';
+      data.setValue(replacement);
+      emit(data,'change',replacement,previous);
+      data.checkChange?.();
+      return;
+    }
+    const match=raw.match(/^(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})[ T](\d{1,2}:\d{2})(:\d{2})?$/);
+    if(!match){
+      throw new Error(`3012_BACKING_DATE_UNKNOWN:${data.itemId||'__Data'}`);
+    }
+    const separator=raw.includes('T')?'T':' ';
+    const dayFormat=match[1].includes('/')?day.replace(/-/g,'/'):day;
+    // Keep backing seconds equal to parent.setValue(full), which has
+    // minute-precision input and therefore second=00.
+    const replacement=dayFormat+separator+hour+(match[3]?':00':'');
+    data.setValue(replacement);
+    emit(data,'change',replacement,previous);
+    data.checkChange?.();
+  };
   const applyDateTime=(root,dateValue,timeValue)=>{
     const parent=byItemId(root,{visibleOnly:true});
     const date=byItemId(root+'__Date',{visibleOnly:true});
@@ -86,6 +146,14 @@ async (cfg) => {
       parent.setValue(full); emit(parent,'change',full,parentOld); parent.checkChange?.();
     }
     const dateOld=date.getValue?.(); date.setValue(dateOnly); emit(date,'select',dateOnly); emit(date,'change',dateOnly,dateOld); date.checkChange?.(); emit(date,'blur');
+    try {
+      const input=date?.inputEl?.dom;
+      if(input){
+        input.value=clean(date.getRawValue?.())||dateValue;
+        input.dispatchEvent(new Event('input',{bubbles:true}));
+        input.dispatchEvent(new Event('change',{bubbles:true}));
+      }
+    } catch(e) {}
     const timeOld=time.getValue?.(); time.setValue(timeValue);
     if(!timeMatches(time,timeValue)&&typeof time.setRawValue==='function') time.setRawValue(timeValue);
     try {
@@ -96,6 +164,7 @@ async (cfg) => {
     if(typeof parent.setValue==='function'){
       const old=parent.getValue?.(); parent.setValue(full); emit(parent,'change',full,old); parent.checkChange?.(); emit(parent,'blur');
     }
+    syncBackingDate(data,full,dateValue,timeValue);
     if(!dateMatches(date,dateValue)) throw new Error(`3012_DATE_NOT_APPLIED:${root}`);
     if(!timeMatches(time,timeValue)) throw new Error(`3012_TIME_NOT_APPLIED:${root}`);
     const hiddenRaw=clean(data?.getValue?.()??data?.getRawValue?.());
@@ -115,6 +184,13 @@ async (cfg) => {
   applied.defectCode=setMappedField('cdvDefectCode',cfg.defectCode);
   applied.dateFrom=applyDateTime('dteFromDate',cfg.dateFrom,cfg.timeFrom);
   applied.dateTo=applyDateTime('dteToDate',cfg.dateTo,cfg.timeTo);
+  // Changing one ExtJS datetime compound can silently reset its sibling.
+  // Validate both after setting the end, not only while setting each field.
+  const mappedMatches=(root,day,hour)=>dateMatches(byItemId(root+'__Date',{visibleOnly:true}),day)
+    &&timeMatches(byItemId(root+'__Time',{visibleOnly:true}),hour);
+  if(!mappedMatches('dteFromDate',cfg.dateFrom,cfg.timeFrom)
+    ||!mappedMatches('dteToDate',cfg.dateTo,cfg.timeTo))
+    throw new Error('3012_DATE_RANGE_NOT_APPLIED: datas de início/fim divergentes na interface');
 
   const storeFields=store=>{
     const out=[];
@@ -149,6 +225,37 @@ async (cfg) => {
   const beforeParams=snapshotParams(initialStore);
   const beforeParamsText=JSON.stringify(beforeParams);
   const observed=new Map();
+  // The 3012 Home sometimes submits the form through Ext.Ajax with serialized
+  // `dteFromDate__Data` / `dteToDate__Data` values, while the grid store's
+  // extraParams contains only paging and an SN. Observe the actual outgoing
+  // request instead of requiring invented top-level `fromDate`/`toDate` keys.
+  // No XHR/fetch monkey patch and no request values are placed in errors.
+  const ajaxRequests=[];
+  const ajax=Ext.Ajax||null;
+  const ajaxBefore=(_connection,options)=>{
+    if(!options||typeof options!=='object')return;
+    // Some ExtJS installations submit the query as an HTML form instead of
+    // putting its filters in options.params/jsonData. Read only the exact SN
+    // and period field names from that form; never copy unrelated fields,
+    // credentials or session values into the query proof.
+    const allowed=new Set(['snimei','txtsnimei','sn','lotid','pcbasn','serialno',
+      'fromdate','datefrom','defecttimestart','dtefromdate','dtefromdatedata',
+      'todate','dateto','defecttimeend','dtetodate','dtetodatedata']);
+    const key=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    let form=options.form?.dom||options.form||null;
+    if(typeof form==='string')form=document.getElementById?.(form)||null;
+    const formFields=[];
+    try{
+      for(const field of Array.from(form?.elements||[]).slice(0,300)){
+        const name=String(field?.name||'');
+        if(allowed.has(key(name)))formFields.push({name,value:field.value});
+      }
+    }catch(e){}
+    ajaxRequests.push({params:options.params,jsonData:options.jsonData,
+      rawData:options.rawData,url:options.url,formFields});
+    if(ajaxRequests.length>12)ajaxRequests.shift();
+  };
+  try{ajax?.on?.('beforerequest',ajaxBefore);}catch(e){}
   const observe=store=>{
     if(observed.has(store)) return observed.get(store);
     const state={store,token:storeToken(store),before:0,loads:0,changes:0,success:null,requestParams:null};
@@ -160,7 +267,7 @@ async (cfg) => {
     try{store.on?.('datachanged',state.changeFn);}catch(e){}
     observed.set(store,state);return state;
   };
-  const cleanup=()=>{for(const st of observed.values()){try{st.store.un?.('beforeload',st.beforeFn);}catch(e){}try{st.store.un?.('load',st.loadFn);}catch(e){}try{st.store.un?.('datachanged',st.changeFn);}catch(e){}}};
+  const cleanup=()=>{for(const st of observed.values()){try{st.store.un?.('beforeload',st.beforeFn);}catch(e){}try{st.store.un?.('load',st.loadFn);}catch(e){}try{st.store.un?.('datachanged',st.changeFn);}catch(e){}}try{ajax?.un?.('beforerequest',ajaxBefore);}catch(e){}};
   observe(initialStore); initialStore.currentPage=1;
   const physicalElement=()=>{
     for(const root of [viewButton?.btnEl?.dom,viewButton?.el?.dom]){
@@ -193,14 +300,19 @@ async (cfg) => {
     if(rebound&&!reboundAt) reboundAt=Date.now();
     const params=snapshotParams(cur.store);
     const paramsChanged=JSON.stringify(params)!==beforeParamsText;
-    const started=[...observed.values()].some(x=>x.before||x.loads||x.changes)||rebound||paramsChanged;
+    // A rebound store or changed proxy extraParams alone is NOT a completed
+    // View request. These events previously promoted an inert button click to
+    // apparent progress and allowed the stale grid to masquerade as fresh.
+    const started=[...observed.values()].some(x=>x.before||x.loads||x.changes)||ajaxRequests.length>0;
     return {cur,st,token,rebound,params,paramsChanged,started,loading:cur.store?.isLoading?.()===true};
   };
   const viewAttempts=[];
   let viewAction=null;
   for(const mode of ['physical_dom_click','ext_click_event','handler_fallback']){
     try{trigger(mode);viewAttempts.push({mode,status:'invoked'});}catch(e){viewAttempts.push({mode,status:'unavailable',error:String(e?.message||e)});continue;}
-    const until=Date.now()+700;
+    // The first physical click is allowed to initiate a slow ExtJS request;
+    // falling through after 700ms could click View again while it was loading.
+    const until=Date.now()+(mode==='physical_dom_click'?3500:1500);
     while(Date.now()<until){const s=stateNow();if(s.started){viewAction=mode;break;}await sleep(50);}
     if(viewAction) break;
   }
@@ -212,14 +324,91 @@ async (cfg) => {
     if(s.st.success===false){cleanup();throw new Error('3012_STORE_LOAD_FAILED');}
     if(!s.loading&&s.st.loads>0&&s.st.success!==false){finalState=s;freshness='STORE_LOAD_CONFIRMED';break;}
     if(!s.loading&&s.st.changes>0){finalState=s;freshness='STORE_DATASET_EVENT';break;}
-    if(!s.loading&&s.rebound&&reboundAt&&Date.now()-reboundAt>=350){finalState=s;freshness='STORE_REBOUND_AFTER_VIEW';break;}
+    // No rebound-only success: require an observed store completion/event.
     await sleep(70);
   }
   if(!finalState){cleanup();throw new Error('3012_RESPONSE_NOT_CONFIRMED: View executou, mas nenhuma resposta nova da grid foi comprovada.');}
+  if(!mappedMatches('dteFromDate',cfg.dateFrom,cfg.timeFrom)
+    ||!mappedMatches('dteToDate',cfg.dateTo,cfg.timeTo)){
+    cleanup();throw new Error('3012_DATE_RANGE_DRIFT_AFTER_VIEW: a consulta alterou os campos de data');
+  }
   const store=finalState.cur.store;
   const params=snapshotParams(store);
   const finalToken=storeToken(store);
   const proofState=observed.get(store);
+  // A visible field match alone is insufficient. The MES query must receive
+  // two distinct, correct bounds in its actual ExtJS store request. This
+  // refuses the silent Jan-23-to-Jan-23 empty range seen at the workstation.
+  const requestParams=proofState?.requestParams||[...observed.values()].map(x=>x.requestParams).find(Boolean)||{};
+  const normKey=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const findParameter=(root,aliases,depth=0)=>{
+    if(depth>7||root==null)return null;
+    const accepted=new Set(aliases.map(normKey));
+    if(typeof root==='string'){
+      const raw=root.trim();
+      if((raw[0]==='{'||raw[0]==='[')&&raw.length<50000){
+        try{return findParameter(JSON.parse(raw),aliases,depth+1);}catch(e){}
+      }
+      if(raw.includes('=')){
+        const pairs={};
+        for(const item of raw.replace(/^\?/,'').split('&').slice(0,120)){
+          const pos=item.indexOf('=');if(pos<0)continue;
+          try{pairs[decodeURIComponent(item.slice(0,pos).replace(/\+/g,' '))]=decodeURIComponent(item.slice(pos+1).replace(/\+/g,' '));}catch(e){}
+        }
+        return findParameter(pairs,aliases,depth+1);
+      }
+      return null;
+    }
+    if(Array.isArray(root)){
+      for(const item of root){const value=findParameter(item,aliases,depth+1);if(value!=null)return value;}
+      return null;
+    }
+    if(typeof root!=='object')return null;
+    if(accepted.has(normKey(root.name||root.field||root.itemId)) && root.value!=null)return root.value;
+    for(const [key,value] of Object.entries(root)){
+      if(accepted.has(normKey(key))&&value!=null&&value!=='')return value;
+    }
+    for(const value of Object.values(root)){
+      if(typeof value==='object'||typeof value==='string'){
+        const found=findParameter(value,aliases,depth+1);if(found!=null)return found;
+      }
+    }
+    return null;
+  };
+  const fromAliases=['fromDate','dateFrom','defectTimeStart','dteFromDate','dteFromDate__Data'];
+  const toAliases=['toDate','dateTo','defectTimeEnd','dteToDate','dteToDate__Data'];
+  const snAliases=['snImei','txtSnImei','sn','lotId','pcbaSn','serialNo'];
+  const requestSources=[...ajaxRequests.map(x=>({name:'ajax_beforerequest',data:x})).reverse(),
+    {name:'store_beforeload',data:requestParams},{name:'proxy',data:params}];
+  const stamp=value=>{
+    const raw=clean(value);
+    const iso=raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})[ T](\d{1,2}):(\d{2})/);
+    const local=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T](\d{1,2}):(\d{2})/);
+    const parts=iso?[+iso[1],+iso[2],+iso[3],+iso[4],+iso[5]]:
+      local?[+local[3],+local[2],+local[1],+local[4],+local[5]]:null;
+    if(!parts)return '';
+    const [year,month,day,hour,minute]=parts;
+    const valid=new Date(Date.UTC(year,month-1,day,hour,minute));
+    if(valid.getUTCFullYear()!==year||valid.getUTCMonth()!==month-1||valid.getUTCDate()!==day||
+      valid.getUTCHours()!==hour||valid.getUTCMinutes()!==minute)return '';
+    return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+  };
+  const expectedFrom=`${cfg.dateFrom} ${cfg.timeFrom}`,expectedTo=`${cfg.dateTo} ${cfg.timeTo}`;
+  let actualFrom='',actualTo='',periodSource='not_observed';
+  for(const source of requestSources){
+    // A background ExtJS request may share the same date fields. Never
+    // certify it as the selected board's request without an exact SN match.
+    // Store and proxy metadata can also belong to another query or keep
+    // stale dates. Require the exact SN in every source of period proof.
+    if(clean(findParameter(source.data,snAliases))!==clean(cfg.sn))continue;
+    const begin=stamp(findParameter(source.data,fromAliases)),end=stamp(findParameter(source.data,toAliases));
+    if(begin&&end){actualFrom=begin;actualTo=end;periodSource=source.name;break;}
+  }
+  const periodVerified=actualFrom===expectedFrom&&actualTo===expectedTo;
+  if(!periodVerified&&!cfg.allowWirePeriodProof){
+    // Dates only: no SN, MES response rows, cookies, tokens or request headers.
+    cleanup();throw new Error(`3012_QUERY_PERIOD_MISMATCH: esperado ${expectedFrom} -> ${expectedTo}; observado ${actualFrom||'AUSENTE'} -> ${actualTo||'AUSENTE'} (${periodSource}); consulta recusada`);
+  }
   const records=[];
   try{for(const r of store.getRange?.()||[])records.push(dataOf(r));}catch(e){try{store.each?.(r=>records.push(dataOf(r)));}catch(_) {}}
   const total=Number(store.getTotalCount?.()??records.length??0);
@@ -235,7 +424,8 @@ async (cfg) => {
   }
   for(let p=2;p<=pages;p++){const rs=await loadPage(p);records.push(...rs);pageResults.push({page:p,count:rs.length});}
   if(records.length!==total){cleanup();throw new Error('3012 incompleta: '+records.length+' / '+total);}
-  const queryProof={contract:CONTRACT,viewAction,viewAttempts,freshness,initialStoreToken:initialToken,finalStoreToken:finalToken,storeRebound:finalToken!==initialToken,requestParams:proofState?.requestParams||null,proxyParams:params};
+  const queryProof={contract:CONTRACT,viewAction,viewAttempts,freshness,initialStoreToken:initialToken,finalStoreToken:finalToken,storeRebound:finalToken!==initialToken,requestParams,proxyParams:params,periodVerified,periodSource,
+    requestedWindow:{from:expectedFrom,to:expectedTo},actualWindow:{from:actualFrom,to:actualTo}};
   cleanup();
   return {records,total,pageSize,pages,pageResults,applied,proxyParams:params,beforeParams,storeFields:storeFields(store),gridItemId:finalState.cur.grid?.itemId||null,viewAction,queryProof};
 }
@@ -244,6 +434,451 @@ async (cfg) => {
 
 def _clean(value: Any) -> str:
     return "" if value is None else str(value).strip()
+
+
+_WIRE_3012_ALIASES = {
+    'sn': ('snImei', 'txtSnImei', 'sn', 'lotId', 'pcbaSn', 'serialNo'),
+    'from': ('fromDate', 'dateFrom', 'defectTimeStart', 'dteFromDate', 'dteFromDate__Data'),
+    'to': ('toDate', 'dateTo', 'defectTimeEnd', 'dteToDate', 'dteToDate__Data'),
+    # Ext.NET compound fields can send date and time as two distinct inputs;
+    # the previous probe required a single datetime and therefore missed both.
+    'from_day': ('dteFromDate__Date', 'defectTimeStartDate'),
+    'from_time': ('dteFromDate__Time', 'defectTimeStartTime'),
+    'to_day': ('dteToDate__Date', 'defectTimeEndDate'),
+    'to_time': ('dteToDate__Time', 'defectTimeEndTime'),
+}
+
+
+def _wire_key(value: Any) -> str:
+    return re.sub(r'[^a-z0-9]', '', str(value or '').lower())
+
+
+def _wire_find(root: Any, names: Iterable[str], depth: int = 0) -> Any:
+    """Read only selected form values, including nested Ext.NET JSON/URL forms.
+
+    This helper may inspect the request payload in RAM. No raw body, URL,
+    cookies, unrelated fields, response, or SN is ever persisted/logged.
+    """
+    if root is None or depth > 8:
+        return None
+    aliases = {_wire_key(name) for name in names}
+    if isinstance(root, str):
+        raw = root.strip()
+        if len(raw) > 250000:
+            return None
+        if raw[:3].lower() in ('%7b', '%5b'):
+            return _wire_find(unquote_plus(raw), names, depth + 1)
+        if raw.startswith(('{', '[')):
+            try:
+                return _wire_find(json.loads(raw), names, depth + 1)
+            except (ValueError, TypeError):
+                return None
+        if '=' in raw:
+            try:
+                return _wire_find(dict(parse_qsl(raw.lstrip('?'), keep_blank_values=True,
+                                                max_num_fields=500)), names, depth + 1)
+            except (ValueError, TypeError):
+                return None
+        return None
+    if isinstance(root, (list, tuple)):
+        for item in root:
+            found = _wire_find(item, names, depth + 1)
+            if found is not None:
+                return found
+        return None
+    if not isinstance(root, dict):
+        return None
+    for name in ('name', 'field', 'itemId'):
+        if _wire_key(root.get(name)) in aliases and root.get('value') not in (None, ''):
+            return root['value']
+    for key, value in root.items():
+        if _wire_key(key) in aliases and value not in (None, ''):
+            return value
+    for value in root.values():
+        if isinstance(value, (str, dict, list, tuple)):
+            found = _wire_find(value, names, depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
+def _wire_stamp(value: Any, *, end_bound: bool = False) -> str:
+    raw = _clean(value)
+    def valid_seconds(instant: datetime) -> bool:
+        # A-MES date-time controls display minutes. The inclusive upper
+        # boundary may be submitted at :59 seconds; the start must be :00.
+        # All other seconds/fractions are a different, unverified query.
+        return instant.microsecond == 0 and instant.second in ((0, 59) if end_bound else (0,))
+    # MES integrations can serialize a local calendar instant as a compact
+    # number instead of a Unix timestamp. Unlike epoch milliseconds, these
+    # values have twelve/fourteen digits and MUST be checked as a complete
+    # calendar value. A malformed value can never certify coverage.
+    if re.fullmatch(r'\d{12}(?:\d{2})?', raw):
+        try:
+            instant = datetime.strptime(raw, '%Y%m%d%H%M%S' if len(raw) == 14
+                                        else '%Y%m%d%H%M')
+            if not (2000 <= instant.year <= 2100 and valid_seconds(instant)):
+                return ''
+            return instant.strftime('%Y-%m-%d %H:%M')
+        except ValueError:
+            return ''
+    # The physical 3012 View serializes its Ext.NET date values as numeric
+    # Unix timestamps. Parse only explicit seconds/milliseconds/microseconds,
+    # in the production MES timezone. Do not use the executor machine's local
+    # timezone or silently round a fractional minute into a coverage proof.
+    if re.fullmatch(r'-?\d{10}|-?\d{13}|-?\d{16}', raw):
+        try:
+            unit = {10: 1, 13: 1_000, 16: 1_000_000}[len(raw.lstrip('-'))]
+            epoch = int(raw)
+            seconds, subsecond = divmod(epoch, unit)
+            stamp = (datetime.fromtimestamp(seconds, tz=ZoneInfo('America/Sao_Paulo'))
+                     + timedelta(microseconds=subsecond * (1_000_000 // unit)))
+            if not (2000 <= stamp.year <= 2100 and valid_seconds(stamp)):
+                return ''
+            return stamp.strftime('%Y-%m-%d %H:%M')
+        except (ValueError, OverflowError, OSError, KeyError):
+            return ''
+    # A date prefix is not period proof. A trailing timezone, suffix or
+    # malformed timestamp needs its own explicit interpretation, never a
+    # silent prefix match against the requested local MES minute.
+    iso = re.fullmatch(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?', raw)
+    local = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{4})[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?', raw)
+    parts = (tuple(int(iso[i]) for i in range(1, 6)) if iso else
+             (int(local[3]), int(local[2]), int(local[1]), int(local[4]), int(local[5]))
+             if local else None)
+    if not parts:
+        return ''
+    try:
+        match = iso or local
+        secs = int(match[6] or 0)
+        micros = int((match[7] or '').ljust(6, '0') or '0')
+        instant = datetime(*parts, secs, micros)
+        return instant.strftime('%Y-%m-%d %H:%M') if valid_seconds(instant) else ''
+    except ValueError:
+        return ''
+
+
+def _wire_values(root: Any, names: Iterable[str], depth: int = 0) -> List[Any]:
+    """Return *all* matching date fields, including blanks and duplicates.
+
+    A single `_wire_find` collapses duplicate URL-encoded keys and skips empty
+    fields. Both behaviors made very different real MES failures look identical
+    and could prefer a stale URL value over the actual POST body. Values remain
+    in memory and are never returned from diagnostics or written to disk.
+    """
+    if root is None or depth > 8:
+        return []
+    aliases = {_wire_key(name) for name in names}
+    if isinstance(root, str):
+        raw = root.strip()
+        if len(raw) > 250000:
+            return []
+        if raw[:3].lower() in ('%7b', '%5b'):
+            return _wire_values(unquote_plus(raw), names, depth + 1)
+        if raw.startswith(('{', '[')):
+            try:
+                return _wire_values(json.loads(raw), names, depth + 1)
+            except (ValueError, TypeError):
+                return []
+        if '=' in raw:
+            try:
+                pairs = parse_qsl(raw.lstrip('?'), keep_blank_values=True, max_num_fields=500)
+            except (ValueError, TypeError):
+                return []
+            return [value for key, value in pairs if _wire_key(key) in aliases] + [
+                candidate for key, value in pairs if _wire_key(key) not in aliases
+                for candidate in _wire_values(value, names, depth + 1)]
+        return []
+    if isinstance(root, (list, tuple)):
+        values = []
+        for item in root[:500]:
+            values.extend(_wire_values(item, names, depth + 1))
+        return values
+    if not isinstance(root, dict):
+        return []
+    values = []
+    if any(_wire_key(root.get(n)) in aliases for n in ('name', 'field', 'itemId')) and 'value' in root:
+        values.append(root['value'])
+    for key, value in root.items():
+        if _wire_key(key) in aliases:
+            values.append(value)
+        elif isinstance(value, (str, dict, list, tuple)):
+            values.extend(_wire_values(value, names, depth + 1))
+    return values
+
+
+def _wire_value_shape(value: Any) -> str:
+    """Report only a fixed vocabulary, never a field value or credentials."""
+    if value is None:
+        return 'null'
+    if isinstance(value, bool):
+        return 'boolean'
+    if isinstance(value, (int, float)):
+        return 'number'
+    if isinstance(value, (dict, list, tuple)):
+        return 'object'
+    raw = _clean(value)
+    if not raw:
+        return 'empty'
+    if re.fullmatch(r'-?\d{10,16}', raw):
+        # Exposing only the number of digits lets factory evidence distinguish
+        # Unix epoch (10/13/16) from compact calendar (12/14) without leaking
+        # any timestamp or potentially sensitive request payload.
+        return f'numeric_{len(raw.lstrip("-"))}_digits'
+    if _wire_stamp(raw):
+        return 'datetime_recognized'
+    if re.fullmatch(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', raw):
+        return 'iso_day_only'
+    if re.fullmatch(r'\d{1,2}/\d{1,2}/\d{4}', raw):
+        return 'br_day_only'
+    if re.fullmatch(r'/?Date\(-?\d+(?:[+-]\d+)?\)/?', raw, flags=re.I):
+        return 'dotnet_date'
+    if re.match(r'^\d{4}-\d{2}-\d{2}T', raw) and (raw.endswith('Z') or re.search(r'[+-]\d{2}:?\d{2}$', raw)):
+        return 'iso_timezone'
+    if raw.startswith(('{', '[')):
+        return 'json_wrapped'
+    return 'other_text'
+
+
+def _wire_request_dates(root: Any) -> tuple[list[str], list[str], list[tuple[str, str]]]:
+    """Inspect one request source; never mix unrelated from/to candidates."""
+    from_values = _wire_values(root, _WIRE_3012_ALIASES['from'])[:12]
+    to_values = _wire_values(root, _WIRE_3012_ALIASES['to'])[:12]
+    from_days = _wire_values(root, _WIRE_3012_ALIASES['from_day'])[:4]
+    from_times = _wire_values(root, _WIRE_3012_ALIASES['from_time'])[:4]
+    to_days = _wire_values(root, _WIRE_3012_ALIASES['to_day'])[:4]
+    to_times = _wire_values(root, _WIRE_3012_ALIASES['to_time'])[:4]
+    starts, ends = [], []
+    for raw in from_values:
+        stamp = _wire_stamp(raw)
+        if not stamp:
+            for day in from_days or [raw]:
+                for hour in from_times:
+                    stamp = _wire_split_stamp(day, hour)
+                    if stamp:
+                        break
+                if stamp:
+                    break
+        if stamp:
+            starts.append(stamp)
+    for raw in to_values:
+        stamp = _wire_stamp(raw, end_bound=True)
+        if not stamp:
+            for day in to_days or [raw]:
+                for hour in to_times:
+                    stamp = _wire_split_stamp(day, hour, end_bound=True)
+                    if stamp:
+                        break
+                if stamp:
+                    break
+        if stamp:
+            ends.append(stamp)
+    # Split Ext.NET date/time fields may omit the combined `fromDate`/`toDate`.
+    if not from_values:
+        starts.extend(filter(None, (_wire_split_stamp(day, hour)
+            for day in from_days for hour in from_times)))
+    if not to_values:
+        ends.extend(filter(None, (_wire_split_stamp(day, hour, end_bound=True)
+            for day in to_days for hour in to_times)))
+    def shapes(combined, days, times):
+        if combined:
+            return sorted({_wire_value_shape(v) for v in combined})
+        if not days and not times:
+            return ['absent']
+        return sorted({f'day_{_wire_value_shape(v)}' for v in days} |
+                      {f'time_{"recognized" if re.fullmatch(r"\d{1,2}:\d{2}(?::\d{2})?", _clean(v)) else "unrecognized" if _clean(v) else "empty"}' for v in times})
+    return (shapes(from_values, from_days, from_times),
+            shapes(to_values, to_days, to_times),
+            [(start, end) for start in set(starts) for end in set(ends)])
+
+
+def _wire_split_stamp(day: Any, clock: Any, *, end_bound: bool = False) -> str:
+    """Combine only an explicit date field and its matching time field."""
+    date_raw, time_raw = _clean(day), _clean(clock)
+    iso = re.fullmatch(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', date_raw)
+    local = re.fullmatch(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_raw)
+    clock_match = re.fullmatch(r'(\d{1,2}):(\d{2})(?::(\d{2}))?', time_raw)
+    if not clock_match or not (iso or local):
+        return ''
+    parts = ((int(iso[1]),int(iso[2]),int(iso[3])) if iso else
+             (int(local[3]),int(local[2]),int(local[1])))
+    try:
+        seconds = int(clock_match[3] or 0)
+        if seconds not in ((0, 59) if end_bound else (0,)):
+            return ''
+        return datetime(*parts, int(clock_match[1]), int(clock_match[2]), seconds).strftime('%Y-%m-%d %H:%M')
+    except ValueError:
+        return ''
+
+
+def _wire_date_hints(root: Any, depth: int = 0) -> set[str]:
+    """Inspect field *names* only; never expose submitted values or headers.
+
+    Ext.NET may serialize date fields under its own names rather than the
+    mapped component IDs. This evidence distinguishes an unknown field name
+    from dates absent from the outgoing HTTP payload.
+    """
+    if root is None or depth > 8:
+        return set()
+    if isinstance(root, str):
+        raw = root.strip()
+        if len(raw) > 250000:
+            return set()
+        if raw[:3].lower() in ('%7b', '%5b'):
+            return _wire_date_hints(unquote_plus(raw), depth + 1)
+        if raw.startswith(('{', '[')):
+            try:
+                return _wire_date_hints(json.loads(raw), depth + 1)
+            except (ValueError, TypeError):
+                return set()
+        if '=' in raw:
+            try:
+                return _wire_date_hints(dict(parse_qsl(raw.lstrip('?'), keep_blank_values=True,
+                                                     max_num_fields=500)), depth + 1)
+            except (ValueError, TypeError):
+                return set()
+        return set()
+    if isinstance(root, (list, tuple)):
+        result = set()
+        for item in root[:500]:
+            result.update(_wire_date_hints(item, depth + 1))
+        return result
+    if not isinstance(root, dict):
+        return set()
+    result = set()
+    candidates = list(root.keys())
+    if root.get('name') is not None:
+        candidates.append(root.get('name'))
+    if root.get('field') is not None:
+        candidates.append(root.get('field'))
+    for name in candidates:
+        # These are normalized technical keys, never the raw field name.
+        key = _wire_key(name)[:48]
+        if (key and any(part in key for part in ('date', 'time', 'from', 'begin', 'start', 'end'))
+                and not any(part in key for part in ('password', 'token', 'secret', 'cookie', 'session', 'auth'))):
+            result.add(key)
+    for value in root.values():
+        if isinstance(value, (str, dict, list, tuple)):
+            result.update(_wire_date_hints(value, depth + 1))
+    return result
+
+
+def _wire_expected_day_in_payload(fields: list[Any], expected: str) -> bool:
+    """Diagnostic hint only; an unnamed date literal is never period proof."""
+    try:
+        day = datetime.strptime(expected[:10], '%Y-%m-%d')
+        patterns = (day.strftime('%Y-%m-%d'), day.strftime('%Y/%m/%d'),
+                    day.strftime('%d/%m/%Y'))
+        for field in fields:
+            raw = json.dumps(field, default=str, ensure_ascii=False) if not isinstance(field, str) else field
+            decoded = unquote_plus(raw[:250000])
+            if any(pattern in decoded for pattern in patterns):
+                return True
+    except (ValueError, TypeError):
+        pass
+    return False
+
+
+class Wire3012Probe:
+    """Passive Playwright HTTP proof of the exact submitted SN and period.
+
+    No route interception, request modification or broad network capture. The
+    only durable output is a handful of counters; request bodies are dropped
+    immediately after examining permitted fields in memory.
+    """
+
+    def __init__(self, host: str, sn: str, expected: Dict[str, str]):
+        self.host = str(host or '').lower()
+        self.sn = str(sn or '').strip()
+        self.expected = expected
+        self._requests = {}
+
+    def on_request(self, request):
+        try:
+            url = urlsplit(str(request.url))
+            if (url.hostname or '').lower() != self.host:
+                return
+            kind = str(request.resource_type or '').lower()
+            method = str(request.method or '').upper()
+            if kind not in ('xhr', 'fetch') and method != 'POST':
+                return
+            if len(self._requests) >= 50:
+                return
+            # Keep the original URL-encoded query to detect duplicate keys.
+            # Turning it into a dict silently discards competing from/to values.
+            query = url.query
+            body = request.post_data or ''
+            fields = [query, body]
+            sns = [_clean(value) for source in fields
+                   for value in _wire_values(source, _WIRE_3012_ALIASES['sn'])]
+            named_sns = {value for value in sns if value}
+            exact_sn = bool(self.sn and named_sns == {self.sn})
+            inspected = [('url', _wire_request_dates(query)),
+                         ('body', _wire_request_dates(body))]
+            valid_periods = set(pair for _, (_, _, pairs) in inspected for pair in pairs)
+            # Two competing submitted periods cannot certify which one the
+            # server applied. Nor can a complete URL period certify a POST
+            # carrying unrecognizable/empty dates. Retain only a safe bit.
+            incomplete_sources = [location for location, (left, right, pairs) in inspected
+                                  if (left != ['absent'] or right != ['absent']) and not pairs]
+            conflict = len(valid_periods) > 1 or bool(valid_periods and incomplete_sources)
+            exact_period = ((self.expected['from'], self.expected['to']) in valid_periods
+                            and not conflict)
+            date_shapes = [f'{location}:{field}={"+".join(shapes)}'
+                           for location, (from_shapes, to_shapes, _) in inspected
+                           for field, shapes in (('from', from_shapes), ('to', to_shapes))]
+            hints = set()
+            for field in fields:
+                hints.update(_wire_date_hints(field))
+            self._requests[request] = {
+                'exact_sn': exact_sn,
+                'date_pair': bool(valid_periods),
+                'exact_period': exact_period,
+                'ambiguous_period': conflict,
+                'date_shapes': date_shapes,
+                'date_field_hints': sorted(hints)[:12],
+                'from_text': _wire_expected_day_in_payload(fields, self.expected['from']),
+                'to_text': _wire_expected_day_in_payload(fields, self.expected['to']),
+                'finished': False,
+                'failed': False,
+                'response_ok': False,
+            }
+        except Exception:
+            # Diagnostic must never interfere with the live MES query.
+            return
+
+    def on_finished(self, request):
+        if request in self._requests:
+            self._requests[request]['finished'] = True
+
+    def on_failed(self, request):
+        if request in self._requests:
+            self._requests[request]['failed'] = True
+
+    def on_response(self, response):
+        request = response.request
+        if request in self._requests:
+            self._requests[request]['response_ok'] = 200 <= int(response.status) < 300
+
+    def confirmed(self) -> bool:
+        return any(row['exact_sn'] and row['date_pair'] and row['exact_period']
+                   and row['finished'] and row['response_ok'] and not row['failed']
+                   for row in self._requests.values())
+
+    def counters(self) -> Dict[str, Any]:
+        rows = list(self._requests.values())
+        exact_sn_rows = [r for r in rows if r['exact_sn']]
+        return {'http': len(rows),
+                'sn': sum(bool(r['exact_sn']) for r in rows),
+                'dates': sum(bool(r['date_pair']) for r in rows),
+                'period': sum(bool(r['exact_sn'] and r['date_pair'] and r['exact_period']) for r in rows),
+                'finished': sum(bool(r['finished']) for r in rows),
+                'http_ok': sum(bool(r['response_ok']) for r in rows),
+                'date_keys': sorted({key for r in exact_sn_rows for key in r['date_field_hints']})[:12],
+                'from_text': int(any(r['from_text'] for r in exact_sn_rows)),
+                'to_text': int(any(r['to_text'] for r in exact_sn_rows)),
+                'ambiguous': sum(bool(r['ambiguous_period']) for r in exact_sn_rows),
+                'date_shapes': sorted({shape for r in exact_sn_rows for shape in r['date_shapes']})[:8]}
 
 
 def _keymap(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -321,6 +956,29 @@ def _chunks(start: datetime, end: datetime, days: int) -> List[tuple[datetime, d
         chunk_end=min(end, cursor + timedelta(days=days) - timedelta(seconds=1))
         out.append((cursor,chunk_end));cursor=chunk_end + timedelta(seconds=1)
     return out
+
+
+def _verified_checkpoint(loaded: Dict[str, Any] | None) -> Dict[str, Any]:
+    """A prior 'done' without query proof must never skip an MES request."""
+    fresh = {"contract": CHECKPOINT_CONTRACT, "done": [], "rows": [], "chunks": []}
+    if not isinstance(loaded, dict) or loaded.get("contract") != CHECKPOINT_CONTRACT:
+        return fresh
+    done = set(loaded.get("done") or [])
+    if not done and (loaded.get("rows") or loaded.get("chunks")):
+        return fresh
+    verified = []
+    for item in loaded.get("chunks") or []:
+        if not isinstance(item, dict):
+            continue
+        proof = item.get("query_proof") or {}
+        if (proof.get("periodVerified") is True and proof.get("contract") == QUERY_CONTRACT
+                and proof.get("freshness") and proof.get("actualWindow") == proof.get("requestedWindow")
+                and proof.get("actualWindow") == {"from": item.get("from"), "to": item.get("to")}
+                and item.get("key") in done):
+            verified.append(item)
+    if len(verified) != len(done) or {item["key"] for item in verified} != done:
+        return fresh
+    return {**loaded, "done": sorted(done), "chunks": verified}
 
 
 def _url_matches_host(url: str, ames_host: str) -> bool:
@@ -412,19 +1070,17 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
     targets=[str(x).strip() for x in (sns or []) if str(x).strip()] or [""]
     chunks=_chunks(start,end,chunk_days)
     checkpoint_path=Path(checkpoint_path) if checkpoint_path else None
-    checkpoint={"contract":CHECKPOINT_CONTRACT,"done":[],"rows":[]}
+    checkpoint=_verified_checkpoint(None)
     if checkpoint_path and checkpoint_path.exists():
         try:
             loaded=json.loads(checkpoint_path.read_text(encoding="utf-8"))
-            # Pre-V2 checkpoints may contain false zero-row successes produced by
-            # the old fuzzy field/store resolver. Never let them suppress a real
-            # mapped V2 MES query.
-            if loaded.get("contract")==CHECKPOINT_CONTRACT:
-                checkpoint=loaded
+            checkpoint=_verified_checkpoint(loaded)
         except Exception:
-            checkpoint={"contract":CHECKPOINT_CONTRACT,"done":[],"rows":[]}
+            checkpoint=_verified_checkpoint(None)
+    # The old checkpoint is left untouched until a verified fresh query saves
+    # a replacement; neither false 'done' keys nor unproved rows are reused.
     done=set(checkpoint.get("done") or []);records=[dict(x) for x in checkpoint.get("rows") or []]
-    diagnostics=[]
+    diagnostics=[{key:value for key,value in item.items() if key!="key"} for item in checkpoint["chunks"]]
 
     with sync_playwright() as pw:
         browser=pw.chromium.connect_over_cdp(cdp_url);page=_select_page(browser,ames_host)
@@ -436,21 +1092,70 @@ def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None
                 if chunk_key in done:continue
                 cfg={"sn":sn,"line":line,"model":model,"defectCode":defect_code,"repairCode":repair_code,"defectType":defect_type,
                      "dateFrom":chunk_start.strftime("%Y-%m-%d"),"timeFrom":chunk_start.strftime("%H:%M"),
-                     "dateTo":chunk_end.strftime("%Y-%m-%d"),"timeTo":chunk_end.strftime("%H:%M")}
-                raw=page.evaluate(QUERY_3012_JS,cfg)
+                     "dateTo":chunk_end.strftime("%Y-%m-%d"),"timeTo":chunk_end.strftime("%H:%M"),
+                     "allowWirePeriodProof":True}
+                expected={"from":cfg["dateFrom"]+" "+cfg["timeFrom"],"to":cfg["dateTo"]+" "+cfg["timeTo"]}
+                # Ext.NET can send the View request outside the grid store or
+                # Ext.Ajax options. Read the actual Playwright HTTP request
+                # passively, without routing, patching XHR or storing its body.
+                wire=Wire3012Probe(ames_host,sn,expected)
+                handlers=(("request",wire.on_request),
+                          ("response",wire.on_response),
+                          ("requestfinished",wire.on_finished),
+                          ("requestfailed",wire.on_failed))
+                for event,handler in handlers:
+                    page.on(event,handler)
+                try:
+                    raw=page.evaluate(QUERY_3012_JS,cfg)
+                finally:
+                    for event,handler in handlers:
+                        try:
+                            page.remove_listener(event,handler)
+                        except AttributeError:
+                            try:
+                                page.off(event,handler)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
                 normalized=[normalize_3012_row(r) for r in (raw.get("records") or [])]
                 if sn and any(sn not in (r.get('pcba_sn'),r.get('imei')) for r in normalized):
                     raise RuntimeError('3012 retornou outra SN; filtros/grade nao confirmados')
-                records.extend(normalized);done.add(chunk_key)
                 proof=dict(raw.get("queryProof") or {})
-                if proof.get("contract")!=QUERY_CONTRACT or not proof.get("freshness"):
-                    raise RuntimeError("3012 respondeu sem prova do contrato mapeado V2")
-                diagnostics.append({"sn":sn,"from":cfg["dateFrom"]+" "+cfg["timeFrom"],"to":cfg["dateTo"]+" "+cfg["timeTo"],"rows":len(normalized),
+                if wire.confirmed() and proof.get('freshness') in (
+                        'STORE_LOAD_CONFIRMED','STORE_DATASET_EVENT'):
+                    proof.update(periodVerified=True,periodSource='playwright_http_finished',
+                                 actualWindow=expected,wire_counters=wire.counters())
+                else:
+                    # Ext.Ajax/store observations are useful diagnostics, not
+                    # the same as a completed outbound HTTP request with the
+                    # exact SN and period. Do not promote their provisional
+                    # `periodVerified` flag into trusted SQLite coverage.
+                    proof.update(periodVerified=False,periodSource='http_period_unconfirmed',
+                                 actualWindow={'from':'','to':''})
+                if (proof.get("contract")!=QUERY_CONTRACT or not proof.get("freshness")
+                        or proof.get("periodVerified") is not True
+                        or proof.get("actualWindow")!=expected or proof.get("requestedWindow")!=expected):
+                    counts=wire.counters()
+                    # Counts only: the diagnostic never includes request body,
+                    # URL, cookies, form values or credentials.
+                    date_keys=','.join(counts['date_keys'])[:76] or 'nenhum'
+                    shapes=';'.join(counts['date_shapes'])[:160] or 'nenhum'
+                    raise RuntimeError(
+                        f"3012_QUERY_PERIOD_MISMATCH: HTTP={counts['http']} SN={counts['sn']} "
+                        f"OK={counts['http_ok']} datas={counts['dates']} janela={counts['period']} "
+                        f"texto={counts['from_text']}/{counts['to_text']} ambig={counts['ambiguous']} "
+                        f"formatos=[{shapes}] chaves=[{date_keys}]; "
+                        f"esperado {expected['from']} -> {expected['to']}")
+                records.extend(normalized);done.add(chunk_key)
+                item={"key":chunk_key,"sn":sn,"from":expected["from"],"to":expected["to"],"rows":len(normalized),
                                     "total":raw.get("total"),"pages":raw.get("pages"),"fields":raw.get("storeFields"),"applied":raw.get("applied"),"surface":"home",
-                                    "view_action":raw.get("viewAction"),"query_proof":proof,"proxy_params":raw.get("proxyParams")})
+                                    "view_action":raw.get("viewAction"),"query_proof":proof,"proxy_params":raw.get("proxyParams")}
+                diagnostics.append({key:value for key,value in item.items() if key!="key"})
+                checkpoint.setdefault("chunks",[]).append(item)
                 if checkpoint_path:
                     checkpoint_path.parent.mkdir(parents=True,exist_ok=True)
-                    checkpoint_path.write_text(json.dumps({"contract":CHECKPOINT_CONTRACT,"done":sorted(done),"rows":records,"updated_at":datetime.now().isoformat(timespec="seconds")},ensure_ascii=False,indent=2,default=str),encoding="utf-8")
+                    checkpoint_path.write_text(json.dumps({"contract":CHECKPOINT_CONTRACT,"done":sorted(done),"rows":records,"chunks":checkpoint["chunks"],"updated_at":datetime.now().isoformat(timespec="seconds")},ensure_ascii=False,indent=2,default=str),encoding="utf-8")
 
     unique={}
     for row in records:unique[row["row_key"]]=row

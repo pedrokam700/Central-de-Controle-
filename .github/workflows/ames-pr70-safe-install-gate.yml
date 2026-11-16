@@ -1,0 +1,69 @@
+name: A-MES PR70 Safe Installer Gate
+
+on:
+  push:
+    branches:
+      - work/ames-3012-reuso-auditado-20261106
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-state-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify immutable SQLite state, backup and transfer
+        run: |
+          python scripts/ames-pr70-state-transfer.test.py
+          python scripts/agent-package-contract.test.py
+          node --test scripts/ames-pr70-safe-switch.test.mjs scripts/ames-pr69-complete-package.test.mjs scripts/ames-candidate-legacy-port-guard.test.mjs
+      - name: Build exact-HEAD full release and verify every file
+        run: python scripts/build-integrated-candidate.py "$RUNNER_TEMP/central-ames-pr70-safe-test.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: central-ames-pr70-qa-${{ github.sha }}
+          path: ${{ runner.temp }}/central-ames-pr70-safe-test.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-safe-switch-contract:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Parse switcher using Windows PowerShell 5.1 and PowerShell Core
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $file='tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1'
+          $tokens=$null; $errorsFound=$null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errorsFound)|Out-Null
+          if($errorsFound.Count){throw 'switcher_parser_error'}
+          $proof=@(& ./scripts/ames-pr69-switch-parser.windows.test.ps1)
+          if(-not ($proof -contains 'PR69 Windows switcher syntax and 6 classification cases: PASS')){throw 'pwsh_switcher_parser_failed'}
+          $native=@(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File './scripts/ames-pr69-switch-parser.windows.test.ps1')
+          if($LASTEXITCODE -ne 0 -or -not ($native -contains 'PR69 Windows switcher syntax and 6 classification cases: PASS')){throw 'winps51_switcher_parser_failed'}
+      - name: Verify offline state transfer and backup ACL using Windows fixture only
+        shell: pwsh
+        run: |
+          python scripts/ames-pr70-state-transfer.test.py
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          $proof=@(& ./scripts/issue57-private-backup-acl.windows.test.ps1)
+          if(-not ($proof -contains 'Issue57 private backup ACL: verified synthetic data and rejected broad ACE; no production touch')){throw 'private_backup_acl_not_verified'}
+          node --test scripts/ames-pr70-safe-switch.test.mjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}

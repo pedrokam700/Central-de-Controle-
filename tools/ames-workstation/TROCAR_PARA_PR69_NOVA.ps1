@@ -5,7 +5,9 @@ $NewRoot=[IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\')
 $ExpectedSha='__BUNDLE_SHA__'
 $RunKey='HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $RunName='CentralAMESOperatorAgent'
-$mutex=$null;$held=$false;$oldRun=$null;$stopped=$false;$started=$false
+$mutex=$null;$held=$false;$oldRun=$null;$oldRoot=$null
+$stopped=$false;$committed=$false;$failed=$false;$rollbackNeeded=$false
+$backupRoot=$null;$python=$null;$registrationChanged=$false
 
 function Fail([string]$message){throw $message}
 function EqualPath($a,$b){return ([string]$a).TrimEnd('\') -ieq ([string]$b).TrimEnd('\')}
@@ -95,6 +97,19 @@ function WriteRun($value){
   if($null -eq $value){Remove-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue}
   else {New-Item -Path $RunKey -Force|Out-Null;Set-ItemProperty -Path $RunKey -Name $RunName -Value $value -Type String}
 }
+function Invoke-StateTransfer([string]$operation){
+  $tool=Join-Path $NewRoot 'suporte\ames-workstation\SAFE_STATE_TRANSFER.py'
+  $argsList=@($tool,$operation,'--old-root',$oldRoot,'--new-root',$NewRoot)
+  if($operation -eq 'stage'){$argsList+=@('--backup-root',$backupRoot)}
+  $output=& $python @argsList
+  $code=$LASTEXITCODE
+  try{$result=($output|Out-String|ConvertFrom-Json -ErrorAction Stop)}catch{Fail 'Recibo da transferencia de estado invalido.'}
+  if($code -ne 0 -or $result.ok -ne $true){
+    $reason=if($result.reason){[string]$result.reason}else{'transferencia_nao_comprovada'}
+    Fail "Transferencia de estado bloqueada: $reason"
+  }
+  return $result
+}
 function StopKnown($known){
   $p=Get-CimInstance Win32_Process -Filter "ProcessId=$($known.pid)" -ErrorAction SilentlyContinue
   $now=Identify $p
@@ -109,7 +124,7 @@ function StopKnown($known){
 try {
   $manifest=Get-Content -LiteralPath (Join-Path $NewRoot 'CANDIDATE_MANIFEST.json') -Raw | ConvertFrom-Json
   if($manifest.sha -cne $ExpectedSha -or $manifest.development -or -not $manifest.standalone_clean){Fail 'SHA/estado do pacote PR69 diferente do esperado; troca bloqueada.'}
-  foreach($required in @('00_INICIAR_AQUI.bat','08_PREPARAR_REDE_AMES.bat','TROCAR_PARA_PR69_NOVA.ps1','START_LOCAL_CANDIDATE.ps1','network/ensure_ames_route.ps1','suporte\ames-workstation\KEEP_AGENT_RUNNING.ps1','ames-agent\agent_hardened_entry.py')){
+  foreach($required in @('00_INICIAR_AQUI.bat','01_INSTALAR_UMA_VEZ.bat','08_PREPARAR_REDE_AMES.bat','TROCAR_PARA_PR69_NOVA.ps1','START_LOCAL_CANDIDATE.ps1','network/ensure_ames_route.ps1','suporte\ames-workstation\KEEP_AGENT_RUNNING.ps1','suporte\ames-workstation\SAFE_STATE_TRANSFER.py','suporte\ames-workstation\issue57_update_preflight.py','ames-agent\agent_hardened_entry.py')){
     $file=Join-Path $NewRoot $required
     if(-not(Test-Path -LiteralPath $file -PathType Leaf)){Fail "Pacote incompleto: $required"}
     $manifestKey=$required.Replace('\','/')
@@ -118,10 +133,34 @@ try {
     $actual=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
     if($actual -ne ([string]$expected.Value).ToLowerInvariant()){Fail "Arquivo alterado: $required"}
   }
+  # Hash-check the ENTIRE release, including the frontend being tested,
+  # before any process/registry changes or temporary runtime preparation.
+  $prefix=$NewRoot+'\'
+  foreach($entry in @($manifest.files.PSObject.Properties)){
+    $relative=[string]$entry.Name
+    if(-not $relative -or $relative.StartsWith('/') -or $relative.Contains('\') -or
+       $relative.Contains(':') -or $relative -match '(^|/)\.\.?(/|$)'){
+      Fail 'Manifesto contem caminho inseguro; troca bloqueada.'
+    }
+    $file=[IO.Path]::GetFullPath((Join-Path $NewRoot ($relative.Replace('/','\'))))
+    if(-not $file.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase) -or
+       -not(Test-Path -LiteralPath $file -PathType Leaf)){
+      Fail 'Manifesto referencia arquivo ausente ou fora do pacote.'
+    }
+    $current=$file
+    while(-not(EqualPath $current $NewRoot)){
+      $info=Get-Item -LiteralPath $current -Force -ErrorAction Stop
+      if($info.Attributes -band [IO.FileAttributes]::ReparsePoint){Fail 'Pacote contem link ou junction; troca bloqueada.'}
+      $current=Split-Path $current -Parent
+    }
+    $actual=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+    if($actual -ne ([string]$entry.Value).ToLowerInvariant()){Fail "Hash do pacote divergente: $relative"}
+  }
   if(-not(Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)){Fail 'Get-NetTCPConnection indisponivel.'}
   Write-Host "Pacote PR69 confirmado: $ExpectedSha"
-  Write-Host 'Este procedimento preserva a pasta/banco/token antigo, mas interrompe o agente confirmado.'
-  Write-Host 'Somente execute com autorizacao local, backup e sem coletas/sincronizacoes pendentes.'
+  Write-Host 'A troca prepara dependencias ANTES de interromper o agente.'
+  Write-Host 'Depois de parar o agente, faz backup privado, ensaio de restauracao e transferencia verificada.'
+  Write-Host 'Somente execute sem coletas/sincronizacoes pendentes.'
 
   # Network checks happen before stopping the old agent; a failed Wi-Fi/UAC
   # must not cause production downtime.
@@ -176,6 +215,9 @@ try {
   if($roots.Count -eq 0){Fail 'Nenhum agente/guardian antigo identificado; para PC virgem, use 00_INICIAR_AQUI.bat.'}
   $oldRoot=$roots[0]
   if(EqualPath $oldRoot $NewRoot){Fail 'Nova versao ja esta ativa.'}
+  if(-not(Test-Path -LiteralPath (Join-Path $oldRoot 'suporte\ames-workstation\START_AGENT_CANONICAL.ps1') -PathType Leaf)){
+    Fail 'Instalacao antiga nao tem launcher canonico para rollback automatico; troca bloqueada.'
+  }
   $oldRun=RegistryRun
   if($oldRun){
     $runTokens=SplitArgv $oldRun
@@ -197,6 +239,9 @@ try {
   }
   $services=@(Get-CimInstance Win32_Service -ErrorAction Stop|Where-Object {$_.StartMode -ne 'Disabled' -and $_.PathName -match 'KEEP_AGENT_RUNNING|START_AGENT_CANONICAL|agent_hardened_entry'})
   if($services.Count){Fail 'Servico Windows relanca A-MES; troca bloqueada.'}
+  if(@($known|Where-Object {$_.kind -eq 'guardian'}).Count -and -not $oldRun){
+    Fail 'Guardian antigo ativo mas nao registrado no inicio automatico; comportamento de retorno nao comprovado.'
+  }
   if($listeners.Count){
     $tokenFile=Join-Path $oldRoot 'ames-agent\data\local_agent_token'
     if(-not(Test-Path -LiteralPath $tokenFile)){Fail 'Token antigo indisponivel para conferir coletas.'}
@@ -207,44 +252,102 @@ try {
     if($null -eq $jobs.jobs){Fail 'Agente antigo nao retornou lista de coletas valida.'}
     if(@($jobs.jobs|Where-Object {$_.status -in @('running','queued','pending','starting','in_progress')}).Count){Fail 'Ha coleta em andamento; troca bloqueada.'}
   }
+  # Running the normal installer before migration would create a fresh SQLite
+  # and block safe transfer. /prepare installs dependencies only, with NO data.
+  & (Join-Path $NewRoot '01_INSTALAR_UMA_VEZ.bat') /prepare
+  if($LASTEXITCODE -ne 0){Fail 'Dependencias da nova versao nao foram preparadas; agente antigo preservado.'}
+  $python=Join-Path $NewRoot '.venv\Scripts\python.exe'
+  if(-not(Test-Path -LiteralPath $python -PathType Leaf)){Fail 'Python da nova versao indisponivel.'}
+  $receipt=Invoke-StateTransfer 'preflight'
+  if(-not $receipt.candidate_pristine -or -not $receipt.old_runtime_present){Fail 'Preflight de estado nao comprovado.'}
+  $backupRoot=Join-Path (Split-Path $NewRoot -Parent) ('CENTRAL_AMES_BACKUP_'+$ExpectedSha.Substring(0,8)+'_'+(Get-Date -Format 'yyyyMMdd_HHmmss')+'_'+[guid]::NewGuid().ToString('N').Substring(0,8))
   # Ask only after validating the old agent, guardian and idle job queue.
   # A click on 01_TROCAR is the operator's intent; never demand a typed word.
   # PCs without an identified old agent exit above with the 00_INICIAR_AQUI path.
   try {
     $dialog=New-Object -ComObject WScript.Shell -ErrorAction Stop
-    $answer=$dialog.Popup('Agente antigo confirmado e sem coletas ativas. A troca interrompera somente esse agente. Continue apenas se o backup e a autorizacao local estiverem confirmados.',0,'Central/A-MES PR69 - troca supervisionada',0x34)
+    $answer=$dialog.Popup('Agente antigo identificado e nenhuma coleta ativa observada. Confirmou que nao ha sincronizacao pendente no navegador? A troca fara backup privado e restauracao ensaiada antes de iniciar a nova versao. Continuar?',0,'Central/A-MES - troca com preservacao de historico',0x34)
   } catch {
     Fail 'Confirmacao visual do Windows indisponivel; troca bloqueada sem desligar o agente antigo.'
   }
   if($answer -ne 6){Fail 'Operador escolheu nao prosseguir; agente antigo preservado.'}
-  if($oldRun){WriteRun $null}
+  if($oldRun){WriteRun $null;$registrationChanged=$true}
   foreach($process in @($known|Where-Object {$_.kind -eq 'guardian'})){StopKnown $process}
   foreach($process in @($known|Where-Object {$_.kind -eq 'agent'})){StopKnown $process}
   Start-Sleep -Seconds 2
   if((ListenerPids).Count){Fail 'Porta 8765 foi ocupada novamente.'}
+  # The old runtime is now quiesced under the transaction mutex. On error,
+  # original files are NEVER modified; candidate staging is left for audit.
+  $receipt=Invoke-StateTransfer 'stage'
+  if(-not $receipt.backup_verified -or -not $receipt.restore_rehearsed -or
+     -not $receipt.source_unchanged -or -not $receipt.staged_identity_verified){
+    Fail 'Backup, ensaio de restauracao ou identidade da transferencia nao comprovados.'
+  }
+  Write-Host '[OK] SQLite, configuracao, token e arquivos operacionais transferidos com backup ensaiado.'
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $NewRoot 'START_LOCAL_CANDIDATE.ps1')
   if($LASTEXITCODE -ne 0){Fail 'Novo launcher nao passou no preflight.'}
   $owners=ListenerPids
   if($owners.Count -ne 1){Fail 'Novo agente nao confirmou listener unico na porta 8765.'}
   $newProcess=Identify (Get-CimInstance Win32_Process -Filter "ProcessId=$($owners[0])" -ErrorAction SilentlyContinue)
   if(-not $newProcess -or $newProcess.kind -ne 'agent' -or -not(EqualPath $newProcess.root $NewRoot)){Fail 'PID do novo agente nao corresponde a pasta PR69.'}
-  $started=$true
   if($oldRun){
     $watcher=Join-Path $NewRoot 'suporte\ames-workstation\KEEP_AGENT_RUNNING.ps1'
     $value='powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$watcher+'" -Root "'+$NewRoot+'"'
     WriteRun $value
     Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',('"'+$watcher+'"'),'-Root',('"'+$NewRoot+'"'))
   }
+  $committed=$true
   Write-Host 'TROCA_PR69=SUCCESS' -ForegroundColor Green
-  Write-Host 'Pasta e dados da instalacao anterior preservados. Validacao fisica continua obrigatoria.'
+  Write-Host "Backup privado confirmado: $backupRoot"
+  Write-Host 'Pasta antiga preservada. Historico transferido; validacao fisica continua obrigatoria.'
 } catch {
+  $failed=$true
   Write-Host ('TROCA_PR69=BLOCKED: '+$_.Exception.Message) -ForegroundColor Red
-  if(-not $started -and $oldRun -and -not(RegistryRun)){
-    try{WriteRun $oldRun;Write-Host 'Inicio automatico anterior restaurado.'}catch{Write-Host 'ATENCAO: nao foi possivel restaurar inicio automatico anterior.'}
+  if(-not $committed -and $registrationChanged -and $oldRun){
+    try{WriteRun $oldRun;Write-Host 'Inicio automatico antigo restaurado.'}catch{Write-Host 'ATENCAO: falha ao restaurar registro de inicio automatico.'}
   }
-  if($stopped){Write-Host 'Agente antigo foi encerrado; reinicie manualmente apenas a pasta anterior confirmada para rollback.'}
-  exit 1
+  if(-not $committed -and $stopped){$rollbackNeeded=$true}
 } finally {
   if($held -and $mutex){$mutex.ReleaseMutex()}
   if($mutex){$mutex.Dispose()}
 }
+if($rollbackNeeded){
+  # Never kill unknown PIDs. Only reclaim the verified candidate root, then
+  # restart the preserved old installation AFTER releasing UpdateTransaction.
+  try {
+    $all=@(Get-CimInstance Win32_Process -ErrorAction Stop)
+    $newKnown=@($all|ForEach-Object {Identify $_}|Where-Object {$_ -and (EqualPath $_.root $NewRoot)})
+    $oldKnown=@($all|ForEach-Object {Identify $_}|Where-Object {$_ -and (EqualPath $_.root $oldRoot)})
+    $listeners=ListenerPids
+    foreach($pidOnPort in $listeners){
+      $candidate=@($newKnown|Where-Object {$_.pid -eq $pidOnPort -and $_.kind -eq 'agent'})
+      $original=@($oldKnown|Where-Object {$_.pid -eq $pidOnPort -and $_.kind -eq 'agent'})
+      if($candidate.Count -ne 1 -and $original.Count -ne 1){
+        Fail "Porta 8765 ocupada por PID nao comprovado no rollback: $pidOnPort"
+      }
+    }
+    foreach($item in @($newKnown|Where-Object {$_.kind -eq 'guardian'})){StopKnown $item}
+    foreach($item in @($newKnown|Where-Object {$_.kind -eq 'agent'})){StopKnown $item}
+    $remaining=ListenerPids
+    if($remaining.Count -gt 1){Fail 'Multiplos listeners na porta 8765; rollback automatico bloqueado.'}
+    if($remaining.Count -eq 0){
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $oldRoot 'suporte\ames-workstation\START_AGENT_CANONICAL.ps1') -Root $oldRoot
+      if($LASTEXITCODE -ne 0){Fail 'Inicializador antigo retornou erro.'}
+    }
+    $oldListener=ListenerPids
+    if($oldListener.Count -ne 1){Fail 'Listener da versao antiga nao confirmado.'}
+    $oldAgent=Identify (Get-CimInstance Win32_Process -Filter "ProcessId=$($oldListener[0])" -ErrorAction SilentlyContinue)
+    if(-not $oldAgent -or $oldAgent.kind -ne 'agent' -or -not(EqualPath $oldAgent.root $oldRoot)){
+      Fail 'Agente antigo nao comprovado apos reinicio.'
+    }
+    if($oldRun){
+      $oldGuardian=Join-Path $oldRoot 'suporte\ames-workstation\KEEP_AGENT_RUNNING.ps1'
+      Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',('"'+$oldGuardian+'"'),'-Root',('"'+$oldRoot+'"'))
+    }
+    Write-Host 'ROLLBACK_ANTIGO=SUCCESS; dados originais preservados.' -ForegroundColor Green
+  }catch{
+    Write-Host ('ROLLBACK_ANTIGO=MANUAL: '+$_.Exception.Message) -ForegroundColor Red
+    Write-Host 'Nao inicie outra pasta ate conferir porta 8765 e processos; preserve as duas instalacoes e o backup.'
+  }
+}
+if($failed){exit 1}

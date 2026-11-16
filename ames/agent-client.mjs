@@ -31,7 +31,8 @@ const boundedOffset=(value,max=100000)=>{const n=Number(value);return Number.isI
 
 // Transport belongs to the existing session; all operational data lives in store.
 export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedule=setTimeout, unschedule=clearTimeout, now=Date.now, agentToken=''}={}) {
-  let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false,refreshSettled=null,lastPartial=-1,lastRefresh=0,pendingSubmission=null;
+  let generation=0, controller=new AbortController(), timer, busy=false, refreshing=false,refreshSettled=null,lastPartial=-1,lastRefresh=0,lastLiveRefreshAttempt=0,pendingSubmission=null;
+  const LIVE_DATA_REFRESH_INTERVAL_MS=15000; // progress still polls every 850 ms
   const workstationToken=bootstrapAgentToken(agentToken);
   // Keep API requests same-origin when a user pastes the local Central URL into
   // another tab. Fetch Metadata proves same-origin even when Origin is omitted
@@ -42,7 +43,9 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
   const canOpenOfficial=()=>!!workstationToken&&globalThis.location?.protocol==='http:'&&['127.0.0.1','localhost'].includes(globalThis.location?.hostname)&&globalThis.location?.port==='8765';
   const canPairFromOfficial=()=>globalThis.location?.origin==='https://pedrokam700.github.io' && globalThis.location?.pathname.startsWith('/Central-de-Controle-/');
 
-  const publish=patch=>{store.updateAgent(patch);changed();};
+  // Distinguish a lightweight progress tick from a data/revision change.
+  // MES polling must not trigger Firestore capture or full dashboard redraw.
+  const publish=(patch,kind='data')=>{store.updateAgent(patch);changed(kind);};
   async function request(path,body,blob=false) {
     const token=generation;
     const headers={};
@@ -157,9 +160,10 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       // without copying MES evidence into the source-selection receipt.
       const trace_receipt=raw.kind==='deep_trace'&&collected&&Object.keys(collected).length
         ?{snapshot_ids:collected}:null;
-      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}});
+      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,created_at:raw.created_at,started_at:raw.started_at,finished_at:raw.finished_at,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}}, ['done','error','cancelled','skipped'].includes(raw.status)?'job-finished':'job-poll');
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
-      if(done||(partial!==lastPartial&&now()-lastRefresh>2200)){
+      if(done||(partial!==lastPartial&&now()-Math.max(lastRefresh,lastLiveRefreshAttempt)>=LIVE_DATA_REFRESH_INTERVAL_MS)){
+        lastLiveRefreshAttempt=now(); // retry budget even when a slow SQLite/HTTP read fails
         try{await refresh({afterJob:raw.status==='done'&&['analysis','deep_trace'].includes(raw.kind)});lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
       }
       // /v2/snapshots intentionally exposes TODAY only. A completed 3028
@@ -414,10 +418,16 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
           delete body.snapshot_targets[line].line_id;
         }
         if(value.trace_mode!==undefined){
-          if(!['full','process_only','reuse_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
+          if(!['full','process_only','reuse_only','history_only'].includes(value.trace_mode))throw Error('Modo de rastreabilidade inválido.');
           if(value.trace_mode==='process_only'&&store.agent().capabilities?.process_timeline!==true)throw Error('process_only exige coleta 3022 em lote. Conecte um agente 3022-R12+ ou aguarde a incorporação do coletor 3022 no agente canônico.');
           body.trace_mode=value.trace_mode;
+          // Historical 3012 is opt-in during Full/Reuso. The independent
+          // history_only mode always runs 3012 and never repeats other views.
+          body.include_3012=value.trace_mode==='history_only'||
+            (['full','reuse_only'].includes(value.trace_mode)&&value.include_3012===true);
         }
+        if(value.repair_partials===true)body.repair_partials=true;
+        if(value.force_new_run===true)body.force_new_run=true;
       }
       else if(type==='today'||type==='previous_day'){path='/runs';body={preset:type,lines:scope.lines,performance:scope.performance};}
       else if(type==='custom'){path='/runs';body={preset:'custom',mode:'custom',lines:scope.lines,performance:scope.performance,start_at:value.start_at,end_at:value.end_at,shift:value.shift||null};if(!body.start_at||!body.end_at||body.start_at>=body.end_at)throw Error('Informe período válido.');}
@@ -432,7 +442,8 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       pendingSubmission ||= {signature,id:crypto.randomUUID(),body};body={...pendingSubmission.body,request_id:pendingSubmission.id};
       if(type==='deep')publish({submitting:true,error:''});
       let job;try{job=await request(path,body);if(!job?.id)throw Error('O agente não retornou um job.');}finally{if(type==='deep')publish({submitting:false});}
-      pendingSubmission=null;publish({job:{id:job.id,kind:job.kind,status:job.status,stage:job.stage,message:job.message,scope:{trace_mode:value.trace_mode}},error:''});
+      pendingSubmission=null;publish({job:{id:job.id,kind:job.kind,status:job.status,stage:job.stage,message:job.message,
+        scope:{trace_mode:value.trace_mode,include_3012:type==='deep'?body.include_3012:undefined}},error:''});
       lastPartial=-1;unschedule(timer);const token=generation;timer=schedule(()=>poll(job.id,token),850);
     }),
     cancel:()=>action(async()=>{check();const job=store.agent().job;if(job)await request('/jobs/'+encodeURIComponent(job.id)+'/cancel',{});}),
@@ -467,7 +478,31 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const configPatch=name==='config'?publicConfig(result):name==='setup'?publicConfig(result?.config||result):undefined;
       publish({auxiliary:{name,result,line},resultSource:'auxiliary',...(configPatch?{config:configPatch}:{})});if(['repairs','import'].includes(name))await refresh();return result;
     }),
+    // Read-only local SQLite history: no A-MES automation, snapshot write or
+    // 3012 collection is started when the operator opens a reuse detail.
+    cachedRepairHistory:async({sn='',line='',start_at='',limit=5000}={})=>{
+      check();const exact=String(sn).trim(),start=String(start_at).trim();
+      if(exact.length>128||(line&&!LINE_IDS.includes(line))||
+         (start&&!/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/.test(start))||
+         (!exact&&!line&&!start))return [];
+      const params={limit:String(boundedLimit(limit,5000,5000))};
+      if(exact)params.sn=exact;
+      if(line)params.line=line;
+      if(start)params.start_at=start;
+      const data=await request('/3012/history?'+new URLSearchParams(params));
+      return Array.isArray(data?.rows)?data.rows:[];
+    },
+    // Recover 3022's explicit Tran User Id/Tran User pair from old SQLite
+    // raw_json via the already-existing read-only SN route. No MES navigation,
+    // new collection, or write to the sensitive 3012 cache is required.
+    cached3022Operators:async({sn='',limit=5000}={})=>{
+      check();const exact=String(sn).trim();
+      if(!exact||exact.length>128)return [];
+      const data=await request('/local/sn?'+new URLSearchParams({sn:exact,limit:String(boundedLimit(limit,5000,5000))}));
+      return Array.isArray(data?.process_events)?data.process_events.filter(row=>
+        String(row?.pcba_sn||'').trim()===exact):[];
+    },
     excel:()=>action(async()=>{check();const blob=await request('/export/excel/download?team=1',undefined,true);const header=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(header[0]!==80||header[1]!==75)throw new Error('Resposta Excel inválida.');return blob;}),
-    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;refreshSettled=null;lastPartial=-1;lastRefresh=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',connection_error:null,config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
+    clear(){generation++;unschedule(timer);controller.abort();controller=new AbortController();busy=false;refreshing=false;refreshSettled=null;lastPartial=-1;lastRefresh=0;lastLiveRefreshAttempt=0;pendingSubmission=null;store.setLocalConnected(false);store.updateAgent({status:'disconnected',connection_error:null,config:null,job:null,readiness:null,runtime:null,monitor:null,capabilities:null,auxiliary:null,resultSource:null,upload_path:null,agent_build:'',error:''});}
   });
 }

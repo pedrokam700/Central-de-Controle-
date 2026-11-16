@@ -1,4 +1,4 @@
-import {componentMatrixHtml} from './console-component-matrix.mjs';
+import {componentMatrixHtml,wireComponentMatrix} from './console-component-matrix.mjs';
 import {mountReuseCohorts} from './console-reuse-cohorts.mjs';
 import {mountReuseTable} from "./reuse-table-view.mjs";
 import { LINE_IDS } from './data/contract.mjs';
@@ -50,7 +50,7 @@ function reuseLineTabs(store,active){
   return `<div class="ames-reuse-line-tabs" role="tablist" aria-label="${t('Linhas do dashboard','Dashboard lines')}">${LINE_IDS.map((id,i)=>{const read=store.read(id),snapshot=read.snapshot,selected=id===active,cph=snapshot?.product_model||snapshot?.cph||'—',occ=snapshot?.occurrences?.length;return `<button type="button" role="tab" aria-selected="${selected}" class="${selected?'active':''}" data-reuse-line-tab="${esc(id)}"><span>${t('Linha','Line')} ${i+1}</span><b>${esc(id)}</b><small>${esc(cph)}${Number.isFinite(occ)?` · ${occ} ${t('ocorr.','occ.')}`:''}</small></button>`;}).join('')}</div>`;
 }
 
-export function createReuseConsoleView(root,store){
+export function createReuseConsoleView(root,store,client){
   let line=store.context?.().line_id||store.preferredLine?.()||LINE_IDS[0],selected='',last='';
   function render(){
     const shared=store.context?.().line_id;if(LINE_IDS.includes(shared)&&shared!==line){line=shared;selected='';last='';}
@@ -63,6 +63,18 @@ export function createReuseConsoleView(root,store){
       <details class="ames-reuse-coverage"><summary>${t('Cobertura desta leitura','Coverage of this read')}</summary><div class="ames-summary-grid ames-reuse-summary">${kv('Snapshot',snapshot?.snapshot_id||'—',read.source||t('sem fonte','no source'))}${kv(t('Grupos','Groups'),groupCount)}${kv(t('Indicadores','Indicators'),kpiCount)}${kv('Drill-downs',drillCount,t('itens exatos','exact items'))}${kv(t('Linha','Line'),line,t('isolada','isolated'))}${kv('CPH',snapshot?.product_model||snapshot?.cph||'—',t('sem aproximação','exact match only'))}</div></details></section>
       ${!insights?`<div class="ames-empty ames-empty-large"><span>▥</span><h3>${t('Reuso ainda não enriquecido nesta linha','Reuse has not been enriched for this line')}</h3><p>${t('Execute Rastreabilidade em modo completo ou reuse_only. Ausência de dados não significa ausência de reutilização.','Run full or reuse_only traceability. Missing data does not mean no reuse occurred.')}</p></div>`:orderedGroups.map(group=>{const pairs=groups[group];return `<section class="mes-context-panel ames-reuse-group" data-reuse-group="${esc(group)}">${sectionHead(groupLabel(group),t('Clique em um indicador para abrir somente os SNs/PCBAs que sustentam aquele número.','Click an indicator to open only the SNs/PCBAs that support that value.'))}<div class="ames-reuse-kpis">${(pairs||[]).map(([label,value])=>{const drill=INSIGHT_DRILL[label],available=Boolean(drill&&insights.drilldowns?.[drill]);return available?`<button type="button" class="stat ames-kpi-button${selected===drill?' active':''}" data-reuse-drill="${esc(drill)}"><span class="stat-label">${esc(label)}</span><strong class="stat-value">${esc(fmt(value))}</strong><span class="stat-note">${t('ver itens','view items')}</span></button>`:`<div class="stat ames-kpi-disabled"><span class="stat-label">${esc(label)}</span><strong class="stat-value">${esc(fmt(value))}</strong><span class="stat-note">${t('sem drill-down nesta leitura','no drill-down in this read')}</span></div>`}).join('')}</div></section>`;}).join('')}
       ${selected?`<section class="mes-context-panel ames-selected-evidence">${sectionHead(t('Itens exatos em evidência','Exact evidence items'),t(`${rows.length} registro(s) sustentam o indicador selecionado. A lista abaixo é exatamente a evidência que forma o número.`,`${rows.length} record(s) support the selected indicator. The list below is the exact evidence forming the value.`),`<button type="button" class="button secondary" data-reuse-clear>${t('Fechar evidência','Close evidence')}</button>`)}${rows.length?`<div class="ames-evidence-hero"><small>${t('Primeiro item do conjunto','First item in the set')}</small><b>${esc(reuseExactId(rows[0],selected)||t('Identificador não informado','Identifier not provided'))}</b><span>${esc(reuseMeta(rows[0],selected))}</span></div>`:''}${rowsTable(rows,reuseColumns(rows[0]||{},selected),{empty:t('O indicador existe, mas nenhum registro detalhado foi retornado nesta leitura.','The indicator exists, but no detailed records were returned in this read.'),highlight:(_,i)=>i===0})}</section>`:''}`;
+    // A failed classifier is not proof that this line was never collected.
+    // Report the real local status instead of asking for a blind MES rerun.
+    if(!insights&&snapshot?.insight_status){
+      const empty=root.querySelector('.ames-empty-large');
+      if(empty){
+        empty.querySelector('h3').textContent=t('Classificação de reuso indisponível nesta revisão','Reuse classification unavailable for this revision');
+        const status=snapshot.insight_status;
+        const safeCode=/^LOCAL_INSIGHT_BUILD_FAILED_[A-Z0-9_]{1,60}$/.test(status.reason||'')?status.reason:'';
+        empty.querySelector('p').textContent=(status.message||t('Verifique as evidências locais antes de repetir a coleta.','Inspect local evidence before recollecting.'))
+          +(safeCode?' Código de diagnóstico: '+safeCode:'');
+      }
+    }
     // Preserve all detailed source KPI values and drill-downs, but collapse
     // their duplicate visible matrices behind one optional audit panel.
     const sourceGroups=[...root.querySelectorAll('.ames-reuse-group')];
@@ -73,8 +85,8 @@ export function createReuseConsoleView(root,store){
       sourceGroups[0].before(technical);
       for(const group of sourceGroups)technical.append(group);
     }
-    if(snapshot){const matrix=document.createElement('details');matrix.className='mes-context-panel ames-reuse-component-details';matrix.innerHTML='<summary>Matriz de componentes e vínculos · auditoria</summary>'+componentMatrixHtml(snapshot);root.append(matrix);}
-    if(snapshot){const cohorts=document.createElement('section');cohorts.className='mes-context-panel';cohorts.dataset.reuseCohorts='';root.children[0].after(cohorts);mountReuseCohorts(cohorts,snapshot);}
+    if(snapshot){const matrix=document.createElement('details');matrix.className='mes-context-panel ames-reuse-component-details';matrix.innerHTML='<summary>Matriz de componentes e vínculos · auditoria</summary>'+componentMatrixHtml(snapshot);root.append(matrix);wireComponentMatrix(matrix,snapshot);}
+    if(snapshot){const cohorts=document.createElement('section');cohorts.className='mes-context-panel';cohorts.dataset.reuseCohorts='';root.children[0].after(cohorts);mountReuseCohorts(cohorts,snapshot,{cachedRepairHistory:client?.cachedRepairHistory,cached3022Operators:client?.cached3022Operators});}
     const advanced=document.createElement('details');advanced.className='mes-context-panel ames-reuse-granularity';advanced.innerHTML=`<summary><b>${t('Análise detalhada / gráficos e vínculos','Detailed analysis / charts and links')}</b><span>${t('Abra quando precisar cruzar PCBAs, Material SN, grupos e processo 3022.','Open when you need to cross-reference PCBAs, Material SNs, groups and the 3022 process.')}</span></summary><div data-reuse-granular-host></div>`;root.append(advanced);
     let advancedMounted=false;const mountAdvanced=()=>{if(advancedMounted)return;advancedMounted=true;mountReuseTable(advanced.querySelector('[data-reuse-granular-host]'),snapshot);};advanced.addEventListener('toggle',()=>{if(advanced.open)mountAdvanced();});
     for(const btn of root.querySelectorAll('[data-reuse-line-tab]'))btn.addEventListener('click',()=>{line=btn.dataset.reuseLineTab;store.updateContext?.({line_id:line});selected='';last='';render();});

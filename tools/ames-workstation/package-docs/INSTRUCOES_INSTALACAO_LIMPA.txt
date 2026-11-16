@@ -3,7 +3,7 @@ SHA EXATO DO PACOTE: __BUNDLE_SHA__
 ESTADO: PR69 em validacao; aceite fisico na fabrica PENDENTE.
 
 NUNCA EXTRAIA ESTE ZIP SOBRE UMA INSTALACAO ANTERIOR.
-NUNCA COPIE SQLite, tokens, cookies, config.json ou filas entre pastas.
+NUNCA COPIE SQLite, tokens, cookies, config.json ou filas MANUALMENTE entre pastas.
 
 COMPUTADOR VIRGEM / SEM AGENTE ANTERIOR:
 1. Extraia em uma pasta nova do usuario com permissao de escrita.
@@ -21,19 +21,26 @@ COMPUTADOR VIRGEM / SEM AGENTE ANTERIOR:
    Envie print do erro sem mostrar credenciais, token ou dados pessoais.
 
 POSTO COM AGENTE ANTIGO / PORTA 8765 EM USO:
-1. Termine as coletas, confirme sincronizacoes e backup/rollback da pasta antiga.
+1. Termine as coletas e confira manualmente as sincronizacoes pendentes na Central.
 2. Extraia a candidata numa pasta completamente separada e preservada.
 3. Nao execute 00_INICIAR_AQUI.bat enquanto o agente antigo estiver ativo.
-4. Somente com autorizacao do responsavel e inventario confirmado, execute
-   01_TROCAR_PARA_PR69_NOVA.bat. Nao e necessario digitar TROCAR.
+4. Somente com autorizacao local, execute 01_TROCAR.bat da pasta NOVA.
+   O nome 01_TROCAR_PARA_PR69_NOVA.bat permanece como compatibilidade.
+   Nao e necessario digitar TROCAR.
    A confirmacao visual Sim/Nao aparece somente depois de comprovar que
    existe agente antigo reconhecido e nao ha coleta ativa.
 5. A ferramenta verifica SHA, hashes, rede, processos, guardians, porta,
-   relancadores e coletas pendentes antes de encerrar processos identificados.
+   relancadores e coletas pendentes; instala as dependencias SEM criar SQLite.
+   Apos parar o antigo, cria backup PRIVADO com ensaio de restauracao e
+   transfere SQLite, configuracao, token e arquivos do historico para o novo.
 6. Se TROCA_PR69=BLOCKED aparecer, nao force nem execute dois agentes.
-   Em caso de falha apos parar o antigo, reinicie manualmente a versao antiga
-   conhecida; a pasta e os dados originais sao preservados.
-7. A ferramenta NAO migra nem copia bancos, token, configuracoes ou historico.
+   Em caso de erro apos parar o antigo, o script TENTA reinicia-lo e verifica
+   a porta. Se aparecer ROLLBACK_ANTIGO=MANUAL, nao abra outra pasta ate
+   identificar a causa. A pasta anterior nao e modificada.
+7. O backup privado ao lado da pasta NOVA nao deve ser apagado. A transferencia
+   preserva o historico LOCAL. A fila do navegador/Firestore nao e comprovada
+   pelo agente: o operador deve finalizar a sincronizacao antes da troca.
+8. Confirme TROCA_PR69=SUCCESS e use 07_VERIFICAR_VERSAO_CENTRAL.bat.
 
 TESTES OBRIGATORIOS NO POSTO REAL:
 - Rede A-MES + Ethernet simultaneas e persistencia apos reboot.

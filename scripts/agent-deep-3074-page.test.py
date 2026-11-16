@@ -1,4 +1,4 @@
-"""Deep trace must consult verified 3074/Home even after OPC/2114 is opened.
+"""Deep trace must pin 3074/Home and complete it before opening OPC/2114.
 
 No MES, database, token, or real factory network connection is used.
 """
@@ -28,7 +28,8 @@ class DeepHomePageTests(unittest.TestCase):
             def __init__(self,*a):pass
             def ensure_3074(self):
                 calls.append('3074:home');return home
-            def ensure_2114(self):
+            def ensure_2114(self,timeout_s=None):
+                if timeout_s!=12.0:raise AssertionError('Bounded 2114 OPC navigation is required')
                 calls.append('2114:opc');return opc
             def ensure_current_shift_2114(self,*a):return '1st Shift'
         class Tela3074:
@@ -67,7 +68,7 @@ class DeepHomePageTests(unittest.TestCase):
                 'defect_time':'2026-10-27T09:00:00-03:00'}],
                 'trace-test',pathlib.Path(folder)/'scratch')
         self.assertEqual(result['trace_3074']['processed_pcba_count'],1)
-        self.assertEqual(calls,['3074:home','2114:opc','run3074','run2114','disconnect'])
+        self.assertEqual(calls,['3074:home','run3074','2114:opc','run2114','disconnect'])
 
 if __name__=='__main__':
     unittest.main(verbosity=2)
