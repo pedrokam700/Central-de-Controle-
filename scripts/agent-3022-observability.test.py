@@ -200,7 +200,7 @@ class Canonical3022QueryTests(unittest.TestCase):
     def test_generic_playwright_actionability_timeout_is_not_mislabeled_as_mask(self):
         with self.fixture([{'rows':history_rows('stale')}],
                           trial_not_ready_until_s=120) as f:
-            with self.assertRaisesRegex(RuntimeError,'View não liberado'):
+            with self.assertRaisesRegex(RuntimeError,'3022 View não confirmou clique'):
                 f.tela.consultar('B')
             d=f.tela.last_query_diagnostics
             self.assertEqual(d['status'],'BLOCKED_VIEW_NOT_READY')
@@ -251,7 +251,7 @@ class Canonical3022QueryTests(unittest.TestCase):
         with self.fixture([{'rows':history_rows('SHOULD_NOT_BE_QUERIED')}],
                           rows=history_rows('stale-previous'),mask_until_s=120) as f:
             with self.assertRaisesRegex(RuntimeError,
-                                        '3022 View não liberado pela interface A-MES'):
+                                        '3022 View não confirmou clique'):
                 f.tela.consultar('B')
             diag=f.tela.last_query_diagnostics
             self.assertEqual(diag['status'],'BLOCKED_VIEW_MASK')
@@ -270,7 +270,7 @@ class Canonical3022QueryTests(unittest.TestCase):
             first=f.tela.consultar('A')
             self.assertEqual(first['query_diagnostics']['status'],'CONFIRMED')
             f.mask_until_s=f.clock+120
-            with self.assertRaisesRegex(RuntimeError,'bloqueado por máscara ExtJS'):
+            with self.assertRaisesRegex(RuntimeError,'3022 View não confirmou clique'):
                 f.tela.consultar('B')
             self.assertEqual(f.call(op='state')['submitted'],['A'])
             self.assertEqual(first['rows'][0]['Tran User Id'],'first')
