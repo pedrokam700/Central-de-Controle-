@@ -169,3 +169,13 @@ body.dark .ames-legacy-shell .ames-health-agent.unknown{background:var(--ames-so
 [data-component-matrix] .ames-matrix-raw-list dt{color:#53687a}
 [data-component-matrix] .ames-matrix-raw-list dd{margin:0}
 @media(max-width:900px){[data-component-matrix] .ames-matrix-metric-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Source-event timeline: visible evidence, theme tokens, horizontal table scroll. */
+[data-reuse-history-timeline] td:last-child{max-width:28ch;overflow-wrap:anywhere}
+[data-reuse-history-timeline] td small{display:block;white-space:normal;overflow-wrap:anywhere}
+[data-reuse-history-timeline] .ames-reuse-visible-comment{min-width:20ch;white-space:pre-wrap;overflow:visible;text-overflow:clip}
+[data-reuse-cohorts] [data-reuse-history-timeline] th{background:var(--ames-soft2,#f5f6f8);color:var(--ames-text,#515967)}
+[data-reuse-cohorts] [data-reuse-history-timeline] td,[data-reuse-cohorts] [data-reuse-history-timeline] th{border-color:var(--ames-line,#dde3e8)}
+[data-reuse-cohorts] [data-reuse-history-timeline] tbody tr:nth-child(even){background:var(--ames-soft2,#f8fbfc)}
+[data-reuse-cohorts] [data-reuse-history-timeline] tbody tr:hover{background:var(--ames-soft,#ecf4f8)}
+[data-reuse-cohorts] [data-reuse-history-timeline] td small{color:var(--ames-muted,#64748b)}
