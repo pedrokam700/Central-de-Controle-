@@ -1,0 +1,35 @@
+name: A-MES PR72 Local 3022 Replay Tests
+
+on:
+  push:
+    branches:
+      - work/ames-pr72-3022-local-replay-20261116
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-3022:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+      - name: Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install test-only factory parser dependencies
+        run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
+      - name: Run real SQLite plus fake CDP replay contract
+        run: python3 scripts/agent-3022-local-replay.test.py
+      - name: Preserve V0.16 factory engine regressions
+        env:
+          PYTHONPATH: ames/factory-engine
+        run: python3 -m unittest discover -s ames/factory-engine/tests -p 'test_*.py' -q
+      - name: Preserve source capture, trace targeting and resume contracts
+        run: |
+          python3 scripts/agent-source-capture.test.py
+          python3 scripts/agent-trace-target.test.py
+          python3 scripts/agent-trace-auto-resume.test.py
