@@ -100,11 +100,15 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Install isolated browser test tools
         run: |
+          python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
           npm install --prefix "$RUNNER_TEMP/console-tests" playwright@1.62.1
           "$RUNNER_TEMP/console-tests/node_modules/.bin/playwright" install --with-deps chromium
       - name: Verify all Console views and sync reload
