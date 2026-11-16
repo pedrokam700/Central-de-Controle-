@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - work/ames-pr76-cross-integration-20261116
+      - work/ames-pr77-3022-checkpoint-proof-20261116
   workflow_dispatch:
 
 permissions:
@@ -28,6 +29,8 @@ jobs:
         run: |
           python3 scripts/agent-3022-local-replay.test.py
           python3 scripts/agent-3022-mixed-replay.test.py
+          python3 scripts/agent-3022-checkpoint-proof.test.py
+          python3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_R3_complete_label_without_3022_query_proof_does_not_skip_capture
       - name: Historical names, proven source and negative cases
         run: |
           python3 scripts/agent-local-sn-operator-evidence.test.py

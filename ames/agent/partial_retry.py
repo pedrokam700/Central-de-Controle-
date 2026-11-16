@@ -130,6 +130,13 @@ def pending_pcbas(base_sns, captures):
                 continue
             if view == '3074' and (_bad_page(item) or not _has_page_proof(item)):
                 continue
+            if view == '3022':
+                # A terminal label from a legacy source response is NOT a
+                # query-response checkpoint. Only the independently verified
+                # per-PCBA rows with CONFIRMED/CONFIRMED_EMPTY MES diagnostics
+                # may suppress a new 3022 query (see verified_3022_items).
+                # Never override those proofs by trusting a generic COMPLETE.
+                continue
             verified[view].add(sn)
         # Per-board proof takes precedence. A source-level COMPLETE with no
         # per-board records is not proof of which PCBAs were queried.
