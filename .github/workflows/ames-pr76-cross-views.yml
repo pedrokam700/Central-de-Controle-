@@ -8,6 +8,7 @@ on:
       - work/ames-pr78-names-provenance-20261116
       - work/ames-pr79-observability-gate-20261116
       - work/ames-pr80-reuse-2114-history-parity-20261116
+      - work/ames-pr81-mes-navigation-readiness-20261116
   workflow_dispatch:
 
 permissions:
@@ -49,6 +50,8 @@ jobs:
           python3 scripts/agent-trace-target.test.py
           python3 scripts/agent-trace-auto-resume.test.py
           python3 scripts/agent-sn-3012-fallback.test.py
+      - name: A-MES navigation route, visibility and OPC readiness
+        run: python3 scripts/agent-navigation-readiness.test.py
       - name: Full 3022 observability, single-click, stale-grid and storm-breaker regressions
         env:
           PYTHONPATH: ames/factory-engine
