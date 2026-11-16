@@ -13,7 +13,7 @@ from material_trace_provenance import exact_observation, trace_material_links
 from datetime import datetime, timezone
 
 SCHEMA = 'central-ames-v2'
-PROJECTION_VERSION = 11  # repair exact 3028/3074 key lineage; older revisions stay immutable
+PROJECTION_VERSION = 12  # reproject 3074 physical proof; older revisions stay immutable
 LINES = ('TAN10101', 'TAN10102', 'TAN10103')
 DATASETS = ('defects','pcba_history','material_reuse','history_contexts','process_timeline')
 TABLES = ('defect_observations','line_metrics','pcba_history','material_reuse','history_contexts','snapshot_payloads','mes_process_timeline')
@@ -261,6 +261,7 @@ def export_revision(store,sid,line,insight_builder=None):
                         previous_pcbas=material_raw.get('previous_pcbas')
                         if (material_raw.get('current_pcba_confirmed') is True
                             and type(prior_count) is int and prior_count>=0
+                            and not (prior_count==0 and (material_raw.get('coverage') or {}).get('status')=='incomplete_page')
                             and raw.get('previous_pcba_count')==prior_count
                             and isinstance(previous_pcbas,list)
                             and len(set(previous_pcbas))==prior_count):

@@ -4,6 +4,30 @@ Only exact current 3028 occurrence identities and the explicitly selected
 physical line may contribute. Does not write SQLite or open MES.
 """
 from copy import deepcopy
+from datetime import datetime
+
+
+def _valid_mounting_start(row):
+    """Same accepted clocks as uso_pcba; Prod Time needs the PCBA batch proof."""
+    values = [row.get("Bind Time")]
+    if str(row.get("Batch Id") or "").strip():
+        values.append(row.get("Prod Time"))
+    for value in values:
+        if not value:
+            continue
+        if isinstance(value, datetime):
+            return True
+        text = str(value).strip().replace("Z", "+00:00")
+        try:
+            datetime.fromisoformat(text)
+            return True
+        except ValueError:
+            try:
+                datetime.strptime(text, "%Y%m%d%H%M%S")
+                return True
+            except ValueError:
+                pass
+    return False
 
 
 def _ident(row):
@@ -47,7 +71,7 @@ def _confirmed_self_rows(query, pcba):
         if (str(row.get("Aut Cmf1") or "").strip().upper() != "PCBA"
                 and "pcba" not in str(row.get("Sn Type") or "").lower()):
             continue
-        if not str(row.get("Bind Time") or "").strip():
+        if not row.get("Bind Time") or not _valid_mounting_start({"Bind Time": row["Bind Time"]}):
             continue
         result.append(row)
     return result
@@ -176,7 +200,12 @@ def recover_snapshot_line(versions, line, base_rows):
                 self_rows = [row for row in own_rows
                              if str(row.get("Aut Cmf1") or "").strip().upper() == "PCBA"
                              or "pcba" in str(row.get("Sn Type") or "").lower()]
-                return (bool(self_rows), len(own_rows), pair[0])
+                dated = [row for row in self_rows if _valid_mounting_start(row)]
+                confirmed = (query.get("query_sn") == sn and query.get("query_confirmation")
+                             in {"STORE_REFRESH_AFTER_VIEW", "EXACT_QUERY_ROW"})
+                # Row volume cannot outrank an interpretable physical mounting.
+                # Keep legacy fallback, but prefer a proven PCBA-scoped query.
+                return (bool(confirmed and dated), bool(dated), bool(self_rows), len(own_rows), pair[0])
             selected = max(board["bases"], key=base_score)[1]
             item["base_query"], merged_count = _reconcile_self_mountings(
                 selected, board["bases"], sn)

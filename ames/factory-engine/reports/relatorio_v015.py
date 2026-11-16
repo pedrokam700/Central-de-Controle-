@@ -81,7 +81,16 @@ def _manual_auto(hist):
 
 
 def _pcba_item_map(resultado_3074):
-    return {str(x.get("pcba_sn") or "").strip(): x for x in (resultado_3074 or {}).get("items", []) or [] if x.get("pcba_sn")}
+    # One SN can occur in several captures/lines. Locate its own base by the
+    # same explicit occurrence that produced the report row, before line filters.
+    result = {}
+    for item in (resultado_3074 or {}).get("items", []) or []:
+        sn = str(item.get("pcba_sn") or "").strip()
+        for trace in item.get("defect_traces") or []:
+            defect = trace.get("defect") or {}
+            key = (sn, defect.get("line", ""), defect.get("defect_time", ""), defect.get("defect_code", ""))
+            result[key] = item
+    return result
 
 
 def _reuse_analysis(row, pcba_map):
@@ -237,7 +246,7 @@ def _build_views(resultado_3074, resultado_2114):
         current_sig = _hist_signature(current_hist)
         current_seq_num = _hist_seq_value(current_hist, -1) if current_hist else None
 
-        base_rows = ((item_map.get(pcba) or {}).get("base_query") or {}).get("rows") or []
+        base_rows = ((item_map.get((pcba, f.get("Linha", ""), defect_time, defect_code)) or {}).get("base_query") or {}).get("rows") or []
         usage = reconstruir_usos_pcba(base_rows, pcba, defect_time)
         pcba_usage_by_context[key] = usage
 
@@ -276,14 +285,15 @@ def _build_views(resultado_3074, resultado_2114):
             row[f"_reuso_{idx}_sn"] = r.get("Material SN", "")
             row[f"_reuso_{idx}_key"] = (key, r.get("Material SN", ""))
 
-            prev = int(r.get("Reusos anteriores a falha") or 0)
-            use_no = prev + 1
+            prev = r.get("Reusos anteriores a falha")
+            use_no = r.get("Usos ate a falha")
+            use_label = f"{use_no}º uso" if use_no is not None else "NÃO DETERMINADO"
             material_summary_rows.append({
                 "_failure_key": key, "_material_key": (key, r.get("Material SN", "")), "_analysis_row": analise_idx + 1,
                 "Linha": r.get("Linha", ""), "Modelo": r.get("Modelo", ""), "PCBA atual": r.get("PCBA da falha", ""),
                 "Defect Time atual": r.get("Defect Time", ""), "Defect Code atual": r.get("Defect Code", ""), "Defect Desc atual": r.get("Defect Desc", ""),
                 "Tipo material": _material_name(r.get("Tipo material", "")), "Material SN": r.get("Material SN", ""),
-                "Uso material na falha": f"{use_no}º uso", "Reusos anteriores material": prev,
+                "Uso material na falha": use_label, "Reusos anteriores material": prev,
                 "Usos conhecidos material": r.get("Usos totais conhecidos"), "Reusos conhecidos material": r.get("Reusos totais conhecidos"),
                 "PCBAs desvinculadas únicas": ra.get("old_pcba_count", 0),
                 "PCBAs com mesma falha": ra.get("same_pcbas", 0), "PCBAs com mesma família": ra.get("similar_pcbas", 0),
@@ -299,7 +309,7 @@ def _build_views(resultado_3074, resultado_2114):
                     "Linha": r.get("Linha", ""), "Modelo": r.get("Modelo", ""), "PCBA atual": r.get("PCBA da falha", ""),
                     "Defect Time atual": r.get("Defect Time", ""), "Defect Code atual": r.get("Defect Code", ""), "Defect Desc atual": r.get("Defect Desc", ""),
                     "Tipo material": _material_name(r.get("Tipo material", "")), "Material SN": r.get("Material SN", ""),
-                    "Uso material na falha": f"{use_no}º uso", "Reusos anteriores material": prev,
+                    "Uso material na falha": use_label, "Reusos anteriores material": prev,
                     "Usos conhecidos material": r.get("Usos totais conhecidos"), "Reusos conhecidos material": r.get("Reusos totais conhecidos"),
                     "PCBAs desvinculadas únicas": ra.get("old_pcba_count", 0),
                     "PCBAs com mesma falha": ra.get("same_pcbas", 0),

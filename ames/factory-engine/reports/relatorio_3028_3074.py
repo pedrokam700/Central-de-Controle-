@@ -41,9 +41,9 @@ def _known_uses(r):
         return value
     # JSON V0.8 antigo só permite afirmar o total ATÉ A FALHA.
     prev = r.get("previous_pcba_count")
-    if prev is None:
+    if type(prev) is not int or prev < 0 or r.get("current_pcba_confirmed") is not True:
         return None
-    return int(prev) + (1 if r.get("current_pcba_confirmed", True) else 0)
+    return prev + 1
 
 
 def _known_reuses(r):
@@ -106,8 +106,12 @@ def extrair_linhas(resultado):
             material_rows = []
             for r in results:
                 previous = list(r.get("previous_pcbas") or [])
-                uses_until_defect = (r.get("previous_pcba_count") or 0) + (1 if r.get("current_pcba_confirmed", True) else 0)
-                reuses_until_defect = r.get("previous_pcba_count") or 0
+                previous_count = r.get("previous_pcba_count")
+                proven = (type(previous_count) is int and previous_count >= 0
+                          and r.get("current_pcba_confirmed") is True
+                          and not (previous_count == 0 and (r.get("coverage") or {}).get("status") == "incomplete_page"))
+                uses_until_defect = previous_count + 1 if proven else None
+                reuses_until_defect = previous_count if proven else None
                 known_uses = _known_uses(r)
                 known_reuses = _known_reuses(r)
                 inactive_now = r.get("inactive_now_pcbas")
@@ -147,7 +151,7 @@ def extrair_linhas(resultado):
                 }
                 materiais.append(row)
                 material_rows.append(row)
-                if (known_reuses or 0) > 0 or reuses_until_defect > 0:
+                if (known_reuses or 0) > 0 or (reuses_until_defect or 0) > 0:
                     reuso.append(row)
 
             reused_here = [x for x in material_rows if (x.get("Reusos totais conhecidos") or 0) > 0 or (x.get("Reusos anteriores a falha") or 0) > 0]

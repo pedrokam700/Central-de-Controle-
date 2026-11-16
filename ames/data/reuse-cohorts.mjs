@@ -2,6 +2,7 @@ import {compareFailures} from './failure-taxonomy.mjs';
 // Read-only populations. A defect investigation is never a production denominator.
 import {factoryWallMinute} from './history.mjs';
 import {processBackedBoardReuses,contextBackedBoardReuses} from './reuse-cycle-evidence.mjs';
+import {compatibleExplicitLineage} from './production-evidence.mjs';
 const value=(r,...keys)=>keys.map(k=>r?.[k]).find(v=>v!==undefined&&v!==null&&v!=='')??null;
 const unique=items=>[...new Set(items.filter(v=>v!==null&&v!==undefined&&v!==''))];
 const list=v=>{if(Array.isArray(v))return v;try{const x=JSON.parse(v);if(Array.isArray(x))return x;}catch{}return typeof v==='string'?v.split(/[|,;\n]/).map(x=>x.trim()).filter(Boolean):[];};
@@ -217,7 +218,7 @@ export function buildReuseCohorts(snapshot={},filters={}){
  const occurrences=(snapshot.occurrences||[]).filter(r=>!r.line_id||r.line_id===snapshot.line_id);
  const history=snapshot.pcba_history?.records||[],pcbas=new Map(),components=new Map();
  function add(map,id,kind,row,event,source){
-  if(!id||((row.line_id||row.line||row.Linha)&&String(row.line_id||row.line||row.Linha)!==snapshot.line_id))return;
+  if(!id||!compatibleExplicitLineage(snapshot,row)||((row.line_id||row.line||row.Linha)&&String(row.line_id||row.line||row.Linha)!==snapshot.line_id))return;
   if(!map.has(id))map.set(id,{id,kind,sn:kind==='pcba'?sn(row):String(value(row,'item_sn','material_sn','Material SN')),
    item_type:kind==='component'?String(value(row,'item_type','material_type','Tipo material')||''):null,
    uses:[],known_cycle_candidates:[],events:[],prior_events:[],previous_pcbas:[],current_pcbas:[],products:[],part_numbers:[],evidence:[]});

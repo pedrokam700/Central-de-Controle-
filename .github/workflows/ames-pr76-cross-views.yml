@@ -13,6 +13,7 @@ on:
       - work/ames-pr83-cdp-home-recovery-20261116
       - work/ames-pr84-3022-extjs-preflight-20261116
       - work/ames-issue85-reuse-event-timeline-20261116
+      - work/ames-3074-physical-use-audit-20261116
   workflow_dispatch:
 
 permissions:
@@ -33,6 +34,18 @@ jobs:
           node-version: '24'
       - name: Install disposable parser test dependencies
         run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
+      - name: 3074 physical proof matrix (disposable SQLite)
+        run: |
+          python3 scripts/agent-3074-physical-classification.test.py
+          python3 scripts/agent-integrated-snapshot-history.test.py
+          python3 scripts/agent-material-3074-link.test.py
+          python3 scripts/agent-canonical.test.py
+          python3 scripts/agent-canonical-insight-retry.test.py
+      - name: 3074 pagination, multi-cycle, raw revisions and state preservation
+        run: |
+          for suite in agent-deep-3074-page agent-3074-coverage-summary agent-multi-cycle-3028-3074 agent-3074-grid-lifecycle agent-individual-assembly agent-assembly-scope agent-3074-uncertain-reuse agent-history-restore agent-local-history agent-raw-history agent-3074-projection-audit agent-3074-pagination agent-saved-sn-history ames-pr70-state-transfer; do
+            python3 "scripts/$suite.test.py" || exit 1
+          done
       - name: Local confirmed and mixed replay
         run: |
           python3 scripts/agent-3022-local-replay.test.py
@@ -87,11 +100,15 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Install isolated browser test tools
         run: |
+          python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
           npm install --prefix "$RUNNER_TEMP/console-tests" playwright@1.62.1
           "$RUNNER_TEMP/console-tests/node_modules/.bin/playwright" install --with-deps chromium
       - name: Verify all Console views and sync reload
@@ -100,6 +117,7 @@ jobs:
           export BROWSER_OUTPUT="$RUNNER_TEMP/console-evidence"
           node scripts/ames-experience.browser.mjs
           node scripts/ames-reuse-timeline.browser.mjs
+          node scripts/ames-3074-physical-classification.browser.mjs
           node scripts/ames-sync-reload.browser.mjs
           node scripts/ames-pairing.browser.mjs
           node scripts/ames-3028-completion.browser.mjs
@@ -108,7 +126,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: issue85-browser-${{ github.sha }}
+          name: ames-3074-browser-${{ github.sha }}
           path: ${{ runner.temp }}/console-evidence/*.png
           if-no-files-found: ignore
           retention-days: 7
