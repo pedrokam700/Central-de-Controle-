@@ -12,6 +12,7 @@ on:
       - work/ames-pr82-production-scope-isolation-20261116
       - work/ames-pr83-cdp-home-recovery-20261116
       - work/ames-pr84-3022-extjs-preflight-20261116
+      - work/ames-issue85-reuse-event-timeline-20261116
   workflow_dispatch:
 
 permissions:
@@ -98,6 +99,7 @@ jobs:
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/console-tests/node_modules/playwright/index.mjs"
           export BROWSER_OUTPUT="$RUNNER_TEMP/console-evidence"
           node scripts/ames-experience.browser.mjs
+          node scripts/ames-reuse-timeline.browser.mjs
           node scripts/ames-sync-reload.browser.mjs
           node scripts/ames-pairing.browser.mjs
           node scripts/ames-3028-completion.browser.mjs
