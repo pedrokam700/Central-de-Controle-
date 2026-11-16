@@ -315,7 +315,15 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                         preflight_stage="view_navigation"
                         nav.ensure_3022()
                         preflight_stage="view_ready"
-                        tela._page()
+                        # A true CDP browser exposes a list of tabs; it must
+                        # prove canonical Home and its active ExtJS input before
+                        # the batch. Synthetic single-page R2/N4 fixtures do
+                        # not expose browser.pages: preserve their per-PCBA
+                        # circuit-breaker test contract, not a fake session gate.
+                        if hasattr(browser._target, "pages") and hasattr(tela, "ensure_ready_3022"):
+                            tela.ensure_ready_3022()
+                        else:
+                            tela._page()
                     except Exception as exc:
                         preflight_failure=exc
                 if preflight_failure is not None:
