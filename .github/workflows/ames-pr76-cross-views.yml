@@ -35,6 +35,8 @@ jobs:
       - name: Missing 3022 input now stops after two attempts
         run: python3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_R2_missing_extjs_input_stops_after_two_recoverable_failures
       - name: Preserve factory engine and raw capture/recovery contracts
+        env:
+          PYTHONPATH: ames/factory-engine
         run: |
           python3 -m unittest discover -s ames/factory-engine/tests -p 'test_*.py' -q
           python3 scripts/agent-source-capture.test.py
