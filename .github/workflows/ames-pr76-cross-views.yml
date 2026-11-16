@@ -7,6 +7,7 @@ on:
       - work/ames-pr77-3022-checkpoint-proof-20261116
       - work/ames-pr78-names-provenance-20261116
       - work/ames-pr79-observability-gate-20261116
+      - work/ames-pr80-reuse-2114-history-parity-20261116
   workflow_dispatch:
 
 permissions:
@@ -54,6 +55,8 @@ jobs:
         run: python3 scripts/agent-3022-observability.test.py
       - name: All Central Node contracts across nine views
         run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
+      - name: U1 single 2114 history without losing original fields
+        run: node --test --test-name-pattern='U1' scripts/audit/codex_cross_contracts_red.mjs
       - name: Independent N1/N3 name and source contracts
         run: |
           node --test --test-name-pattern='N1|N2|N3' scripts/audit/codex_cross_contracts_red.mjs
