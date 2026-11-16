@@ -90,7 +90,9 @@ class Observability3022Tests(unittest.TestCase):
     def test_3022_mes_phase_is_exclusive_and_precedes_local_persistence(self):
         source = (AGENT / "process_r11.py").read_text(encoding="utf-8")
         mes_start = source.index("# Phase A")
-        lease = source.index("with MES.critical()", mes_start)
+        # The MES lease is conditional: fully confirmed local replay and a
+        # failed CDP preflight must NOT occupy the A-MES session.
+        lease = source.index("with (MES.critical() if needs_mes and preflight_failure is None else nullcontext()):", mes_start)
         query = source.index("rr=tela.consultar(pcba)", lease)
         local_start = source.index("# Phase B", query)
         sql = source.index("DELETE FROM process_raw_events", local_start)
