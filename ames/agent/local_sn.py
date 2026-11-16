@@ -62,6 +62,51 @@ def _hydrate_process(row: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _historical_operator_observations(con,targets,limit):
+    """Read-only identity evidence from 3022 events that are NOT END LOT.
+
+    process_events deliberately contains production passage rows only. The
+    canonical mes_process_timeline also stores REPAIR END/A6900 observations
+    with explicit operator fields. Expose these as operator observations, not
+    as completed production passages. Never map a bare BRM ID to a name.
+    """
+    if not targets:
+        return []
+    if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='mes_process_timeline'").fetchone():
+        return []
+    marks=",".join("?" for _ in targets)
+    sql=(f"SELECT event_id,snapshot_id,line_id,product,pcba_sn,process,station,"
+         f"event_time,raw_ref,provenance_json FROM mes_process_timeline "
+         f"WHERE pcba_sn IN ({marks}) AND source_view='3022' AND valid=0 "
+         f"ORDER BY event_time DESC LIMIT ?")
+    results=[]
+    for source in con.execute(sql,[*targets,limit]).fetchall():
+        row=dict(source)
+        provenance=_json_object(row.get("provenance_json"))
+        evidence=provenance.get("operator_evidence") or {}
+        if not isinstance(evidence,dict):
+            continue
+        ident=str(evidence.get("operator_id") or "").strip()
+        name=str(evidence.get("operator_name") or "").strip()
+        fields=evidence.get("operator_fields") or {}
+        if not (ident and name and ident.casefold()!=name.casefold()
+                and isinstance(fields,dict) and fields.get("operator_name")):
+            continue
+        results.append({
+            "pcba_sn":row["pcba_sn"],"station":row["station"],
+            "operation_code":row["station"],"operation_name":row["process"],
+            "event_time":row["event_time"],"operator_id":ident,
+            "operator_name":name,"operator_fields":fields,"source":"3022",
+            "source_view":"3022","event_id":row["event_id"],
+            "snapshot_id":row["snapshot_id"],"line_id":row["line_id"],
+            "product":row["product"],"raw_ref":row["raw_ref"],
+            "operator_role":"observed_process_operator",
+            "completion_confirmed":False,
+            "production_shift_source":"not_production_passage",
+        })
+    return results
+
+
 def lookup(store, sn: str, *, limit: int = 5000) -> Dict[str, Any]:
     sn=str(sn or "").strip()
     if not sn:raise ValueError("Informe uma SN")
@@ -95,6 +140,10 @@ def lookup(store, sn: str, *, limit: int = 5000) -> Dict[str, Any]:
         histories=[_hydrate_history(dict(r)) for r in con.execute(f"SELECT * FROM pcba_history WHERE pcba_sn IN ({marks}) ORDER BY snapshot_id DESC,hist_seq DESC LIMIT ?",[*targets,limit]).fetchall()] if targets else []
         defects=[dict(r) for r in con.execute(f"SELECT * FROM defect_observations WHERE pcba_sn IN ({marks}) ORDER BY snapshot_id DESC,defect_time DESC LIMIT ?",[*targets,limit]).fetchall()] if targets else []
         process=[_hydrate_process(dict(r)) for r in con.execute(f"SELECT * FROM process_events WHERE pcba_sn IN ({marks}) ORDER BY event_time DESC LIMIT ?",[*targets,limit]).fetchall()] if targets else []
+        # A6900 / REPAIR END operator observations were intentionally stored
+        # separately from END LOT passages. Returning them is not a new
+        # production record, an authored repair event, or a new MES query.
+        process.extend(_historical_operator_observations(con,targets,limit))
         contexts=[dict(r) for r in con.execute(f"SELECT * FROM history_contexts WHERE current_pcba IN ({marks}) OR historical_pcba IN ({marks}) ORDER BY snapshot_id DESC,id DESC LIMIT ?",[*targets,*targets,limit]).fetchall()] if targets else []
 
     if cached_lookup:
