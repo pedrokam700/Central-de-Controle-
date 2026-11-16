@@ -104,4 +104,14 @@ jobs:
           node scripts/ames-pairing.browser.mjs
           node scripts/ames-3028-completion.browser.mjs
 
-# No build, upload, merge, deployment, factory CDP, network MES, or installer.
+      - name: Preserve synthetic browser evidence (screenshots only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue85-browser-${{ github.sha }}
+          path: ${{ runner.temp }}/console-evidence/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+# No build, merge, deployment, factory CDP, network MES, or installer.
+# The only artifact is synthetic browser screenshots; no operational data.
