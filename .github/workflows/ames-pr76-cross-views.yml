@@ -6,6 +6,7 @@ on:
       - work/ames-pr76-cross-integration-20261116
       - work/ames-pr77-3022-checkpoint-proof-20261116
       - work/ames-pr78-names-provenance-20261116
+      - work/ames-pr79-observability-gate-20261116
   workflow_dispatch:
 
 permissions:
@@ -47,6 +48,10 @@ jobs:
           python3 scripts/agent-trace-target.test.py
           python3 scripts/agent-trace-auto-resume.test.py
           python3 scripts/agent-sn-3012-fallback.test.py
+      - name: Full 3022 observability, single-click, stale-grid and storm-breaker regressions
+        env:
+          PYTHONPATH: ames/factory-engine
+        run: python3 scripts/agent-3022-observability.test.py
       - name: All Central Node contracts across nine views
         run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
       - name: Independent N1/N3 name and source contracts

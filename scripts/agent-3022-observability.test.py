@@ -90,7 +90,9 @@ class Observability3022Tests(unittest.TestCase):
     def test_3022_mes_phase_is_exclusive_and_precedes_local_persistence(self):
         source = (AGENT / "process_r11.py").read_text(encoding="utf-8")
         mes_start = source.index("# Phase A")
-        lease = source.index("with MES.critical()", mes_start)
+        # The MES lease is conditional: fully confirmed local replay and a
+        # failed CDP preflight must NOT occupy the A-MES session.
+        lease = source.index("with (MES.critical() if needs_mes and preflight_failure is None else nullcontext()):", mes_start)
         query = source.index("rr=tela.consultar(pcba)", lease)
         local_start = source.index("# Phase B", query)
         sql = source.index("DELETE FROM process_raw_events", local_start)
@@ -200,7 +202,7 @@ class Canonical3022QueryTests(unittest.TestCase):
     def test_generic_playwright_actionability_timeout_is_not_mislabeled_as_mask(self):
         with self.fixture([{'rows':history_rows('stale')}],
                           trial_not_ready_until_s=120) as f:
-            with self.assertRaisesRegex(RuntimeError,'View não liberado'):
+            with self.assertRaisesRegex(RuntimeError,'3022 View não confirmou clique'):
                 f.tela.consultar('B')
             d=f.tela.last_query_diagnostics
             self.assertEqual(d['status'],'BLOCKED_VIEW_NOT_READY')
@@ -251,7 +253,7 @@ class Canonical3022QueryTests(unittest.TestCase):
         with self.fixture([{'rows':history_rows('SHOULD_NOT_BE_QUERIED')}],
                           rows=history_rows('stale-previous'),mask_until_s=120) as f:
             with self.assertRaisesRegex(RuntimeError,
-                                        '3022 View não liberado pela interface A-MES'):
+                                        '3022 View não confirmou clique'):
                 f.tela.consultar('B')
             diag=f.tela.last_query_diagnostics
             self.assertEqual(diag['status'],'BLOCKED_VIEW_MASK')
@@ -270,7 +272,7 @@ class Canonical3022QueryTests(unittest.TestCase):
             first=f.tela.consultar('A')
             self.assertEqual(first['query_diagnostics']['status'],'CONFIRMED')
             f.mask_until_s=f.clock+120
-            with self.assertRaisesRegex(RuntimeError,'bloqueado por máscara ExtJS'):
+            with self.assertRaisesRegex(RuntimeError,'3022 View não confirmou clique'):
                 f.tela.consultar('B')
             self.assertEqual(f.call(op='state')['submitted'],['A'])
             self.assertEqual(first['rows'][0]['Tran User Id'],'first')
