@@ -13,6 +13,7 @@ on:
       - work/ames-pr83-cdp-home-recovery-20261116
       - work/ames-pr84-3022-extjs-preflight-20261116
       - work/ames-issue85-reuse-event-timeline-20261116
+      - work/ames-3074-physical-use-audit-20261116
   workflow_dispatch:
 
 permissions:
@@ -33,6 +34,8 @@ jobs:
           node-version: '24'
       - name: Install disposable parser test dependencies
         run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
+      - name: 3074 physical proof matrix (disposable SQLite)
+        run: python3 scripts/agent-3074-physical-classification.test.py
       - name: Local confirmed and mixed replay
         run: |
           python3 scripts/agent-3022-local-replay.test.py
