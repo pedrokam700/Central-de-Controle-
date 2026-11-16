@@ -9,6 +9,7 @@ on:
       - work/ames-pr79-observability-gate-20261116
       - work/ames-pr80-reuse-2114-history-parity-20261116
       - work/ames-pr81-mes-navigation-readiness-20261116
+      - work/ames-pr82-production-scope-isolation-20261116
   workflow_dispatch:
 
 permissions:
@@ -64,6 +65,10 @@ jobs:
         run: |
           node --test --test-name-pattern='N1|N2|N3' scripts/audit/codex_cross_contracts_red.mjs
           node --test scripts/ames-name-consistency.test.mjs
+      - name: S1 source, line, snapshot, revision and period isolation
+        run: |
+          node --test --test-name-pattern='S1' scripts/audit/codex_cross_contracts_red.mjs
+          node --test scripts/ames-production-scope-isolation.test.mjs
       - name: Pairing and authentication unaffected
         run: |
           node --test scripts/ames-auth-hardening.test.mjs
