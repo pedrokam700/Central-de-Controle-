@@ -315,10 +315,12 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                         preflight_stage="view_navigation"
                         nav.ensure_3022()
                         preflight_stage="view_ready"
-                        # The production collector proves a live ExtJS SN field
-                        # before the first board; synthetic/legacy test adapters
-                        # retain their original _page contract.
-                        if hasattr(tela, "ensure_ready_3022"):
+                        # A true CDP browser exposes a list of tabs; it must
+                        # prove canonical Home and its active ExtJS input before
+                        # the batch. Synthetic single-page R2/N4 fixtures do
+                        # not expose browser.pages: preserve their per-PCBA
+                        # circuit-breaker test contract, not a fake session gate.
+                        if hasattr(browser._target, "pages") and hasattr(tela, "ensure_ready_3022"):
                             tela.ensure_ready_3022()
                         else:
                             tela._page()
