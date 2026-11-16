@@ -64,27 +64,56 @@ class AmesNavigation:
             return False
 
     def _main_page(self):
-        candidates = []
+        """Reuse Home, or recover it from the already connected OPC origin.
+
+        Never start another Chrome, log in, or guess a production host. Opening
+        Home is a read-only navigation in the *same* existing CDP context.
+        An ambiguous origin or login redirects must stop before any MES query.
+        """
+        homes, opcs, logins = [], [], []
         for p in self.browser.pages:
             try:
-                u = (p.url or "").lower()
-                if "/asymes/home" in u or "/asymes/home" in u.replace("asymes", "asymes"):
-                    candidates.append(p)
+                parts = urlsplit(p.url or "")
+                if parts.scheme.lower() not in ("http", "https") or not parts.netloc:
+                    continue
+                path = parts.path.lower().rstrip("/")
+                origin = (parts.scheme.lower(), parts.netloc.lower())
+                if path == "/asymes/home":
+                    homes.append((p, parts, origin))
+                elif path == "/asymes/opc":
+                    opcs.append((p, parts, origin))
+                elif path.endswith("/login") and "/asymes" in path:
+                    logins.append((p, parts, origin))
             except Exception:
-                pass
-        if not candidates:
-            for p in self.browser.pages:
-                try:
-                    u = (p.url or "").lower()
-                    if "172.29.185.215" in u and "/opc" not in u and "/login" not in u:
-                        candidates.append(p)
-                except Exception:
-                    pass
-        if not candidates:
+                continue
+
+        if homes:
+            # Never silently attach an unrelated host's Home when multiple
+            # A-MES origins share this CDP browser.
+            if len({entry[2] for entry in homes + opcs}) != 1:
+                raise RuntimeError("HOME_ORIGIN_AMBIGUOUS: múltiplas origens A-MES no Chrome dedicado.")
+            page = homes[-1][0]
+            if self._is_login(page):
+                raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES e tente novamente.")
+            return page
+
+        if logins:
+            raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES e tente novamente.")
+        if not opcs:
             raise RuntimeError("Aba principal do A-MES não encontrada no Chrome dedicado.")
-        page = candidates[-1]
+        if len({entry[2] for entry in opcs}) != 1:
+            raise RuntimeError("HOME_ORIGIN_AMBIGUOUS: múltiplas origens OPC; não é seguro escolher o servidor.")
+
+        opc_page, parts, _ = opcs[-1]
+        if self._is_login(opc_page):
+            raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES/OPC e tente novamente.")
+        home_url = urlunsplit((parts.scheme, parts.netloc, "/asymes/home", parts.query, ""))
+        page = self.browser.context.new_page()
+        page.goto(home_url, wait_until="domcontentloaded", timeout=15000)
         if self._is_login(page):
             raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES e tente novamente.")
+        if not self._is_home_surface(page):
+            raise RuntimeError("HOME_SESSION_NOT_READY: navegação Home não confirmada, sem consulta ao MES.")
         return page
 
     def _wait_view(self, page, route: str, selector: str | None, timeout_s: float):
@@ -107,7 +136,7 @@ class AmesNavigation:
         route = self.ROUTES[view]
         for p in reversed(self.browser.pages):
             try:
-                if route.lower() in (p.url or "").lower() and (not selector or self._has_visible(p, selector)):
+                if self._is_home_surface(p) and route.lower() in (p.url or "").lower() and (not selector or self._has_visible(p, selector)):
                     if self._is_login(p):
                         raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES e tente novamente.")
                     return p
