@@ -26,6 +26,7 @@ jobs:
         run: python3 -B scripts/agent-updater-recovery.test.py -v
       - name: Static safe contracts and dependency closure (no builder)
         run: |
+          python3 -B scripts/agent-lab-preservation-static.test.py -v
           python3 -B scripts/audit/offline-homologation-static.test.py -v
           python3 -B scripts/agent-integration-migration-static.test.py -v
       - name: Existing update hardening recovery identity contracts (disposable)
@@ -61,23 +62,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -B scripts/agent-updater-recovery.test.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B scripts/agent-lab-preservation-static.test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -B scripts/audit/offline-homologation-static.test.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-  node-integrated:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        shell: bash ./scripts/audit/guarded-ci.sh {0}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Full existing Node contracts without builders or installation
-        run: >-
-          node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' ! -name 'ames-r12-migration-bundle.test.mjs' ! -name 'ames-r12-capture.test.mjs' ! -name 'ames-offline-shell.test.mjs' ! -name 'ames-release-build.test.mjs' ! -name 'ames-deploy-routing.test.mjs' ! -name 'ames-stage-vercel.test.mjs' | sort)
-      - name: Pairing authentication and independent cross-view identities
-        run: |
-          node --test scripts/ames-auth-hardening.test.mjs scripts/ames-agent-pairing.test.mjs
-          node --test --test-name-pattern='U1|N1|N2|N3|S1' scripts/audit/codex_cross_contracts_red.mjs

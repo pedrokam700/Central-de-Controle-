@@ -1,0 +1,71 @@
+name: A-MES existing regressions without dependency installation
+on:
+  push:
+    branches:
+      - work/ames-lab-entry-p01-p03-p06-20261117
+permissions:
+  contents: read
+jobs:
+  node-integrated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash ./scripts/audit/guarded-ci.sh {0}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Full existing Node contracts without builders or installation
+        run: >-
+          node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' ! -name 'ames-r12-migration-bundle.test.mjs' ! -name 'ames-r12-capture.test.mjs' ! -name 'ames-offline-shell.test.mjs' ! -name 'ames-release-build.test.mjs' ! -name 'ames-deploy-routing.test.mjs' ! -name 'ames-stage-vercel.test.mjs' | sort)
+      - name: Pairing authentication and independent cross-view identities
+        if: always()
+        run: |
+          node --test scripts/ames-auth-hardening.test.mjs scripts/ames-agent-pairing.test.mjs
+          node --test --test-name-pattern='U1|N1|N2|N3|S1' scripts/audit/codex_cross_contracts_red.mjs
+
+  python-integrated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash ./scripts/audit/guarded-ci.sh {0}
+    env:
+      PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Existing synthetic Python contracts (no install or builders)
+        run: |
+          result=0
+          python3 -B scripts/agent-performance90.test.py || result=1
+          python3 -B scripts/agent-performance-equivalence.test.py || result=1
+          python3 -B scripts/agent-integration-migration-static.test.py || result=1
+          python3 -B scripts/agent-integration-brm.test.py || result=1
+          python3 -B scripts/agent-integration-projection.test.py || result=1
+          python3 -B scripts/agent-3022-production-evidence.test.py || result=1
+          python3 -B scripts/agent-3022-origin-fallback.test.py || result=1
+          python3 -B scripts/agent-production-trust.test.py || result=1
+          python3 -B scripts/agent-integrated-v5.test.py || result=1
+          python3 -B scripts/agent-process-r11.test.py || result=1
+          python3 -B scripts/agent-3022-canonical-contract.test.py || result=1
+          python3 -B scripts/agent-3074-physical-classification.test.py || result=1
+          python3 -B scripts/agent-integrated-snapshot-history.test.py || result=1
+          python3 -B scripts/agent-material-3074-link.test.py || result=1
+          python3 -B scripts/agent-canonical.test.py || result=1
+          python3 -B scripts/agent-canonical-insight-retry.test.py || result=1
+          python3 -B scripts/agent-3022-local-replay.test.py || result=1
+          python3 -B scripts/agent-3022-mixed-replay.test.py || result=1
+          python3 -B scripts/agent-3022-checkpoint-proof.test.py || result=1
+          python3 -B scripts/agent-local-sn-operator-evidence.test.py || result=1
+          python3 -B scripts/agent-3022-real-view-preflight.test.py || result=1
+          python3 -B scripts/agent-home-cdp-recovery.test.py || result=1
+          python3 -B scripts/agent-navigation-readiness.test.py || result=1
+          python3 -B scripts/agent-3022-observability.test.py || result=1
+          python3 -B scripts/agent-source-capture.test.py || result=1
+          python3 -B scripts/agent-trace-target.test.py || result=1
+          python3 -B scripts/agent-trace-auto-resume.test.py || result=1
+          exit "$result"
+# Dependency failures remain visible. No install fallback, no masked tests, no packages.

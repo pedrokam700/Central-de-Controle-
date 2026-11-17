@@ -1,6 +1,6 @@
 {
   "schema": "ames-offline-homologation-gates-v1",
-  "code_base_sha": "1ecc8daae2e1d8e055f36135cfe460817b0d69d9",
+  "code_base_sha": "db3cb5b58c99bcf86c44b671280cb42f7dd31d4c",
   "physical": "PENDING",
   "execution_authorized": false,
   "performed": false,
@@ -58,16 +58,13 @@
     }
   ],
   "blockers": [
-    "P01",
     "P02",
-    "P03",
     "P04",
     "P05",
-    "P06",
     "P07",
     "P08"
   ],
-  "decision": "UPDATER_CORRECTED_IN_TESTS_HOMOLOGATION_STILL_BLOCKED",
+  "decision": "LAB_ENTRY_CORRECTED_IN_SYNTHETIC_TESTS_HOMOLOGATION_STILL_BLOCKED",
   "budget_accepted": false,
   "proposed_lab_budget": {
     "repetitions_per_volume": 5,
@@ -90,5 +87,13 @@
     "D02": "CORRECTED_SYNTHETIC_TESTS_PHYSICAL_PENDING"
   },
   "reference_frontend_parent_sha": "83f5db58438318c726c9b22a8d0a2d8d78124c81",
-  "candidate_code_sha": "92601eb20a65c90248ac97b7cfb75d17b692c124"
+  "candidate_code_sha": "318130f203fe81ed6f4ece73b9383aa60ae8eada",
+  "updater_reference_code_sha": "92601eb20a65c90248ac97b7cfb75d17b692c124",
+  "synthetic_lab_entry_corrections": {
+    "P01": "CORRECTED_FOR_SEPARATE_SYNTHETIC_ENTRY_ONLY",
+    "P03": "CORRECTED_FOR_SEPARATE_SYNTHETIC_ENTRY_ONLY",
+    "P06": "CORRECTED_FOR_SEPARATE_SYNTHETIC_ENTRY_ONLY"
+  },
+  "lab_entry_scope": "Trusted closed stdio synthetic kernel; no operational agent, Chrome, engine, real-data importer or network. OS containment remains mandatory.",
+  "operational_launchers_lab_eligible": false
 }

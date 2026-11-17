@@ -1,5 +1,16 @@
 # Preparação da homologação offline — instalação 0.5.39 → código PR90
 
+
+> Continuidade #93 (base exclusiva #92 db3cb5b58c99bcf86c44b671280cb42f7dd31d4c):
+> P01/P03/P06 tratados em testes SOMENTE pela nova entrada
+> [LAB sintética explícita](LAB_SYNTHETIC_ENTRY.md). Launchers produtivos e agente
+> continuam com seus efeitos operacionais e não são entrada de laboratório.
+> O kernel stdio não inicia o agente HTTP, não abre as nove telas e não serve
+> para importar dados de instalação. Não substitui contenção externa.
+> P02/P04/P05/P07/P08 e G0–G7 continuam PENDENTES; ensaio supervisionado não executado.
+> D01/D02 preservados; pending journal ou session.claim bloqueia a entrada.
+> CI sintética LAB não é homologação física, nem prova do shell completo.
+
 **PLANO DOCUMENTAL. NÃO EXECUTADO. Homologação física PENDENTE.**
 Data: 17/11/2026, America/Sao_Paulo. Base EXCLUSIVA:
 `83f5db58438318c726c9b22a8d0a2d8d78124c81` (PR90, DRAFT).
