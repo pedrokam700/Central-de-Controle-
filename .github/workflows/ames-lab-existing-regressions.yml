@@ -1,4 +1,4 @@
-name: A-MES existing regressions without dependency installation
+name: A-MES integrated regressions with verified CI-only Python wheels
 on:
   push:
     branches:
@@ -7,8 +7,10 @@ permissions:
   contents: read
 jobs:
   node-integrated:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
     defaults:
       run:
         shell: bash ./scripts/audit/guarded-ci.sh {0}
@@ -16,7 +18,123 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Full existing Node contracts without builders or installation
+      - &test-python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.12'
+          architecture: x64
+          check-latest: false
+      - &prepare-test-python
+        name: Provision verified Python test wheels in disposable runner only
+        run: |
+          test "${GITHUB_ACTIONS:-}" = true
+          test "${RUNNER_OS:-}" = Linux
+          test "${RUNNER_ARCH:-}" = X64
+          test -n "${RUNNER_TEMP:-}"
+          # Select Node24 already present in the runner image: no npm/setup download.
+          node_bin_dir="$(python3 -B - <<'PY_NODE'
+          import os
+          from pathlib import Path
+          cache = Path(os.environ['RUNNER_TOOL_CACHE']).resolve()
+          versions = sorted(cache.glob('node/24.*/x64/bin/node'),
+              key=lambda p: tuple(map(int, p.parents[2].name.split('.'))))
+          assert versions, 'Preinstalled Node24 missing; download forbidden'
+          binary = versions[-1].resolve()
+          assert binary.is_relative_to(cache)
+          print(binary.parent)
+          PY_NODE
+          )"
+          export PATH="$node_bin_dir:$PATH"
+          echo "$node_bin_dir" >> "$GITHUB_PATH"
+          node --test scripts/ames-distribution-preload.test.mjs
+          python3 -B scripts/agent-distribution-guard-compat.test.py -v
+          test_venv="$RUNNER_TEMP/ames-ci-python"
+          test_lock="$RUNNER_TEMP/ames-ci-wheels.txt"
+          test ! -e "$test_venv"
+          export TMPDIR="$RUNNER_TEMP"
+          python3 -m venv --without-pip "$test_venv"
+          # PyPI metadata checked 2026-11-17. No index, sdists, resolver or cache.
+          cat > "$test_lock" <<'WHEELS'
+          openpyxl @ https://files.pythonhosted.org/packages/c0/da/977ded879c29cbd04de313843e76868e6e13408a94ed6b987245dc7c8506/openpyxl-3.1.5-py2.py3-none-any.whl --hash=sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2
+          pandas @ https://files.pythonhosted.org/packages/38/f8/d8fddee9ed0d0c0f4a2132c1dfcf0e3e53265055da8df952a53e7eaf178c/pandas-2.2.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl --hash=sha256:fffb8ae78d8af97f849404f21411c95062db1496aeb3e56f146f0355c9989319
+          et-xmlfile @ https://files.pythonhosted.org/packages/c1/8b/5fe2cc11fee489817272089c4203e679c63b570a5aaeb18d852ae3cbba6a/et_xmlfile-2.0.0-py3-none-any.whl --hash=sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa
+          numpy @ https://files.pythonhosted.org/packages/8c/3d/1e1db36cfd41f895d266b103df00ca5b3cbe965184df824dec5c08c6b803/numpy-2.2.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl --hash=sha256:fd83c01228a688733f1ded5201c678f0c53ecc1006ffbc404db9f7a899ac6249
+          python-dateutil @ https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
+          pytz @ https://files.pythonhosted.org/packages/81/c4/34e93fe5f5429d7570ec1fa436f1986fb1f00c3e0f43a589fe2bbcd22c3f/pytz-2025.2-py2.py3-none-any.whl --hash=sha256:5ddf76296dd8c44c26eb8f4b6f35488f3ccbf6fbbd7adee0b7262d43f0ec2f00
+          tzdata @ https://files.pythonhosted.org/packages/5c/23/c7abc0ca0a1526a0774eca151daeb8de62ec457e77262b66b359c3c7679e/tzdata-2025.2-py2.py3-none-any.whl --hash=sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8
+          six @ https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
+          WHEELS
+          python3 -m pip --python "$test_venv/bin/python" --isolated install \
+            --no-index --no-deps --require-hashes --only-binary=:all: \
+            --no-cache-dir --no-compile --disable-pip-version-check \
+            --report "$RUNNER_TEMP/ames-ci-pip-report.json" -r "$test_lock"
+          python3 -m pip --python "$test_venv/bin/python" --isolated check
+          # Only subsequent steps of this disposable job see this interpreter.
+          echo "$test_venv/bin" >> "$GITHUB_PATH"
+      - &inventory-test-python
+        name: Verify guards versions wheel origins SQLite JSON1 and runner inventory
+        run: |
+          node --test scripts/ames-distribution-preload.test.mjs
+          python3 -B scripts/agent-distribution-guard-compat.test.py -v
+          python3 -B - <<'PY_INVENTORY'
+          import hashlib, importlib.metadata, json, os, platform, re, shutil, sqlite3, subprocess, sys, sysconfig
+          from pathlib import Path
+          from datetime import datetime
+          from zoneinfo import ZoneInfo, TZPATH
+          import sitecustomize
+          import numpy, pandas, openpyxl
+          scratch = Path(os.environ['RUNNER_TEMP'])
+          assert sys.version_info[:3] == (3,12,12), sys.version
+          assert Path(sys.prefix) == scratch/'ames-ci-python', 'Interpreter escaped CI venv'
+          assert subprocess.Popen is sitecustomize._GuardedPopen, 'Python guard missing'
+          lock = (scratch/'ames-ci-wheels.txt').read_text()
+          expected = {}
+          for line in lock.splitlines():
+              match = re.fullmatch(r'([\w-]+) @ (https://files\.pythonhosted\.org/\S+) --hash=sha256:([a-f0-9]{64})', line)
+              assert match, 'Invalid locked wheel origin'
+              expected[match[1].lower().replace('_','-')] = (match[2],match[3])
+          report = json.loads((scratch/'ames-ci-pip-report.json').read_text())
+          installed = {}
+          for item in report['install']:
+              name = item['metadata']['name'].lower().replace('_','-')
+              info = item['download_info']
+              assert (info['url'],info['archive_info']['hashes']['sha256']) == expected[name]
+              installed[name] = item['metadata']['version']
+          assert set(installed) == set(expected)
+          actual = {d.metadata['Name'].lower().replace('_','-'):d.version for d in importlib.metadata.distributions()}
+          assert actual == installed, (actual, installed)
+          node = json.loads(subprocess.check_output(['node','-e',
+              "if(globalThis[Symbol.for('central.no-distribution.active')]!==true)throw Error('Node guard missing'); console.log(JSON.stringify(process.versions))"],text=True))
+          assert node['node'].split('.')[0] == '24', node
+          con = sqlite3.connect(':memory:')
+          try:
+              scalar = con.execute("SELECT json_valid(?),json_extract(?, '$.x[0]'),json_remove(?, '$.x')",
+                  ('{"x":[1,2]}','{"x":[1,2]}','{"x":1,"y":2}')).fetchone()
+              array = con.execute("SELECT json_group_array(json_extract(value,'$.product')) FROM json_each(?, '$.datasets.defects')",
+                  ('{"datasets":{"defects":[{"product":"LAB-A"},{"product":"LAB-B"}]}}',)).fetchone()[0]
+              assert scalar == (1,1,'{"y":2}') and json.loads(array) == ['LAB-A','LAB-B']
+              source_id = con.execute('SELECT sqlite_source_id()').fetchone()[0]
+              compile_options = [r[0] for r in con.execute('PRAGMA compile_options')]
+          finally:
+              con.close()
+          zone = ZoneInfo('America/Sao_Paulo')
+          offset = datetime(2026,11,17,7,tzinfo=zone).utcoffset().total_seconds()
+          assert offset == -10800
+          with open(shutil.which('node'),'rb') as node_binary:
+              node_hash = hashlib.file_digest(node_binary,'sha256').hexdigest()
+          inventory = {'scope':'DISPOSABLE_GITHUB_ACTIONS_ONLY',
+              'runner':{k:os.environ.get(k) for k in ('ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH')},
+              'python':{'version':sys.version,'implementation':platform.python_implementation(),'SOABI':sysconfig.get_config_var('SOABI'),'machine':platform.machine(),'libc':platform.libc_ver()},
+              'node':{'versions':node,'binary_sha256':node_hash},'packages':actual,'wheel_origins_sha256':expected,
+              'lock_sha256':hashlib.sha256(lock.encode()).hexdigest(),
+              'sqlite':{'version':sqlite3.sqlite_version,'source_id':source_id,'compile_options':compile_options,'json1_scalar':scalar,'json1_array':json.loads(array)},
+              'timezone':{'zone':zone.key,'utc_offset_seconds':offset,'TZPATH':TZPATH,'tzdata_package':actual['tzdata']},
+              'guards':{'python':'_GuardedPopen verified; sentinel tests passed','node':'active preload and before-launch sentinel tests passed'},
+              'physical':'PENDING','P04_original_Windows':'PENDING'}
+          (scratch/'ames-ci-inventory.json').write_text(json.dumps(inventory,indent=2))
+          print(json.dumps(inventory,indent=2))
+          PY_INVENTORY
+      - name: Full existing Node contracts without builders
         run: >-
           node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' ! -name 'ames-r12-migration-bundle.test.mjs' ! -name 'ames-r12-capture.test.mjs' ! -name 'ames-offline-shell.test.mjs' ! -name 'ames-release-build.test.mjs' ! -name 'ames-deploy-routing.test.mjs' ! -name 'ames-stage-vercel.test.mjs' | sort)
       - name: Pairing authentication and independent cross-view identities
@@ -26,7 +144,7 @@ jobs:
           node --test --test-name-pattern='U1|N1|N2|N3|S1' scripts/audit/codex_cross_contracts_red.mjs
 
   python-integrated:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -37,7 +155,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Existing synthetic Python contracts (no install or builders)
+      - *test-python
+      - *prepare-test-python
+      - *inventory-test-python
+      - name: Existing synthetic Python contracts (no builders)
         run: |
           result=0
           python3 -B scripts/agent-performance90.test.py || result=1
@@ -68,4 +189,5 @@ jobs:
           python3 -B scripts/agent-trace-target.test.py || result=1
           python3 -B scripts/agent-trace-auto-resume.test.py || result=1
           exit "$result"
-# Dependency failures remain visible. No install fallback, no masked tests, no packages.
+# Test-only wheels are installed ONLY in disposable GitHub Actions venvs.
+# No business-test edits/exclusions, distribution builders, archives or artifact upload.
