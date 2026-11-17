@@ -314,6 +314,7 @@ print('DENIED')
         args=[sys.executable,'-I','-S','-B',str(ENTRY),'--lab-root',str(self.lab),'--initialize-synthetic']
         for name in ('stdout','stderr','stdin'):
             with self.subTest(stream=name):
+                self.lab=self.area/('AMES-LAB-STDIO-'+name.upper());self.lab.mkdir()
                 target=self.area/('EXTERNAL-'+name)
                 if name=='stdin':target.write_text('{"command":"status"}\n')
                 else:target.write_bytes(b'')
