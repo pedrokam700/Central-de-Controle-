@@ -5,8 +5,20 @@ import unittest
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'ames/agent'))
 import production_shift as shift
+import material_trace_provenance as material
 
 class ContextWork(unittest.TestCase):
+    def test_saved_material_links_do_not_scan_all_occurrences_per_component(self):
+        rows = [{'pcba_sn': f'P{i}', 'line': 'TAN10101', 'defect_code': 'D', 'defect_desc': 'Camera',
+                 'defect_time': '2026-11-03 09:00:00', 'defect_key': f'K{i}'} for i in range(200)]
+        payload = {'trace_3074': {'items': [{'pcba_sn': r['pcba_sn'], 'defect_traces': [{
+            'defect': r, 'defect_key': 'LEGACY'+r['defect_key'], 'trace_3074': {'results': [{
+                'item_sn': 'M'+r['pcba_sn'], 'current_pcba_confirmed': True, 'previous_pcba_count': 1}]}}]} for r in rows]}}
+        with patch.object(material, '_field', wraps=material._field) as field:
+            out = material.trace_material_links(payload, rows)
+            self.assertEqual(len(out), 200)
+            self.assertLessEqual(field.call_count, 80*len(rows), f'RED: material identity rereads={field.call_count}')
+
     def test_exact_projection_indexes_occurrences_instead_of_N_by_N_scan(self):
         rows = [{'pcba_sn': f'P{i}', 'line': 'TAN10101', 'defect_code': 'D',
                  'defect_time': '2026-11-03T12:00:00Z', 'defect_key': f'K{i}'} for i in range(200)]
