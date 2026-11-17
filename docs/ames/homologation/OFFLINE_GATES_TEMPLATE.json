@@ -1,0 +1,90 @@
+{
+  "schema": "ames-offline-homologation-gates-v1",
+  "code_base_sha": "83f5db58438318c726c9b22a8d0a2d8d78124c81",
+  "physical": "PENDING",
+  "execution_authorized": false,
+  "performed": false,
+  "lab_run_id": null,
+  "reviewer_roles_attested": false,
+  "public_data_policy": "Synthetic/source-only. Operational evidence and fingerprints remain private; do not fill this tracked template with real data.",
+  "gates": [
+    {
+      "id": "G0",
+      "name": "Scope and containment",
+      "status": "PENDING",
+      "private_evidence_ref": null
+    },
+    {
+      "id": "G1",
+      "name": "Read-only original inventory",
+      "status": "PENDING",
+      "private_evidence_ref": null
+    },
+    {
+      "id": "G2",
+      "name": "Exclusive freeze and consistent backup",
+      "status": "PENDING",
+      "private_evidence_ref": null
+    },
+    {
+      "id": "G3",
+      "name": "Deidentified offline lab and dependencies",
+      "status": "PENDING",
+      "private_evidence_ref": null
+    },
+    {
+      "id": "G4",
+      "name": "Integrity and evidence comparison",
+      "status": "PENDING",
+      "private_evidence_ref": null
+    },
+    {
+      "id": "G5",
+      "name": "Nine views recovery restart responsiveness SW",
+      "status": "PENDING",
+      "private_evidence_ref": null
+    },
+    {
+      "id": "G6",
+      "name": "Rollback preserves new data",
+      "status": "PENDING",
+      "private_evidence_ref": null
+    },
+    {
+      "id": "G7",
+      "name": "Supervised verdict",
+      "status": "PENDING",
+      "private_evidence_ref": null
+    }
+  ],
+  "blockers": [
+    "D01",
+    "D02",
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08"
+  ],
+  "decision": "DOCUMENTATION_ONLY_EXECUTION_BLOCKED",
+  "budget_accepted": false,
+  "proposed_lab_budget": {
+    "repetitions_per_volume": 5,
+    "volumes": [
+      100,
+      200,
+      400,
+      800,
+      1600
+    ],
+    "max_ui_action_ms": 5000,
+    "p95_ui_response_ms": 2000,
+    "max_event_loop_gap_ms": 1000,
+    "max_rss_guest_reserved_ram_percent": 60,
+    "rss_last_three_cycles_variation_percent": 10,
+    "physical_slo": false
+  }
+}

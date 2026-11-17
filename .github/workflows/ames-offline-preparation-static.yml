@@ -1,0 +1,27 @@
+name: A-MES Offline Preparation (source only, no homologation)
+on:
+  push:
+    branches:
+      - work/ames-offline-homologation-plan-20261117
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash ./scripts/audit/guarded-ci.sh {0}
+jobs:
+  static-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Use only runner-provided Python/Node. No setup, pip, npm, browser or package.
+      - name: Verify preparation only and exact unchanged production base
+        run: |
+          git diff --exit-code 83f5db58438318c726c9b22a8d0a2d8d78124c81 HEAD -- ames tools sw.js offline-bootstrap.mjs scripts/templates
+          python3 -B scripts/audit/offline-homologation-static.test.py -v
+      - name: Emit public source-only findings (physical gates remain pending)
+        run: python3 -B scripts/audit/offline-homologation-static.test.py --report
