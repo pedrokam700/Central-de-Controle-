@@ -3,6 +3,7 @@ import {compareFailures} from './failure-taxonomy.mjs';
 import {factoryWallMinute} from './history.mjs';
 import {processBackedBoardReuses,contextBackedBoardReuses} from './reuse-cycle-evidence.mjs';
 import {compatibleExplicitLineage} from './production-evidence.mjs';
+import {reuseHistoryIdentity} from './reuse-history-timeline.mjs';
 const value=(r,...keys)=>keys.map(k=>r?.[k]).find(v=>v!==undefined&&v!==null&&v!=='')??null;
 const unique=items=>[...new Set(items.filter(v=>v!==null&&v!==undefined&&v!==''))];
 const list=v=>{if(Array.isArray(v))return v;try{const x=JSON.parse(v);if(Array.isArray(x))return x;}catch{}return typeof v==='string'?v.split(/[|,;\n]/).map(x=>x.trim()).filter(Boolean):[];};
@@ -64,7 +65,7 @@ export function board2114Timeline(board,history=[]){
  const original=history.filter(r=>sn(r)===id&&code(r));
  const seen=new Set();
  const records=original.filter(r=>{
-  const key=JSON.stringify([sequence(r),code(r),value(r,'defect_desc','Defect Description'),value(r,'defect_type','Defect Type'),value(r,'repair_status','Repair Status')]);
+  const key=reuseHistoryIdentity({...r,source_view:'2114'});
   if(seen.has(key))return false;
   seen.add(key);return true;
  }).sort((a,b)=>{
@@ -74,11 +75,12 @@ export function board2114Timeline(board,history=[]){
  const earlier=[];
  return records.map(row=>{
   const seq=sequence(row),hasOrder=seq!==null;
-  const prior=hasOrder?earlier.filter(r=>sequence(r)!==null&&sequence(r)<seq):[];
+  const prior=hasOrder?[...new Map(earlier.filter(r=>sequence(r)!==null&&sequence(r)<seq&&compatibleExplicitLineage(row,r))
+   .map(r=>[JSON.stringify([sequence(r),code(r),value(r,'defect_desc','Defect Description')]),r])).values()]:[];
   const exact=prior.filter(r=>compareFailures(code(row),value(row,'defect_desc','Defect Description'),code(r),value(r,'defect_desc','Defect Description')).classification==='EXACT');
   const similar=prior.filter(r=>compareFailures(code(row),value(row,'defect_desc','Defect Description'),code(r),value(r,'defect_desc','Defect Description')).classification==='SIMILAR');
   earlier.push(row);
-  return {hist_seq:seq,defect_code:code(row),defect_desc:value(row,'defect_desc','Defect Description')||null,
+  return {...row,hist_seq:seq,defect_code:code(row),defect_desc:value(row,'defect_desc','Defect Description')||null,
    defect_type:value(row,'defect_type','Defect Type')||null,
    analysis_scope:analysisScope2114(value(row,'defect_type','Defect Type')),
    repair_status:value(row,'repair_status','Repair Status')||null,

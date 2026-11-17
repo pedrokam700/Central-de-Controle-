@@ -236,14 +236,21 @@ def _production_rows(rows, line):
         if not production_shift.has_clock(normalized.get('event_time')):
             continue
         explicit_lines = {str(row[k]).strip().upper() for k in ('Line Id', 'Line', 'line', 'line_id') if row.get(k)}
+        if normalized.get('line_code'):
+            explicit_lines.add(normalized['line_code'].strip().upper())
         if line and any(value != str(line).strip().upper() for value in explicit_lines):
             continue
         # AT may reuse assembly operation codes on END LOT. Preserve those
         # events in raw/timeline, but do not call them productive assembly.
-        desc = ' '.join(str(row.get(k) or '') for k in ('Working Oper', 'Working Operation', 'Operation Name', 'TRAN CMF3')).lower()
-        operator = str(row.get('Tran User Id') or row.get('Transaction User Id') or '').upper()
-        if str(row.get('Tran Desc') or '').upper() == 'END LOT' and (
-                any(word in desc for word in ('repair', 'disassembly', 'rework', 'desmontagem')) or operator.startswith('BRM')):
+        desc = ' '.join(str(normalized.get(k) or '') for k in ('working_oper', 'tran_cmf3')).lower()
+        # A normalized preferred alias must not erase a second, contradictory
+        # explicit legacy label/ID. Keep every previously enforced AT guard.
+        desc += ' ' + ' '.join(str(row.get(k) or '') for k in ('Working Oper', 'Working Operation', 'Operation Name', 'TRAN CMF3')).lower()
+        operators = {str(normalized.get('tran_user_id') or '').strip().upper(),
+                     str(row.get('Tran User Id') or '').strip().upper(),
+                     str(row.get('Transaction User Id') or '').strip().upper()}
+        if str(normalized.get('tran_desc') or '').upper() == 'END LOT' and (
+                any(word in desc for word in ('repair', 'disassembly', 'rework', 'desmontagem')) or any(operator.startswith('BRM') for operator in operators)):
             continue
         result.append(row)
     return result
@@ -496,7 +503,8 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                     op_ev=operator_evidence(p.get("raw") or {})
                     adapter={
                         "contract":"R11_DERIVED_REQUIRES_R12_FACTORY_GATE","hist_seq":hist,
-                        **production_shift.classify_passage(event_time),
+                        **production_shift.classify_passage(event_time, station=op,
+                            eligible=p.get('completion_confirmed',True) and bool(_production_rows([p.get('raw') or {}],line))),
                         "current_operation_code":p.get("current_operation_code"),"event_group":p.get("event_group"),
                         "defect_contexts":context_by_pass.get(event_time,[]),
                         "operator_evidence":op_ev,

@@ -33,7 +33,9 @@ def classify(reference_event_time, previous_event_time=None, *, naive_offset=-3)
         return dict(zip(FIELDS, ('1st Shift' if 450 <= minute < 1050 else ('2nd Shift' if minute >= 1050 or minute < 210 else 'Outside scheduled shifts'), day.isoformat(), local.isoformat(), '3022', basis)))
     return result
 
-def classify_passage(event_time, *, naive_offset=-3):
+def classify_passage(event_time, *, naive_offset=-3, station=None, eligible=True):
+    if str(station or '').strip().upper().startswith('A69') or not eligible:
+        return {**dict.fromkeys(FIELDS), 'production_shift_source': 'not_production_passage'}
     result = classify(event_time, naive_offset=naive_offset)
     if result['production_shift_source']:
         result['production_shift_basis'] = 'process_passage'
@@ -122,7 +124,8 @@ def proven_context(contexts):
 def enrich_sn(result, *, grid_offset=0):
     """Classify each actual passage; failure-level association uses the correlator."""
     for event in (result.get('trace_3022') or {}).get('process_passages') or []:
-        event.update(classify_passage(event.get('event_time_utc') or event.get('event_time'), naive_offset=grid_offset))
+        event.update(classify_passage(event.get('event_time_utc') or event.get('event_time'), naive_offset=grid_offset,
+                                     station=event.get('operation_code') or event.get('station')))
     return result
 
 def _aware_defect(value):

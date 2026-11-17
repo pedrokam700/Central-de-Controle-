@@ -41,7 +41,7 @@ def payload(*items):
     return {'trace_3074': {'items': list(items)}, 'trace_2114': {'pcbas': []}}
 
 
-def export_synthetic_fixture():
+def export_synthetic_fixture(augment=None):
     """Raw 3074 -> scanner -> SQLite -> insights -> canonical, no live source."""
     with tempfile.TemporaryDirectory() as directory:
         store = Store(Path(directory) / 'fixture.sqlite')
@@ -76,6 +76,8 @@ def export_synthetic_fixture():
         store.save_snapshot_payload(sid, 'integrated_v016', data)
         store.ingest_material_reuse(sid, data['trace_3074'])
         stored = store.get_snapshot_payload(sid, ['integrated_v016'])
+        if augment:
+            augment(store, sid)
         def insights(**kw):
             return {**build_trace_insights(ROOT / 'ames/factory-engine', stored, line=LINE),
                     'ready': True, 'snapshot_id': sid}

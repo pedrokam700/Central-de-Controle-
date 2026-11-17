@@ -1,0 +1,232 @@
+{
+  "audit_base": "3a088ddad41be9e31b144e4ac4b0b73725141624",
+  "scope": "synthetic_local_precommit_validation",
+  "physical": "PENDING",
+  "local_contract_steps": [
+    {
+      "name": "Independent integration and static migration proof (no builders)",
+      "exit": 0,
+      "seconds": 2.43,
+      "log": "/workspace/work/89-local-0.log"
+    },
+    {
+      "name": "Disposable update rollback and crash recovery (no package)",
+      "exit": 0,
+      "seconds": 1.85,
+      "log": "/workspace/work/89-local-1.log"
+    },
+    {
+      "name": "3022 production time proof matrix (disposable SQLite)",
+      "exit": 0,
+      "seconds": 3.47,
+      "log": "/workspace/work/89-local-2.log"
+    },
+    {
+      "name": "3074 physical proof matrix (disposable SQLite)",
+      "exit": 0,
+      "seconds": 2.68,
+      "log": "/workspace/work/89-local-3.log"
+    },
+    {
+      "name": "3074 pagination, multi-cycle, raw revisions and state preservation",
+      "exit": 0,
+      "seconds": 6.41,
+      "log": "/workspace/work/89-local-4.log"
+    },
+    {
+      "name": "Local confirmed and mixed replay",
+      "exit": 0,
+      "seconds": 1.76,
+      "log": "/workspace/work/89-local-5.log"
+    },
+    {
+      "name": "Historical names, proven source and negative cases",
+      "exit": 0,
+      "seconds": 1.06,
+      "log": "/workspace/work/89-local-6.log"
+    },
+    {
+      "name": "Missing 3022 input now stops after two attempts",
+      "exit": 0,
+      "seconds": 0.41,
+      "log": "/workspace/work/89-local-7.log"
+    },
+    {
+      "name": "Preserve factory engine and raw capture/recovery contracts",
+      "exit": 0,
+      "seconds": 8.09,
+      "log": "/workspace/work/89-local-8.log"
+    },
+    {
+      "name": "F2 3022 strict Home and ExtJS preflight",
+      "exit": 0,
+      "seconds": 0.58,
+      "log": "/workspace/work/89-local-9.log"
+    },
+    {
+      "name": "F1 existing OPC/CDP session Home recovery safety",
+      "exit": 0,
+      "seconds": 0.19,
+      "log": "/workspace/work/89-local-10.log"
+    },
+    {
+      "name": "A-MES navigation route, visibility and OPC readiness",
+      "exit": 0,
+      "seconds": 0.3,
+      "log": "/workspace/work/89-local-11.log"
+    },
+    {
+      "name": "Full 3022 observability, single-click, stale-grid and storm-breaker regressions",
+      "exit": 0,
+      "seconds": 3.25,
+      "log": "/workspace/work/89-local-12.log"
+    },
+    {
+      "name": "Central Node contracts across nine views (no installer generation)",
+      "exit": 0,
+      "seconds": 31.28,
+      "log": "/workspace/work/89-local-13.log"
+    },
+    {
+      "name": "U1 single 2114 history without losing original fields",
+      "exit": 0,
+      "seconds": 0.27,
+      "log": "/workspace/work/89-local-14.log"
+    },
+    {
+      "name": "Independent N1/N3 name and source contracts",
+      "exit": 0,
+      "seconds": 0.41,
+      "log": "/workspace/work/89-local-15.log"
+    },
+    {
+      "name": "S1 source, line, snapshot, revision and period isolation",
+      "exit": 0,
+      "seconds": 0.43,
+      "log": "/workspace/work/89-local-16.log"
+    },
+    {
+      "name": "Pairing and authentication unaffected",
+      "exit": 0,
+      "seconds": 0.45,
+      "log": "/workspace/work/89-local-17.log"
+    }
+  ],
+  "browser_runs": [
+    {
+      "command": "node scripts/ames-experience.browser.mjs",
+      "exit": 0,
+      "seconds": 20.87,
+      "log": "/workspace/work/89-browser-0.log"
+    },
+    {
+      "command": "node scripts/ames-integration-worker.browser.mjs",
+      "exit": 0,
+      "seconds": 6.58,
+      "log": "/workspace/work/89-browser-1.log"
+    },
+    {
+      "command": "node scripts/ames-reuse-timeline.browser.mjs",
+      "exit": 0,
+      "seconds": 8.51,
+      "log": "/workspace/work/89-browser-2.log"
+    },
+    {
+      "command": "node scripts/ames-3074-physical-classification.browser.mjs",
+      "exit": 0,
+      "seconds": 5.14,
+      "log": "/workspace/work/89-browser-3.log"
+    },
+    {
+      "command": "node scripts/ames-3022-production-evidence.browser.mjs",
+      "exit": 0,
+      "seconds": 6.6,
+      "log": "/workspace/work/89-browser-4.log"
+    },
+    {
+      "command": "node scripts/ames-sync-reload.browser.mjs",
+      "exit": 0,
+      "seconds": 5.06,
+      "log": "/workspace/work/89-browser-5.log"
+    },
+    {
+      "command": "node scripts/ames-pairing.browser.mjs",
+      "exit": 0,
+      "seconds": 8.63,
+      "log": "/workspace/work/89-browser-6.log"
+    },
+    {
+      "command": "node scripts/ames-3028-completion.browser.mjs",
+      "exit": 0,
+      "seconds": 5.21,
+      "log": "/workspace/work/89-browser-7.log"
+    }
+  ],
+  "scale_python": {
+    "schema": "ames-synthetic-scale-v1",
+    "phase": "project_contexts",
+    "factory_acceptance": "PENDING",
+    "samples": [
+      {
+        "occurrences": 500,
+        "contexts": 500,
+        "seconds": 0.6468
+      },
+      {
+        "occurrences": 1000,
+        "contexts": 1000,
+        "seconds": 2.9991
+      },
+      {
+        "occurrences": 2000,
+        "contexts": 2000,
+        "seconds": 5.3533
+      }
+    ]
+  },
+  "scale_node_comparison": {
+    "schema": "ames-synthetic-scale-v1",
+    "baseline_sha": "3a088ddad41be9e31b144e4ac4b0b73725141624",
+    "factory_acceptance": "PENDING",
+    "cohorts": [
+      {
+        "pcbas": 250,
+        "historical_rows": 500,
+        "components": 250,
+        "milliseconds": 280,
+        "rss_mib": 50
+      },
+      {
+        "pcbas": 500,
+        "historical_rows": 1000,
+        "components": 500,
+        "milliseconds": 651,
+        "rss_mib": 64
+      },
+      {
+        "pcbas": 1000,
+        "historical_rows": 2000,
+        "components": 1000,
+        "milliseconds": 1933,
+        "rss_mib": 83
+      }
+    ],
+    "deep_history": [
+      {
+        "historical_rows_one_pcba": 100,
+        "base_milliseconds": 351,
+        "current_milliseconds": 417
+      },
+      {
+        "historical_rows_one_pcba": 200,
+        "base_milliseconds": 1653,
+        "current_milliseconds": 1964
+      },
+      {
+        "historical_rows_one_pcba": 400,
+        "base_milliseconds": 6619,
+        "current_milliseconds": 6832
+      }
+    ]
+  }
+}
