@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = 'db3cb5b58c99bcf86c44b671280cb42f7dd31d4c'
 BRANCH = 'work/ames-lab-entry-p01-p03-p06-20261117'
 ALLOWED = {
+    'docs/ames/audits/PR93_LAB_VALIDATION_20261117.json',
     'ames/agent/lab_entry.py', 'scripts/agent-lab-isolation.test.py',
     'scripts/agent-lab-preservation-static.test.py',
     '.github/workflows/ames-lab-isolation.yml', '.github/workflows/ames-lab-existing-regressions.yml',

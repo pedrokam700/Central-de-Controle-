@@ -21,7 +21,8 @@ não é iniciado por esta entrada. Shell frio/SDK/auth offline (P05) continua pe
 
 1. Somente ambiente descartável sintético expressamente autorizado, CPython >=3.11
    confiável, stdlib previamente disponível. Não instalar/reparar dependências.
-2. Raiz local ABSOLUTA, existente, vazia, nome AMES-LAB-*, sem symlink/junction/
+2. Raiz local ABSOLUTA, existente, vazia, nome AMES-LAB-*, fora do pacote de fonte
+   e de ancestrais com marcadores de instalação/engine/perfil. Sem symlink/junction/
    reparse/hardlink, com todos ancestrais verificáveis. Não usar share UNC,
    caminho de dispositivo, instalação original ou pasta com configurações existentes.
 3. Conta/VM isolada e diretório sob controle exclusivo. Política Python não
@@ -55,6 +56,11 @@ Entrada JSON de uma linha, única chave command:
   Uso físico e horário produtivo permanecem null: não há evidência real.
 - {"command":"shutdown"} ou EOF: fecha SQLite e remove SOMENTE claim da sessão
   concluída. Mensagem de prontidão identifica SYNTHETIC_LAB_ONLY, não agent ready.
+
+Stdin/stdout/stderr devem ser pipes ou terminais comprovados. Redirecionamento
+para arquivo regular, inclusive arquivo de comandos, é recusado antes de escrever.
+Se stderr não for seguro, a recusa não grava mensagem nele: saída é código 2.
+Harness captura por pipes e registra só em seus próprios temporários.
 
 Saída é JSON sem caminhos/credenciais/ambiente. Não existe comando de coleta,
 recuperação de job, importação, edição de config, acesso à Internet, SQL ou código.

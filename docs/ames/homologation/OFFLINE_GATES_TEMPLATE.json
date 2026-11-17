@@ -87,7 +87,7 @@
     "D02": "CORRECTED_SYNTHETIC_TESTS_PHYSICAL_PENDING"
   },
   "reference_frontend_parent_sha": "83f5db58438318c726c9b22a8d0a2d8d78124c81",
-  "candidate_code_sha": "318130f203fe81ed6f4ece73b9383aa60ae8eada",
+  "candidate_code_sha": "0a44ce2bfba2f894d023134459b4e2aff79a5926",
   "updater_reference_code_sha": "92601eb20a65c90248ac97b7cfb75d17b692c124",
   "synthetic_lab_entry_corrections": {
     "P01": "CORRECTED_FOR_SEPARATE_SYNTHETIC_ENTRY_ONLY",
