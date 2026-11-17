@@ -17,3 +17,7 @@
   for = "/Central-de-Controle-/sw.js"
   [headers.values]
     Cache-Control = "no-cache"
+
+# Audit branch: suppress automatic preview builds; no distribution is authorized.
+[context."work/ames-performance-guard-20261117"]
+  ignore = "exit 0"

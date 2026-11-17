@@ -4,7 +4,7 @@
   "buildCommand": "node scripts/build-static.mjs",
   "installCommand": "",
   "outputDirectory": "dist",
-  "git": { "deploymentEnabled": { "main": false } },
+  "git": { "deploymentEnabled": { "main": false, "work/ames-performance-guard-20261117": false } },
   "redirects": [
     { "source": "/", "destination": "/Central-de-Controle-/", "permanent": false },
     { "source": "/Central-de-Controle-", "destination": "/Central-de-Controle-/", "permanent": false }

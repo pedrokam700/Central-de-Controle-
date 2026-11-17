@@ -1,4 +1,4 @@
-import {compareFailures} from './failure-taxonomy.mjs';
+import {compareFailures,describeFailure} from './failure-taxonomy.mjs';
 // Read-only populations. A defect investigation is never a production denominator.
 import {factoryWallMinute} from './history.mjs';
 import {processBackedBoardReuses,contextBackedBoardReuses} from './reuse-cycle-evidence.mjs';
@@ -40,19 +40,28 @@ export function analysisScope2114(type){
  * it DOES NOT prove this 3028 record happened at a particular 2114 time.
  */
 export function boardHistSeqRecurrence(occurrence={},history=[]){
- const pcba=sn(occurrence);
- if(!pcba||!code(occurrence))return [];
- const own=history.filter(r=>sn(r)===pcba&&sequence(r)!==null&&code(r));
+ return histSeqRecurrence(occurrence,history,compareFailures);
+}
+function prepareHistSeq(pcba,history){
  const bySeq=new Map();
- for(const row of own){
+ for(const row of history){
+  if(sn(row)!==pcba||!code(row))continue;
   const seq=sequence(row);
-  if(!bySeq.has(seq))bySeq.set(seq,row);
+  if(seq!==null&&!bySeq.has(seq))bySeq.set(seq,row);
  }
  const ordered=[...bySeq].sort((a,b)=>a[0]-b[0]);
+ return {ordered,prior:null};
+}
+function histSeqRecurrence(occurrence,history,compare,prepared){
+ const pcba=sn(occurrence);
+ if(!pcba||!code(occurrence))return [];
+ const state=prepared||prepareHistSeq(pcba,history),ordered=state.ordered;
  if(ordered.length<2)return [];
  const latest=ordered.at(-1)[1];
- if(compareFailures(code(occurrence),occurrence.defect_desc,code(latest),latest.defect_desc).classification!=='EXACT')return [];
- return ordered.slice(0,-1).map(([,old])=>({...old,history_order_basis:'HIST_SEQ_ONLY',history_timestamp_proven:Boolean(time(old))}));
+ if(compare(code(occurrence),occurrence.defect_desc,code(latest),latest.defect_desc).classification!=='EXACT')return [];
+ // All callers within one projection observe the same immutable source rows.
+ // Copies/annotations are prepared once; no cache crosses a snapshot boundary.
+ return state.prior??=ordered.slice(0,-1).map(([,old])=>({...old,history_order_basis:'HIST_SEQ_ONLY',history_timestamp_proven:Boolean(time(old))}));
 }
 
 /** Auditable whole 2114 history of the same board, independent of a 3028 match.
@@ -72,26 +81,111 @@ export function board2114Timeline(board,history=[]){
   const sa=sequence(a),sb=sequence(b);
   return sa===null&&sb===null?0:sa===null?1:sb===null?-1:sa-sb;
  });
- const earlier=[];
- return records.map(row=>{
-  const seq=sequence(row),hasOrder=seq!==null;
-  const prior=hasOrder?[...new Map(earlier.filter(r=>sequence(r)!==null&&sequence(r)<seq&&compatibleExplicitLineage(row,r))
-   .map(r=>[JSON.stringify([sequence(r),code(r),value(r,'defect_desc','Defect Description')]),r])).values()]:[];
-  const exact=prior.filter(r=>compareFailures(code(row),value(row,'defect_desc','Defect Description'),code(r),value(r,'defect_desc','Defect Description')).classification==='EXACT');
-  const similar=prior.filter(r=>compareFailures(code(row),value(row,'defect_desc','Defect Description'),code(r),value(r,'defect_desc','Defect Description')).classification==='SIMILAR');
-  earlier.push(row);
-  return {...row,hist_seq:seq,defect_code:code(row),defect_desc:value(row,'defect_desc','Defect Description')||null,
-   defect_type:value(row,'defect_type','Defect Type')||null,
-   analysis_scope:analysisScope2114(value(row,'defect_type','Defect Type')),
-   repair_status:value(row,'repair_status','Repair Status')||null,
-   manual_or_auto:value(row,'manual_or_auto','TestTools Auto Defect Or Defect By Hand')||null,
-   defect_oper:value(row,'defect_oper','Defect Oper')||null,
-   defect_time:value(row,'defect_time','Defect Time')||null,
-   history_order_proven:hasOrder,
-   repeat_exact_prior_count:exact.length,repeat_family_prior_count:similar.length,
-   recurrence_basis:hasOrder?'2114_HIST_SEQ':'NO_ORDER_PROOF',
-   record_id:row.record_id||null};
+ // Count prior logical identities within compatible lineages. Classification
+ // depends on normalized code equality and the taxonomy's family/subtype flags,
+ // so descriptions sharing those proven flags can share counters, never rows.
+ const scopes=new Map(),descriptors=new Map(),comparisons=new Map();
+ const scopeAliases=[['source_id'],['line','line_id'],['snapshot_id'],['snapshot_revision','revision'],['period']];
+ const token=v=>v==null?'':typeof v==='object'?JSON.stringify(v):String(v).trim();
+ const scopeKey=r=>JSON.stringify(scopeAliases.map(keys=>keys.map(k=>r[k])));
+ const entries=records.map(row=>{
+  const scope=scopeKey(row),rawCode=code(row),desc=value(row,'defect_desc','Defect Description');
+  const descriptor=JSON.stringify([rawCode,desc]);
+  if(!scopes.has(scope))scopes.set(scope,{sample:row,seen:new Set(),counts:new Map(),
+   tokens:scopeAliases.map(keys=>keys.map(k=>token(row[k])).find(Boolean)||''),
+   valid:compatibleExplicitLineage(row,{})});
+  if(!descriptors.has(descriptor)){
+   const facts=describeFailure(rawCode,desc);
+   descriptors.set(descriptor,{code:rawCode,desc,normalizedCode:facts.code,
+    shape:JSON.stringify([facts.family,facts.subtype,facts.ambiguous,facts.negative])});
+  }
+  return {row,scope,descriptor:descriptors.get(descriptor),seq:sequence(row),logicalKey:JSON.stringify([sequence(row),rawCode,desc])};
  });
+ // Narrow scope candidates by the most selective explicit field. Missing
+ // fields remain wildcards; the original predicate makes the final decision.
+ const byField=scopeAliases.map(()=>new Map()),missing=scopeAliases.map(()=>[]),valid=[];
+ for(const [key,state] of scopes)if(state.valid){
+  valid.push(key);
+  state.tokens.forEach((v,i)=>{if(!v)missing[i].push(key);else{if(!byField[i].has(v))byField[i].set(v,[]);byField[i].get(v).push(key);}});
+ }
+ const acceptedBy=new Map([...scopes.keys()].map(key=>[key,[]]));
+ const scopeSizes=new Map();for(const entry of entries)scopeSizes.set(entry.scope,(scopeSizes.get(entry.scope)||0)+1);
+ let sparse=true,work=0;
+ scopeQueries: for(const query of scopes.values())if(query.valid){
+  let candidates=valid;
+  query.tokens.forEach((v,i)=>{if(v){const own=byField[i].get(v)||[];if(own.length+missing[i].length<candidates.length)candidates=[...own,...missing[i]];}});
+  for(const key of candidates)if(compatibleExplicitLineage(query.sample,scopes.get(key).sample)){
+   work+=scopeSizes.get(key);
+   // Incomplete legacy scopes can form a dense wildcard graph. Bound index
+   // memory instead of storing a quadratic number of per-query identities.
+   // The fallback scans cached facts and preserves every original observation.
+   if(work>64*entries.length){sparse=false;acceptedBy.clear();break scopeQueries;}
+   acceptedBy.get(key).push(query);
+  }
+ }
+ const insert=(query,entry)=>{
+  if(query.seen.has(entry.logicalKey))return;
+  query.seen.add(entry.logicalKey);const d=entry.descriptor;
+  if(!query.counts.has(d.shape))query.counts.set(d.shape,{total:0,codes:new Map()});
+  const group=query.counts.get(d.shape);group.total++;
+  if(!group.codes.has(d.normalizedCode))group.codes.set(d.normalizedCode,{sample:d,count:0});
+  group.codes.get(d.normalizedCode).count++;
+ };
+ const priorState=(entry,begin)=>{
+  const query=scopes.get(entry.scope);if(sparse)return query;
+  const state={seen:new Set(),counts:new Map()};if(!query.valid)return state;
+  for(let i=0;i<begin;i++){
+   const prior=entries[i],candidate=scopes.get(prior.scope);
+   if(prior.seq!==null&&candidate.valid&&query.tokens.every((v,j)=>!v||!candidate.tokens[j]||v===candidate.tokens[j]))insert(state,prior);
+  }
+  return state;
+ };
+ const compare=(current,old,equal)=>{
+  const key=JSON.stringify([current.shape,old.shape,equal,equal&&Boolean(current.normalizedCode)]);
+  if(!comparisons.has(key)){
+   if(comparisons.size>=4096)comparisons.clear();
+   comparisons.set(key,compareFailures(current.code,current.desc,old.code,old.desc).classification);
+  }
+  return comparisons.get(key);
+ };
+ const output=[];
+ for(let begin=0;begin<entries.length;){
+  let end=begin+1;while(end<entries.length&&entries[end].seq===entries[begin].seq)end++;
+  for(let pos=begin;pos<end;pos++){
+   const {row,scope,descriptor,seq}=entries[pos],hasOrder=seq!==null;
+   let exact=0,similar=0;
+   if(hasOrder)for(const group of priorState(entries[pos],begin).counts.values()){
+    const equal=group.codes.get(descriptor.normalizedCode);
+    if(equal){const kind=compare(descriptor,equal.sample,true);if(kind==='EXACT')exact+=equal.count;else if(kind==='SIMILAR')similar+=equal.count;}
+    if(group.total>(equal?.count||0)){
+     // At most two entries need inspection to choose an actually observed
+     // different code. No synthetic code/label is passed to the classifier.
+     let different;for(const [normalized,item] of group.codes)if(normalized!==descriptor.normalizedCode){different=item.sample;break;}
+     const kind=compare(descriptor,different,false),count=group.total-(equal?.count||0);
+     if(kind==='EXACT')exact+=count;else if(kind==='SIMILAR')similar+=count;
+    }
+   }
+   output.push({...row,hist_seq:seq,defect_code:code(row),defect_desc:value(row,'defect_desc','Defect Description')||null,
+    defect_type:value(row,'defect_type','Defect Type')||null,
+    analysis_scope:analysisScope2114(value(row,'defect_type','Defect Type')),
+    repair_status:value(row,'repair_status','Repair Status')||null,
+    manual_or_auto:value(row,'manual_or_auto','TestTools Auto Defect Or Defect By Hand')||null,
+    defect_oper:value(row,'defect_oper','Defect Oper')||null,
+    defect_time:value(row,'defect_time','Defect Time')||null,
+    history_order_proven:hasOrder,
+    repeat_exact_prior_count:exact,repeat_family_prior_count:similar,
+    recurrence_basis:hasOrder?'2114_HIST_SEQ':'NO_ORDER_PROOF',
+    record_id:row.record_id||null});
+  }
+  // Publish a complete sequence block only afterwards: equal Hist Seq rows
+  // remain observations of that sequence, never earlier failures for it.
+  if(sparse)for(let pos=begin;pos<end;pos++){
+   const entry=entries[pos];if(entry.seq===null)continue;
+   for(const query of acceptedBy.get(entry.scope))insert(query,entry);
+  }
+  begin=end;
+ }
+ return output;
 }
 
 function exactOccurrence(row,occurrences,kind){
@@ -111,7 +205,18 @@ function reference(snapshot,row,source){
   line_id:snapshot.line_id,source_view:source,record_id:row.record_id||null,
   period:snapshot.period||snapshot.canonical?.summary?.period||null,raw:row};
 }
-function finish(map,history=[]){
+// Comparison candidates only: display/evidence arrays remain complete. Native
+// Map keys preserve null/undefined and object identity for legacy policy values.
+function comparisonRows(rows){
+ const groups=new Map(),out=[];
+ for(const row of rows){
+  const keys=[code(row),row.defect_desc,family(row)];let level=groups;
+  for(const key of keys){if(!level.has(key))level.set(key,new Map());level=level.get(key);}
+  if(!level.has('seen')){level.set('seen',true);out.push(row);}
+ }
+ return out;
+}
+function finish(map,history=[],compare=compareFailures){
  const historyByPcba=new Map();
  for(const row of history){
   const id=sn(row);if(!id||!code(row))continue;
@@ -132,8 +237,9 @@ function finish(map,history=[]){
   row.outcome=row.kind==='pcba'&&row.events.length?'failed':'unknown';
   // Component association alone is never a diagnosed component failure.
   row.associated_current_failure=row.kind==='component'&&row.events.length>0;
-  row.same_failure=row.prior_events.some(p=>row.events.some(e=>compareFailures(code(e),e.defect_desc,code(p),p.defect_desc).classification==='EXACT'));
-  row.same_family=row.prior_events.some(p=>row.events.some(e=>compareFailures(code(e),e.defect_desc,code(p),p.defect_desc,{currentFamily:family(e)??undefined,oldFamily:family(p)??undefined}).classification==='SIMILAR'));
+  const priorComparisons=comparisonRows(row.prior_events),eventComparisons=comparisonRows(row.events);
+  row.same_failure=priorComparisons.some(p=>eventComparisons.some(e=>compare(code(e),e.defect_desc,code(p),p.defect_desc).classification==='EXACT'));
+  row.same_family=priorComparisons.some(p=>eventComparisons.some(e=>compare(code(e),e.defect_desc,code(p),p.defect_desc,{currentFamily:family(e)??undefined,oldFamily:family(p)??undefined}).classification==='SIMILAR'));
   row.reused=row.use_index>=2;
   // A material's 3074 physical mounting history and each board's 2114
   // failures are separate evidence. Never hide three known mountings merely
@@ -146,7 +252,7 @@ function finish(map,history=[]){
       const key=JSON.stringify([h.record_id||null,sequence(h),code(h),value(h,'defect_desc','Defect Description'),time(h)]);
       if(seen.has(key))return false;seen.add(key);return true;
      }).map(h=>{
-      const exact=row.events.some(e=>compareFailures(code(e),e.defect_desc,code(h),h.defect_desc).classification==='EXACT');
+      const exact=row.events.some(e=>compare(code(e),e.defect_desc,code(h),h.defect_desc).classification==='EXACT');
       const before=row.events.some(e=>time(e)&&time(h)&&time(h)<time(e));
       return {pcba_sn:pcba,hist_seq:sequence(h),defect_code:code(h),defect_desc:value(h,'defect_desc','Defect Description')||null,
        defect_time:value(h,'defect_time','Defect Time')||null,defect_type:value(h,'defect_type','Defect Type')||null,
@@ -169,7 +275,7 @@ function finish(map,history=[]){
    const groups=[];
    for(const binding of row.binding_history)for(const failure of binding.failures){
     if(!failure.defect_code)continue;
-    let group=groups.find(g=>compareFailures(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT');
+    let group=groups.find(g=>compare(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT');
     if(!group){group={defect_code:failure.defect_code,defect_desc:failure.defect_desc,pcbas:new Set()};groups.push(group);}
     group.pcbas.add(binding.pcba_sn);
    }
@@ -178,7 +284,7 @@ function finish(map,history=[]){
    }));
    for(const binding of row.binding_history)for(const failure of binding.failures){
     failure.recurrence_pcba_count=row.cross_board_recurrences.find(g=>
-     compareFailures(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT')?.pcba_count||0;
+     compare(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT')?.pcba_count||0;
    }
    row.cross_board_same_failure=row.cross_board_recurrences.length>0;
    row.same_failure=row.same_failure||row.cross_board_same_failure;
@@ -219,6 +325,44 @@ export function summarizeReusePopulation(rows,proof=null){
 export function buildReuseCohorts(snapshot={},filters={}){
  const occurrences=(snapshot.occurrences||[]).filter(r=>!r.line_id||r.line_id===snapshot.line_id);
  const history=snapshot.pcba_history?.records||[],pcbas=new Map(),components=new Map();
+ // Per-projection indexes/caches cannot leak results across snapshots, scopes
+ // or later mutations. Lists preserve source order and duplicate observations.
+ const group=(rows,key)=>{const out=new Map();for(const row of rows){const k=key(row);if(!out.has(k))out.set(k,[]);out.get(k).push(row);}return out;};
+ const occurrenceByPcba=group(occurrences,sn),historyByPcba=group(history,sn);
+ const eventByPcba=group(snapshot.process_timeline?.events||[],sn),contextByPcba=group(snapshot.process_timeline?.contexts||[],sn);
+ // The reuse-proof helpers deliberately trim their board IDs and have their
+ // own legacy alias order. Their candidate indexes must use those semantics.
+ const proofId=r=>String(r?.pcba_sn||r?.PCBA||r?.current_pcba_sn||'').trim();
+ const proofHistory=group(history,proofId),proofEvents=group(snapshot.process_timeline?.events||[],proofId),proofContexts=group(snapshot.process_timeline?.contexts||[],proofId);
+ const historyEntries=group(history.map((row,position)=>({row,position})),e=>sn(e.row));
+ const clockCandidates=new Map();
+ const priorRows=previous=>{
+  const ids=[...new Set(previous)],key=JSON.stringify(ids);
+  if(!clockCandidates.has(key))clockCandidates.set(key,ids.flatMap(id=>historyEntries.get(id)||[])
+   .sort((a,b)=>a.position-b.position).map(e=>({row:e.row,at:time(e.row)})).filter(e=>e.at&&code(e.row)));
+  return clockCandidates.get(key);
+ };
+ const preparedSequences=new Map(),priorMaps=new WeakMap(),eventKeys=new WeakMap(),lastPriors=new WeakMap();
+ const keyOf=row=>{if(!eventKeys.has(row))eventKeys.set(row,eventKey(row));return eventKeys.get(row);};
+ const addPriors=(item,rows)=>{
+  if(!rows.length||lastPriors.get(item)===rows)return;
+  lastPriors.set(item,rows);
+  if(!priorMaps.has(item))priorMaps.set(item,new Map());
+  const prior=priorMaps.get(item);
+  // Exactly the existing finish() policy: first key insertion order, last row
+  // wins. Apply it while accumulating instead of retaining N copies until finish.
+  for(const row of rows)prior.set(keyOf(row),row);
+ };
+ const comparisons=new Map();
+ const compare=(...args)=>{
+  // Non-string policy inputs retain the uncached legacy path and identity
+  // semantics. Canonical code/description/family fields are strings or absent.
+  if(args.slice(0,4).some(v=>v!=null&&typeof v!=='string')||
+   ['currentFamily','oldFamily'].some(k=>args[4]?.[k]!==undefined&&typeof args[4][k]!=='string'))return compareFailures(...args);
+  const key=JSON.stringify(args);
+  if(!comparisons.has(key)){if(comparisons.size>=4096)comparisons.clear();comparisons.set(key,compareFailures(...args));}
+  return comparisons.get(key);
+ };
  function add(map,id,kind,row,event,source){
   if(!id||!compatibleExplicitLineage(snapshot,row)||((row.line_id||row.line||row.Linha)&&String(row.line_id||row.line||row.Linha)!==snapshot.line_id))return;
   if(!map.has(id))map.set(id,{id,kind,sn:kind==='pcba'?sn(row):String(value(row,'item_sn','material_sn','Material SN')),
@@ -235,12 +379,12 @@ export function buildReuseCohorts(snapshot={},filters={}){
   // summary cannot be joined to one exact 3028 defect occurrence. Never turn
   // the missing occurrence join into "use unknown"; likewise, never use that
   // independent index to attribute a particular current defect or repair.
-  const boardInScope=kind==='pcba'&&source==='2114/3074'&&occurrences.some(o=>sn(o)===id)&&
-   (!time(row)||occurrences.some(o=>sn(o)===id&&time(o)&&time(o)>=time(row)));
+  const boardInScope=kind==='pcba'&&source==='2114/3074'&&(occurrenceByPcba.get(id)||[]).length>0&&
+   (!time(row)||(occurrenceByPcba.get(id)||[]).some(o=>time(o)&&time(o)>=time(row)));
   // The reused Material SN's physical 3074 mounting index is independently
   // observable, even when no unique 3028 event can be joined. A later 3074
   // binding must never be retroactively attached to the present defect.
-  const componentBoard=kind==='component'?occurrences.filter(o=>sn(o)===sn(row)):[];
+  const componentBoard=kind==='component'?(occurrenceByPcba.get(sn(row))||[]):[];
   const materialBound=factoryWallMinute(value(row,'bind_time_utc','bind_time','Bind Time'));
   const materialInScope=kind==='component'&&source==='3074'&&componentBoard.length>0&&
    (!materialBound||componentBoard.some(o=>time(o)&&time(o)>=materialBound));
@@ -254,16 +398,21 @@ export function buildReuseCohorts(snapshot={},filters={}){
    if(sn(row))item.current_pcbas.push(sn(row));
   }
   if(event){item.events.push(event);const cutoff=time(event);
-   const priorByClock=history.filter(h=>previous.includes(sn(h))&&time(h)&&cutoff&&time(h)<cutoff&&code(h));
+   const priorByClock=priorRows(previous).filter(h=>cutoff&&h.at<cutoff).map(h=>h.row);
    // Hist Seq is a valid order within one 2114 PCBA, including MES variants
    // that never return Defect Time. Never use this rule across materials/PCBAs.
-   const priorBySeq=kind==='pcba'?boardHistSeqRecurrence(event,history):[];
-   item.prior_events.push(...priorByClock,...priorBySeq);
+   let priorBySeq=[];
+   if(kind==='pcba'){
+    const id=sn(event);
+    if(!preparedSequences.has(id))preparedSequences.set(id,prepareHistSeq(id,historyByPcba.get(id)||[]));
+    priorBySeq=histSeqRecurrence(event,[],compare,preparedSequences.get(id));
+   }
+   addPriors(item,priorByClock);addPriors(item,priorBySeq);
   }
  }
  for(const o of occurrences)add(pcbas,sn(o),'pcba',o,o,'3028');
  for(const row of snapshot.insights?.drilldowns?.pcba_analysis||[]){
-  add(pcbas,sn(row),'pcba',row,exactOccurrence(row,occurrences,'pcba'),'2114/3074');
+  add(pcbas,sn(row),'pcba',row,exactOccurrence(row,occurrenceByPcba.get(sn(row))||[],'pcba'),'2114/3074');
  }
  // Both sources contribute evidence; a physical SN/type is counted only once.
  const materialRows=[...(snapshot.material_trace?.records||[]),...(snapshot.insights?.drilldowns?.material_analysis||[])],byMaterial=new Map();
@@ -275,28 +424,29 @@ export function buildReuseCohorts(snapshot={},filters={}){
   const types=unique(candidates.map(r=>value(r,'item_type','material_type','Tipo material')));
   if(!type&&types.length===1)type=String(types[0]);
   const normalized={...row,item_type:type};
-  let event=exactOccurrence(normalized,occurrences,'component');
+  let event=exactOccurrence(normalized,occurrenceByPcba.get(sn(normalized))||[],'component');
   // A summary cannot override a contradictory dated binding in canonical evidence.
   if(event&&candidates.some(r=>sn(r)===sn(row)&&String(value(r,'item_type','material_type','Tipo material')||type)===type&&
     factoryWallMinute(r.bind_time_utc)&&time(event)&&factoryWallMinute(r.bind_time_utc)>time(event)))event=null;
   add(components,JSON.stringify([String(item),type]),'component',normalized,event,'3074');
  }
- const filter=rows=>rows.filter(r=>(!filters.product||r.products.includes(filters.product))&&
-  (r.kind==='pcba'||!filters.item_type||r.item_type===filters.item_type)&&(r.kind==='pcba'||!filters.part_number||r.part_numbers.includes(filters.part_number))&&
-  (!filters.sn||r.sn.toLowerCase().includes(String(filters.sn).toLowerCase())));
- const pcbaRows=filter(finish(pcbas,history)),componentRows=filter(finish(components,history));
+ for(const item of [...pcbas.values(),...components.values()])item.prior_events=[...(priorMaps.get(item)?.values()||[])];
+ const filter=rows=>selectCohortRows(rows,filters);
+ const pcbaRows=filter(finish(pcbas,history,compare)),componentRows=filter(finish(components,history,compare));
  // A PCBA's full 2114 sequence is always inspectable even when 3074 has
  // insufficient self-mounting evidence to determine a physical use count.
  // Keep it separate from the current 3028-vs-2114 recurrence KPI.
  for(const board of pcbaRows){
-  board.history_2114=board2114Timeline(board.sn,history);
+  board.history_2114=board2114Timeline(board.sn,historyByPcba.get(board.sn)||[]);
   board.history_2114_repeats=board.history_2114.filter(h=>h.repeat_exact_prior_count>0).length;
   // 3074 physical self-bindings take precedence. When the self-binding report
   // is absent, corroborated 2114 dismantling + later production 3022 provides
   // a conservative minimum: never count a 2114 row or 3022 station alone.
+  const proofBoard=String(board.sn).trim(),boardProofHistory=proofHistory.get(proofBoard)||[],
+   boardProofEvents=proofEvents.get(proofBoard)||[],boardProofContexts=proofContexts.get(proofBoard)||[];
   const processProof=board.events.flatMap(event=>[
-   processBackedBoardReuses(board.sn,event,history,snapshot.process_timeline?.events||[]),
-   contextBackedBoardReuses(board.sn,event,history,snapshot.process_timeline?.contexts||[])
+   ...(boardProofEvents.length?[processBackedBoardReuses(board.sn,event,boardProofHistory,boardProofEvents)]:[]),
+   ...(boardProofContexts.length?[contextBackedBoardReuses(board.sn,event,boardProofHistory,boardProofContexts)]:[])
   ]).filter(proof=>proof.minimum_uses).sort((a,b)=>b.minimum_uses-a.minimum_uses)[0];
   board.process_reuse_evidence=processProof||null;
   if(!board.use_index&&board.uses.length===0&&processProof){
@@ -313,8 +463,8 @@ export function buildReuseCohorts(snapshot={},filters={}){
     previous_2114_failures:board.prior_events.length,
     '2114_records':board.history_2114.length,
     '2114_dismantlings':board.history_2114.filter(h=>['board_disassembly','phone_disassembly'].includes(h.analysis_scope)).length,
-    '3022_process_passages':(snapshot.process_timeline?.events||[]).filter(e=>sn(e)===board.sn).length,
-    '3022_correlations':(snapshot.process_timeline?.contexts||[]).filter(e=>sn(e)===board.sn).length
+    '3022_process_passages':(eventByPcba.get(board.sn)||[]).length,
+    '3022_correlations':(contextByPcba.get(board.sn)||[]).length
    };
   }
  }
@@ -323,4 +473,13 @@ export function buildReuseCohorts(snapshot={},filters={}){
  const pcbaSummary=summarizeReusePopulation(pcbaRows);
  return {pcbas:{rows:pcbaRows,...pcbaSummary},
   components:{rows:componentRows,...summarizeReusePopulation(componentRows)}};
+}
+
+function selectCohortRows(rows,filters={}){return rows.filter(r=>(!filters.product||r.products.includes(filters.product))&&
+  (r.kind==='pcba'||!filters.item_type||r.item_type===filters.item_type)&&(r.kind==='pcba'||!filters.part_number||r.part_numbers.includes(filters.part_number))&&
+  (!filters.sn||r.sn.toLowerCase().includes(String(filters.sn).toLowerCase())))}
+// Reuse only within one immutable view snapshot; no global snapshot cache.
+export function filterReuseCohorts(model,filters={}){
+ const pcbas=selectCohortRows(model.pcbas.rows,filters),components=selectCohortRows(model.components.rows,filters);
+ return {pcbas:{rows:pcbas,...summarizeReusePopulation(pcbas)},components:{rows:components,...summarizeReusePopulation(components)}};
 }

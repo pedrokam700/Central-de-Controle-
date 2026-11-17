@@ -10,6 +10,25 @@ def _field(row, key):
     return str((row or {}).get(key) or '').strip()
 
 
+IDENTITY_FIELDS = ('line', 'pcba_sn', 'defect_time', 'defect_code', 'defect_desc')
+
+
+def index_observations(observations):
+    """Narrow candidates without changing exact_observation's literal clocks.
+
+    Unlike 3022 UTC correlation, this legacy-key contract requires the SAME
+    recorded clock string. Keep every duplicate and revalidate product/model.
+    """
+    indexed = {}
+    for row in observations:
+        indexed.setdefault(tuple(_field(row, k) for k in IDENTITY_FIELDS), []).append(row)
+    return indexed
+
+
+def observation_candidates(source, indexed):
+    return indexed.get(tuple(_field(source, k) for k in IDENTITY_FIELDS), ())
+
+
 def exact_observation(source, observations):
     """Require a unique same-line, same-defect 3028 record; never join by SN alone."""
     if not isinstance(source, dict) or not all(
@@ -32,13 +51,15 @@ def trace_material_links(payload, observations):
     """
     found = {}
     ambiguous = set()
+    indexed = index_observations(observations) if isinstance(observations, (list, tuple)) else None
     for item in ((payload or {}).get('trace_3074') or {}).get('items') or []:
         pcba = _field(item, 'pcba_sn')
         for trace in item.get('defect_traces') or []:
             occurrence = trace.get('defect') or {}
             if _field(occurrence, 'pcba_sn') != pcba:
                 continue
-            matched = exact_observation(occurrence, observations)
+            candidates = observation_candidates(occurrence, indexed) if indexed is not None else observations
+            matched = exact_observation(occurrence, candidates)
             if matched is None:
                 continue
             checkpoint_key = _field(trace, 'defect_key')

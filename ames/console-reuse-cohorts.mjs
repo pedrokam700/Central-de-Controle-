@@ -1,4 +1,4 @@
-import {buildReuseCohorts,analysisScope2114} from './data/reuse-cohorts.mjs';
+import {buildReuseCohorts,filterReuseCohorts,analysisScope2114} from './data/reuse-cohorts.mjs';
 import {reuseHistoryIdentity} from './data/reuse-history-timeline.mjs';
 import {renderReuseHistoryTimeline} from './console-reuse-history-timeline.mjs';
 import {a6900TechnicianFor} from './data/a6900-technician.mjs';
@@ -143,7 +143,7 @@ export function mountReuseCohorts(root,snapshot,{cachedRepairHistory,cached3022O
  let selection=null,filters={};
  const all=buildReuseCohorts(snapshot),options=(key,values)=>`<select name="${key}"><option value="">${t('Todos','All')}</option>${[...new Set(values.filter(Boolean))].sort().map(v=>`<option${filters[key]===v?' selected':''} value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`;
  function render(){
-  const model=buildReuseCohorts(snapshot,filters),names=labels();
+  const model=filterReuseCohorts(all,filters),names=labels();
   // Uncollected/partial evidence must not be rendered as a verified zero-failure cohort.
   const verifiedEvidence=model.pcbas.counts.verified_no_failure!==null||model.components.counts.verified_no_failure!==null;
   const health=snapshot.insights?.local_reconstruction||null;
@@ -227,20 +227,22 @@ export function mountReuseCohorts(root,snapshot,{cachedRepairHistory,cached3022O
  }
  // These are display-only source rows. Do not change buildReuseCohorts or its KPIs.
  const boardOf=row=>String(row.pcba_sn||row.current_pcba_sn||'').trim();
+ const grouped=rows=>{const out=new Map();for(const row of rows){const key=boardOf(row);if(!out.has(key))out.set(key,[]);out.get(key).push(row);}return out;};
+ const displayHistory=grouped(snapshot.pcba_history?.records||[]),displayCurrent=grouped(snapshot.occurrences||[]);
  function timelineBoard(row){
-  const originals=(snapshot.pcba_history?.records||[]).filter(h=>boardOf(h)===row.sn);
+  const originals=displayHistory.get(row.sn)||[],factsById=new Map();
+  for(const facts of row.history_2114||[])if(facts.record_id&&!factsById.has(facts.record_id))factsById.set(facts.record_id,facts);
   const history=originals.length?originals.map(h=>{
-   const facts=(row.history_2114||[]).find(f=>f.record_id&&f.record_id===h.record_id)||{};
+   const facts=factsById.get(h.record_id)||{};
    return {...facts,...h,analysis_scope:analysisScope2114(h.defect_type)};
   }):row.history_2114;
-  const events=(snapshot.occurrences||[]).filter(e=>boardOf(e)===row.sn);
+  const events=displayCurrent.get(row.sn)||[];
   return {...row,history_2114:history,events:events.length?events:row.events};
  }
  function timelineComponent(row){
-  const histories=snapshot.pcba_history?.records||[],observations=snapshot.occurrences||[];
   const bindings=(row.binding_history||[]).flatMap(binding=>{
-   const rawHistory=histories.filter(h=>boardOf(h)===binding.pcba_sn);
-   const rawCurrent=observations.filter(h=>boardOf(h)===binding.pcba_sn);
+   const rawHistory=displayHistory.get(binding.pcba_sn)||[];
+   const rawCurrent=displayCurrent.get(binding.pcba_sn)||[];
    const failures=rawHistory.length||rawCurrent.length
     ?[...rawHistory.map(h=>({...h,source_view:'2114'})),...rawCurrent.map(h=>({...h,source_view:'3028'}))]:binding.failures;
    const own=(row.evidence||[]).filter(ref=>ref.source_view==='3074'&&boardOf(ref.raw||{})===binding.pcba_sn);

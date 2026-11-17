@@ -2,6 +2,7 @@
 import cp from 'node:child_process';
 import fs from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
+Object.defineProperty(globalThis,Symbol.for('central.no-distribution.active'),{value:true});
 export function assertNoDistribution(command,args=[]){
  const parts=[command,...(Array.isArray(args)?args:[])].filter(x=>typeof x==='string');
  if(parts.some(value=>/(?:^|[\\/\s'"])(?:build-[\w-]+\.(?:py|mjs)|stage-vercel\.mjs|capture-r12-engine\.py|harden-[\w-]*package\.py)(?:$|[\s'"])/.test(value)))throw Error('NO_DISTRIBUTION: builder command refused');

@@ -1,0 +1,58 @@
+"""Deterministic work budget, synthetic rows only; no MES/database needed."""
+from pathlib import Path
+import sys
+import unittest
+from unittest.mock import patch
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'ames/agent'))
+import production_shift as shift
+import material_trace_provenance as material
+import integrated_snapshot_history as recovery
+from core import failure_taxonomy as taxonomy
+
+class ContextWork(unittest.TestCase):
+    def test_recovery_membership_does_not_rescan_all_base_keys(self):
+        rows = [{'line':'TAN10101','pcba_sn':f'P{i}','defect_code':'D','defect_time':'2026-11-03 09:00:00'} for i in range(200)]
+        versions = [{'trace_3074':{'items':[{'pcba_sn':r['pcba_sn'],'status':'COMPLETE',
+            'defect_traces':[{'status':'COMPLETE','defect':r}]} for r in rows]}}]
+        reads=[0]
+        def counted_any(values):
+            for value in values:
+                reads[0]+=1
+                if value:return True
+            return False
+        with patch.object(recovery,'any',counted_any,create=True):
+            result,_=recovery.recover_snapshot_line(versions,'TAN10101',rows)
+        self.assertEqual(len(result['trace_3074']['items']),200)
+        self.assertLessEqual(reads[0],1600,f'RED: recovery membership reads={reads[0]}')
+
+    def test_taxonomy_reuses_only_pure_unicode_normalization(self):
+        value='SYNTHETIC câmeras câmera frontal performance-counterproof'
+        with patch.object(taxonomy.unicodedata,'normalize',wraps=taxonomy.unicodedata.normalize) as normalize:
+            results=[taxonomy.normalize(value) for _ in range(200)]
+            self.assertEqual(len(set(results)),1)
+            self.assertLessEqual(normalize.call_count,2,'RED: repeated pure Unicode normalization')
+
+    def test_saved_material_links_do_not_scan_all_occurrences_per_component(self):
+        rows = [{'pcba_sn': f'P{i}', 'line': 'TAN10101', 'defect_code': 'D', 'defect_desc': 'Camera',
+                 'defect_time': '2026-11-03 09:00:00', 'defect_key': f'K{i}'} for i in range(200)]
+        payload = {'trace_3074': {'items': [{'pcba_sn': r['pcba_sn'], 'defect_traces': [{
+            'defect': r, 'defect_key': 'LEGACY'+r['defect_key'], 'trace_3074': {'results': [{
+                'item_sn': 'M'+r['pcba_sn'], 'current_pcba_confirmed': True, 'previous_pcba_count': 1}]}}]} for r in rows]}}
+        with patch.object(material, '_field', wraps=material._field) as field:
+            out = material.trace_material_links(payload, rows)
+            self.assertEqual(len(out), 200)
+            self.assertLessEqual(field.call_count, 80*len(rows), f'RED: material identity rereads={field.call_count}')
+
+    def test_exact_projection_indexes_occurrences_instead_of_N_by_N_scan(self):
+        rows = [{'pcba_sn': f'P{i}', 'line': 'TAN10101', 'defect_code': 'D',
+                 'defect_time': '2026-11-03T12:00:00Z', 'defect_key': f'K{i}'} for i in range(200)]
+        contexts = [{**r, 'source': '3022', 'reference_station_code': 'A5162',
+                     'reference_event_time': '2026-11-03T11:00:00Z'} for r in rows]
+        with patch.object(shift, 'same_occurrence', wraps=shift.same_occurrence) as compare:
+            out = shift.project_contexts(contexts, rows)
+            self.assertEqual(len(out), len(rows))
+            self.assertTrue(all(r['production_shift_source'] == '3022' for r in out))
+            self.assertLessEqual(compare.call_count, 8*len(rows), 'RED: exact context matching is quadratic')
+
+if __name__ == '__main__':
+    unittest.main()
