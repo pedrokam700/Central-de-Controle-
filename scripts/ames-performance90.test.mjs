@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {board2114Timeline} from '../ames/data/reuse-cohorts.mjs';
+import {board2114Timeline,buildReuseCohorts} from '../ames/data/reuse-cohorts.mjs';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 test('new browser runtime has a distinct source cache revision even without executing a distribution builder',()=>{
@@ -17,4 +17,14 @@ test('history work must reuse proven descriptors rather than reread every histor
  assert.equal(out.length,200);assert.equal(out.at(-1).repeat_exact_prior_count,199);
  assert.deepEqual(out.map(r=>r.defect_user_name),rows.map(r=>r.defect_user_name));
  assert(reads<=200*40,`RED historical code reads=${reads}, linear work budget=${200*40}`);
+});
+test('independent failures on one board must not rebuild/copy the same Hist Seq series for every failure',()=>{
+ let reads=0;const n=200;
+ const history=Array.from({length:n},(_,i)=>({pcba_sn:'P',get hist_seq(){reads++;return i;},
+  record_id:'H'+i,defect_code:'D',defect_desc:'Camera impurity',defect_user_name:'Pessoa '+i}));
+ const occurrences=Array.from({length:n},(_,i)=>({pcba_sn:'P',line_id:'TAN10101',defect_code:'D',
+  defect_desc:'Camera impurity',defect_key:'K'+i,defect_time:new Date(Date.UTC(2026,10,3,12,i)).toISOString(),product_model:'CPH2859'}));
+ const out=buildReuseCohorts({line_id:'TAN10101',occurrences,pcba_history:{records:history}}).pcbas.rows[0];
+ assert.equal(out.events.length,n);assert.equal(out.history_2114.length,n);assert.equal(out.prior_events.length,n-1);
+ assert(reads<=100*n,`RED independent occurrence Hist Seq reads=${reads}, budget=${100*n}`);
 });
