@@ -93,7 +93,7 @@ class LabIsolation(unittest.TestCase):
     def test_06_refuse_external_engine_chrome_db_profile_and_config(self):
         self.init()
         file=self.lab/'lab.json'; base=json.loads(file.read_text())
-        for key in ('engine_dir','chrome_cdp','db_path','chrome_profile_dir','config_path','ames_start_url','source_id','token','jobs'):
+        for key in ('engine_dir','engine','chrome_cdp','chrome','database','db_path','chrome_profile_dir','config_path','ames_start_url','source_id','token','jobs'):
             with self.subTest(key=key):
                 file.write_text(json.dumps({**base,key:str(self.area/'OPERATIONAL-SENTINEL')}))
                 self.denied(self.run_lab())
@@ -206,6 +206,105 @@ class LabIsolation(unittest.TestCase):
         finally:con.close()
         (self.lab/'session.claim').unlink()  # Supervised TEST cleanup after process termination proof.
         self.assertEqual(self.run_lab([{'command':'status'}]).returncode,0)
+
+
+    def test_21_guard_must_prove_itself_before_writes(self):
+        self.available()
+        code=f"""import runpy,sys
+m=runpy.run_path({str(ENTRY)!r})
+sys.addaudithook=lambda hook:None
+sys.argv=['LAB','--lab-root',{str(self.lab)!r},'--initialize-synthetic']
+raise SystemExit(m['main']())
+"""
+        result=subprocess.run([sys.executable,'-I','-S','-B','-c',code],capture_output=True,text=True,env=self.lab_env(),timeout=10)
+        self.denied(result);self.assertIn('GUARD_NOT_ACTIVE',result.stderr)
+        self.assertEqual(list(self.lab.iterdir()),[])
+
+    def test_22_foreign_schema_is_rejected_without_rw_open(self):
+        self.init()
+        db=self.lab/'lab.sqlite3'
+        con=sqlite3.connect(db)
+        try:con.execute('CREATE TABLE foreign_operational_sentinel (secret TEXT)');con.commit()
+        finally:con.close()
+        before=db.read_bytes()
+        self.denied(self.run_lab())
+        self.assertEqual(db.read_bytes(),before);self.assertFalse((self.lab/'session.claim').exists())
+
+    def test_23_no_automatic_operational_import(self):
+        self.guard_probe("__import__('agent')")
+        self.guard_probe("__import__('network_watch')")
+
+    def test_24_sqlite_sidecars_are_pending_not_ignored(self):
+        self.init()
+        for suffix in ('-wal','-shm','-journal'):
+            with self.subTest(suffix=suffix):
+                file=self.lab/('lab.sqlite3'+suffix);file.write_text('SYNTHETIC PENDING')
+                before=(self.lab/'lab.sqlite3').read_bytes()
+                self.denied(self.run_lab())
+                self.assertEqual(file.read_text(),'SYNTHETIC PENDING')
+                self.assertEqual((self.lab/'lab.sqlite3').read_bytes(),before);file.unlink()
+
+    def test_25_partial_initialization_preserves_claim_and_blocks_restart(self):
+        self.available()
+        code=f"""import runpy,sys
+m=runpy.run_path({str(ENTRY)!r})
+def failed(root):raise OSError('SYNTHETIC_IO_FAILURE_NOT_PUBLIC')
+m['main'].__globals__['connect']=failed
+sys.argv=['LAB','--lab-root',{str(self.lab)!r},'--initialize-synthetic']
+raise SystemExit(m['main']())
+"""
+        result=subprocess.run([sys.executable,'-I','-S','-B','-c',code],capture_output=True,text=True,env=self.lab_env(),timeout=10)
+        self.denied(result);self.assertNotIn('SYNTHETIC_IO_FAILURE_NOT_PUBLIC',result.stderr)
+        before={p.name:p.read_bytes() for p in self.lab.iterdir()}
+        self.assertIn('session.claim',before);self.assertIn('lab.json',before)
+        self.denied(self.run_lab())
+        self.assertEqual(before,{p.name:p.read_bytes() for p in self.lab.iterdir()})
+
+    def test_26_concurrent_session_refused_without_modifying_owner(self):
+        self.available()
+        args=[sys.executable,'-I','-S','-B',str(ENTRY),'--lab-root',str(self.lab),'--initialize-synthetic']
+        child=subprocess.Popen(args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,cwd=self.area,env=self.lab_env())
+        try:
+            self.assertIn('SYNTHETIC_LAB_ONLY',child.stdout.readline())
+            before={p.name:p.read_bytes() for p in self.lab.iterdir()}
+            self.denied(self.run_lab())
+            self.assertEqual(before,{p.name:p.read_bytes() for p in self.lab.iterdir()})
+            stdout,stderr=child.communicate('{"command":"shutdown"}\n',timeout=8)
+            self.assertEqual(child.returncode,0,stderr)
+        finally:
+            if child.poll() is None:child.kill();child.wait(timeout=8)
+            for stream in (child.stdin,child.stdout,child.stderr):
+                if stream is not None:stream.close()
+        self.assertFalse((self.lab/'session.claim').exists())
+
+    def test_27_attach_and_sqlite_extension_blocked(self):
+        self.available()
+        code=f"""import runpy,sqlite3
+from pathlib import Path
+m=runpy.run_path({str(ENTRY)!r})
+root=Path({str(self.lab)!r});m['install_guard'](root);con=m['connect'](root)
+try:
+ for sql in ("ATTACH DATABASE ':memory:' AS extra","SELECT load_extension('SYNTHETIC')","PRAGMA temp_store_directory='SYNTHETIC'"):
+  try:con.execute(sql)
+  except sqlite3.DatabaseError:pass
+  else:raise SystemExit('SQL_POLICY_MISSING')
+ try:con.enable_load_extension(True)
+ except PermissionError:pass
+ else:raise SystemExit('NATIVE_POLICY_MISSING')
+finally:con.close()
+print('DENIED')
+"""
+        result=subprocess.run([sys.executable,'-I','-S','-B','-c',code],capture_output=True,text=True,env=self.lab_env(),timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout.strip(),'DENIED')
+
+    def test_28_manifest_boolean_types_are_not_numeric_permission(self):
+        self.init()
+        file=self.lab/'lab.json';base=json.loads(file.read_text())
+        for key in ('synthetic_only','network','guardian','recover_jobs'):
+            with self.subTest(key=key):
+                changed={**base,key:int(base[key])};file.write_text(json.dumps(changed))
+                self.denied(self.run_lab())
+        file.write_text(json.dumps(base))
 
 
 if __name__=='__main__':unittest.main()
