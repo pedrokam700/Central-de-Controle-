@@ -1,6 +1,6 @@
 {
   "schema": "ames-offline-homologation-gates-v1",
-  "code_base_sha": "83f5db58438318c726c9b22a8d0a2d8d78124c81",
+  "code_base_sha": "1ecc8daae2e1d8e055f36135cfe460817b0d69d9",
   "physical": "PENDING",
   "execution_authorized": false,
   "performed": false,
@@ -88,5 +88,7 @@
   "software_corrections": {
     "D01": "CORRECTED_SYNTHETIC_TESTS_PHYSICAL_PENDING",
     "D02": "CORRECTED_SYNTHETIC_TESTS_PHYSICAL_PENDING"
-  }
+  },
+  "reference_frontend_parent_sha": "83f5db58438318c726c9b22a8d0a2d8d78124c81",
+  "candidate_code_sha": "92601eb20a65c90248ac97b7cfb75d17b692c124"
 }

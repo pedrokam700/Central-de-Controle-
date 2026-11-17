@@ -5,6 +5,12 @@ Data: 17/11/2026, America/Sao_Paulo. Base EXCLUSIVA:
 `83f5db58438318c726c9b22a8d0a2d8d78124c81` (PR90, DRAFT).
 Nenhum procedimento abaixo autoriza sua execução nesta missão.
 
+Atualização da PR92: correção de updater baseada EXATAMENTE na PR91
+`1ecc8daae2e1d8e055f36135cfe460817b0d69d9`; código
+`92601eb20a65c90248ac97b7cfb75d17b692c124`,
+[handoff D01/D02](../handoffs/PR92_UPDATER_ROLLBACK_D01_D02_20261117.md).
+O frontend/coleta/classificação continuam iguais à base; este plano não foi executado.
+
 Foram lidos integralmente o [handoff #90](../handoffs/PR90_DESEMPENHO_GUARD_20261117.md),
 o [parecer e rollback #89](../audits/PR89_INTEGRACAO_69_88_20261117.md) e a discussão
 #89, incluindo checkpoint independente 6950145034. O plano abaixo substitui, para

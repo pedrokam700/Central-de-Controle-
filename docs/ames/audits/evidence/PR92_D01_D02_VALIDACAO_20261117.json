@@ -1,0 +1,539 @@
+{
+  "schema": "ames-updater-d01-d02-proof-v1",
+  "physical": "PENDING",
+  "offline_homologation_started": false,
+  "base_sha": "1ecc8daae2e1d8e055f36135cfe460817b0d69d9",
+  "code_sha": "92601eb20a65c90248ac97b7cfb75d17b692c124",
+  "pr": 92,
+  "draft": true,
+  "only_production_changed": [
+    "ames/agent/update_candidate.py"
+  ],
+  "worktree_rescue": {
+    "remote_safe_sha": "c6f8b1ef17eed0f1dbd9f28782d46e8a3dfb6235",
+    "saved_before_edits": true,
+    "file_complete": true,
+    "lines_at_rescue": 470,
+    "AST_valid": true,
+    "hard_reset": false,
+    "restoration_needed": false
+  },
+  "source_sha256": {
+    ".github/workflows/ames-updater-recovery.yml": "ad1ebdd71bc5c8e11ea1d36a3f4f2aef3800ef53f88da19559871a33874c0736",
+    "ames/agent/update_candidate.py": "a06e02ecfcbf838f603728fb4b9921a04550c14c6e4ae0bbc163100174880921",
+    "scripts/agent-distribution-guard-compat.test.py": "4559b1f0b4d9fbccb2de980f7a568208fe1074443d65c5649e80d2b7f5f75f2a",
+    "scripts/agent-updater-recovery.test.py": "80476fbf746ffe7c372959384b9de2d94d97b99c925a815843e4585574435f70",
+    "scripts/audit/no_distribution/sitecustomize.py": "542801f729695573ffa0207b488307124ce621f00683987cd90537f5a92006a5",
+    "scripts/audit/offline-homologation-static.test.py": "f6cd287dcb2d936015de8f6a3b2f4588a87cb8f2f7c8f3648276d76fa05f36f3"
+  },
+  "RED": {
+    "sha": "c6f8b1ef17eed0f1dbd9f28782d46e8a3dfb6235",
+    "run_id": 44140363559,
+    "linux_tests": 13,
+    "assertion_failures_including_subtests": 16,
+    "windows": "infrastructure failure before tests: Popen function incompatible with asyncio subclass"
+  },
+  "intermediate": [
+    {
+      "sha": "8da8fdf96dba660b403c46885f9fdf808971568d",
+      "run_id": 44150272238,
+      "linux": "SUCCESS",
+      "windows": "fixture failures: unclosed sqlite handles and unresolved 8.3 fault paths; not ignored"
+    },
+    {
+      "sha": "4fe52d96f82ba573ac3076a6b09b91480202964b",
+      "run_id": 44150853469,
+      "linux": "SUCCESS",
+      "windows": "SUCCESS",
+      "updater_tests": 26,
+      "windows_fixture_filesystem": "NTFS"
+    }
+  ],
+  "GREEN_code": {
+    "sha": "92601eb20a65c90248ac97b7cfb75d17b692c124",
+    "run_id": 44151330007,
+    "linux_job": 134280168079,
+    "windows_job": 134280167680,
+    "linux": "SUCCESS",
+    "windows": "SUCCESS",
+    "updater_tests": 27,
+    "static_tests": 13,
+    "guard_compat_tests": 2,
+    "CI_node_contracts": 16,
+    "windows_fixture_filesystem": "NTFS",
+    "windows_updater_seconds": 53.756,
+    "linux_updater_seconds": 8.432
+  },
+  "GREEN_local": {
+    "updater_test_names": [
+      "test_missing_middle_agent_member_must_not_change_any_destination",
+      "test_missing_root_member_must_not_change_any_destination",
+      "test_corrupt_agent_member_must_be_rejected_before_copy",
+      "test_corrupt_root_member_must_be_rejected_before_copy",
+      "test_agent_copy_IO_failure_recovers_current_generation_and_new_data",
+      "test_root_copy_IO_failure_recovers_current_generation_and_new_data",
+      "test_failed_update_and_failed_automatic_restore_leave_blocked_recoverable_state",
+      "test_interruption_during_automatic_compensation_keeps_barrier_and_before_generation",
+      "test_interruptions_preserve_journal_and_allow_explicit_recovery_without_old_DB_restore",
+      "test_legacy_hashless_backup_is_not_silently_trusted",
+      "test_backup_destination_open_failure_closes_source_and_never_changes_generation",
+      "test_backup_records_integrity_of_all_saved_members",
+      "test_helper_absent_destination_is_copied_then_removed_on_verified_rollback",
+      "test_old_helper_is_backed_up_copied_and_restored",
+      "test_transitive_PowerShell_dot_sources_are_delivered_and_managed",
+      "test_windows_fixture_filesystem_is_recorded_without_workstation_commands",
+      "test_source_corruption_between_preflight_and_staging_is_rejected",
+      "test_extra_requirements_and_frontend_are_backed_up_and_rolled_back",
+      "test_legacy_backup_restores_only_with_independent_complete_proof",
+      "test_restore_inventory_cannot_target_current_operational_artifacts",
+      "test_invalid_proof_or_backup_from_other_installation_cannot_write",
+      "test_corrupted_staging_and_wrong_transaction_id_keep_barrier",
+      "test_third_party_code_or_config_write_blocks_recovery_without_overwrite",
+      "test_finalization_IO_failure_blocks_until_verified_completion",
+      "test_hard_process_exit_recovers_from_persisted_generations_and_preserves_new_data",
+      "test_live_claim_cannot_be_recovered_by_a_second_process",
+      "test_missing_candidate_helper_and_wrong_manifest_hash_are_preflight_failures"
+    ],
+    "integrated_steps": [
+      {
+        "name": "Prove effective distribution preload (simulated builder only)",
+        "exit": 0,
+        "seconds": 0.4,
+        "command": "node --test scripts/ames-distribution-preload.test.mjs"
+      },
+      {
+        "name": "Performance and effective preload counterproofs",
+        "exit": 0,
+        "seconds": 2.2,
+        "command": "result=0\npython3 scripts/agent-performance90.test.py || result=1\npython3 scripts/agent-performance-equivalence.test.py || result=1\nnode --test scripts/ames-performance90.test.mjs scripts/ames-distribution-preload.test.mjs || result=1\nexit \"$result\""
+      },
+      {
+        "name": "Independent integration and static migration proof (no builders)",
+        "exit": 0,
+        "seconds": 2.75,
+        "command": "result=0\npython3 scripts/agent-integration-migration-static.test.py || result=1\npython3 scripts/agent-integration-brm.test.py || result=1\npython3 scripts/agent-integration-projection.test.py || result=1\nnode --test scripts/ames-integration-worker.test.mjs || result=1\nexit \"$result\""
+      },
+      {
+        "name": "Disposable update rollback and crash recovery (no package)",
+        "exit": 0,
+        "seconds": 1.91,
+        "command": "python3 scripts/agent-update.test.py\npython3 scripts/agent-hardening.test.py\npython3 scripts/agent-update-readiness.test.py\npython3 scripts/agent-performance-indexes.test.py\npython3 scripts/agent-operational-calendar.test.py"
+      },
+      {
+        "name": "3022 production time proof matrix (disposable SQLite)",
+        "exit": 0,
+        "seconds": 4.06,
+        "command": "python3 scripts/agent-3022-production-evidence.test.py\npython3 scripts/agent-3022-origin-fallback.test.py\npython3 scripts/agent-production-trust.test.py\npython3 scripts/agent-integrated-v5.test.py\npython3 scripts/agent-process-r11.test.py\npython3 scripts/agent-3022-canonical-contract.test.py"
+      },
+      {
+        "name": "3074 physical proof matrix (disposable SQLite)",
+        "exit": 0,
+        "seconds": 3.41,
+        "command": "python3 scripts/agent-3074-physical-classification.test.py\npython3 scripts/agent-integrated-snapshot-history.test.py\npython3 scripts/agent-material-3074-link.test.py\npython3 scripts/agent-canonical.test.py\npython3 scripts/agent-canonical-insight-retry.test.py"
+      },
+      {
+        "name": "3074 pagination, multi-cycle, raw revisions and state preservation",
+        "exit": 0,
+        "seconds": 9.37,
+        "command": "for suite in agent-deep-3074-page agent-3074-coverage-summary agent-multi-cycle-3028-3074 agent-3074-grid-lifecycle agent-individual-assembly agent-assembly-scope agent-3074-uncertain-reuse agent-history-restore agent-local-history agent-raw-history agent-3074-projection-audit agent-3074-pagination agent-saved-sn-history ames-pr70-state-transfer; do\n  python3 \"scripts/$suite.test.py\" || exit 1\ndone"
+      },
+      {
+        "name": "Local confirmed and mixed replay",
+        "exit": 0,
+        "seconds": 2.05,
+        "command": "python3 scripts/agent-3022-local-replay.test.py\npython3 scripts/agent-3022-mixed-replay.test.py\npython3 scripts/agent-3022-checkpoint-proof.test.py\npython3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_R3_complete_label_without_3022_query_proof_does_not_skip_capture"
+      },
+      {
+        "name": "Historical names, proven source and negative cases",
+        "exit": 0,
+        "seconds": 1.33,
+        "command": "python3 scripts/agent-local-sn-operator-evidence.test.py\npython3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_N4_saved_non_END_LOT_operator_reaches_local_SN_cache"
+      },
+      {
+        "name": "Missing 3022 input now stops after two attempts",
+        "exit": 0,
+        "seconds": 0.6,
+        "command": "python3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_R2_missing_extjs_input_stops_after_two_recoverable_failures"
+      },
+      {
+        "name": "Preserve factory engine and raw capture/recovery contracts",
+        "exit": 0,
+        "seconds": 7.62,
+        "command": "python3 -m unittest discover -s ames/factory-engine/tests -p 'test_*.py' -q\npython3 scripts/agent-source-capture.test.py\npython3 scripts/agent-trace-target.test.py\npython3 scripts/agent-trace-auto-resume.test.py\npython3 scripts/agent-sn-3012-fallback.test.py"
+      },
+      {
+        "name": "F2 3022 strict Home and ExtJS preflight",
+        "exit": 0,
+        "seconds": 0.65,
+        "command": "python3 scripts/agent-3022-real-view-preflight.test.py"
+      },
+      {
+        "name": "F1 existing OPC/CDP session Home recovery safety",
+        "exit": 0,
+        "seconds": 0.17,
+        "command": "python3 scripts/agent-home-cdp-recovery.test.py"
+      },
+      {
+        "name": "A-MES navigation route, visibility and OPC readiness",
+        "exit": 0,
+        "seconds": 0.27,
+        "command": "python3 scripts/agent-navigation-readiness.test.py"
+      },
+      {
+        "name": "Full 3022 observability, single-click, stale-grid and storm-breaker regressions",
+        "exit": 0,
+        "seconds": 2.88,
+        "command": "python3 scripts/agent-3022-observability.test.py"
+      },
+      {
+        "name": "Central Node contracts across nine views (no installer generation)",
+        "exit": 0,
+        "seconds": 42.76,
+        "command": "node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' ! -name 'ames-r12-migration-bundle.test.mjs' ! -name 'ames-r12-capture.test.mjs' ! -name 'ames-offline-shell.test.mjs' ! -name 'ames-release-build.test.mjs' ! -name 'ames-deploy-routing.test.mjs' ! -name 'ames-stage-vercel.test.mjs' | sort)"
+      },
+      {
+        "name": "U1 single 2114 history without losing original fields",
+        "exit": 0,
+        "seconds": 0.26,
+        "command": "node --test --test-name-pattern='U1' scripts/audit/codex_cross_contracts_red.mjs"
+      },
+      {
+        "name": "Independent N1/N3 name and source contracts",
+        "exit": 0,
+        "seconds": 0.48,
+        "command": "node --test --test-name-pattern='N1|N2|N3' scripts/audit/codex_cross_contracts_red.mjs\nnode --test scripts/ames-name-consistency.test.mjs"
+      },
+      {
+        "name": "S1 source, line, snapshot, revision and period isolation",
+        "exit": 0,
+        "seconds": 0.39,
+        "command": "node --test --test-name-pattern='S1' scripts/audit/codex_cross_contracts_red.mjs\nnode --test scripts/ames-production-scope-isolation.test.mjs"
+      },
+      {
+        "name": "Pairing and authentication unaffected",
+        "exit": 0,
+        "seconds": 0.38,
+        "command": "node --test scripts/ames-auth-hardening.test.mjs\nnode --test scripts/ames-agent-pairing.test.mjs"
+      }
+    ],
+    "central_node_tests": 876,
+    "browser_scripts": [
+      {
+        "name": "node scripts/ames-experience.browser.mjs",
+        "exit": 0,
+        "seconds": 16.23
+      },
+      {
+        "name": "node scripts/ames-performance.browser.mjs",
+        "exit": 0,
+        "seconds": 17.47
+      },
+      {
+        "name": "node scripts/ames-integration-worker.browser.mjs",
+        "exit": 0,
+        "seconds": 5.65
+      },
+      {
+        "name": "node scripts/ames-reuse-timeline.browser.mjs",
+        "exit": 0,
+        "seconds": 7.09
+      },
+      {
+        "name": "node scripts/ames-3074-physical-classification.browser.mjs",
+        "exit": 0,
+        "seconds": 4.58
+      },
+      {
+        "name": "node scripts/ames-3022-production-evidence.browser.mjs",
+        "exit": 0,
+        "seconds": 5.12
+      },
+      {
+        "name": "node scripts/ames-sync-reload.browser.mjs",
+        "exit": 0,
+        "seconds": 4.65
+      },
+      {
+        "name": "node scripts/ames-pairing.browser.mjs",
+        "exit": 0,
+        "seconds": 8.65
+      },
+      {
+        "name": "node scripts/ames-3028-completion.browser.mjs",
+        "exit": 0,
+        "seconds": 7.6
+      }
+    ],
+    "scope": "Final runtime, all synthetic/disposable. Installed test tools were reused; no setup/pip/npm/download. No builder/operational scripts invoked."
+  },
+  "static_source_report": {
+    "schema": "ames-offline-preparation-static-v1",
+    "base_sha": "1ecc8daae2e1d8e055f36135cfe460817b0d69d9",
+    "physical": "PENDING",
+    "execution_authorized": false,
+    "static_only": true,
+    "runtime_changed": true,
+    "runtime_scope": "update_candidate.py D01/D02 only",
+    "windows_executed": false,
+    "sqlite_opened": false,
+    "builders_executed": false,
+    "plan": "docs/ames/homologation/HOMOLOGACAO_OFFLINE_0539_PR90_20261117.md",
+    "findings": [
+      {
+        "id": "D02",
+        "severity": "HIGH",
+        "status": "CORRECTED_SYNTHETIC_TESTS",
+        "path": "ames/agent/update_candidate.py",
+        "fact": "ROOT_FILES includes the transitive PowerShell helper; candidate copy, backup, absence and rollback are covered by synthetic tests.",
+        "proposal": "Retain dependency closure and absent/stale helper tests; never execute operational PowerShell in this proof.",
+        "line": 1
+      },
+      {
+        "id": "D01",
+        "severity": "HIGH",
+        "status": "CORRECTED_SYNTHETIC_TESTS",
+        "path": "ames/agent/update_candidate.py",
+        "symbol": "rollback",
+        "fact": "All backup members are validated before restoration plans; persistent staged generations support verified compensation or blocked supervised recovery.",
+        "proposal": "Retain integrity/I/O/interruption regressions; Windows and Linux synthetic CI do not authorize physical homologation.",
+        "line": 462
+      },
+      {
+        "id": "P01",
+        "severity": "BLOCKER",
+        "status": "PENDING",
+        "path": "tools/ames-workstation/START_LOCAL_CANDIDATE.ps1",
+        "fact": "Normal launchers call network preparation, dependency repair, Chrome and agent; not an offline dry run.",
+        "proposal": "Do not invoke; require a reviewed offline-only entry strategy and external VM containment before any future clone launch.",
+        "line": 1
+      },
+      {
+        "id": "P02",
+        "severity": "BLOCKER",
+        "status": "PENDING",
+        "path": "tools/ames-workstation/SAFE_STATE_TRANSFER.py",
+        "symbol": "stage",
+        "fact": "State transfer intentionally copies config and local token, preserves source identity, and cannot attest browser outbox or lease.",
+        "proposal": "Separate private immutable backup from synthetic/desidentified lab derivative; never use stage as anonymizer or receipt as maintenance authorization.",
+        "line": 103
+      },
+      {
+        "id": "P03",
+        "severity": "BLOCKER",
+        "status": "PENDING",
+        "path": "ames/agent/agent_hardened_entry.py",
+        "fact": "Import chain initializes/migrates SQLite/config/token; main starts monitor, job recovery and network guardian.",
+        "proposal": "No import or --help as inventory; future isolated clone must have neutralized lab scheduling/state and a separately validated offline launch contract.",
+        "line": 1
+      },
+      {
+        "id": "P04",
+        "severity": "HIGH",
+        "status": "PENDING",
+        "path": "ames/agent/preflight.py",
+        "symbol": "check",
+        "fact": "find_spec and quick_check do not prove package versions, tzdata or required JSON1 function semantics.",
+        "proposal": "Future lab must verify interpreter/ABI, locked offline dependency inventory, timezone and functional JSON1 queries before launching.",
+        "line": 9
+      },
+      {
+        "id": "P05",
+        "severity": "BLOCKER",
+        "status": "PENDING",
+        "path": "sw.js",
+        "fact": "Fresh service-worker install fetches exact external gstatic SDK URLs; stock cold offline shell without provisioned SDK cannot be assumed ready.",
+        "proposal": "Keep cold/warm shell and synthetic harness gates distinct; no operational Chrome profile or internet warmup. Review offline public dependency provisioning separately.",
+        "line": 1
+      },
+      {
+        "id": "P06",
+        "severity": "HIGH",
+        "status": "PENDING",
+        "path": "ames/agent/engine_bridge.py",
+        "symbol": "discover_engine",
+        "fact": "Environment/config/parent/CWD engine fallbacks and default operational Chrome path can escape a copied directory.",
+        "proposal": "Separate VM/account/profile, explicit lab-only paths, no inherited operational environment/mounts, independently verified containment.",
+        "line": 147
+      },
+      {
+        "id": "P07",
+        "severity": "BLOCKER",
+        "status": "PENDING",
+        "path": "tools/ames-workstation/issue57_update_preflight.py",
+        "symbol": "backup_operational_tree",
+        "fact": "Agent-data backup alone excludes browser outbox and full machine state; read-only SQLite mode is not a global maintenance lease.",
+        "proposal": "Future externally attested freeze, private coherent raw DB/WAL capture, logical backup from a working copy, independent restore and private completeness ledger.",
+        "line": 518
+      },
+      {
+        "id": "P08",
+        "severity": "HIGH",
+        "status": "PENDING",
+        "path": "tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1",
+        "fact": "Failure path may restart old installation root; does not reconcile candidate evidence newly written after startup.",
+        "proposal": "No automatic stale-state resumption after new writes; preserve both generations, prove compatibility with current data or stop for supervised recovery.",
+        "line": 1
+      }
+    ],
+    "source_sha256": {
+      "ames/agent/agent.py": "5398061fa879ffc487307b70daf3d4dbfd4dc4ae1a33fc75a1f3efed59580b44",
+      "ames/agent/agent_entry.py": "5032985af827945f69129d2bf23ba63e0df8c13e9369a9133a6a13d8c967d631",
+      "ames/agent/agent_hardened_entry.py": "4136f273eefd1e50825abad7e4a0fd5555ac75dac76ba631087f6e5d432dee4d",
+      "ames/agent/candidate_config.py": "ffd37bab1965bb49b206c66c18d69ca8867cf596221da19e5ca9fc6dcb998b72",
+      "ames/agent/canonical.py": "9d8c7e269806c696c2d8e84701e38f5179e5876c86b487ad2958bfa4c3edf518",
+      "ames/agent/config.example.json": "acd42a9e9dcc56d351ba784428f3d50c58ee895cba1bd84135cd7464be32d38c",
+      "ames/agent/engine_bridge.py": "2a6a3907a6064868f42c39fd0bd3763b7fd7e8d96a557d22855f31a1bacf5abf",
+      "ames/agent/hardening.py": "56bc9db77be0035689121c11da259524ecd22a078b3c2f40cee722d0299f5999",
+      "ames/agent/network_watch.py": "4b4b6f2362292498c9007ca09f4ca64f7177b816be2ae40f453aa2da18c7c70f",
+      "ames/agent/performance_indexes.py": "623cb34299e75e5d74a31d3f1165cab207b33134c3380c10ef9845860af3d0a0",
+      "ames/agent/preflight.py": "d4b5ab779ea5d3899a5f38b961511ed510685422e78e3e916c2e8c4b022cfd22",
+      "ames/agent/production_diagnostics.py": "73171765e922f60afb813a4abc57ea33fd72ac39ee96297e74e2780c760d529e",
+      "ames/agent/production_shift.py": "0249e3668d6dae3f7e7e9c80b149be1175d27581a7572b27b1ce31a88248f636",
+      "ames/agent/requirements.txt": "1979723abab6724fc826a936f9d57cb04faccad49a88c0b97dfdd05af7a43ee9",
+      "ames/agent/store.py": "80459ec8935cce04fb8d8cff43cb3d3f64c90122165efb5def557d3989b029aa",
+      "ames/agent/update_candidate.py": "a06e02ecfcbf838f603728fb4b9921a04550c14c6e4ae0bbc163100174880921",
+      "ames/agent/update_readiness.py": "a94f9687d4b76967bf6a85dc61536a733276adfb9620b1a8f1f38b26f298d9df",
+      "ames/agent/workstation_autostart.py": "c00916c73146223882c0c1c7271fc825cbea396e6663e077fec65a9b8524431d",
+      "ames/data/workstation-update-policy.mjs": "321dfff4bb949233ba5cdce3ef12e98d6b3c576cc1fa54332d40570a9a9af475",
+      "ames/factory-engine/requirements.txt": "c0ceca9a1d5f1ef768ae1d5f55627fdc3631639fbb93e5465e37d7df7a5a7afd",
+      "offline-bootstrap.mjs": "a7a991d1ebea7bda2a484ad997d3ce063ea0ba9cb3a712c0b6b09abdaaeb57e0",
+      "scripts/ames-r12-migration-bundle.test.mjs": "48ef2623e55122913b197ff7b797b9ee57bdf218dc41a26b61d131bd504c38c0",
+      "scripts/build-r12-migration-bundle.py": "6c61c769cd8353832eabfc40825eb64c65174695ee0de0eb0f05970356fe45cd",
+      "scripts/templates/INICIAR_FASTLANE_TESTE.ps1": "ddb5aeff348fdbeda690f7aefbfdf6d439a0e8baff7b529d6a10c0ce57f554a0",
+      "scripts/templates/agent_fastlane_bootstrap.pyw": "e04645288e3d4f13d5dbce0c4827057e709bea45ed5216f76da72e48a102b5f2",
+      "sw.js": "2f3b4f15ebdb0876659bd5203d7add6c40a1c944ee117787a21d629f60c649c2",
+      "tools/ames-workstation/01_INSTALAR_UMA_VEZ.bat": "1bc4ff852ec9ed03e4b5842c5f4b1c6dae3fac22329a8872287b45a96b89821a",
+      "tools/ames-workstation/01_TROCAR.bat": "b5e569fd48464ce9fe0ea9e566a5c678b67553a92d90936c732c7012459cd546",
+      "tools/ames-workstation/01_TROCAR_PARA_PR69_NOVA.bat": "98e7eb69be24bee15d5cf65329e4bcc3260e7c2c582a30c8212241737c75ad4e",
+      "tools/ames-workstation/05_ABRIR_CHROME_AMES.bat": "a8072dff41ed88e69882343cc0b9f61608f64e09566f91737d203b8fe469df6f",
+      "tools/ames-workstation/07_VERIFICAR_VERSAO_CENTRAL.bat": "7d8efa1a6039ce253aaba5e84bc881cc2fefdac6f800214db4ece30ac0d10648",
+      "tools/ames-workstation/08_PREPARAR_REDE_AMES.bat": "187d65ddfde4dd8cf9076c7d2b442602a84c263f4c8a191deb0b8bd76e0d1cfe",
+      "tools/ames-workstation/09_REPARAR_DEPENDENCIAS.bat": "5ba073791bf06949948772f99b3aab18de64c40fee075a9ea9c8a36822d5e0e8",
+      "tools/ames-workstation/09_REPARAR_DEPENDENCIAS_CLEAN.bat": "26021b190f0cec2da1659f5976d7ba5eea414e9730442324882f3cd974191a70",
+      "tools/ames-workstation/12_APLICAR_ROTA_AMES_PERSISTENTE.bat": "3907921cb2ab5abfccfdfee101f2b45515940b186776a2de10e810edfa51f38e",
+      "tools/ames-workstation/ABRIR_HTTPS_EXISTENTE_SEM_ATUALIZAR.cmd": "ad6db41a30543cee21a05bf94807293465a0ef41b4ee45fe90ee59da085da107",
+      "tools/ames-workstation/ABRIR_HTTPS_EXISTENTE_SEM_ATUALIZAR.ps1": "4e0d37c9458593d9a73bee03a05351492d05295e9e3627f7bd2db16d1b910add",
+      "tools/ames-workstation/CAPTURAR_MOTOR_R12_SEGURO.bat": "70089cd5039f56d5bd01827cbdad0006f0ea8ec4e938faa26aacc0e970a65eb5",
+      "tools/ames-workstation/DIAGNOSTICO_POSTO.ps1": "29caa1bf67410642028ba27bbaf92422a1b922dde4f16ee1704b88cb71dfdccc",
+      "tools/ames-workstation/INICIAR_POSTO_CENTRAL_V2.bat": "f2d2802ff174ddbb8585047b36cbd07d786c73061c7aea03dd5c19f7449d0337",
+      "tools/ames-workstation/INVENTARIAR_GUARDIANS_READONLY.ps1": "c4a2baf21e45acfa527f240617226edf2268ef76d700fc47358afc3882bc7bbe",
+      "tools/ames-workstation/INVENTARIAR_INSTALACOES_READONLY.ps1": "a303e6210fd0def35307f67d06ecdd3597b0ef1da972cfe13d7dc09a42041e37",
+      "tools/ames-workstation/ISSUE57_GUARDIAN_SIGNALS.ps1": "6cf7bf0c2a754260cdfe8d65d13e2e8e744a7d5a87b21b802fe2765d1603b267",
+      "tools/ames-workstation/ISSUE57_PROCESS_WITNESS_READONLY.ps1": "e2d2913df9c3561639d15ad65a40faf18caf92d194e5ba7087535925043f399c",
+      "tools/ames-workstation/ISSUE57_RELAUNCH_ENROLLMENT.ps1": "f16cfaf34125a26052635b6d0c422cb11a192e5d5c51b9f225a29a2a9093be00",
+      "tools/ames-workstation/KEEP_AGENT_RUNNING.ps1": "af9234f9e044e84dda95b7e3a31790989badb7c68c092a13484f10b1bb856627",
+      "tools/ames-workstation/PR69_APLICAR_CODIGO.bat": "0a4463579619633cd2140e627cb61fe942210c1005ad1056135985ba61d882dc",
+      "tools/ames-workstation/ROTA_AMES_APLICAR.bat": "69d21845368e609295d8ce5887c3011ca51d3978250585c784e6ec549a4af559",
+      "tools/ames-workstation/ROTA_AMES_REMOVER.bat": "92fc1e979abd27e7d614267fd6e43c8afc0050ea4dfe6f6a45e10289ef1b4b0f",
+      "tools/ames-workstation/SAFE_STATE_TRANSFER.py": "72b4b6cfff52c6c6ae8605aa846e5108df6c023073825d849ecf423faf8fa254",
+      "tools/ames-workstation/START_AGENT_CANONICAL.ps1": "56db5762c44525c5c7238d37aa24785b6b5a13792f5bc1b1f50830a8e25c71e4",
+      "tools/ames-workstation/START_LOCAL_CANDIDATE.ps1": "52b4c523a04a2c55ffca74bea90a175e06ae5cc841689dc71bc2577170e92a5f",
+      "tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1": "4b14bd7a4bd34eed3cd08bec0d10032d006b38634784d25dc971ce11545b461a",
+      "tools/ames-workstation/VERIFICAR_VERSAO_CENTRAL.ps1": "e32ef7c2f3a008d37d57312862cf5c404f664250bc318abcdb4f3adf7c903d79",
+      "tools/ames-workstation/VERIFY_PRIVATE_BACKUP_ACL.ps1": "345ede069bdbd704004cc64e5a1e26e0ecfdd31798e93d69b157e9cf476193cb",
+      "tools/ames-workstation/at-setup/00_PREPARAR_PENDRIVE_AT.bat": "be6aa863f86abdac3cdb7a33e687a668a65c181109e488814506944aac37d271",
+      "tools/ames-workstation/at-setup/01_INSTALAR_AT.bat": "0afbaf6dbc4103a7d03fc4a874ce7b16769fa813da446fadad7bffd35d3bb42f",
+      "tools/ames-workstation/at-setup/02_ABRIR_AT.bat": "63dd6802695aa1ebeed178792bafeb3da48d56a0c8d616504d49e2fa025b3538",
+      "tools/ames-workstation/at-setup/05_ABRIR_CHROME_AMES.bat": "a8072dff41ed88e69882343cc0b9f61608f64e09566f91737d203b8fe469df6f",
+      "tools/ames-workstation/at-setup/INICIAR_CENTRAL_AT.ps1": "33f526cf186656761a62d7ac61c6a6f7ee355a55adb277fa1aec3b1badd2965e",
+      "tools/ames-workstation/at-setup/INSTALAR_CENTRAL_AT.ps1": "cfbde62e6e8fa45de44b7530fe3003c2357a85324dea2b3a12980f592a5df044",
+      "tools/ames-workstation/at-setup/PREPARAR_DEPENDENCIAS_AT.ps1": "78604a836a6890259396d16907698fb2cb134ec457e7b98c7a842ee13d35a7c0",
+      "tools/ames-workstation/capture-r12-engine.py": "10890473bcc76cef447d9c2a870131476fff4d16dc0a0f3ab948238b68a41884",
+      "tools/ames-workstation/ensure_ames_route.ps1": "560e11bb286740c79db6862237f4a24e61ad45673f0399598823059ad80417c1",
+      "tools/ames-workstation/issue57_drain_coordinator.py": "adeb47798ef4b531d24c0d602019c07c077d224cceb78ce5db1bce4fbe852a17",
+      "tools/ames-workstation/issue57_maintenance_ledger.py": "7ed96b8cf746d94d4d06252eb63146bfb442ce1cfeb96dd74c56ccff30ae87df",
+      "tools/ames-workstation/issue57_update_preflight.py": "02b8a7fdc4b6f6c05c9ddf2ac39337cc80e2effb9e837fefa9212672afcda6b4",
+      "tools/ames-workstation/pr69_apply_code.py": "f8a2782ccb66bd2866e4f38369e4156320380de02f010040557f6c995722dcad"
+    },
+    "limit": "AST/text proves source structure only; no original installation, package, Windows parser, ABI, backup or homologation has been exercised."
+  },
+  "gates": {
+    "software_D01": "CORRECTED_SYNTHETIC",
+    "software_D02": "CORRECTED_SYNTHETIC",
+    "P01_P08": [
+      "P01",
+      "P02",
+      "P03",
+      "P04",
+      "P05",
+      "P06",
+      "P07",
+      "P08"
+    ],
+    "all_homologation_gates": "PENDING",
+    "execution_authorized": false
+  },
+  "limits": [
+    "No multi-file atomicity, power-loss, disk-controller or factory Windows 0.5.39 attestation.",
+    "A failed compensation or process interruption can leave mixed files; persistent claim prevents cooperative startup and requires supervised recovery.",
+    "Legacy guardians/noncooperating writers and browser/outbox lease remain P07, not solved by updater file lock.",
+    "Corrupt/unreadable journal, corrupt stage or third-party changes block recovery; no force/bypass.",
+    "Backup hashes assume trustworthy custody/manifest, are not signatures. Unproven legacy backups remain inspection-only.",
+    "SQLite/WAL/token/checkpoints are not restore targets. Config rollback is explicit and current config is backed up; external changes during pending recovery block it.",
+    "Full integrated and Chromium suites are local evidence; CI independently runs Windows/Linux matrices and selected stdlib/Node regressions.",
+    "Metadata/filesystem failure and storage exhaustion may require supervised recovery; no automatic deletion of evidence.",
+    "No installer/archive/publishing/distribution or offline homologation was executed."
+  ],
+  "final_head_ci": "Documentation-only child HEAD and exact CI recorded in PR92 final checkpoint.",
+  "preserved_refs": {
+    "main": "b283b1764432f5d90486d38a7553b30542a5c118",
+    "prs": [
+      {
+        "number": 70,
+        "state": "open",
+        "draft": true,
+        "merged": false,
+        "head": "fddc75438796cdfcc8a133eb8193d08fa1d9b783",
+        "base": "128397dc0dd3ddc31cfdb5578c1162e83ea237a2"
+      },
+      {
+        "number": 86,
+        "state": "open",
+        "draft": true,
+        "merged": false,
+        "head": "5c19beee85125830e0b483c5cf9708eb8de25228",
+        "base": "3a736b57230ec3dd14ff48ac00106a857c1fb7a6"
+      },
+      {
+        "number": 87,
+        "state": "open",
+        "draft": true,
+        "merged": false,
+        "head": "fed8076b15f95d1a037ed369ce0a02aaf46b2280",
+        "base": "5c19beee85125830e0b483c5cf9708eb8de25228"
+      },
+      {
+        "number": 88,
+        "state": "open",
+        "draft": true,
+        "merged": false,
+        "head": "3a088ddad41be9e31b144e4ac4b0b73725141624",
+        "base": "fed8076b15f95d1a037ed369ce0a02aaf46b2280"
+      },
+      {
+        "number": 89,
+        "state": "open",
+        "draft": true,
+        "merged": false,
+        "head": "b8a2b1e00193e2d5493d0fd14bfcbf41e89087ca",
+        "base": "3a088ddad41be9e31b144e4ac4b0b73725141624"
+      },
+      {
+        "number": 90,
+        "state": "open",
+        "draft": true,
+        "merged": false,
+        "head": "83f5db58438318c726c9b22a8d0a2d8d78124c81",
+        "base": "b8a2b1e00193e2d5493d0fd14bfcbf41e89087ca"
+      },
+      {
+        "number": 91,
+        "state": "open",
+        "draft": true,
+        "merged": false,
+        "head": "1ecc8daae2e1d8e055f36135cfe460817b0d69d9",
+        "base": "83f5db58438318c726c9b22a8d0a2d8d78124c81"
+      }
+    ]
+  }
+}
