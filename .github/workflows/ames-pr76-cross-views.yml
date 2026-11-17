@@ -27,7 +27,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      NODE_OPTIONS: '--import=./scripts/audit/no-distribution-guard.mjs'
       PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
     steps:
       - uses: actions/checkout@v7
@@ -37,13 +36,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Enable no-distribution guard after checkout and tool setup
+        run: echo "NODE_OPTIONS=--import=$GITHUB_WORKSPACE/scripts/audit/no-distribution-guard.mjs" >> "$GITHUB_ENV"
       - name: Install disposable parser test dependencies
         run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
       - name: Independent integration and static migration proof (no builders)
         run: |
-          python3 scripts/agent-integration-migration-static.test.py
-          python3 scripts/agent-integration-brm.test.py
-          node --test scripts/ames-integration-worker.test.mjs
+          result=0
+          python3 scripts/agent-integration-migration-static.test.py || result=1
+          python3 scripts/agent-integration-brm.test.py || result=1
+          node --test scripts/ames-integration-worker.test.mjs || result=1
+          exit "$result"
       - name: 3022 production time proof matrix (disposable SQLite)
         run: |
           python3 scripts/agent-3022-production-evidence.test.py
@@ -117,7 +120,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      NODE_OPTIONS: '--import=./scripts/audit/no-distribution-guard.mjs'
       PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
     steps:
       - uses: actions/checkout@v7
@@ -127,6 +129,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Enable no-distribution guard after checkout and tool setup
+        run: echo "NODE_OPTIONS=--import=$GITHUB_WORKSPACE/scripts/audit/no-distribution-guard.mjs" >> "$GITHUB_ENV"
       - name: Install isolated browser test tools
         run: |
           python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
@@ -144,14 +148,6 @@ jobs:
           node scripts/ames-pairing.browser.mjs
           node scripts/ames-3028-completion.browser.mjs
 
-      - name: Preserve synthetic browser evidence (screenshots only)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ames-3022-production-browser-${{ github.sha }}
-          path: ${{ runner.temp }}/console-evidence/*.png
-          if-no-files-found: ignore
-          retention-days: 7
 
 # No build, merge, deployment, factory CDP, network MES, or installer.
-# The only artifact is synthetic browser screenshots; no operational data.
+# Browser screenshots remain disposable; no archive/upload-artifact is generated.
