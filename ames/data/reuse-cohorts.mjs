@@ -42,20 +42,26 @@ export function analysisScope2114(type){
 export function boardHistSeqRecurrence(occurrence={},history=[]){
  return histSeqRecurrence(occurrence,history,compareFailures);
 }
-function histSeqRecurrence(occurrence,history,compare){
- const pcba=sn(occurrence);
- if(!pcba||!code(occurrence))return [];
- const own=history.filter(r=>sn(r)===pcba&&sequence(r)!==null&&code(r));
+function prepareHistSeq(pcba,history){
  const bySeq=new Map();
- for(const row of own){
+ for(const row of history){
+  if(sn(row)!==pcba||!code(row))continue;
   const seq=sequence(row);
-  if(!bySeq.has(seq))bySeq.set(seq,row);
+  if(seq!==null&&!bySeq.has(seq))bySeq.set(seq,row);
  }
  const ordered=[...bySeq].sort((a,b)=>a[0]-b[0]);
+ return {ordered,prior:null};
+}
+function histSeqRecurrence(occurrence,history,compare,prepared){
+ const pcba=sn(occurrence);
+ if(!pcba||!code(occurrence))return [];
+ const state=prepared||prepareHistSeq(pcba,history),ordered=state.ordered;
  if(ordered.length<2)return [];
  const latest=ordered.at(-1)[1];
  if(compare(code(occurrence),occurrence.defect_desc,code(latest),latest.defect_desc).classification!=='EXACT')return [];
- return ordered.slice(0,-1).map(([,old])=>({...old,history_order_basis:'HIST_SEQ_ONLY',history_timestamp_proven:Boolean(time(old))}));
+ // All callers within one projection observe the same immutable source rows.
+ // Copies/annotations are prepared once; no cache crosses a snapshot boundary.
+ return state.prior??=ordered.slice(0,-1).map(([,old])=>({...old,history_order_basis:'HIST_SEQ_ONLY',history_timestamp_proven:Boolean(time(old))}));
 }
 
 /** Auditable whole 2114 history of the same board, independent of a 3028 match.
@@ -199,6 +205,17 @@ function reference(snapshot,row,source){
   line_id:snapshot.line_id,source_view:source,record_id:row.record_id||null,
   period:snapshot.period||snapshot.canonical?.summary?.period||null,raw:row};
 }
+// Comparison candidates only: display/evidence arrays remain complete. Native
+// Map keys preserve null/undefined and object identity for legacy policy values.
+function comparisonRows(rows){
+ const groups=new Map(),out=[];
+ for(const row of rows){
+  const keys=[code(row),row.defect_desc,family(row)];let level=groups;
+  for(const key of keys){if(!level.has(key))level.set(key,new Map());level=level.get(key);}
+  if(!level.has('seen')){level.set('seen',true);out.push(row);}
+ }
+ return out;
+}
 function finish(map,history=[],compare=compareFailures){
  const historyByPcba=new Map();
  for(const row of history){
@@ -220,8 +237,9 @@ function finish(map,history=[],compare=compareFailures){
   row.outcome=row.kind==='pcba'&&row.events.length?'failed':'unknown';
   // Component association alone is never a diagnosed component failure.
   row.associated_current_failure=row.kind==='component'&&row.events.length>0;
-  row.same_failure=row.prior_events.some(p=>row.events.some(e=>compare(code(e),e.defect_desc,code(p),p.defect_desc).classification==='EXACT'));
-  row.same_family=row.prior_events.some(p=>row.events.some(e=>compare(code(e),e.defect_desc,code(p),p.defect_desc,{currentFamily:family(e)??undefined,oldFamily:family(p)??undefined}).classification==='SIMILAR'));
+  const priorComparisons=comparisonRows(row.prior_events),eventComparisons=comparisonRows(row.events);
+  row.same_failure=priorComparisons.some(p=>eventComparisons.some(e=>compare(code(e),e.defect_desc,code(p),p.defect_desc).classification==='EXACT'));
+  row.same_family=priorComparisons.some(p=>eventComparisons.some(e=>compare(code(e),e.defect_desc,code(p),p.defect_desc,{currentFamily:family(e)??undefined,oldFamily:family(p)??undefined}).classification==='SIMILAR'));
   row.reused=row.use_index>=2;
   // A material's 3074 physical mounting history and each board's 2114
   // failures are separate evidence. Never hide three known mountings merely
@@ -317,7 +335,24 @@ export function buildReuseCohorts(snapshot={},filters={}){
  const proofId=r=>String(r?.pcba_sn||r?.PCBA||r?.current_pcba_sn||'').trim();
  const proofHistory=group(history,proofId),proofEvents=group(snapshot.process_timeline?.events||[],proofId),proofContexts=group(snapshot.process_timeline?.contexts||[],proofId);
  const historyEntries=group(history.map((row,position)=>({row,position})),e=>sn(e.row));
- const priorRows=previous=>[...new Set(previous)].flatMap(id=>historyEntries.get(id)||[]).sort((a,b)=>a.position-b.position).map(e=>e.row);
+ const clockCandidates=new Map();
+ const priorRows=previous=>{
+  const ids=[...new Set(previous)],key=JSON.stringify(ids);
+  if(!clockCandidates.has(key))clockCandidates.set(key,ids.flatMap(id=>historyEntries.get(id)||[])
+   .sort((a,b)=>a.position-b.position).map(e=>({row:e.row,at:time(e.row)})).filter(e=>e.at&&code(e.row)));
+  return clockCandidates.get(key);
+ };
+ const preparedSequences=new Map(),priorMaps=new WeakMap(),eventKeys=new WeakMap(),lastPriors=new WeakMap();
+ const keyOf=row=>{if(!eventKeys.has(row))eventKeys.set(row,eventKey(row));return eventKeys.get(row);};
+ const addPriors=(item,rows)=>{
+  if(!rows.length||lastPriors.get(item)===rows)return;
+  lastPriors.set(item,rows);
+  if(!priorMaps.has(item))priorMaps.set(item,new Map());
+  const prior=priorMaps.get(item);
+  // Exactly the existing finish() policy: first key insertion order, last row
+  // wins. Apply it while accumulating instead of retaining N copies until finish.
+  for(const row of rows)prior.set(keyOf(row),row);
+ };
  const comparisons=new Map();
  const compare=(...args)=>{
   // Non-string policy inputs retain the uncached legacy path and identity
@@ -363,11 +398,16 @@ export function buildReuseCohorts(snapshot={},filters={}){
    if(sn(row))item.current_pcbas.push(sn(row));
   }
   if(event){item.events.push(event);const cutoff=time(event);
-   const priorByClock=priorRows(previous).filter(h=>time(h)&&cutoff&&time(h)<cutoff&&code(h));
+   const priorByClock=priorRows(previous).filter(h=>cutoff&&h.at<cutoff).map(h=>h.row);
    // Hist Seq is a valid order within one 2114 PCBA, including MES variants
    // that never return Defect Time. Never use this rule across materials/PCBAs.
-   const priorBySeq=kind==='pcba'?histSeqRecurrence(event,historyByPcba.get(sn(event))||[],compare):[];
-   item.prior_events.push(...priorByClock,...priorBySeq);
+   let priorBySeq=[];
+   if(kind==='pcba'){
+    const id=sn(event);
+    if(!preparedSequences.has(id))preparedSequences.set(id,prepareHistSeq(id,historyByPcba.get(id)||[]));
+    priorBySeq=histSeqRecurrence(event,[],compare,preparedSequences.get(id));
+   }
+   addPriors(item,priorByClock);addPriors(item,priorBySeq);
   }
  }
  for(const o of occurrences)add(pcbas,sn(o),'pcba',o,o,'3028');
@@ -390,6 +430,7 @@ export function buildReuseCohorts(snapshot={},filters={}){
     factoryWallMinute(r.bind_time_utc)&&time(event)&&factoryWallMinute(r.bind_time_utc)>time(event)))event=null;
   add(components,JSON.stringify([String(item),type]),'component',normalized,event,'3074');
  }
+ for(const item of [...pcbas.values(),...components.values()])item.prior_events=[...(priorMaps.get(item)?.values()||[])];
  const filter=rows=>selectCohortRows(rows,filters);
  const pcbaRows=filter(finish(pcbas,history,compare)),componentRows=filter(finish(components,history,compare));
  // A PCBA's full 2114 sequence is always inspectable even when 3074 has
@@ -401,9 +442,11 @@ export function buildReuseCohorts(snapshot={},filters={}){
   // 3074 physical self-bindings take precedence. When the self-binding report
   // is absent, corroborated 2114 dismantling + later production 3022 provides
   // a conservative minimum: never count a 2114 row or 3022 station alone.
+  const proofBoard=String(board.sn).trim(),boardProofHistory=proofHistory.get(proofBoard)||[],
+   boardProofEvents=proofEvents.get(proofBoard)||[],boardProofContexts=proofContexts.get(proofBoard)||[];
   const processProof=board.events.flatMap(event=>[
-   processBackedBoardReuses(board.sn,event,proofHistory.get(String(board.sn).trim())||[],proofEvents.get(String(board.sn).trim())||[]),
-   contextBackedBoardReuses(board.sn,event,proofHistory.get(String(board.sn).trim())||[],proofContexts.get(String(board.sn).trim())||[])
+   ...(boardProofEvents.length?[processBackedBoardReuses(board.sn,event,boardProofHistory,boardProofEvents)]:[]),
+   ...(boardProofContexts.length?[contextBackedBoardReuses(board.sn,event,boardProofHistory,boardProofContexts)]:[])
   ]).filter(proof=>proof.minimum_uses).sort((a,b)=>b.minimum_uses-a.minimum_uses)[0];
   board.process_reuse_evidence=processProof||null;
   if(!board.use_index&&board.uses.length===0&&processProof){

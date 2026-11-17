@@ -52,3 +52,21 @@ test('dense partial legacy lineages retain all observations with bounded index m
   ...(i%2?{source_id:'SOURCE-'+i}:{period:{mode:'PERIOD-'+i}})}));
  assert.deepEqual(board2114Timeline('P',rows),base.board2114Timeline('P',rows));
 });
+test('independent faults retain last-winning prior annotations, all actors, clocks and duplicate identity rules',()=>{
+ for(let run=0;run<12;run++){
+  const history=Array.from({length:24},(_,i)=>({pcba_sn:'P',hist_seq:i%19,record_id:'H'+i,
+   defect_code:i%4?'D':'D2',defect_desc:i%3?'Camera impurity':'WiFi failed',
+   defect_time:i%3?new Date(Date.UTC(2026,10,3,8,i)).toISOString():null,
+   defect_user_name:'Pessoa '+i,repair_comment:'Observação '+i,repair_status:i%2?'Y':'N'}));
+  const occurrences=Array.from({length:12},(_,i)=>({pcba_sn:'P',line_id:'TAN10101',
+   defect_code:i%4?'D':'D2',defect_desc:i%3?'Camera impurity':'WiFi failed',
+   defect_key:'K'+i,defect_time:new Date(Date.UTC(2026,10,3,8,(i*7+run)%60)).toISOString()}));
+  if(run%2)occurrences.reverse();
+  const snapshot={line_id:'TAN10101',source_id:'SOURCE',snapshot_id:'S',revision:14,
+   occurrences,pcba_history:{records:history},process_timeline:{
+    events:run%3?[{pcba_sn:'P',station:'A5162',event_time:'2026-11-03T09:00:00Z'}]:[],contexts:[]}};
+  const original=structuredClone(snapshot);
+  assert.deepEqual(buildReuseCohorts(snapshot),base.buildReuseCohorts(snapshot),'independent run '+run);
+  assert.deepEqual(snapshot,original);
+ }
+});
