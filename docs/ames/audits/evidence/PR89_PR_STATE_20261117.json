@@ -1,0 +1,221 @@
+{
+  "audit_base": "3a088ddad41be9e31b144e4ac4b0b73725141624",
+  "observed_date": "2026-11-17",
+  "repository": "pedrokam700/Central-de-Controle-",
+  "prs": [
+    {
+      "number": 69,
+      "title": "[DRAFT] A-MES: recuperação canônica, revisão local e integridade da candidata",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pilot-integration-57-66-20261027",
+      "head_sha": "128397dc0dd3ddc31cfdb5578c1162e83ea237a2",
+      "base": "main",
+      "base_sha": "b283b1764432f5d90486d38a7553b30542a5c118"
+    },
+    {
+      "number": 70,
+      "title": "[DRAFT] Central A-MES: auditoria 3012, reuso e pacote íntegro 06/11",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-3012-reuso-auditado-20261106",
+      "head_sha": "fddc75438796cdfcc8a133eb8193d08fa1d9b783",
+      "base": "work/ames-pilot-integration-57-66-20261027",
+      "base_sha": "128397dc0dd3ddc31cfdb5578c1162e83ea237a2"
+    },
+    {
+      "number": 71,
+      "title": "[DRAFT][AUDITORIA] Parecer independente PR70: evidências, contratos RED e plano por módulos",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/codex-parecer-independente-20261116",
+      "head_sha": "a5deb982e7aa0305f4b9681fc8f87d7c7b8e3135",
+      "base": "work/ames-3012-reuso-auditado-20261106",
+      "base_sha": "fddc75438796cdfcc8a133eb8193d08fa1d9b783"
+    },
+    {
+      "number": 72,
+      "title": "[DRAFT][AMES] Fase 1A: reprocessar 3022 confirmada sem Chrome/CDP",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr72-3022-local-replay-20261116",
+      "head_sha": "f91f7f92ae1ff6409e623b285d93793b0c3fefae",
+      "base": "work/codex-parecer-independente-20261116",
+      "base_sha": "a5deb982e7aa0305f4b9681fc8f87d7c7b8e3135"
+    },
+    {
+      "number": 73,
+      "title": "[DRAFT][AMES] Fase 1B.1: replay misto 3022 sem perder checkpoints quando Chrome/Home falham",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr73-3022-mixed-offline-recovery-20261116",
+      "head_sha": "ed5fcd4bb317e3522b13439136765ab1044d192d",
+      "base": "work/ames-pr72-3022-local-replay-20261116",
+      "base_sha": "f91f7f92ae1ff6409e623b285d93793b0c3fefae"
+    },
+    {
+      "number": 74,
+      "title": "[DRAFT][AMES] Fase 2A: expor nomes 3022 históricos já salvos no SQLite para /local/sn",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr74-3022-local-operator-evidence-20261116",
+      "head_sha": "917333f1ad56d5d947c36548b3f2247efbf28204",
+      "base": "work/codex-parecer-independente-20261116",
+      "base_sha": "a5deb982e7aa0305f4b9681fc8f87d7c7b8e3135"
+    },
+    {
+      "number": 75,
+      "title": "[DRAFT][AMES] Fase 1B.2: reconhecer campo SN ausente na 3022 e interromper erros em cascata",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr75-3022-input-circuit-20261116",
+      "head_sha": "26a9df1ddcdc860e5399a1fc137ae0b702b8cb97",
+      "base": "work/ames-pr73-3022-mixed-offline-recovery-20261116",
+      "base_sha": "ed5fcd4bb317e3522b13439136765ab1044d192d"
+    },
+    {
+      "number": 76,
+      "title": "[DRAFT][AMES] Fase integrada: 3022 replay, SN input breaker e nomes históricos com 9-view gate",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr76-cross-integration-20261116",
+      "head_sha": "06b61bfb4d668a5bb94b09673e273de12522d0eb",
+      "base": "work/ames-pr75-3022-input-circuit-20261116",
+      "base_sha": "26a9df1ddcdc860e5399a1fc137ae0b702b8cb97"
+    },
+    {
+      "number": 77,
+      "title": "[DRAFT][AMES] R3: não dispensar coleta 3022 com COMPLETE sem prova MES",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr77-3022-checkpoint-proof-20261116",
+      "head_sha": "eaf14cb67658fb1eb0fc452ad2168a58b3d91c6d",
+      "base": "work/ames-pr76-cross-integration-20261116",
+      "base_sha": "06b61bfb4d668a5bb94b09673e273de12522d0eb"
+    },
+    {
+      "number": 78,
+      "title": "[DRAFT][AMES] N1/N3: manter nome explícito 3012 e bloquear origem divergente nas projeções",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr78-names-provenance-20261116",
+      "head_sha": "e1596ac3462eb1f54b2b6465a50750325eb32e00",
+      "base": "work/ames-pr77-3022-checkpoint-proof-20261116",
+      "base_sha": "eaf14cb67658fb1eb0fc452ad2168a58b3d91c6d"
+    },
+    {
+      "number": 79,
+      "title": "[DRAFT][AMES] Restaurar 29 testes de observabilidade 3022 no gate integrado",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr79-observability-gate-20261116",
+      "head_sha": "4d2a32117d4c3d87ebdd6f0590d24bfab4293031",
+      "base": "work/ames-pr78-names-provenance-20261116",
+      "base_sha": "e1596ac3462eb1f54b2b6465a50750325eb32e00"
+    },
+    {
+      "number": 80,
+      "title": "[DRAFT][AMES] U1a: remover 2114 duplicada preservando campos por passagem",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr80-reuse-2114-history-parity-20261116",
+      "head_sha": "fc5afaac5c5e491dfcbf34ab5448c38aaeed222e",
+      "base": "work/ames-pr79-observability-gate-20261116",
+      "base_sha": "4d2a32117d4c3d87ebdd6f0590d24bfab4293031"
+    },
+    {
+      "number": 81,
+      "title": "[DRAFT][AMES] F2: exigir rota, controle visível e superfície OPC na navegação",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr81-mes-navigation-readiness-20261116",
+      "head_sha": "d439fca6b2e46b6b6842c31720d5afbe04f64e3d",
+      "base": "work/ames-pr80-reuse-2114-history-parity-20261116",
+      "base_sha": "fc5afaac5c5e491dfcbf34ab5448c38aaeed222e"
+    },
+    {
+      "number": 82,
+      "title": "[DRAFT][AMES] S1: bloquear horário 3022 de outra origem, linha ou revisão",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr82-production-scope-isolation-20261116",
+      "head_sha": "cf6843faaad6c43c8d0b75761de9fc8a86e397e0",
+      "base": "work/ames-pr81-mes-navigation-readiness-20261116",
+      "base_sha": "d439fca6b2e46b6b6842c31720d5afbe04f64e3d"
+    },
+    {
+      "number": 83,
+      "title": "[DRAFT][AMES] F1: recuperar Home na sessão OPC existente sem adivinhar host",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr83-cdp-home-recovery-20261116",
+      "head_sha": "547b1f25cd07a6618570841fb747984b1ce07094",
+      "base": "work/ames-pr82-production-scope-isolation-20261116",
+      "base_sha": "cf6843faaad6c43c8d0b75761de9fc8a86e397e0"
+    },
+    {
+      "number": 84,
+      "title": "[DRAFT][AMES] F2: bloquear lote 3022 sem campo SN/IMEI ExtJS realmente pronto",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-pr84-3022-extjs-preflight-20261116",
+      "head_sha": "3a736b57230ec3dd14ff48ac00106a857c1fb7a6",
+      "base": "work/ames-pr83-cdp-home-recovery-20261116",
+      "base_sha": "547b1f25cd07a6618570841fb747984b1ce07094"
+    },
+    {
+      "number": 86,
+      "title": "[DRAFT][AMES][#85] Timeline única de reuso: eventos, técnicos e comentários com proveniência",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-issue85-reuse-event-timeline-20261116",
+      "head_sha": "5c19beee85125830e0b483c5cf9708eb8de25228",
+      "base": "work/ames-pr84-3022-extjs-preflight-20261116",
+      "base_sha": "3a736b57230ec3dd14ff48ac00106a857c1fb7a6"
+    },
+    {
+      "number": 87,
+      "title": "A-MES: corrigir perda de evidência e falso primeiro uso na classificação 3074",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-3074-physical-use-audit-20261116",
+      "head_sha": "fed8076b15f95d1a037ed369ce0a02aaf46b2280",
+      "base": "work/ames-issue85-reuse-event-timeline-20261116",
+      "base_sha": "5c19beee85125830e0b483c5cf9708eb8de25228"
+    },
+    {
+      "number": 88,
+      "title": "A-MES: corrigir prova e diagnóstico dos horários produtivos 3022 por ocorrência",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "head": "work/ames-3022-production-time-audit-20261117",
+      "head_sha": "3a088ddad41be9e31b144e4ac4b0b73725141624",
+      "base": "work/ames-3074-physical-use-audit-20261116",
+      "base_sha": "fed8076b15f95d1a037ed369ce0a02aaf46b2280"
+    }
+  ],
+  "issue85": {
+    "number": 85,
+    "state": "open",
+    "is_pull_request": false
+  }
+}

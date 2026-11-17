@@ -15,6 +15,7 @@ on:
       - work/ames-issue85-reuse-event-timeline-20261116
       - work/ames-3074-physical-use-audit-20261116
       - work/ames-3022-production-time-audit-20261117
+      - work/ames-final-integration-audit-20261117
   workflow_dispatch:
 
 permissions:
@@ -25,6 +26,9 @@ jobs:
     name: 3022, identity, SQLite and Console contracts
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      NODE_OPTIONS: '--import=./scripts/audit/no-distribution-guard.mjs'
+      PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -35,6 +39,11 @@ jobs:
           node-version: '24'
       - name: Install disposable parser test dependencies
         run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
+      - name: Independent integration and static migration proof (no builders)
+        run: |
+          python3 scripts/agent-integration-migration-static.test.py
+          python3 scripts/agent-integration-brm.test.py
+          node --test scripts/ames-integration-worker.test.mjs
       - name: 3022 production time proof matrix (disposable SQLite)
         run: |
           python3 scripts/agent-3022-production-evidence.test.py
@@ -69,7 +78,7 @@ jobs:
         run: python3 scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_R2_missing_extjs_input_stops_after_two_recoverable_failures
       - name: Preserve factory engine and raw capture/recovery contracts
         env:
-          PYTHONPATH: ames/factory-engine
+          PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
         run: |
           python3 -m unittest discover -s ames/factory-engine/tests -p 'test_*.py' -q
           python3 scripts/agent-source-capture.test.py
@@ -84,10 +93,10 @@ jobs:
         run: python3 scripts/agent-navigation-readiness.test.py
       - name: Full 3022 observability, single-click, stale-grid and storm-breaker regressions
         env:
-          PYTHONPATH: ames/factory-engine
+          PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
         run: python3 scripts/agent-3022-observability.test.py
       - name: Central Node contracts across nine views (no installer generation)
-        run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' ! -name 'ames-r12-migration-bundle.test.mjs' | sort)
+        run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' ! -name 'ames-r12-migration-bundle.test.mjs' ! -name 'ames-r12-capture.test.mjs' ! -name 'ames-offline-shell.test.mjs' ! -name 'ames-release-build.test.mjs' ! -name 'ames-deploy-routing.test.mjs' ! -name 'ames-stage-vercel.test.mjs' | sort)
       - name: U1 single 2114 history without losing original fields
         run: node --test --test-name-pattern='U1' scripts/audit/codex_cross_contracts_red.mjs
       - name: Independent N1/N3 name and source contracts
@@ -107,6 +116,9 @@ jobs:
     name: Nine views browser regression
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      NODE_OPTIONS: '--import=./scripts/audit/no-distribution-guard.mjs'
+      PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
