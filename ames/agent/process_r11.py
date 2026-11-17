@@ -243,11 +243,14 @@ def _production_rows(rows, line):
         # AT may reuse assembly operation codes on END LOT. Preserve those
         # events in raw/timeline, but do not call them productive assembly.
         desc = ' '.join(str(normalized.get(k) or '') for k in ('working_oper', 'tran_cmf3')).lower()
-        # Keep the legacy explicit label too: it need not be Current Oper.
-        desc += ' ' + str(row.get('Operation Name') or '').lower()
-        operator = str(normalized.get('tran_user_id') or row.get('Transaction User Id') or '').strip().upper()
+        # A normalized preferred alias must not erase a second, contradictory
+        # explicit legacy label/ID. Keep every previously enforced AT guard.
+        desc += ' ' + ' '.join(str(row.get(k) or '') for k in ('Working Oper', 'Working Operation', 'Operation Name', 'TRAN CMF3')).lower()
+        operators = {str(normalized.get('tran_user_id') or '').strip().upper(),
+                     str(row.get('Tran User Id') or '').strip().upper(),
+                     str(row.get('Transaction User Id') or '').strip().upper()}
         if str(normalized.get('tran_desc') or '').upper() == 'END LOT' and (
-                any(word in desc for word in ('repair', 'disassembly', 'rework', 'desmontagem')) or operator.startswith('BRM')):
+                any(word in desc for word in ('repair', 'disassembly', 'rework', 'desmontagem')) or any(operator.startswith('BRM') for operator in operators)):
             continue
         result.append(row)
     return result
