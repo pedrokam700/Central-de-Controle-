@@ -58,8 +58,6 @@
     }
   ],
   "blockers": [
-    "D01",
-    "D02",
     "P01",
     "P02",
     "P03",
@@ -69,7 +67,7 @@
     "P07",
     "P08"
   ],
-  "decision": "DOCUMENTATION_ONLY_EXECUTION_BLOCKED",
+  "decision": "UPDATER_CORRECTED_IN_TESTS_HOMOLOGATION_STILL_BLOCKED",
   "budget_accepted": false,
   "proposed_lab_budget": {
     "repetitions_per_volume": 5,
@@ -86,5 +84,9 @@
     "max_rss_guest_reserved_ram_percent": 60,
     "rss_last_three_cycles_variation_percent": 10,
     "physical_slo": false
+  },
+  "software_corrections": {
+    "D01": "CORRECTED_SYNTHETIC_TESTS_PHYSICAL_PENDING",
+    "D02": "CORRECTED_SYNTHETIC_TESTS_PHYSICAL_PENDING"
   }
 }
