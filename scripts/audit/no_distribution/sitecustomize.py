@@ -10,7 +10,7 @@ _popen = subprocess.Popen
 
 def _guarded_popen(args, *pos, **kw):
     parts = args if isinstance(args, (list, tuple)) else [args]
-    if any(re.search(r'(?:^|[\\/\s])(?:build-[\w-]+\.(?:py|mjs)|stage-vercel\.mjs|capture-r12-engine\.py|harden-[\w-]*package\.py)(?:$|\s)', str(p)) for p in parts):
+    if any(re.search(r'(?:^|[\\/\s\'"])(?:build-[\w-]+\.(?:py|mjs)|stage-vercel\.mjs|capture-r12-engine\.py|harden-[\w-]*package\.py)(?:$|[\s\'"])', str(p)) for p in parts):
         raise RuntimeError('NO_DISTRIBUTION: builder command refused')
     return _popen(args, *pos, **kw)
 

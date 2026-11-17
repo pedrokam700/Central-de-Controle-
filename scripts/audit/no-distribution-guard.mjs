@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
 export function assertNoDistribution(command,args=[]){
  const parts=[command,...(Array.isArray(args)?args:[])].filter(x=>typeof x==='string');
- if(parts.some(value=>/(?:^|[\\/\s])(?:build-[\w-]+\.(?:py|mjs)|stage-vercel\.mjs|capture-r12-engine\.py|harden-[\w-]*package\.py)(?:$|\s)/.test(value)))throw Error('NO_DISTRIBUTION: builder command refused');
+ if(parts.some(value=>/(?:^|[\\/\s'"])(?:build-[\w-]+\.(?:py|mjs)|stage-vercel\.mjs|capture-r12-engine\.py|harden-[\w-]*package\.py)(?:$|[\s'"])/.test(value)))throw Error('NO_DISTRIBUTION: builder command refused');
 }
 for(const method of ['spawn','spawnSync','execFile','execFileSync']){
  const original=cp[method];cp[method]=function(command,args,...rest){assertNoDistribution(command,args);return original.call(this,command,args,...rest);};

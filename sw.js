@@ -1,6 +1,23 @@
-const CACHE_REVISION='ames-3022-production-evidence-20261117';
+const CACHE_REVISION='ames-integration-client-isolation-20261117';
 const CACHE='central-cora-v15v-15-1-13-54-'+CACHE_REVISION;
 const BASE='/Central-de-Controle-/';
+// Persist activation-time document identities in this shell's static cache.
+// A worker can restart between requests; an in-memory Set alone is unsafe.
+const LEGACY_CLIENTS_KEY=BASE+'__runtime_clients__/'+CACHE_REVISION;
+let legacyClientsPromise;
+async function legacyClientIds(){
+  if(!legacyClientsPromise)legacyClientsPromise=(async()=>{
+    const saved=await (await caches.open(CACHE)).match(LEGACY_CLIENTS_KEY);
+    if(!saved)throw new Error('Runtime client inventory unavailable');
+    const ids=await saved.json();
+    if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string'))throw new Error('Invalid runtime client inventory');
+    return new Set(ids);
+  })();
+  return legacyClientsPromise;
+}
+function scopedWindows(clients){
+  return clients.filter(client=>{const url=new URL(client.url);return url.origin===self.location.origin&&url.pathname.startsWith(BASE);});
+}
 const ASSETS=[BASE+'ames/data/failure-taxonomy.mjs',BASE+'ames/data/failure-taxonomy-rules.mjs',BASE+'ames/data/component-matrix.mjs',BASE+'ames/console-component-matrix.mjs',BASE,BASE+'core/ames-session.mjs',BASE+'core/central-roundtrip.mjs',BASE+'ames/operational-context-bridge.mjs',BASE+'ames/ui-scheduler.mjs',BASE+'ames/data/source-provenance.mjs',BASE+'ames/data/history-source-choice.mjs',BASE+'ames/data/sn-forensics.mjs',BASE+'ames/data/a6900-technician.mjs',BASE+'ames/data/job-live-events.mjs',BASE+'ames/data/sn-process-diagnostic.mjs',BASE+'ames/console-process-provenance.mjs',BASE+'ames/console-sn-consistency.mjs',BASE+'ames/console-reuse-provenance.mjs',BASE+'ames/integration-session.mjs',BASE+'ames/history-source.mjs',BASE+'core/login-navigation.mjs',BASE+'core/login-accessibility.css',BASE+'ames/console-i18n.mjs',BASE+'ames/console-i18n-extra.mjs',BASE+'ames/console-preparation.mjs',BASE+'ames/data/workstation-update-policy.mjs',BASE+'ames/console-theme.css',BASE+'ames/console-history.mjs',BASE+'ames/data/history.mjs',BASE+'ames/data/operational-period.mjs',BASE+'ames/data/reading-period.mjs',BASE+'ames/reading-period-controller.mjs',BASE+'ames/console-reading-period.mjs',BASE+'ames/console-saved-sn-history.mjs',BASE+'ames/data/time-display.mjs',BASE+'ames/data/production-evidence.mjs',BASE+'ames/data/observation-provenance.mjs',BASE+'ames/console-failure-evidence.mjs',BASE+'ames/failure-group-evidence.mjs',BASE+'ames/console-sn-source-provenance.mjs',BASE+'ames/console-sn-repair-evidence.mjs',BASE+'ames/console-sn-material-bindings.mjs',BASE+'ames/console-sn-live-context.mjs',BASE+'ames/console-sn-history-detail.mjs',BASE+'ames/console-sn-smart-alerts.mjs',BASE+'ames/console-sn-temporal-proof.mjs',BASE+'ames/console-r12-polish.css',BASE+'ames/console-fastlane.css',BASE+'ames/console-daily-analytics.css',BASE+'ames/console-improvements.css',BASE+'ames/console-operator-parity.css',BASE+'ames/console-monitor-modern.css',BASE+'ames/console-workstation-setup.css',BASE+'index.html',BASE+'offline-bootstrap.mjs',BASE+'app.js',BASE+'core/daily-admin-insights.mjs',BASE+'core/offline-outbox.mjs',BASE+'core/auth-hardening.mjs',BASE+'ames/data/store.mjs',BASE+'ames/data/canonical.mjs',BASE+'ames/data/process-timeline.mjs',BASE+'ames/data/reuse-analysis.mjs',BASE+'ames/data/source-coverage.mjs',BASE+'ames/console-source-capture-history.mjs',BASE+'ames/data/history-trends.mjs',BASE+'ames/console-history-trends.mjs',BASE+'ames/data/reuse-history-timeline.mjs',BASE+'ames/console-reuse-history-timeline.mjs',BASE+'ames/data/reuse-cohorts.mjs',BASE+'ames/console-reuse-cohorts.mjs',BASE+'ames/data/dashboard.mjs',BASE+'ames/sync.mjs',BASE+'ames/firebase-sync.mjs',BASE+'ames/advanced-view.mjs',BASE+'ames/advanced-table.mjs',BASE+'ames/base-paging.mjs',BASE+'ames/data/agent-contract.mjs',BASE+'ames/agent-client.mjs',BASE+'ames/automation-view.mjs',BASE+'ames/agent-evidence-view.mjs',BASE+'ames/agent-diagnostics.mjs',BASE+'ames/agent-3012-health.mjs',BASE+'ames/console-specialized-views.mjs',BASE+'ames/console-wave3-views.mjs',BASE+'ames/reuse-table-view.mjs',BASE+'ames/console-base-view.mjs',BASE+'ames/console-base-catalog.mjs',BASE+'ames/console-fastlane-sn-reuse.mjs',BASE+'ames/console-sn-offline-fastlane.mjs',BASE+'ames/console-sn-offline-navigation.mjs',BASE+'ames/console-network-fastlane.mjs',BASE+'ames/console-3012-fastlane.mjs',BASE+'ames/console-process-operator.mjs',BASE+'ames/console-capability-guard.mjs',BASE+'ames/console-monitor-runtime.mjs',BASE+'ames/console-failure-process.mjs',BASE+'ames/console-knowledge-architecture.mjs',BASE+'ames/console-refresh-decorator.mjs',BASE+'ames/console-trace-scope.mjs',BASE+'ames/console-data-health.mjs',BASE+'ames/console-shift-summary.mjs',BASE+'ames/console-evidence-drawer.mjs',BASE+'ames/daily-failure-summary.mjs',BASE+'ames/daily-failure-analytics.mjs',BASE+'ames/data/target-impact.mjs',BASE+'ames/defect-label.mjs',BASE+'ames/collection-status.mjs',BASE+'ames/console-legacy-parity.mjs',BASE+'ames/console-latest-capture.mjs',BASE+'ames/console-legacy.css',BASE+'ames/console-wave2.css',BASE+'ames/console-wave3.css',BASE+'ames/console-r12-fidelity.css',BASE+'ames/console-monitor-runtime.css',BASE+'ames/console-knowledge-architecture.css',BASE+'ames/console-mobile-polish.css',BASE+'ames/central-mes-context.mjs',BASE+'ames/central-mes-context.css',BASE+'ames/data/capabilities.mjs',BASE+'ames/capability-view.mjs',BASE+'ames/console-view.mjs',BASE+'ames/dashboard-view.mjs',BASE+'ames/dashboard.css',BASE+'ames/trace-view.mjs',BASE+'ames/data/trace.mjs',BASE+'ames/evidence-view.mjs',BASE+'ames/occurrence-view.mjs',BASE+'ames/onboarding-view.mjs',BASE+'ames/release-discovery.mjs',BASE+'ames/release-login-link.mjs',BASE+'ames/migration-download.mjs',BASE+'ames/data/onboarding.mjs',BASE+'ames/releases/latest/release.json',BASE+'ames/cora-view.mjs',BASE+'ames/data/cora.mjs',BASE+'ames/daily-view.mjs',BASE+'ames/data/daily.mjs',BASE+'ames/data/failures.mjs',BASE+'ames/data/product.mjs',BASE+'ames/product-view.mjs',BASE+'ames/product.css',BASE+'ames/data/contract.mjs',BASE+'styles.css',BASE+'mobile.css',BASE+'manifest.webmanifest',BASE+'icons/cora-192.svg',BASE+'icons/cora-512.svg'];
 ASSETS.push(BASE+'ames/data/trace-targets.mjs');
 ASSETS.push(BASE+'ames/console-sn-material-investigation.mjs');
@@ -39,16 +56,38 @@ self.addEventListener('install',event=>{event.waitUntil(precache());});
 self.addEventListener('message',event=>{
   if(event.data?.type==='cora-activate-update')event.waitUntil(Promise.resolve().then(()=>self.skipWaiting()));
 });
-self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('central-cora-v15v-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()).then(()=>self.clients.matchAll({includeUncontrolled:true})).then(cs=>cs.forEach(c=>c.postMessage({type:'cora-cache-updated',version:'15.1.13.54',cache_revision:CACHE_REVISION}))));});
+self.addEventListener('activate',event=>{event.waitUntil((async()=>{
+  const before=scopedWindows(await self.clients.matchAll({type:'window',includeUncontrolled:true}));
+  const ids=new Set(before.map(client=>client.id));
+  const cache=await caches.open(CACHE);
+  const remember=()=>cache.put(LEGACY_CLIENTS_KEY,new Response(JSON.stringify([...ids]),{headers:{'Content-Type':'application/json'}}));
+  await remember();
+  await self.clients.claim();
+  // Include a document opened during claim. Fetches wait for activation; new
+  // navigations after it receive a new document ID and the new shell together.
+  const after=scopedWindows(await self.clients.matchAll({type:'window',includeUncontrolled:true}));
+  after.forEach(client=>ids.add(client.id));
+  await remember();
+  legacyClientsPromise=Promise.resolve(ids);
+  await Promise.all((await caches.keys()).filter(k=>k.startsWith('central-cora-v15v-')&&k!==CACHE).map(k=>caches.delete(k)));
+  after.forEach(c=>c.postMessage({type:'cora-cache-updated',version:'15.1.13.54',cache_revision:CACHE_REVISION}));
+})());});
 self.addEventListener('fetch',event=>{
   const req=event.request,url=new URL(req.url);
   if(req.method!=='GET')return;
   const firebase=FIREBASE_SDK.includes(url.href);
   const local=url.origin===self.location.origin&&ASSETS.includes(url.pathname);
   if(!firebase&&!local)return;
-  if(local&&([...url.searchParams.keys()].some(key=>key!=='v')||(url.searchParams.has('v')&&url.searchParams.get('v')!=='15.1.13.54')))return;
+  const supportedQuery=![...url.searchParams.keys()].some(key=>key!=='v')&&(!url.searchParams.has('v')||url.searchParams.get('v')==='15.1.13.54');
+  if(local&&!supportedQuery&&!event.clientId)return;
   const key=firebase?url.href:url.pathname;
   event.respondWith((async()=>{
+    if(local&&req.mode!=='navigate'&&event.clientId){
+      let legacy=true;
+      try{legacy=(await legacyClientIds()).has(event.clientId);}catch{/* Fail closed if the persisted guard is unreadable. */}
+      if(legacy)return new Response('Central atualizada. Salve o trabalho e recarregue esta aba para carregar a mesma versão.',{status:409,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
+    }
+    if(local&&!supportedQuery)return fetch(req);
     const cache=await caches.open(CACHE);
     // Each installed shell is immutable. Fetching some modules from the next
     // deployment while others remain cached can mix incompatible builds.

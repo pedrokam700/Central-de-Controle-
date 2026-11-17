@@ -48,6 +48,13 @@ jobs:
           python3 scripts/agent-integration-projection.test.py || result=1
           node --test scripts/ames-integration-worker.test.mjs || result=1
           exit "$result"
+      - name: Disposable update rollback and crash recovery (no package)
+        run: |
+          python3 scripts/agent-update.test.py
+          python3 scripts/agent-hardening.test.py
+          python3 scripts/agent-update-readiness.test.py
+          python3 scripts/agent-performance-indexes.test.py
+          python3 scripts/agent-operational-calendar.test.py
       - name: 3022 production time proof matrix (disposable SQLite)
         run: |
           python3 scripts/agent-3022-production-evidence.test.py
@@ -142,6 +149,7 @@ jobs:
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/console-tests/node_modules/playwright/index.mjs"
           export BROWSER_OUTPUT="$RUNNER_TEMP/console-evidence"
           node scripts/ames-experience.browser.mjs
+          node scripts/ames-integration-worker.browser.mjs
           node scripts/ames-reuse-timeline.browser.mjs
           node scripts/ames-3074-physical-classification.browser.mjs
           node scripts/ames-3022-production-evidence.browser.mjs

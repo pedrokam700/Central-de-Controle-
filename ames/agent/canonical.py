@@ -14,11 +14,11 @@ from material_trace_provenance import exact_observation, trace_material_links
 from datetime import datetime, timezone
 
 SCHEMA = 'central-ames-v2'
-PROJECTION_VERSION = 13  # reproject 3022 exact evidence; older revisions stay immutable
+PROJECTION_VERSION = 14  # retain raw 2114 facts and reject AT passage labels; old revisions remain immutable
 LINES = ('TAN10101', 'TAN10102', 'TAN10103')
 DATASETS = ('defects','pcba_history','material_reuse','history_contexts','process_timeline')
 TABLES = ('defect_observations','line_metrics','pcba_history','material_reuse','history_contexts','snapshot_payloads','mes_process_timeline')
-FIELDS = ('line','pcba_sn','current_pcba_sn','historical_pcba','current_pcba','product_model','defect_key','hist_seq','defect_code','defect_desc','defect_time','defect_oper','defect_location','defect_material_id','repair_status','repair_status_current','repair_state_current','defect_type','defect_type_current','defect_type_class','manual_or_auto','item_sn','item_type','material_sn','material_type','usage_status','previous_pcba_count','total_pcba_count_known_now','previous_pcbas_json','active_now_pcbas_json','inactive_now_pcbas_json','bind_time_utc','unbind_time_utc','context_kind','context_key','current_defect_key')
+FIELDS = ('line','pcba_sn','current_pcba_sn','historical_pcba','current_pcba','product_model','defect_key','hist_seq','defect_code','defect_desc','defect_time','defect_user','defect_user_name','defect_oper','defect_location','defect_material_id','repair_status','repair_status_current','repair_state_current','defect_type','defect_type_current','defect_type_class','manual_or_auto','item_sn','item_type','material_sn','material_type','usage_status','previous_pcba_count','total_pcba_count_known_now','previous_pcbas_json','active_now_pcbas_json','inactive_now_pcbas_json','bind_time_utc','unbind_time_utc','context_kind','context_key','current_defect_key')
 def encoded(value):
     return json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),default=str)
 def digest(value):return hashlib.sha256(encoded(value).encode()).hexdigest()
@@ -232,6 +232,19 @@ def export_revision(store,sid,line,insight_builder=None):
                 if not candidates:unassigned+=1
                 if line not in candidates:continue
                 selected=[r for r in refs if r['line_id']==line]
+                if dataset=='pcba_history':
+                    # These source facts are stored only in raw_json by the
+                    # legacy 2114 schema. Missing clocks/authors stay missing.
+                    try:
+                        history_raw=json.loads(raw.get('raw_json') or '{}')
+                    except (ValueError,TypeError):
+                        history_raw={}
+                    if isinstance(history_raw,dict):
+                        for field,aliases in {'defect_time':('Defect Time','defect_time'),
+                                'defect_user':('Defect User','defect_user'),
+                                'defect_user_name':('Defect User Name','defect_user_name')}.items():
+                            if raw.get(field) in (None,''):
+                                raw[field]=next((history_raw[k] for k in aliases if history_raw.get(k) not in (None,'')),None)
                 row={k:raw[k] for k in FIELDS if k in raw and raw[k] is not None}
                 key=raw.get('defect_key') if dataset=='defects' else raw.get('context_key') if dataset=='history_contexts' else raw.get('id') or raw.get('event_id')
                 if dataset=='pcba_history' and all(raw.get(k) is not None for k in ('pcba_sn','hist_seq','defect_code','defect_desc')):key=[raw[k] for k in ('pcba_sn','hist_seq','defect_code','defect_desc')]
@@ -274,7 +287,8 @@ def export_revision(store,sid,line,insight_builder=None):
                 if dataset=='process_timeline':
                     row.update({k:raw.get(k) for k in ('event_id','product','pcba_sn','process','station','event_time','raw_ref')});row['valid']=bool(raw['valid'])
                     row['provenance']['adapter']=json.loads(raw['provenance_json'])
-                    row.update(production_shift.classify_passage(raw.get('event_time')))
+                    row.update(production_shift.classify_passage(raw.get('event_time'),station=raw.get('station'),
+                        eligible=bool(raw['valid']) and row['provenance']['adapter'].get('production_shift_source')!='not_production_passage'))
                     row['coverage']={'status':'partial','source_complete':False}
                 ambiguous+=int(len(candidates)>1);rows.append(row)
             sets[dataset]=rows

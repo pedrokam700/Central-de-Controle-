@@ -40,3 +40,18 @@ test('upgrade cannot delete unrelated cached data and does not intercept API wri
  assert(data.has('unrelated-offline-data'));
  assert.equal(await h.request('api/v1/snapshots','old-tab'),undefined);
 });
+test('legacy version query cannot bypass the guard; unrelated same-origin clients are not blocked',async()=>{
+ const h=harness();h.clients.push({id:'another-app',url:origin+'/another-app/',postMessage(){}});
+ await h.lifecycle('install');await h.lifecycle('activate');
+ assert.equal((await h.request('app.js?v=OLD','old-tab')).status,409);
+ assert.equal((await h.request('app.js','another-app')).status,200);
+});
+test('missing or corrupt persisted client inventory fails closed after worker restart',async()=>{
+ for(const corrupt of [null,'invalid json']){
+  const first=harness();await first.lifecycle('install');await first.lifecycle('activate');
+  for(const entries of first.shared.values())for(const key of entries.keys())if(key.includes('__runtime_clients__')){
+   if(corrupt===null)entries.delete(key);else entries.set(key,new Response(corrupt));
+  }
+  assert.equal((await harness(first.shared).request('ames/data/canonical.mjs','old-tab')).status,409);
+ }
+});

@@ -23,6 +23,19 @@ class OperatorEligibility(unittest.TestCase):
             row = end_lot(**{'Tran User Id': operator})
             self.assertEqual(_production_rows([row], LINE), [row])
 
+    def test_current_operation_is_destination_not_the_work_just_completed(self):
+        row = end_lot(**{'Current Oper': 'Repair station', 'Current Oper Code': 'A6900', 'Tran User Id': 'PROD-001'})
+        self.assertEqual(_production_rows([row], LINE), [row])
+
+    def test_repair_aliases_and_contradictory_explicit_lines_remain_blocked(self):
+        for fields in ({'Working Operation': 'Repair station'}, {'Operation Name': 'Disassembly'},
+                       {'TRAN CMF3': 'rework'}, {'Line Id': LINE, 'Line Code': 'TAN10102'},
+                       {'Transaction User Id': ' BRM-001 '}):
+            row = end_lot(**fields)
+            if 'Working Operation' in fields:
+                del row['Working Oper']
+            self.assertEqual(_production_rows([row], LINE), [], fields)
+
     def test_known_brm_at_end_lot_remains_blocked(self):
         self.assertEqual(_production_rows([end_lot(**{'Tran User Id': 'BRM-001'})], LINE), [])
 

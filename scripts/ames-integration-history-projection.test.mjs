@@ -16,4 +16,7 @@ test('same 2114 sequence from another revision or contradictory author must rema
  const rows=board2114Timeline('P',[row,structuredClone(row),{...row,snapshot_revision:3},{...row,defect_user_name:'Autor B'}]);
  assert.equal(rows.length,3);
  assert(rows.every(r=>r.repeat_exact_prior_count===0));
+ const withLater=board2114Timeline('P',[row,{...row,snapshot_revision:3},{...row,defect_user_name:'Autor B'},
+  {...row,hist_seq:1}]);
+ assert.equal(withLater.find(r=>r.hist_seq===1).repeat_exact_prior_count,1);
 });

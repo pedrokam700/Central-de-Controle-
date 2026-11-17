@@ -157,7 +157,10 @@ def lookup(store, sn: str, *, limit: int = 5000) -> Dict[str, Any]:
         for m in (cached_lookup.get('trace_3074') or {}).get('reused_components') or []:
             direct_material.append({**m,'current_pcba_sn':sn,'previous_pcbas_json':json.dumps(m.get('previous_pcbas') or []),'source':'3074'})
     for row in process:
-        if not row.get('production_shift_source'):
+        if str(row.get('station') or row.get('operation_code') or '').strip().upper().startswith('A69'):
+            row.update(production_shift.classify_passage(row.get('event_time'), station='A6900'))
+            row.update(operator_role='observed_process_operator', completion_confirmed=False)
+        elif not row.get('production_shift_source'):
             # Canonical timestamp has explicit offset; legacy naive grid is UTC by engine contract.
             row.update(production_shift.classify(row.get('event_time'),naive_offset=0))
     repairs=[]
