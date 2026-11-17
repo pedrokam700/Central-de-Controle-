@@ -7,6 +7,12 @@ test('CI wraps every workload shell and never tries to write NODE_OPTIONS to GIT
  assert.match(workflow,/defaults:\s+run:\s+shell: bash \.\/scripts\/audit\/guarded-ci\.sh \{0\}/);
  assert.doesNotMatch(workflow,/NODE_OPTIONS[^\n]*GITHUB_ENV/);
  assert.equal((workflow.match(/Prove effective distribution preload/g)||[]).length,2);
+ // CI's real preload refused Playwright's browser ZIP download. Keep the
+ // test-tool fix explicit: use installed Chrome, fail if absent, never relax ZIP.
+ assert.doesNotMatch(workflow,/playwright install/);
+ assert.match(workflow,/command -v google-chrome/);
+ assert.match(workflow,/No preinstalled Chrome: refusing a browser ZIP download/);
+ assert.match(workflow,/PLAYWRIGHT_EXECUTABLE_PATH=\$chrome_path/);
  const wrapper=fs.readFileSync('scripts/audit/guarded-ci.sh','utf8');
  assert.match(wrapper,/export NODE_OPTIONS=/);assert.match(wrapper,/assert-distribution-preload\.mjs/);
 });
