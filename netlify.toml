@@ -29,3 +29,7 @@
 # D01/D02 isolated proof: no preview distribution.
 [context."work/ames-updater-rollback-d01-d02-20261117"]
   ignore = "exit 0"
+
+# Synthetic LAB proof only: no preview distribution.
+[context."work/ames-lab-entry-p01-p03-p06-20261117"]
+  ignore = "exit 0"

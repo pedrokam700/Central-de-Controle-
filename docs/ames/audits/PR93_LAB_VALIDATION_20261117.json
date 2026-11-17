@@ -1,0 +1,374 @@
+{
+  "schema": "ames-synthetic-lab-validation-v1",
+  "base_sha": "db3cb5b58c99bcf86c44b671280cb42f7dd31d4c",
+  "runtime_code_sha": "0a44ce2bfba2f894d023134459b4e2aff79a5926",
+  "tested_head_before_documentation": "d5ef2a6fab619161c0eeaf0517cdbac1c0e3fdd0",
+  "runtime_blob": "21cae4f67665f4c93a7b97df7a9e1be53a40348f",
+  "local_runtime_sha256": "46802fd80ffd37a4338caeaacd05f52ef4c90fdb9f08e6fa53556bc3e36e8245",
+  "local_environment": {
+    "python": "3.12.14",
+    "node": "v24.22.1",
+    "chromium": "preinstalled /usr/bin/chromium; ephemeral synthetic profiles",
+    "dependencies_installed": false
+  },
+  "local_results": {
+    "lab_tests": {
+      "total": 30,
+      "pass": 30
+    },
+    "preservation_static": {
+      "total": 5,
+      "pass": 5
+    },
+    "D01_D02": {
+      "total": 27,
+      "pass": 27
+    },
+    "central_node": {
+      "total": 876,
+      "pass": 876,
+      "fail": 0,
+      "skip": 0
+    },
+    "integrated_groups": [
+      {
+        "name": "Prove effective distribution preload (simulated builder only)",
+        "exit": 0,
+        "seconds": 0.7,
+        "log": "integrated-3.log"
+      },
+      {
+        "name": "Performance and effective preload counterproofs",
+        "exit": 0,
+        "seconds": 4.39,
+        "log": "integrated-5.log"
+      },
+      {
+        "name": "Independent integration and static migration proof (no builders)",
+        "exit": 0,
+        "seconds": 3.84,
+        "log": "integrated-6.log"
+      },
+      {
+        "name": "Disposable update rollback and crash recovery (no package)",
+        "exit": 0,
+        "seconds": 3.23,
+        "log": "integrated-7.log"
+      },
+      {
+        "name": "3022 production time proof matrix (disposable SQLite)",
+        "exit": 0,
+        "seconds": 5.04,
+        "log": "integrated-8.log"
+      },
+      {
+        "name": "3074 physical proof matrix (disposable SQLite)",
+        "exit": 0,
+        "seconds": 3.78,
+        "log": "integrated-9.log"
+      },
+      {
+        "name": "3074 pagination, multi-cycle, raw revisions and state preservation",
+        "exit": 0,
+        "seconds": 9.88,
+        "log": "integrated-10.log"
+      },
+      {
+        "name": "Local confirmed and mixed replay",
+        "exit": 0,
+        "seconds": 2.18,
+        "log": "integrated-11.log"
+      },
+      {
+        "name": "Historical names, proven source and negative cases",
+        "exit": 0,
+        "seconds": 1.43,
+        "log": "integrated-12.log"
+      },
+      {
+        "name": "Missing 3022 input now stops after two attempts",
+        "exit": 0,
+        "seconds": 0.78,
+        "log": "integrated-13.log"
+      },
+      {
+        "name": "Preserve factory engine and raw capture/recovery contracts",
+        "exit": 0,
+        "seconds": 7.09,
+        "log": "integrated-14.log"
+      },
+      {
+        "name": "F2 3022 strict Home and ExtJS preflight",
+        "exit": 0,
+        "seconds": 0.92,
+        "log": "integrated-15.log"
+      },
+      {
+        "name": "F1 existing OPC/CDP session Home recovery safety",
+        "exit": 0,
+        "seconds": 0.53,
+        "log": "integrated-16.log"
+      },
+      {
+        "name": "A-MES navigation route, visibility and OPC readiness",
+        "exit": 0,
+        "seconds": 0.31,
+        "log": "integrated-17.log"
+      },
+      {
+        "name": "Full 3022 observability, single-click, stale-grid and storm-breaker regressions",
+        "exit": 0,
+        "seconds": 3.34,
+        "log": "integrated-18.log"
+      },
+      {
+        "name": "Central Node contracts across nine views (no installer generation)",
+        "exit": 0,
+        "seconds": 51.19,
+        "log": "integrated-19.log"
+      },
+      {
+        "name": "U1 single 2114 history without losing original fields",
+        "exit": 0,
+        "seconds": 0.31,
+        "log": "integrated-20.log"
+      },
+      {
+        "name": "Independent N1/N3 name and source contracts",
+        "exit": 0,
+        "seconds": 0.51,
+        "log": "integrated-21.log"
+      },
+      {
+        "name": "S1 source, line, snapshot, revision and period isolation",
+        "exit": 0,
+        "seconds": 0.42,
+        "log": "integrated-22.log"
+      },
+      {
+        "name": "Pairing and authentication unaffected",
+        "exit": 0,
+        "seconds": 0.43,
+        "log": "integrated-23.log"
+      }
+    ],
+    "browser_harnesses": [
+      {
+        "name": "node scripts/ames-experience.browser.mjs",
+        "exit": 0,
+        "seconds": 22.1,
+        "log": "browser-0.log"
+      },
+      {
+        "name": "node scripts/ames-performance.browser.mjs",
+        "exit": 0,
+        "seconds": 18.88,
+        "log": "browser-1.log"
+      },
+      {
+        "name": "node scripts/ames-integration-worker.browser.mjs",
+        "exit": 0,
+        "seconds": 6.15,
+        "log": "browser-2.log"
+      },
+      {
+        "name": "node scripts/ames-reuse-timeline.browser.mjs",
+        "exit": 0,
+        "seconds": 8.28,
+        "log": "browser-3.log"
+      },
+      {
+        "name": "node scripts/ames-3074-physical-classification.browser.mjs",
+        "exit": 0,
+        "seconds": 4.74,
+        "log": "browser-4.log"
+      },
+      {
+        "name": "node scripts/ames-3022-production-evidence.browser.mjs",
+        "exit": 0,
+        "seconds": 7.19,
+        "log": "browser-5.log"
+      },
+      {
+        "name": "node scripts/ames-sync-reload.browser.mjs",
+        "exit": 0,
+        "seconds": 5.08,
+        "log": "browser-6.log"
+      },
+      {
+        "name": "node scripts/ames-pairing.browser.mjs",
+        "exit": 0,
+        "seconds": 8.91,
+        "log": "browser-7.log"
+      },
+      {
+        "name": "node scripts/ames-3028-completion.browser.mjs",
+        "exit": 0,
+        "seconds": 9.62,
+        "log": "browser-8.log"
+      }
+    ]
+  },
+  "red_checkpoints": [
+    {
+      "sha": "49706d8d0e4647b1b217c98fdc6dc24e8b582a8a",
+      "cause": "missing separate LAB entry",
+      "methods": 20,
+      "assertion_failures_including_subcases": 40,
+      "run": 44157767947
+    },
+    {
+      "sha": "be6d5379053c2ecf4559eea77a09e069b67c3ae3",
+      "cause": "numeric JSON substitutes for booleans",
+      "subcase_failures": 4,
+      "run": 44159481562
+    },
+    {
+      "sha": "541291ecba775048574c6aae32a0cceebe426333",
+      "cause": "inherited regular stdio descriptors",
+      "independent_subcase_failures": 3
+    },
+    {
+      "sha": "393b57268fd2e3a7db588148b364e9bceac06e36",
+      "cause": "LAB nested in operational sentinel ancestors",
+      "subcase_failures": 3
+    }
+  ],
+  "code_ci": {
+    "sha": "d5ef2a6fab619161c0eeaf0517cdbac1c0e3fdd0",
+    "run": 44163348807,
+    "linux": "SUCCESS",
+    "windows": "SUCCESS",
+    "lab_tests_each": 30,
+    "updater_tests_each": 27,
+    "preservation_tests_each": 5,
+    "offline_static_tests_each": 13,
+    "windows_default_temp_marker_names": [
+      "Cookies"
+    ],
+    "harness_root": "explicit RUNNER_TEMP; runtime guards not relaxed"
+  },
+  "expanded_ci_without_installs": {
+    "sha": "d5ef2a6fab619161c0eeaf0517cdbac1c0e3fdd0",
+    "run": 44163348767,
+    "conclusion": "FAILURE_DEPENDENCY_UNAVAILABLE",
+    "node": {
+      "total": 876,
+      "pass": 874,
+      "fail": 2,
+      "skip": 0
+    },
+    "cause": "openpyxl unavailable on runner, confirmed ModuleNotFoundError; no install fallback or hidden tests",
+    "full_local_with_preexisting_dependencies": "PASS"
+  },
+  "local_raw_log_sha256": {
+    "browser-0.log": "c8623f916d505d5853b7e450a3637acd1ce75ecdeb0817ca70e09a673fe64c36",
+    "browser-1.log": "7fe8562b74b565da87ae5ff14d3151cf00ca40d1b6d618a91a3c9f68a146aa51",
+    "browser-2.log": "2d2705ef7c69159bd7ae6486edf0d1aa7a6e9c67b12cd246e710665bfabc24fd",
+    "browser-3.log": "dfd9b4d48cf944a3cfedf8bcca46f78906cc0c396831127e23778ad0ae14fd87",
+    "browser-4.log": "47d10ca06b18675dd6a78fd263de987eb91b61d1ee0782f1f85f9e95ff4400f8",
+    "browser-5.log": "f74ef07d6daabf9540e86228523d0de07d2f44535d99b457a39fff269883b53d",
+    "browser-6.log": "b2a2eea6afcc937a7931d4e8ae15c5652307976975b96daab64cdca37654571c",
+    "browser-7.log": "5000565de0cef3d60ab321e6c1bd67a78a5fe8a065cbd605ae6fe94ba60d6ae7",
+    "browser-8.log": "500fbea3139c4acc106d5710d22ffc8454b79fc328784d503a92082bc1aee2fc",
+    "green-final-lab.log": "d0cd1306029d3d4d3b8d45d663f919d8ddd5a9d1695e2c0ce5b6325b07c82775",
+    "green-preservation.log": "6331e4ca17ccbd448ea0a3911ab805ea4f1c297f3c7d4d35f1323745d406de1c",
+    "green-updater.log": "36726d9212dd22de551aeb27e3ebfeeba7f8162c58025d42aa8f41a6c6d84cd7",
+    "integrated-10.log": "e7241d1b6febc162afe46d3e6e395d8df4ff9140477ff945915245c78b2ff7d8",
+    "integrated-11.log": "ce21fef237cda700a1cf84ea11fc81aa19ac5c9617535a6b69435481a8bbe427",
+    "integrated-12.log": "fe98ab60cb42b38fb44e72a4799b53c1deb1740df0e50e3e8e06677954ff4787",
+    "integrated-13.log": "56ffb644455e75f366a6937da4a04180ad2d20a3bfad4ca26722c30f6f5fc951",
+    "integrated-14.log": "d5dc03db507e50abf6d8aad36013a7a6357f3f6c78c0b9f39327f066c036403b",
+    "integrated-15.log": "b46673f64867f696eb15277b449a644e81403ee099baa0df35054985dc8f04e1",
+    "integrated-16.log": "5f48ffc1588c841c0f710310a6344306c99980032e00e9ace6540c7159fd14d1",
+    "integrated-17.log": "27c1d512ce5f75da419cfef0445b117ddac4cb6544bf8f52173e57daf6960c2b",
+    "integrated-18.log": "63f496f11484fd0cee34cefdda708eca692d1549e6b8276d547f9eabdf451d80",
+    "integrated-19.log": "83c3f96f5b072f3a4d20ccc01528fa01c613a73ef07495f6b19b01d756e2d951",
+    "integrated-20.log": "c5861806ae7a6e79643315d1f4a13058c42dc372bcb1bcc2c6638cd2fbe03836",
+    "integrated-21.log": "f0d648e6ab03f85c95eb1b853b1d639c92e431866527ead8027988e1b1bf1cec",
+    "integrated-22.log": "98a61e0943fa1262f2d7785de6a7994f580f9305b48817095112307e97f66922",
+    "integrated-23.log": "23cb8cf0573a6903c43699492cae0f652e17d778f3c339fc1ab5144fe3d6fd3f",
+    "integrated-3.log": "68599cd3907578962f4552bd9985feca7ef55c4937b48662758157d253cb1a77",
+    "integrated-5.log": "1aa552c096ea181a50318a2bbc3ef1599ed387f83f267ea8c443a67842f9b9c8",
+    "integrated-6.log": "1a9766d32ff4279e7190759e1846496f218eeb847c5139049d00510a41d6d244",
+    "integrated-7.log": "9dbda9415cd1196d3bcc4534d8cdac92da1dff3f0abce90100d2911b1eb4ee8e",
+    "integrated-8.log": "29127ba5a503dd2745226230c17bb6653ab5d71da13527fa3341ff3bb79ec105",
+    "integrated-9.log": "23d038e5762218d2afc4db90b0499a13689773ace86a2b9e428f9fe191679677",
+    "red-operational-parent.log": "7123f0f346e8803c79547abc1e065b0f7cd0e5d96e4143c8e54e2337cf96ac9c",
+    "red-stdio-independent-corrected.log": "fc2881af54c46595b63e65eb00ba43dc4f1c39a5faf3f67ba593b28d82889da8",
+    "red.log": "705bf48243d45fbcaea0a15aeeed5e54549e9d3c4fee35e2ac6413c1cc2ab712"
+  },
+  "log_reproduction": "Original workflow ames-pr76-cross-views.yml run blocks, excluding Install/setup steps; guarded-ci.sh, preinstalled Python/Node/Chromium/Playwright only. Raw logs in disposable Codex lab93-results workspace; no operational evidence.",
+  "preserved_github_refs": {
+    "main": "b283b1764432f5d90486d38a7553b30542a5c118",
+    "pull_requests": [
+      {
+        "number": 70,
+        "sha": "fddc75438796cdfcc8a133eb8193d08fa1d9b783",
+        "state": "OPEN",
+        "draft": true,
+        "merged": false
+      },
+      {
+        "number": 86,
+        "sha": "5c19beee85125830e0b483c5cf9708eb8de25228",
+        "state": "OPEN",
+        "draft": true,
+        "merged": false
+      },
+      {
+        "number": 87,
+        "sha": "fed8076b15f95d1a037ed369ce0a02aaf46b2280",
+        "state": "OPEN",
+        "draft": true,
+        "merged": false
+      },
+      {
+        "number": 88,
+        "sha": "3a088ddad41be9e31b144e4ac4b0b73725141624",
+        "state": "OPEN",
+        "draft": true,
+        "merged": false
+      },
+      {
+        "number": 89,
+        "sha": "b8a2b1e00193e2d5493d0fd14bfcbf41e89087ca",
+        "state": "OPEN",
+        "draft": true,
+        "merged": false
+      },
+      {
+        "number": 90,
+        "sha": "83f5db58438318c726c9b22a8d0a2d8d78124c81",
+        "state": "OPEN",
+        "draft": true,
+        "merged": false
+      },
+      {
+        "number": 91,
+        "sha": "1ecc8daae2e1d8e055f36135cfe460817b0d69d9",
+        "state": "OPEN",
+        "draft": true,
+        "merged": false
+      },
+      {
+        "number": 92,
+        "sha": "db3cb5b58c99bcf86c44b671280cb42f7dd31d4c",
+        "state": "OPEN",
+        "draft": true,
+        "merged": false
+      }
+    ]
+  },
+  "physical": "PENDING",
+  "G0_G7": "PENDING",
+  "remaining_independent_blockers": [
+    "P02",
+    "P04",
+    "P05",
+    "P07",
+    "P08"
+  ],
+  "scope_limit": "Trusted closed stdio synthetic kernel, no operational agent/HTTP/UI/MES/Chrome/guardian; not a kernel sandbox, migration tool, anonymizer or full offline shell. Synthetic Linux/Windows CI and browser fixtures do not attest physical homologation.",
+  "final_head_and_exact_ci": "See final checkpoint in PR93 discussion; documentation commit cannot contain its own SHA."
+}
