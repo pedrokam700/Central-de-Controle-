@@ -67,6 +67,33 @@ def refuse_pending_journal(root):
                 raise LabRefused('UPDATE_PENDING_OR_UNVERIFIED')
 
 
+def refuse_operational_ancestry(root):
+    source = Path(__file__).absolute().parent
+    if source.name.casefold() == 'agent' and source.parent.name.casefold() == 'ames':
+        package = source.parent.parent
+    elif source.name.casefold() == 'ames-agent':
+        package = source.parent
+    else:
+        package = source
+    if root.is_relative_to(package):
+        raise LabRefused('LAB_OUTSIDE_CODE_PACKAGE_REQUIRED')
+
+    def present(path):
+        try:
+            path.lstat()  # Metadata only. Permission/IO errors propagate closed.
+            return True
+        except FileNotFoundError:
+            return False
+
+    markers = ('ames-agent', 'factory-engine', 'ames_local.sqlite3', 'config.json',
+               'local_agent_token', 'Preferences', 'Local State', 'Cookies', 'Login Data')
+    for parent in (root, *root.parents):
+        if (parent.name.casefold() in {'chromeprofile', 'user data'}
+                or any(present(parent / marker) for marker in markers)
+                or (present(parent / 'main.py') and present(parent / 'ames/browser.py'))):
+            raise LabRefused('OPERATIONAL_ANCESTOR')
+
+
 def pipe_or_terminal(stream):
     try:
         mode = os.fstat(stream.fileno()).st_mode
@@ -249,6 +276,7 @@ def run(root, initialize):
     plain_directory_chain(root)
     if not re.fullmatch(r'AMES-LAB-[A-Za-z0-9_-]{1,80}', root.name):
         raise LabRefused('EXPLICIT_LAB_ROOT_NAME_REQUIRED')
+    refuse_operational_ancestry(root)
     refuse_pending_journal(root)
     inventory(root, initialize)
     install_guard(root)
