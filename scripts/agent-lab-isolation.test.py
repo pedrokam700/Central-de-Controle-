@@ -330,4 +330,21 @@ print('DENIED')
                 self.assertEqual(list(self.lab.iterdir()),[])
 
 
+
+    def test_30_root_inside_synthetic_operational_parent_is_refused(self):
+        self.available()
+        for kind in ('agent','chrome','engine'):
+            with self.subTest(kind=kind):
+                parent=self.area/('OPERATIONAL-SENTINEL-'+kind);parent.mkdir()
+                if kind=='agent':(parent/'ames-agent').mkdir()
+                elif kind=='chrome':(parent/'Preferences').write_text('SYNTHETIC PRIVATE SESSION')
+                else:
+                    (parent/'main.py').write_text('SYNTHETIC ENGINE')
+                    (parent/'ames').mkdir();(parent/'ames/browser.py').write_text('SYNTHETIC CDP')
+                self.lab=parent/'AMES-LAB-REJECT';self.lab.mkdir()
+                before={str(p.relative_to(parent)):p.read_bytes() for p in parent.rglob('*') if p.is_file()}
+                self.denied(self.run_lab(initialize=True))
+                self.assertEqual(list(self.lab.iterdir()),[])
+                self.assertEqual(before,{str(p.relative_to(parent)):p.read_bytes() for p in parent.rglob('*') if p.is_file()})
+
 if __name__=='__main__':unittest.main()
