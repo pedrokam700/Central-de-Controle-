@@ -8,12 +8,13 @@ import hashlib
 import json
 import uuid
 import production_shift
+import production_diagnostics
 import repair_association
 from material_trace_provenance import exact_observation, trace_material_links
 from datetime import datetime, timezone
 
 SCHEMA = 'central-ames-v2'
-PROJECTION_VERSION = 12  # reproject 3074 physical proof; older revisions stay immutable
+PROJECTION_VERSION = 13  # reproject 3022 exact evidence; older revisions stay immutable
 LINES = ('TAN10101', 'TAN10102', 'TAN10103')
 DATASETS = ('defects','pcba_history','material_reuse','history_contexts','process_timeline')
 TABLES = ('defect_observations','line_metrics','pcba_history','material_reuse','history_contexts','snapshot_payloads','mes_process_timeline')
@@ -218,9 +219,10 @@ def export_revision(store,sid,line,insight_builder=None):
         process_contexts=[dict(r) for r in con.execute('SELECT * FROM process_defect_contexts WHERE snapshot_id=? AND line=?',(sid,line))] if 'process_defect_contexts' in tables else []
         # Raw/debug blobs remain in SQLite; transport only scalar evidence columns.
         process_contexts=[{k:v for k,v in r.items() if k not in ('raw_json','details_json') and (v is None or isinstance(v,(str,int,float,bool)))} for r in process_contexts]
-        for context in process_contexts:
-            context.update(production_shift.from_context(context))
-        context_by_key={r['defect_key']:r for r in process_contexts}
+        observations=[dict(row) for row in con.execute('SELECT * FROM defect_observations WHERE snapshot_id=? AND line=?',(sid,line))]
+        process_contexts=production_shift.project_contexts(process_contexts,observations)
+        context_by_key={rec['defect_key']:production_shift.proven_context([
+            ctx for ctx in process_contexts if ctx.get('defect_key')==rec['defect_key'] and production_shift.same_occurrence(ctx,rec)]) or {} for rec in observations}
         repair_rows=[dict(r) for r in con.execute('SELECT * FROM repair_history_3012')] if 'repair_history_3012' in tables else []
         sets={};coverage={}
         for dataset in DATASETS:
@@ -345,11 +347,14 @@ def export_revision(store,sid,line,insight_builder=None):
                           "message":"Falha na classificação local de reuso; dados MES salvos preservados.",
                           "drilldowns":{},"population_complete":False}
         payload={'projection_version':PROJECTION_VERSION,'schema':SCHEMA,'schema_version':2,'source_id':source,'snapshot_id':str(sid),'line_id':line,'collected_at':snap['collected_at'],'source_view':'3028','source_timestamp':None,'summary':{'period':dict(con.execute('SELECT start_at,end_at,mode FROM analysis_windows WHERE id=?',(snap['window_id'],)).fetchone() or {}),'line':line,'snapshot_id':str(sid),'collected_at':snap['collected_at'],'fpy':m.get('fpy'),'check_fpy':m.get('check_fpy'),'quantity':m.get('quantity'),'defect_rows':len(sets['defects'])},'datasets':sets,'coverage':coverage,'source_coverage':source_coverage,'insights':insights,'process_contexts':process_contexts,'material_candidates':material_candidates,'capabilities':{'process_timeline':bool(sets['process_timeline'])}}
+        payload['production_diagnostics']=production_diagnostics.export_diagnostics(con,sid,line,source,observations,process_contexts)
         fingerprint=digest(payload)
         if previous and previous['content_hash']==fingerprint:
             con.execute('UPDATE mes_revisions SET epoch=? WHERE snapshot_id=? AND line=? AND revision=?',(epoch,sid,line,previous['revision']));return json.loads(previous['payload'])
         revision=previous['revision']+1 if previous else 1
         payload.update(snapshot_revision=revision,content_hash=fingerprint)
+        for row in (*process_contexts,*payload['production_diagnostics']):
+            row.update(source_id=source,snapshot_revision=revision)
         for rows in sets.values():
             for row in rows:row['snapshot_revision']=revision
         con.execute('INSERT INTO mes_revisions VALUES(?,?,?,?,?,?)',(sid,line,revision,epoch,fingerprint,encoded(payload)))

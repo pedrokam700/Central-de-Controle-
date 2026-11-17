@@ -4,6 +4,10 @@ import {normalizeCanonical} from '../ames/data/canonical.mjs';
 import {productionEvidenceForOccurrence,trustedProductionEvidence,productionEvidenceGap} from '../ames/data/production-evidence.mjs';
 import {failureOccurrenceEvidence} from '../ames/console-failure-evidence.mjs';
 import {canonicalAgentFixture,productFixture} from './ames-fixtures.mjs';
+import {execFileSync} from 'node:child_process';
+import {buildDailyFailureRows} from '../ames/daily-failure-analytics.mjs';
+import {filterProcessScope} from '../ames/console-specialized-views.mjs';
+import {temporalProofForFailure} from '../ames/console-sn-temporal-proof.mjs';
 const occurrence={pcba_sn:'SYNTHETIC-0001',line:'TAN10101',defect_code:'CAM-D',defect_time:'2026-11-16T10:00:00-03:00',defect_key:'K'};
 const evidence={...occurrence,source:'3022',reference_station_code:'A5162',reference_event_time:'2026-11-16T12:00:00Z',
  production_event_time:'2026-11-16T09:00:00-03:00',production_shift:'1st Shift',production_operational_date:'2026-11-16',
@@ -28,6 +32,7 @@ test('own production fields cannot bypass contradictory exact context',()=>{
 });
 test('trust helper rejects invalid future AT and contradictory reference clocks',()=>{
  for(const change of [{production_event_time:'bad',reference_event_time:'bad'},
+  {production_event_time:'2026-02-30T12:00:00Z',reference_event_time:'2026-02-30T12:00:00Z'},
   {production_event_time:'2026-11-16T15:00:00Z',reference_event_time:'2026-11-16T15:00:00Z'},
   {reference_station_code:'A6900'},{production_event_time:'2026-11-16T12:30:00Z'}]){
   assert.equal(trustedProductionEvidence({...evidence,...change}).trusted,false,JSON.stringify(change));
@@ -62,4 +67,29 @@ test('missing context and missing time remain pending without borrowing 3028/301
  assert.equal(productionEvidenceForOccurrence(o,[]).event_time,null);
  assert.match(productionEvidenceGap(o,[]),/sem contextos/);
  assert.equal(productionEvidenceForOccurrence(o,[{...evidence,reference_event_time:null,production_event_time:null}]).trusted,false);
+});
+test('same SQLite evidence agrees across daily Dashboard, Falhas, Processo and Consulta SN',()=>{
+ const f=JSON.parse(execFileSync(process.env.PYTHON_BIN||'python3',['scripts/agent-3022-production-evidence.test.py','--fixture'],{encoding:'utf8'}));
+ const current=normalizeCanonical(f.after),old=normalizeCanonical(f.before),other=normalizeCanonical(f.other_line);
+ const contexts=current.process_timeline.contexts;
+ const rows=buildDailyFailureRows({read:line=>({snapshot:line===current.line_id?current:line===other.line_id?other:null})});
+ const codes=Object.fromEntries(f.after.production_diagnostics.map(d=>[d.pcba_sn,d.code]));
+ assert.deepEqual(codes,{CONFLICT:'CONFLICTING_REFERENCES',DUPLICATE:'PROVEN',EMPTY:'NO_REFERENCE_PASSAGE',GOOD:'PROVEN',
+  INVALID:'INVALID_REFERENCE_TIME',NO_MATCH:'NO_EXACT_OCCURRENCE',PARTIAL:'PARTIAL_QUERY',RAW_ONLY:'CONTEXT_NOT_LOADED',TIMEZONE:'TIMEZONE_CONFLICT',UNMAPPED:'REFERENCE_UNMAPPED',UNQUERIED:'PCBA_NOT_QUERIED'});
+ const good=rows.filter(r=>r.pcba==='GOOD').sort((a,b)=>a.defect_time.localeCompare(b.defect_time));
+ assert.deepEqual(good.map(r=>r.production_event_time),['2026-11-16T09:00:00-03:00','2026-11-16T10:30:00-03:00']);
+ for(const occurrence of current.occurrences){
+  const expected=productionEvidenceForOccurrence(occurrence,contexts);
+  assert.equal(failureOccurrenceEvidence(current,occurrence).production.trusted,expected.trusted);
+  assert.equal(temporalProofForFailure(occurrence,{local_snapshot:{process_contexts:contexts}},occurrence.pcba_sn).production.trusted,expected.trusted);
+  assert.equal(rows.find(r=>r.pcba===occurrence.pcba_sn&&r.defect_time===occurrence.defect_time).production_evidence_proven,expected.trusted);
+ }
+ const conflict=filterProcessScope(contexts,[],{pcba:'CONFLICT'});
+ assert(conflict.contexts.every(row=>row.production_evidence_proven===false));
+ assert.equal(filterProcessScope(contexts,[]).contexts.filter(row=>row.production_evidence_proven).length,3);
+ assert.equal(rows.filter(r=>r.production_evidence_proven).length,3);
+ assert(old.occurrences.every(o=>!productionEvidenceForOccurrence(o,old.process_timeline.contexts).trusted));
+ assert(other.occurrences.every(o=>!productionEvidenceForOccurrence(o,contexts).trusted));
+ assert.match(rows.find(r=>r.pcba==='RAW_ONLY').generation_evidence_gap,/resposta salva/);
+ assert.match(rows.find(r=>r.pcba==='PARTIAL').generation_evidence_gap,/consulta parcial/);
 });

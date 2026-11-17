@@ -4,6 +4,11 @@ const code=row=>text(row?.defect_code||row?.['Defect Code']);
 const defectTime=row=>text(row?.defect_time||row?.['Defect Time']);
 function instant(value){
   const raw=text(value);if(!raw)return null;
+  const parts=/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(raw);
+  if(!parts)return null;
+  const [year,month,day,hour,minute]=parts.slice(1).map(Number),calendar=new Date(0);
+  calendar.setUTCFullYear(year,month-1,day);
+  if(calendar.getUTCFullYear()!==year||calendar.getUTCMonth()!==month-1||calendar.getUTCDate()!==day||hour>23||minute>59)return null;
   const prepared=/[Zz]$|[+-]\d{2}:?\d{2}$/.test(raw)?raw:/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw)?raw.replace(' ','T')+'-03:00':'';
   if(!prepared)return null;const n=Date.parse(prepared);return Number.isFinite(n)?n:null;
 }
@@ -16,7 +21,13 @@ export function trustedProductionEvidence(row={}){
   const basis=text(row.production_shift_basis).toLowerCase();
   const referenceStation=text(row.reference_station_code);
   const eventTime=row.production_event_time||row.reference_event_time||null;
-  const trusted=source==='3022'&&basis==='reference_process'&&Boolean(referenceStation&&eventTime);
+  const eventAt=instant(eventTime),referenceAt=instant(row.reference_event_time);
+  const defectAt=instant(defectTime(row)),defectUtc=instant(row.defect_time_utc);
+  const trusted=source==='3022'&&basis==='reference_process'&&Boolean(referenceStation)&&
+    !/^A69/i.test(referenceStation)&&eventAt!==null&&
+    (!row.reference_event_time||referenceAt!==null&&referenceAt===eventAt)&&
+    (!defectTime(row)||defectAt!==null&&eventAt<=defectAt)&&
+    (!row.defect_time_utc||defectUtc!==null&&(defectAt===null||defectUtc===defectAt));
   return Object.freeze({
     trusted,
     source:trusted?'3022':null,
@@ -77,9 +88,8 @@ function provenReference(occurrence,reference){
 
 export function productionEvidenceForOccurrence(occurrence={},contexts=[]){
   const own=provenReference(occurrence,occurrence);
-  if(own)return own;
   const matched=Array.isArray(contexts)?contexts.filter(row=>row&&sameFailureOccurrence(occurrence,row)):[];
-  const proven=matched.map(row=>provenReference(occurrence,row)).filter(Boolean);
+  const proven=[own,...matched.map(row=>provenReference(occurrence,row))].filter(Boolean);
   if(!proven.length)return trustedProductionEvidence({});
   // Distinct trusted 3022 contexts for the same occurrence must not be
   // resolved by array order. Identical repeated evidence is harmless.
@@ -89,8 +99,24 @@ export function productionEvidenceForOccurrence(occurrence={},contexts=[]){
 
 /** Diagnose missing 3022 generation evidence without treating 3028 timestamps as a replacement.
  * Returns only observable source/matching states, never guesses the station. */
-export function productionEvidenceGap(occurrence={},contexts=[]){
+export function productionEvidenceGap(occurrence={},contexts=[],diagnostics=[]){
   if(productionEvidenceForOccurrence(occurrence,contexts).trusted)return null;
+  const diagnostic=diagnostics.find?.(row=>sameFailureOccurrence(occurrence,row));
+  const reasons={
+    PCBA_NOT_QUERIED:'3022 sem consulta comprovada para esta PCBA no escopo selecionado',
+    CONTEXT_NOT_LOADED:'3022 com resposta salva, mas contexto local ainda não projetado',
+    PARTIAL_QUERY:'3022 com consulta parcial; referência produtiva permanece pendente',
+    NO_EXACT_OCCURRENCE:'3022 carregada, mas sem correlação exata PCBA + falha + Defect Time',
+    TIMEZONE_CONFLICT:'3022 com relógios explícitos divergentes; fuso não corrigido por suposição',
+    INVALID_DEFECT_TIME:'3022 com horário da ocorrência inválido ou ausente',
+    INVALID_REFERENCE_TIME:'3022 com horário de referência inválido ou não interpretável',
+    FUTURE_REFERENCE:'3022 com referência posterior à ocorrência investigada',
+    AT_REFERENCE:'3022 com referência de AT; horário produtivo não comprovado',
+    CONFLICTING_REFERENCES:'3022 com referências conflitantes para esta ocorrência',
+    REFERENCE_UNMAPPED:'3022 sem posto de referência mapeado para o CPH e família',
+    NO_REFERENCE_PASSAGE:'3022 sem passagem válida concluída no posto de referência',
+  };
+  if(diagnostic&&reasons[diagnostic.code])return reasons[diagnostic.code];
   if(!Array.isArray(contexts)||!contexts.length)return '3022 sem contextos carregados para a linha/revisão';
   const matched=contexts.filter(row=>row&&sameFailureOccurrence(occurrence,row));
   if(!matched.length)return '3022 carregada, mas sem correlação exata PCBA + falha + Defect Time';

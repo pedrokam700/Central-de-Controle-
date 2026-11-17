@@ -1,5 +1,17 @@
 export const EXTRA_EN=Object.fromEntries(`
 Falhas carregadas|Loaded failures
+3022 carregada, mas sem correlação exata PCBA + falha + Defect Time|3022 loaded without an exact PCBA + failure + Defect Time correlation
+3022 com horário de referência inválido ou não interpretável|3022 reference time is invalid or unreadable
+3022 com referência posterior à ocorrência investigada|3022 reference is later than the investigated occurrence
+3022 sem posto de referência mapeado para o CPH e família|3022 has no reference station mapped for the CPH and failure family
+3022 sem passagem válida concluída no posto de referência|3022 has no valid completed passage at the reference station
+3022 sem consulta comprovada para esta PCBA no escopo selecionado|3022 has no proven query for this PCBA in the selected scope
+3022 com resposta salva, mas contexto local ainda não projetado|3022 response saved; local context has not been projected yet
+3022 com consulta parcial; referência produtiva permanece pendente|Partial 3022 query; production reference remains pending
+3022 com relógios explícitos divergentes; fuso não corrigido por suposição|3022 explicit clocks conflict; timezone is not adjusted by assumption
+3022 com horário da ocorrência inválido ou ausente|3022 occurrence time is invalid or missing
+3022 com referência de AT; horário produtivo não comprovado|3022 reference belongs to repair; production time is unproven
+3022 com referências conflitantes para esta ocorrência|3022 references conflict for this occurrence
 Selecione pela descrição. A contagem soma as ocorrências nas linhas escolhidas. Selecionadas exige ao menos um código antes de iniciar.|Select by description. Counts add occurrences across the chosen lines. Selected requires at least one code before starting.
 Nenhuma falha carregada nas linhas selecionadas.|No failures loaded for the selected lines.
 Limites avançados|Advanced limits

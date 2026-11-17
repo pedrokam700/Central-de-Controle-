@@ -105,3 +105,18 @@ de qualquer correção de runtime. Somente testes, este parecer e workflow na fa
 Rollback é reverter commits próprios sobre #87; não há ação em dados operacionais.
 Expansão de matriz de postos, redefinição de turnos, deslocamentos de fuso e acesso
 fabril não fazem parte da correção autorizada. GREEN físico permanece pendente.
+
+## Contraprovas acrescentadas depois do checkpoint inicial
+
+A discussão da PR registra REDs adicionais antes dos ajustes correspondentes:
+resposta com revisão inexistente/período contraditório; checkpoint vazio posterior
+suprimindo um histórico positivo; contagem 3 versus 5 pela duplicação direto/aninhado
+(Hist Seq string/número e boolean 0/false); data sem relógio virando meia-noite;
+calendário JS aceitando 30/02 por rollover. O filtro de referência também recebeu
+contraprova para preservar reparo/retorno AT como contexto separado. O bruto e os
+exports anteriores não são modificados para resolver essas discrepâncias.
+
+O gate final exclui `ames-r12-migration-bundle.test.mjs`, pois ele chama o builder
+de instalador. A primeira execução ampla herdada criou um ZIP efêmero removido
+pelo próprio teste; nenhum pacote foi preservado ou publicado. Os contratos
+funcionais permanecem completos; build/distribuição estão fora desta missão.

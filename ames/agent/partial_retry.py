@@ -5,7 +5,45 @@ never from a different day, line or remote Firebase revision.  A source marked
 partial does not invalidate independently completed PCBA reads.
 """
 import json
+import re
 from copy import deepcopy
+
+
+def confirmed_3022_response(response, pcba, *, source_id=None, snapshot_id=None, line=None, period=None, revisions=None):
+    """A confirmation cannot override contradictory explicit response facts.
+
+    Legacy responses can lack optional metadata; individual confirmed reads in
+    a partial batch remain reusable. A partial page is not a complete response.
+    """
+    if not isinstance(response, dict) or not isinstance(response.get('rows'), list):
+        return False
+    status = (response.get('query_diagnostics') or {}).get('status')
+    if status not in ('CONFIRMED', 'CONFIRMED_EMPTY'):
+        return False
+    if status == 'CONFIRMED_EMPTY' and response['rows']:
+        return False
+    if (response.get('coverage') or {}).get('status') in ('incomplete_page', 'partial'):
+        return False
+    if period is not None and response.get('period') is not None and json.dumps(response['period'], sort_keys=True) != json.dumps(period, sort_keys=True):
+        return False
+    revision = response.get('snapshot_revision', response.get('revision'))
+    if revisions is not None and revision is not None and (type(revision) is not int or revision not in revisions):
+        return False
+    for keys, expected in ((('query_sn', 'pcba_sn'), pcba), (('source_id',), source_id),
+                           (('snapshot_id',), snapshot_id), (('line', 'line_id'), line)):
+        values = {str(response[k]).strip() for k in keys if response.get(k) not in (None, '')}
+        if len(values) > 1 or expected is not None and any(v != str(expected).strip() for v in values):
+            return False
+    # Same primary PCBA aliases as the collector. Do not compare Material SN or IMEI.
+    identifiers = {'lotid', 'pcba', 'pcbasn', 'pcbaid', 'pcbaserialnumber', 'sn', 'serialnumber'}
+    for row in response['rows']:
+        if not isinstance(row, dict):
+            return False
+        for key, value in row.items():
+            key = re.sub(r'[^a-z0-9]', '', str(key).split('__', 1)[0].lower())
+            if key in identifiers and value not in (None, '') and str(value).strip() != pcba:
+                return False
+    return True
 
 
 def _complete(status):
@@ -88,10 +126,13 @@ def verified_3022_items(captures, wanted=None):
             sn=str(item.get('pcba_sn') or '').strip()
             rr=item.get('result') or {}
             diagnostics=rr.get('query_diagnostics') or {}
-            if (sn and (allowed is None or sn in allowed) and
-                    isinstance(rr.get('rows'),list) and
-                    diagnostics.get('status') in ('CONFIRMED','CONFIRMED_EMPTY')):
-                verified[sn]=rr
+            if sn and (allowed is None or sn in allowed) and confirmed_3022_response(rr, sn):
+                previous = verified.get(sn)
+                # A later empty read cannot retract a positively observed
+                # historical passage. Reuse that complete response as-is;
+                # never union pages or fabricate another MES confirmation.
+                if previous is None or rr['rows'] or not previous['rows']:
+                    verified[sn]=rr
     return verified
 
 
@@ -156,6 +197,9 @@ def pending_pcbas(base_sns, captures):
 def load_captures(store, snapshot_id, line):
     """Read only recorded captures belonging to this exact local line/snapshot."""
     with store.connect() as con:
+        owner = con.execute("SELECT value FROM schema_meta WHERE key='ames_source_id'").fetchone()[0]
+        parents = {r['revision']: json.loads(r['payload']) for r in con.execute(
+            'SELECT revision,payload FROM mes_revisions WHERE snapshot_id=? AND line=?', (int(snapshot_id), line))}
         rows = con.execute("""SELECT r.payload_json FROM snapshot_payload_revisions r
             WHERE r.snapshot_id=? AND r.kind LIKE 'source_capture_%'
             ORDER BY r.revision ASC""", (int(snapshot_id),)).fetchall()
@@ -168,7 +212,13 @@ def load_captures(store, snapshot_id, line):
         if (doc.get('schema') == 'ames-local-source-capture-v1'
                 and doc.get('line_id') == line
                 and str(doc.get('snapshot_id')) == str(snapshot_id)
+                and doc.get('source_id') in (None, owner)
                 and isinstance(doc.get('result'), dict)):
+            parent = parents.get(doc.get('parent_snapshot_revision'))
+            if doc.get('parent_snapshot_revision') is not None and (not parent
+                    or doc.get('parent_content_hash') not in (None, parent['content_hash'])
+                    or doc.get('period') is not None and doc['period'] != parent['summary']['period']):
+                continue
             results.append(doc)
     return results
 
