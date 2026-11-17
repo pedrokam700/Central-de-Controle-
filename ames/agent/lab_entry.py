@@ -166,7 +166,7 @@ def read_manifest(root):
         raise LabRefused('INVALID_MANIFEST')
     data = json.loads(path.read_text(encoding='utf-8'))
     lab_id = data.get('lab_id') if isinstance(data, dict) else None
-    if not isinstance(lab_id, str) or not re.fullmatch(r'LAB-[0-9a-f]{32}', lab_id) or data != manifest(lab_id):
+    if not isinstance(lab_id, str) or not re.fullmatch(r'LAB-[0-9a-f]{32}', lab_id) or json.dumps(data, sort_keys=True) != json.dumps(manifest(lab_id), sort_keys=True):
         raise LabRefused('NON_SYNTHETIC_OR_EXTERNAL_CONFIG')
     return data
 

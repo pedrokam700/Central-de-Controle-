@@ -76,6 +76,7 @@ class LabIsolation(unittest.TestCase):
         again=self.run_lab([{'command':'status'}])
         self.assertEqual(again.returncode,0,again.stderr)
         self.assertEqual(json.loads(again.stdout.splitlines()[1])['records'],1)
+        self.assertEqual(json.loads(again.stdout.splitlines()[1])['evidence_sha256'],docs[2]['evidence_sha256'])
 
     def test_04_no_overwrite_or_import_existing_state(self):
         self.init()
