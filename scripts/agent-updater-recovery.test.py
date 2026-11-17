@@ -130,6 +130,19 @@ class RecoveryTests(unittest.TestCase):
         saved,_,_=self.saved_and_current();m=json.loads((saved/'backup.json').read_text())
         legacy={k:m[k] for k in ('target','agent_files','agent_absent','root_files','root_absent')}
         (saved/'backup.json').write_text(json.dumps(legacy));self.reject_unchanged(saved)
+    def test_backup_destination_open_failure_closes_source_and_never_changes_generation(self):
+        before=self.generation();data=self.data_state();real=sqlite3.connect;opened=[]
+        class SourceWitness:
+            def __init__(self,con):self.con=con;self.closed=False
+            def close(self):self.closed=True;self.con.close()
+        def connect(path,*args,**kwargs):
+            if kwargs.get('uri'):
+                con=SourceWitness(real(path,*args,**kwargs));opened.append(con);return con
+            raise OSError('LAB cannot create backup database')
+        with patch.object(u.sqlite3,'connect',side_effect=connect),self.assertRaises(OSError):u.backup(self.target)
+        self.assertEqual(len(opened),1);self.assertTrue(opened[0].closed)
+        self.assertEqual(self.generation(),before);self.assertEqual(self.data_state(),data)
+
     def test_backup_records_integrity_of_all_saved_members(self):
         saved=u.backup(self.target);m=json.loads((saved/'backup.json').read_text())
         self.assertEqual(m.get('schema'),'central-updater-backup-v2','RED: backup has no integrity format')

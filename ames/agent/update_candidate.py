@@ -8,7 +8,7 @@ import socket
 import sqlite3
 import uuid
 import stat
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path, PurePosixPath
 FILES=('agent.py','agent_entry.py','agent_hardened_entry.py','base_paging_backend.py','candidate_config.py','hardening.py','local_security.py','operational_calendar.py','origin_policy.py','workstation_pairing.py','update_readiness.py','maintenance_admission.py','engine_bridge.py','integrated_snapshot_history.py','partial_retry.py','trace_auto_resume.py','store.py','mes_scheduler.py','canonical.py','production_diagnostics.py','material_trace_provenance.py','process_timeline.py','process_r11.py','preflight.py','operator_evidence.py','production_shift.py','workstation_autostart.py','agent_3012_patch.py','ames_3012_live.py','ames_3012_strategy.py','repair_3012.py','repair_3012_capture.py','repair_association.py','local_sn.py','network_watch.py','performance_indexes.py','source_capture.py','sn_lookup_context.py','fastlane_runtime_guard.py','factory_redfix.py','offline_catalog.py','map_3012.py','comment_provenance_3028.py','at_offline_package.py','at_profiles.py','trace_3012_enrichment.py')
 ROOT_FILES=('INICIAR_POSTO_CENTRAL_V2.bat','00_INICIAR_AQUI.bat','INICIAR_CENTRAL_AMES.cmd',
@@ -239,10 +239,9 @@ def backup(target,extra_root=()):
     db=target/'data'/'ames_local.sqlite3'
     if db.exists():
         if not _regular(db):raise ValueError('Invalid database source')
-        src=sqlite3.connect(db.resolve().as_uri()+'?mode=ro',uri=True);dst=sqlite3.connect(folder/'ames_local.sqlite3')
-        try:
-            src.backup(dst);dst.commit()
-        finally:dst.close();src.close()
+        with closing(sqlite3.connect(db.resolve().as_uri()+'?mode=ro',uri=True)) as src:
+            with closing(sqlite3.connect(folder/'ames_local.sqlite3')) as dst:
+                src.backup(dst);dst.commit()
     manifest['sha256']=_hash_table(folder)
     _atomic_json(folder/'backup.json',manifest)
     _load_backup(folder)
