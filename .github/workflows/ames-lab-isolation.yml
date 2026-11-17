@@ -56,6 +56,8 @@ jobs:
       - name: Disposable Windows Python I/O and interruption matrix
         shell: pwsh
         run: |
+          python -B -c "from pathlib import Path; import tempfile; p=Path(tempfile.gettempdir()); names=('ames-agent','factory-engine','ames_local.sqlite3','config.json','local_agent_token','Preferences','Local State','Cookies','Login Data'); print({'ci_default_temp_marker_names': sorted({n for a in (p,*p.parents) for n in names if (a/n).exists()})})"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -B scripts/agent-lab-isolation.test.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -B scripts/agent-distribution-guard-compat.test.py -v

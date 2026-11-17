@@ -17,7 +17,10 @@ ENTRY = ROOT / 'ames/agent/lab_entry.py'
 
 class LabIsolation(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix='ames-lab-proof-')
+        # CI Windows default TEMP can be under a browser/user profile. Do not
+        # relax runtime ancestry checks: explicitly authorize the runner's
+        # disposable job root instead. Local tests keep their synthetic temp.
+        self.tmp = tempfile.TemporaryDirectory(prefix='ames-lab-proof-', dir=os.environ.get('RUNNER_TEMP') or None)
         self.addCleanup(self.tmp.cleanup)
         self.area = Path(self.tmp.name).resolve()
         self.lab = self.area / 'AMES-LAB-SYNTHETIC'
