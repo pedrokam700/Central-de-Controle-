@@ -26,13 +26,17 @@ class LabIsolation(unittest.TestCase):
     def available(self):
         self.assertTrue(ENTRY.is_file(), 'RED: no separate fail-closed synthetic LAB entry on PR92')
 
+    def lab_env(self):
+        # Child receives an explicit synthetic environment, never runner/workstation config.
+        return {k:v for k,v in os.environ.items() if k.upper() in {'PATH','SYSTEMROOT','WINDIR','TEMP','TMP','LANG','LC_ALL'}}
+
     def run_lab(self, commands=(), *, initialize=False, entry=ENTRY, flags=('-I', '-S', '-B'), env=None):
         self.available()
         args = [sys.executable, *flags, str(entry), '--lab-root', str(self.lab)]
         if initialize:
             args.append('--initialize-synthetic')
         return subprocess.run(args, input=''.join(json.dumps(x)+'\n' for x in commands),
-                              text=True, capture_output=True, timeout=12, cwd=self.area, env=env)
+                              text=True, capture_output=True, timeout=12, cwd=self.area, env=self.lab_env() if env is None else env)
 
     def init(self):
         result = self.run_lab(initialize=True)
@@ -98,7 +102,7 @@ class LabIsolation(unittest.TestCase):
     def test_07_no_inherited_operational_environment(self):
         for key in ('AMES_ENGINE_DIR','AMES_CONFIG','CHROME_PROFILE_DIR','GOOGLE_APPLICATION_CREDENTIALS','FIREBASE_CONFIG'):
             with self.subTest(key=key):
-                env=dict(os.environ);env[key]=str(self.area/'OPERATIONAL-SENTINEL')
+                env=self.lab_env();env[key]=str(self.area/'OPERATIONAL-SENTINEL')
                 self.denied(self.run_lab(initialize=True,env=env))
                 self.assertEqual(list(self.lab.iterdir()),[])
 
@@ -106,7 +110,7 @@ class LabIsolation(unittest.TestCase):
         marker=self.area/'IMPORT-ESCAPED'
         for module in ('sitecustomize','agent','agent_entry','engine_bridge','sqlite3'):
             (self.area/(module+'.py')).write_text(f'open({str(marker)!r},"w").write("bad")\n')
-        env=dict(os.environ);env['PYTHONPATH']=str(self.area)
+        env=self.lab_env();env['PYTHONPATH']=str(self.area)
         result=self.run_lab(initialize=True,env=env)
         self.assertEqual(result.returncode,0,result.stderr);self.assertFalse(marker.exists())
 
@@ -189,7 +193,7 @@ class LabIsolation(unittest.TestCase):
     def test_20_interrupted_process_preserves_committed_synthetic_evidence(self):
         self.available()
         args=[sys.executable,'-I','-S','-B',str(ENTRY),'--lab-root',str(self.lab),'--initialize-synthetic']
-        with subprocess.Popen(args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,cwd=self.area) as child:
+        with subprocess.Popen(args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,cwd=self.area,env=self.lab_env()) as child:
             self.assertIn('SYNTHETIC_LAB_ONLY',child.stdout.readline())
             child.stdin.write('{"command":"append_fixture"}\n');child.stdin.flush()
             self.assertEqual(json.loads(child.stdout.readline())['records'],1)
