@@ -12,7 +12,7 @@ import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = '83f5db58438318c726c9b22a8d0a2d8d78124c81'
+BASE = '1ecc8daae2e1d8e055f36135cfe460817b0d69d9'
 PLAN = 'docs/ames/homologation/HOMOLOGACAO_OFFLINE_0539_PR90_20261117.md'
 
 
@@ -40,12 +40,12 @@ def calls(node, name):
 
 
 FINDINGS = [
-    {'id':'D02','severity':'HIGH','status':'OPEN_PROPOSED_ONLY','path':'ames/agent/update_candidate.py',
-     'fact':'ROOT_FILES omits ISSUE57_RELAUNCH_ENROLLMENT.ps1 although both copied PowerShell entrypoints dot-source it and the builder map includes it.',
-     'proposal':'Future isolated RED: transitive PowerShell dependency closure must cover payload, updater copy, backup and rollback, including absent/stale destination helper. Add helper only with that proof.'},
-    {'id':'D01','severity':'HIGH','status':'OPEN_PROPOSED_ONLY','path':'ames/agent/update_candidate.py','symbol':'rollback',
-     'fact':'Agent files are restored before root backup completeness is validated; an absent root member can leave partial code restoration.',
-     'proposal':'Future isolated RED: absent/corrupt root or agent backup must fail before first destination mutation; prevalidate all paths/hashes, stage and journal restoration.'},
+    {'id':'D02','severity':'HIGH','status':'CORRECTED_SYNTHETIC_TESTS','path':'ames/agent/update_candidate.py',
+     'fact':'ROOT_FILES includes the transitive PowerShell helper; candidate copy, backup, absence and rollback are covered by synthetic tests.',
+     'proposal':'Retain dependency closure and absent/stale helper tests; never execute operational PowerShell in this proof.'},
+    {'id':'D01','severity':'HIGH','status':'CORRECTED_SYNTHETIC_TESTS','path':'ames/agent/update_candidate.py','symbol':'rollback',
+     'fact':'All backup members are validated before restoration plans; persistent staged generations support verified compensation or blocked supervised recovery.',
+     'proposal':'Retain integrity/I/O/interruption regressions; Windows and Linux synthetic CI do not authorize physical homologation.'},
     {'id':'P01','severity':'BLOCKER','status':'PENDING','path':'tools/ames-workstation/START_LOCAL_CANDIDATE.ps1',
      'fact':'Normal launchers call network preparation, dependency repair, Chrome and agent; not an offline dry run.',
      'proposal':'Do not invoke; require a reviewed offline-only entry strategy and external VM containment before any future clone launch.'},
@@ -84,41 +84,43 @@ def report():
         node=function(entry['path'],entry['symbol']) if 'symbol' in entry else None
         findings.append({**entry,'line':node.lineno if node else 1})
     return {'schema':'ames-offline-preparation-static-v1','base_sha':BASE,'physical':'PENDING','execution_authorized':False,
-            'static_only':True,'runtime_changed':False,'windows_executed':False,'sqlite_opened':False,'builders_executed':False,
+            'static_only':True,'runtime_changed':True,'runtime_scope':'update_candidate.py D01/D02 only','windows_executed':False,'sqlite_opened':False,'builders_executed':False,
             'plan':PLAN,'findings':findings,
             'source_sha256':{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in sorted(paths)},
             'limit':'AST/text proves source structure only; no original installation, package, Windows parser, ABI, backup or homologation has been exercised.'}
 
 
 class StaticOfflinePreparation(unittest.TestCase):
-    def test_D01_agent_restore_precedes_root_backup_validation(self):
+    def test_D01_whole_backup_validated_before_plans_and_staged_transaction(self):
         node=function('ames/agent/update_candidate.py','rollback')
-        restore=calls(node,'_restore_agent')[0]
-        root_error=next(n for n in ast.walk(node) if isinstance(n,ast.Raise) and 'Incomplete root backup' in ast.unparse(n))
-        self.assertLess(restore.lineno,root_error.lineno,'Finding changed: re-audit before changing blocker')
-        # This is a SOURCE proof of bad ordering, never an invocation of rollback.
-        self.assertTrue(calls(function('ames/agent/update_candidate.py','_restore_agent'),'_copy_preserving'))
+        load=calls(node,'_load_backup')[0]
+        self.assertLess(load.lineno,calls(node,'_restore_agent')[0].lineno)
+        self.assertLess(load.lineno,calls(node,'_restore_root')[0].lineno)
+        self.assertTrue(calls(node,'_transaction'))
+        for name in ('_restore_agent','_restore_root'):
+            plan=function('ames/agent/update_candidate.py',name)
+            for mutator in ('_copy_preserving','copy2','replace','unlink'):
+                self.assertFalse(calls(plan,mutator))
+        for symbol in ('_load_backup','_seal','_staged','_claim_lock','recover'):
+            self.assertIsNotNone(function('ames/agent/update_candidate.py',symbol))
+        self.assertEqual(constant('ames/agent/update_candidate.py','BACKUP_SCHEMA'),'central-updater-backup-v2')
 
-    def test_D02_builder_lists_required_PowerShell_helper_but_updater_does_not_copy_it(self):
+    def test_D02_builder_and_updater_cover_transitive_PowerShell_helper(self):
         relative='suporte/ames-workstation/ISSUE57_RELAUNCH_ENROLLMENT.ps1'
-        roots=constant('ames/agent/update_candidate.py','ROOT_FILES')
-        self.assertNotIn(relative,roots,'Finding changed: re-audit full copy/rollback closure')
+        self.assertIn(relative,constant('ames/agent/update_candidate.py','ROOT_FILES'))
         builder=tree('scripts/build-r12-migration-bundle.py')
         mapping=next(n.value for n in builder.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='ROOT_FILES' for t in n.targets))
         self.assertIn(relative,{ast.literal_eval(k) for k in mapping.keys})
         for file in ('START_AGENT_CANONICAL.ps1','KEEP_AGENT_RUNNING.ps1'):
             self.assertIn(". (Join-Path $PSScriptRoot 'ISSUE57_RELAUNCH_ENROLLMENT.ps1')",source('tools/ames-workstation/'+file))
-        updater=source('ames/agent/update_candidate.py')
-        self.assertIn('for rel in ROOT_FILES:_copy_preserving',updater)
-        self.assertNotIn("'suporte/'",updater[updater.index('extras={}'):updater.index('saved=backup')])
 
-    def test_legacy_rollback_does_not_restore_database_but_is_not_global_safe_rollback(self):
-        node=function('ames/agent/update_candidate.py','rollback')
-        text=ast.unparse(node)
-        self.assertNotIn('sqlite3.connect',text)
-        self.assertNotIn('ames_local.sqlite3',text)
-        self.assertNotIn('sha256',text)
-        self.assertIn('manifest[\'target\']',text)
+    def test_rollback_never_targets_database_and_unverified_legacy_is_blocked(self):
+        node=function('ames/agent/update_candidate.py','rollback');text=ast.unparse(node)
+        self.assertNotIn('sqlite3.connect',text);self.assertNotIn('ames_local.sqlite3',text)
+        self.assertTrue(calls(node,'_load_backup'))
+        guard=source('ames/agent/update_candidate.py')
+        self.assertIn('Operational data is never a restore target',guard)
+        self.assertIn('central-updater-legacy-proof-v1',guard)
 
     def test_normal_windows_entry_is_not_offline_or_read_only(self):
         text=source('tools/ames-workstation/START_LOCAL_CANDIDATE.ps1')

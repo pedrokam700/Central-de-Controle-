@@ -1,6 +1,6 @@
 {
   "schema": "ames-offline-homologation-gates-v1",
-  "code_base_sha": "83f5db58438318c726c9b22a8d0a2d8d78124c81",
+  "code_base_sha": "1ecc8daae2e1d8e055f36135cfe460817b0d69d9",
   "physical": "PENDING",
   "execution_authorized": false,
   "performed": false,
@@ -58,8 +58,6 @@
     }
   ],
   "blockers": [
-    "D01",
-    "D02",
     "P01",
     "P02",
     "P03",
@@ -69,7 +67,7 @@
     "P07",
     "P08"
   ],
-  "decision": "DOCUMENTATION_ONLY_EXECUTION_BLOCKED",
+  "decision": "UPDATER_CORRECTED_IN_TESTS_HOMOLOGATION_STILL_BLOCKED",
   "budget_accepted": false,
   "proposed_lab_budget": {
     "repetitions_per_volume": 5,
@@ -86,5 +84,11 @@
     "max_rss_guest_reserved_ram_percent": 60,
     "rss_last_three_cycles_variation_percent": 10,
     "physical_slo": false
-  }
+  },
+  "software_corrections": {
+    "D01": "CORRECTED_SYNTHETIC_TESTS_PHYSICAL_PENDING",
+    "D02": "CORRECTED_SYNTHETIC_TESTS_PHYSICAL_PENDING"
+  },
+  "reference_frontend_parent_sha": "83f5db58438318c726c9b22a8d0a2d8d78124c81",
+  "candidate_code_sha": "92601eb20a65c90248ac97b7cfb75d17b692c124"
 }

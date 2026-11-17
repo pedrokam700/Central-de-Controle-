@@ -5,6 +5,12 @@ Data: 17/11/2026, America/Sao_Paulo. Base EXCLUSIVA:
 `83f5db58438318c726c9b22a8d0a2d8d78124c81` (PR90, DRAFT).
 Nenhum procedimento abaixo autoriza sua execução nesta missão.
 
+Atualização da PR92: correção de updater baseada EXATAMENTE na PR91
+`1ecc8daae2e1d8e055f36135cfe460817b0d69d9`; código
+`92601eb20a65c90248ac97b7cfb75d17b692c124`,
+[handoff D01/D02](../handoffs/PR92_UPDATER_ROLLBACK_D01_D02_20261117.md).
+O frontend/coleta/classificação continuam iguais à base; este plano não foi executado.
+
 Foram lidos integralmente o [handoff #90](../handoffs/PR90_DESEMPENHO_GUARD_20261117.md),
 o [parecer e rollback #89](../audits/PR89_INTEGRACAO_69_88_20261117.md) e a discussão
 #89, incluindo checkpoint independente 6950145034. O plano abaixo substitui, para
@@ -17,25 +23,27 @@ Leitura de fontes, AST, declarações de inventário, contratos e hashes de font
 públicas. Nenhum import de agente/updater/builder, execução Windows, abertura de
 SQLite, backup/restore, instalação, download de dependências ou homologação.
 
-**Execução futura ainda BLOQUEADA:** D01/D02 e gates P01–P08 abaixo não estão
-resolvidos por este documento. Não há novo pacote candidato gerado/aprovado.
-CI estática PASS significa que o parecer reproduz a estrutura do código, não que
-seja seguro executar os launchers existentes ou que Windows tenha sido validado.
+**Execução futura ainda BLOQUEADA:** D01/D02 foram corrigidos em software na
+PR92 e verificados em cópias sintéticas; P01–P08 e todos os gates de homologação
+continuam PENDENTES. Resultados/CI exatos constam no handoff PR92. Não há novo pacote candidato gerado/aprovado.
+CI estática PASS confirma contratos de fonte. A CI Python Windows/Linux da PR92
+exercita apenas árvores/SQLite LAB, falhas de I/O e término de processo; não
+autoriza launchers existentes nem prova instalação Windows 0.5.39 ou perda de energia.
 
 [Recibo público estático](../audits/evidence/OFFLINE_PREPARACAO_ESTATICO_20261117.json)
 contém somente código público/hash, fatos e pendências. O teste
 `scripts/audit/offline-homologation-static.test.py` apenas lê fontes/AST; não
-executa os caminhos auditados. Os testes de atualização existentes foram lidos,
-NÃO executados nesta missão, pois eles simulam atualização/rollback.
+executa os caminhos auditados. Na preparação #91 esses testes foram apenas lidos. A missão #92 autorizou
+explicitamente matrizes sintéticas de update/rollback; não iniciou este ensaio offline.
 
 ## Achados, evidências e propostas isoladas
 
 Os links fixam a fonte da PR90; nomes de função e linhas também estão no JSON.
 
-| ID / severidade | Fato comprovado em fonte | Consequência / correção proposta, NÃO implementada |
+| ID / severidade | Fato comprovado em fonte | Estado e tratamento |
 |---|---|---|
-| **D01 / ALTA** | [update_candidate.py:118–127](https://github.com/pedrokam700/Central-de-Controle-/blob/83f5db58438318c726c9b22a8d0a2d8d78124c81/ames/agent/update_candidate.py#L118): `rollback` chama `_restore_agent` antes de verificar existência de todos os `root_files`; cópias podem já ter ocorrido quando `Incomplete root backup` é lançado | Defeito de ordenação comprovado; backup incompleto pode deixar restauração parcial de código. PR isolada futura: RED com membro de raiz/agente ausente ou corrompido, zero mutações antes de validar TODOS os paths/hashes; staging e recuperação transacional. Não executar rollback legado para reproduzir nesta missão |
-| **D02 / ALTA** | [ROOT_FILES do updater](https://github.com/pedrokam700/Central-de-Controle-/blob/83f5db58438318c726c9b22a8d0a2d8d78124c81/ames/agent/update_candidate.py#L12) omite `suporte/ames-workstation/ISSUE57_RELAUNCH_ENROLLMENT.ps1`; o [builder o lista](https://github.com/pedrokam700/Central-de-Controle-/blob/83f5db58438318c726c9b22a8d0a2d8d78124c81/scripts/build-r12-migration-bundle.py#L35), e launcher/guardian copiados fazem dot-source dele | Fechamento de dependências PowerShell não é garantido pelo updater. Se ausente no destino, startup falha; se antigo, preserva helper antigo com scripts novos. Não afirma que falta no posto real. PR futura: contraprova estática e sintética de fechamento payload→cópia→backup→rollback, destinos ausente/antigo; incluir dependência somente com RED/GREEN. O defeito não está no glob da CLEAN integrada |
+| **D01 / ALTA — corrigido em testes** | [update_candidate.py:118–127](https://github.com/pedrokam700/Central-de-Controle-/blob/83f5db58438318c726c9b22a8d0a2d8d78124c81/ames/agent/update_candidate.py#L118): `rollback` chama `_restore_agent` antes de verificar existência de todos os `root_files`; cópias podem já ter ocorrido quando `Incomplete root backup` é lançado | Histórico RED preservado na #91 e no primeiro commit #92. Agora valida todo o inventário/hash antes de planejar restauração; duas gerações seladas, cópia temporária/substituição por arquivo, compensação verificada ou claim/journal persistente com recuperação explícita. Não há atomicidade multiarquivo nem homologação física |
+| **D02 / ALTA — corrigido em testes** | [ROOT_FILES do updater](https://github.com/pedrokam700/Central-de-Controle-/blob/83f5db58438318c726c9b22a8d0a2d8d78124c81/ames/agent/update_candidate.py#L12) omite `suporte/ames-workstation/ISSUE57_RELAUNCH_ENROLLMENT.ps1`; o [builder o lista](https://github.com/pedrokam700/Central-de-Controle-/blob/83f5db58438318c726c9b22a8d0a2d8d78124c81/scripts/build-r12-migration-bundle.py#L35), e launcher/guardian copiados fazem dot-source dele | Histórico da omissão preservado. ROOT_FILES agora inclui o helper; fechamento dot-source/builder/updater e destino ausente/antigo/candidato incorreto são verificados, incluindo ausência e versão anterior no rollback. Nenhum script PowerShell operacional foi executado; não se afirma qual helper existe no posto real |
 | **P01 / BLOQUEADOR** | `START_LOCAL_CANDIDATE.ps1` chama rede, instalador/reparador, agente e Chrome; `INICIAR_POSTO_CENTRAL_V2.bat` pode consultar preview/produção e reparar rota. `01_INSTALAR_UMA_VEZ.bat /prepare` evita criar SQLite/config/token, mas ainda instala software e pode baixar Python/Chrome/wheels | Nenhum deles é dry-run offline. Bloquear todos até estratégia offline específica revisada. Não usar `/auto` ou `/prepare` como garantia de isolamento |
 | **P02 / BLOQUEADOR** | `SAFE_STATE_TRANSFER.stage:119–138` copia config/token e mantém source_id; recibo `source_unchanged=True` não concede lease. `backup_operational_tree` exclui outbox do navegador; nesse caller `external_inventory` nem é fornecido | Transferência preservadora não é anonimização nem backup de máquina inteira. Separar backup privado fiel de derivado laboratorial sem identidade operacional; exigir inventário externo explícito |
 | **P03 / BLOQUEADOR** | `agent.py:144` inicializa SQLite no import; hardened entry aplica hardening/índices/calendário/token antes do main. `agent_entry.main:571` recupera jobs, inicia monitor e NetworkGuardian | `python agent.py --help` ou importar entry NÃO é leitura neutra. Não iniciar sobre original/backup mestre. Sem flag offline universal validada; definir entrada laboratorial e conter efeitos antes de qualquer boot futuro |
@@ -45,8 +53,8 @@ Os links fixam a fonte da PR90; nomes de função e linhas também estão no JSO
 | **P07 / BLOQUEADOR** | `update_readiness` sempre retorna `update_authorized=False`/`maintenance_lease=False`; inventário guardian declara all_sessions/lease falsos. Backup online não congela outros arquivos/outbox; `mode=ro` SQLite não é lease nem garantia de ausência de efeitos em SHM | Precisa coordenação externa atestada e captura coerente do estado completo; não inferir quiescência de porta livre, job zero ou receipt do helper |
 | **P08 / ALTA** | Falha de `TROCAR_PARA_PR69_NOVA.ps1` pode reiniciar a raiz antiga; esse bloco não reconcilia evidência gravada pela candidata. Rollback Python conserva SQLite corrente, mas restaura configuração/código e não prova compatibilidade de esquema | Voltar à raiz antiga pode deixar novas evidências apenas na candidata. Nunca retomar snapshot antigo silenciosamente; preservar gerações, verificar compatibilidade do código antigo com dados atuais ou INTERROMPER |
 
-D01/D02 são defeitos de preparação/atualização demonstrados estaticamente, não
-prova de dano no posto. P01–P08 descrevem contratos insuficientes para ESTE ensaio,
+D01/D02 são defeitos históricos agora corrigidos em software e cobertos por
+contraprovas sintéticas da PR92; não são prova de dano nem de reparo no posto. P01–P08 descrevem contratos insuficientes para ESTE ensaio,
 não necessariamente defeitos no uso fabril normal. Não foram removidas proteções
 BRM/AT, recuperação, guardian ou regras de autenticação para contorná-los.
 
@@ -93,17 +101,17 @@ cofre privado com ACL verificada; publicar apenas código de gate e motivo fixo.
 
 - [ ] Autorização futura escrita identifica origem, janela e responsáveis; permite
   aquisição/cópia/desidentificação/ensaio explicitamente. Não derivar isso desta PR.
-- [ ] Fixar código candidato PR90/SHA acima e CI 44113137883, sem interpretar a CI
-  Linux sintética como prova de Windows. Manifesto completo de qualquer artefato
+- [ ] Fixar o SHA candidato/CI exatos da PR92 registrados no handoff; conservar a
+  linhagem #90/#91. CI sintética Windows/Linux não é homologação da instalação. Manifesto completo de qualquer artefato
   futuro deve ser verificado por origem confiável; nenhum artefato foi gerado aqui.
 - [ ] Identificar separadamente versão do pacote, SHA frontend servido, hashes de
   agente/engine/launcher, schema/projeção. `agent_version=0.5.23`, rótulo legado do
   updater ou shell 15.x NÃO identificam sozinhos instalação 0.5.39. A referência
   pública 0.5.39 no preflight é tag `ames-v0.5.39-multipc-20261022`, commit
   `b283b1764432f5d90486d38a7553b30542a5c118`; é referência, não atestado do posto.
-- [ ] D01/D02 resolvidos por PRs isoladas ou caminho correspondente explicitamente
-  excluído e substituído por procedimento revisado. Não executar updater legado
-  como contorno; nenhuma correção produtiva foi feita nesta missão.
+- [ ] Conferir D01/D02 corrigidos no SHA #92 e seus testes, backup v2/legado com prova
+  independente e journal. Isso não elimina P01–P08 nem autoriza updater em posto
+  real. Não executar versão anterior para contornar bloqueio de integridade.
 - [ ] VM Windows exclusiva, sem NIC ligada à fábrica/Internet, bridge/NAT, VPN,
   passthrough Wi-Fi, compartilhamento de disco/perfil/clipboard ou credenciais de
   domínio operacional. Evidência de contenção obtida fora da aplicação. Não alterar
@@ -323,7 +331,7 @@ solução offline validada para shell/autenticação, G5 completo permanece PEND
 - [ ] **R1: candidata executou e há apenas deltas técnicos conhecidos:** preservar
   B integral primeiro. Retorno de código antigo só em NOVO diretório/VM vazio,
   com cópia dos dados ATUAIS de B e compatibilidade demonstrada em ensaio separado.
-  Não restaurar C0 sobre B nem usar rollback legado com D01 aberto.
+  Não restaurar C0 sobre B nem usar updater anterior à #92 ou backup sem prova.
 - [ ] **R2: nova evidência, job, checkpoint, outbox ou delta desconhecido:** STOP;
   congelar B e seus WAL/arquivos/browser LAB de forma consistente. Conservar A/C0
   e B separadamente. Não iniciar A com estado antigo como se incluísse evidência
@@ -361,12 +369,12 @@ específica com evidência fabril. Sem merge, instalação fabril ou distribuiç
 
 ## Continuidade proposta por módulos — sem implementação
 
-1. **Updater/rollback (D01):** RED sobre cópias sintéticas, validação integral
-   antes de qualquer cópia, staging/journal e recuperação após interrupção;
-   guard de distribuição preservado, nenhuma execução real nesta preparação.
-2. **Dependências Windows (D02):** fechamento transitivo PowerShell + Python no
-   inventário de entrega, cópia, backup e rollback; destino sem helper e helper
-   antigo. Não repetir correção Python já feita na #89.
+1. **Updater/rollback (D01) — corrigido em software #92:** conservar os testes
+   de integridade, I/O, término de processo, compensação/journal, dados novos e
+   prova independente de backup legado. Garantias físicas de IO/energia pendentes.
+2. **Dependências Windows (D02) — corrigido em software #92:** manter fechamento
+   transitivo, ausência/versão antiga/candidato incorreto e rollback; não executar
+   guardian/PowerShell operacional nem repetir a correção Python da #89.
 3. **Laboratório (P01/P03/P06):** entrada offline explícita e testável que não
    reinstale/repare/conecte MES nem referencie engine/perfil externos; isolamento
    externo continua obrigatório. Não implementar flag fictícia no checklist.
@@ -377,6 +385,6 @@ específica com evidência fabril. Sem merge, instalação fabril ou distribuiç
    completo de harness sintético e não introduzir login operacional no laboratório.
 
 Cada implementação futura precisa autorização/branch isolada, contraprova antes
-do runtime e revisão própria. Esta branch entrega somente plano/evidência/testes
-estáticos/CI sem instalação. Vercel/Netlify suprimem auto-preview SOMENTE nesta
+do runtime e revisão própria. A #91 entregou somente preparação estática; a #92 acrescenta a correção D01/D02
+e testes sintéticos autorizados, sem instalar ou iniciar homologação. Vercel/Netlify suprimem auto-preview SOMENTE nesta
 branch documental antes de publicá-la. Main e PRs anteriores preservadas.

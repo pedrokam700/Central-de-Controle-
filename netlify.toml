@@ -25,3 +25,7 @@
 # Documentation-only offline planning: no preview build authorized.
 [context."work/ames-offline-homologation-plan-20261117"]
   ignore = "exit 0"
+
+# D01/D02 isolated proof: no preview distribution.
+[context."work/ames-updater-rollback-d01-d02-20261117"]
+  ignore = "exit 0"
