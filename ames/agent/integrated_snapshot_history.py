@@ -142,6 +142,7 @@ def recover_snapshot_line(versions, line, base_rows):
     }
     if not expected:
         return None, {"reason": "no_base_occurrences", "versions_checked": len(versions)}
+    expected_sns = {key[0] for key in expected}
     by_pcba = {}
     rejected = 0
     for version_index, payload in enumerate(versions):
@@ -152,7 +153,7 @@ def recover_snapshot_line(versions, line, base_rows):
                 rejected += 1
                 continue
             sn = str(item.get("pcba_sn") or "").strip()
-            if not sn or not any(x[0] == sn for x in expected):
+            if not sn or sn not in expected_sns:
                 rejected += 1
                 continue
             matches = []
@@ -161,12 +162,12 @@ def recover_snapshot_line(versions, line, base_rows):
                 key = (sn, str(d.get("defect_code") or "").strip(),
                        str(d.get("defect_time") or "").strip())
                 if str(d.get("line") or d.get("line_id") or "").strip() == line and key in expected:
-                    matches.append((key, deepcopy(trace)))
+                    matches.append((key, trace))
             if not matches:
                 rejected += 1
                 continue
             board = by_pcba.setdefault(sn, {"traces": {}, "bases": [], "source": {}})
-            source = deepcopy(item)
+            source = item
             for key, trace in matches:
                 quality = (int(_complete(trace) and _complete(item)), version_index)
                 if key not in board["traces"] or quality > board["traces"][key][0]:
@@ -175,7 +176,7 @@ def recover_snapshot_line(versions, line, base_rows):
             # A 3074 base query is for the matched current PCBA, not for
             # arbitrary other identities discovered by the component query.
             if (item.get("base_query") or {}).get("rows"):
-                board["bases"].append((version_index, deepcopy(item["base_query"])))
+                board["bases"].append((version_index, item["base_query"]))
     if not by_pcba:
         return None, {"reason": "no_matching_integrated_items",
                       "versions_checked": len(versions), "rejected_items": rejected,
@@ -185,9 +186,15 @@ def recover_snapshot_line(versions, line, base_rows):
     merged_self_pcbas = set()
     permitted_history = set()
     for sn, board in sorted(by_pcba.items()):
-        traces = {k: value[1] for k, value in board["traces"].items()}
+        traces = {k: deepcopy(value[1]) for k, value in board["traces"].items()}
         source = next(reversed(board["source"].values()))
-        item = deepcopy(source)
+        # Select by the unchanged evidence rules first; copy only winners.
+        # Preserve field order and independent ownership of every output row.
+        excluded = {"defect_traces", "current_defects"}
+        if board["bases"]:
+            excluded.add("base_query")
+        owned = deepcopy({k:v for k,v in source.items() if k not in excluded})
+        item = {k:owned.get(k) for k in source}
         item["defect_traces"] = list(traces.values())
         item["current_defects"] = [deepcopy(t.get("defect") or {}) for t in traces.values()]
         # Preserve all rows of the chosen latest base query as they are required
@@ -207,9 +214,10 @@ def recover_snapshot_line(versions, line, base_rows):
                 # Keep legacy fallback, but prefer a proven PCBA-scoped query.
                 return (bool(confirmed and dated), bool(dated), bool(self_rows), len(own_rows), pair[0])
             selected = max(board["bases"], key=base_score)[1]
-            item["base_query"], merged_count = _reconcile_self_mountings(
+            rebuilt, merged_count = _reconcile_self_mountings(
                 selected, board["bases"], sn)
-            if merged_count and item["base_query"] is not selected:
+            item["base_query"] = deepcopy(rebuilt)
+            if merged_count and rebuilt is not selected:
                 merged_self_pcbas.add(sn)
             for row in (item["base_query"].get("rows") or []):
                 if str(row.get("Barcode") or "").strip() != sn:
@@ -249,7 +257,7 @@ def recover_snapshot_line(versions, line, base_rows):
                 continue
             quality = history_quality(row, revision_index)
             if sn not in history or quality > history_score[sn]:
-                history[sn] = deepcopy(row)
+                history[sn] = row
                 history_score[sn] = quality
         for name, dest in (("contexts", contexts), ("current_contexts", current_contexts)):
             for row in trace.get(name) or []:
@@ -259,14 +267,14 @@ def recover_snapshot_line(versions, line, base_rows):
                     continue
                 key = str(row.get("context_key") or "").strip()
                 if key:
-                    dest[key] = deepcopy(row)
+                    dest[key] = row
     result = {
         "trace_3074": {"items": items, "source_status": "PARTIAL",
                        "requested_pcba_count": len({x[0] for x in expected}),
                        "processed_pcba_count": sum(_complete(i) for i in items),
                        "pcba_error_count": sum(str(i.get("status") or "").upper() == "ERROR" for i in items)},
-        "trace_2114": {"pcbas": list(history.values()), "contexts": list(contexts.values()),
-                       "current_contexts": list(current_contexts.values()), "source_status": "PARTIAL"},
+        "trace_2114": {"pcbas": [deepcopy(r) for r in history.values()], "contexts": [deepcopy(r) for r in contexts.values()],
+                       "current_contexts": [deepcopy(r) for r in current_contexts.values()], "source_status": "PARTIAL"},
         "read_only_reconstruction": True
     }
     return result, {"reason": "read_only_local_recovery", "versions_checked": len(versions),

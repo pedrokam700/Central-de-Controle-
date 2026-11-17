@@ -1,12 +1,19 @@
 """Shared, versioned deterministic matcher. Configuration is also compiled for the UI."""
 import json,re,unicodedata
 from pathlib import Path
+from functools import lru_cache
 CONFIG=Path(__file__).resolve().parents[1]/'config'
 def configuration():
     return {**json.loads((CONFIG/'failure_taxonomy.json').read_text()),'families':json.loads((CONFIG/'familias_falhas.json').read_text())}
-def normalize(value):
-    text=''.join(c for c in unicodedata.normalize('NFKD',str(value or '')) if not unicodedata.combining(c)).lower()
+def _normalize_text(value):
+    text=''.join(c for c in unicodedata.normalize('NFKD',value) if not unicodedata.combining(c)).lower()
     return ' '.join(re.sub('[^a-z0-9]+',' ',text).split())
+_cached_normalize_text=lru_cache(maxsize=1024)(_normalize_text)
+def normalize(value):
+    text=str(value or '')
+    # Cache only this pure immutable string transform, not configuration or
+    # comparison results. Long source descriptions are never truncated/cached.
+    return _cached_normalize_text(text) if len(text)<=2048 else _normalize_text(text)
 def contains(text,phrase):return bool(phrase) and (' '+phrase+' ') in (' '+text+' ')
 def describe(code,desc,rules=None):
     rules=rules or configuration();text=normalize(desc)

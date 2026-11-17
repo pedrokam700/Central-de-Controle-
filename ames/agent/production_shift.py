@@ -98,13 +98,37 @@ def same_occurrence(left, right):
     return a is not None and a == b
 
 
+def occurrence_key(row, *, required=False):
+    """Lookup key with the exact string/date semantics of same_occurrence.
+
+    Keep datetime equality (including naive factory-local clocks), not string
+    clock equality. The left operand alone requires truthy identity fields.
+    Callers still run same_occurrence on the narrowed bucket.
+    """
+    fields = ('pcba_sn', 'line', 'defect_code')
+    if required and any(not row.get(k) for k in fields):
+        return None
+    stamp = _aware_defect(row.get('defect_time'))
+    return (*[str(row.get(k) or '').strip() for k in fields], stamp) if stamp is not None else None
+
+
+def occurrence_index(rows):
+    index = {}
+    for row in rows:
+        key = occurrence_key(row)
+        if key is not None:
+            index.setdefault(key, []).append(row)
+    return index
+
+
 def project_contexts(contexts, observations):
     """Read-only legacy-key reconciliation; exact unique occurrence required."""
     keys = {row.get('defect_key'): row for row in observations}
+    indexed = occurrence_index(observations)
     result = []
     for raw in contexts:
         ctx = dict(raw)
-        matches = [row for row in observations if same_occurrence(ctx, row)]
+        matches = [row for row in indexed.get(occurrence_key(ctx, required=True), ()) if same_occurrence(ctx, row)]
         known = keys.get(ctx.get('defect_key'))
         if len(matches) == 1 and (known is None or same_occurrence(ctx, known)):
             if ctx.get('defect_key') != matches[0]['defect_key']:

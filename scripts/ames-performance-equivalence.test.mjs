@@ -1,0 +1,54 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {reference89} from './audit/reference89.mjs';
+import {board2114Timeline,buildReuseCohorts,filterReuseCohorts} from '../ames/data/reuse-cohorts.mjs';
+import {renderBoardComparisonTable} from '../ames/console-reuse-cohorts.mjs';
+import {multi} from './audit/performance90.mjs';
+const base=await reference89('ames/data/reuse-cohorts.mjs');
+const descriptions=['Camera impurity','Front camera failed','Rear camera failed','No fault camera',
+ 'Camera frontal traseira','Light sensor failed','Proximity sensor failed','WiFi failed','GPS failed','Screen failed','UNKNOWN',''];
+const codes=['D','D2','UNKNOWN','N/A','-','',null];
+let seed=90289;const random=n=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed%n;};
+test('historical projections equal PR89 including partial/conflicting scopes, missing clocks and independent actors',()=>{
+ for(let run=0;run<24;run++){
+  const rows=Array.from({length:40},(_,i)=>({pcba_sn:i%11?'P':'OTHER',source_view:'2114',hist_seq:i%13?random(12):null,
+   defect_code:codes[random(codes.length)],defect_desc:descriptions[random(descriptions.length)],defect_time:i%5?'2026-11-01 08:00:00':null,
+   defect_user_name:'Autor '+i,repair_comment:'Comentário '+i,usage_status:i%2?'Y':'N',
+   ...[{}, {source_id:'A'}, {source_id:'B',line:'TAN10101'}, {snapshot_id:'1',snapshot_revision:2},
+    {revision:'2',period:{start_at:'A'}}, {line_id:'TAN10102',snapshot_revision:3},
+    {line:'TAN10101',line_id:'TAN10102'}, {revision:2,snapshot_revision:3}][random(8)]}));
+  rows.push(structuredClone(rows[1]),{...rows[1],defect_user_name:'Autor divergente'});
+  const original=structuredClone(rows),expected=base.board2114Timeline('P',rows),actual=board2114Timeline('P',rows);
+  assert.deepEqual(actual,expected,'seed run '+run);assert.deepEqual(rows,original);
+  assert.equal(renderBoardComparisonTable({sn:'P',history_2114:actual}),renderBoardComparisonTable({sn:'P',history_2114:expected}));
+ }
+});
+test('many distinct codes/descriptions retain exact, similar and unknown classifications',()=>{
+ const rows=Array.from({length:120},(_,i)=>({pcba_sn:'P',hist_seq:i,
+  defect_code:i%4?'D'+i:codes[i%codes.length],defect_desc:descriptions[i%descriptions.length]+' '+i,
+  source_view:'2114',snapshot_id:'1',revision:i%9?2:undefined,defect_user_name:'Pessoa '+i}));
+ assert.deepEqual(board2114Timeline('P',rows),base.board2114Timeline('P',rows));
+});
+test('multi-PCBA/component populations preserve complete rows, identity, counts and filters',()=>{
+ for(const size of [40,80,120]){
+  const snapshot=multi(size);snapshot.pcba_history.records.push({...snapshot.pcba_history.records[0],snapshot_revision:13,defect_user_name:'Revisão antiga'});
+  const original=structuredClone(snapshot);
+  for(const filters of [{},{sn:'SYNTH-1'},{item_type:'Camera'},{product:'OTHER'},{part_number:'UNKNOWN'}]){
+   assert.deepEqual(buildReuseCohorts(snapshot,filters),base.buildReuseCohorts(snapshot,filters));
+   assert.deepEqual(filterReuseCohorts(buildReuseCohorts(snapshot),filters),base.buildReuseCohorts(snapshot,filters));
+  }
+  assert.deepEqual(snapshot,original);
+ }
+});
+test('proof indexes retain trimmed legacy board identities and alias order',()=>{
+ const snapshot=multi(40),sn=snapshot.occurrences[0].pcba_sn;
+ snapshot.pcba_history.records.push({pcba_sn:' '+sn+' ',defect_type:'MainBoard',defect_time:'2026-11-02 08:00:00'});
+ snapshot.process_timeline={events:[{pcba_sn:' '+sn+' ',station:'A5162',event_time:'2026-11-03T12:00:00Z'}],contexts:[]};
+ assert.deepEqual(buildReuseCohorts(snapshot),base.buildReuseCohorts(snapshot));
+});
+test('dense partial legacy lineages retain all observations with bounded index memory',()=>{
+ const rows=Array.from({length:300},(_,i)=>({pcba_sn:'P',source_view:'2114',hist_seq:i,
+  defect_code:'D',defect_desc:'Camera impurity',defect_user_name:'Autor '+i,
+  ...(i%2?{source_id:'SOURCE-'+i}:{period:{mode:'PERIOD-'+i}})}));
+ assert.deepEqual(board2114Timeline('P',rows),base.board2114Timeline('P',rows));
+});

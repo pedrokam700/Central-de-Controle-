@@ -753,7 +753,7 @@ class Store:
         return count
 
     def ingest_material_reuse(self, snapshot_id: int, trace_3074: Dict[str, Any]) -> int:
-        from material_trace_provenance import exact_observation
+        from material_trace_provenance import exact_observation, index_observations, observation_candidates
         count = 0
         with self.connect() as con:
             # A CLEAN checkpoint key is NOT the SQLite 3028 defect_key.
@@ -761,11 +761,12 @@ class Store:
             observations = [dict(row) for row in con.execute(
                 'SELECT defect_key,line,pcba_sn,defect_time,defect_code,defect_desc,product_model '
                 'FROM defect_observations WHERE snapshot_id=?', (snapshot_id,))]
+            indexed = index_observations(observations)
             for item in trace_3074.get("items") or []:
                 current_pcba = item.get("pcba_sn")
                 for defect_trace in item.get("defect_traces") or []:
                     occurrence = defect_trace.get('defect') or {}
-                    matched = exact_observation(occurrence, observations) if str(
+                    matched = exact_observation(occurrence, observation_candidates(occurrence,indexed)) if str(
                         occurrence.get('pcba_sn') or '').strip() == str(current_pcba or '').strip() else None
                     dkey = (matched['defect_key'] if matched else defect_trace.get('defect_key') or '')
                     trace = defect_trace.get("trace_3074") or {}

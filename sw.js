@@ -1,4 +1,4 @@
-const CACHE_REVISION='ames-integration-client-isolation-20261117';
+const CACHE_REVISION='ames-performance-equivalent-20261117';
 const CACHE='central-cora-v15v-15-1-13-54-'+CACHE_REVISION;
 const BASE='/Central-de-Controle-/';
 // Persist activation-time document identities in this shell's static cache.

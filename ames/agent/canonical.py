@@ -10,7 +10,7 @@ import uuid
 import production_shift
 import production_diagnostics
 import repair_association
-from material_trace_provenance import exact_observation, trace_material_links
+from material_trace_provenance import exact_observation, trace_material_links, index_observations, observation_candidates
 from datetime import datetime, timezone
 
 SCHEMA = 'central-ames-v2'
@@ -101,12 +101,13 @@ def contextual_rows(con,sid,dataset):
             for key,canonical_key in lookup.items():
                 if key in lookups and lookups[key]!=canonical_key:conflicts.add(key)
                 lookups[key]=canonical_key
+        defect_keys={d['defect_key'] for d in defects}
         valid={(r['current_pcba_sn'],r['current_defect_key'],r['item_sn']) for r in rows
-               if r['current_defect_key'] and any(d['defect_key']==r['current_defect_key'] for d in defects)}
+               if r['current_defect_key'] and r['current_defect_key'] in defect_keys}
         reconciled=[]
         for row in rows:
             old_key=row.get('current_defect_key')
-            if old_key and not any(d['defect_key']==old_key for d in defects):
+            if old_key and old_key not in defect_keys:
                 lookup_key=(row['current_pcba_sn'],old_key,row['item_sn'])
                 new_key=lookups.get(lookup_key) if lookup_key not in conflicts else None
                 if new_key:
@@ -153,6 +154,7 @@ def _candidate_materials_from_trace(integrated, defects, max_rows=500):
     allowed={str(row.get('pcba_sn') or '') for row in defects if row.get('pcba_sn')}
     allowed_keys={str(row.get('defect_key') or '') for row in defects if row.get('defect_key')}
     out=[];seen=set()
+    indexed=index_observations(defects)
     for item in traced.get('items') or []:
         pcba=str(item.get('pcba_sn') or '').strip()
         if pcba not in allowed:continue
@@ -160,7 +162,8 @@ def _candidate_materials_from_trace(integrated, defects, max_rows=500):
             defect_key=str(occurrence.get('defect_key') or '').strip()
             canonical_key=defect_key if defect_key in allowed_keys else None
             if defect_key and not canonical_key:
-                matched=exact_observation(occurrence.get('defect') or {},defects)
+                candidate=occurrence.get('defect') or {}
+                matched=exact_observation(candidate,observation_candidates(candidate,indexed))
                 if matched and str(matched.get('pcba_sn') or '')==pcba:
                     canonical_key=matched.get('defect_key')
                 if not canonical_key:continue
@@ -221,8 +224,11 @@ def export_revision(store,sid,line,insight_builder=None):
         process_contexts=[{k:v for k,v in r.items() if k not in ('raw_json','details_json') and (v is None or isinstance(v,(str,int,float,bool)))} for r in process_contexts]
         observations=[dict(row) for row in con.execute('SELECT * FROM defect_observations WHERE snapshot_id=? AND line=?',(sid,line))]
         process_contexts=production_shift.project_contexts(process_contexts,observations)
+        contexts_by_key={}
+        for ctx in process_contexts:
+            contexts_by_key.setdefault(ctx.get('defect_key'),[]).append(ctx)
         context_by_key={rec['defect_key']:production_shift.proven_context([
-            ctx for ctx in process_contexts if ctx.get('defect_key')==rec['defect_key'] and production_shift.same_occurrence(ctx,rec)]) or {} for rec in observations}
+            ctx for ctx in contexts_by_key.get(rec['defect_key'],()) if production_shift.same_occurrence(ctx,rec)]) or {} for rec in observations}
         repair_rows=[dict(r) for r in con.execute('SELECT * FROM repair_history_3012')] if 'repair_history_3012' in tables else []
         sets={};coverage={}
         for dataset in DATASETS:
@@ -395,10 +401,20 @@ def history_index(store,line):
     with store.connect() as con:
         con.execute('BEGIN')
         source=con.execute("SELECT value FROM schema_meta WHERE key='ames_source_id'").fetchone()[0]
-        for r in con.execute('SELECT * FROM mes_revisions WHERE line=? ORDER BY snapshot_id DESC,revision DESC',(line,)):
-            p=json.loads(r['payload']);period=p.get('summary',{}).get('period',{})
+        # Keep the exact saved metadata, but let SQLite project away bulky
+        # datasets before transferring/decoding them. Products still come from
+        # each revision's OWN defects and are sorted with Python's old rules.
+        indexed_sql="""SELECT snapshot_id,epoch,
+            json_remove(payload,'$.datasets','$.insights','$.process_contexts',
+                '$.production_diagnostics','$.material_candidates','$.source_coverage',
+                '$.coverage','$.capabilities') AS metadata,
+            (SELECT json_group_array(json_extract(d.value,'$.product'))
+             FROM json_each(mes_revisions.payload,'$.datasets.defects') AS d) AS products
+            FROM mes_revisions WHERE line=? ORDER BY snapshot_id DESC,revision DESC"""
+        for r in con.execute(indexed_sql,(line,)):
+            p=json.loads(r['metadata']);period=p.get('summary',{}).get('period',{})
             latest.setdefault(r['snapshot_id'],(r['epoch'],p.get('projection_version')))
-            products=sorted({d['product'] for d in p.get('datasets',{}).get('defects',[]) if d.get('product')})
+            products=sorted({product for product in json.loads(r['products']) if product})
             out.append({'snapshot_id':p['snapshot_id'],'line_id':line,'source_id':p['source_id'],
                         'snapshot_revision':p['snapshot_revision'],'content_hash':p['content_hash'],
                         'collected_at':p['collected_at'],'period_start':period.get('start_at'),

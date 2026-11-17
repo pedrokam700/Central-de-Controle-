@@ -68,3 +68,72 @@ Main e branches antigas mantêm seus próprios arquivos/configurações intactos
 Sem MES, SQLite/WAL operacional, guardian, rede, Firebase, credenciais/outbox,
 merge, deploy, release, ZIP ou instalador. Sem redução de registros, `+N` ou
 supressão de conflitos para ganhar velocidade. **Física PENDENTE.**
+
+## Otimizações implementadas após os checkpoints RED
+
+- Histórico: contadores de identidades lógicas anteriores por Hist Seq e
+  linhagem compatível, descritores normalizados e comparação original. Nenhuma
+  observação é removida além da deduplicação exata já existente na #89.
+  Código normalizado/família/subtipo/negação/ambiguidade só indexam contagens;
+  a comparação ainda recebe código e descrição realmente observados.
+- Escopos completos usam índice pelo campo mais seletivo; metadados legados
+  parciais podem formar grafo denso. O índice tem orçamento de 64×N cópias de
+  identidade; excedido esse orçamento, calcula contagens com fatos pré-lidos,
+  sem limitar registros. Esse caso patológico ainda pode ter custo N×N em
+  operações simples, mas não aloca índice quadrático nem recompõe descritores.
+- Coortes: índice por PCBA e ocorrência, cache de comparação só nesta projeção
+  (4096 entradas), filtro do mesmo mount reutiliza o modelo. Não há cache global
+  de snapshot ou resultados de técnico/uso físico. Proveniência e ordem mantidas.
+- Renderização: índice para os registros originais e record_id, preservando o
+  primeiro match e a política de IDs legados com espaços/aliases dos helpers.
+- 3022: índice com exatamente a igualdade de string/datetime de same_occurrence,
+  mantendo a validação final, duplicados e conflitos. Não normaliza relógio ruim.
+- 3074/SQLite: índice de candidatos para a chave legada por campos literais,
+  preservando a distinção entre relógios equivalentes e strings diferentes
+  exigida por esse contrato. Persistência faz os mesmos INSERTs, no mesmo bloco;
+  nenhuma mudança de esquema/dados operacionais, conexão, WAL ou timeout.
+- Recuperação: seleciona a mesma evidência vencedora antes de clonar; retorna
+  cópias profundas independentes. Pertinência da PCBA usa set, sem varrer todas
+  as chaves. Qualidade/status e escolha entre revisões não foram modificados.
+- Taxonomia Python: cache LRU de no máximo 1024 strings de até 2048 caracteres,
+  SOMENTE da transformação Unicode imutável. Texto longo não é truncado; passa
+  sem cache. Configuração continua lida/revalidada como antes e classificações
+  não são cacheadas. Não altera regras, códigos, papéis, versão ou lógica 3074.
+- Canônico: contexto/diagnóstico indexados; pais referenciados são validados pela
+  metadata do próprio payload (não pela coluna contraditória). JSON inválido
+  continua rejeitado. Listagem projeta metadata/produtos no SQLite, sem carregar
+  datasets inteiros em Python. BEGIN IMMEDIATE, epoch e atomicidade preservados.
+- SW: apenas revisão do cache de fonte avança para evitar shell antigo em leitura
+  direta; mecanismos #89 de abas/restart/offline permanecem e são retestados.
+- CI: defaults.run.shell usa guarded-ci.sh, que exporta NODE_OPTIONS dentro do
+  shell e executa assert-distribution-preload ANTES de cada workload. O processo
+  filho sem preload é uma contraprova negativa obrigatória; o com preload deve
+  bloquear caminho fictício. Nenhum GITHUB_ENV é usado para NODE_OPTIONS.
+
+## Primeira comparação GREEN de software (medições sintéticas)
+
+| Caso, 1600 registros | #89 | Candidata medida | Prova de resultado |
+|---|---:|---:|---|
+| Histórico 2114 | 119133 ms | ~40 ms | SHA-256 integral idêntico |
+| 200 PCBAs/400 componentes/1600 históricos | 2800 ms | ~424 ms | SHA-256/contagens integrais idênticos |
+| Contextos 3022 | 2128 ms | ~149 ms na primeira rodada | Mesmas linhas/diagnósticos/conflitos |
+| Canônico de ocorrências | 6426 ms | rodada final em consolidação | Hash integral idêntico |
+| Recuperação de quatro revisões | 1419 ms | ~196 ms | Hash integral idêntico |
+| Insights 3074 | 3802 ms | ~981 ms | Hash integral idêntico |
+| Ingestão de 1600 componentes, SQLite descartável | 2620 ms | ~90 ms | Mesmos INSERTs/contagens e igualdade em clones |
+| Canônico com componentes | 5697 ms | ~592 ms | Hash integral idêntico |
+
+Chrome: caso base medido com 400 registros, nove telas: pausa máxima ~13559 ms;
+na candidata com 400, ~180 ms. A candidata também percorreu nove telas com
+100/200/400/800/1600 históricos e confirmou todas as linhas e autores no DOM,
+inclusive depois de filtrar. Com 1600, abertura completa do detalhe ~839 ms e
+pausa ~607 ms na primeira rodada. Custo linear de HTML/DOM permanece: não se
+ocultam linhas nem se usa +N. Não afirmar ausência universal de pausa.
+
+A matriz final anexa tempos/CPU/RSS e hashes, com limites de medição. Resultados
+parciais concorrentes não são promessa de ganho físico; custo de commit SQLite
+não está integralmente incluído no primeiro instrumento de reserva. Não usar
+esses números como SLO fabril ou certificado de instalação.
+
+A primeira rodada local dos contratos integrados passou; validação de código
+exato/CI e handoff serão registrados ao fechar a PR DRAFT. **Física PENDENTE.**

@@ -19,6 +19,10 @@ on:
       - work/ames-performance-guard-20261117
   workflow_dispatch:
 
+defaults:
+  run:
+    shell: bash ./scripts/audit/guarded-ci.sh {0}
+
 permissions:
   contents: read
 
@@ -31,20 +35,23 @@ jobs:
       PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Enable no-distribution guard after checkout and tool setup
-        run: echo "NODE_OPTIONS=--import=$GITHUB_WORKSPACE/scripts/audit/no-distribution-guard.mjs" >> "$GITHUB_ENV"
+      - name: Prove effective distribution preload (simulated builder only)
+        run: node --test scripts/ames-distribution-preload.test.mjs
       - name: Install disposable parser test dependencies
         run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
       - name: Performance and effective preload counterproofs
         run: |
           result=0
           python3 scripts/agent-performance90.test.py || result=1
+          python3 scripts/agent-performance-equivalence.test.py || result=1
           node --test scripts/ames-performance90.test.mjs scripts/ames-distribution-preload.test.mjs || result=1
           exit "$result"
       - name: Independent integration and static migration proof (no builders)
@@ -138,14 +145,16 @@ jobs:
       PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Enable no-distribution guard after checkout and tool setup
-        run: echo "NODE_OPTIONS=--import=$GITHUB_WORKSPACE/scripts/audit/no-distribution-guard.mjs" >> "$GITHUB_ENV"
+      - name: Prove effective distribution preload (simulated builder only)
+        run: node --test scripts/ames-distribution-preload.test.mjs
       - name: Install isolated browser test tools
         run: |
           python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
@@ -156,6 +165,7 @@ jobs:
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/console-tests/node_modules/playwright/index.mjs"
           export BROWSER_OUTPUT="$RUNNER_TEMP/console-evidence"
           node scripts/ames-experience.browser.mjs
+          node scripts/ames-performance.browser.mjs
           node scripts/ames-integration-worker.browser.mjs
           node scripts/ames-reuse-timeline.browser.mjs
           node scripts/ames-3074-physical-classification.browser.mjs
