@@ -45,6 +45,7 @@ jobs:
           result=0
           python3 scripts/agent-integration-migration-static.test.py || result=1
           python3 scripts/agent-integration-brm.test.py || result=1
+          python3 scripts/agent-integration-projection.test.py || result=1
           node --test scripts/ames-integration-worker.test.mjs || result=1
           exit "$result"
       - name: 3022 production time proof matrix (disposable SQLite)
