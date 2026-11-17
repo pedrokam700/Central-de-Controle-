@@ -1,6 +1,6 @@
 import {displayValue,formatFactoryDateTime as factoryTime,formatFactoryDate as factoryDate} from './data/time-display.mjs';
 import {processPassageDiagnostic} from './data/sn-process-diagnostic.mjs';
-import {trustedProductionEvidence,genericReturnEvidence} from './data/production-evidence.mjs';
+import {productionEvidenceForOccurrence,trustedProductionEvidence,genericReturnEvidence} from './data/production-evidence.mjs';
 import {collectionStatus} from './collection-status.mjs';
 import {componentFamily} from "./data/reuse-analysis.mjs";
 import { LINE_IDS } from './data/contract.mjs';
@@ -41,8 +41,8 @@ export function historicalLastBatchReuse(trace3074={}){
     }).join('')}</tbody></table></div></div>`;
 }
 
-function safeProcessContext(row={}){
-  const production=trustedProductionEvidence(row),ret=genericReturnEvidence(row);
+function safeProcessContext(row={},allContexts=[]){
+  const production=productionEvidenceForOccurrence(row,allContexts),ret=genericReturnEvidence(row);
   const passage=processPassageDiagnostic(row);
   return {...row,
     previous_passage_shift:passage.passage_shift,
@@ -240,7 +240,7 @@ export function createTraceConsoleView(root,store,client){
 }
 
 export function filterProcessScope(allContexts=[],allEvents=[],{pcba='',defect=''}={}){
-  const contexts=(allContexts||[]).map(safeProcessContext).filter(row=>(!pcba||row.pcba_sn===pcba)&&(!defect||row.defect_code===defect));
+  const contexts=(allContexts||[]).map(row=>safeProcessContext(row,allContexts)).filter(row=>(!pcba||row.pcba_sn===pcba)&&(!defect||row.defect_code===defect));
   const pcbas=[...new Set(contexts.map(row=>row.pcba_sn).filter(Boolean))],pcbaSet=new Set(pcbas);
   const events=allEvents.filter(row=>{if(pcba&&row.pcba_sn!==pcba)return false;if(defect&&!pcbaSet.has(row.pcba_sn))return false;return true;});
   return {contexts,events,pcbas};

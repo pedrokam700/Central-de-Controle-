@@ -5,15 +5,20 @@ normalized by the process correlator are timezone aware. Never use Defect Time.
 """
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+import re
 
 FIELDS = ('production_shift', 'production_operational_date', 'production_event_time', 'production_shift_source', 'production_shift_basis')
 ZONE = ZoneInfo('America/Sao_Paulo')
+
+
+def has_clock(value):
+    return bool(re.match(r'^(?:\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|\d{14}$)', str(value or '').strip()))
 
 def classify(reference_event_time, previous_event_time=None, *, naive_offset=-3):
     result = dict.fromkeys(FIELDS)
     # Legacy positional argument is ignored: a previous passage is not generation evidence.
     for value, basis in ((reference_event_time, 'reference_process'),):
-        if not value:
+        if not value or not has_clock(value):
             continue
         try:
             event = datetime.fromisoformat(str(value).strip().replace('Z', '+00:00'))
@@ -37,7 +42,7 @@ def classify_passage(event_time, *, naive_offset=-3):
 def from_context(context):
     """Revalidate a persisted defect context; old fallback classifications are not proof."""
     empty = dict.fromkeys(FIELDS)
-    if context.get('source') != '3022' or not context.get('reference_station_code'):
+    if reference_problem(context) is not None:
         return empty
     reference = context.get('reference_event_time')
     defect = context.get('defect_time_utc') or context.get('defect_time')
@@ -53,6 +58,67 @@ def from_context(context):
         return empty
     return classify(reference)
 
+
+def reference_problem(context):
+    """Validate explicit clocks; never repair them by changing the offset."""
+    station = str(context.get('reference_station_code') or '').strip().upper()
+    if station.startswith('A69'):
+        return 'AT_REFERENCE'
+    raw = _aware_defect(context.get('defect_time'))
+    utc = _aware_defect(context.get('defect_time_utc'))
+    if context.get('defect_time') and raw is None or context.get('defect_time_utc') and utc is None:
+        return 'INVALID_DEFECT_TIME'
+    if raw is not None and utc is not None and raw != utc:
+        return 'TIMEZONE_CONFLICT'
+    defect = utc or raw
+    if defect is None:
+        return 'INVALID_DEFECT_TIME'
+    reference = context.get('reference_event_time')
+    if not reference:
+        return ('REFERENCE_UNMAPPED' if not context.get('reference_rule_id') and not station
+                or 'RULE_NOT_MAPPED' in str(context.get('reference_status') or context.get('status') or '')
+                else 'NO_REFERENCE_PASSAGE')
+    at = _aware_defect(reference)
+    if at is None:
+        return 'INVALID_REFERENCE_TIME'
+    if at > defect:
+        return 'FUTURE_REFERENCE'
+    if context.get('source') != '3022' or not station:
+        return 'UNVERIFIED_REFERENCE'
+    return None
+
+
+def same_occurrence(left, right):
+    required = ('pcba_sn', 'line', 'defect_code')
+    if any(not left.get(k) or str(left.get(k)).strip() != str(right.get(k) or '').strip() for k in required):
+        return False
+    a, b = _aware_defect(left.get('defect_time')), _aware_defect(right.get('defect_time'))
+    return a is not None and a == b
+
+
+def project_contexts(contexts, observations):
+    """Read-only legacy-key reconciliation; exact unique occurrence required."""
+    keys = {row.get('defect_key'): row for row in observations}
+    result = []
+    for raw in contexts:
+        ctx = dict(raw)
+        matches = [row for row in observations if same_occurrence(ctx, row)]
+        known = keys.get(ctx.get('defect_key'))
+        if len(matches) == 1 and (known is None or same_occurrence(ctx, known)):
+            if ctx.get('defect_key') != matches[0]['defect_key']:
+                ctx['original_defect_key'] = ctx.get('defect_key')
+                ctx['defect_key'] = matches[0]['defect_key']
+        ctx.update(from_context(ctx))
+        result.append(ctx)
+    return result
+
+
+def proven_context(contexts):
+    valid = [ctx for ctx in contexts if reference_problem(ctx) is None]
+    identities = {(str(ctx.get('reference_station_code')), _aware_defect(ctx.get('reference_event_time')))
+                  for ctx in valid}
+    return valid[0] if len(identities) == 1 else None
+
 def enrich_sn(result, *, grid_offset=0):
     """Classify each actual passage; failure-level association uses the correlator."""
     for event in (result.get('trace_3022') or {}).get('process_passages') or []:
@@ -60,7 +126,7 @@ def enrich_sn(result, *, grid_offset=0):
     return result
 
 def _aware_defect(value):
-    if not value:
+    if not value or not has_clock(value):
         return None
     try:
         dt = datetime.fromisoformat(str(value).strip().replace('Z', '+00:00'))
@@ -146,7 +212,8 @@ def correlate_sn(result, engine_dir, *, grid_offset=0):
                    'defect_desc':row.get('Defect Description'),
                    'defect_time':stamp,'manual_or_auto':mode,
                    'defect_time_source':source}
-            correlated = correlate(engine_dir, processes[sn].get('rows') or [], rec,
+            from process_r11 import correlate_production
+            correlated = correlate_production(correlate, engine_dir, processes[sn].get('rows') or [], rec,
                                    registration_value=mode,
                                    registration_source='2114',
                                    defect_local_offset_hours=-3,

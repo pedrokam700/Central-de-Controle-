@@ -1,5 +1,5 @@
 import {formatFactoryDateTime as time} from './data/time-display.mjs';
-import {sameFailureOccurrence,trustedProductionEvidence,genericReturnEvidence,parseFailureInstant} from './data/production-evidence.mjs';
+import {sameFailureOccurrence,productionEvidenceForOccurrence,trustedProductionEvidence,genericReturnEvidence,parseFailureInstant} from './data/production-evidence.mjs';
 import {reuseLinks} from './data/reuse-analysis.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 import {EXTRA_EN} from './console-i18n-extra.mjs';
@@ -107,7 +107,7 @@ function repairEvidence(occurrence){
 }
 
 export function failureOccurrenceEvidence(snapshot={},occurrence={}){
-  const context=exactContext(snapshot,occurrence),production=context?trustedProductionEvidence(context):trustedProductionEvidence({}),ret=context?genericReturnEvidence(context):genericReturnEvidence({});
+  const context=exactContext(snapshot,occurrence),production=productionEvidenceForOccurrence(occurrence,snapshot?.process_timeline?.contexts||[]),ret=context?genericReturnEvidence(context):genericReturnEvidence({});
   const history=historyRows(snapshot,occurrence),reuse=ownReuseState(snapshot,occurrence),relations=relationState(snapshot,occurrence),materials=materialLinks(snapshot,occurrence),repair=repairEvidence(occurrence);
   return {occurrence,production,returnEvidence:ret,context,history,reuse,relations,materials,repair};
 }

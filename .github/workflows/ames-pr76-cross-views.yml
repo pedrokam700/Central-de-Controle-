@@ -14,6 +14,7 @@ on:
       - work/ames-pr84-3022-extjs-preflight-20261116
       - work/ames-issue85-reuse-event-timeline-20261116
       - work/ames-3074-physical-use-audit-20261116
+      - work/ames-3022-production-time-audit-20261117
   workflow_dispatch:
 
 permissions:
@@ -34,6 +35,14 @@ jobs:
           node-version: '24'
       - name: Install disposable parser test dependencies
         run: python3 -m pip install openpyxl==3.1.5 pandas==2.2.3
+      - name: 3022 production time proof matrix (disposable SQLite)
+        run: |
+          python3 scripts/agent-3022-production-evidence.test.py
+          python3 scripts/agent-3022-origin-fallback.test.py
+          python3 scripts/agent-production-trust.test.py
+          python3 scripts/agent-integrated-v5.test.py
+          python3 scripts/agent-process-r11.test.py
+          python3 scripts/agent-3022-canonical-contract.test.py
       - name: 3074 physical proof matrix (disposable SQLite)
         run: |
           python3 scripts/agent-3074-physical-classification.test.py
@@ -77,8 +86,8 @@ jobs:
         env:
           PYTHONPATH: ames/factory-engine
         run: python3 scripts/agent-3022-observability.test.py
-      - name: All Central Node contracts across nine views
-        run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' | sort)
+      - name: Central Node contracts across nine views (no installer generation)
+        run: node --test --test-isolation=none $(find scripts -maxdepth 1 -type f -name 'ames-*.test.mjs' ! -name 'ames-auth-hardening.test.mjs' ! -name 'ames-agent-pairing.test.mjs' ! -name 'ames-r12-migration-bundle.test.mjs' | sort)
       - name: U1 single 2114 history without losing original fields
         run: node --test --test-name-pattern='U1' scripts/audit/codex_cross_contracts_red.mjs
       - name: Independent N1/N3 name and source contracts
@@ -118,6 +127,7 @@ jobs:
           node scripts/ames-experience.browser.mjs
           node scripts/ames-reuse-timeline.browser.mjs
           node scripts/ames-3074-physical-classification.browser.mjs
+          node scripts/ames-3022-production-evidence.browser.mjs
           node scripts/ames-sync-reload.browser.mjs
           node scripts/ames-pairing.browser.mjs
           node scripts/ames-3028-completion.browser.mjs
@@ -126,7 +136,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ames-3074-browser-${{ github.sha }}
+          name: ames-3022-production-browser-${{ github.sha }}
           path: ${{ runner.temp }}/console-evidence/*.png
           if-no-files-found: ignore
           retention-days: 7

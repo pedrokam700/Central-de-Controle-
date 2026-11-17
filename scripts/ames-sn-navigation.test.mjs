@@ -14,7 +14,8 @@ test('live SN summary KPIs navigate to their evidence tabs',()=>{
 
 test('live SN process digest only presents proven 3022 reference as generation evidence',()=>{
   assert.match(src,/trustedProductionEvidence/);
-  assert.match(src,/contexts\.map\(trustedProductionEvidence\)\.find/);
+  assert.match(src,/productionEvidenceForOccurrence\(/);
+  assert.doesNotMatch(src,/contexts\.map\(trustedProductionEvidence\)\.find/);
   assert.doesNotMatch(src,/contexts\[0\]\|\|passages\[0\]/);
   assert.match(src,/Posto de referência \(3022\)/);
   assert.match(src,/Horário de geração \(3022\)/);

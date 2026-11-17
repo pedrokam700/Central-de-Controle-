@@ -23,6 +23,7 @@ from operator_evidence import operator_evidence
 import canonical
 import production_shift
 import process_timeline
+from partial_retry import confirmed_3022_response
 
 
 def _json(value):
@@ -151,6 +152,8 @@ def patch_store(store) -> None:
 
 
 def _event_time_utc(engine_dir: Path, value: Any, grid_offset: float):
+    if not production_shift.has_clock(value):
+        return None
     temporal = importlib.import_module("core.temporal_3074")
     dt = temporal.grid_time_to_utc(value, grid_offset)
     return dt.isoformat() if dt else None
@@ -225,6 +228,37 @@ def _persist_legacy_events(store, snapshot_id: int, pcba: str, passages: Iterabl
             )
 
 
+def _production_rows(rows, line):
+    """Eligibility for correlation only. Raw history and operator events stay intact."""
+    result = []
+    for row in rows:
+        normalized=importlib.import_module('ames.tela_3022').normalizar_evento_3022(row)
+        if not production_shift.has_clock(normalized.get('event_time')):
+            continue
+        explicit_lines = {str(row[k]).strip().upper() for k in ('Line Id', 'Line', 'line', 'line_id') if row.get(k)}
+        if line and any(value != str(line).strip().upper() for value in explicit_lines):
+            continue
+        # AT may reuse assembly operation codes on END LOT. Preserve those
+        # events in raw/timeline, but do not call them productive assembly.
+        desc = ' '.join(str(row.get(k) or '') for k in ('Working Oper', 'Working Operation', 'Operation Name', 'TRAN CMF3')).lower()
+        operator = str(row.get('Tran User Id') or row.get('Transaction User Id') or '').upper()
+        if str(row.get('Tran Desc') or '').upper() == 'END LOT' and (
+                any(word in desc for word in ('repair', 'disassembly', 'rework', 'desmontagem')) or operator.startswith('BRM')):
+            continue
+        result.append(row)
+    return result
+
+
+def correlate_production(correlate, engine_dir, rows, rec, **options):
+    """Filter productive references without deleting separate AT/return context."""
+    eligible = _production_rows(rows, rec.get('line'))
+    result = correlate(engine_dir, eligible, rec, **options)
+    if len(eligible) != len(rows):
+        full = correlate(engine_dir, rows, rec, **options)
+        result.update(previous_process=full.get('previous_process'), repair_cycle=full.get('repair_cycle'))
+    return result
+
+
 def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], *, snapshot_id: int, line: str,
                         max_pcbas: int = 0, performance: str = "balanced", line_callback=None, event_callback=None,
                         seed_3022_items=None) -> Dict[str, Any]:
@@ -260,7 +294,7 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
     by_pcba: Dict[str,List[Dict[str,Any]]] = {}
     for rec in records or []:
         pcba = str((rec or {}).get("pcba_sn") or "").strip()
-        if pcba:
+        if pcba and (not rec.get('line') or rec.get('line') == line):
             by_pcba.setdefault(pcba, []).append(dict(rec))
     targets = list(by_pcba)
     if max_pcbas:
@@ -275,13 +309,18 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
     consecutive_view_blocks=0
     seed_3022_items=seed_3022_items if isinstance(seed_3022_items,dict) else {}
 
+    local_source_id=canonical.source_id(store)
+    with store.connect() as con:
+        window=con.execute('SELECT start_at,end_at,mode FROM analysis_windows WHERE id=(SELECT window_id FROM snapshots WHERE id=?)',(snapshot_id,)).fetchone()
+        local_period=dict(window) if window else {}
+        local_revisions={row[0] for row in con.execute('SELECT revision FROM mes_revisions WHERE snapshot_id=? AND line=?',(snapshot_id,line))}
+
     def confirmed_seed(pcba):
         # A saved query is reusable only with its own MES response proof; a
         # generic per-board COMPLETE flag cannot certify a 3022 response.
         rr=seed_3022_items.get(pcba)
-        return (isinstance(rr,dict) and isinstance(rr.get('rows'),list) and
-                (rr.get('query_diagnostics') or {}).get('status') in
-                {'CONFIRMED','CONFIRMED_EMPTY'})
+        return confirmed_3022_response(rr, pcba, source_id=local_source_id,
+                                       snapshot_id=snapshot_id, line=line, period=local_period, revisions=local_revisions)
 
     # No CDP/browser or MES lease is needed if every target has a confirmed
     # durable response and the only remaining work is local SQLite replay.
@@ -377,7 +416,7 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
                         rr=tela.consultar(pcba)
                         diagnostics=(rr or {}).get("query_diagnostics") or {}
                         consecutive_view_blocks=0
-                        if diagnostics.get("status") not in {"CONFIRMED", "CONFIRMED_EMPTY"}:
+                        if diagnostics.get("status") not in {"CONFIRMED", "CONFIRMED_EMPTY"} or not confirmed_3022_response(rr, pcba, source_id=local_source_id, snapshot_id=snapshot_id, line=line, period=local_period, revisions=local_revisions):
                             raise RuntimeError("3022 sem confirmação do coletor; resposta anterior não será reutilizada")
                         query_ms=round((time.perf_counter()-started)*1000.0,2)
                         query_times.append(query_ms)
@@ -426,7 +465,7 @@ def collect_and_persist(store, engine_dir: Path, records: List[Dict[str, Any]], 
             contexts=[]
             context_by_pass={}
             for rec in by_pcba.get(pcba,[]):
-                corr=tela3022_mod.correlacionar_falha_3022(
+                corr=correlate_production(tela3022_mod.correlacionar_falha_3022,
                     engine_dir, rows, rec, registration_value=rec.get("manual_or_auto"), registration_source="3028",
                     defect_local_offset_hours=defect_offset, event_naive_offset_hours=grid_offset)
                 ctx=_context_from_correlation(rec,corr);contexts.append(ctx);all_contexts.append(ctx)
