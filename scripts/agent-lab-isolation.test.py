@@ -315,6 +315,7 @@ print('DENIED')
         for name in ('stdout','stderr','stdin'):
             with self.subTest(stream=name):
                 self.lab=self.area/('AMES-LAB-STDIO-'+name.upper());self.lab.mkdir()
+                args[args.index('--lab-root')+1]=str(self.lab)
                 target=self.area/('EXTERNAL-'+name)
                 if name=='stdin':target.write_text('{"command":"status"}\n')
                 else:target.write_bytes(b'')
