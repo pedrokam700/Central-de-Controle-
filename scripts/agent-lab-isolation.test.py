@@ -308,4 +308,24 @@ print('DENIED')
         file.write_text(json.dumps(base))
 
 
+
+    def test_29_regular_stdio_files_refused_before_lab_or_external_writes(self):
+        self.available()
+        args=[sys.executable,'-I','-S','-B',str(ENTRY),'--lab-root',str(self.lab),'--initialize-synthetic']
+        for name in ('stdout','stderr','stdin'):
+            with self.subTest(stream=name):
+                target=self.area/('EXTERNAL-'+name)
+                if name=='stdin':target.write_text('{"command":"status"}\n')
+                else:target.write_bytes(b'')
+                with target.open('r' if name=='stdin' else 'w') as stream:
+                    kwargs={'stdout':subprocess.PIPE,'stderr':subprocess.PIPE,'text':True,
+                            'timeout':10,'env':self.lab_env()}
+                    if name=='stdin':kwargs['stdin']=stream
+                    else:kwargs.update(input='',**{name:stream})
+                    result=subprocess.run(args,**kwargs)
+                self.assertNotEqual(result.returncode,0)
+                if name!='stdin':self.assertEqual(target.read_bytes(),b'')
+                self.assertEqual(list(self.lab.iterdir()),[])
+
+
 if __name__=='__main__':unittest.main()
