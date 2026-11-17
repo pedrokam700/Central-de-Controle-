@@ -36,6 +36,14 @@ class OperatorEligibility(unittest.TestCase):
                 del row['Working Oper']
             self.assertEqual(_production_rows([row], LINE), [], fields)
 
+    def test_normalization_must_not_hide_a_second_explicit_legacy_repair_label(self):
+        row = end_lot(**{'Working Operation': 'Repair station'})
+        self.assertEqual(_production_rows([row], LINE), [])
+
+    def test_normalization_must_not_hide_the_legacy_brm_operator_field(self):
+        row = end_lot(**{'User Id': 'PROD-001', 'Transaction User Id': 'BRM-001'})
+        self.assertEqual(_production_rows([row], LINE), [])
+
     def test_known_brm_at_end_lot_remains_blocked(self):
         self.assertEqual(_production_rows([end_lot(**{'Tran User Id': 'BRM-001'})], LINE), [])
 
