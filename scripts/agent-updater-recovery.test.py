@@ -1,5 +1,6 @@
 """D01/D02: disposable synthetic trees, injected I/O/crash; no launcher/builder/MES."""
 import ast
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -24,7 +25,7 @@ class Interrupted(BaseException):pass
 class RecoveryTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
-        self.base=Path(self.tmp.name);self.pkg=self.base/'LAB-installed';self.target=self.pkg/'ames-agent'
+        self.base=Path(self.tmp.name).resolve();self.pkg=self.base/'LAB-installed';self.target=self.pkg/'ames-agent'
         self.src=self.base/'LAB-candidate'/'ames-agent';self.target.mkdir(parents=True);self.src.mkdir(parents=True)
         self.paths=['ames-agent/'+n for n in (*u.FILES,'config.json')]+list(dict.fromkeys((*u.ROOT_FILES,HELPER,*u.OPTIONAL_ROOT_FILES)))
         for name in u.FILES:
@@ -35,8 +36,8 @@ class RecoveryTests(unittest.TestCase):
         self.write(self.target/'config.json',json.dumps({'port':8765,'allowed_origins':['https://lab.invalid']}))
         (self.src/'candidate-files.json').write_text(json.dumps({n:self.hash(self.src/n) for n in u.FILES}))
         self.data=self.target/'data';self.data.mkdir()
-        with sqlite3.connect(self.data/'ames_local.sqlite3') as con:
-            con.execute('CREATE TABLE evidence(id INTEGER PRIMARY KEY, value TEXT)');con.execute("INSERT INTO evidence(value) VALUES('LAB-before')")
+        with closing(sqlite3.connect(self.data/'ames_local.sqlite3')) as con:
+            con.execute('CREATE TABLE evidence(id INTEGER PRIMARY KEY, value TEXT)');con.execute("INSERT INTO evidence(value) VALUES('LAB-before')");con.commit()
         self.write(self.data/'checkpoint.json','LAB-checkpoint');self.write(self.data/'local_agent_token','LAB-only-token')
         self.socket=patch.object(u.socket,'create_connection',side_effect=OSError);self.socket.start();self.addCleanup(self.socket.stop)
 
@@ -44,10 +45,10 @@ class RecoveryTests(unittest.TestCase):
     def hash(self,path):return hashlib.sha256(path.read_bytes()).hexdigest()
     def generation(self):return {p:(self.pkg/p).read_bytes() if (self.pkg/p).is_file() else None for p in self.paths}
     def data_state(self):
-        with sqlite3.connect(self.data/'ames_local.sqlite3') as con:rows=con.execute('SELECT * FROM evidence').fetchall()
+        with closing(sqlite3.connect(self.data/'ames_local.sqlite3')) as con:rows=con.execute('SELECT * FROM evidence').fetchall()
         return rows,(self.data/'checkpoint.json').read_bytes(),(self.data/'local_agent_token').read_bytes()
     def newer(self):
-        with sqlite3.connect(self.data/'ames_local.sqlite3') as con:con.execute("INSERT INTO evidence(value) VALUES('LAB-NEW')")
+        with closing(sqlite3.connect(self.data/'ames_local.sqlite3')) as con:con.execute("INSERT INTO evidence(value) VALUES('LAB-NEW')");con.commit()
         self.write(self.data/'checkpoint.json','LAB-NEW-checkpoint')
     def saved_and_current(self):
         saved=u.backup(self.target)
@@ -70,7 +71,9 @@ class RecoveryTests(unittest.TestCase):
             dst=Path(dst)
             if dst.parent==wanted.parent and (dst.name==wanted.name or dst.name.startswith('.'+wanted.name+'.')):
                 hits.append(str(dst))
-                if repeat or len(hits)==1:raise OSError('LAB injected copy failure')
+                if repeat or len(hits)==1:
+                    dst.write_bytes(b'LAB partially copied bytes')
+                    raise OSError('LAB injected copy failure')
             return original(src,dst,*args,**kwargs)
         return patch.object(u.shutil,'copy2',side_effect=fail),hits
 
@@ -97,6 +100,17 @@ class RecoveryTests(unittest.TestCase):
         tx=json.loads((self.pkg/'.ames-update'/'transaction.json').read_text())
         u.recover(self.target,transaction_id=tx['transaction_id'])
         self.assertEqual(self.generation(),before);self.assertEqual(self.data_state(),data)
+    def test_interruption_during_automatic_compensation_keeps_barrier_and_before_generation(self):
+        before=self.generation();fault,hits=self.copy_fault('ames-agent/'+u.FILES[3])
+        def stop(name):
+            record=self.pkg/'.ames-update'/'transaction.json'
+            if name=='after:ames-agent/agent.py' and json.loads(record.read_text())['state']=='COMPENSATING':
+                raise Interrupted('LAB interrupted compensation')
+        with fault,patch.object(u,'_phase',side_effect=stop),self.assertRaises(RuntimeError):u.update(self.target,self.src)
+        self.assertTrue(hits);self.assert_blocked();record=json.loads((self.pkg/'.ames-update'/'transaction.json').read_text())
+        self.newer();data=self.data_state();u.recover(self.target,transaction_id=record['transaction_id'])
+        self.assertEqual(self.generation(),before);self.assertEqual(self.data_state(),data)
+
     def test_interruptions_preserve_journal_and_allow_explicit_recovery_without_old_DB_restore(self):
         saved,before,data=self.saved_and_current()
         for phase in ('prepared','after:ames-agent/agent.py','after:'+u.ROOT_FILES[-1],'verified'):
