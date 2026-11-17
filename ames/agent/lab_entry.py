@@ -67,7 +67,25 @@ def refuse_pending_journal(root):
                 raise LabRefused('UPDATE_PENDING_OR_UNVERIFIED')
 
 
+def pipe_or_terminal(stream):
+    try:
+        mode = os.fstat(stream.fileno()).st_mode
+        return stat.S_ISFIFO(mode) or (stat.S_ISCHR(mode) and stream.isatty())
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+def refusal(code):
+    # A caller may have pre-opened stderr outside LAB. Do not write even a
+    # refusal there; return code 2 is the only safe signal in that case.
+    if pipe_or_terminal(sys.stderr):
+        print('LAB_REFUSED: ' + code, file=sys.stderr)
+    return 2
+
+
 def check_environment():
+    if not all(pipe_or_terminal(stream) for stream in (sys.stdin, sys.stdout, sys.stderr)):
+        raise LabRefused('PIPE_OR_TERMINAL_STDIO_REQUIRED')
     if (sys.implementation.name != 'cpython' or sys.version_info < (3, 11)
             or not sys.flags.isolated or not sys.flags.no_site or not sys.dont_write_bytecode
             or not hasattr(sys, 'addaudithook') or not hasattr(sys, 'audit')):
@@ -302,11 +320,9 @@ def main():
             raise LabRefused('EXPLICIT_LAB_ARGUMENTS_REQUIRED')
         run(Path(args[1]), len(args) == 3)
     except LabRefused as error:
-        print('LAB_REFUSED: ' + str(error), file=sys.stderr)
-        return 2
+        return refusal(str(error))
     except (OSError, ValueError, TypeError, sqlite3.Error, RuntimeError):
-        print('LAB_REFUSED: UNVERIFIED_STATE_PRESERVE_FOR_SUPERVISION', file=sys.stderr)
-        return 2
+        return refusal('UNVERIFIED_STATE_PRESERVE_FOR_SUPERVISION')
     return 0
 
 

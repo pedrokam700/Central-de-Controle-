@@ -217,7 +217,7 @@ sys.addaudithook=lambda hook:None
 sys.argv=['LAB','--lab-root',{str(self.lab)!r},'--initialize-synthetic']
 raise SystemExit(m['main']())
 """
-        result=subprocess.run([sys.executable,'-I','-S','-B','-c',code],capture_output=True,text=True,env=self.lab_env(),timeout=10)
+        result=subprocess.run([sys.executable,'-I','-S','-B','-c',code],capture_output=True,text=True,input='',env=self.lab_env(),timeout=10)
         self.denied(result);self.assertIn('GUARD_NOT_ACTIVE',result.stderr)
         self.assertEqual(list(self.lab.iterdir()),[])
 
@@ -254,7 +254,7 @@ m['main'].__globals__['connect']=failed
 sys.argv=['LAB','--lab-root',{str(self.lab)!r},'--initialize-synthetic']
 raise SystemExit(m['main']())
 """
-        result=subprocess.run([sys.executable,'-I','-S','-B','-c',code],capture_output=True,text=True,env=self.lab_env(),timeout=10)
+        result=subprocess.run([sys.executable,'-I','-S','-B','-c',code],capture_output=True,text=True,input='',env=self.lab_env(),timeout=10)
         self.denied(result);self.assertNotIn('SYNTHETIC_IO_FAILURE_NOT_PUBLIC',result.stderr)
         before={p.name:p.read_bytes() for p in self.lab.iterdir()}
         self.assertIn('session.claim',before);self.assertIn('lab.json',before)
@@ -295,7 +295,7 @@ try:
 finally:con.close()
 print('DENIED')
 """
-        result=subprocess.run([sys.executable,'-I','-S','-B','-c',code],capture_output=True,text=True,env=self.lab_env(),timeout=10)
+        result=subprocess.run([sys.executable,'-I','-S','-B','-c',code],capture_output=True,text=True,input='',env=self.lab_env(),timeout=10)
         self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout.strip(),'DENIED')
 
     def test_28_manifest_boolean_types_are_not_numeric_permission(self):
