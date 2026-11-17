@@ -115,7 +115,11 @@ class LabIsolation(unittest.TestCase):
         for command in ({'command':'sql','sql':'ATTACH DATABASE outside'}, {'command':'exec','code':'pass'},
                         {'command':'recover_jobs'}, {'command':'chrome_start'}, {'command':'network_repair'},
                         {'command':'append_fixture','pcba':'REAL'}, {'command':'status','path':'../outside'}):
-            with self.subTest(command=command):self.denied(self.run_lab([command]))
+            with self.subTest(command=command):
+                self.denied(self.run_lab([command]))
+                # Process has exited; explicit supervised TEST cleanup only.
+                claim=self.lab/'session.claim'
+                if claim.exists():claim.unlink()
         self.assertEqual(json.loads(self.run_lab([{'command':'status'}]).stdout.splitlines()[1])['records'],0)
 
     def test_10_network_all_sockets_and_dns_denied_before_os(self):
@@ -193,8 +197,9 @@ class LabIsolation(unittest.TestCase):
         result=self.run_lab([{'command':'status'}]);self.denied(result)
         # Interrupted session requires supervision; no auto-job recovery or marker deletion.
         self.assertTrue((self.lab/'session.claim').exists())
-        with sqlite3.connect(self.lab/'lab.sqlite3') as con:
-            self.assertEqual(con.execute('SELECT count(*) FROM lab_evidence').fetchone()[0],1)
+        con=sqlite3.connect(self.lab/'lab.sqlite3')
+        try:self.assertEqual(con.execute('SELECT count(*) FROM lab_evidence').fetchone()[0],1)
+        finally:con.close()
         (self.lab/'session.claim').unlink()  # Supervised TEST cleanup after process termination proof.
         self.assertEqual(self.run_lab([{'command':'status'}]).returncode,0)
 
