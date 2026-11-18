@@ -45,3 +45,6 @@
 # P08 synthetic decision/reconciliation proof: no preview.
 [context."work/ames-p08-generation-reconciliation-20261118"]
   ignore = "exit 0"
+
+[context."work/ames-complete-candidate-20261118"]
+  ignore = "exit 0"

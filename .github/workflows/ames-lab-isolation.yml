@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - work/ames-p08-generation-reconciliation-20261118
+      - work/ames-complete-candidate-20261118
 permissions:
   contents: read
 jobs:

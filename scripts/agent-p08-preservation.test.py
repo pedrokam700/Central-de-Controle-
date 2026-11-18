@@ -8,6 +8,7 @@ import subprocess
 import unittest
 ROOT=Path(__file__).resolve().parents[1];BASE='48112ea9e408f5dce7fe85f951616b06ed4020e0';BRANCH='work/ames-p08-generation-reconciliation-20261118'
 ALLOWED={
+ 'scripts/build-integrated-candidate.py','scripts/verify-complete-candidate.py','scripts/candidate97-source.test.py','scripts/candidate97-artifact.test.py','scripts/candidate97-ci-gate.py','scripts/audit/package-source-inventory.py','scripts/ames-candidate-legacy-port-guard.test.mjs','.github/workflows/ames-complete-candidate.yml','docs/ames/packaging/CANDIDATA_INSTALACAO_FUTURA_20261118.md','docs/ames/audits/PR97_PACOTE_COMPLETO_20261118.md','docs/ames/handoffs/PR97_CANDIDATA_COMPLETA_20261118.md',
  'scripts/audit/package-source-inventory.py',
  'docs/ames/audits/CONSOLIDACAO_EEDACC65_PR96_20261118.md','tools/ames-lab/generation_reconcile.py','tools/ames-lab/p08_profile.json','scripts/fixtures/p08_generations.py',
  'scripts/agent-p08-generation.test.py','scripts/agent-p08-native-readers.test.py','scripts/agent-p08-preservation.test.py',
@@ -50,7 +51,8 @@ class Preservation(unittest.TestCase):
         self.assertTrue(all(x['status']=='PENDING' for x in data['gates']))
     def test_preview_only_own_branch_disabled(self):
         before=json.loads(git('show',BASE+':vercel.json'));after=json.loads((ROOT/'vercel.json').read_text())
-        self.assertIs(after['git']['deploymentEnabled'].pop(BRANCH),False);self.assertEqual(before,after)
+        self.assertIs(after['git']['deploymentEnabled'].pop(BRANCH),False)
+        self.assertIs(after['git']['deploymentEnabled'].pop('work/ames-complete-candidate-20261118'),False);self.assertEqual(before,after)
 
 
 if __name__=='__main__':unittest.main()
