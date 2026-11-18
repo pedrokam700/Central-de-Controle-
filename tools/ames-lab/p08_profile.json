@@ -1,0 +1,21 @@
+{
+  "schema": "ames-p08-reviewed-synthetic-profile-v1",
+  "base_sha": "48112ea9e408f5dce7fe85f951616b06ed4020e0",
+  "a_reference_sha": "5856eb3f0cc1dd391cf93217fd068f0a044f8ab2",
+  "p02_helper_sha256": "f1d307111257107aa9a633086b7bba651695599cbf9ad7e9506adc3d0c2a79c5",
+  "canonical_reader_sha256": "9d8c7e269806c696c2d8e84701e38f5179e5876c86b487ad2958bfa4c3edf518",
+  "technical_step": "INDEX_AUDIT_V1",
+  "index_name": "p08_synthetic_lookup_idx",
+  "index_sql": "CREATE INDEX p08_synthetic_lookup_idx ON pcba_history(pcba_sn)",
+  "audit_row": [
+    2,
+    "2026-11-18T00:00:00Z",
+    "SYNTHETIC-P08",
+    "P08_SYNTHETIC_BOOT_TECHNICAL",
+    null,
+    null,
+    "{\"scope\":\"SYNTHETIC_ONLY\",\"step\":\"INDEX_AUDIT_V1\"}"
+  ],
+  "compatibility_scope": "FROZEN_READ_REVISION_AND_EXACT_TECHNICAL_REPLAY_ONLY",
+  "physical": "PENDING"
+}

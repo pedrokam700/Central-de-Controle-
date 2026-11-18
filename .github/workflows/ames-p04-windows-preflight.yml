@@ -2,7 +2,7 @@ name: A-MES P04 Windows compatibility proof (synthetic only)
 on:
   push:
     branches:
-      - work/ames-p04-windows-preflight-20261118
+      - work/ames-p08-generation-reconciliation-20261118
 permissions:
   contents: read
 jobs:
@@ -51,5 +51,11 @@ jobs:
           python -B scripts/agent-p04-preservation.test.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -B scripts/agent-p04-ci.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: P08 native readers on verified disposable Windows dependencies
+        shell: pwsh
+        run: |
+          $p08Python = Join-Path $env:RUNNER_TEMP "P04-SYNTHETIC-$($env:GITHUB_RUN_ID)/venv/Scripts/python.exe"
+          & $p08Python -B scripts/agent-p08-native-readers.test.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 # No builder, operational entrypoint, software installer, archive or artifact upload.
