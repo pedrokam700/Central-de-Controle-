@@ -2,7 +2,7 @@ name: A-MES integrated regressions with verified CI-only Python wheels
 on:
   push:
     branches:
-      - work/ames-lab-entry-p01-p03-p06-20261117
+      - work/ames-p02-synthetic-deidentification-20261117
 permissions:
   contents: read
 jobs:
@@ -189,5 +189,7 @@ jobs:
           python3 -B scripts/agent-trace-target.test.py || result=1
           python3 -B scripts/agent-trace-auto-resume.test.py || result=1
           exit "$result"
+      - name: P02 native 3074 3022 operator projection and LAB sync-domain proof
+        run: python3 -B scripts/agent-p02-projection.test.py -v
 # Test-only wheels are installed ONLY in disposable GitHub Actions venvs.
 # No business-test edits/exclusions, distribution builders, archives or artifact upload.

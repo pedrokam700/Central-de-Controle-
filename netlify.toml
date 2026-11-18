@@ -33,3 +33,7 @@
 # Synthetic LAB proof only: no preview distribution.
 [context."work/ames-lab-entry-p01-p03-p06-20261117"]
   ignore = "exit 0"
+
+# P02 synthetic proof: no distribution/preview.
+[context."work/ames-p02-synthetic-deidentification-20261117"]
+  ignore = "exit 0"

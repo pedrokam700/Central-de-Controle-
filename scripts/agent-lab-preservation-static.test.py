@@ -9,6 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = 'db3cb5b58c99bcf86c44b671280cb42f7dd31d4c'
 BRANCH = 'work/ames-lab-entry-p01-p03-p06-20261117'
 ALLOWED = {
+    'tools/ames-lab/synthetic_deidentify.py', 'tools/ames-lab/p02_profile.json',
+    'scripts/fixtures/p02_state.json', 'scripts/fixtures/p02_installation.py',
+    'scripts/agent-p02-deidentification.test.py', 'scripts/agent-p02-projection.test.py',
+    'docs/ames/audits/PR94_P02_AUDITORIA_20261117.md',
+    'docs/ames/handoffs/PR94_P02_SINTETICO_20261117.md',
     'docs/ames/audits/PR93_LAB_VALIDATION_20261117.json',
     'ames/agent/lab_entry.py', 'scripts/agent-lab-isolation.test.py',
     'scripts/agent-lab-preservation-static.test.py',

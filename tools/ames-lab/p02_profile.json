@@ -1,0 +1,1335 @@
+{
+  "schema": "ames-p02-reviewed-synthetic-profile-v1",
+  "source_base_sha": "5e00c857f17e932d288b09104e54b0e05b771557",
+  "ddl_sha256": "bb828b733782ab10a6b8e899a3219f9b9ceffedde9acd3a5dc7b9ea856933b81",
+  "columns": {
+    "analysis_windows": [
+      "id",
+      "window_key",
+      "mode",
+      "start_at",
+      "end_at",
+      "shift",
+      "requested_lines_json",
+      "created_at",
+      "updated_at"
+    ],
+    "artifacts": [
+      "id",
+      "snapshot_id",
+      "artifact_type",
+      "path",
+      "created_at",
+      "metadata_json"
+    ],
+    "audit_events": [
+      "id",
+      "created_at",
+      "workstation",
+      "event_type",
+      "snapshot_id",
+      "line",
+      "details_json"
+    ],
+    "cora_documents": [
+      "doc_id",
+      "snapshot_id",
+      "line",
+      "pcba_sn",
+      "kind",
+      "title",
+      "body",
+      "metadata_json",
+      "updated_at"
+    ],
+    "defect_entities": [
+      "defect_key",
+      "first_seen_snapshot_id",
+      "last_seen_snapshot_id",
+      "first_seen_at",
+      "last_seen_at",
+      "last_presence",
+      "removed_from_latest",
+      "line",
+      "pcba_sn",
+      "defect_code",
+      "defect_desc",
+      "defect_time",
+      "product_model"
+    ],
+    "defect_observations": [
+      "id",
+      "snapshot_id",
+      "defect_key",
+      "line",
+      "pcba_sn",
+      "imei",
+      "defect_code",
+      "defect_desc",
+      "defect_oper",
+      "defect_oper_desc",
+      "defect_time",
+      "repair_user",
+      "repair_comment",
+      "defect_reason_type",
+      "defect_reason_desc",
+      "repair_code",
+      "repair_desc",
+      "product_model",
+      "work_shift",
+      "manual_or_auto",
+      "repair_status_current",
+      "defect_type_current",
+      "repair_state_current",
+      "present_in_3028",
+      "raw_json"
+    ],
+    "history_contexts": [
+      "id",
+      "snapshot_id",
+      "context_key",
+      "context_kind",
+      "historical_pcba",
+      "current_pcba",
+      "line",
+      "material_sn",
+      "material_type",
+      "defect_time",
+      "defect_code",
+      "defect_desc",
+      "raw_json"
+    ],
+    "jobs": [
+      "id",
+      "kind",
+      "mode",
+      "status",
+      "created_at",
+      "started_at",
+      "finished_at",
+      "progress",
+      "stage",
+      "message",
+      "config_json",
+      "result_json",
+      "error"
+    ],
+    "line_metrics": [
+      "snapshot_id",
+      "line",
+      "product_model",
+      "quantity",
+      "function_defect_qty",
+      "appearance_defect_qty",
+      "process_defect_qty",
+      "total_defect_qty",
+      "auto_input_defect_qty",
+      "function_fpy",
+      "appearance_fpy",
+      "process_fpy",
+      "fpy",
+      "check_fpy",
+      "raw_json"
+    ],
+    "material_reuse": [
+      "id",
+      "snapshot_id",
+      "current_pcba_sn",
+      "current_defect_key",
+      "item_sn",
+      "item_type",
+      "usage_status",
+      "previous_pcba_count",
+      "total_pcba_count_known_now",
+      "previous_pcbas_json",
+      "active_now_pcbas_json",
+      "inactive_now_pcbas_json",
+      "bind_time_utc",
+      "unbind_time_utc",
+      "raw_json"
+    ],
+    "mes_process_timeline": [
+      "event_id",
+      "snapshot_id",
+      "line_id",
+      "product",
+      "pcba_sn",
+      "process",
+      "station",
+      "event_time",
+      "source_view",
+      "provenance_json",
+      "raw_ref",
+      "valid"
+    ],
+    "mes_requests": [
+      "request_id",
+      "kind",
+      "config_hash",
+      "job_id"
+    ],
+    "mes_revisions": [
+      "snapshot_id",
+      "line",
+      "revision",
+      "epoch",
+      "content_hash",
+      "payload"
+    ],
+    "mes_source_clock": [
+      "snapshot_id",
+      "epoch"
+    ],
+    "monitor_profiles": [
+      "id",
+      "enabled",
+      "interval_minutes",
+      "mode",
+      "config_json",
+      "next_run_at",
+      "updated_at"
+    ],
+    "pcba_history": [
+      "id",
+      "snapshot_id",
+      "pcba_sn",
+      "hist_seq",
+      "defect_code",
+      "defect_desc",
+      "defect_oper",
+      "defect_location",
+      "defect_material_id",
+      "repair_status",
+      "manual_or_auto",
+      "defect_type",
+      "defect_type_class",
+      "raw_json"
+    ],
+    "process_defect_contexts": [
+      "snapshot_id",
+      "line",
+      "product_model",
+      "pcba_sn",
+      "defect_key",
+      "defect_code",
+      "defect_desc",
+      "defect_time",
+      "defect_time_utc",
+      "manual_or_auto_3028",
+      "manual_or_auto_2114",
+      "registration_mode",
+      "registration_mode_source",
+      "registration_mode_conflict",
+      "failure_family",
+      "analysis_kind",
+      "reference_rule_id",
+      "reference_confidence",
+      "reference_station_code",
+      "reference_reason",
+      "reference_status",
+      "reference_event_time",
+      "reference_hist_seq",
+      "reference_pass_count_before_defect",
+      "previous_operation_code",
+      "previous_operation_name",
+      "previous_station",
+      "previous_event_time",
+      "previous_hist_seq",
+      "previous_event_group",
+      "repair_action",
+      "repair_class",
+      "repair_event_time",
+      "return_a5201_event_time",
+      "next_reference_event_time",
+      "status",
+      "source",
+      "details_json",
+      "production_shift",
+      "production_operational_date",
+      "production_event_time",
+      "production_shift_source",
+      "production_shift_basis",
+      "return_station_code",
+      "return_operation_name",
+      "return_event_time"
+    ],
+    "process_events": [
+      "id",
+      "snapshot_id",
+      "pcba_sn",
+      "station",
+      "operation_code",
+      "operation_name",
+      "event_time",
+      "event_group",
+      "source",
+      "raw_json"
+    ],
+    "process_raw_events": [
+      "snapshot_id",
+      "pcba_sn",
+      "row_index",
+      "raw_json",
+      "source"
+    ],
+    "repair_coverage_3012": [
+      "sn",
+      "start_at",
+      "end_at",
+      "source",
+      "completed_at"
+    ],
+    "repair_history_3012": [
+      "row_key",
+      "product_id",
+      "pcba_sn",
+      "imei",
+      "department",
+      "line",
+      "product_model",
+      "order_id",
+      "sample_batch_id",
+      "material_id",
+      "material_desc",
+      "defect_user",
+      "defect_time",
+      "defect_oper",
+      "defect_code",
+      "defect_desc",
+      "defect_category",
+      "defect_return_category",
+      "defect_material_id",
+      "defect_material_desc",
+      "defect_reason_type",
+      "defect_reason_desc",
+      "reason_desc",
+      "defect_location",
+      "repaired_location",
+      "repaired_count",
+      "repair_code",
+      "repair_desc",
+      "repair_comment",
+      "repair_user",
+      "repair_time",
+      "defect_source",
+      "query_meta_json",
+      "raw_json",
+      "first_seen_at",
+      "last_seen_at"
+    ],
+    "repair_query_rows_3012": [
+      "job_id",
+      "row_key",
+      "revision"
+    ],
+    "repair_query_runs_3012": [
+      "job_id",
+      "source_id",
+      "origin",
+      "requested_json",
+      "scope_json",
+      "scope_hash",
+      "started_at",
+      "finished_at",
+      "status",
+      "source",
+      "coverage_json",
+      "row_count",
+      "source_complete",
+      "population_complete"
+    ],
+    "repair_refreshes": [
+      "id",
+      "snapshot_id",
+      "refreshed_at",
+      "pcba_sn",
+      "status",
+      "payload_json",
+      "error"
+    ],
+    "repair_row_versions_3012": [
+      "row_key",
+      "revision",
+      "content_hash",
+      "row_json",
+      "captured_at"
+    ],
+    "schema_meta": [
+      "key",
+      "value"
+    ],
+    "snapshot_payload_revisions": [
+      "snapshot_id",
+      "kind",
+      "revision",
+      "payload_json",
+      "created_at"
+    ],
+    "snapshot_payloads": [
+      "snapshot_id",
+      "kind",
+      "payload_json",
+      "created_at"
+    ],
+    "snapshots": [
+      "id",
+      "window_id",
+      "collected_at",
+      "source_kind",
+      "source_name",
+      "source_sha256",
+      "status",
+      "notes"
+    ]
+  },
+  "json_columns": [
+    [
+      "audit_events",
+      "details_json"
+    ],
+    [
+      "cora_documents",
+      "metadata_json"
+    ],
+    [
+      "defect_observations",
+      "raw_json"
+    ],
+    [
+      "history_contexts",
+      "raw_json"
+    ],
+    [
+      "material_reuse",
+      "active_now_pcbas_json"
+    ],
+    [
+      "material_reuse",
+      "inactive_now_pcbas_json"
+    ],
+    [
+      "material_reuse",
+      "previous_pcbas_json"
+    ],
+    [
+      "material_reuse",
+      "raw_json"
+    ],
+    [
+      "mes_process_timeline",
+      "provenance_json"
+    ],
+    [
+      "monitor_profiles",
+      "config_json"
+    ],
+    [
+      "pcba_history",
+      "raw_json"
+    ],
+    [
+      "process_defect_contexts",
+      "details_json"
+    ],
+    [
+      "process_events",
+      "raw_json"
+    ],
+    [
+      "process_raw_events",
+      "raw_json"
+    ],
+    [
+      "repair_history_3012",
+      "query_meta_json"
+    ],
+    [
+      "repair_history_3012",
+      "raw_json"
+    ],
+    [
+      "repair_row_versions_3012",
+      "row_json"
+    ],
+    [
+      "snapshot_payload_revisions",
+      "payload_json"
+    ],
+    [
+      "snapshot_payloads",
+      "payload_json"
+    ]
+  ],
+  "json_keys": [
+    "% reuso",
+    "2114",
+    "2º uso",
+    "3012",
+    "3022",
+    "3028",
+    "3074",
+    "3º+ uso",
+    "Aut Cmf1",
+    "Aut Cmf7",
+    "Barcode",
+    "Bind Time",
+    "Ciclos de uso PCBA 3074",
+    "Classificação desta PCBA",
+    "Com falha nas PCBAs desvinculadas",
+    "Com mesma falha",
+    "Com mesma família",
+    "Current Oper Code",
+    "Defect Code",
+    "Defect Code 2114",
+    "Defect Code antigo",
+    "Defect Code atual",
+    "Defect Desc",
+    "Defect Desc atual",
+    "Defect Description 2114",
+    "Defect Description antigo",
+    "Defect Hist Seq",
+    "Defect Oper 2114",
+    "Defect Oper antigo",
+    "Defect Time",
+    "Defect Time atual",
+    "Defect Type",
+    "Defect Type 2114",
+    "Defect Type antigo",
+    "Defect Type atual",
+    "Defect User Name",
+    "Estado vínculo atual",
+    "Evidência histórica",
+    "Falhas 2114 desta PCBA",
+    "Falhas 2114 nas desvinculadas",
+    "Falhas anteriores 2114",
+    "Falhas diferentes anteriores",
+    "Falhas registradas 2114",
+    "Família 2114",
+    "Família falha antiga",
+    "Hist Seq",
+    "Hist Seq atual",
+    "Iss Status",
+    "Line Code",
+    "Linha",
+    "Materiais 2º+ uso",
+    "Materiais na falha",
+    "Materiais únicos no lote",
+    "Material SN",
+    "Mesma falha anterior",
+    "Mesma família anterior",
+    "Modelo",
+    "Motivo da relação",
+    "Ocorrência atual?",
+    "Ordem de uso anterior",
+    "PCBA",
+    "PCBA atual",
+    "PCBA desvinculada",
+    "PCBAs com falha diferente",
+    "PCBAs com mesma falha",
+    "PCBAs com mesma família",
+    "PCBAs desvinculadas",
+    "PCBAs desvinculadas com mesma falha",
+    "PCBAs desvinculadas com mesma família",
+    "PCBAs desvinculadas únicas",
+    "PCBAs sem histórico de falha",
+    "Posição no histórico",
+    "Registro falha 2114",
+    "Relação com falha atual",
+    "Relação desta ocorrência",
+    "Repair Comment atual",
+    "Repair Status 2114",
+    "Repair Status antigo",
+    "Repair Status atual",
+    "Reusos anteriores PCBA",
+    "Reusos anteriores da PCBA",
+    "Reusos anteriores material",
+    "Reusos conhecidos material",
+    "Reutilizados únicos",
+    "Sem falha nas PCBAs desvinculadas",
+    "Situação da PCBA",
+    "Situação reparo",
+    "Situação reparo antiga",
+    "Situação reparo atual",
+    "Sn Type",
+    "Tipo material",
+    "Tran Desc",
+    "Tran Time",
+    "Tran User ID",
+    "Tran User Id",
+    "Tran User Name",
+    "Transaction Desc",
+    "Unbind Time",
+    "Uso PCBA na falha",
+    "Uso da PCBA na falha",
+    "Uso material na falha",
+    "Usos conhecidos PCBA",
+    "Usos conhecidos da PCBA",
+    "Usos conhecidos material",
+    "Working Oper",
+    "Working Oper Code",
+    "_analysis_row",
+    "_failure_key",
+    "_pcba_use_index",
+    "active",
+    "active_at_defect",
+    "active_now_pcbas",
+    "active_now_pcbas_json",
+    "adapter",
+    "all_pcba_history",
+    "ambiguous_context_rows",
+    "analysis_kind",
+    "assembly_scope",
+    "association",
+    "base_coverage",
+    "base_query",
+    "basis",
+    "bind_id",
+    "bind_time_utc",
+    "binding_line",
+    "binding_operation",
+    "binding_product",
+    "bound_after_defect",
+    "boundary_ambiguous",
+    "candidate_for_occurrence",
+    "candidate_material_history",
+    "capabilities",
+    "check_fpy",
+    "classifier_version",
+    "code",
+    "collected_at",
+    "component_type_items",
+    "component_types",
+    "componentes_com_reuso_anterior",
+    "components_error",
+    "components_ok",
+    "components_scanned_total",
+    "content_hash",
+    "contexts",
+    "contract",
+    "correlation_kpis",
+    "correlation_reason",
+    "correlation_same_failure",
+    "correlation_same_family",
+    "coverage",
+    "current_defect_key",
+    "current_defects",
+    "current_operation_code",
+    "current_pcba",
+    "current_pcba_confirmed",
+    "current_pcba_sn",
+    "current_repair_states",
+    "dataset_rows",
+    "datasets",
+    "defect",
+    "defect_category",
+    "defect_code",
+    "defect_contexts",
+    "defect_desc",
+    "defect_key",
+    "defect_location",
+    "defect_material_desc",
+    "defect_material_id",
+    "defect_oper",
+    "defect_reason_desc",
+    "defect_reason_type",
+    "defect_return_category",
+    "defect_rows",
+    "defect_source",
+    "defect_time",
+    "defect_time_local",
+    "defect_time_utc",
+    "defect_traces",
+    "defect_type",
+    "defect_types",
+    "defect_user",
+    "defect_user_name",
+    "defects",
+    "department",
+    "drilldowns",
+    "ended_before_defect",
+    "error",
+    "event_count",
+    "event_group",
+    "event_id",
+    "event_time",
+    "failure_family",
+    "families",
+    "fields",
+    "fpy",
+    "future_association_count_ignored",
+    "future_links_excluded",
+    "hist_seq",
+    "historical_pcba",
+    "history_contexts",
+    "identical_duplicates",
+    "identity_basis",
+    "identity_scope",
+    "imei",
+    "inactive_now_pcbas",
+    "inactive_now_pcbas_json",
+    "inserted",
+    "insights",
+    "iss_status",
+    "iss_status_n_now_among_active_then",
+    "iss_status_now",
+    "iss_status_other_now_among_active_then",
+    "iss_status_y_now_among_active_then",
+    "item_sn",
+    "item_type",
+    "items",
+    "kind",
+    "line",
+    "line_ambiguous",
+    "line_candidates",
+    "line_id",
+    "manual_or_auto_2114",
+    "manual_or_auto_3028",
+    "matched_contexts",
+    "material_3plus_use",
+    "material_analysis",
+    "material_candidates",
+    "material_desc",
+    "material_history",
+    "material_id",
+    "material_kpis",
+    "material_reuse",
+    "material_same_failure",
+    "material_same_family",
+    "material_second_use",
+    "material_sn",
+    "material_use_index",
+    "material_with_old_failure",
+    "model",
+    "next_reference_event_time",
+    "occurrence_id",
+    "occurrence_match",
+    "operation_name",
+    "operator_events",
+    "operator_evidence",
+    "operator_fields",
+    "operator_id",
+    "operator_name",
+    "order_id",
+    "overview_kpis",
+    "parent_hash",
+    "part_number",
+    "past_links_excluded",
+    "pcba_3plus_use",
+    "pcba_analysis",
+    "pcba_history",
+    "pcba_kpis",
+    "pcba_occurrences_analysed",
+    "pcba_occurrences_classified",
+    "pcba_occurrences_without_temporal_use_proof",
+    "pcba_query",
+    "pcba_reused_with_prior_failure",
+    "pcba_same_failure",
+    "pcba_same_family",
+    "pcba_second_use",
+    "pcba_second_use_same_failure",
+    "pcba_second_use_same_family",
+    "pcba_sn",
+    "pcbas",
+    "pcbas_until_defect",
+    "period",
+    "physical_absence_proven",
+    "population_complete",
+    "previous_event_group",
+    "previous_event_time",
+    "previous_hist_seq",
+    "previous_operation_code",
+    "previous_operation_name",
+    "previous_pcba_count",
+    "previous_pcbas",
+    "previous_pcbas_json",
+    "previous_station",
+    "process",
+    "process_contexts",
+    "process_timeline",
+    "product",
+    "product_candidates",
+    "product_id",
+    "product_model",
+    "production_diagnostics",
+    "production_event_time",
+    "production_operational_date",
+    "production_shift",
+    "production_shift_basis",
+    "production_shift_source",
+    "projection_version",
+    "proof",
+    "proof_diagnostics",
+    "provenance",
+    "quantity",
+    "query",
+    "query_confirmation",
+    "query_sn",
+    "query_state",
+    "rate_kpis",
+    "raw",
+    "raw_pcbas_missing_self_rows",
+    "raw_pcbas_observed",
+    "raw_pcbas_with_self_rows",
+    "raw_ref",
+    "ready",
+    "reason",
+    "reason_desc",
+    "record_id",
+    "records",
+    "reference_confidence",
+    "reference_event_time",
+    "reference_hist_seq",
+    "reference_pass_count_before_defect",
+    "reference_reason",
+    "reference_rule_id",
+    "reference_station_code",
+    "reference_status",
+    "registration_mode",
+    "registration_mode_conflict",
+    "registration_mode_source",
+    "repair_action",
+    "repair_candidates",
+    "repair_class",
+    "repair_code",
+    "repair_comment",
+    "repair_confirmed",
+    "repair_desc",
+    "repair_event_time",
+    "repair_evidence_3012",
+    "repair_time",
+    "repair_user",
+    "repaired_count",
+    "repaired_location",
+    "reported_total",
+    "results",
+    "return_a5201_event_time",
+    "return_event_time",
+    "return_operation_name",
+    "return_station_code",
+    "returned",
+    "reuse_count_known_now",
+    "reuso_multiplo_anterior",
+    "revision",
+    "root_cause",
+    "row",
+    "row_key",
+    "rows",
+    "sample_batch_id",
+    "scanned_at",
+    "schema",
+    "schema_version",
+    "scope",
+    "segundo_uso_no_momento_da_falha",
+    "selected_items",
+    "selection_reason",
+    "sem_reuso_anterior",
+    "sn",
+    "snapshot_id",
+    "snapshot_revision",
+    "source",
+    "source_complete",
+    "source_coverage",
+    "source_id",
+    "source_timestamp",
+    "source_view",
+    "station",
+    "status",
+    "stored_rows",
+    "stored_total",
+    "summary",
+    "temporal_active_at_defect",
+    "temporal_bound_after_defect",
+    "temporal_boundary_ambiguous",
+    "temporal_ended_before_defect",
+    "temporal_filter",
+    "temporal_iss_status_n_now_among_active_then",
+    "temporal_iss_status_other_now_among_active_then",
+    "temporal_iss_status_y_now_among_active_then",
+    "temporal_only",
+    "temporal_reason",
+    "temporal_relation",
+    "temporal_time_unknown",
+    "time_unknown",
+    "total_pcba_count_known_now",
+    "trace_2114",
+    "trace_3074",
+    "transport_complete",
+    "unassigned_rows",
+    "unbind_id",
+    "unbind_time_utc",
+    "uncertain_items",
+    "unverified_previous_pcbas",
+    "updated",
+    "usage_status",
+    "valid"
+  ],
+  "enums": {
+    "event_type": [
+      "INGEST_3012"
+    ],
+    "source": [
+      "",
+      "2114",
+      "3022",
+      "3028",
+      "3074",
+      "LIVE"
+    ],
+    "kind": [
+      "current_observation",
+      "failure",
+      "integrated_v016",
+      "material_reuse",
+      "pcba_history",
+      "process_event",
+      "sn_lookup",
+      "source_row"
+    ],
+    "defect_code": [
+      "D",
+      "HIST",
+      "UNDATED"
+    ],
+    "defect_desc": [
+      "Camera impurity"
+    ],
+    "context_kind": [
+      "historical_pcba"
+    ],
+    "material_type": [
+      "Camera"
+    ],
+    "iss_status": [
+      "N"
+    ],
+    "item_type": [
+      "Camera"
+    ],
+    "usage_status": [
+      "REUSO_MULTIPLO_ANTERIOR",
+      "SEGUNDO_USO_NO_MOMENTO_DA_FALHA",
+      "SEM_REUSO_ANTERIOR"
+    ],
+    "iss_status_now": [
+      "N",
+      "Y"
+    ],
+    "binding_line": [
+      ""
+    ],
+    "binding_operation": [
+      ""
+    ],
+    "status": [
+      "COMPLETE",
+      "COMPLETE_ASSEMBLY_FALLBACK",
+      "COMPONENTES_DO_MOMENTO_DA_FALHA_PROCESSADOS",
+      "REUSO_MULTIPLO_ANTERIOR",
+      "SEGUNDO_USO_NO_MOMENTO_DA_FALHA",
+      "SEM_REUSO_ANTERIOR",
+      "VINCULO_PCBA_ITEM_NAO_CONFIRMADO",
+      "bounded",
+      "candidate_partial",
+      "complete",
+      "done",
+      "incomplete",
+      "not_collected",
+      "observed_partial",
+      "partial",
+      "returned",
+      "unknown"
+    ],
+    "selection_reason": [
+      "bind_interval_contains_defect"
+    ],
+    "source_view": [
+      "2114",
+      "3012",
+      "3022",
+      "3028",
+      "3074"
+    ],
+    "process": [
+      "Camera assembly",
+      "Repair station"
+    ],
+    "station": [
+      "",
+      "A5162",
+      "A6900"
+    ],
+    "contract": [
+      "R11_DERIVED_REQUIRES_R12_FACTORY_GATE"
+    ],
+    "production_shift": [
+      "1st Shift"
+    ],
+    "production_shift_source": [
+      "3022",
+      "not_production_passage"
+    ],
+    "production_shift_basis": [
+      "process_passage",
+      "reference_process"
+    ],
+    "current_operation_code": [
+      "A6900",
+      "A7600"
+    ],
+    "event_group": [
+      "FOCO_MONTAGEM_TESTE"
+    ],
+    "registration_mode": [
+      "UNKNOWN"
+    ],
+    "registration_mode_source": [
+      "3028"
+    ],
+    "failure_family": [
+      "UNKNOWN"
+    ],
+    "analysis_kind": [
+      "FALLBACK_LAST_COMPLETED_ASSEMBLY"
+    ],
+    "reference_rule_id": [
+      "LAST_COMPLETED_ASSEMBLY_BEFORE_DEFECT"
+    ],
+    "reference_confidence": [
+      "OBSERVED_ASSEMBLY_PASSAGE_NOT_CAUSE"
+    ],
+    "reference_station_code": [
+      "A5162"
+    ],
+    "reference_reason": [
+      "Posto previsto (não mapeado) não possui passagem concluída anterior à falha. Usada última passagem END LOT comprovada na montagem A5162, antes do Defect Time e fora de REPAIR/AT. Horário de referência operacional, não causa nem posto exato da origem da falha."
+    ],
+    "reference_status": [
+      "FALLBACK_COMPLETED_ASSEMBLY"
+    ],
+    "previous_operation_code": [
+      "A6900"
+    ],
+    "previous_operation_name": [
+      "Repair station"
+    ],
+    "previous_station": [
+      ""
+    ],
+    "previous_event_group": [
+      "FOCO_MONTAGEM_TESTE"
+    ],
+    "repair_action": [
+      ""
+    ],
+    "repair_class": [
+      ""
+    ],
+    "operation_name": [
+      "Camera assembly",
+      "Repair station"
+    ],
+    "reason": [
+      "Legacy source has no durable MES ID or completeness proof"
+    ],
+    "scope": [
+      "snapshot_line_context",
+      "stored_snapshot_line_context",
+      "workstation_history_candidate_for_snapshot_line"
+    ],
+    "identity_scope": [
+      "agent_snapshot_observation"
+    ],
+    "code": [
+      "PCBA_NOT_QUERIED",
+      "PROVEN"
+    ],
+    "query_state": [
+      "RAW_OBSERVED",
+      "UNKNOWN"
+    ],
+    "schema": [
+      "ames-insights-v1",
+      "central-ames-v2"
+    ],
+    "proof": [
+      "no_line_specific_repair_proof",
+      "no_source_execution_evidence",
+      "same_pcba_repair_rows",
+      "stored_snapshot_line_rows"
+    ],
+    "association": [
+      "candidate_only_never_proven",
+      "distinct_occurrence_candidate",
+      "exact_identity_candidate",
+      "unrelated"
+    ],
+    "correlation_reason": [
+      "conflicting_defect_identity_or_prior_repair",
+      "pcba_mismatch",
+      "same_pcba_code_defect_instant_not_repair_proof"
+    ],
+    "identity_basis": [
+      "defect_code",
+      "defect_instant",
+      "pcba_sn"
+    ],
+    "occurrence_match": [
+      "candidate",
+      "contradicted"
+    ],
+    "temporal_relation": [
+      "after_occurrence",
+      "prior_to_occurrence",
+      "unknown"
+    ],
+    "defect_type": [
+      "MainBoard",
+      "Phone Disassembly"
+    ],
+    "classifier_version": [
+      "2026-10-21.1"
+    ],
+    "Tipo material": [
+      "Camera"
+    ],
+    "correlation_kpis": [
+      "Vínculos material↔PCBA com mesma falha",
+      "Vínculos material↔PCBA com mesma família"
+    ],
+    "current_repair_states": [
+      "SEM HISTÓRICO 2114"
+    ],
+    "defect_types": [
+      "(vazio)"
+    ],
+    "Defect Code atual": [
+      "D"
+    ],
+    "Defect Desc atual": [
+      ""
+    ],
+    "Evidência histórica": [
+      "REUSO SEM FALHA ANTERIOR REGISTRADA"
+    ],
+    "Uso material na falha": [
+      "2º uso",
+      "3º uso",
+      "NÃO DETERMINADO"
+    ],
+    "Classificação desta PCBA": [
+      "SEM HISTÓRICO 2114"
+    ],
+    "Defect Code antigo": [
+      ""
+    ],
+    "Defect Description antigo": [
+      "SEM HISTÓRICO 2114"
+    ],
+    "Defect Oper antigo": [
+      ""
+    ],
+    "Defect Type antigo": [
+      ""
+    ],
+    "Estado vínculo atual": [
+      "DESVINCULADA"
+    ],
+    "Família falha antiga": [
+      ""
+    ],
+    "Motivo da relação": [
+      "PCBA sem histórico retornado na 2114"
+    ],
+    "Relação desta ocorrência": [
+      "SEM HISTÓRICO 2114"
+    ],
+    "Repair Status antigo": [
+      ""
+    ],
+    "Situação reparo antiga": [
+      "STATUS NÃO CLASSIFICADO"
+    ],
+    "Defect Code": [
+      "D",
+      "HIST",
+      "UNDATED"
+    ],
+    "Defect Desc": [
+      ""
+    ],
+    "Defect Type atual": [
+      ""
+    ],
+    "Repair Status atual": [
+      ""
+    ],
+    "Situação da PCBA": [
+      "SEM HISTÓRICO 2114"
+    ],
+    "Situação reparo atual": [
+      "SEM HISTÓRICO 2114"
+    ],
+    "Uso da PCBA na falha": [
+      "1º uso",
+      "2º uso",
+      "3º uso"
+    ],
+    "Defect Code 2114": [
+      ""
+    ],
+    "Defect Description 2114": [
+      "SEM HISTÓRICO 2114"
+    ],
+    "Defect Oper 2114": [
+      ""
+    ],
+    "Defect Type 2114": [
+      ""
+    ],
+    "Família 2114": [
+      ""
+    ],
+    "Ocorrência atual?": [
+      ""
+    ],
+    "Posição no histórico": [
+      ""
+    ],
+    "Registro falha 2114": [
+      ""
+    ],
+    "Relação com falha atual": [
+      "SEM HISTÓRICO 2114"
+    ],
+    "Repair Status 2114": [
+      ""
+    ],
+    "Situação reparo": [
+      "SEM HISTÓRICO 2114"
+    ],
+    "Uso PCBA na falha": [
+      "1º uso",
+      "2º uso",
+      "3º uso"
+    ],
+    "material_kpis": [
+      "Câmeras reutilizadas",
+      "Materiais em 2º uso",
+      "Materiais em 3º+ uso",
+      "Materiais únicos 2º+ uso",
+      "Reuso COM falha em PCBA desvinculada",
+      "Reuso SEM falha em PCBA desvinculada",
+      "Reuso com a MESMA falha",
+      "Reuso com falha da MESMA família",
+      "Reuso com somente outras falhas",
+      "Screens/LCDs reutilizados",
+      "Tipos de componente com reuso"
+    ],
+    "overview_kpis": [
+      "Falhas atuais 3028",
+      "Linhas no lote",
+      "Materiais únicos presentes",
+      "PCBAs únicas com falha"
+    ],
+    "pcba_kpis": [
+      "PCBA em 1º uso",
+      "PCBA em 2º uso",
+      "PCBA em 3º+ uso",
+      "PCBA uso não determinado",
+      "PCBAs 2º+ uso com falha anterior",
+      "PCBAs 2º+ uso com só 1 falha 2114",
+      "PCBAs com 2+ falhas 2114",
+      "PCBAs com 3+ falhas 2114",
+      "PCBAs com recorrência da mesma família",
+      "PCBAs em 2º uso com mesma falha anterior",
+      "PCBAs em 2º uso com mesma família anterior",
+      "PCBAs que repetiram a mesma falha",
+      "Recorrência após MainBoard + Y"
+    ],
+    "rate_kpis": [
+      "% PCBAs atuais em 2º+ uso",
+      "% PCBAs em 2º uso que repetiram mesma falha",
+      "% PCBAs reutilizadas com falha anterior",
+      "% materiais presentes que são 2º+ uso",
+      "% materiais reutilizados com falha anterior",
+      "% materiais reutilizados com mesma falha",
+      "% materiais reutilizados com mesma família"
+    ],
+    "mode": [
+      "today"
+    ],
+    "Defect Type": [
+      "MainBoard",
+      "Phone Disassembly"
+    ],
+    "operation_code": [
+      "A5162",
+      "A6900"
+    ],
+    "Current Oper Code": [
+      "A6900",
+      "A7600"
+    ],
+    "Line Code": [
+      "TAN10103"
+    ],
+    "Tran Desc": [
+      "END LOT"
+    ],
+    "Working Oper": [
+      "Camera assembly",
+      "Repair station"
+    ],
+    "Working Oper Code": [
+      "A5162",
+      "A6900"
+    ],
+    "Transaction Desc": [
+      "END LOT"
+    ],
+    "key": [
+      "ames_source_id",
+      "schema_version"
+    ],
+    "query_confirmation": [
+      "EXACT_QUERY_ROW"
+    ],
+    "Aut Cmf1": [
+      "PCBA"
+    ],
+    "Iss Status": [
+      "N",
+      "Y"
+    ],
+    "Sn Type": [
+      "Camera",
+      "PCBA"
+    ],
+    "basis": [
+      "3028_exact_pcba_defect_time"
+    ],
+    "binding_product": [
+      ""
+    ],
+    "temporal_reason": [
+      "bind_interval_contains_defect"
+    ],
+    "source_kind": [
+      "synthetic"
+    ]
+  },
+  "synthetic_provenance": {
+    "source_id": "ba063416-4a02-4c7f-9c22-6c99180ec330",
+    "fixed_files": {
+      "ames-agent/config.json": "07fcd403ff71c80e33b7a283ade11a37ba110c084331e61f9d6b53d7844f664c",
+      "ames-agent/data/at_admin_auth.json": "1b1e369beea968eee0899936a310c4bff0d1e67c0902cf6fd9ed42ec11681d2c",
+      "ames-agent/data/at_user_profiles.json": "57d9f361a40ebac4e86bcfa2be8151d4e4f67ffccfed4c5e3680891e35f94f55",
+      "ames-agent/data/local_agent_token": "f6003bcc7f48dc40a09367cd2dff6b007aa4fe510b68d1c7354a146041366f81",
+      "chrome/Default/Preferences": "cd9673b599cddcd06fd4cef255b89a721b22b190e80774a3bdf14ba320a5d248",
+      "factory-engine/config/settings.json": "9a2bae72ea67234df4ceeafd357b15622eaa82a5b9ee0ea933d72c20076c4fc6",
+      "factory-engine/session.json": "2730c0154ef64583fd63d04b607124a0f730846ec1f425f61b7ae7a77105cf9f",
+      "logs/agent.log": "afd92c40010160c23d6eaa95997d204ab0e81d48b1ef3e999073a92ed4f4006a"
+    },
+    "browser_auth": "SYNTHETIC-FIREBASE-AUTH"
+  }
+}
