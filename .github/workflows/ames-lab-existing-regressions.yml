@@ -191,5 +191,8 @@ jobs:
           exit "$result"
       - name: P02 native 3074 3022 operator projection and LAB sync-domain proof
         run: python3 -B scripts/agent-p02-projection.test.py -v
+      - name: P08 native immutable readers names reuse production and SN on copies
+        run: python3 -B scripts/agent-p08-native-readers.test.py -v
 # Test-only wheels are installed ONLY in disposable GitHub Actions venvs.
 # No business-test edits/exclusions, distribution builders, archives or artifact upload.
+

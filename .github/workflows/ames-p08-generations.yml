@@ -19,7 +19,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: P08 R0 R1 R2 raw WAL interruption and no-overwrite matrix
-        run: python3 -B scripts/agent-p08-generation.test.py -v
+        run: |
+          python3 -B scripts/agent-p08-generation.test.py -v
+          python3 -B scripts/agent-p08-preservation.test.py -v
   windows-generations:
     runs-on: windows-2025
     timeout-minutes: 10
@@ -38,5 +40,7 @@ jobs:
           python -B scripts/agent-distribution-guard-compat.test.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -B scripts/agent-p08-generation.test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B scripts/agent-p08-preservation.test.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 # No operational updater/launcher, network, packages, archive or artifact upload.

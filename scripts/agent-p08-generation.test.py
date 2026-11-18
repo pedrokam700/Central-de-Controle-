@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];TOOL=ROOT/'tools/ames-lab/generation_reconcile.py'
@@ -210,5 +211,52 @@ os._exit(86)
 
     def test_43_unexplained_physical_DB_change_is_not_technical_proof(self):
         f=self.api(True);self.change('PRAGMA user_version=999');self.stop(f,'TECHNICAL_REPLAY_MISMATCH')
+
+    def test_44_malformed_revision_is_explicit_STOP_not_exception(self):
+        f=self.api(True);self.change("UPDATE mes_revisions SET payload='[]' WHERE rowid=1");self.stop(f,'REVISION_CONFLICT')
+
+    def test_45_unknown_root_evidence_after_R1_invalidates_current_verification(self):
+        f=self.api(True);self.assertEqual(f(self.root)['decision'],'R1')
+        (self.root/'NEW-EXTERNAL-EVIDENCE.json').write_text('{"synthetic":"NEW"}')
+        self.assertFalse(self.m['verify_target'](self.root))
+
+    def test_46_unreviewed_execution_metadata_in_C0_and_A_is_not_ignored(self):
+        f=self.api(True)
+        for role in ('C0','A'):
+            path=self.root/role/'execution.json';data=json.loads(path.read_text());data['unreviewed']='SYNTHETIC-UNKNOWN';FIX['write'](path,data)
+        FIX['seal'](self.root);self.stop(f,'EXECUTION_UNVERIFIED')
+
+    def test_47_IO_mid_capture_preserves_originals_and_unverified_fragments(self):
+        f=self.api(True);before=self.before();copy=f.__globals__['_copy'];reached=[]
+        def fail(src,dst):
+            if dst==self.root/'.p08-private/vault/A'/DB:
+                reached.append(dst.name);dst.parent.mkdir(parents=True,exist_ok=True);dst.write_bytes(src.read_bytes()[:32]);raise OSError('SYNTHETIC IO')
+            return copy(src,dst)
+        with patch.dict(f.__globals__,_copy=fail):r=f(self.root)
+        self.assertEqual(reached,['ames_local.sqlite3']);self.assertEqual(r['decision'],'R2');self.assertEqual(before,self.before())
+        self.assertEqual(self.m['recover'](self.root)['decision'],'R2');self.assertFalse(self.m['verify_target'](self.root))
+        self.assertEqual((self.root/'.p08-private/vault/A'/DB).stat().st_size,32)
+
+    def test_48_destination_created_at_publication_boundary_is_not_replaced(self):
+        f=self.api(True);reached=[]
+        def create(phase):
+            if phase=='before_target':
+                reached.append(phase);p=self.root/'return-target';p.mkdir();(p/'NEWER').write_bytes(b'SYNTHETIC NEWER DATA')
+        with patch.dict(f.__globals__,_phase=create):result=f(self.root)
+        self.assertEqual(reached,['before_target']);self.assertEqual(result['reason'],'DESTINATION_EXISTS')
+        self.assertEqual((self.root/'return-target/NEWER').read_bytes(),b'SYNTHETIC NEWER DATA');self.assertFalse(self.m['verify_target'](self.root))
+
+    def test_49_late_contender_cannot_invalidate_completed_owner(self):
+        f=self.api(True);original=f.__globals__['_input'];entered=threading.Event();release=threading.Event();out=[];held=[]
+        def blocked(root):
+            value=original(root)
+            if threading.current_thread().name=='p08-late' and not held:
+                held.append(True);entered.set();self.assertTrue(release.wait(30))
+            return value
+        with patch.dict(f.__globals__,_input=blocked):
+            thread=threading.Thread(name='p08-late',target=lambda:out.append(f(self.root)));thread.start()
+            self.assertTrue(entered.wait(20));self.assertEqual(f(self.root)['decision'],'R1');before=FIX['hashes'](self.root)
+            release.set();thread.join(20);self.assertFalse(thread.is_alive())
+        self.assertEqual(out[0]['reason'],'PENDING_OR_EXISTING_ATTEMPT');self.assertEqual(before,FIX['hashes'](self.root));self.assertTrue(self.m['verify_target'](self.root))
 
 if __name__=='__main__':unittest.main()
