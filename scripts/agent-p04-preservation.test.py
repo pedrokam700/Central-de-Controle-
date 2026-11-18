@@ -69,6 +69,7 @@ class P04Preservation(unittest.TestCase):
     def test_preview_suppressed_for_only_own_branch(self):
         before=json.loads(git('show',BASE+':vercel.json'));after=json.loads((ROOT/'vercel.json').read_text())
         self.assertIs(after['git']['deploymentEnabled'].pop(BRANCH),False)
+        self.assertIs(after['git']['deploymentEnabled'].pop('work/ames-p08-generation-reconciliation-20261118'),False)
         self.assertEqual(before,after)
         before=git('show',BASE+':netlify.toml');after=(ROOT/'netlify.toml').read_text()
         self.assertTrue(after.startswith(before));self.assertIn('[context."'+BRANCH+'"]\n  ignore = "exit 0"',after)
