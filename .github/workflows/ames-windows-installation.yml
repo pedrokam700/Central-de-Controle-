@@ -74,6 +74,7 @@ jobs:
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/containment.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/dependency-receipt.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/progress.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/startup-*.json
           if-no-files-found: warn
           retention-days: 7
 # User authorization: actual execution ONLY on disposable Windows with synthetic data.

@@ -32,7 +32,15 @@ def api(root,path):
  req=urllib.request.Request('http://127.0.0.1:8765'+path,headers={'X-Central-Agent-Token':token})
  with urllib.request.urlopen(req,timeout=8) as r:return json.load(r)
 def start(root):
- out=run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',root/'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','-Root',root,'-MaxAttempts','1','-StartupTimeoutSeconds','25'],timeout=75)
+ try:
+  out=run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',root/'suporte/ames-workstation/START_AGENT_CANONICAL.ps1','-Root',root,'-MaxAttempts','1','-StartupTimeoutSeconds','25'],timeout=75)
+ except Exception:
+  state=root/'logs/agent_startup_state.json'
+  if state.exists():
+   raw=json.loads(state.read_text(encoding='utf-8-sig'));diag={k:raw.get(k) for k in ('status','message','pid','process_created_at','events','probe_error','capability_error','hardening_error')}
+   print('NATIVE_STARTUP_DIAGNOSTIC '+json.dumps(diag,ensure_ascii=True),flush=True)
+   (LAB/('startup-'+root.name+'.json')).write_text(json.dumps(diag,indent=2))
+  raise
  ready=api(root,'/api/v1/ready');hard=api(root,'/api/v1/hardening/health');cap=api(root,'/api/v1/v2/capabilities')
  assert ready['ready'] is True and hard['integrity']=='ok' and pathlib.Path(cap['package_root']).resolve()==root
  record('native_bootstrap_'+root.name,'PASS',pid=ready['pid'],sqlite=hard['integrity']);return ready['pid']
