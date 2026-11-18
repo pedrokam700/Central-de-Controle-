@@ -92,6 +92,17 @@ def main():
   newer=tables(B);assert before!=newer
   pid=start(B);assert tables(B)==newer;stop(B,pid);pid=None
   record('native_restart_preserves_new_B_evidence','PASS')
+  # Fault injection at the real rollback boundary AFTER real B wrote new data.
+  # No fake process, listener or starter: original branch may actually reopen A.
+  result=subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'scripts/install98/rollback-probe.ps1'),'-OldRoot',str(A),'-CandidateRoot',str(B)],capture_output=True,text=True,timeout=100)
+  print(result.stdout[-5000:]+result.stderr[-5000:],flush=True)
+  try:
+   live=api(A,'/api/v1/v2/capabilities');old_is_serving=pathlib.Path(live['package_root']).resolve()==A
+  except Exception:old_is_serving=False
+  record('rollback_must_STOP_after_new_B_evidence','RED' if old_is_serving else 'PASS',old_generation_serving=old_is_serving,all_B_evidence_preserved=tables(B)==newer)
+  if old_is_serving:
+   ready=api(A,'/api/v1/ready');stop(A,ready['pid'])
+  assert tables(B)==newer
   record('full_01_TROCAR_and_START_LOCAL','PENDING',cause='factory_network_gate_not_executed_as_LAB_bypass')
  finally:
   if pid is not None:
