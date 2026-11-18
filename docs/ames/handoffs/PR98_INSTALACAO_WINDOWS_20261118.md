@@ -54,3 +54,28 @@ do audit log nativo passou em c6847c72c07e1297bf46030a3f828b990b0dd089,
 https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44377550040:
 loopback positivo e evento WFP de bloqueio vinculado ao PID. Build GUI real
 prosseguiu; seus resultados e boot ainda devem ser conferidos integralmente.
+
+## Ensaio real: dependências e recusa do primeiro boot
+
+Em 81cec4f51e79fa00c04616dbaeec1914aea6aaea, run
+https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44379328512,
+ambos os instaladores /prepare, GUI nativa e screenshot 1024x768 passaram.
+Pillow 11.3.0 é provisionado apenas para a captura adicional do TESTE; não é
+importado pelo runtime da Central nem justificativa para mudar requirements.
+O primeiro boot real de A foi recusado: `Processo criado nao confirmou a
+identidade do entrypoint atual`; a tentativa de cleanup recusou UNKNOWN_OWNER,
+corretamente sem matar PID não comprovado. Assim, inicialização NÃO passou.
+
+A captura inicial por pipes ficava aguardando descendente; saídas em arquivos
+permitiram obter recusa em ~6 segundos. Runs antigos 44378093893, 44378330966,
+44378718476 foram cancelados para diagnóstico e NÃO contam como PASS. Recibos
+parciais preservados em Actions; novo harness conserva estado/eventos de startup
+e observa CIM independentemente. Canonical launcher de EEDACC65 e PR97 tem o
+mesmo blob `eeb97b51796056ef4e56924d2327ed902546d8c4`: investigar a causa nativa,
+não liberar PID desconhecido nem alterar agente para fazer o teste passar.
+
+No SHA 3ea8012160474fdf0cda61a760a0ecef3d0f4c6a passaram regressões integradas
+44378718606 (Node/Python/nove telas), P04 44378718651 e P08 44378718428.
+Esses resultados não substituem a exigência de SHA final e instalação inteira.
+Transfer helper continua único arquivo funcional alterado até este checkpoint;
+agente, motor, UI, requisitos e entry LAB preservados integralmente.
