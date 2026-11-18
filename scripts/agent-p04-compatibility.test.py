@@ -96,4 +96,26 @@ class P04Contracts(unittest.TestCase):
         m=self.api();f=fixture();f['private_metadata']='SYNTHETIC-TOKEN';r=m['assess'](f);self.assertEqual(r['core_status'],'FAIL');self.assertIn('UNREVIEWED_FACTS',r['reasons'])
 
 
+    def test_33_unknown_nested_metadata_cannot_be_attested(self):
+        m=self.api();f=fixture();f['runtime']['private_token']='SYNTHETIC-SECRET'
+        r=m['assess'](f);self.assertEqual(r['core_status'],'FAIL');self.assertIn('UNREVIEWED_FACTS',r['reasons'])
+
+    def test_34_malformed_sections_fail_closed_with_diagnostic(self):
+        m=self.api();f=fixture();f['runtime']=['not','a','runtime']
+        r=m['assess'](f);self.assertEqual(r['core_status'],'FAIL');self.assertIn('UNREVIEWED_FACTS',r['reasons'])
+
+    def test_35_minimal_self_hashed_receipt_does_not_prove_complete_measurement(self):
+        m=self.api();f=fixture()
+        receipt={'code_sha':'a'*40,'scope':'DISPOSABLE_WINDOWS_RUNNER_ONLY','physical':'PENDING',
+          'operational_installation_tested':False,'homologation_authorized':False,'assessment':m['assess'](f),'facts':f}
+        receipt['receipt_sha256']=m['digest'](receipt)
+        self.assertFalse(m['verify_receipt'](receipt,'a'*40))
+
+    def test_36_numpy_import_does_not_require_relaxing_environment_mutation_guard(self):
+        # Fresh stdlib-only child checks forbidden mutation before any OS call.
+        m=self.api()
+        code="import runpy,sys; m=runpy.run_path(sys.argv[1]); m['install_guard'](); import os; os.environ['P04_SYNTHETIC_MUTATION']='1'"
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(TOOL)],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0);self.assertIn('P04_SIDE_EFFECT_REFUSED',result.stderr)
+
 if __name__=='__main__':unittest.main()
