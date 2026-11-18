@@ -193,6 +193,14 @@ jobs:
         run: python3 -B scripts/agent-p02-projection.test.py -v
       - name: P08 native immutable readers names reuse production and SN on copies
         run: python3 -B scripts/agent-p08-native-readers.test.py -v
+      - name: Complete inherited factory engine matrix
+        run: python3 -B -m unittest discover -s ames/factory-engine/tests -p 'test_*.py' -q
+      - name: Inherited pagination cycles raw revisions and state transfer without builders
+        run: for suite in agent-deep-3074-page agent-3074-coverage-summary agent-multi-cycle-3028-3074 agent-3074-grid-lifecycle agent-individual-assembly agent-assembly-scope agent-3074-uncertain-reuse agent-history-restore agent-local-history agent-raw-history agent-3074-projection-audit agent-3074-pagination agent-saved-sn-history ames-pr70-state-transfer; do python3 -B "scripts/$suite.test.py" || exit 1; done
+      - name: Independent recovery names and input breaker counterproofs
+        run: python3 -B scripts/audit/codex_recovery_names_red.py IndependentRecoveryNames.test_R3_complete_label_without_3022_query_proof_does_not_skip_capture IndependentRecoveryNames.test_N4_saved_non_END_LOT_operator_reaches_local_SN_cache IndependentRecoveryNames.test_R2_missing_extjs_input_stops_after_two_recoverable_failures
+      - name: SN 3012 local fallback remains independent
+        run: python3 -B scripts/agent-sn-3012-fallback.test.py
   chromium-integrated:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
