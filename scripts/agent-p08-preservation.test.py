@@ -7,7 +7,9 @@ import re
 import subprocess
 import unittest
 ROOT=Path(__file__).resolve().parents[1];BASE='48112ea9e408f5dce7fe85f951616b06ed4020e0';BRANCH='work/ames-p08-generation-reconciliation-20261118'
-ALLOWED={'tools/ames-lab/generation_reconcile.py','tools/ames-lab/p08_profile.json','scripts/fixtures/p08_generations.py',
+ALLOWED={
+ 'scripts/audit/package-source-inventory.py',
+ 'docs/ames/audits/CONSOLIDACAO_EEDACC65_PR96_20261118.md','tools/ames-lab/generation_reconcile.py','tools/ames-lab/p08_profile.json','scripts/fixtures/p08_generations.py',
  'scripts/agent-p08-generation.test.py','scripts/agent-p08-native-readers.test.py','scripts/agent-p08-preservation.test.py',
  '.github/workflows/ames-p08-generations.yml','.github/workflows/ames-p04-windows-preflight.yml',
  '.github/workflows/ames-lab-isolation.yml','.github/workflows/ames-lab-existing-regressions.yml',

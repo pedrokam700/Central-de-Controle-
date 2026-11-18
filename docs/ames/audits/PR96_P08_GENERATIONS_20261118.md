@@ -67,3 +67,23 @@ primeiro ref. Nenhum código produtivo alterado; se necessário, apenas proposta
 P02 real/P04 completa-real/P05/P07/P08 real/G0–G7/homologação física PENDENTES.
 Sem instalação/MES/Firebase/banco/credenciais/guardian/rede reais, launcher,
 builder/ZIP/instalador/deploy/merge. A ferramenta nova não é o updater operacional.
+
+## Retomada e fechamento adicional de software
+
+As alterações locais sobreviveram à interrupção; backup/patch foram preservados
+antes de editar. RED 49 publicado em fd869ccd4465df5e0da6543613525ef0c94c454a:
+44/45/46 demonstraram revisão sem objeto, raiz com evidência extra ignorada e
+execution desconhecida de C0/A. Correção limitada à ferramenta sintética em
+4af248a5c7a1b37f7aea4d9ddaf6601cff1913e0. RED 50/51 publicado em
+806cae0f7e87c5cdc21b5100f04d8f59d583f04a demonstrou journal sem objeto e com
+campo desconhecido; corrigido em a260811bd8901f586cf51a76b21dbb1d740bdf7c.
+Matriz final: 51 P08, cinco leitores nativos, seis preservação e regressões
+anteriores. A CI Chromium foi retomada nesta mesma branch, sem executar builders.
+
+[Handoff completo](../handoffs/PR96_P08_G6_20261118.md) contém RED/GREEN, limites,
+correções de instrumento Windows/workflow e referências. SHA e quatro CIs finais
+devem ser conferidos no checkpoint final da discussão, incluindo documentação.
+[Consolidação da próxima candidata](CONSOLIDACAO_EEDACC65_PR96_20261118.md):
+EEDACC65 é o último pacote TESTE de referência; modelo estático 345→349 sem
+remoções, porém ZIP/manifestos reais indisponíveis aqui. Não declarar paridade
+de output, segurança de instalação/retorno operacional ou homologação física.

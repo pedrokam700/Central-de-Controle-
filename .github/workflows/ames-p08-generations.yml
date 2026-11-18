@@ -22,6 +22,8 @@ jobs:
         run: |
           python3 -B scripts/agent-p08-generation.test.py -v
           python3 -B scripts/agent-p08-preservation.test.py -v
+      - name: Read-only source inventory versus EEDACC65 no builder no archive
+        run: python3 -B scripts/audit/package-source-inventory.py
   windows-generations:
     runs-on: windows-2025
     timeout-minutes: 10
