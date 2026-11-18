@@ -33,6 +33,8 @@ if($rules.Count -ne $count -or @($rules|Where-Object {$_.Enabled -ne 'True' -or 
 # WFP failure auditing is a kernel denial witness, not a timeout-as-proof.
 & auditpol.exe /set '/subcategory:{0CCE9226-69AE-11D9-BED3-505054503030}' /failure:enable
 if($LASTEXITCODE -ne 0){throw 'WFP_AUDIT_UNAVAILABLE'}
+& auditpol.exe /set '/subcategory:{0CCE9225-69AE-11D9-BED3-505054503030}' /failure:enable
+if($LASTEXITCODE -ne 0){throw 'WFP_PACKET_AUDIT_UNAVAILABLE'}
 $since=Get-Date
 $probe=Join-Path $lab 'deny-probe.py'
 @'
@@ -47,11 +49,16 @@ print(json.dumps({'pid':os.getpid(),'loopback':True,'external_connect_result':re
 $output=& $python -B $probe
 if($LASTEXITCODE -ne 0){throw 'NETWORK_DENIAL_PROBE_FAILED'}
 $proof=$output|ConvertFrom-Json
-$events=@(Get-WinEvent -FilterHashtable @{LogName='Security';Id=5157;StartTime=$since} -ErrorAction Stop)
-$matching=@($events|Where-Object {
- $eventXml=[xml]$_.ToXml();$fields=@{};foreach($d in $eventXml.Event.EventData.Data){$fields[$d.Name]=[string]$d.'#text'}
- $fields['DestAddress'] -eq '198.51.100.1' -and [int64]$fields['ProcessID'] -eq [int64]$proof.pid
-})
+Write-Output ("NATIVE_PROBE "+($proof|ConvertTo-Json -Compress))
+$matching=@()
+for($attempt=0;$attempt -lt 20 -and $matching.Count -eq 0;$attempt++){
+ $events=@(Get-WinEvent -FilterHashtable @{LogName='Security';Id=5157,5152;StartTime=$since.AddSeconds(-2)} -ErrorAction SilentlyContinue)
+ $matching=@($events|Where-Object {
+  $eventXml=[xml]$_.ToXml();$fields=@{};foreach($d in $eventXml.Event.EventData.Data){$fields[$d.Name]=[string]$d.'#text'}
+  $fields['DestAddress'] -eq '198.51.100.1' -and [int64]$fields['ProcessID'] -eq [int64]$proof.pid
+ })
+ if($matching.Count -eq 0){Start-Sleep -Milliseconds 1000}
+}
 if($matching.Count -lt 1){throw 'KERNEL_DENIAL_NOT_PROVEN_NO_AGENT_MAY_START'}
 @{schema='central98-windows-containment-v1';kernel_deny_proven=$true;loopback_proven=[bool]$proof.loopback;
  rules=$count;wfp_denials=$matching.Count;scope='PINNED_PYTHON_POWERSHELL_CHROME_PLAYWRIGHT_PROCESSES';physical='PENDING'}|
