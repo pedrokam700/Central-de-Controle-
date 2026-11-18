@@ -202,8 +202,6 @@ jobs:
     env:
       PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution:${{ github.workspace }}/ames/factory-engine'
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      PLAYWRIGHT_MODULE: '${{ runner.temp }}/console-tests/node_modules/playwright/index.mjs'
-      BROWSER_OUTPUT: '${{ runner.temp }}/p08-browser-evidence'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -217,6 +215,8 @@ jobs:
           chrome_path="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
           test -n "$chrome_path" || { echo "Preinstalled Chrome required; browser download forbidden"; exit 1; }
           echo "PLAYWRIGHT_EXECUTABLE_PATH=$chrome_path" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_MODULE=$RUNNER_TEMP/console-tests/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
+          echo "BROWSER_OUTPUT=$RUNNER_TEMP/p08-browser-evidence" >> "$GITHUB_ENV"
       - name: Nine complete views languages and themes
         run: node scripts/ames-experience.browser.mjs
       - name: Full histories and responsiveness
