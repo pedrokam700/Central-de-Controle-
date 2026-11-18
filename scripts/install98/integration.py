@@ -40,6 +40,9 @@ def start(root):
    raw=json.loads(state.read_text(encoding='utf-8-sig'));diag={k:raw.get(k) for k in ('status','message','pid','process_created_at','events','probe_error','capability_error','hardening_error')}
    print('NATIVE_STARTUP_DIAGNOSTIC '+json.dumps(diag,ensure_ascii=True),flush=True)
    (LAB/('startup-'+root.name+'.json')).write_text(json.dumps(diag,indent=2))
+   if raw.get('pid'):
+    ps="$p=Get-CimInstance Win32_Process -Filter 'ProcessId = "+str(int(raw['pid']))+"'; if($p){@{pid=$p.ProcessId;created=([datetime]$p.CreationDate).ToUniversalTime().ToString('o');executable=$p.ExecutablePath;entry_present=([string]$p.CommandLine).Contains('"+str(root/'ames-agent/agent_hardened_entry.py').replace("'","''")+"');command=$(if(([string]$p.CommandLine).Contains('"+str(root).replace("'","''")+"')){$p.CommandLine}else{'UNPROVEN_ROOT_REDACTED'})}|ConvertTo-Json -Compress}"
+    print('NATIVE_OWNER_OBSERVATION '+run(['powershell.exe','-NoProfile','-Command',ps]),flush=True)
   raise
  ready=api(root,'/api/v1/ready');hard=api(root,'/api/v1/hardening/health');cap=api(root,'/api/v1/v2/capabilities')
  assert ready['ready'] is True and hard['integrity']=='ok' and pathlib.Path(cap['package_root']).resolve()==root
