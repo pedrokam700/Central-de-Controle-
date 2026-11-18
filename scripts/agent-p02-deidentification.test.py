@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -66,12 +67,14 @@ class SyntheticP02(unittest.TestCase):
         prepare=self.api();prepare(self.workspace)
         ledger=json.loads((self.workspace/'private/transform-ledger.json').read_text())
         inverse={new:old for old,new in ledger['mapping'].items()}
-        def undo(v):
-            if isinstance(v,dict):return {inverse.get(k,k):undo(x) for k,x in v.items()}
-            if isinstance(v,list):return [undo(x) for x in v]
+        def undo(v,restore=False):
+            if isinstance(v,dict):return {(inverse.get(k,k) if restore else k):undo(x,restore) for k,x in v.items()}
+            if isinstance(v,list):return [undo(x,restore) for x in v]
             if isinstance(v,str):
-                if v in inverse:return inverse[v]
-                try:return undo(json.loads(v))
+                if restore and v in inverse:return inverse[v]
+                try:
+                    parsed=json.loads(v)
+                    return undo(parsed,restore) if isinstance(parsed,(dict,list)) else v
                 except (ValueError,TypeError):return v
             return v
         a=sqlite3.connect(self.db);b=sqlite3.connect(self.workspace/'published/lab/ames_local.sqlite3')
@@ -79,7 +82,7 @@ class SyntheticP02(unittest.TestCase):
             tables=[r[0] for r in a.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
             for table in tables:
                 left=[undo(list(row)) for row in a.execute('SELECT * FROM "'+table+'" ORDER BY rowid')]
-                right=[undo(list(row)) for row in b.execute('SELECT * FROM "'+table+'" ORDER BY rowid')]
+                right=[undo(list(row),True) for row in b.execute('SELECT * FROM "'+table+'" ORDER BY rowid')]
                 self.assertEqual(left,right,table)
             self.assertEqual(b.execute('PRAGMA integrity_check').fetchone(),('ok',))
             self.assertEqual(b.execute('PRAGMA foreign_key_check').fetchall(),[])
@@ -92,23 +95,23 @@ class SyntheticP02(unittest.TestCase):
 
     def test_05_required_files_missing(self):
         prepare=self.api();(self.source/'browser/storage.json').unlink()
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^INCOMPLETE_SOURCE$'):prepare(self.workspace)
         self.no_release()
 
     def test_06_hardlinks_and_links_refused(self):
         prepare=self.api();file=self.source/'ames-agent/config.json';alias=self.workspace/'ALIAS'
         os.link(file,alias)
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^UNTRUSTED_LINK_OR_MEMBER$'):prepare(self.workspace)
         self.no_release()
 
     def test_07_unknown_metadata_file_even_if_manifested(self):
         prepare=self.api();(self.source/'unknown.json').write_text('{"credential":"SYNTHETIC"}');FIX['seal'](self.workspace)
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^UNKNOWN_FILE_OR_CAPACITY$'):prepare(self.workspace)
         self.no_release()
 
     def test_08_unknown_database_schema(self):
         prepare=self.api();self.db_change('CREATE TABLE unexpected(secret TEXT)')
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^UNREVIEWED_SCHEMA$'):prepare(self.workspace)
         self.no_release()
 
     def test_09_truncated_database(self):
@@ -117,28 +120,33 @@ class SyntheticP02(unittest.TestCase):
         marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text())
         marker['files']['ames-agent/data/ames_local.sqlite3']=hashlib.sha256(self.db.read_bytes()).hexdigest()
         (self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker))
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^DATABASE_MATERIALIZATION_FAILED$'):prepare(self.workspace)
         self.no_release()
 
     def test_10_outbox_never_silently_dropped(self):
         prepare=self.api();p=self.source/'browser/storage.json';v=json.loads(p.read_text());v['outbox']=[{'payload':'SYNTHETIC-NEW-EVIDENCE'}];p.write_text(json.dumps(v));FIX['seal'](self.workspace)
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^OUTBOX_NOT_PROVEN_EMPTY$'):prepare(self.workspace)
         self.no_release();self.assertIn('SYNTHETIC-NEW-EVIDENCE',p.read_text())
 
     def test_11_contradictory_source_or_checkpoint_revision(self):
         prepare=self.api();p=self.source/'ames-agent/data/checkpoint.json';v=json.loads(p.read_text());v['source_id']='OTHER-SYNTHETIC-SOURCE';p.write_text(json.dumps(v));FIX['seal'](self.workspace)
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^CHECKPOINT_SOURCE_CONFLICT$'):prepare(self.workspace)
         self.no_release()
 
     def test_12_unknown_nested_json_never_assumed_safe(self):
         prepare=self.api();self.db_change("UPDATE pcba_history SET raw_json=? WHERE id=(SELECT min(id) FROM pcba_history)",(json.dumps({'unknown_private_metadata':{'url':'http://private.invalid','token':'SYNTHETIC'}}),))
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^UNKNOWN_JSON_METADATA$'):prepare(self.workspace)
         self.no_release()
 
     def test_13_queued_jobs_and_monitor_cannot_be_imported(self):
-        prepare=self.api();self.db_change('UPDATE monitor_profiles SET enabled=1')
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
-        self.no_release()
+        for state in ('monitor','queued','running'):
+            with self.subTest(state=state):
+                self.workspace=Path(self.tmp.name).resolve()/('P02-SYNTHETIC-'+state)
+                prepare=self.api()
+                if state=='monitor':self.db_change('UPDATE monitor_profiles SET enabled=1')
+                else:self.db_change("INSERT INTO jobs(id,kind,status,created_at,config_json) VALUES(?,?,?,?,?)",('SYNTHETIC-PENDING','sn_lookup',state,'2026-11-03T10:00:00Z','{}'))
+                with self.assertRaisesRegex(self.mod['Refused'],r'^ACTIVE_WORK_UNVERIFIED$'):prepare(self.workspace)
+                self.no_release()
 
     def test_14_WAL_committed_included_uncommitted_excluded_origin_untouched(self):
         prepare=self.api();con=sqlite3.connect(self.db);con.execute('PRAGMA journal_mode=WAL');con.execute('PRAGMA wal_autocheckpoint=0')
@@ -156,15 +164,18 @@ class SyntheticP02(unittest.TestCase):
 
     def test_15_missing_declared_WAL_rejected(self):
         prepare=self.api();marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text());marker['files']['ames-agent/data/ames_local.sqlite3-wal']='0'*64;(self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker))
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^SOURCE_MANIFEST_MISMATCH$'):prepare(self.workspace)
         self.no_release()
 
     def test_16_interruption_preserves_backup_and_blocks_publication(self):
         prepare=self.api();before=files(self.source)
+        reached=[]
         def fail(phase):
+            reached.append(phase)
             if phase=='after_db':raise OSError('SYNTHETIC IO FAILURE')
         with patch.dict(prepare.__globals__,_phase=fail):
             with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        self.assertIn('after_db',reached)
         self.no_release();self.assertEqual(before,files(self.source));self.assertEqual(before,files(self.workspace/'private/master'))
         with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
 
@@ -191,22 +202,25 @@ class SyntheticP02(unittest.TestCase):
 
     def test_20_renamed_real_installation_arguments_are_not_a_supported_mode(self):
         prepare=self.api();(self.workspace/'SYNTHETIC_ONLY.json').unlink();before=files(self.source)
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^SYNTHETIC_PROVENANCE_REQUIRED$'):prepare(self.workspace)
         self.assertEqual(files(self.source),before);self.no_release()
 
 
 
     def test_21_symlink_member_refused(self):
         prepare=self.api();p=self.source/'ames-agent/config.json';other=self.workspace/'EXTERNAL';other.write_bytes(p.read_bytes());p.unlink();p.symlink_to(other)
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^UNTRUSTED_LINK_OR_MEMBER$'):prepare(self.workspace)
         self.no_release()
 
     def test_22_new_source_write_never_rolled_back_over(self):
         prepare=self.api();p=self.source/'ames-agent/config.json';old=p.read_bytes()
+        reached=[]
         def changed(phase):
+            reached.append(phase)
             if phase=='after_backup':p.write_text('SYNTHETIC NEW DATA DO NOT OVERWRITE')
         with patch.dict(prepare.__globals__,_phase=changed):
-            with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+            with self.assertRaisesRegex(self.mod['Refused'],r'^SOURCE_OR_MASTER_CHANGED$'):prepare(self.workspace)
+        self.assertIn('after_backup',reached)
         self.no_release();self.assertEqual(p.read_text(),'SYNTHETIC NEW DATA DO NOT OVERWRITE')
         self.assertEqual((self.workspace/'private/master/ames-agent/config.json').read_bytes(),old)
 
@@ -222,13 +236,13 @@ class SyntheticP02(unittest.TestCase):
             con.execute("UPDATE pcba_history SET hist_seq='9' WHERE id=(SELECT min(id) FROM pcba_history)");con.commit()
             p=Path(str(self.db)+'-wal');data=bytearray(p.read_bytes());data[-1]^=1;p.write_bytes(data)
             marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text());marker['files']=files(self.source);(self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker))
-            with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+            with self.assertRaisesRegex(self.mod['Refused'],r'^WAL_FRAME_CHECKSUM$'):prepare(self.workspace)
             self.no_release()
         finally:con.close()
 
     def test_25_checkpoint_scope_mismatch(self):
         prepare=self.api();p=self.source/'ames-agent/data/checkpoint.json';v=json.loads(p.read_text());v['revision']=999;p.write_text(json.dumps(v));FIX['seal'](self.workspace)
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^CHECKPOINT_SCOPE_CONFLICT$'):prepare(self.workspace)
         self.no_release()
 
     def test_26_free_text_is_not_an_identity_escape(self):
@@ -241,7 +255,68 @@ class SyntheticP02(unittest.TestCase):
         prepare=self.api();p=self.source/'ames-agent/config.json'
         if os.name=='nt':Path(str(p)+':private').write_text('SYNTHETIC ADS')
         else:os.setxattr(p,'user.p02-private',b'SYNTHETIC XATTR')
-        with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^(?:UNSUPPORTED_EXTENDED_METADATA|UNSUPPORTED_ALTERNATE_STREAM)$'):prepare(self.workspace)
         self.no_release()
+
+
+    def test_28_unlisted_nested_READY_is_not_ignored(self):
+        prepare=self.api();prepare(self.workspace)
+        self.assertTrue(self.mod['verify_publication'](self.workspace))
+        (self.workspace/'published/lab/READY.json').write_text('SYNTHETIC PRIVATE LEAK')
+        self.no_release()
+
+    def test_29_edited_READY_cannot_reseal_tampered_data(self):
+        prepare=self.api();prepare(self.workspace)
+        target=self.workspace/'published/lab/checkpoint.json';target.write_text('{"private":"SYNTHETIC LEAK"}')
+        file=self.workspace/'published/READY.json';data=json.loads(file.read_text());data['files']['lab/checkpoint.json']=hashlib.sha256(target.read_bytes()).hexdigest();file.write_text(json.dumps(data))
+        self.no_release()
+
+    def test_30_late_contender_cannot_invalidate_completed_owner(self):
+        prepare=self.api();globals_=prepare.__globals__;inventory=globals_['_inventory'];blocked=threading.Event();release=threading.Event();errors=[]
+        waited=False
+        def delayed(source):
+            nonlocal waited
+            value=inventory(source)
+            if threading.current_thread().name=='p02-contender' and not waited:
+                waited=True;blocked.set()
+                if not release.wait(15):raise AssertionError('Race witness not released')
+            return value
+        def contender():
+            try:prepare(self.workspace)
+            except Exception as error:errors.append(error)
+        with patch.dict(globals_,_inventory=delayed):
+            thread=threading.Thread(target=contender,name='p02-contender');thread.start()
+            try:
+                self.assertTrue(blocked.wait(15));prepare(self.workspace);before=files(self.workspace)
+            finally:release.set();thread.join(15)
+        self.assertFalse(thread.is_alive());self.assertEqual(len(errors),1);self.assertIsInstance(errors[0],self.mod['Refused'])
+        self.assertEqual(before,files(self.workspace));self.assertTrue(self.mod['verify_publication'](self.workspace))
+
+    def test_31_date_suffix_cannot_carry_private_text(self):
+        self.api();mapper=self.mod['Mapper']('SYNTHETIC-SOURCE')
+        with self.assertRaisesRegex(self.mod['Refused'],r'^UNKNOWN_DATE_FORMAT$'):
+            mapper.date('2026-11-03 09:00:00 SYNTHETIC-SECRET')
+
+    def test_32_period_partial_and_completed_SN_history_survive(self):
+        prepare=self.api()
+        con=sqlite3.connect(self.db)
+        try:
+            con.execute("INSERT INTO analysis_windows(id,window_key,mode,start_at,end_at,requested_lines_json,created_at,updated_at) VALUES(10,'SYNTHETIC-WINDOW','today','2026-11-03T07:00:00-03:00','2026-11-04T07:00:00-03:00','[\"TAN10103\"]','2026-11-03T07:00:00Z','2026-11-03T07:00:00Z')")
+            con.execute("UPDATE snapshots SET window_id=10,status='partial' WHERE id=1")
+            con.execute("INSERT INTO jobs(id,kind,status,created_at,config_json,result_json) VALUES(?,?,?,?,?,?)",('SYNTHETIC-COMPLETED-SN','sn_lookup','done','2026-11-03T10:00:00Z',json.dumps({'sn':'P1'}),json.dumps({'query_sn':'P1','trace_2114':{'pcbas':[]}})))
+            con.commit()
+        finally:con.close()
+        FIX['seal'](self.workspace);prepare(self.workspace)
+        con=sqlite3.connect(self.workspace/'published/lab/ames_local.sqlite3')
+        try:
+            self.assertEqual(con.execute('SELECT status,window_id FROM snapshots WHERE id=1').fetchone(),('partial',10))
+            self.assertEqual(con.execute('SELECT start_at,end_at FROM analysis_windows WHERE id=10').fetchone(),('2027-11-02T07:00:00-03:00','2027-11-03T07:00:00-03:00'))
+            self.assertEqual(con.execute('SELECT kind,status FROM jobs').fetchone(),('sn_lookup','done'))
+        finally:con.close()
+
+    def test_33_forged_fixture_marker_does_not_admit_other_private_identity(self):
+        prepare=self.api();(self.source/'ames-agent/data/local_agent_token').write_text('NOT-THE-KNOWN-SYNTHETIC-CREDENTIAL');FIX['seal'](self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^FIXTURE_PROVENANCE_REQUIRED$'):prepare(self.workspace)
+        self.no_release();self.assertFalse((self.workspace/'private').exists())
 
 if __name__=='__main__':unittest.main()
