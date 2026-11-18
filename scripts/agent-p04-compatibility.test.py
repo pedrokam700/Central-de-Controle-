@@ -128,4 +128,14 @@ class P04Contracts(unittest.TestCase):
         r=subprocess.run([sys.executable,'-I','-B','-c',code,str(TOOL)],capture_output=True,text=True)
         self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(json.loads(r.stdout),{'guard':True})
 
+    def test_39_PyPI_and_wheel_Requires_Python_order_is_semantically_equivalent(self):
+        normalize=self.api()['normalized_python_spec']
+        self.assertEqual(normalize('>=2.7, !=3.0.*, !=3.1.*, !=3.2.*'),normalize('!=3.0.*,!=3.1.*,!=3.2.*,>=2.7'))
+        self.assertNotEqual(normalize('>=2.7,!=3.12.*'),normalize('>=2.7,!=3.2.*'))
+
+    def test_40_unknown_specifier_expression_is_not_executed_or_treated_as_compatible(self):
+        m=self.api()
+        with self.assertRaisesRegex(m['Refused'],r'^UNREVIEWED_PYTHON_SPECIFIER$'):
+            m['normalized_python_spec']('>=2.7 or SYNTHETIC_PRIVATE_EXPRESSION')
+
 if __name__=='__main__':unittest.main()

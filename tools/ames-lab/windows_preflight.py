@@ -165,6 +165,17 @@ def _tags(filename):
     return {'-'.join(parts) for parts in itertools.product(python.split('.'),abi.split('.'),platform.split('.'))}
 
 
+def normalized_python_spec(value):
+    # PyPI canonicalizes Requires-Python clause order, unlike wheel METADATA.
+    # Only conjunctions of reviewed version specifiers, never expressions/eval.
+    if not isinstance(value,str):raise Refused('UNREVIEWED_PYTHON_SPECIFIER')
+    if not value:return ()
+    clauses=[re.sub(r'\s+','',v) for v in value.split(',')]
+    if any(not re.fullmatch(r'(?:===|~=|==|!=|<=|>=|<|>)(?:[0-9]+!)?[0-9]+(?:\.[0-9]+)*(?:\.\*)?(?:(?:a|b|rc)[0-9]+|\.post[0-9]+|\.dev[0-9]+)?',v) for v in clauses):
+        raise Refused('UNREVIEWED_PYTHON_SPECIFIER')
+    return tuple(sorted(clauses))
+
+
 def verify_packages(report_path,prefix):
     """Hash-pinned pip report + installed wheel metadata, RECORD and closure.
 
@@ -191,7 +202,7 @@ def verify_packages(report_path,prefix):
         if (info['url']!=a['url'] or info['archive_info']['hashes']!={'sha256':a['sha256']} or item['metadata']['version']!=a['version']):raise Refused('WHEEL_ORIGIN_MISMATCH:'+name)
         d=available[name]
         if d.version!=a['version']:raise Refused('INSTALLED_VERSION_MISMATCH:'+name)
-        if sorted(d.requires or [])!=sorted(a['requires_dist']) or (d.metadata.get('Requires-Python') or '')!=(a['requires_python'] or ''):
+        if sorted(d.requires or [])!=sorted(a['requires_dist']) or normalized_python_spec(d.metadata.get('Requires-Python') or '')!=normalized_python_spec(a['requires_python'] or ''):
             raise Refused('DEPENDENCY_METADATA_MISMATCH:'+name)
         wheel=d.read_text('WHEEL') or '';tags={line[5:].strip() for line in wheel.splitlines() if line.startswith('Tag: ')}
         if tags!=set(a.get('installed_tags',_tags(a['filename']))):raise Refused('WHEEL_TAG_MISMATCH:'+name)
@@ -275,6 +286,7 @@ def _context(root):
         or context['scope']!='SYNTHETIC_ONLY' or context['base_sha']!=PROFILE['base_sha']
         or context['code_sha']!=os.environ.get('GITHUB_SHA') or not re.fullmatch('[0-9a-f]{40}',context['code_sha'])
         or context['run_id']!=os.environ.get('GITHUB_RUN_ID')):raise Refused('CI_CONTEXT_UNVERIFIED')
+    if any(os.environ.get(k)!='1' for k in ('OPENBLAS_MAIN_FREE','GOTOBLAS_MAIN_FREE')):raise Refused('REVIEWED_IMPORT_DEFAULTS_REQUIRED')
     return context
 
 
@@ -315,6 +327,7 @@ def collect(root):
              'facts':facts,'assessment':assessment,'native_binaries':native['binaries'],
              'python_build':sys.version,'cache_tag':sys.implementation.cache_tag,'SOABI':sysconfig.get_config_var('SOABI'),
              'windows_version':list(sys.getwindowsversion()),
+             'process_import_defaults':{k:os.environ[k] for k in ('OPENBLAS_MAIN_FREE','GOTOBLAS_MAIN_FREE')},
              'runner_image':{k:os.environ.get(k) for k in ('ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH')},
              'operational_installation_tested':False,'homologation_authorized':False,'physical':'PENDING'}
     receipt['receipt_sha256']=digest(receipt)
@@ -325,7 +338,7 @@ def verify_receipt(receipt,code_sha):
     try:
         required={'schema','scope','code_sha','base_sha','run_id','profile_sha256','wheel_lock_sha256','tool_sha256',
                   'facts','assessment','native_binaries','python_build','cache_tag','SOABI','windows_version','runner_image',
-                  'operational_installation_tested','homologation_authorized','physical','receipt_sha256'}
+                  'operational_installation_tested','homologation_authorized','physical','receipt_sha256','process_import_defaults'}
         if not isinstance(receipt,dict) or set(receipt)!=required:return False
         copy=dict(receipt);sha=copy.pop('receipt_sha256')
         if (sha!=digest(copy) or copy['schema']!='ames-p04-runner-receipt-v1' or copy['code_sha']!=code_sha
@@ -340,6 +353,7 @@ def verify_receipt(receipt,code_sha):
         binary=copy['native_binaries']
         if set(binary)!={'python_executable','python_base','sqlite_extension','loaded_sqlite_dll'}:return False
         if any(not re.fullmatch('[0-9a-f]{64}',h) for h in binary.values()):return False
+        if copy['process_import_defaults']!={'OPENBLAS_MAIN_FREE':'1','GOTOBLAS_MAIN_FREE':'1'}:return False
         image=copy['runner_image']
         if set(image)!={'ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH'} or image['RUNNER_OS']!='Windows' or image['RUNNER_ARCH']!='X64':return False
         if any(not isinstance(value,str) or not value for value in image.values()):return False
