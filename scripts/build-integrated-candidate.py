@@ -1,6 +1,7 @@
 """Build one standalone clean local Central + A-MES candidate from canonical sources."""
 import argparse, hashlib, json, os, re, subprocess, tempfile, zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import stat
 ROOT=Path(__file__).resolve().parents[1]
 HASHES={'ames_3028.py':'829da91ba7b685f4594bae2aad737f1eea64d7b1eaa8073e8bb263748fbe1ca1','ames_3028_live.py':'b512d42ad39fad326252264ce57f98f3731db5161ab8625cf5b244dffffad0e2'}
 SUPPORT_FILES=('START_AGENT_CANONICAL.ps1','DIAGNOSTICO_POSTO.ps1','KEEP_AGENT_RUNNING.ps1','ISSUE57_RELAUNCH_ENROLLMENT.ps1',
@@ -11,9 +12,24 @@ AT_SETUP_FILES=('00_PREPARAR_PENDRIVE_AT.bat','PREPARAR_DEPENDENCIAS_AT.ps1','01
 FIRST_RUN_FILES=('08_PREPARAR_REDE_AMES.bat','01_TROCAR.bat','01_TROCAR_PARA_PR69_NOVA.bat','TROCAR_PARA_PR69_NOVA.ps1',
  '12_APLICAR_ROTA_AMES_PERSISTENTE.bat')
 PACKAGE_DOCS=('INSTRUCOES_INSTALACAO_LIMPA.txt','MANUAL_LOGICA_CAPTURA_E_CRUZAMENTO.md','NOTAS_ALERTAS_SN_PR69.md','NOTAS_CORRECOES_28OUT_RESTAURACAO.md','NOTAS_VALIDACAO_FPY_TOP3_RASTREABILIDADE.md')
+CANDIDATE_EVIDENCE=(
+ 'docs/ames/handoffs/ISSUE85_PR86_TIMELINE_20261116.md',
+ 'docs/ames/handoffs/PR87_CLASSIFICACAO_FISICA_3074_20261116.md',
+ 'docs/ames/handoffs/PR88_HORARIOS_PRODUTIVOS_3022_20261117.md',
+ 'docs/ames/handoffs/PR89_INTEGRACAO_FINAL_69_88_20261117.md',
+ 'docs/ames/handoffs/PR90_DESEMPENHO_GUARD_20261117.md',
+ 'docs/ames/handoffs/PR92_UPDATER_ROLLBACK_D01_D02_20261117.md',
+ 'docs/ames/handoffs/PR93_ENTRADA_LAB_P01_P03_P06_20261117.md',
+ 'docs/ames/handoffs/PR94_P02_SINTETICO_20261117.md',
+ 'docs/ames/handoffs/PR95_P04_WINDOWS_20261118.md',
+ 'docs/ames/handoffs/PR96_P08_G6_20261118.md',
+ 'docs/ames/audits/CONSOLIDACAO_EEDACC65_PR96_20261118.md',
+ 'docs/ames/audits/PR97_PACOTE_COMPLETO_20261118.md',
+ 'docs/ames/handoffs/PR97_CANDIDATA_COMPLETA_20261118.md')
+CANDIDATE_INSTRUCTIONS='docs/ames/packaging/CANDIDATA_INSTALACAO_FUTURA_20261118.md'
 _FORBIDDEN_EXACT={'config.json','local_agent_token','network_health.jsonl','.env','cookies.json','session.json'}
 _FORBIDDEN_SUFFIXES={'.sqlite','.sqlite3','.db','.pyc','.log','.zip','.pem','.key'}
-REQUIRED_FILES={'00_INICIAR_AQUI.bat','ames-agent/agent_entry.py','ames-agent/engine_bridge.py',
+REQUIRED_FILES={'PACKAGE_IDENTITY.json','00_INICIAR_AQUI.bat','ames-agent/agent_entry.py','ames-agent/engine_bridge.py',
  'ames-agent/agent_hardened_entry.py','network/ensure_ames_route.ps1','LOCAL_BUNDLE_MANIFEST.json',
  'frontend/release-build.json','frontend/Central-de-Controle-/sw.js',
  *FIRST_RUN_FILES,*VERIFIER_FILES,*PACKAGE_DOCS,*('suporte/ames-workstation/'+n for n in SUPPORT_FILES),
@@ -37,11 +53,15 @@ def verify_build_identity(z,manifest):
    raise ValueError('Local manifest hash mismatch: '+name)
 
 def assert_clean_payload(payload):
- bad=[]
+ bad=[];seen=set()
  for name in payload:
-  normalized=str(name).replace('\\','/')
-  p=Path(normalized);base=p.name.lower();parts={part.lower() for part in p.parts}
-  if normalized.startswith('ames-agent/data/') or '__pycache__' in parts or base in _FORBIDDEN_EXACT or p.suffix.lower() in _FORBIDDEN_SUFFIXES:
+  normalized=str(name);p=PurePosixPath(normalized);base=p.name.lower();parts={part.lower() for part in p.parts}
+  if (not normalized or '\\' in normalized or ':' in normalized or normalized.startswith('/')
+      or '/'.join(p.parts)!=normalized or any(x in ('.','..') or x.endswith(('.',' ')) or any(ord(c)<32 for c in x)
+      or re.fullmatch(r'(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?',x) for x in p.parts)
+      or normalized.casefold() in seen):raise ValueError('Unsafe or aliased package path: '+normalized)
+  seen.add(normalized.casefold())
+  if normalized.lower().startswith('ames-agent/data/') or '__pycache__' in parts or base in _FORBIDDEN_EXACT or base.startswith('.env.') or base.endswith(('-wal','-shm','-journal')) or p.suffix.lower() in _FORBIDDEN_SUFFIXES:
    bad.append(normalized)
  if bad:raise ValueError('Standalone CLEAN contains forbidden runtime/private files: '+', '.join(sorted(bad)))
  return True
@@ -50,6 +70,9 @@ def verify_zip(destination):
  destination=Path(destination)
  with zipfile.ZipFile(destination) as z:
   if len(z.namelist())!=len(set(z.namelist())):raise ValueError('Duplicate ZIP paths')
+  assert_clean_payload({name:b'' for name in z.namelist()})
+  if any(stat.S_ISLNK(info.external_attr>>16) or info.flag_bits&1 or info.file_size>64*1024*1024 for info in z.infolist()):raise ValueError('Unsafe ZIP member')
+  if sum(info.file_size for info in z.infolist())>256*1024*1024:raise ValueError('ZIP capacity exceeded')
   if z.testzip():raise ValueError('ZIP CRC failure')
   names=set(z.namelist())
   if 'CANDIDATE_MANIFEST.json' not in names:raise ValueError('CANDIDATE_MANIFEST.json missing from final ZIP')
@@ -132,8 +155,6 @@ def build(destination, development=False):
   raise ValueError('Integrated Central bootstrap missing from CLEAN index')
  if 'src="/Central-de-Controle-/local-entry.mjs"' in html:
   raise ValueError('CLEAN regressed to standalone local Console entry')
- extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/','at-setup/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat',*FIRST_RUN_FILES,*VERIFIER_FILES,*PACKAGE_DOCS] or k.startswith('suporte/ames-workstation/')}
- payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES)},indent=2).encode()
  for doc in (ROOT/'docs/ames').glob('integrated-v5*'):
   if doc.is_file():payload['evidence/'+doc.name]=doc.read_bytes()
  analytics_doc=ROOT/'docs/ames/falhas-do-dia-analytics.md'
@@ -146,95 +167,34 @@ def build(destination, development=False):
  payload['evidence/'+audit_handoff.name]=audit_handoff.read_bytes()
  prior_audit=ROOT/'docs/ames/handoffs/PR69_AUDITORIA_3012_REUSO_20261105.md'
  payload['evidence/'+prior_audit.name]=prior_audit.read_bytes()
- payload['LEIA_PRIMEIRO.txt']=(f'''CENTRAL + A-MES — PACOTE CLEAN INTEGRADO (GITHUB / CANDIDATO DE TESTE)
-HEAD: {sha}
-Gate fisico pendente. Nao e uma promocao de producao.
-
-INSTALACAO / TESTE — LEIA ANTES DE EXECUTAR:
-1. PC COM 0.5.39 OU OUTRO GUARDIAN EM EXECUCAO: NAO EXECUTE 00_INICIAR_AQUI.bat.
-   Esse launcher ainda NAO substitui o guardian antigo. O guardian antigo pode
-   reiniciar o agente enquanto a candidata tenta assumir a mesma porta 8765.
-   Primeiro finalize as coletas/sincronizacoes, feche coletas no navegador e
-   use SOMENTE 01_TROCAR.bat da pasta nova. O assistente exige inventario de
-   guardian/instalacoes, dependencias prontas e confirmacao expressa.
-   Nenhuma deteccao automatica deste ZIP autoriza o desligamento do guardian.
-2. Guarde intacta a pasta anterior. O 01_TROCAR.bat faz backup privado,
-   ensaio de restauracao e transfere SQLite/config/token/historico para a pasta
-   nova apos parar somente o agente comprovado. Se houver erro, tenta reiniciar
-   automaticamente o antigo. NUNCA apague a pasta ou o backup anterior.
-3. Extraia ESTE ZIP em uma pasta NOVA e independente, sem sobrescrever a antiga.
-4. SOMENTE em posto sem guardian anterior, ou APOS a migracao supervisionada
-   e a liberacao expressa, execute 00_INICIAR_AQUI.bat.
-   PC virgem: conecte TAXXX_5G via Windows com credenciais da TI; o launcher
-   executa 08_PREPARAR_REDE_AMES.bat, valida a rota /32 e bloqueia sem rede.
-   A rota solicita UAC apenas quando precisa ser criada/reparada.
-5. Primeiro uso cria .venv, config.json e SQLite somente nesta pasta.
-   Se Python 3.12, Google Chrome ou dependencias nao existirem, o primeiro uso requer internet.
-6. Central e Console MES usam o MESMO frontend local: http://127.0.0.1:8765/Central-de-Controle-/
-7. Console MES e uma view interna da Central: entrar/sair nao abre outra aplicacao nem exige um segundo login.
-8. O primeiro login da Central pode exigir internet. Depois, Auth/Firestore usam persistencia/cache do navegador quando disponiveis.
-
-ATUALIZACAO EXISTENTE — 01_TROCAR.bat:
-- Troca supervisionada com transferencia verificada de dados e backup privado.
-- Faz preflight, instala dependencias sem criar SQLite, confirma guardian/porta
-  e ausencia de coletas observadas; solicita confirmacao para prosseguir.
-- A fila de sincronizacao do navegador NAO pode ser comprovada pelo agente:
-  finalize/verifique manualmente antes de clicar Sim. Nao coletar durante troca.
-- Se bloquear, NAO execute 00_INICIAR nem desative guardian/antivirus para forcar.
-- Se falhar apos parar o antigo, tenta rollback com a instalacao original;
-  se retornar ROLLBACK_ANTIGO=MANUAL, preserve as pastas e solicite ajuda.
-- NAO eh validacao fisica GREEN nem instalador de producao geral; teste
-  primeiro no posto conhecido, com aceite local e historico intacto.
-- INSTRUCOES_INSTALACAO_LIMPA.txt e o procedimento atualizado do SHA acima.
-- Manuais/notas PR69 adicionais sao HISTORICOS e podem citar SHAs anteriores.
-- nao sobrepoe CLEAN V3;
-- nao traz banco operacional, senha, cookie, sessao CDP ou token;
-- o A-MES, agente, SQLite, coletores e scheduler continuam locais/offline por padrao;
-- usa um unico frontend local, agente, SQLite e scheduler.
-
-CENTRAL AT SEPARADA:
-- Os scripts em at-setup sao fontes para MONTAR outro pendrive;
-  NAO constituem um instalador AT offline pronto. Faltam o manifesto AT
-  assinado/gerado, as dependencias vendor e as contas locais necessarias.
-- Nao execute esses scripts como se ja fossem uma instalacao de campo.
-
-3012 / HISTORICO:
-- AMES_START_DATE nasce configuravel no posto (default atual do ambiente: {config_example.get('ames_start_date')});
-- SN exata usa SQLite como cache e volta ao MES apenas para lacunas temporais;
-- consulta ampla sem SN usa blocos/checkpoint;
-- 3012 continua gate fisico ate prova no A-MES real.
-
-VALIDACAO FISICA AINDA NECESSARIA:
-- Navegacao Central -> Console MES -> Central sem reload, troca de origem ou novo login.
-- PC A -> Firestore -> PC B: testar snapshots e revisoes identicos, cache/online, conflito de origem e fila.
-- PC com agente: pareamento autenticado HTTPS via launcher local; sem reinstalar SQLite.
-- PC novo so leitor: nao instalar agente. Login Central e leitura da equipe via Firestore.
-- Turnos reais 1st 07:30-17:30 / 2nd 17:30-03:30; 03:30-07:30 fora de turno.
-- Janela da 3028: 07:00-07:00 (nao e um turno).
-- 3012 real: Defect/Repair User/Time/Code/Comment e consulta historica por SN.
-- Consulta SN: falha atual/antigas/material/PCBA anterior e 3022.
-- 3028 hoje/anterior, TAN10101/2/3 separadas, reuso e processo com retrabalho.
-- Turno de producao 3022 em casos reais e fronteiras de turno.
-- Guardian TAXXX_5G / rota 172.29.185.215/32 em queda real.
-- Reboot/bootstrap, performance e 9/9 desktop/mobile.
-
-SE O ENSAIO FALHAR:
-- Interrompa o ensaio e acione o responsavel pelo procedimento supervisionado.
-- Retorne somente a instalacao oficial anterior comprovada (0.5.39 neste baseline),
-  com sua identidade e dados preservados, conforme o rollback previamente ensaiado.
-- Este ZIP nao restaura backups nem desativa/reinscreve guardians.
-- Nao inicie dois agentes/guardians; nao copie nem substitua SQLite, WAL, token, configuracao, source_id ou filas
-  para contornar uma falha. Nao reinstale CLEAN sobre a instalacao existente.
-- Se o backup/restauracao ou a identidade anterior nao puderem ser comprovados,
-  mantenha a migracao bloqueada e preserve as duas pastas para investigacao.
-''').encode()
+ version='AMES-CANDIDATA-'+sha[:12]
+ instructions=(ROOT/CANDIDATE_INSTRUCTIONS).read_text(encoding='utf-8').replace('__CANDIDATE_SHA__',sha).replace('__CANDIDATE_VERSION__',version).encode('utf-8')
+ payload['LEIA_PRIMEIRO.txt']=instructions
+ payload['INSTRUCOES_INSTALACAO_LIMPA.txt']=instructions
+ for name in PACKAGE_DOCS:
+  if name!='INSTRUCOES_INSTALACAO_LIMPA.txt':
+   payload[name]=b'HISTORICO: consulte LEIA_PRIMEIRO.txt desta candidata antes de qualquer procedimento.\n\n'+payload[name]
+ for source in CANDIDATE_EVIDENCE:payload['evidence/current/'+Path(source).name]=(ROOT/source).read_bytes()
+ components={}
+ for name,prefix in [('frontend','frontend/'),('agent','ames-agent/'),('engine','factory-engine/')]:
+  members={k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items()) if k.startswith(prefix)}
+  components[name]={'code_sha':sha,'files':len(members),'members_sha256':hashlib.sha256(json.dumps(members,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
+ payload['PACKAGE_IDENTITY.json']=json.dumps({'schema':'central-complete-candidate-v1','sha':sha,'candidate_version':version,
+  'delivery':'INTEGRATED_CLEAN_COMPLETE','reference_test_sha':'eedacc65445dea9967a92085777b878c1ee9c123',
+  'installation_authorized':False,'physical':'PENDING','legacy_updater_compatible':False,
+  'future_supervised_entry':'01_TROCAR.bat','components':components,
+  'limits':['P02_REAL_PENDING','P04_FULL_GUI_BLOCKED','P05_PENDING','P07_PENDING','P08_REAL_PENDING','G0_G7_PENDING','EEDACC65_ZIP_BYTES_UNAVAILABLE']},sort_keys=True,indent=2).encode()
+ extra={k:hashlib.sha256(v).hexdigest() for k,v in payload.items() if k.startswith(('frontend/','factory-engine/','network/','at-setup/')) or k in ['ames-agent/requirements.txt','ames-agent/config.example.json','START_LOCAL_CANDIDATE.ps1','01_INSTALAR_UMA_VEZ.bat','05_ABRIR_CHROME_AMES.bat','09_REPARAR_DEPENDENCIAS.bat',*FIRST_RUN_FILES,*VERIFIER_FILES,*PACKAGE_DOCS] or k.startswith('suporte/ames-workstation/')}
+ payload['LOCAL_BUNDLE_MANIFEST.json']=json.dumps({'sha':sha,'files':extra,'development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES)},indent=2).encode()
  assert_clean_payload(payload)
- manifest={'sha':sha,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
+ manifest={'sha':sha,'candidate_version':version,'delivery':'INTEGRATED_CLEAN_COMPLETE','installation_authorized':False,'baseline':'CLEAN_V3_20261013','implementation_reconciled':'CLEAN_V5_3012_SHIFT_20261013','pr26_sha':'f561a6ba65d80fef59e586e5b060a8cfbac79bc5','development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'physical_gate':'PENDING','hashes_3028':HASHES,'ames_start_date_default':config_example.get('ames_start_date'),'support_files':list(SUPPORT_FILES),'files':{k:hashlib.sha256(v).hexdigest() for k,v in sorted(payload.items())}}
  payload['CANDIDATE_MANIFEST.json']=json.dumps(manifest,indent=2).encode()
  assert_clean_payload(payload)
  destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
- with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED) as z:
-  for name,data in sorted(payload.items()):z.writestr(name,data)
+ with zipfile.ZipFile(destination,'x',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
+  for name,data in sorted(payload.items()):
+   info=zipfile.ZipInfo(name,(2026,11,18,0,0,0));info.create_system=3;info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED
+   z.writestr(info,data,compresslevel=9)
  verification=verify_zip(destination)
  if verification['sha']!=sha:raise ValueError('Final ZIP manifest SHA does not match build HEAD')
  print(json.dumps({'file':str(destination.resolve()),'sha':sha,'development':bool(dirty),'standalone_clean':True,'integrated_shell':True,'sha256':hashlib.sha256(destination.read_bytes()).hexdigest(),'files':len(payload),'verified_manifest_files':verification['manifest_files'],'verified_zip_files':verification['zip_files']}))

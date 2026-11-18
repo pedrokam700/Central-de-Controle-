@@ -4,16 +4,55 @@
   "buildCommand": "node scripts/build-static.mjs",
   "installCommand": "",
   "outputDirectory": "dist",
-  "git": { "deploymentEnabled": { "main": false, "work/ames-performance-guard-20261117": false, "work/ames-offline-homologation-plan-20261117": false, "work/ames-updater-rollback-d01-d02-20261117": false, "work/ames-lab-entry-p01-p03-p06-20261117": false, "work/ames-p02-synthetic-deidentification-20261117": false, "work/ames-p04-windows-preflight-20261118": false, "work/ames-p08-generation-reconciliation-20261118": false } },
+  "git": {
+    "deploymentEnabled": {
+      "main": false,
+      "work/ames-performance-guard-20261117": false,
+      "work/ames-offline-homologation-plan-20261117": false,
+      "work/ames-updater-rollback-d01-d02-20261117": false,
+      "work/ames-lab-entry-p01-p03-p06-20261117": false,
+      "work/ames-p02-synthetic-deidentification-20261117": false,
+      "work/ames-p04-windows-preflight-20261118": false,
+      "work/ames-p08-generation-reconciliation-20261118": false,
+      "work/ames-complete-candidate-20261118": false
+    }
+  },
   "redirects": [
-    { "source": "/", "destination": "/Central-de-Controle-/", "permanent": false },
-    { "source": "/Central-de-Controle-", "destination": "/Central-de-Controle-/", "permanent": false }
+    {
+      "source": "/",
+      "destination": "/Central-de-Controle-/",
+      "permanent": false
+    },
+    {
+      "source": "/Central-de-Controle-",
+      "destination": "/Central-de-Controle-/",
+      "permanent": false
+    }
   ],
   "rewrites": [
-    { "source": "/Central-de-Controle-/", "destination": "/Central-de-Controle-/index.html" }
+    {
+      "source": "/Central-de-Controle-/",
+      "destination": "/Central-de-Controle-/index.html"
+    }
   ],
   "headers": [
-    { "source": "/Central-de-Controle-/:path*.mjs", "headers": [{ "key": "Content-Type", "value": "text/javascript; charset=utf-8" }] },
-    { "source": "/Central-de-Controle-/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+    {
+      "source": "/Central-de-Controle-/:path*.mjs",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/javascript; charset=utf-8"
+        }
+      ]
+    },
+    {
+      "source": "/Central-de-Controle-/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    }
   ]
 }
