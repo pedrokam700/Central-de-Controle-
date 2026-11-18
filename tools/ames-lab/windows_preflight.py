@@ -249,7 +249,13 @@ def install_guard():
             if registry_event_allowed(event,args):
                 if event=='winreg.OpenKey':pending_registry_result+=1
                 return
-            raise Refused('P04_SIDE_EFFECT_REFUSED:'+event)
+            detail=''
+            if event=='winreg.OpenKey':
+                known={p.casefold():'PUBLIC_TZ_KEY' for p in REGISTRY_PATHS}
+                label=known.get(str(args[1]).casefold(),'OTHER_KEY') if len(args)>1 else 'MISSING_KEY'
+                access=str(args[2]) if len(args)>2 and type(args[2]) is int else 'NONINT'
+                detail=':shape='+str(len(args))+':key='+label+':access='+access
+            raise Refused('P04_SIDE_EFFECT_REFUSED:'+event+detail)
         if (event.startswith(('socket.','subprocess.')) or event in mutations
             or event in {'os.system','os.posix_spawn','os.exec','os.spawn','os.startfile'}):raise Refused('P04_SIDE_EFFECT_REFUSED:'+event)
         if event=='import' and str(args[0]).split('.')[0] in denied_modules:raise Refused('P04_OPERATIONAL_IMPORT_REFUSED')
