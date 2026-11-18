@@ -48,3 +48,6 @@
 
 [context."work/ames-complete-candidate-20261118"]
   ignore = "exit 0"
+
+[context."work/ames-windows-installation-20261118"]
+  ignore = "exit 0"

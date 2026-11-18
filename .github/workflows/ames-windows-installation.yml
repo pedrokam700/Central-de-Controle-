@@ -1,0 +1,77 @@
+name: A-MES genuine Windows installation isolated synthetic qualification
+on:
+  push:
+    branches: [work/ames-windows-installation-20261118]
+permissions:
+  contents: read
+jobs:
+  transfer-counterproof:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash ./scripts/audit/guarded-ci.sh {0}
+    env:
+      PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: python3 -B scripts/install98/transfer-red.test.py -v
+  genuine-windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIP_NO_CACHE_DIR: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Download official pinned inputs without executing source packages
+        shell: pwsh
+        run: |
+          $lab=Join-Path $env:RUNNER_TEMP "CENTRAL-INSTALL-LAB-$($env:GITHUB_RUN_ID)"
+          "INSTALL98_ROOT=$lab" >> $env:GITHUB_ENV
+          $env:INSTALL98_ROOT=$lab
+          python -B scripts/install98/prepare.py download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Path "$lab/tmp" | Out-Null
+          "TEMP=$lab/tmp" >> $env:GITHUB_ENV
+          "TMP=$lab/tmp" >> $env:GITHUB_ENV
+      - name: Require OS firewall and WFP denial proof before source build or agent
+        shell: pwsh
+        run: ./scripts/install98/containment.ps1
+      - name: Build genuine GUI dependencies offline under proven containment
+        shell: pwsh
+        run: |
+          python -B scripts/install98/prepare.py build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Execute real installers canonical processes and state transfer using only synthetic copies
+        shell: pwsh
+        run: |
+          python -B scripts/install98/integration.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve safe synthetic evidence even on refusal no installation payload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WINDOWS_INSTALLATION_EVIDENCE_${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/containment.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/dependency-receipt.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/progress.json
+          if-no-files-found: warn
+          retention-days: 7
+# User authorization: actual execution ONLY on disposable Windows with synthetic data.
+# Kernel denial is mandatory. No agent starts if isolation is unproven.
