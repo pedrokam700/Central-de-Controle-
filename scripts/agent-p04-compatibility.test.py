@@ -17,7 +17,7 @@ LOCK=json.loads((ROOT/'tools/ames-lab/p04_windows_wheels.json').read_text(encodi
 
 
 def fixture():
-    return {'runtime':{'version':[3,12,10],'implementation':'cpython','bits':64,'platform':'win-amd64','native_machine':'AMD64','isolated':True,'bytecode_disabled':True},
+    return {'runtime':{'version':[3,12,10],'implementation':'cpython','bits':64,'platform':'win-amd64','native_machine':'AMD64','extension_suffix':'.cp312-win_amd64.pyd','isolated':True,'bytecode_disabled':True},
       'sqlite':{'version':[3,45,1],'json1':True,'upsert':True,'foreign_keys':True,'backup':True,'integrity':True},
       'timezone':{'tzdata_version':'2025.2','iana_version':'2025b','resource_verified':True,'vectors_verified':True},
       'packages':{a['name']:{'version':a['version'],'filename':a['filename'],'sha256':a['sha256'],'origin_verified':True,'records_verified':True,'metadata_verified':True} for a in LOCK['artifacts']},
@@ -162,5 +162,25 @@ class P04Contracts(unittest.TestCase):
         self.assertTrue(rule('winreg.OpenKey',(123,base+r'\UTC',0x20019)))
         self.assertFalse(rule('winreg.OpenKey',(123,base+r'\SYNTHETIC-OTHER-ZONE',0x20019)))
         self.assertFalse(rule('winreg.OpenKey',(123,base+r'\UTC\SYNTHETIC-CHILD',0x20019)))
+
+    def test_45_wrong_Windows_extension_ABI_is_incompatible(self):
+        self.bad('runtime','extension_suffix','.cp311-win_amd64.pyd','CPYTHON_EXTENSION_ABI')
+
+    def test_46_complete_receipt_preserves_native_Windows_null_SOABI(self):
+        m=self.api();f=fixture()
+        receipt={'schema':'ames-p04-runner-receipt-v1','scope':'DISPOSABLE_WINDOWS_RUNNER_ONLY','code_sha':'a'*40,
+          'base_sha':m['PROFILE']['base_sha'],'run_id':'123','profile_sha256':m['file_hash'](TOOL.with_name('p04_profile.json')),
+          'wheel_lock_sha256':m['file_hash'](TOOL.with_name('p04_windows_wheels.json')),'tool_sha256':m['file_hash'](TOOL),
+          'facts':f,'assessment':m['assess'](f),'native_binaries':{k:'0'*64 for k in ('python_executable','python_base','sqlite_extension','loaded_sqlite_dll')},
+          'python_build':'3.12.10 SYNTHETIC-POLICY-FIXTURE','cache_tag':'cpython-312','SOABI':None,'windows_version':[10,0,26100,2,''],
+          'process_import_defaults':{'OPENBLAS_MAIN_FREE':'1','GOTOBLAS_MAIN_FREE':'1'},
+          'readonly_registry_contract':{'scope':'local_HKLM_timezone_roots_and_guard_owned_UTC_values_only','paths':sorted(m['REGISTRY_PATHS']),
+            'access':'KEY_READ','remote_allowed':False,'writes_allowed':False},
+          'runner_image':{'ImageOS':'SYNTHETIC','ImageVersion':'SYNTHETIC','RUNNER_OS':'Windows','RUNNER_ARCH':'X64'},
+          'operational_installation_tested':False,'homologation_authorized':False,'physical':'PENDING','limitations':m['LIMITATIONS']}
+        receipt['receipt_sha256']=m['digest'](receipt)
+        self.assertTrue(m['verify_receipt'](receipt,'a'*40))
+        receipt['SOABI']='SYNTHETIC-UNKNOWN-ABI';receipt.pop('receipt_sha256');receipt['receipt_sha256']=m['digest'](receipt)
+        self.assertFalse(m['verify_receipt'](receipt,'a'*40))
 
 if __name__=='__main__':unittest.main()

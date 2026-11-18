@@ -85,5 +85,6 @@
     "pymsgbox",
     "pytweening",
     "pyrect"
-  ]
+  ],
+  "extension_suffix": ".cp312-win_amd64.pyd"
 }

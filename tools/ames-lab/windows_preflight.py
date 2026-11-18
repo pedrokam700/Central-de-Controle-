@@ -26,6 +26,9 @@ HERE=Path(__file__).resolve().parent
 PROFILE=json.loads((HERE/'p04_profile.json').read_text(encoding='utf-8'))
 LOCK=json.loads((HERE/'p04_windows_wheels.json').read_text(encoding='utf-8'))
 ARTIFACTS={a['name']:a for a in LOCK['artifacts']}
+LIMITATIONS=['DISPOSABLE_WINDOWS_RUNNER_ONLY','FULL_WORKSTATION_BLOCKED_SOURCE_ONLY_GUI_DEPENDENCIES',
+ 'NO_GUI_OR_CHROME_CDP_EXERCISE','NO_OPERATIONAL_INSTALLATION_OR_DATA','NO_PHYSICAL_HOMOLOGATION',
+ 'PROCESS_AUDIT_NOT_KERNEL_SANDBOX','DIGEST_IS_NOT_SIGNATURE_OR_MAINTENANCE_LEASE']
 IMPORTS={'pandas':'pandas','openpyxl':'openpyxl','numpy':'numpy','playwright':'playwright.sync_api',
          'greenlet':'greenlet','pyee':'pyee','typing-extensions':'typing_extensions','pyperclip':'pyperclip',
          'tzdata':'tzdata','pytz':'pytz','python-dateutil':'dateutil','six':'six','et-xmlfile':'et_xmlfile'}
@@ -64,13 +67,14 @@ def assess(facts):
         if not isinstance(value,dict):reasons.append('UNREVIEWED_FACTS');return {}
         if not set(required)<=set(value) or not set(value)<=set(required)|set(optional):reasons.append('UNREVIEWED_FACTS')
         return value
-    r=section('runtime',{'version','implementation','bits','platform','native_machine','isolated','bytecode_disabled'})
+    r=section('runtime',{'version','implementation','bits','platform','native_machine','isolated','bytecode_disabled','extension_suffix'})
     s=section('sqlite',{'version','json1','upsert','foreign_keys','backup','integrity'},{'source_id','compile_options'})
     z=section('timezone',{'tzdata_version','iana_version','resource_verified','vectors_verified'},{'resource_sha256','vectors','source'})
     if r.get('version')!=PROFILE['python'] or any(type(x)!=int for x in r.get('version',[])):reasons.append('PYTHON_VERSION')
     if r.get('implementation')!='cpython':reasons.append('PYTHON_IMPLEMENTATION')
     if type(r.get('bits'))!=int or r.get('bits')!=64:reasons.append('PROCESS_ARCHITECTURE')
     if r.get('platform')!='win-amd64':reasons.append('WINDOWS_REQUIRED')
+    if r.get('extension_suffix')!=PROFILE['extension_suffix']:reasons.append('CPYTHON_EXTENSION_ABI')
     if r.get('native_machine')!='AMD64':reasons.append('NATIVE_ARCHITECTURE')
     if r.get('isolated') is not True or r.get('bytecode_disabled') is not True:reasons.append('ISOLATION_REQUIRED')
     version=s.get('version')
@@ -324,6 +328,7 @@ def _context(root):
     if not sys.flags.isolated or not sys.dont_write_bytecode:raise Refused('ISOLATED_INTERPRETER_REQUIRED')
     if list(sys.version_info[:3])!=PROFILE['python'] or sys.implementation.name!='cpython':raise Refused('UNSUPPORTED_CI_PYTHON')
     if struct.calcsize('P')*8!=64 or sysconfig.get_platform()!='win-amd64':raise Refused('UNSUPPORTED_CI_ARCHITECTURE')
+    if sysconfig.get_config_var('EXT_SUFFIX')!=PROFILE['extension_suffix']:raise Refused('UNSUPPORTED_CPYTHON_EXTENSION_ABI')
     for name in ('context.json','pip-report.json'):_regular(root/name)
     context=parse((root/'context.json').read_text(encoding='utf-8'))
     if (set(context)!={'schema','scope','base_sha','code_sha','run_id'} or context['schema']!='ames-p04-ci-context-v1'
@@ -361,7 +366,7 @@ def collect(root):
     if native['native_machine']!='AMD64':raise Refused('UNSUPPORTED_NATIVE_ARCHITECTURE')
     zone=timezone_probe();imports=_imports()
     runtime={'version':list(sys.version_info[:3]),'implementation':sys.implementation.name,'bits':struct.calcsize('P')*8,
-             'platform':sysconfig.get_platform(),'native_machine':native['native_machine'],
+             'platform':sysconfig.get_platform(),'native_machine':native['native_machine'],'extension_suffix':sysconfig.get_config_var('EXT_SUFFIX'),
              'isolated':bool(sys.flags.isolated),'bytecode_disabled':bool(sys.dont_write_bytecode)}
     facts={'runtime':runtime,'sqlite':sql,'timezone':zone,'packages':packages,'imports':imports,'guard':guard}
     assessment=assess(facts)
@@ -375,7 +380,7 @@ def collect(root):
              'readonly_registry_contract':{'scope':'local_HKLM_timezone_roots_and_guard_owned_UTC_values_only','paths':sorted(REGISTRY_PATHS),
                                            'access':'KEY_READ','remote_allowed':False,'writes_allowed':False},
              'runner_image':{k:os.environ.get(k) for k in ('ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH')},
-             'operational_installation_tested':False,'homologation_authorized':False,'physical':'PENDING'}
+             'operational_installation_tested':False,'homologation_authorized':False,'physical':'PENDING','limitations':LIMITATIONS}
     receipt['receipt_sha256']=digest(receipt)
     return receipt
 
@@ -384,7 +389,7 @@ def verify_receipt(receipt,code_sha):
     try:
         required={'schema','scope','code_sha','base_sha','run_id','profile_sha256','wheel_lock_sha256','tool_sha256',
                   'facts','assessment','native_binaries','python_build','cache_tag','SOABI','windows_version','runner_image',
-                  'operational_installation_tested','homologation_authorized','physical','receipt_sha256','process_import_defaults','readonly_registry_contract'}
+                  'operational_installation_tested','homologation_authorized','physical','receipt_sha256','process_import_defaults','readonly_registry_contract','limitations'}
         if not isinstance(receipt,dict) or set(receipt)!=required:return False
         copy=dict(receipt);sha=copy.pop('receipt_sha256')
         if (sha!=digest(copy) or copy['schema']!='ames-p04-runner-receipt-v1' or copy['code_sha']!=code_sha
@@ -404,7 +409,9 @@ def verify_receipt(receipt,code_sha):
         image=copy['runner_image']
         if set(image)!={'ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH'} or image['RUNNER_OS']!='Windows' or image['RUNNER_ARCH']!='X64':return False
         if any(not isinstance(value,str) or not value for value in image.values()):return False
-        if copy['cache_tag']!='cpython-312' or not str(copy['SOABI']).startswith('cp312'):return False
+        if copy['cache_tag']!='cpython-312' or copy['SOABI'] not in (None,'cp312-win_amd64'):return False
+        if copy['facts']['runtime']['extension_suffix']!=PROFILE['extension_suffix']:return False
+        if copy['limitations']!=LIMITATIONS:return False
         if not str(copy['python_build']).startswith('3.12.10 '):return False
         if not isinstance(copy['windows_version'],list) or len(copy['windows_version'])!=5:return False
         return True
