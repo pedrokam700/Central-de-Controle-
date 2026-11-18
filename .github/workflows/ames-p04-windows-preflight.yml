@@ -2,7 +2,7 @@ name: A-MES P04 Windows compatibility proof (synthetic only)
 on:
   push:
     branches:
-      - work/ames-p04-windows-preflight-20261118
+      - work/ames-p08-generation-reconciliation-20261118
 permissions:
   contents: read
 jobs:

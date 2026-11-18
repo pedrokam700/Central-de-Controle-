@@ -9,7 +9,9 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1];BASE='5856eb3f0cc1dd391cf93217fd068f0a044f8ab2'
 BRANCH='work/ames-p04-windows-preflight-20261118'
-ALLOWED={'tools/ames-lab/windows_preflight.py','tools/ames-lab/p04_profile.json','tools/ames-lab/p04_windows_wheels.json',
+ALLOWED={
+ 'tools/ames-lab/generation_reconcile.py', 'tools/ames-lab/p08_profile.json', 'scripts/fixtures/p08_generations.py', 'scripts/agent-p08-generation.test.py', 'scripts/agent-p08-preservation.test.py', 'scripts/agent-p08-native-readers.test.py', '.github/workflows/ames-p08-generations.yml', 'docs/ames/audits/PR96_P08_GENERATIONS_20261118.md', 'docs/ames/handoffs/PR96_P08_G6_20261118.md',
+ 'scripts/agent-p04-preservation.test.py','tools/ames-lab/windows_preflight.py','tools/ames-lab/p04_profile.json','tools/ames-lab/p04_windows_wheels.json',
  'scripts/agent-p04-compatibility.test.py','scripts/agent-p04-preservation.test.py','scripts/agent-p04-ci.py',
  '.github/workflows/ames-p04-windows-preflight.yml','.github/workflows/ames-lab-isolation.yml','.github/workflows/ames-lab-existing-regressions.yml',
  'scripts/agent-lab-preservation-static.test.py','vercel.json','netlify.toml',

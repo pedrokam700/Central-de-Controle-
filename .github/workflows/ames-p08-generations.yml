@@ -1,0 +1,42 @@
+name: A-MES P08 synthetic generation reconciliation (no distribution)
+on:
+  push:
+    branches:
+      - work/ames-p08-generation-reconciliation-20261118
+permissions:
+  contents: read
+jobs:
+  linux-generations:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash ./scripts/audit/guarded-ci.sh {0}
+    env:
+      PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: P08 R0 R1 R2 raw WAL interruption and no-overwrite matrix
+        run: python3 -B scripts/agent-p08-generation.test.py -v
+  windows-generations:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution'
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: P08 real filesystem and synthetic SQLite matrix Windows
+        shell: pwsh
+        run: |
+          python -B scripts/agent-distribution-guard-compat.test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B scripts/agent-p08-generation.test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# No operational updater/launcher, network, packages, archive or artifact upload.

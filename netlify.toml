@@ -41,3 +41,7 @@
 # P04 disposable Windows compatibility proof: no preview.
 [context."work/ames-p04-windows-preflight-20261118"]
   ignore = "exit 0"
+
+# P08 synthetic decision/reconciliation proof: no preview.
+[context."work/ames-p08-generation-reconciliation-20261118"]
+  ignore = "exit 0"

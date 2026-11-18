@@ -2,7 +2,7 @@ name: A-MES integrated regressions with verified CI-only Python wheels
 on:
   push:
     branches:
-      - work/ames-p04-windows-preflight-20261118
+      - work/ames-p08-generation-reconciliation-20261118
 permissions:
   contents: read
 jobs:
