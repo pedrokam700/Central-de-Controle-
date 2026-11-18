@@ -5,13 +5,152 @@ on:
 permissions:
   contents: read
   actions: read
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
 jobs:
-  packaging-counterproofs:
+  build-and-verify:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      zip_sha256: ${{ steps.identity.outputs.zip_sha256 }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Packaging counterproofs before implementation
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Source counterproofs without operational execution
         run: python3 -B scripts/candidate97-source.test.py -v
-# Distribution is explicitly authorized ONLY here. Regression guards unchanged.
+      - name: Require all four guarded regressions on the exact SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B scripts/candidate97-ci-gate.py | tee "$RUNNER_TEMP/regression-gate.log"
+      - name: Authorized isolated complete candidate build only
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain --untracked-files=all)"
+          mkdir "$RUNNER_TEMP/central-candidate"
+          candidate_zip="$RUNNER_TEMP/central-candidate/CENTRAL_AMES_CANDIDATA_${GITHUB_SHA}.zip"
+          python3 -B scripts/build-integrated-candidate.py "$candidate_zip"
+          echo "CANDIDATE_ZIP=$candidate_zip" >> "$GITHUB_ENV"
+          tail -1 "$RUNNER_TEMP/regression-gate.log" > "$RUNNER_TEMP/central-candidate/REGRESSOES.json"
+      - name: Independently verify actual bytes manifests transforms and new extraction
+        run: python3 -B scripts/verify-complete-candidate.py "$CANDIDATE_ZIP" --sha "$GITHUB_SHA" --extract-to "$RUNNER_TEMP/passive-candidate-linux" --receipt "$RUNNER_TEMP/central-candidate/VERIFICACAO_LINUX.json"
+      - name: Positive and adversarial archive counterproofs on synthetic copies
+        run: python3 -B scripts/candidate97-artifact.test.py -v
+      - name: Inventory digest and clean checkout receipt
+        id: identity
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain --untracked-files=all)"
+          cd "$RUNNER_TEMP/central-candidate"
+          sha256sum "CENTRAL_AMES_CANDIDATA_${GITHUB_SHA}.zip" > SHA256SUMS.txt
+          python3 -B - <<'PY'
+          import json,os,pathlib
+          r=json.loads(pathlib.Path('VERIFICACAO_LINUX.json').read_text())
+          pathlib.Path('INVENTARIO_ARQUIVOS.json').write_text(json.dumps(r['files'],indent=2))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('zip_sha256='+r['zip_sha256']+'\n')
+          print(json.dumps({k:v for k,v in r.items() if k!='files'}))
+          PY
+      - name: Internal validated archive transport for passive Windows check
+        uses: actions/upload-artifact@v4
+        with:
+          name: VALIDACAO_INTERNA_NAO_ENTREGA_${{ github.sha }}
+          path: ${{ runner.temp }}/central-candidate/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+  windows-passive:
+    needs: build-and-verify
+    runs-on: windows-2025
+    timeout-minutes: 20
+    env:
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+      EXPECTED_ZIP_SHA256: ${{ needs.build-and-verify.outputs.zip_sha256 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v5
+        with:
+          name: VALIDACAO_INTERNA_NAO_ENTREGA_${{ github.sha }}
+          path: ${{ runner.temp }}/central-candidate
+      - name: Verify same archive digest and passively extract every member
+        shell: pwsh
+        run: |
+          $candidateZip = Join-Path $env:RUNNER_TEMP "central-candidate/CENTRAL_AMES_CANDIDATA_$($env:GITHUB_SHA).zip"
+          if ((Get-FileHash -LiteralPath $candidateZip -Algorithm SHA256).Hash.ToLower() -ne $env:EXPECTED_ZIP_SHA256) { throw 'Wrong archive digest' }
+          "CANDIDATE_ZIP=$candidateZip" >> $env:GITHUB_ENV
+          python -B scripts/verify-complete-candidate.py $candidateZip --sha $env:GITHUB_SHA --extract-to "$env:RUNNER_TEMP/passive-candidate-windows" --receipt "$env:RUNNER_TEMP/VERIFICACAO_WINDOWS.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Real Windows negative archive and extraction tests
+        shell: pwsh
+        run: |
+          python -B scripts/candidate97-artifact.test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Parse all extracted PowerShell sources without running any script
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'passive-candidate-windows'
+          $parsed = 0
+          foreach ($file in Get-ChildItem -LiteralPath $root -Filter '*.ps1' -Recurse -File) {
+            $tokens = $null; $parseErrors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) { throw "PowerShell syntax refused: $($file.Name): $parseErrors" }
+            $parsed++
+          }
+          if ($parsed -lt 10) { throw 'Missing PowerShell members' }
+          Write-Output "PASSIVE_WINDOWS_POWERSHELL_PARSE=$parsed; NO_SCRIPT_EXECUTED"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VALIDACAO_WINDOWS_${{ github.sha }}
+          path: ${{ runner.temp }}/VERIFICACAO_WINDOWS.json
+          if-no-files-found: error
+          retention-days: 1
+  publish-candidate:
+    needs: [build-and-verify, windows-passive]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: VALIDACAO_INTERNA_NAO_ENTREGA_${{ github.sha }}
+          path: ${{ runner.temp }}/delivery
+      - uses: actions/download-artifact@v5
+        with:
+          name: VALIDACAO_WINDOWS_${{ github.sha }}
+          path: ${{ runner.temp }}/delivery
+      - name: Require Linux Windows same digest and exact code SHA before delivery
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/delivery"
+          sha256sum -c SHA256SUMS.txt
+          python3 -B - <<'PY'
+          import json,os,pathlib
+          a=json.loads(pathlib.Path('VERIFICACAO_LINUX.json').read_text())
+          b=json.loads(pathlib.Path('VERIFICACAO_WINDOWS.json').read_text())
+          assert a==b, 'Platform receipts differ'
+          assert a['sha']==os.environ['GITHUB_SHA'] and a['installation_authorized'] is False
+          assert a['passive_extraction_verified'] is True and a['physical']=='PENDING'
+          assert json.loads(pathlib.Path('REGRESSOES.json').read_text())['regression_gate']=='PASS'
+          print('DELIVERY VERIFIED',a['sha'],a['zip_sha256'],a['members'])
+          PY
+      - name: Downloadable complete test candidate requires GitHub access no release
+        id: delivery
+        uses: actions/upload-artifact@v4
+        with:
+          name: CENTRAL_AMES_CANDIDATA_${{ github.sha }}
+          path: ${{ runner.temp }}/delivery/*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Publication receipt
+        run: echo 'Candidate download ${{ steps.delivery.outputs.artifact-url }}. NOT AUTHORIZED FOR OPERATIONAL INSTALLATION.'
+# The user's 18/11 authorization is limited to THIS packaging workflow.
+# No global guard exception, no agent/startup/updater/MES/guardian execution.

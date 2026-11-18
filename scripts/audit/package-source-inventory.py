@@ -52,6 +52,9 @@ def sources(ref):
   name=PurePosixPath(p)
   if name.parent.as_posix()=='docs/ames' and name.name.startswith('integrated-v5'):add('evidence/'+name.name,p)
  for p in ('docs/ames/falhas-do-dia-analytics.md','docs/ames/handoffs/ISSUE66_CANDIDATA_CONSOLIDADA_20261023.md','docs/ames/handoffs/PR69_RECOVERY_20261030.md','docs/ames/handoffs/PR69_3012_REUSO_20261106.md','docs/ames/handoffs/PR69_AUDITORIA_3012_REUSO_20261105.md'):add('evidence/'+PurePosixPath(p).name,p)
+ for source in constants.get('CANDIDATE_EVIDENCE',()):add('evidence/current/'+PurePosixPath(source).name,source)
+ if 'CANDIDATE_INSTRUCTIONS' in constants:
+  mapping['INSTRUCOES_INSTALACAO_LIMPA.txt']=constants['CANDIDATE_INSTRUCTIONS'];add('PACKAGE_IDENTITY.json',None)
  return mapping,derived
 new=git('rev-parse','HEAD').decode().strip();old,od=sources(OLD);current,cd=sources(new)
 hashes=lambda ref,m:{k:hashlib.sha256(read_git(ref,v)).hexdigest() for k,v in m.items() if v is not None}

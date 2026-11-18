@@ -16,13 +16,14 @@ test('o launcher da candidata recusa porta 8765 ocupada antes de instalar ou ini
 
 test('o pacote exige migracao supervisionada quando existe guardian anterior',()=>{
   const builder=readFileSync('scripts/build-integrated-candidate.py','utf8');
-  assert.match(builder,/PC COM 0\.5\.39 OU OUTRO GUARDIAN/);
-  assert.match(builder,/NAO EXECUTE 00_INICIAR_AQUI\.bat/);
-  assert.match(builder,/ATUALIZACAO EXISTENTE — 01_TROCAR\.bat/);
-  assert.match(builder,/backup privado,\s+ensaio de restauracao e transfere SQLite/);
-  assert.doesNotMatch(builder,/volte a usar a CLEAN V3 intacta/);
-  assert.match(builder,/instalacao oficial anterior comprovada \(0\.5\.39/);
-  assert.match(builder,/nao copie nem substitua SQLite, WAL, token, configuracao, source_id ou filas/);
+  const instructions=readFileSync('docs/ames/packaging/CANDIDATA_INSTALACAO_FUTURA_20261118.md','utf8');
+  assert.match(instructions,/NÃO AUTORIZADO PARA INSTALAÇÃO OPERACIONAL/);
+  assert.match(instructions,/EEDACC65/);
+  assert.match(instructions,/nem escolher 0\.5\.39 como retorno padrão/);
+  assert.match(instructions,/01_TROCAR\.bat/);
+  assert.match(instructions,/SQLite\/WAL/);
+  assert.match(instructions,/R2 com dados novos\/estado desconhecido/);
+  assert.match(builder,/payload\['LEIA_PRIMEIRO\.txt'\]=instructions/);
   for(const name of ['VERIFIER_FILES','SAFE_STATE_TRANSFER.py','issue57_update_preflight.py','AT_SETUP_FILES']){
     assert.ok(builder.includes(name),`required previous-package support must survive repackaging: ${name}`);
   }
