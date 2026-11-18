@@ -60,9 +60,9 @@ def _write(path,value):
     path.chmod(0o600)
 
 
-def _journal(root,state):
+def _journal(root,state,ready_sha256=None):
     temporary=root/'.p02-journal.tmp'
-    _write(temporary,{'schema':'p02-private-journal-v1','state':state})
+    _write(temporary,{'schema':'p02-private-journal-v1','state':state,'ready_sha256':ready_sha256})
     os.replace(temporary,root/'.p02-journal.json')
 
 
@@ -176,12 +176,18 @@ def _logical(master,work):
     for suffix in ('','-wal','-shm'):
         source=master/(DB+suffix)
         if source.exists():_copy(source,work/('input.sqlite3'+suffix))
-    src=sqlite3.connect(work/'input.sqlite3');dest=sqlite3.connect(work/'logical.sqlite3')
-    try:src.backup(dest);dest.commit()
-    finally:dest.close();src.close()
-    con=sqlite3.connect(work/'logical.sqlite3')
-    con.execute('PRAGMA trusted_schema=OFF')
-    return con
+    src=dest=con=None
+    try:
+        src=sqlite3.connect(work/'input.sqlite3');dest=sqlite3.connect(work/'logical.sqlite3')
+        src.backup(dest);dest.commit()
+        con=sqlite3.connect(work/'logical.sqlite3');con.execute('PRAGMA trusted_schema=OFF')
+        return con
+    except sqlite3.Error:
+        if con is not None:con.close()
+        raise Refused('DATABASE_MATERIALIZATION_FAILED') from None
+    finally:
+        if dest is not None:dest.close()
+        if src is not None:src.close()
 
 
 def _schema(con):
@@ -386,17 +392,25 @@ def _new_database(path,schema,rows):
 
 
 def _prepare(root):
-    if {p.name for p in root.iterdir()}!={'source','SYNTHETIC_ONLY.json'}:raise Refused('EXISTING_OR_INTERRUPTED_WORKSPACE')
+    if not (root/'SYNTHETIC_ONLY.json').exists():raise Refused('SYNTHETIC_PROVENANCE_REQUIRED')
     _plain(root/'SYNTHETIC_ONLY.json');marker=parse((root/'SYNTHETIC_ONLY.json').read_text(encoding='utf-8'))
     if (set(marker)!={'schema','purpose','source_id','files'} or marker['schema']!='ames-p02-synthetic-workspace-v1'
             or marker['purpose']!='synthetic_only_not_factory' or not isinstance(marker['source_id'],str)):
         raise Refused('SYNTHETIC_PROVENANCE_REQUIRED')
     initial=_inventory(root/'source')
     if initial!=marker['files']:raise Refused('SOURCE_MANIFEST_MISMATCH')
+    if {p.name for p in root.iterdir()}!={'source','SYNTHETIC_ONLY.json'}:raise Refused('EXISTING_OR_INTERRUPTED_WORKSPACE')
+    provenance=PROFILE['synthetic_provenance']
+    if marker['source_id']!=provenance['source_id'] or any(initial.get(name)!=sha for name,sha in provenance['fixed_files'].items()):
+        raise Refused('FIXTURE_PROVENANCE_REQUIRED')
+    # O_EXCL claim precedes every journal/destination write. Never removed or
+    # auto-resumed: an interruption requires a separate supervised workspace.
+    try:_write(root/'.p02-claim.json',{'schema':'p02-exclusive-claim-v1'})
+    except FileExistsError:raise Refused('EXISTING_OR_INTERRUPTED_WORKSPACE') from None
     _journal(root,'PREPARING')
     private=root/'private';private.mkdir(mode=0o700);master=private/'master';master.mkdir(mode=0o700)
     for name in initial:_copy(root/'source'/name,master/name)
-    if _inventory(root/'source')!=initial:raise Refused('SOURCE_CHANGED_DURING_COPY')
+    if _inventory(root/'source')!=initial or _inventory(master)!=initial:raise Refused('SOURCE_CHANGED_DURING_COPY')
     _write(private/'master-manifest.json',{'schema':'p02-private-byte-seal-v1','files':initial,'immutable_storage_attested':False})
     _seal(master);_phase('after_backup')
     # Everything below reads a WORKING copy, never original/master via SQLite.
@@ -404,13 +418,15 @@ def _prepare(root):
     browser=parse((master/'browser/storage.json').read_text(encoding='utf-8'))
     if set(browser)!={'auth','outbox'} or not isinstance(browser['outbox'],list) or browser['outbox']:
         raise Refused('OUTBOX_NOT_PROVEN_EMPTY')
+    if browser['auth']!=provenance['browser_auth']:raise Refused('FIXTURE_PROVENANCE_REQUIRED')
     checkpoint=parse((master/CHECKPOINT).read_text(encoding='utf-8'))
     con=_logical(master,private/'work')
     try:
         schema,rows=_read(con)
         meta=dict(rows['schema_meta'])
         if set(meta)!={'schema_version','ames_source_id'} or meta['ames_source_id']!=marker['source_id']:raise Refused('DATABASE_SOURCE_CONFLICT')
-        if any(r[1] for r in rows['monitor_profiles']) or any(r[3] in {'queued','running'} for r in rows['jobs']):raise Refused('ACTIVE_WORK_UNVERIFIED')
+        if (any(r[1] for r in rows['monitor_profiles']) or any(r[3] in {'queued','running'} for r in rows['jobs'])
+            or any(r[8]=='running' for r in rows['repair_query_runs_3012'])):raise Refused('ACTIVE_WORK_UNVERIFIED')
         if (set(checkpoint)!={'source_id','snapshot_id','line','revision','content_hash','query_sn','status'}
             or checkpoint['source_id']!=meta['ames_source_id'] or checkpoint['status']!='COMPLETE'):
             raise Refused('CHECKPOINT_SOURCE_CONFLICT')
@@ -440,9 +456,14 @@ def _prepare(root):
     if _inventory(root/'source')!=initial or {p.relative_to(master).as_posix():file_hash(p) for p in master.rglob('*') if p.is_file()}!=initial:
         raise Refused('SOURCE_OR_MASTER_CHANGED')
     _phase('before_publish')
-    if (root/'published').exists():raise Refused('DESTINATION_EXISTS')
-    os.replace(stage,root/'published');_phase('after_publish')
-    _journal(root,'COMPLETE')
+    # Exclusive destination reservation plus xb copies, never replacing even an
+    # empty existing directory. Multi-file publication is NOT an atomic rename.
+    published=root/'published'
+    try:published.mkdir(mode=0o700)
+    except FileExistsError:raise Refused('DESTINATION_EXISTS') from None
+    for name in ready:_copy(stage/name,published/name)
+    _copy(stage/'READY.json',published/'READY.json');_phase('after_publish')
+    _journal(root,'COMPLETE',file_hash(stage/'READY.json'))
     if not verify_publication(root):raise Refused('PUBLICATION_NOT_VERIFIED')
     return receipt
 
@@ -454,18 +475,44 @@ def prepare_synthetic(workspace):
         raise Refused('UNVERIFIED_STATE_PRESERVE_EVIDENCE') from None
 
 
+def _published_files(published):
+    expected={'lab/ames_local.sqlite3','lab/checkpoint.json','lab/LAB_ONLY.json','public/receipt.json','READY.json'}
+    actual={}
+    _plain(published,True)
+    for parent,dirs,names in os.walk(published,followlinks=False):
+        for name in dirs:
+            path=Path(parent)/name;_plain(path,True)
+            if path.relative_to(published).as_posix() not in {'lab','public'}:raise Refused('UNKNOWN_PUBLICATION_MEMBER')
+        for name in names:
+            path=Path(parent)/name;relative=path.relative_to(published).as_posix();_plain(path)
+            if relative not in expected:raise Refused('UNKNOWN_PUBLICATION_MEMBER')
+            actual[relative]=file_hash(path)
+    if set(actual)!=expected:raise Refused('INCOMPLETE_PUBLICATION')
+    return actual
+
+
 def verify_publication(workspace):
     try:
-        root=_root(workspace);state=parse((root/'.p02-journal.json').read_text(encoding='utf-8'))
-        if state!={'schema':'p02-private-journal-v1','state':'COMPLETE'}:return False
-        published=root/'published';_plain(published,True)
+        root=_root(workspace)
+        for name in ('.p02-claim.json','.p02-journal.json'):_plain(root/name)
+        if parse((root/'.p02-claim.json').read_text(encoding='utf-8'))!={'schema':'p02-exclusive-claim-v1'}:return False
+        state=parse((root/'.p02-journal.json').read_text(encoding='utf-8'))
+        if (set(state)!={'schema','state','ready_sha256'} or state['schema']!='p02-private-journal-v1'
+            or state['state']!='COMPLETE'):return False
+        published=root/'published';actual=_published_files(published)
+        if state['ready_sha256']!=actual.pop('READY.json'):return False
         ready=parse((published/'READY.json').read_text(encoding='utf-8'))
-        actual={p.relative_to(published).as_posix():file_hash(p) for p in published.rglob('*') if p.is_file() and p.name!='READY.json'}
-        for p in published.rglob('*'):_plain(p,p.is_dir())
         if ready!={'schema':'p02-publication-v1','files':actual}:return False
+        lab=parse((published/'lab/LAB_ONLY.json').read_text(encoding='utf-8'))
+        if lab!={'schema':'ames-p02-passive-data-v1','runtime_allowed':False,'sync_allowed':False,
+                 'files':{name:actual['lab/'+name] for name in ('ames_local.sqlite3','checkpoint.json')}}:return False
+        receipt=parse((published/'public/receipt.json').read_text(encoding='utf-8'))
+        if receipt!={'schema':'ames-p02-public-proof-v1','profile':PROFILE['schema'],'relations_verified':True,
+             'source_unchanged':True,'private_backup_sealed':True,'real_data_authorized':False,'physical':'PENDING'}:return False
+        _plain(root/'private',True);_plain(root/'private/master-manifest.json')
         sealed=parse((root/'private/master-manifest.json').read_text(encoding='utf-8'))
-        master=root/'private/master'
-        if {p.relative_to(master).as_posix():file_hash(p) for p in master.rglob('*') if p.is_file()}!=sealed['files']:return False
+        if set(sealed)!={'schema','files','immutable_storage_attested'} or sealed['schema']!='p02-private-byte-seal-v1' or sealed['immutable_storage_attested'] is not False:return False
+        if _inventory(root/'private/master')!=sealed['files']:return False
         return True
     except (OSError,ValueError,TypeError,KeyError,Refused):return False
 

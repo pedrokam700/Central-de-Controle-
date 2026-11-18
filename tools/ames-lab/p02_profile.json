@@ -823,6 +823,7 @@
     "selected_items",
     "selection_reason",
     "sem_reuso_anterior",
+    "sn",
     "snapshot_id",
     "snapshot_revision",
     "source",
@@ -881,6 +882,7 @@
       "material_reuse",
       "pcba_history",
       "process_event",
+      "sn_lookup",
       "source_row"
     ],
     "defect_code": [
@@ -929,6 +931,7 @@
       "bounded",
       "candidate_partial",
       "complete",
+      "done",
       "incomplete",
       "not_collected",
       "observed_partial",
@@ -1314,5 +1317,19 @@
     "source_kind": [
       "synthetic"
     ]
+  },
+  "synthetic_provenance": {
+    "source_id": "ba063416-4a02-4c7f-9c22-6c99180ec330",
+    "fixed_files": {
+      "ames-agent/config.json": "07fcd403ff71c80e33b7a283ade11a37ba110c084331e61f9d6b53d7844f664c",
+      "ames-agent/data/at_admin_auth.json": "1b1e369beea968eee0899936a310c4bff0d1e67c0902cf6fd9ed42ec11681d2c",
+      "ames-agent/data/at_user_profiles.json": "57d9f361a40ebac4e86bcfa2be8151d4e4f67ffccfed4c5e3680891e35f94f55",
+      "ames-agent/data/local_agent_token": "f6003bcc7f48dc40a09367cd2dff6b007aa4fe510b68d1c7354a146041366f81",
+      "chrome/Default/Preferences": "cd9673b599cddcd06fd4cef255b89a721b22b190e80774a3bdf14ba320a5d248",
+      "factory-engine/config/settings.json": "9a2bae72ea67234df4ceeafd357b15622eaa82a5b9ee0ea933d72c20076c4fc6",
+      "factory-engine/session.json": "2730c0154ef64583fd63d04b607124a0f730846ec1f425f61b7ae7a77105cf9f",
+      "logs/agent.log": "afd92c40010160c23d6eaa95997d204ab0e81d48b1ef3e999073a92ed4f4006a"
+    },
+    "browser_auth": "SYNTHETIC-FIREBASE-AUTH"
   }
 }

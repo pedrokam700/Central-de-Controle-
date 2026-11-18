@@ -15,7 +15,7 @@ def dump(value):return json.dumps(value,ensure_ascii=False,sort_keys=True,separa
 
 
 def database(path):
-    fixture=json.loads((ROOT/'scripts/fixtures/p02_state.json').read_text())
+    fixture=json.loads((ROOT/'scripts/fixtures/p02_state.json').read_text(encoding='utf-8'))
     con=sqlite3.connect(path)
     try:
         for typ,name,table,sql in fixture['schema']:

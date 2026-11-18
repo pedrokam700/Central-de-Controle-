@@ -65,7 +65,7 @@ class SyntheticP02(unittest.TestCase):
 
     def test_03_every_row_json_relation_and_revision_survives(self):
         prepare=self.api();prepare(self.workspace)
-        ledger=json.loads((self.workspace/'private/transform-ledger.json').read_text())
+        ledger=json.loads((self.workspace/'private/transform-ledger.json').read_text(encoding='utf-8'))
         inverse={new:old for old,new in ledger['mapping'].items()}
         def undo(v,restore=False):
             if isinstance(v,dict):return {(inverse.get(k,k) if restore else k):undo(x,restore) for k,x in v.items()}
@@ -117,19 +117,19 @@ class SyntheticP02(unittest.TestCase):
     def test_09_truncated_database(self):
         prepare=self.api();self.db.write_bytes(self.db.read_bytes()[:96])
         # Reseal bytes without trying to open this intentionally broken database.
-        marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text())
+        marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text(encoding='utf-8'))
         marker['files']['ames-agent/data/ames_local.sqlite3']=hashlib.sha256(self.db.read_bytes()).hexdigest()
         (self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker))
         with self.assertRaisesRegex(self.mod['Refused'],r'^DATABASE_MATERIALIZATION_FAILED$'):prepare(self.workspace)
         self.no_release()
 
     def test_10_outbox_never_silently_dropped(self):
-        prepare=self.api();p=self.source/'browser/storage.json';v=json.loads(p.read_text());v['outbox']=[{'payload':'SYNTHETIC-NEW-EVIDENCE'}];p.write_text(json.dumps(v));FIX['seal'](self.workspace)
+        prepare=self.api();p=self.source/'browser/storage.json';v=json.loads(p.read_text(encoding='utf-8'));v['outbox']=[{'payload':'SYNTHETIC-NEW-EVIDENCE'}];p.write_text(json.dumps(v));FIX['seal'](self.workspace)
         with self.assertRaisesRegex(self.mod['Refused'],r'^OUTBOX_NOT_PROVEN_EMPTY$'):prepare(self.workspace)
-        self.no_release();self.assertIn('SYNTHETIC-NEW-EVIDENCE',p.read_text())
+        self.no_release();self.assertIn('SYNTHETIC-NEW-EVIDENCE',p.read_text(encoding='utf-8'))
 
     def test_11_contradictory_source_or_checkpoint_revision(self):
-        prepare=self.api();p=self.source/'ames-agent/data/checkpoint.json';v=json.loads(p.read_text());v['source_id']='OTHER-SYNTHETIC-SOURCE';p.write_text(json.dumps(v));FIX['seal'](self.workspace)
+        prepare=self.api();p=self.source/'ames-agent/data/checkpoint.json';v=json.loads(p.read_text(encoding='utf-8'));v['source_id']='OTHER-SYNTHETIC-SOURCE';p.write_text(json.dumps(v));FIX['seal'](self.workspace)
         with self.assertRaisesRegex(self.mod['Refused'],r'^CHECKPOINT_SOURCE_CONFLICT$'):prepare(self.workspace)
         self.no_release()
 
@@ -149,21 +149,31 @@ class SyntheticP02(unittest.TestCase):
                 self.no_release()
 
     def test_14_WAL_committed_included_uncommitted_excluded_origin_untouched(self):
-        prepare=self.api();con=sqlite3.connect(self.db);con.execute('PRAGMA journal_mode=WAL');con.execute('PRAGMA wal_autocheckpoint=0')
-        try:
-            con.execute("INSERT INTO pcba_history(snapshot_id,pcba_sn,hist_seq,defect_code,defect_desc,raw_json) VALUES(1,'P1','9','HIST','Camera impurity','{}')");con.commit()
-            FIX['seal'](self.workspace)
-            con.execute("INSERT INTO pcba_history(snapshot_id,pcba_sn,hist_seq,defect_code,defect_desc,raw_json) VALUES(1,'P1','10','HIST','Camera impurity','{}')")
-            # Copy of a frozen synthetic writer, NOT an attested real maintenance lease.
-            marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text());marker['files']=files(self.source);(self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker))
-            before=files(self.source);prepare(self.workspace);self.assertEqual(before,files(self.source))
-            out=sqlite3.connect(self.workspace/'published/lab/ames_local.sqlite3')
-            try:self.assertEqual(out.execute("SELECT hist_seq FROM pcba_history WHERE hist_seq IN ('9','10')").fetchall(),[('9',)])
-            finally:out.close()
-        finally:con.rollback();con.close()
+        prepare=self.api()
+        # A real SQLite writer spills an uncommitted transaction, then exits
+        # without rollback/close. No live Windows file lock or production lease.
+        code="""import json,os,sqlite3,sys
+con=sqlite3.connect(sys.argv[1]);con.execute('PRAGMA journal_mode=WAL');con.execute('PRAGMA wal_autocheckpoint=0')
+con.execute("INSERT INTO pcba_history(snapshot_id,pcba_sn,hist_seq,defect_code,defect_desc,raw_json) VALUES(1,'P1','9','HIST','Camera impurity','{}')");con.commit()
+con.execute('PRAGMA cache_size=1');con.execute('PRAGMA cache_spill=ON')
+con.execute("INSERT INTO pcba_history(snapshot_id,pcba_sn,hist_seq,defect_code,defect_desc,raw_json) VALUES(1,'P1','10','HIST','Camera impurity',?)",(json.dumps({'notes':'SYNTHETIC-UNCOMMITTED'*100000}),))
+os._exit(86)
+"""
+        result=subprocess.run([sys.executable,'-B','-c',code,str(self.db)],capture_output=True,text=True)
+        self.assertEqual(result.returncode,86,result.stderr)
+        wal=Path(str(self.db)+'-wal').read_bytes();page_size=int.from_bytes(wal[8:12],'big')
+        commit_sizes=[int.from_bytes(wal[start+4:start+8],'big') for start in range(32,len(wal),24+page_size)]
+        self.assertTrue(any(commit_sizes));self.assertEqual(commit_sizes[-1],0)
+        marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text(encoding='utf-8'))
+        marker['files']=files(self.source)
+        (self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker),encoding='utf-8')
+        before=files(self.source);prepare(self.workspace);self.assertEqual(before,files(self.source))
+        out=sqlite3.connect(self.workspace/'published/lab/ames_local.sqlite3')
+        try:self.assertEqual(out.execute("SELECT hist_seq FROM pcba_history WHERE hist_seq IN ('9','10')").fetchall(),[('9',)])
+        finally:out.close()
 
     def test_15_missing_declared_WAL_rejected(self):
-        prepare=self.api();marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text());marker['files']['ames-agent/data/ames_local.sqlite3-wal']='0'*64;(self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker))
+        prepare=self.api();marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text(encoding='utf-8'));marker['files']['ames-agent/data/ames_local.sqlite3-wal']='0'*64;(self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker))
         with self.assertRaisesRegex(self.mod['Refused'],r'^SOURCE_MANIFEST_MISMATCH$'):prepare(self.workspace)
         self.no_release()
 
@@ -221,7 +231,7 @@ class SyntheticP02(unittest.TestCase):
         with patch.dict(prepare.__globals__,_phase=changed):
             with self.assertRaisesRegex(self.mod['Refused'],r'^SOURCE_OR_MASTER_CHANGED$'):prepare(self.workspace)
         self.assertIn('after_backup',reached)
-        self.no_release();self.assertEqual(p.read_text(),'SYNTHETIC NEW DATA DO NOT OVERWRITE')
+        self.no_release();self.assertEqual(p.read_text(encoding='utf-8'),'SYNTHETIC NEW DATA DO NOT OVERWRITE')
         self.assertEqual((self.workspace/'private/master/ames-agent/config.json').read_bytes(),old)
 
     def test_23_exit_after_backup_preserves_master(self):
@@ -235,13 +245,13 @@ class SyntheticP02(unittest.TestCase):
         try:
             con.execute("UPDATE pcba_history SET hist_seq='9' WHERE id=(SELECT min(id) FROM pcba_history)");con.commit()
             p=Path(str(self.db)+'-wal');data=bytearray(p.read_bytes());data[-1]^=1;p.write_bytes(data)
-            marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text());marker['files']=files(self.source);(self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker))
+            marker=json.loads((self.workspace/'SYNTHETIC_ONLY.json').read_text(encoding='utf-8'));marker['files']=files(self.source);(self.workspace/'SYNTHETIC_ONLY.json').write_text(json.dumps(marker))
             with self.assertRaisesRegex(self.mod['Refused'],r'^WAL_FRAME_CHECKSUM$'):prepare(self.workspace)
             self.no_release()
         finally:con.close()
 
     def test_25_checkpoint_scope_mismatch(self):
-        prepare=self.api();p=self.source/'ames-agent/data/checkpoint.json';v=json.loads(p.read_text());v['revision']=999;p.write_text(json.dumps(v));FIX['seal'](self.workspace)
+        prepare=self.api();p=self.source/'ames-agent/data/checkpoint.json';v=json.loads(p.read_text(encoding='utf-8'));v['revision']=999;p.write_text(json.dumps(v));FIX['seal'](self.workspace)
         with self.assertRaisesRegex(self.mod['Refused'],r'^CHECKPOINT_SCOPE_CONFLICT$'):prepare(self.workspace)
         self.no_release()
 
@@ -268,7 +278,7 @@ class SyntheticP02(unittest.TestCase):
     def test_29_edited_READY_cannot_reseal_tampered_data(self):
         prepare=self.api();prepare(self.workspace)
         target=self.workspace/'published/lab/checkpoint.json';target.write_text('{"private":"SYNTHETIC LEAK"}')
-        file=self.workspace/'published/READY.json';data=json.loads(file.read_text());data['files']['lab/checkpoint.json']=hashlib.sha256(target.read_bytes()).hexdigest();file.write_text(json.dumps(data))
+        file=self.workspace/'published/READY.json';data=json.loads(file.read_text(encoding='utf-8'));data['files']['lab/checkpoint.json']=hashlib.sha256(target.read_bytes()).hexdigest();file.write_text(json.dumps(data))
         self.no_release()
 
     def test_30_late_contender_cannot_invalidate_completed_owner(self):
