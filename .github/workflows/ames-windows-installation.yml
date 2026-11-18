@@ -60,6 +60,7 @@ jobs:
           python -B scripts/install98/prepare.py build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Execute real installers canonical processes and state transfer using only synthetic copies
+        timeout-minutes: 10
         shell: pwsh
         run: |
           python -B scripts/install98/integration.py

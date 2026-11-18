@@ -13,9 +13,20 @@ def record(name,status,**fields):
  row={'check':name,'status':status,**fields};ROWS.append(row);print(json.dumps(row),flush=True)
  (LAB/'progress.json').write_text(json.dumps({'checks':ROWS,'physical':'PENDING','full_switch_qualified':False},indent=2))
 def run(args,**kw):
- r=subprocess.run(list(map(str,args)),capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=kw.pop('timeout',180),**kw)
- if r.returncode:print(r.stdout[-7000:]+r.stderr[-7000:],flush=True);raise RuntimeError('CHILD_FAILED:'+str(args[0]))
- return r.stdout
+ # Files avoid a Windows pipe-reader waiting indefinitely for inherited handles
+ # in a long-lived descendant. They do not change or replace any tested code.
+ label=str(time.monotonic_ns());out=LAB/('child-'+label+'.stdout');err=LAB/('child-'+label+'.stderr')
+ print('REAL_CHILD_START '+str(args[0])+' '+label,flush=True)
+ try:
+  with out.open('w',encoding='utf-8') as of,err.open('w',encoding='utf-8') as ef:
+   r=subprocess.run(list(map(str,args)),stdout=of,stderr=ef,timeout=kw.pop('timeout',180),**kw)
+ except subprocess.TimeoutExpired:
+  print(out.read_text(errors='replace')[-7000:]+err.read_text(errors='replace')[-7000:],flush=True)
+  raise
+ stdout=out.read_text(encoding='utf-8',errors='replace');stderr=err.read_text(encoding='utf-8',errors='replace')
+ if r.returncode:print(stdout[-7000:]+stderr[-7000:],flush=True);raise RuntimeError('CHILD_FAILED:'+str(args[0]))
+ print('REAL_CHILD_EXIT '+label+' 0',flush=True)
+ return stdout
 def api(root,path):
  token=(root/'ames-agent/data/local_agent_token').read_text().strip()
  req=urllib.request.Request('http://127.0.0.1:8765'+path,headers={'X-Central-Agent-Token':token})
@@ -96,8 +107,8 @@ def main():
   record('native_restart_preserves_new_B_evidence','PASS')
   # Fault injection at the real rollback boundary AFTER real B wrote new data.
   # No fake process, listener or starter: original branch may actually reopen A.
-  result=subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'scripts/install98/rollback-probe.ps1'),'-OldRoot',str(A),'-CandidateRoot',str(B)],capture_output=True,text=True,timeout=100)
-  print(result.stdout[-5000:]+result.stderr[-5000:],flush=True)
+  result=subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'scripts/install98/rollback-probe.ps1'),'-OldRoot',str(A),'-CandidateRoot',str(B)],stdout=(LAB/'rollback.stdout').open('w'),stderr=(LAB/'rollback.stderr').open('w'),timeout=100)
+  print((LAB/'rollback.stdout').read_text(errors='replace')[-5000:]+(LAB/'rollback.stderr').read_text(errors='replace')[-5000:],flush=True)
   try:
    live=api(A,'/api/v1/v2/capabilities');old_is_serving=pathlib.Path(live['package_root']).resolve()==A
   except Exception:old_is_serving=False
