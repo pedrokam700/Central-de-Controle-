@@ -16,7 +16,7 @@ import sqlite3
 import stat
 import struct
 import sys
-from datetime import date,timedelta
+from datetime import date,datetime,timedelta
 
 PROFILE=json.loads(Path(__file__).with_name('p02_profile.json').read_text(encoding='utf-8'))
 DB='ames-agent/data/ames_local.sqlite3'
@@ -203,22 +203,32 @@ class Mapper:
         self.source=source;self.new_source='LAB-P02-'+secrets.token_hex(16)
         self.secret=secrets.token_bytes(32);self.mapping={};self.inverse={};self.hashes={}
         self.keys=set(PROFILE['json_keys']);self.dynamic=set()
+        self.public_literals={v for values in PROFILE['enums'].values() for v in values}
 
     def record(self,old,new):
+        if old==new:return new  # Public control literals are not identities.
         if old in self.mapping and self.mapping[old]!=new:raise Refused('AMBIGUOUS_FIELD_ROLE')
         if new in self.inverse and self.inverse[new]!=old:raise Refused('PSEUDONYM_COLLISION')
         self.mapping[old]=new;self.inverse[new]=old
         return new
 
     def opaque(self,value):
-        stripped=value.strip();token=hmac.new(self.secret,stripped.encode(),'sha256').hexdigest()[:24]
+        stripped=value.strip()
+        if stripped in self.public_literals:raise Refused('IDENTITY_OVERLAPS_PUBLIC_LITERAL')
+        token=hmac.new(self.secret,stripped.casefold().encode(),'sha256').hexdigest()[:24]
         prefix='BRM-LAB-V-' if stripped.upper().startswith('BRM') else 'LAB-V-'
+        mapped=prefix+token
+        # Preserve equality under the existing strip/upper identity convention.
+        # Ambiguous mixed-case aliases are refused by record's injectivity check.
+        if stripped.isupper():mapped=mapped.upper()
+        elif stripped.islower():mapped=mapped.lower()
         before=value[:len(value)-len(value.lstrip())];after=value[len(value.rstrip()):]
-        return self.record(value,before+prefix+token+after)
+        return self.record(value,before+mapped+after)
 
     def date(self,value):
-        match=re.fullmatch(r'(\d{4}-\d{2}-\d{2})(.*)',value)
+        match=re.fullmatch(r'(\d{4}-\d{2}-\d{2})((?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})?)?)',value)
         if not match:raise Refused('UNKNOWN_DATE_FORMAT')
+        datetime.fromisoformat(value.replace('Z','+00:00'))
         first=date.fromisoformat(match[1])
         if first.year<2020 or first.year>2030:raise Refused('DATE_PROFILE_UNSUPPORTED')
         # Preserve lexical precision, offset, ordering and operational clock.
@@ -235,11 +245,16 @@ class Mapper:
         if key in HASH_KEYS:
             if hash_pending:return value
             raise Refused('UNBOUND_HASH_REFERENCE')
-        if key in FREE_TEXT:return self.opaque(value)
-        if 'source_fields' in path and value in self.keys:return self.record(value,value)
+        if key in FREE_TEXT:
+            # Exact text from the reviewed public catalog carries no free-text
+            # identity; any extra suffix/name/address becomes opaque as a whole.
+            return value if value in self.public_literals else self.opaque(value)
+        if any(field in path for field in ('source_fields','operator_fields')):
+            if value not in self.keys:raise Refused('UNREVIEWED_PROVENANCE_FIELD')
+            return value
         if key=='schema' and value=='central-ames-v2':return self.record(value,'central-ames-lab-only-v1')
         if re.fullmatch(r'TAN1010[123]',value):
-            return self.record(value,{'TAN10101':'TAN10102','TAN10102':'TAN10103','TAN10103':'TAN10101'}[value])
+            return self.record(value,'LAB-LINE-'+value[-1])
         if key in PRODUCT_KEYS:
             number=int(hmac.new(self.secret,value.encode(),'sha256').hexdigest()[:8],16)
             return self.record(value,'CPH9'+str(number).zfill(10))
@@ -304,6 +319,12 @@ def _transform(rows,source):
                 if isinstance(value,str) and re.search(r'(?:_key$|_id$|_sn$|pcba$|^doc_id$)',key):
                     mapper.dynamic.add(value)
     mapper.dynamic.discard(source)
+    # 3012 immutable row versions have their own hash domain. They are not
+    # canonical snapshot parents; recompute their actual transformed row JSON.
+    for row in rows['repair_row_versions_3012']:
+        body=parse(row[3])
+        if hashlib.sha256(row[3].encode()).hexdigest()!=row[2]:raise Refused('REPAIR_REVISION_HASH_CONFLICT')
+        mapper.hashes[row[2]]=digest(mapper.walk(body,hash_pending=True))
     # Compute all LAB revision hashes before transforming references/checkpoints.
     revision_columns=PROFILE['columns']['mes_revisions']
     pending=list(rows['mes_revisions'])
