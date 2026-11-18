@@ -362,6 +362,9 @@ def reconcile(workspace):
 def _owned(root):
     for name in ('.p08-claim.json','.p08-journal.json'):P02['_plain'](root/name)
     claim=_json(root/'.p08-claim.json');record=_json(root/'.p08-journal.json')
+    fields={'schema','operation_id','inputs','profile_sha256','tool_sha256','state',
+            'captures_sha256','target_manifest_sha256','reader_proof_sha256','receipt_sha256','reason'}
+    if not isinstance(record,dict) or not set(record)<=fields:raise Stop('JOURNAL_UNVERIFIED')
     if (claim!={'schema':'ames-p08-exclusive-claim-v1','operation_id':record.get('operation_id')}
         or not re.fullmatch('[0-9a-f]{32}',record.get('operation_id','')) or record.get('schema')!='ames-p08-private-journal-v1'
         or record.get('profile_sha256')!=file_hash(HERE/'p08_profile.json') or record.get('tool_sha256')!=file_hash(Path(__file__))):raise Stop('JOURNAL_UNVERIFIED')
