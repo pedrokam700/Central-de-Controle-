@@ -54,6 +54,13 @@ jobs:
       - name: Require OS firewall and WFP denial proof before source build or agent
         shell: pwsh
         run: ./scripts/install98/containment.ps1
+      - name: Verify genuine Windows PowerShell hash and process prerequisites
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          Get-Command Get-FileHash,Get-CimInstance,Get-NetTCPConnection -ErrorAction Stop | Select-Object Name,ModuleName
+          if ($PSVersionTable.PSVersion.Major -ne 5) { throw 'NATIVE_WINDOWS_POWERSHELL_REQUIRED' }
+          $PSVersionTable | Out-String | Write-Output
       - name: Build genuine GUI dependencies offline under proven containment
         shell: pwsh
         run: |
@@ -61,7 +68,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Execute real installers canonical processes and state transfer using only synthetic copies
         timeout-minutes: 10
-        shell: pwsh
+        shell: powershell
         run: |
           python -B scripts/install98/integration.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

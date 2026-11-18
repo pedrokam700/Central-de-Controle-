@@ -79,3 +79,13 @@ No SHA 3ea8012160474fdf0cda61a760a0ecef3d0f4c6a passaram regressões integradas
 Esses resultados não substituem a exigência de SHA final e instalação inteira.
 Transfer helper continua único arquivo funcional alterado até este checkpoint;
 agente, motor, UI, requisitos e entry LAB preservados integralmente.
+
+## Causa imediata da recusa nativa (sem relaxar o launcher)
+
+Contraprova 482e0cc1ab478ca3cf6add3b1b7b089ec061e12c / run 44380671098:
+observação CIM independente confirma PID/birth/entry corretos. A execução dos
+helpers reais revelou `Get-FileHash: CommandNotFoundException`. Get-KnownPackage
+recusa corretamente quando a prova dos coletores congelados não é executável.
+Assim, a hipótese inicial de atraso de PID NÃO está comprovada. Verificar host
+Windows PowerShell 5.1 e evitar PSModulePath herdado de pwsh7 no harness antes
+de propor alteração produtiva. Nenhuma verificação de hash/PID foi removida.

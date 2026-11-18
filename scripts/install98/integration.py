@@ -17,6 +17,11 @@ def run(args,**kw):
  # in a long-lived descendant. They do not change or replace any tested code.
  label=str(time.monotonic_ns());out=LAB/('child-'+label+'.stdout');err=LAB/('child-'+label+'.stderr')
  print('REAL_CHILD_START '+str(args[0])+' '+label,flush=True)
+ native_env=dict(os.environ)
+ # pwsh7's PSModulePath must not shadow Windows PowerShell 5.1 modules.
+ # Let each genuine native host initialize its own standard module path.
+ native_env.pop('PSModulePath',None)
+ kw.setdefault('env',native_env)
  try:
   with out.open('w',encoding='utf-8') as of,err.open('w',encoding='utf-8') as ef:
    r=subprocess.run(list(map(str,args)),stdout=of,stderr=ef,timeout=kw.pop('timeout',180),**kw)
@@ -135,7 +140,8 @@ def main():
   record('native_restart_preserves_new_B_evidence','PASS')
   # Fault injection at the real rollback boundary AFTER real B wrote new data.
   # No fake process, listener or starter: original branch may actually reopen A.
-  result=subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'scripts/install98/rollback-probe.ps1'),'-OldRoot',str(A),'-CandidateRoot',str(B)],stdout=(LAB/'rollback.stdout').open('w'),stderr=(LAB/'rollback.stderr').open('w'),timeout=100)
+  native_env=dict(os.environ);native_env.pop('PSModulePath',None)
+  result=subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'scripts/install98/rollback-probe.ps1'),'-OldRoot',str(A),'-CandidateRoot',str(B)],stdout=(LAB/'rollback.stdout').open('w'),stderr=(LAB/'rollback.stderr').open('w'),env=native_env,timeout=100)
   print((LAB/'rollback.stdout').read_text(errors='replace')[-5000:]+(LAB/'rollback.stderr').read_text(errors='replace')[-5000:],flush=True)
   try:
    live=api(A,'/api/v1/v2/capabilities');old_is_serving=pathlib.Path(live['package_root']).resolve()==A
