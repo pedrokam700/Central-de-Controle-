@@ -19,7 +19,10 @@ foreach($role in @('A','B')){
  $programs+="$lab\$role\.venv\Lib\site-packages\playwright\driver\node.exe"
 }
 $group='CENTRAL98-'+$env:GITHUB_RUN_ID
-$remote=@('0.0.0.0-126.255.255.255','128.0.0.0-255.255.255.255','::/0')
+# Block ALL outbound addresses for each audited executable. The positive native
+# loopback probe below must independently prove Windows' loopback behavior.
+# Never infer an exception from configuration alone or broaden egress to pass.
+$remote='Any'
 $count=0
 foreach($program in @($programs|Sort-Object -Unique)){
  New-NetFirewallRule -DisplayName "$group-$count" -Group $group -Direction Outbound -Action Block -Program $program -RemoteAddress $remote -Profile Any -Enabled True | Out-Null
