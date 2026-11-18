@@ -228,7 +228,7 @@ def install_guard():
     mutations={'os.remove','os.rmdir','os.rename','os.mkdir','os.chmod','os.utime','os.link','os.symlink','os.truncate','os.putenv','os.unsetenv'}
     def audit(event,args):
         if (event.startswith(('socket.','subprocess.','winreg.')) or event in mutations
-            or event in {'os.system','os.posix_spawn','os.exec','os.spawn','os.startfile'}):raise Refused('P04_SIDE_EFFECT_REFUSED')
+            or event in {'os.system','os.posix_spawn','os.exec','os.spawn','os.startfile'}):raise Refused('P04_SIDE_EFFECT_REFUSED:'+event)
         if event=='import' and str(args[0]).split('.')[0] in denied_modules:raise Refused('P04_OPERATIONAL_IMPORT_REFUSED')
         if event=='sqlite3.connect' and args[0]!=':memory:':raise Refused('P04_EXTERNAL_SQLITE_REFUSED')
         if event=='open':
