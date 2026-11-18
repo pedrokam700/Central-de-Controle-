@@ -168,8 +168,10 @@ class P04Contracts(unittest.TestCase):
     def test_45_wrong_Windows_extension_ABI_is_incompatible(self):
         self.bad('runtime','extension_suffix','.cp311-win_amd64.pyd','CPYTHON_EXTENSION_ABI')
 
-    def test_46_complete_receipt_preserves_native_Windows_null_SOABI(self):
-        m=self.api();f=fixture()
+    def complete_receipt(self,m):
+        f=fixture()
+        f['timezone'].update(resource_sha256='0'*64,vectors=copy.deepcopy(m['PROFILE']['clock_vectors']),source='explicit_verified_tzdata_resource_not_host_TZPATH')
+        f['sqlite'].update(source_id='SYNTHETIC-SQLITE-SOURCE',compile_options=[])
         receipt={'schema':'ames-p04-runner-receipt-v1','scope':'DISPOSABLE_WINDOWS_RUNNER_ONLY','code_sha':'a'*40,
           'base_sha':m['PROFILE']['base_sha'],'run_id':'123','profile_sha256':m['file_hash'](TOOL.with_name('p04_profile.json')),
           'wheel_lock_sha256':m['file_hash'](TOOL.with_name('p04_windows_wheels.json')),'tool_sha256':m['file_hash'](TOOL),
@@ -181,6 +183,10 @@ class P04Contracts(unittest.TestCase):
           'runner_image':{'ImageOS':'SYNTHETIC','ImageVersion':'SYNTHETIC','RUNNER_OS':'Windows','RUNNER_ARCH':'X64'},
           'operational_installation_tested':False,'homologation_authorized':False,'physical':'PENDING','limitations':m['LIMITATIONS']}
         receipt['receipt_sha256']=m['digest'](receipt)
+        return receipt
+
+    def test_46_complete_receipt_preserves_native_Windows_null_SOABI(self):
+        m=self.api();receipt=self.complete_receipt(m)
         self.assertTrue(m['verify_receipt'](receipt,'a'*40))
         receipt['SOABI']='SYNTHETIC-UNKNOWN-ABI';receipt.pop('receipt_sha256');receipt['receipt_sha256']=m['digest'](receipt)
         self.assertFalse(m['verify_receipt'](receipt,'a'*40))
@@ -209,5 +215,15 @@ class P04Contracts(unittest.TestCase):
             root=Path(tmp).resolve();(root/'file').write_bytes(b'SYNTHETIC')
             with self.assertRaisesRegex(m['Refused'],r'^INVALID_INSTALLED_RECORD:synthetic$'):
                 m['verify_record']('file,md5=SYNTHETIC,9\n',lambda n:root/n,root,'synthetic')
+
+    def test_50_rehashed_receipt_cannot_claim_true_with_wrong_or_missing_timezone_vectors(self):
+        m=self.api()
+        for mode in ('wrong','missing'):
+            with self.subTest(mode=mode):
+                receipt=self.complete_receipt(m)
+                if mode=='wrong':receipt['facts']['timezone']['vectors'][0][1]='2026-11-03T00:00:00+00:00'
+                else:receipt['facts']['timezone'].pop('vectors')
+                receipt.pop('receipt_sha256');receipt['receipt_sha256']=m['digest'](receipt)
+                self.assertFalse(m['verify_receipt'](receipt,'a'*40))
 
 if __name__=='__main__':unittest.main()
