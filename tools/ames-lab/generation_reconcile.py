@@ -155,19 +155,19 @@ def _revisions(rows,folder):
     source=dict(rows['schema_meta'])['ames_source_id'];refs=set()
     for sid,line,revision,epoch,sha,text in rows['mes_revisions']:
         body=parse(text)
-        if (body.get('schema')!='central-ames-v2' or body.get('source_id')!=source or body.get('line_id')!=line
+        if (not isinstance(body,dict) or body.get('schema')!='central-ames-v2' or body.get('source_id')!=source or body.get('line_id')!=line
             or str(body.get('snapshot_id'))!=str(sid) or body.get('snapshot_revision')!=revision or body.get('content_hash')!=sha):
             raise Stop('REVISION_CONFLICT')
         if not isinstance(body.get('datasets'),dict):raise Stop('REVISION_CONFLICT')
         for name in ('defects','pcba_history','material_reuse','history_contexts','process_timeline'):
             if not isinstance(body['datasets'].get(name),list):raise Stop('REVISION_CONFLICT')
             for item in body['datasets'][name]:
-                if item.get('line_id')!=line or str(item.get('snapshot_id'))!=str(sid) or item.get('snapshot_revision')!=revision:raise Stop('REVISION_CONFLICT')
+                if not isinstance(item,dict) or item.get('line_id')!=line or str(item.get('snapshot_id'))!=str(sid) or item.get('snapshot_revision')!=revision:raise Stop('REVISION_CONFLICT')
         refs.add((sid,line,revision,sha))
     for row in rows['repair_row_versions_3012']:
         if hashlib.sha256(row[3].encode()).hexdigest()!=row[2]:raise Stop('REVISION_CONFLICT')
     checkpoint=_json(folder/P02['CHECKPOINT'])
-    if (checkpoint.get('source_id')!=source or checkpoint.get('status')!='COMPLETE'
+    if (not isinstance(checkpoint,dict) or checkpoint.get('source_id')!=source or checkpoint.get('status')!='COMPLETE'
         or (checkpoint.get('snapshot_id'),checkpoint.get('line'),checkpoint.get('revision'),checkpoint.get('content_hash')) not in refs):
         raise Stop('CHECKPOINT_CONFLICT')
 
@@ -186,7 +186,7 @@ def _pending(folder,rows):
 
 def _execution(folder):
     execution=_json(folder/'execution.json')
-    if (set(execution)!={'schema','entered','completed','steps'} or execution['schema']!='ames-p08-synthetic-execution-v1'
+    if (not isinstance(execution,dict) or set(execution)!={'schema','entered','completed','steps'} or execution['schema']!='ames-p08-synthetic-execution-v1'
         or type(execution['entered']) is not bool or execution['completed'] is not True
         or not isinstance(execution['steps'],list)):raise Stop('EXECUTION_UNVERIFIED')
     return execution
@@ -232,6 +232,9 @@ def _reader_probe(path,rows):
 
 def _decision(root,vault,private,inputs,data):
     trees=inputs['trees']
+    for role in ('C0','A'):
+        prior=_execution(vault/role)
+        if prior['entered'] or prior['steps']:raise Stop('EXECUTION_UNVERIFIED')
     if data['C0']!=data['A'] or trees['C0']!={**trees['A'],'generation.json':trees['C0']['generation.json']}:
         raise Stop('C0_A_DIVERGENCE')
     execution=_execution(vault/'B')
@@ -257,6 +260,9 @@ def _decision(root,vault,private,inputs,data):
 
 
 def _unchanged(root,inputs):
+    allowed={'C0','A','B','SYNTHETIC_ONLY.json','.p08-claim.json','.p08-lock',
+             '.p08-journal.json','.p08-private','return-target','decision.json'}
+    if any(p.name not in allowed for p in root.iterdir()):raise Stop('UNKNOWN_MEMBER')
     if _input(root)!=inputs:raise Stop('SOURCE_CHANGED')
     vault=root/'.p08-private/vault'
     if {role:_tree(vault/role,generation=True) for role in ROLES}!=inputs['trees']:raise Stop('CAPTURE_CORRUPT')
