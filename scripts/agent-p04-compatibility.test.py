@@ -111,11 +111,21 @@ class P04Contracts(unittest.TestCase):
         receipt['receipt_sha256']=m['digest'](receipt)
         self.assertFalse(m['verify_receipt'](receipt,'a'*40))
 
-    def test_36_numpy_import_does_not_require_relaxing_environment_mutation_guard(self):
+    def test_36_environment_mutation_guard_stays_enabled(self):
         # Fresh stdlib-only child checks forbidden mutation before any OS call.
         m=self.api()
         code="import runpy,sys; m=runpy.run_path(sys.argv[1]); m['install_guard'](); import os; os.environ['P04_SYNTHETIC_MUTATION']='1'"
         result=subprocess.run([sys.executable,'-I','-B','-c',code,str(TOOL)],capture_output=True,text=True)
         self.assertNotEqual(result.returncode,0);self.assertIn('P04_SIDE_EFFECT_REFUSED',result.stderr)
+
+    def test_37_JSON1_extension_and_upsert_do_not_require_SQLite_338(self):
+        m=self.api();f=fixture();f['sqlite']['version']=[3,24,0]
+        self.assertEqual(m['assess'](f)['core_status'],'PASS')
+
+    def test_38_REAL_guard_refuses_network_process_write_DB_and_agent(self):
+        self.api()
+        code="import runpy,sys,json; m=runpy.run_path(sys.argv[1]); m['install_guard'](); print(json.dumps({'guard':m['prove_guard']()}))"
+        r=subprocess.run([sys.executable,'-I','-B','-c',code,str(TOOL)],capture_output=True,text=True)
+        self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(json.loads(r.stdout),{'guard':True})
 
 if __name__=='__main__':unittest.main()
