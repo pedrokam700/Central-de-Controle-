@@ -329,4 +329,41 @@ os._exit(86)
         with self.assertRaisesRegex(self.mod['Refused'],r'^FIXTURE_PROVENANCE_REQUIRED$'):prepare(self.workspace)
         self.no_release();self.assertFalse((self.workspace/'private').exists())
 
+    def test_34_destination_created_after_preparation_is_never_replaced(self):
+        prepare=self.api();reached=[]
+        def race(phase):
+            if phase=='before_publish':
+                reached.append(phase);target=self.workspace/'published';target.mkdir()
+                (target/'SYNTHETIC-SENTINEL').write_bytes(b'NEWER-SYNTHETIC-DATA')
+        with patch.dict(prepare.__globals__,_phase=race):
+            with self.assertRaisesRegex(self.mod['Refused'],r'^DESTINATION_EXISTS$'):prepare(self.workspace)
+        self.assertEqual(reached,['before_publish']);self.no_release()
+        self.assertEqual((self.workspace/'published/SYNTHETIC-SENTINEL').read_bytes(),b'NEWER-SYNTHETIC-DATA')
+
+    def test_35_partial_publication_IO_keeps_journal_pending_and_blocks_resume(self):
+        prepare=self.api();copy=prepare.__globals__['_copy'];reached=[]
+        def fail(source,target):
+            if 'published' in target.parts and target.name=='checkpoint.json':
+                reached.append(target.name);target.parent.mkdir(parents=True,exist_ok=True)
+                target.write_bytes(b'SYNTHETIC-PARTIAL');raise OSError('SYNTHETIC IO')
+            return copy(source,target)
+        with patch.dict(prepare.__globals__,_copy=fail):
+            with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        self.assertEqual(reached,['checkpoint.json']);self.no_release();before=files(self.workspace)
+        with self.assertRaisesRegex(self.mod['Refused'],r'^EXISTING_OR_INTERRUPTED_WORKSPACE$'):prepare(self.workspace)
+        self.assertEqual(before,files(self.workspace))
+        self.assertEqual(json.loads((self.workspace/'.p02-journal.json').read_text(encoding='utf-8'))['state'],'PREPARING')
+
+    def test_36_private_backup_copy_IO_never_yields_public_or_mutates_source(self):
+        prepare=self.api();copy=prepare.__globals__['_copy'];before=files(self.source);reached=[]
+        def fail(source,target):
+            if target==self.workspace/'private/master/ames-agent/data/local_agent_token':
+                reached.append(target.name);target.parent.mkdir(parents=True,exist_ok=True)
+                target.write_bytes(b'SYNTHETIC-PARTIAL');raise OSError('SYNTHETIC IO')
+            return copy(source,target)
+        with patch.dict(prepare.__globals__,_copy=fail):
+            with self.assertRaises(self.mod['Refused']):prepare(self.workspace)
+        self.assertEqual(reached,['local_agent_token']);self.no_release()
+        self.assertEqual(before,files(self.source));self.assertFalse((self.workspace/'published').exists())
+
 if __name__=='__main__':unittest.main()
