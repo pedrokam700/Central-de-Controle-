@@ -9,6 +9,12 @@ class Source(unittest.TestCase):
   frozen=['ames/','sw.js','index.html','app.js','styles.css','tools/ames-lab/']
   changed=git('diff','--name-only',BASE,'HEAD').splitlines()
   self.assertFalse([p for p in changed if any(p==x or p.startswith(x) for x in frozen)])
+ def test_local_history_startup_has_explicit_route_free_entry(self):
+  # Native boot already proves the local app works without MES/WLAN.
+  # Current entrypoints nevertheless unconditionally require the factory route.
+  for name in ('TROCAR_PARA_PR69_NOVA.ps1','START_LOCAL_CANDIDATE.ps1'):
+   source=(ROOT/'tools/ames-workstation'/name).read_text()
+   self.assertTrue('[switch]$LocalOnly' in source,name+' lacks explicit local-history startup')
  def test_runtime_imports_not_added_to_transfer(self):
   tree=ast.parse((ROOT/'tools/ames-workstation/SAFE_STATE_TRANSFER.py').read_text())
   modules={a.name.split('.')[0] for n in ast.walk(tree) if isinstance(n,ast.Import) for a in n.names}
