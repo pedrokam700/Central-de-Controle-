@@ -28,7 +28,9 @@ def start(root):
 def stop(root,pid):
  # Only the exact launcher-owned birth/path recorded by the real starter.
  state=json.loads((root/'logs/agent_startup_state.json').read_text(encoding='utf-8-sig'));assert state['pid']==pid
- code="$p=Get-CimInstance Win32_Process -Filter 'ProcessId = "+str(pid)+"'; if(-not $p -or $p.CommandLine -notlike '*agent_hardened_entry.py*'){throw 'OWNER_CHANGED'}; Stop-Process -Id "+str(pid)+" -ErrorAction Stop"
+ birth=state['process_created_at']
+ expected=str(root/'ames-agent/agent_hardened_entry.py')
+ code="$p=Get-CimInstance Win32_Process -Filter 'ProcessId = "+str(pid)+"'; if(-not $p -or ([datetime]$p.CreationDate).ToUniversalTime().ToString('o') -ne '"+birth+"' -or $p.CommandLine -notlike '*"+expected.replace("'","''")+"*'){throw 'OWNER_CHANGED'}; $h=Get-Process -Id "+str(pid)+"; if($h.StartTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.ffffffZ') -ne ([datetime]'"+birth+"').ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.ffffffZ')){throw 'BIRTH_CHANGED'}; $h.Kill(); if(-not $h.WaitForExit(5000)){throw 'OWNER_DID_NOT_EXIT'}"
  run(['powershell.exe','-NoProfile','-Command',code]);time.sleep(1)
 def tables(root):
  with closing(sqlite3.connect(root/'ames-agent/data/ames_local.sqlite3')) as con:
