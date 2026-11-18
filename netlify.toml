@@ -37,3 +37,7 @@
 # P02 synthetic proof: no distribution/preview.
 [context."work/ames-p02-synthetic-deidentification-20261117"]
   ignore = "exit 0"
+
+# P04 disposable Windows compatibility proof: no preview.
+[context."work/ames-p04-windows-preflight-20261118"]
+  ignore = "exit 0"

@@ -1,0 +1,91 @@
+{
+  "schema": "ames-p04-reviewed-profile-v1",
+  "base_sha": "5856eb3f0cc1dd391cf93217fd068f0a044f8ab2",
+  "python": [
+    3,
+    12,
+    10
+  ],
+  "implementation": "cpython",
+  "bits": 64,
+  "platform": "win-amd64",
+  "native_machine": "AMD64",
+  "sqlite_min": [
+    3,
+    24,
+    0
+  ],
+  "requirements": {
+    "ames/agent/requirements.txt": "1979723abab6724fc826a936f9d57cb04faccad49a88c0b97dfdd05af7a43ee9",
+    "ames/factory-engine/requirements.txt": "c0ceca9a1d5f1ef768ae1d5f55627fdc3631639fbb93e5465e37d7df7a5a7afd"
+  },
+  "intersections": {
+    "pandas": ">=2.2,<3",
+    "openpyxl": ">=3.1,<4",
+    "playwright": ">=1.55,<2",
+    "pyautogui": ">=0.9.54,<1",
+    "pyperclip": ">=1.9,<2",
+    "tzdata": ">=2025.2"
+  },
+  "timezone": "America/Sao_Paulo",
+  "tzdata_version": "2025.2",
+  "iana_version": "2025b",
+  "clock_vectors": [
+    [
+      "2026-11-03T09:59:59+00:00",
+      "2026-11-03T06:59:59-03:00",
+      "before_operational_07"
+    ],
+    [
+      "2026-11-03T10:00:00+00:00",
+      "2026-11-03T07:00:00-03:00",
+      "operational_07"
+    ],
+    [
+      "2026-11-03T10:29:59+00:00",
+      "2026-11-03T07:29:59-03:00",
+      "before_shift_0730"
+    ],
+    [
+      "2026-11-03T10:30:00+00:00",
+      "2026-11-03T07:30:00-03:00",
+      "shift_0730"
+    ],
+    [
+      "2026-11-03T20:29:59+00:00",
+      "2026-11-03T17:29:59-03:00",
+      "before_shift_1730"
+    ],
+    [
+      "2026-11-03T20:30:00+00:00",
+      "2026-11-03T17:30:00-03:00",
+      "shift_1730"
+    ],
+    [
+      "2026-11-03T06:29:59+00:00",
+      "2026-11-03T03:29:59-03:00",
+      "before_shift_0330"
+    ],
+    [
+      "2026-11-03T06:30:00+00:00",
+      "2026-11-03T03:30:00-03:00",
+      "shift_0330"
+    ],
+    [
+      "2018-11-05T10:00:00+00:00",
+      "2018-11-05T08:00:00-02:00",
+      "historical_DST"
+    ]
+  ],
+  "unsafe_imports": [
+    "pyautogui",
+    "pyscreeze",
+    "pygetwindow",
+    "mouseinfo",
+    "pymsgbox",
+    "pytweening",
+    "pyrect"
+  ],
+  "extension_suffix": ".cp312-win_amd64.pyd",
+  "tzif_sha256": "fa2ceb222f065c0289f3997ff0c54ba05a74a599b4522870fa86a96e24e18891"
+}

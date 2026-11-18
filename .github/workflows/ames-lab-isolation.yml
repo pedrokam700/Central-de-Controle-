@@ -2,7 +2,7 @@ name: A-MES synthetic LAB isolation and D01 D02 recovery (no distribution)
 on:
   push:
     branches:
-      - work/ames-p02-synthetic-deidentification-20261117
+      - work/ames-p04-windows-preflight-20261118
 permissions:
   contents: read
 jobs:
