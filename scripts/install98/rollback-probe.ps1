@@ -9,8 +9,14 @@ foreach($root in @($OldRoot,$CandidateRoot)){if((Split-Path ([IO.Path]::GetFullP
 $proof=Get-Content (Join-Path $lab 'containment.json') -Raw|ConvertFrom-Json
 if($proof.kernel_deny_proven -ne $true){throw 'NO_CONTAINMENT'}
 $source=Get-Content (Join-Path $CandidateRoot 'TROCAR_PARA_PR69_NOVA.ps1') -Raw
-$prefixEnd=$source.IndexOf("`ntry {`n  `$manifest=")
-$tailStart=$source.IndexOf("`nif(`$rollbackNeeded){")
+$tokens=$null;$parseErrors=$null
+$ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$parseErrors)
+if($parseErrors){throw 'SOURCE_PARSE_FAILED'}
+$main=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.TryStatementAst]})
+$tail=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.StartsWith('if($rollbackNeeded){')})
+if($main.Count -ne 1 -or $tail.Count -ne 1){throw 'ROLLBACK_AST_CONTRACT_CHANGED'}
+$prefixEnd=$main[0].Extent.StartOffset
+$tailStart=$tail[0].Extent.StartOffset
 if($prefixEnd -lt 0 -or $tailStart -lt 0){throw 'ROLLBACK_SOURCE_CONTRACT_CHANGED'}
 # Definitions are untouched. Only state normally set by the failed update is
 # supplied at the isolated fault boundary; the branch and all OS calls are real.

@@ -106,3 +106,28 @@ explícito + ausência de A + B preservado. Nem erro do harness nem ausência de
 listener comprovam recuperação segura. O workflow não deve terminar aprovado
 com a troca completa PENDENTE. Nove telas da suíte Linux passaram, mas render
 sobre agente REAL Windows ainda está pendente. Nada qualifica uso fabril.
+
+## RED comprovado de retorno desatualizado e correções restritas
+
+f71fff9fb57f7fd345163880fbf37fa778c62efc, CI 44381813261, job
+135075824620: trecho REAL de rollback executado, A reiniciou com sucesso depois
+de B produzir comentário novo. Recibo `old_generation_serving:true` e B inteiro
+preservado: RED é a visão antiga apresentada como atual, não perda de B.
+
+Correção do coordenador: qualquer possível execução B bloqueia retorno e
+restauração de HKCU Run antigo. Antes de lançar B, journal CreateNew/Flush(true)
+e barreira persistente .ames-update em A sob mutex CanonicalBootstrap; exigir
+launcher/helper/guardian antigos idênticos aos contratos conhecidos. A fica
+retirada; nenhuma remoção automática da barreira. Falha/abrupto exige supervisão.
+NÃO é transação atômica de diretórios nem mesclagem de bancos. R0 anterior ao
+limite conservador mantém retorno existente; R2 preserva todas as gerações.
+
+RED adicional publicado em 680e27f9049f19736396fffa42c27da75ee10254: entrypoints
+não oferecem partida explícita dos históricos locais sem exigir rota fabril,
+embora boots reais tenham comprovado que a aplicação local funciona sem MES.
+`-LocalOnly` é entrada explícita de troca/partida local e `-NoBrowser` permite
+controle supervisionado sem abrir navegador padrão. NÃO são sandbox: agente e
+suas regras permanecem iguais, e isolamento no ensaio é provado pelo firewall.
+Fluxo normal conserva a validação de rede e Chrome/CDP; partida local exige
+configuração já existente/verificada e não abre Chrome MES automaticamente.
+Boot/rota/MES da fábrica continuam PENDENTES.

@@ -1,3 +1,4 @@
+param([switch]$LocalOnly,[switch]$NoBrowser)
 # Supervised PR69 switch. Never copies, overwrites or deletes old operational data.
 # The CLEAN builder injects the exact expected SHA into the value below.
 $ErrorActionPreference='Stop'
@@ -8,6 +9,8 @@ $RunName='CentralAMESOperatorAgent'
 $mutex=$null;$held=$false;$oldRun=$null;$oldRoot=$null
 $stopped=$false;$committed=$false;$failed=$false;$rollbackNeeded=$false
 $backupRoot=$null;$python=$null;$registrationChanged=$false
+$candidateMayHaveRun=$false;$switchDir=$null
+if($NoBrowser -and -not $LocalOnly){throw 'NoBrowser_requires_LocalOnly'}
 
 function Fail([string]$message){throw $message}
 function EqualPath($a,$b){return ([string]$a).TrimEnd('\') -ieq ([string]$b).TrimEnd('\')}
@@ -110,6 +113,38 @@ function Invoke-StateTransfer([string]$operation){
   }
   return $result
 }
+function Write-SwitchEvidence([string]$Phase){
+  if(-not $script:switchDir){Fail 'Journal de troca indisponivel; recuperacao supervisionada obrigatoria.'}
+  $target=Join-Path $script:switchDir ($Phase+'.json')
+  $body=[ordered]@{schema='central-switch-v1';phase=$Phase;old_root=$oldRoot;candidate_root=$NewRoot;backup_root=$backupRoot;candidate_may_have_run=$script:candidateMayHaveRun;physical='PENDING';created_at=(Get-Date).ToUniversalTime().ToString('o')}
+  $bytes=[Text.Encoding]::UTF8.GetBytes(($body|ConvertTo-Json))
+  $stream=New-Object IO.FileStream($target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+  try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+  if((Get-Item -LiteralPath $target).Length -ne $bytes.Length){Fail 'Journal incompleto; nao retomar automaticamente.'}
+}
+function Preserve-CandidateIntent {
+  # This is a durable fail-closed barrier, NOT an atomic multi-file transaction.
+  # Take the SAME bootstrap gate before retiring A, so no direct starter can
+  # race the persistent marker. Known guardians are already stopped.
+  $gate=New-Object System.Threading.Mutex($false,'Global\CentralAMES.CanonicalBootstrap.8765')
+  $locked=$false
+  try{
+    try{$locked=$gate.WaitOne(10000)}catch [System.Threading.AbandonedMutexException]{$locked=$true}
+    if(-not $locked){Fail 'Bootstrap concorrente; recuperacao supervisionada obrigatoria.'}
+    $script:switchDir=Join-Path $NewRoot '.ames-switch'
+    if(Test-Path -LiteralPath $script:switchDir){Fail 'Journal anterior existe; nao sobrescrever nem retomar.'}
+    New-Item -ItemType Directory -Path $script:switchDir -ErrorAction Stop|Out-Null
+    Write-SwitchEvidence 'candidate-intent'
+    $retired=Join-Path $oldRoot '.ames-update'
+    if(Test-Path -LiteralPath $retired){
+      $item=Get-Item -LiteralPath $retired -Force
+      if(-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or @(Get-ChildItem -LiteralPath $retired -Force).Count){Fail 'Estado de manutencao antigo nao comprovado.'}
+    }else{New-Item -ItemType Directory -Path $retired -ErrorAction Stop|Out-Null}
+    $bytes=[Text.Encoding]::UTF8.GetBytes('CENTRAL_SWITCH_RETIRED_GENERATION_PRESERVE_ALL_DATA')
+    $stream=New-Object IO.FileStream((Join-Path $retired 'switch-retired.txt'),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)
+    try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+  }finally{if($locked){$gate.ReleaseMutex()};$gate.Dispose()}
+}
 function StopKnown($known){
   $p=Get-CimInstance Win32_Process -Filter "ProcessId=$($known.pid)" -ErrorAction SilentlyContinue
   $now=Identify $p
@@ -122,6 +157,7 @@ function StopKnown($known){
 }
 
 try {
+  if(Test-Path -LiteralPath (Join-Path $NewRoot '.ames-switch')){Fail 'Journal de troca anterior existe; preservar evidencias e recuperar com supervisao.'}
   $manifest=Get-Content -LiteralPath (Join-Path $NewRoot 'CANDIDATE_MANIFEST.json') -Raw | ConvertFrom-Json
   if($manifest.sha -cne $ExpectedSha -or $manifest.development -or -not $manifest.standalone_clean){Fail 'SHA/estado do pacote PR69 diferente do esperado; troca bloqueada.'}
   foreach($required in @('00_INICIAR_AQUI.bat','01_INSTALAR_UMA_VEZ.bat','08_PREPARAR_REDE_AMES.bat','TROCAR_PARA_PR69_NOVA.ps1','START_LOCAL_CANDIDATE.ps1','network/ensure_ames_route.ps1','suporte\ames-workstation\KEEP_AGENT_RUNNING.ps1','suporte\ames-workstation\SAFE_STATE_TRANSFER.py','suporte\ames-workstation\issue57_update_preflight.py','ames-agent\agent_hardened_entry.py')){
@@ -164,8 +200,10 @@ try {
 
   # Network checks happen before stopping the old agent; a failed Wi-Fi/UAC
   # must not cause production downtime.
+  if(-not $LocalOnly){
   & (Join-Path $NewRoot '08_PREPARAR_REDE_AMES.bat') /auto
   if($LASTEXITCODE -ne 0){Fail 'Rede da nova instalacao ainda nao comprovada.'}
+  }else{Write-Host '[LOCAL] Somente inicializacao e historicos locais; rede/MES NAO homologados.'}
 
   $mutex=New-Object System.Threading.Mutex($false,'Global\CentralAMES.UpdateTransaction.8765')
   try{$held=$mutex.WaitOne(12000)}catch [System.Threading.AbandonedMutexException]{$held=$true}
@@ -217,6 +255,16 @@ try {
   if(EqualPath $oldRoot $NewRoot){Fail 'Nova versao ja esta ativa.'}
   if(-not(Test-Path -LiteralPath (Join-Path $oldRoot 'suporte\ames-workstation\START_AGENT_CANONICAL.ps1') -PathType Leaf)){
     Fail 'Instalacao antiga nao tem launcher canonico para rollback automatico; troca bloqueada.'
+  }
+  # Retirement requires the exact attested barrier-aware launcher/helper/guardian.
+  # Do not assume an unknown older installation honors crash-persistent claims.
+  foreach($name in @('START_AGENT_CANONICAL.ps1','ISSUE57_RELAUNCH_ENROLLMENT.ps1','KEEP_AGENT_RUNNING.ps1')){
+    $oldFile=Join-Path $oldRoot ('suporte\ames-workstation\'+$name)
+    $newFile=Join-Path $NewRoot ('suporte\ames-workstation\'+$name)
+    if(-not(Test-Path -LiteralPath $oldFile -PathType Leaf) -or
+       (Get-FileHash -LiteralPath $oldFile).Hash -cne (Get-FileHash -LiteralPath $newFile).Hash){
+      Fail 'Contrato de bloqueio persistente da instalacao antiga nao comprovado; nao interromper.'
+    }
   }
   $oldRun=RegistryRun
   if($oldRun){
@@ -284,7 +332,14 @@ try {
     Fail 'Backup, ensaio de restauracao ou identidade da transferencia nao comprovados.'
   }
   Write-Host '[OK] SQLite, configuracao, token e arquivos operacionais transferidos com backup ensaiado.'
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $NewRoot 'START_LOCAL_CANDIDATE.ps1')
+  # Unknown is treated as possible execution BEFORE journal/start I/O. Even a
+  # failed journal write must never reopen A after this conservative boundary.
+  $candidateMayHaveRun=$true
+  Preserve-CandidateIntent
+  $startup=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $NewRoot 'START_LOCAL_CANDIDATE.ps1'))
+  if($LocalOnly){$startup+='-LocalOnly'}
+  if($NoBrowser){$startup+='-NoBrowser'}
+  & powershell.exe @startup
   if($LASTEXITCODE -ne 0){Fail 'Novo launcher nao passou no preflight.'}
   $owners=ListenerPids
   if($owners.Count -ne 1){Fail 'Novo agente nao confirmou listener unico na porta 8765.'}
@@ -296,6 +351,7 @@ try {
     WriteRun $value
     Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',('"'+$watcher+'"'),'-Root',('"'+$NewRoot+'"'))
   }
+  Write-SwitchEvidence 'committed'
   $committed=$true
   Write-Host 'TROCA_PR69=SUCCESS' -ForegroundColor Green
   Write-Host "Backup privado confirmado: $backupRoot"
@@ -303,7 +359,7 @@ try {
 } catch {
   $failed=$true
   Write-Host ('TROCA_PR69=BLOCKED: '+$_.Exception.Message) -ForegroundColor Red
-  if(-not $committed -and $registrationChanged -and $oldRun){
+  if(-not $committed -and -not $candidateMayHaveRun -and $registrationChanged -and $oldRun){
     try{WriteRun $oldRun;Write-Host 'Inicio automatico antigo restaurado.'}catch{Write-Host 'ATENCAO: falha ao restaurar registro de inicio automatico.'}
   }
   if(-not $committed -and $stopped){$rollbackNeeded=$true}
@@ -312,6 +368,13 @@ try {
   if($mutex){$mutex.Dispose()}
 }
 if($rollbackNeeded){
+  if($candidateMayHaveRun){
+    # R2: preserve B and C0; no restart of stale A and no old Run registration.
+    # The A retirement marker also blocks its attested canonical/guardian.
+    Write-Host 'ROLLBACK_ANTIGO=STOP_NEW_OR_UNKNOWN_EVIDENCE' -ForegroundColor Red
+    Write-Host 'Preserve A, B e backup. Retorno exige recuperacao supervisionada; nao substituir SQLite.'
+    exit 1
+  }
   # Never kill unknown PIDs. Only reclaim the verified candidate root, then
   # restart the preserved old installation AFTER releasing UpdateTransaction.
   try {

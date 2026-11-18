@@ -1,4 +1,6 @@
+param([switch]$LocalOnly,[switch]$NoBrowser)
 $ErrorActionPreference='Stop'
+if($NoBrowser -and -not $LocalOnly){throw 'NoBrowser_requires_LocalOnly'}
 $Root=$PSScriptRoot
 Set-Location $Root
 $Python=Join-Path $Root '.venv\Scripts\python.exe'
@@ -32,8 +34,10 @@ try {
   # the agent. The network tool will request UAC only when route repair is needed.
   $NetworkSetup=Join-Path $Root '08_PREPARAR_REDE_AMES.bat'
   if(-not(Test-Path -LiteralPath $NetworkSetup)){throw 'Pacote incompleto: 08_PREPARAR_REDE_AMES.bat'}
+  if(-not $LocalOnly){
   & $NetworkSetup /auto
   if($LASTEXITCODE -ne 0){throw 'Rede A-MES nao validada. Conecte TAXXX_5G ou solicite apoio da TI para a rota persistente.'}
+  }elseif(-not(Test-Path -LiteralPath (Join-Path $Root 'ames-agent\config.json') -PathType Leaf)){throw 'LocalOnly_requires_existing_verified_configuration'}
   if(!(Test-Path $Python)){& "$Root\01_INSTALAR_UMA_VEZ.bat" /auto;if($LASTEXITCODE -ne 0){throw 'Instalacao Python falhou'}}
   & $Python -c "import pandas,openpyxl,playwright,pyautogui,pyperclip; from playwright.sync_api import sync_playwright; from zoneinfo import ZoneInfo; ZoneInfo('America/Sao_Paulo')"
   if($LASTEXITCODE -ne 0){& "$Root\09_REPARAR_DEPENDENCIAS.bat" /auto;if($LASTEXITCODE -ne 0){throw 'Reparo de dependencias falhou'}}
@@ -48,10 +52,13 @@ try {
   if($token.Length -lt 32){throw 'Token local do agente existe, mas e invalido.'}
 
   # The guardian owns conservative Wi-Fi and /32 recovery. No default gateway changes.
-  & "$Root\05_ABRIR_CHROME_AMES.bat"
-  if($LASTEXITCODE -ne 0){Write-Warning 'Chrome/CDP pendente. Consulta local permanece disponivel.'}
+  if(-not $LocalOnly){
+    & "$Root\05_ABRIR_CHROME_AMES.bat"
+    if($LASTEXITCODE -ne 0){Write-Warning 'Chrome/CDP pendente. Consulta local permanece disponivel.'}
+  }
 
-  Start-Process "http://127.0.0.1:8765/Central-de-Controle-/#ames_agent_token=$token"
+  if(-not $NoBrowser){Start-Process "http://127.0.0.1:8765/Central-de-Controle-/#ames_agent_token=$token"}
+  if($LocalOnly){Write-Host '[LOCAL] Historicos locais disponiveis; este modo nao e isolamento de rede nem prova MES.'}
   Write-Host '[OK] Central + A-MES local. Login A-MES continua manual. Gate fisico pendente.'
 }catch{
   Write-Host ('[ERRO] '+$_.Exception.Message) -ForegroundColor Red
