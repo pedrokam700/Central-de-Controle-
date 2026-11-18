@@ -259,4 +259,18 @@ os._exit(86)
             release.set();thread.join(20);self.assertFalse(thread.is_alive())
         self.assertEqual(out[0]['reason'],'PENDING_OR_EXISTING_ATTEMPT');self.assertEqual(before,FIX['hashes'](self.root));self.assertTrue(self.m['verify_target'](self.root))
 
+    def test_50_malformed_private_journal_never_escapes_safe_public_verification(self):
+        f=self.api(True);self.assertEqual(f(self.root)['decision'],'R1')
+        (self.root/'.p08-journal.json').write_text('[]');before=FIX['hashes'](self.root)
+        self.assertFalse(self.m['verify_target'](self.root))
+        self.assertEqual(self.m['recover'](self.root)['decision'],'R2')
+        self.assertEqual(before,FIX['hashes'](self.root))
+
+    def test_51_unknown_private_journal_metadata_blocks_verify_and_recover(self):
+        f=self.api(True);self.assertEqual(f(self.root)['decision'],'R1')
+        path=self.root/'.p08-journal.json';data=json.loads(path.read_text());data['unreviewed']='SYNTHETIC-UNKNOWN';FIX['write'](path,data)
+        before=FIX['hashes'](self.root);self.assertFalse(self.m['verify_target'](self.root))
+        self.assertEqual(self.m['recover'](self.root)['reason'],'JOURNAL_UNVERIFIED')
+        self.assertEqual(before,FIX['hashes'](self.root))
+
 if __name__=='__main__':unittest.main()

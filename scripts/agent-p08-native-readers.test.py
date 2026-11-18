@@ -74,7 +74,7 @@ class NativeReaders(unittest.TestCase):
         self.assertTrue(P08['verify_target'](self.root))
 
     def test_R2_is_STOP_even_if_native_reader_can_still_read_new_evidence(self):
-        other=Path(self.tmp.name)/'P08-SYNTHETIC-NEW';FIX['make'](other,technical=True)
+        other=Path(self.tmp.name).resolve()/'P08-SYNTHETIC-NEW';FIX['make'](other,technical=True)
         con=sqlite3.connect(other/'B'/DB)
         try:con.execute("UPDATE repair_history_3012 SET repair_comment='SYNTHETIC POST CANDIDATE EVIDENCE'");con.commit()
         finally:con.close()
