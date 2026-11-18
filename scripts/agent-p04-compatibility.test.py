@@ -138,4 +138,17 @@ class P04Contracts(unittest.TestCase):
         with self.assertRaisesRegex(m['Refused'],r'^UNREVIEWED_PYTHON_SPECIFIER$'):
             m['normalized_python_spec']('>=2.7 or SYNTHETIC_PRIVATE_EXPRESSION')
 
+    def test_41_dateutil_readonly_public_timezone_key_is_explicit(self):
+        m=self.api();rule=m['registry_event_allowed']
+        self.assertTrue(rule('winreg.ConnectRegistry',(None,0x80000002)))
+        self.assertTrue(rule('winreg.OpenKey',(123,r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Zones',0x20019)))
+
+    def test_42_registry_remote_write_and_other_paths_stay_refused(self):
+        rule=self.api()['registry_event_allowed']
+        for event,args in [('winreg.ConnectRegistry',('SYNTHETIC-REMOTE',0x80000002)),
+          ('winreg.OpenKey',(123,r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Zones',0xF003F)),
+          ('winreg.OpenKey',(123,r'SOFTWARE\SYNTHETIC-PRIVATE',0x20019)),
+          ('winreg.CreateKey',(0x80000001,'SYNTHETIC-NEVER-CREATE')),('winreg.SetValue',(123,'SYNTHETIC',1,'SYNTHETIC'))]:
+            with self.subTest(event=event,args=args):self.assertFalse(rule(event,args))
+
 if __name__=='__main__':unittest.main()

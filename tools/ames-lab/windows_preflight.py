@@ -222,12 +222,35 @@ def verify_packages(report_path,prefix):
     return result
 
 
+REGISTRY_PATHS={r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Zones',r'SOFTWARE\Microsoft\Windows\CurrentVersion\Time Zones'}
+
+
+def registry_event_allowed(event,args):
+    # dateutil.tz.win checks the existence of a PUBLIC timezone key at import.
+    # No remote registry, values, user identities, enumeration, writes or repair.
+    if event=='winreg.ConnectRegistry':
+        return len(args)==2 and args[0] is None and type(args[1]) is int and args[1] in (0x80000002,-2147483646)
+    if event=='winreg.OpenKey':
+        return (len(args)==3 and type(args[0]) is int and args[1] in REGISTRY_PATHS
+                and type(args[2]) is int and args[2]==0x20019)
+    return False
+
+
 def install_guard():
     """Process-level fail-closed policy, not a kernel sandbox or maintenance lease."""
     denied_modules={'agent','agent_entry','agent_hardened_entry','store','engine_bridge','network_watch','ames','pyautogui','pyscreeze','pygetwindow','mouseinfo','pymsgbox'}
     mutations={'os.remove','os.rmdir','os.rename','os.mkdir','os.chmod','os.utime','os.link','os.symlink','os.truncate','os.putenv','os.unsetenv'}
+    pending_registry_result=0
     def audit(event,args):
-        if (event.startswith(('socket.','subprocess.','winreg.')) or event in mutations
+        nonlocal pending_registry_result
+        if event.startswith('winreg.'):
+            if event=='winreg.OpenKey/result' and pending_registry_result and len(args)==1 and type(args[0]) is int:
+                pending_registry_result-=1;return
+            if registry_event_allowed(event,args):
+                if event=='winreg.OpenKey':pending_registry_result+=1
+                return
+            raise Refused('P04_SIDE_EFFECT_REFUSED:'+event)
+        if (event.startswith(('socket.','subprocess.')) or event in mutations
             or event in {'os.system','os.posix_spawn','os.exec','os.spawn','os.startfile'}):raise Refused('P04_SIDE_EFFECT_REFUSED:'+event)
         if event=='import' and str(args[0]).split('.')[0] in denied_modules:raise Refused('P04_OPERATIONAL_IMPORT_REFUSED')
         if event=='sqlite3.connect' and args[0]!=':memory:':raise Refused('P04_EXTERNAL_SQLITE_REFUSED')
@@ -243,7 +266,10 @@ def prove_guard():
     import subprocess
     attempts=[lambda:socket.socket(),lambda:subprocess.Popen(['P04-SENTINEL-NEVER-EXECUTE']),
               lambda:open('P04-SENTINEL-NEVER-WRITE','wb'),lambda:sqlite3.connect('P04-SENTINEL-NEVER-DB'),
-              lambda:__import__('agent')]
+              lambda:__import__('agent'),
+              lambda:sys.audit('winreg.ConnectRegistry','P04-SYNTHETIC-REMOTE',0x80000002),
+              lambda:sys.audit('winreg.CreateKey',0x80000001,r'SOFTWARE\P04-SYNTHETIC-NEVER-CREATE'),
+              lambda:sys.audit('winreg.OpenKey',0x80000002,next(iter(REGISTRY_PATHS)),0xF003F)]
     for probe in attempts:
         try:probe()
         except Refused:continue
@@ -328,6 +354,8 @@ def collect(root):
              'python_build':sys.version,'cache_tag':sys.implementation.cache_tag,'SOABI':sysconfig.get_config_var('SOABI'),
              'windows_version':list(sys.getwindowsversion()),
              'process_import_defaults':{k:os.environ[k] for k in ('OPENBLAS_MAIN_FREE','GOTOBLAS_MAIN_FREE')},
+             'readonly_registry_contract':{'scope':'local_HKLM_timezone_key_existence_only','paths':sorted(REGISTRY_PATHS),
+                                           'access':'KEY_READ','remote_allowed':False,'writes_allowed':False},
              'runner_image':{k:os.environ.get(k) for k in ('ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH')},
              'operational_installation_tested':False,'homologation_authorized':False,'physical':'PENDING'}
     receipt['receipt_sha256']=digest(receipt)
@@ -338,7 +366,7 @@ def verify_receipt(receipt,code_sha):
     try:
         required={'schema','scope','code_sha','base_sha','run_id','profile_sha256','wheel_lock_sha256','tool_sha256',
                   'facts','assessment','native_binaries','python_build','cache_tag','SOABI','windows_version','runner_image',
-                  'operational_installation_tested','homologation_authorized','physical','receipt_sha256','process_import_defaults'}
+                  'operational_installation_tested','homologation_authorized','physical','receipt_sha256','process_import_defaults','readonly_registry_contract'}
         if not isinstance(receipt,dict) or set(receipt)!=required:return False
         copy=dict(receipt);sha=copy.pop('receipt_sha256')
         if (sha!=digest(copy) or copy['schema']!='ames-p04-runner-receipt-v1' or copy['code_sha']!=code_sha
@@ -354,6 +382,7 @@ def verify_receipt(receipt,code_sha):
         if set(binary)!={'python_executable','python_base','sqlite_extension','loaded_sqlite_dll'}:return False
         if any(not re.fullmatch('[0-9a-f]{64}',h) for h in binary.values()):return False
         if copy['process_import_defaults']!={'OPENBLAS_MAIN_FREE':'1','GOTOBLAS_MAIN_FREE':'1'}:return False
+        if copy['readonly_registry_contract']!={'scope':'local_HKLM_timezone_key_existence_only','paths':sorted(REGISTRY_PATHS),'access':'KEY_READ','remote_allowed':False,'writes_allowed':False}:return False
         image=copy['runner_image']
         if set(image)!={'ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH'} or image['RUNNER_OS']!='Windows' or image['RUNNER_ARCH']!='X64':return False
         if any(not isinstance(value,str) or not value for value in image.values()):return False
