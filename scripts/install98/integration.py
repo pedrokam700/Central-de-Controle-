@@ -52,6 +52,10 @@ def main():
   record('actual_installer_prepare_'+label,'PASS',no_runtime_created=True)
  # Genuine GUI backend, no patch or fake module. Images stay private and synthetic.
  py=LAB/'B/.venv/Scripts/python.exe'
+ # Pillow is a verified TEST screenshot dependency, not imported by the agent.
+ # PyScreeze leaves it optional; never substitute a fake imaging backend.
+ run([py,'-m','pip','install','--no-index','--find-links',LAB/'wheels','Pillow==11.3.0'])
+ record('test_only_screenshot_dependency','PASS',package='Pillow==11.3.0',operational_requirements_changed=False)
  gui=json.loads(run([py,'-B','-c',"import json,pyautogui,mouseinfo,pygetwindow,pyrect,pytweening,pymsgbox; from PIL import ImageGrab; im=ImageGrab.grab(); print(json.dumps({'screen':list(pyautogui.size()),'capture':list(im.size),'backend':pyautogui.platformModule.__name__}))"]))
  assert gui['screen'][0]>0 and gui['capture'][0]>0 and gui['backend']=='pyautogui._pyautogui_win'
  record('genuine_windows_GUI_dependencies','PASS',**gui)
