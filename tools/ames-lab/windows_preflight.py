@@ -59,7 +59,14 @@ def assess(facts):
     reasons=[]
     if not isinstance(facts,dict) or set(facts)!={'runtime','sqlite','timezone','packages','imports','guard'}:
         reasons.append('UNREVIEWED_FACTS');facts=facts if isinstance(facts,dict) else {}
-    r=facts.get('runtime') or {};s=facts.get('sqlite') or {};z=facts.get('timezone') or {}
+    def section(name,required,optional=()):
+        value=facts.get(name)
+        if not isinstance(value,dict):reasons.append('UNREVIEWED_FACTS');return {}
+        if not set(required)<=set(value) or not set(value)<=set(required)|set(optional):reasons.append('UNREVIEWED_FACTS')
+        return value
+    r=section('runtime',{'version','implementation','bits','platform','native_machine','isolated','bytecode_disabled'})
+    s=section('sqlite',{'version','json1','upsert','foreign_keys','backup','integrity'},{'source_id','compile_options'})
+    z=section('timezone',{'tzdata_version','iana_version','resource_verified','vectors_verified'},{'resource_sha256','vectors','source'})
     if r.get('version')!=PROFILE['python'] or any(type(x)!=int for x in r.get('version',[])):reasons.append('PYTHON_VERSION')
     if r.get('implementation')!='cpython':reasons.append('PYTHON_IMPLEMENTATION')
     if type(r.get('bits'))!=int or r.get('bits')!=64:reasons.append('PROCESS_ARCHITECTURE')
@@ -73,12 +80,13 @@ def assess(facts):
     if z.get('tzdata_version')!=PROFILE['tzdata_version'] or z.get('iana_version')!=PROFILE['iana_version']:reasons.append('TZDATA_VERSION')
     if z.get('resource_verified') is not True:reasons.append('TZDATA_RESOURCE')
     if z.get('vectors_verified') is not True:reasons.append('TIMEZONE_VECTORS')
-    packages=facts.get('packages') or {};imports=facts.get('imports') or {}
+    packages=section('packages',set(ARTIFACTS));imports=section('imports',set(ARTIFACTS))
     if set(packages)!=set(ARTIFACTS):reasons.append('UNREVIEWED_PACKAGE_SET')
     if set(imports)!=set(ARTIFACTS):reasons.append('UNREVIEWED_IMPORT_SET')
     for name,a in ARTIFACTS.items():
         p=packages.get(name)
         if not isinstance(p,dict):reasons.append('PACKAGE_MISSING:'+name);continue
+        if set(p)!={'version','filename','sha256','origin_verified','records_verified','metadata_verified'}:reasons.append('UNREVIEWED_FACTS')
         if p.get('version')!=a['version']:reasons.append('PACKAGE_VERSION:'+name)
         if p.get('filename')!=a['filename'] or p.get('sha256')!=a['sha256']:reasons.append('WHEEL_IDENTITY:'+name)
         for field,code in [('origin_verified','WHEEL_ORIGIN'),('records_verified','PACKAGE_RECORD'),('metadata_verified','PACKAGE_METADATA')]:
@@ -311,11 +319,31 @@ def collect(root):
 
 def verify_receipt(receipt,code_sha):
     try:
+        required={'schema','scope','code_sha','base_sha','run_id','profile_sha256','wheel_lock_sha256','tool_sha256',
+                  'facts','assessment','native_binaries','python_build','cache_tag','SOABI','windows_version','runner_image',
+                  'operational_installation_tested','homologation_authorized','physical','receipt_sha256'}
+        if not isinstance(receipt,dict) or set(receipt)!=required:return False
         copy=dict(receipt);sha=copy.pop('receipt_sha256')
-        return (sha==digest(copy) and copy['code_sha']==code_sha and copy['scope']=='DISPOSABLE_WINDOWS_RUNNER_ONLY'
-            and copy['operational_installation_tested'] is False and copy['homologation_authorized'] is False
-            and copy['physical']=='PENDING' and copy['assessment']==assess(copy['facts']))
-    except (ValueError,TypeError,KeyError):return False
+        if (sha!=digest(copy) or copy['schema']!='ames-p04-runner-receipt-v1' or copy['code_sha']!=code_sha
+            or not re.fullmatch('[0-9a-f]{40}',code_sha) or copy['base_sha']!=PROFILE['base_sha']
+            or copy['scope']!='DISPOSABLE_WINDOWS_RUNNER_ONLY' or not re.fullmatch('[0-9]+',copy['run_id'])
+            or copy['operational_installation_tested'] is not False or copy['homologation_authorized'] is not False
+            or copy['physical']!='PENDING' or copy['assessment']!=assess(copy['facts'])
+            or 'UNREVIEWED_FACTS' in copy['assessment']['reasons']):return False
+        for field,name in [('profile_sha256','p04_profile.json'),('wheel_lock_sha256','p04_windows_wheels.json')]:
+            if copy[field]!=file_hash(HERE/name):return False
+        if copy['tool_sha256']!=file_hash(Path(__file__)):return False
+        binary=copy['native_binaries']
+        if set(binary)!={'python_executable','python_base','sqlite_extension','loaded_sqlite_dll'}:return False
+        if any(not re.fullmatch('[0-9a-f]{64}',h) for h in binary.values()):return False
+        image=copy['runner_image']
+        if set(image)!={'ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH'} or image['RUNNER_OS']!='Windows' or image['RUNNER_ARCH']!='X64':return False
+        if any(not isinstance(value,str) or not value for value in image.values()):return False
+        if copy['cache_tag']!='cpython-312' or not str(copy['SOABI']).startswith('cp312'):return False
+        if not str(copy['python_build']).startswith('3.12.10 '):return False
+        if not isinstance(copy['windows_version'],list) or len(copy['windows_version'])!=5:return False
+        return True
+    except (OSError,ValueError,TypeError,KeyError,AttributeError):return False
 
 
 def main():

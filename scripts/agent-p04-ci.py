@@ -38,7 +38,10 @@ def main():
     (lab/'context.json').write_text(json.dumps(context),encoding='utf-8')
     api=runpy.run_path(str(TOOL))
     def probe(reason=None):
-        result=subprocess.run([str(py),'-I','-B',str(TOOL),'--ci-lab-root',str(lab)],cwd=ROOT,capture_output=True,text=True,encoding='utf-8',timeout=90)
+        # NumPy's documented process-local defaults are seeded before the guard;
+        # the guard continues refusing ALL putenv/unsetenv attempts by imports.
+        child_env=dict(os.environ,OPENBLAS_MAIN_FREE='1',GOTOBLAS_MAIN_FREE='1')
+        result=subprocess.run([str(py),'-I','-B',str(TOOL),'--ci-lab-root',str(lab)],cwd=ROOT,env=child_env,capture_output=True,text=True,encoding='utf-8',timeout=90)
         assert not result.stderr.strip(),result.stderr
         receipt=json.loads(result.stdout)
         if reason:
@@ -51,8 +54,11 @@ def main():
             assert receipt['assessment']['core_status']=='PASS' and receipt['assessment']['workstation_status']=='BLOCKED',receipt
             assert len(receipt['assessment']['missing_verified_wheels'])==6
         return receipt
-    baseline=probe()
     site=venv/'Lib/site-packages'
+    # Public wheel headers only, to diagnose upstream filename/WHEEL tags.
+    for header in sorted(site.glob('*.dist-info/WHEEL')):
+        print(json.dumps({'wheel_header':header.parent.name,'fields':header.read_text(encoding='utf-8').splitlines()}),flush=True)
+    baseline=probe()
     cases=[('wrong-official-wheel-hash',report,lambda b:json.dumps({**json.loads(b),'install':[{**x,'download_info':{**x['download_info'],'archive_info':{'hashes':{'sha256':'0'*64}}}} if x['metadata']['name'].lower()=='pandas' else x for x in json.loads(b)['install']]}).encode(),'WHEEL_ORIGIN_MISMATCH:pandas'),
       ('wrong-installed-version',site/'pandas-2.2.3.dist-info/METADATA',lambda b:b.replace(b'Version: 2.2.3',b'Version: 3.0.0',1),'INSTALLED_VERSION_MISMATCH:pandas'),
       ('wrong-native-wheel-tag',site/'greenlet-3.2.4.dist-info/WHEEL',lambda b:b.replace(b'cp312-cp312-win_amd64',b'cp311-cp311-win_amd64'),'WHEEL_TAG_MISMATCH:greenlet'),
