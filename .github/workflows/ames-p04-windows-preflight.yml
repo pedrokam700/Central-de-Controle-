@@ -19,7 +19,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: P04 policy and actual stdlib negative contracts
-        run: python3 -B scripts/agent-p04-compatibility.test.py -v
+        run: |
+          python3 -B scripts/agent-p04-compatibility.test.py -v
+          python3 -B scripts/agent-p04-preservation.test.py -v
   windows-compatibility:
     strategy:
       fail-fast: false
@@ -46,6 +48,8 @@ jobs:
       - name: Verified Windows wheels actual imports SQLite timezone and incompatibilities
         shell: pwsh
         run: |
+          python -B scripts/agent-p04-preservation.test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -B scripts/agent-p04-ci.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 # No builder, operational entrypoint, software installer, archive or artifact upload.

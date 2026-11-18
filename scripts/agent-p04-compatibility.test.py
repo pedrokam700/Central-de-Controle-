@@ -46,7 +46,7 @@ class P04Contracts(unittest.TestCase):
     def test_07_Linux_not_Windows(self):self.bad('runtime','platform','linux-x86_64','WINDOWS_REQUIRED')
     def test_08_missing_isolation(self):self.bad('runtime','isolated',False,'ISOLATION_REQUIRED')
     def test_09_no_JSON1_even_when_SQLite_version_is_recent(self):self.bad('sqlite','json1',False,'SQLITE_JSON1')
-    def test_10_old_SQLite(self):self.bad('sqlite','version',[3,24,0],'SQLITE_VERSION')
+    def test_10_old_SQLite(self):self.bad('sqlite','version',[3,23,0],'SQLITE_VERSION')
     def test_11_FK_not_enabled(self):self.bad('sqlite','foreign_keys',False,'SQLITE_FOREIGN_KEYS')
     def test_12_no_upsert(self):self.bad('sqlite','upsert',False,'SQLITE_UPSERT')
     def test_13_no_backup(self):self.bad('sqlite','backup',False,'SQLITE_BACKUP')

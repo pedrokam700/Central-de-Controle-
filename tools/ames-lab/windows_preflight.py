@@ -194,7 +194,7 @@ def verify_packages(report_path,prefix):
         if sorted(d.requires or [])!=sorted(a['requires_dist']) or (d.metadata.get('Requires-Python') or '')!=(a['requires_python'] or ''):
             raise Refused('DEPENDENCY_METADATA_MISMATCH:'+name)
         wheel=d.read_text('WHEEL') or '';tags={line[5:].strip() for line in wheel.splitlines() if line.startswith('Tag: ')}
-        if tags!=_tags(a['filename']):raise Refused('WHEEL_TAG_MISMATCH:'+name)
+        if tags!=set(a.get('installed_tags',_tags(a['filename']))):raise Refused('WHEEL_TAG_MISMATCH:'+name)
         files=d.files
         if not files:raise Refused('INSTALLED_RECORD_MISSING:'+name)
         for entry in files:
@@ -267,6 +267,8 @@ def _context(root):
     if root.resolve()!=root or root.parent!=scratch or not re.fullmatch('P04-SYNTHETIC-[A-Za-z0-9_-]+',root.name):raise Refused('EXPLICIT_LOCAL_LAB_REQUIRED')
     if Path(sys.prefix).resolve()!=root/'venv' or sys.prefix==sys.base_prefix:raise Refused('LAB_INTERPRETER_REQUIRED')
     if not sys.flags.isolated or not sys.dont_write_bytecode:raise Refused('ISOLATED_INTERPRETER_REQUIRED')
+    if list(sys.version_info[:3])!=PROFILE['python'] or sys.implementation.name!='cpython':raise Refused('UNSUPPORTED_CI_PYTHON')
+    if struct.calcsize('P')*8!=64 or sysconfig.get_platform()!='win-amd64':raise Refused('UNSUPPORTED_CI_ARCHITECTURE')
     for name in ('context.json','pip-report.json'):_regular(root/name)
     context=parse((root/'context.json').read_text(encoding='utf-8'))
     if (set(context)!={'schema','scope','base_sha','code_sha','run_id'} or context['schema']!='ames-p04-ci-context-v1'
@@ -299,7 +301,9 @@ def _imports():
 def collect(root):
     context=_context(root);install_guard();guard=prove_guard()
     packages=verify_packages(root/'pip-report.json',root/'venv')
-    sql=sqlite_probe();native=_native_inventory();zone=timezone_probe();imports=_imports()
+    sql=sqlite_probe();native=_native_inventory()
+    if native['native_machine']!='AMD64':raise Refused('UNSUPPORTED_NATIVE_ARCHITECTURE')
+    zone=timezone_probe();imports=_imports()
     runtime={'version':list(sys.version_info[:3]),'implementation':sys.implementation.name,'bits':struct.calcsize('P')*8,
              'platform':sysconfig.get_platform(),'native_machine':native['native_machine'],
              'isolated':bool(sys.flags.isolated),'bytecode_disabled':bool(sys.dont_write_bytecode)}

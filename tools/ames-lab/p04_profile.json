@@ -12,7 +12,7 @@
   "native_machine": "AMD64",
   "sqlite_min": [
     3,
-    38,
+    24,
     0
   ],
   "requirements": {
