@@ -252,9 +252,14 @@ def install_guard():
             detail=''
             if event=='winreg.OpenKey':
                 known={p.casefold():'PUBLIC_TZ_KEY' for p in REGISTRY_PATHS}
+                known.update({r'SOFTWARE\Microsoft\Windows NT\CurrentVersion'.casefold():'PUBLIC_OS_VERSION','':'MIME_CLASSES_ROOT',
+                              r'SYSTEM\CurrentControlSet\Control\TimeZoneInformation'.casefold():'PUBLIC_LOCAL_TIMEZONE'})
                 label=known.get(str(args[1]).casefold(),'OTHER_KEY') if len(args)>1 else 'MISSING_KEY'
                 access=str(args[2]) if len(args)>2 and type(args[2]) is int else 'NONINT'
-                detail=':shape='+str(len(args))+':key='+label+':access='+access
+                callers=[];frame=sys._getframe(1)
+                while frame is not None and len(callers)<6:
+                    callers.append(Path(frame.f_code.co_filename).name+'.'+frame.f_code.co_name);frame=frame.f_back
+                detail=':shape='+str(len(args))+':key='+label+':access='+access+':callers='+','.join(callers)
             raise Refused('P04_SIDE_EFFECT_REFUSED:'+event+detail)
         if (event.startswith(('socket.','subprocess.')) or event in mutations
             or event in {'os.system','os.posix_spawn','os.exec','os.spawn','os.startfile'}):raise Refused('P04_SIDE_EFFECT_REFUSED:'+event)
