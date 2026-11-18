@@ -222,12 +222,15 @@ def verify_packages(report_path,prefix):
     return result
 
 
-REGISTRY_PATHS={r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Zones',r'SOFTWARE\Microsoft\Windows\CurrentVersion\Time Zones'}
+REGISTRY_ROOTS={r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Zones',r'SOFTWARE\Microsoft\Windows\CurrentVersion\Time Zones'}
+REGISTRY_UTC={p+r'\UTC' for p in REGISTRY_ROOTS}
+REGISTRY_PATHS=REGISTRY_ROOTS|REGISTRY_UTC
 
 
 def registry_event_allowed(event,args):
     # dateutil.tz.win checks the existence of a PUBLIC timezone key at import.
-    # No remote registry, values, user identities, enumeration, writes or repair.
+    # UTC values are permitted ONLY for handles opened by this guard below.
+    # No remote registry, other keys, writes, user identities or repair.
     if event=='winreg.ConnectRegistry':
         return len(args)==2 and args[0] is None and type(args[1]) is int and args[1] in (0x80000002,-2147483646)
     if event=='winreg.OpenKey':
@@ -240,15 +243,18 @@ def install_guard():
     """Process-level fail-closed policy, not a kernel sandbox or maintenance lease."""
     denied_modules={'agent','agent_entry','agent_hardened_entry','store','engine_bridge','network_watch','ames','pyautogui','pyscreeze','pygetwindow','mouseinfo','pymsgbox'}
     mutations={'os.remove','os.rmdir','os.rename','os.mkdir','os.chmod','os.utime','os.link','os.symlink','os.truncate','os.putenv','os.unsetenv'}
-    pending_registry_result=0
+    pending_registry_result=[];registry_handles={}
     def audit(event,args):
-        nonlocal pending_registry_result
         if event.startswith('winreg.'):
             if event=='winreg.OpenKey/result' and pending_registry_result and len(args)==1 and type(args[0]) is int:
-                pending_registry_result-=1;return
+                registry_handles[args[0]]=pending_registry_result.pop();return
             if registry_event_allowed(event,args):
-                if event=='winreg.OpenKey':pending_registry_result+=1
+                if event=='winreg.ConnectRegistry':registry_handles.clear()
+                if event=='winreg.OpenKey':pending_registry_result.append(args[1])
                 return
+            if args and registry_handles.get(args[0]) in REGISTRY_UTC:
+                if event=='winreg.QueryInfoKey' and len(args)==1:return
+                if event=='winreg.EnumValue' and len(args)==2 and type(args[1]) is int and 0<=args[1]<64:return
             detail=''
             if event=='winreg.OpenKey':
                 known={p.casefold():'PUBLIC_TZ_KEY' for p in REGISTRY_PATHS}
@@ -280,7 +286,8 @@ def prove_guard():
               lambda:__import__('agent'),
               lambda:sys.audit('winreg.ConnectRegistry','P04-SYNTHETIC-REMOTE',0x80000002),
               lambda:sys.audit('winreg.CreateKey',0x80000001,r'SOFTWARE\P04-SYNTHETIC-NEVER-CREATE'),
-              lambda:sys.audit('winreg.OpenKey',0x80000002,next(iter(REGISTRY_PATHS)),0xF003F)]
+              lambda:sys.audit('winreg.OpenKey',0x80000002,next(iter(REGISTRY_PATHS)),0xF003F),
+              lambda:sys.audit('winreg.QueryInfoKey',0x80000002),lambda:sys.audit('winreg.EnumValue',0x80000002,0)]
     for probe in attempts:
         try:probe()
         except Refused:continue
@@ -365,7 +372,7 @@ def collect(root):
              'python_build':sys.version,'cache_tag':sys.implementation.cache_tag,'SOABI':sysconfig.get_config_var('SOABI'),
              'windows_version':list(sys.getwindowsversion()),
              'process_import_defaults':{k:os.environ[k] for k in ('OPENBLAS_MAIN_FREE','GOTOBLAS_MAIN_FREE')},
-             'readonly_registry_contract':{'scope':'local_HKLM_timezone_key_existence_only','paths':sorted(REGISTRY_PATHS),
+             'readonly_registry_contract':{'scope':'local_HKLM_timezone_roots_and_guard_owned_UTC_values_only','paths':sorted(REGISTRY_PATHS),
                                            'access':'KEY_READ','remote_allowed':False,'writes_allowed':False},
              'runner_image':{k:os.environ.get(k) for k in ('ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH')},
              'operational_installation_tested':False,'homologation_authorized':False,'physical':'PENDING'}
@@ -393,7 +400,7 @@ def verify_receipt(receipt,code_sha):
         if set(binary)!={'python_executable','python_base','sqlite_extension','loaded_sqlite_dll'}:return False
         if any(not re.fullmatch('[0-9a-f]{64}',h) for h in binary.values()):return False
         if copy['process_import_defaults']!={'OPENBLAS_MAIN_FREE':'1','GOTOBLAS_MAIN_FREE':'1'}:return False
-        if copy['readonly_registry_contract']!={'scope':'local_HKLM_timezone_key_existence_only','paths':sorted(REGISTRY_PATHS),'access':'KEY_READ','remote_allowed':False,'writes_allowed':False}:return False
+        if copy['readonly_registry_contract']!={'scope':'local_HKLM_timezone_roots_and_guard_owned_UTC_values_only','paths':sorted(REGISTRY_PATHS),'access':'KEY_READ','remote_allowed':False,'writes_allowed':False}:return False
         image=copy['runner_image']
         if set(image)!={'ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH'} or image['RUNNER_OS']!='Windows' or image['RUNNER_ARCH']!='X64':return False
         if any(not isinstance(value,str) or not value for value in image.values()):return False

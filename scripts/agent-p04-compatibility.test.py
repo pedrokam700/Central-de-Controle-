@@ -151,4 +151,16 @@ class P04Contracts(unittest.TestCase):
           ('winreg.CreateKey',(0x80000001,'SYNTHETIC-NEVER-CREATE')),('winreg.SetValue',(123,'SYNTHETIC',1,'SYNTHETIC'))]:
             with self.subTest(event=event,args=args):self.assertFalse(rule(event,args))
 
+    def test_43_public_UTC_values_require_a_guard_owned_handle(self):
+        self.api()
+        code="import runpy,sys; m=runpy.run_path(sys.argv[1]); m['install_guard'](); sys.audit('winreg.EnumValue',0x80000002,0)"
+        r=subprocess.run([sys.executable,'-I','-B','-c',code,str(TOOL)],capture_output=True,text=True)
+        self.assertNotEqual(r.returncode,0);self.assertIn('P04_SIDE_EFFECT_REFUSED:winreg.EnumValue',r.stderr)
+
+    def test_44_only_exact_UTC_child_key_may_be_opened(self):
+        rule=self.api()['registry_event_allowed'];base=r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Zones'
+        self.assertTrue(rule('winreg.OpenKey',(123,base+r'\UTC',0x20019)))
+        self.assertFalse(rule('winreg.OpenKey',(123,base+r'\SYNTHETIC-OTHER-ZONE',0x20019)))
+        self.assertFalse(rule('winreg.OpenKey',(123,base+r'\UTC\SYNTHETIC-CHILD',0x20019)))
+
 if __name__=='__main__':unittest.main()
