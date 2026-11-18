@@ -2,7 +2,7 @@ name: A-MES integrated regressions with verified CI-only Python wheels
 on:
   push:
     branches:
-      - work/ames-p02-synthetic-deidentification-20261117
+      - work/ames-p04-windows-preflight-20261118
 permissions:
   contents: read
 jobs:

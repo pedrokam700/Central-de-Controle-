@@ -9,6 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = 'db3cb5b58c99bcf86c44b671280cb42f7dd31d4c'
 BRANCH = 'work/ames-lab-entry-p01-p03-p06-20261117'
 ALLOWED = {
+    'tools/ames-lab/windows_preflight.py', 'tools/ames-lab/p04_profile.json',
+    'tools/ames-lab/p04_windows_wheels.json', 'scripts/agent-p04-compatibility.test.py',
+    'scripts/agent-p04-ci.py', 'scripts/agent-p04-preservation.test.py',
+    '.github/workflows/ames-p04-windows-preflight.yml',
+    'docs/ames/audits/PR95_P04_WINDOWS_20261118.md',
+    'docs/ames/handoffs/PR95_P04_WINDOWS_20261118.md',
     'tools/ames-lab/synthetic_deidentify.py', 'tools/ames-lab/p02_profile.json',
     'scripts/fixtures/p02_state.json', 'scripts/fixtures/p02_installation.py',
     'scripts/agent-p02-deidentification.test.py', 'scripts/agent-p02-projection.test.py',
