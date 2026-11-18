@@ -36,3 +36,21 @@ provas GUI/contenção/instalador e primeiro boot; corrigir somente causas
 demonstradas, sem perder dados novos e sem retirar barreiras produtivas. Exigir
 regressões anteriores no SHA final antes de qualquer declaração de candidata.
 G0–G7/homologação física e uso no computador da fábrica PENDENTES.
+
+## Checkpoint: motor e contenção
+
+RED publicado 64e19f77b6b87e0a42a1c66930792034a6c38cb7, CI
+https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44376199516
+(uma falha real em seis contratos). Correção mínima do helper: reconhecer apenas
+engine_dir absoluto dentro da geração A e planejar B/factory-engine; recusar
+override externo/relativo e candidato incompleto antes de gravar. Configuração
+original e backup privado continuam fiéis; os demais campos e SQLite/token não
+mudam. 13 contratos sintéticos de transferência e quatro anteriores passam
+localmente; isso ainda não é GREEN Windows nem qualificação do pacote final.
+
+O primeiro runner recusou prefixos de firewall e o segundo não encontrou o log
+imediatamente; ambos pararam ANTES de GUI/agente. Contraprova com espera limitada
+do audit log nativo passou em c6847c72c07e1297bf46030a3f828b990b0dd089,
+https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44377550040:
+loopback positivo e evento WFP de bloqueio vinculado ao PID. Build GUI real
+prosseguiu; seus resultados e boot ainda devem ser conferidos integralmente.

@@ -87,6 +87,39 @@ def _source_identity(path: Path) -> str:
     return row[0]
 
 
+def _candidate_configuration(source: Path, old: Path, new: Path) -> tuple[bytes, bool]:
+    """Relocate ONLY a proved in-package engine reference; preserve private A.
+
+    The coordinator still owns release hashes, process quiescence and approval.
+    Unknown external/relative engines must not silently supply older code to B.
+    """
+    raw = source.read_bytes()
+    cfg = json.loads(raw.decode('utf-8-sig'))
+    if not isinstance(cfg, dict):
+        raise ValueError('configuration_root_unverified')
+    override = os.environ.get('AMES_ENGINE_DIR')
+    if override and (not Path(override).is_absolute() or Path(override).resolve() != (new / 'factory-engine').resolve()):
+        raise ValueError('external_engine_override_unverified')
+    engine = cfg.get('engine_dir')
+    if engine in (None, ''):
+        return raw, False
+    if not isinstance(engine, str) or not Path(engine).is_absolute():
+        raise ValueError('engine_reference_unverified')
+    path = Path(engine)
+    if (path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction())
+            or path.resolve() != (old / 'factory-engine').resolve()):
+        raise ValueError('external_engine_reference_requires_supervision')
+    for directory in (new / 'factory-engine', new / 'factory-engine/ames'):
+        if directory.is_symlink() or (hasattr(directory, 'is_junction') and directory.is_junction()):
+            raise ValueError('candidate_engine_link_unverified')
+    for relative in ('main.py', 'ames/browser.py'):
+        member = new / 'factory-engine' / relative
+        if not member.is_file() or not _regular_file(member):
+            raise ValueError('candidate_engine_incomplete')
+    cfg['engine_dir'] = str(new / 'factory-engine')
+    return (json.dumps(cfg, ensure_ascii=False, sort_keys=True, indent=2) + '\n').encode('utf-8'), True
+
+
 def preflight(old_root: str, new_root: str) -> dict:
     old, new = _safe_root(old_root), _safe_root(new_root)
     if old == new or old in new.parents or new in old.parents:
@@ -97,6 +130,7 @@ def preflight(old_root: str, new_root: str) -> dict:
         if not _regular_file(old / item):
             raise ValueError("old_installation_missing_critical_state")
     _runtime_inventory(old / "ames-agent/data", MAX_RUNTIME_BACKUP_BYTES)
+    _candidate_configuration(old / 'ames-agent/config.json', old, new)
     return {"candidate_pristine": True, "old_runtime_present": True}
 
 
@@ -118,7 +152,13 @@ def stage(old_root: str, new_root: str, backup_root: str) -> dict:
     output.mkdir(parents=True, exist_ok=True)
     _copy_checked(backup / "ames_local.sqlite3", output / "ames_local.sqlite3")
     _copy_checked(backup / "local_agent_token", output / "local_agent_token")
-    _copy_checked(backup / "config.json", new / "ames-agent/config.json")
+    config_bytes, engine_relocated = _candidate_configuration(backup / 'config.json', old, new)
+    config_target = new / 'ames-agent/config.json'
+    with config_target.open('xb') as writer:
+        if os.name != 'nt':os.chmod(config_target, 0o600)
+        writer.write(config_bytes);writer.flush();os.fsync(writer.fileno())
+    if config_target.read_bytes() != config_bytes:
+        raise ValueError('candidate_configuration_write_mismatch')
     for item in manifest["files"]:
         _copy_checked(backup / "ames-agent/data" / item["path"], output / item["path"])
     if _runtime_inventory(output, MAX_RUNTIME_BACKUP_BYTES) != manifest["files"]:
@@ -126,7 +166,9 @@ def stage(old_root: str, new_root: str, backup_root: str) -> dict:
     for name, dest in (("ames_local.sqlite3", output / "ames_local.sqlite3"),
                        ("local_agent_token", output / "local_agent_token"),
                        ("config.json", new / "ames-agent/config.json")):
-        if sha256_file(dest) != manifest["core_sha256"][name]:
+        if name == 'config.json':
+            if dest.read_bytes() != config_bytes:raise ValueError('staged_config_mismatch')
+        elif sha256_file(dest) != manifest["core_sha256"][name]:
             raise ValueError("staged_core_identity_mismatch")
     _validate_sqlite(output / "ames_local.sqlite3")
     if _source_identity(backup / "ames_local.sqlite3") != _source_identity(output / "ames_local.sqlite3"):
@@ -136,7 +178,7 @@ def stage(old_root: str, new_root: str, backup_root: str) -> dict:
     # backup retains the full manifests and independently verified restore.
     return {"backup_verified": True, "restore_rehearsed": True,
             "source_unchanged": True, "staged_identity_verified": True,
-            "runtime_files": len(manifest["files"]),
+            "runtime_files": len(manifest["files"]), "engine_relocated": engine_relocated,
             "windows_physical_gate": "pending"}
 
 
