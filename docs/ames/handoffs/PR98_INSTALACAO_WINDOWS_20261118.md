@@ -89,3 +89,20 @@ recusa corretamente quando a prova dos coletores congelados não é executável.
 Assim, a hipótese inicial de atraso de PID NÃO está comprovada. Verificar host
 Windows PowerShell 5.1 e evitar PSModulePath herdado de pwsh7 no harness antes
 de propor alteração produtiva. Nenhuma verificação de hash/PID foi removida.
+
+## Primeiros boots reais e correção da contraprova de rollback
+
+ac432e1b035220a3f5876cccc207d0111154a60d / 44381194443 confirmou em Windows:
+Get-FileHash nativo disponível, A e B com /ready + H1 + root correto, WAL
+confirmado preservado em backup/C0 e todos os históricos iguais, B usa motor B,
+frontend servido e B reinicia preservando evidência nova. Nenhum agente/launcher
+precisou ser modificado para obter esses PASS de componentes.
+
+LIMITAÇÃO descoberta: rollback-probe falhou antes de executar seu trecho real
+(PSScriptRoot indisponível no scriptblock extraído). O PASS anterior baseado
+apenas em ausência de listener era inválido. Corrigir binding do root, exigir
+marcador de execução do trecho REAL e retorno esperado; somente aceitar STOP
+explícito + ausência de A + B preservado. Nem erro do harness nem ausência de
+listener comprovam recuperação segura. O workflow não deve terminar aprovado
+com a troca completa PENDENTE. Nove telas da suíte Linux passaram, mas render
+sobre agente REAL Windows ainda está pendente. Nada qualifica uso fabril.

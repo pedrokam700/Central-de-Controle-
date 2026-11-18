@@ -143,10 +143,13 @@ def main():
   native_env={k:v for k,v in os.environ.items() if k.casefold()!='psmodulepath'}
   result=subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'scripts/install98/rollback-probe.ps1'),'-OldRoot',str(A),'-CandidateRoot',str(B)],stdout=(LAB/'rollback.stdout').open('w'),stderr=(LAB/'rollback.stderr').open('w'),env=native_env,timeout=100)
   print((LAB/'rollback.stdout').read_text(errors='replace')[-5000:]+(LAB/'rollback.stderr').read_text(errors='replace')[-5000:],flush=True)
+  rollback_output=(LAB/'rollback.stdout').read_text(errors='replace')
+  if result.returncode!=1 or 'NATIVE_ROLLBACK_BRANCH_ENTERED' not in rollback_output:raise RuntimeError('ROLLBACK_PROBE_DID_NOT_EXECUTE_THE_REAL_BRANCH')
   try:
    live=api(A,'/api/v1/v2/capabilities');old_is_serving=pathlib.Path(live['package_root']).resolve()==A
   except Exception:old_is_serving=False
-  record('rollback_must_STOP_after_new_B_evidence','RED' if old_is_serving else 'PASS',old_generation_serving=old_is_serving,all_B_evidence_preserved=tables(B)==newer)
+  safe_stop=(not old_is_serving and 'ROLLBACK_ANTIGO=STOP_NEW_OR_UNKNOWN_EVIDENCE' in rollback_output)
+  record('rollback_must_STOP_after_new_B_evidence','PASS' if safe_stop else 'RED',old_generation_serving=old_is_serving,all_B_evidence_preserved=tables(B)==newer)
   if old_is_serving:
    ready=api(A,'/api/v1/ready');stop(A,ready['pid'])
   assert tables(B)==newer
@@ -156,4 +159,5 @@ def main():
    try:stop(B if (B/'logs/agent_startup_state.json').exists() else A,pid)
    except Exception:pass
  if any(r['status']=='RED' for r in ROWS):raise SystemExit('PROVEN_INSTALLATION_DEFECT_REQUIRES_CORRECTION')
+ if any(r['status']=='PENDING' for r in ROWS):raise SystemExit('FULL_INSTALLATION_QUALIFICATION_STILL_PENDING')
 if __name__=='__main__':main()

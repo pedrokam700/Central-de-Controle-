@@ -15,8 +15,9 @@ if($prefixEnd -lt 0 -or $tailStart -lt 0){throw 'ROLLBACK_SOURCE_CONTRACT_CHANGE
 # Definitions are untouched. Only state normally set by the failed update is
 # supplied at the isolated fault boundary; the branch and all OS calls are real.
 $preservedOld=$OldRoot;$preservedCandidate=$CandidateRoot
-. ([scriptblock]::Create($source.Substring(0,$prefixEnd)))
+. ([scriptblock]::Create($source.Substring(0,$prefixEnd).Replace('$PSScriptRoot','$preservedCandidate')))
 $oldRoot=$preservedOld;$NewRoot=$preservedCandidate;$oldRun=$null
 $stopped=$true;$committed=$false;$rollbackNeeded=$true;$failed=$true
 $candidateMayHaveRun=$true
+Write-Output 'NATIVE_ROLLBACK_BRANCH_ENTERED'
 . ([scriptblock]::Create($source.Substring($tailStart)))
