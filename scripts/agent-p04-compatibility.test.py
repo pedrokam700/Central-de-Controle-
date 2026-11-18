@@ -170,7 +170,7 @@ class P04Contracts(unittest.TestCase):
 
     def complete_receipt(self,m):
         f=fixture()
-        f['timezone'].update(resource_sha256='0'*64,vectors=copy.deepcopy(m['PROFILE']['clock_vectors']),source='explicit_verified_tzdata_resource_not_host_TZPATH')
+        f['timezone'].update(resource_sha256=m['PROFILE']['tzif_sha256'],vectors=copy.deepcopy(m['PROFILE']['clock_vectors']),source='explicit_verified_tzdata_resource_not_host_TZPATH')
         f['sqlite'].update(source_id='SYNTHETIC-SQLITE-SOURCE',compile_options=[])
         receipt={'schema':'ames-p04-runner-receipt-v1','scope':'DISPOSABLE_WINDOWS_RUNNER_ONLY','code_sha':'a'*40,
           'base_sha':m['PROFILE']['base_sha'],'run_id':'123','profile_sha256':m['file_hash'](TOOL.with_name('p04_profile.json')),

@@ -142,7 +142,7 @@ def timezone_probe():
         if not blob.startswith(b'TZif'):return result
         zone=ZoneInfo.from_file(io.BytesIO(blob),key=PROFILE['timezone'])
         actual=[[utc,datetime.fromisoformat(utc).astimezone(zone).isoformat(),label] for utc,local,label in PROFILE['clock_vectors']]
-        result.update(tzdata_version=tzdata.__version__,iana_version=tzdata.IANA_VERSION,resource_verified=True,
+        result.update(tzdata_version=tzdata.__version__,iana_version=tzdata.IANA_VERSION,resource_verified=hashlib.sha256(blob).hexdigest()==PROFILE['tzif_sha256'],
                       resource_sha256=hashlib.sha256(blob).hexdigest(),vectors_verified=actual==PROFILE['clock_vectors'],vectors=actual,
                       source='explicit_verified_tzdata_resource_not_host_TZPATH')
     except (ImportError,OSError,ValueError,AttributeError):pass
@@ -414,6 +414,13 @@ def verify_receipt(receipt,code_sha):
             or copy['operational_installation_tested'] is not False or copy['homologation_authorized'] is not False
             or copy['physical']!='PENDING' or copy['assessment']!=assess(copy['facts'])
             or 'UNREVIEWED_FACTS' in copy['assessment']['reasons']):return False
+        sql=copy['facts']['sqlite'];zone=copy['facts']['timezone']
+        if set(sql)!={'version','json1','upsert','foreign_keys','backup','integrity','source_id','compile_options'}:return False
+        if not isinstance(sql['source_id'],str) or not sql['source_id']:return False
+        if not isinstance(sql['compile_options'],list) or any(not isinstance(v,str) for v in sql['compile_options']):return False
+        if set(zone)!={'tzdata_version','iana_version','resource_verified','vectors_verified','resource_sha256','vectors','source'}:return False
+        if zone['vectors']!=PROFILE['clock_vectors'] or zone['resource_sha256']!=PROFILE['tzif_sha256']:return False
+        if zone['source']!='explicit_verified_tzdata_resource_not_host_TZPATH':return False
         for field,name in [('profile_sha256','p04_profile.json'),('wheel_lock_sha256','p04_windows_wheels.json')]:
             if copy[field]!=file_hash(HERE/name):return False
         if copy['tool_sha256']!=file_hash(Path(__file__)):return False
