@@ -1,5 +1,7 @@
 """Closed P04 policy counterexamples + REAL stdlib probes, never operational agent."""
 import ast
+import base64
+import hashlib
 import copy
 import importlib.util
 import json
@@ -182,5 +184,30 @@ class P04Contracts(unittest.TestCase):
         self.assertTrue(m['verify_receipt'](receipt,'a'*40))
         receipt['SOABI']='SYNTHETIC-UNKNOWN-ABI';receipt.pop('receipt_sha256');receipt['receipt_sha256']=m['digest'](receipt)
         self.assertFalse(m['verify_receipt'](receipt,'a'*40))
+
+    def test_47_raw_RECORD_missing_member_never_hidden_by_metadata_helper(self):
+        m=self.api()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve();(root/'existing').write_bytes(b'SYNTHETIC')
+            sha=base64.urlsafe_b64encode(hashlib.sha256(b'SYNTHETIC').digest()).decode().rstrip('=')
+            raw='existing,sha256='+sha+',9\nmissing-native.pyd,sha256='+sha+',9\n'
+            with self.assertRaisesRegex(m['Refused'],r'^INSTALLED_MEMBER_MISSING$'):
+                m['verify_record'](raw,lambda n:root/n,root,'synthetic')
+
+    def test_48_duplicate_RECORD_case_aliases_fail_closed(self):
+        m=self.api()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve();(root/'file').write_bytes(b'SYNTHETIC')
+            sha=base64.urlsafe_b64encode(hashlib.sha256(b'SYNTHETIC').digest()).decode().rstrip('=')
+            raw='file,sha256='+sha+',9\nFILE,sha256='+sha+',9\n'
+            with self.assertRaisesRegex(m['Refused'],r'^DUPLICATE_INSTALLED_RECORD:synthetic$'):
+                m['verify_record'](raw,lambda n:root/n,root,'synthetic')
+
+    def test_49_unknown_RECORD_digest_algorithm_does_not_pass(self):
+        m=self.api()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve();(root/'file').write_bytes(b'SYNTHETIC')
+            with self.assertRaisesRegex(m['Refused'],r'^INVALID_INSTALLED_RECORD:synthetic$'):
+                m['verify_record']('file,md5=SYNTHETIC,9\n',lambda n:root/n,root,'synthetic')
 
 if __name__=='__main__':unittest.main()

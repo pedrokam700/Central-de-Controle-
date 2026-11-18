@@ -5,6 +5,7 @@ The audited GUI source-only dependencies keep the full profile BLOCKED.
 """
 from __future__ import annotations
 import base64
+import csv
 import hashlib
 import importlib
 import importlib.metadata
@@ -210,17 +211,10 @@ def verify_packages(report_path,prefix):
             raise Refused('DEPENDENCY_METADATA_MISMATCH:'+name)
         wheel=d.read_text('WHEEL') or '';tags={line[5:].strip() for line in wheel.splitlines() if line.startswith('Tag: ')}
         if tags!=set(a.get('installed_tags',_tags(a['filename']))):raise Refused('WHEEL_TAG_MISMATCH:'+name)
-        files=d.files
-        if not files:raise Refused('INSTALLED_RECORD_MISSING:'+name)
-        for entry in files:
-            path=_inside(d.locate_file(entry),prefix)
-            if not path.is_file():raise Refused('INSTALLED_MEMBER_MISSING:'+name)
-            if entry.hash is None:
-                if not str(entry).endswith('.dist-info/RECORD'):raise Refused('UNHASHED_INSTALLED_MEMBER:'+name)
-                continue
-            if entry.hash.mode!='sha256' or entry.size!=path.stat().st_size:raise Refused('INSTALLED_RECORD_MISMATCH:'+name)
-            expected=base64.urlsafe_b64encode(bytes.fromhex(file_hash(path))).decode().rstrip('=')
-            if expected!=entry.hash.value:raise Refused('INSTALLED_RECORD_MISMATCH:'+name)
+        # Distribution.files() in CPython3.12 SILENTLY filters missing files.
+        # Validate the authoritative raw RECORD, never that filtered view.
+        record_path=_inside(Path(d._path)/'RECORD',prefix)
+        verify_record(record_path.read_text(encoding='utf-8'),d.locate_file,prefix,name)
         result[name]={'version':d.version,'filename':a['filename'],'sha256':a['sha256'],
                       'origin_verified':True,'records_verified':True,'metadata_verified':True}
     return result
@@ -241,6 +235,28 @@ def registry_event_allowed(event,args):
         return (len(args)==3 and type(args[0]) is int and args[1] in REGISTRY_PATHS
                 and type(args[2]) is int and args[2]==0x20019)
     return False
+
+
+def verify_record(raw,locate,prefix,name):
+    if not isinstance(raw,str) or not raw:raise Refused('INSTALLED_RECORD_MISSING:'+name)
+    seen=set()
+    for row in csv.reader(io.StringIO(raw,newline='')):
+        if len(row)!=3:raise Refused('INVALID_INSTALLED_RECORD:'+name)
+        relative,sha,size=row
+        if not relative or ':' in relative or '\\' in relative or '\x00' in relative:raise Refused('INVALID_INSTALLED_RECORD:'+name)
+        folded=relative.casefold()
+        if folded in seen:raise Refused('DUPLICATE_INSTALLED_RECORD:'+name)
+        seen.add(folded)
+        path=_inside(locate(relative),prefix)
+        if not path.is_file():raise Refused('INSTALLED_MEMBER_MISSING')
+        if not sha:
+            if not relative.endswith('.dist-info/RECORD') or size:raise Refused('UNHASHED_INSTALLED_MEMBER:'+name)
+            continue
+        if not re.fullmatch(r'sha256=[A-Za-z0-9_-]{43}',sha) or not size.isdigit():raise Refused('INVALID_INSTALLED_RECORD:'+name)
+        if int(size)!=path.stat().st_size:raise Refused('INSTALLED_RECORD_MISMATCH:'+name)
+        expected=base64.urlsafe_b64encode(bytes.fromhex(file_hash(path))).decode().rstrip('=')
+        if expected!=sha[7:]:raise Refused('INSTALLED_RECORD_MISMATCH:'+name)
+    if not seen:raise Refused('INSTALLED_RECORD_MISSING:'+name)
 
 
 def install_guard():

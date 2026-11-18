@@ -46,7 +46,7 @@ def main():
         receipt=json.loads(result.stdout)
         if reason:
             assert result.returncode==2,(result.returncode,receipt)
-            assert receipt['status']=='REFUSED' and receipt['reason']==reason,receipt
+            assert receipt.get('status')=='REFUSED' and receipt.get('reason')==reason,receipt
         else:
             print(result.stdout,flush=True)
             assert result.returncode==3,(result.returncode,receipt)
@@ -62,20 +62,22 @@ def main():
     cases=[('wrong-official-wheel-hash',report,lambda b:json.dumps({**json.loads(b),'install':[{**x,'download_info':{**x['download_info'],'archive_info':{'hashes':{'sha256':'0'*64}}}} if x['metadata']['name'].lower()=='pandas' else x for x in json.loads(b)['install']]}).encode(),'WHEEL_ORIGIN_MISMATCH:pandas'),
       ('wrong-installed-version',site/'pandas-2.2.3.dist-info/METADATA',lambda b:b.replace(b'Version: 2.2.3',b'Version: 3.0.0',1),'INSTALLED_VERSION_MISMATCH:pandas'),
       ('wrong-native-wheel-tag',site/'greenlet-3.2.4.dist-info/WHEEL',lambda b:b.replace(b'cp312-cp312-win_amd64',b'cp311-cp311-win_amd64'),'WHEEL_TAG_MISMATCH:greenlet'),
-      ('changed-package-before-import',site/'pyperclip/__init__.py',lambda b:b+b'\nraise RuntimeError("SYNTHETIC_IMPORT_CANARY_MUST_NOT_EXECUTE")\n','INSTALLED_RECORD_MISMATCH:pyperclip')]
+      ('changed-package-before-import',site/'pyperclip/__init__.py',lambda b:b+b'\nraise RuntimeError("SYNTHETIC_IMPORT_CANARY_MUST_NOT_EXECUTE")\n','INSTALLED_RECORD_MISMATCH:pyperclip'),
+      ('changed-transitive-dependency',site/'pyee-13.0.0.dist-info/METADATA',lambda b:b.replace(b'Requires-Dist: typing-extensions',b'Requires-Dist: SYNTHETIC-UNREVIEWED>=1',1),'DEPENDENCY_METADATA_MISMATCH:pyee'),
+      ('wrong-candidate-context',lab/'context.json',lambda b:json.dumps({**json.loads(b),'code_sha':'0'*40}).encode(),'CI_CONTEXT_UNVERIFIED')]
     for name,path,transform,reason in cases:
         old=path.read_bytes();new=transform(old);assert old!=new,name
         try:path.write_bytes(new);probe(reason)
         finally:path.write_bytes(old)
         print(json.dumps({'P04_negative':name,'result':'PASS_EXPECTED_REFUSAL','reason':reason}),flush=True)
-    for name,path in [('missing-native-extension',next((site/'greenlet').glob('_greenlet*.pyd'))),('missing-tzdata-resource',site/'tzdata/zoneinfo/America/Sao_Paulo')]:
+    for name,path,reason in [('missing-native-extension',next((site/'greenlet').glob('_greenlet*.pyd')),'INSTALLED_MEMBER_MISSING'),('missing-tzdata-resource',site/'tzdata/zoneinfo/America/Sao_Paulo','INSTALLED_MEMBER_MISSING'),('namespace-without-distribution',site/'pyperclip-1.11.0.dist-info','UNREVIEWED_INSTALLED_SET')]:
         temp=path.with_name(path.name+'.P04-SYNTHETIC-MISSING');path.rename(temp)
-        try:probe('INSTALLED_MEMBER_MISSING')
+        try:probe(reason)
         finally:temp.rename(path)
-        print(json.dumps({'P04_negative':name,'result':'PASS_EXPECTED_REFUSAL','reason':'INSTALLED_MEMBER_MISSING'}),flush=True)
+        print(json.dumps({'P04_negative':name,'result':'PASS_EXPECTED_REFUSAL','reason':reason}),flush=True)
     final=probe();assert final['receipt_sha256']==baseline['receipt_sha256'],'Disposable environment failed to return to verified state'
     (lab/'receipt.json').write_text(json.dumps(final,sort_keys=True,indent=2),encoding='utf-8')
-    print(json.dumps({'P04_core':'PASS','P04_workstation':'BLOCKED_SOURCE_ONLY_GUI_WHEELS','negative_cases':6,'physical':'PENDING','code_sha':os.environ['GITHUB_SHA']}),flush=True)
+    print(json.dumps({'P04_core':'PASS','P04_workstation':'BLOCKED_SOURCE_ONLY_GUI_WHEELS','negative_cases':9,'physical':'PENDING','code_sha':os.environ['GITHUB_SHA']}),flush=True)
 
 
 if __name__=='__main__':main()
