@@ -4,6 +4,7 @@
 > As seções antigas abaixo preservam a cronologia RED/GREEN; não são instruções
 > para repetir trabalhos já aprovados. Ver o fechamento e a próxima etapa ao final.
 > [Roteiro supervisionado OPPO](../homologation/PR98_ATUALIZACAO_SUPERVISIONADA_OPPO_20261119.md).
+> [Matriz de continuidade — 30 requisitos](../audits/PR98_MATRIZ_CONTINUIDADE_INSTALACAO_20261119.md).
 
 # Instalação Windows — continuidade após PR97, 18/11/2026
 
@@ -498,3 +499,72 @@ interface informada é Edge, mas isso não identifica o padrão ou perfil aberto
 pelo launcher. Nenhuma troca para Chrome/localhost nem migração de Auth será
 feita para contornar pendências. A preparação está publicada; a identificação
 da estação, o backup completo e a coleta OPPO continuam etapas futuras.
+
+
+## Diretriz definitiva e auditoria transversal — continuidade sem novo produto
+
+[Auditoria independente obrigatória 7013286618](https://github.com/pedrokam700/Central-de-Controle-/pull/98#issuecomment-7013286618)
+lida integralmente e confrontada com metadados GitHub, objetos Git locais,
+implementação e testes disponíveis. Retomada em 310cf7e7, worktree limpa;
+registro privado de continuidade preservado antes da documentação. Nenhum
+runtime, identificador, teste aprovado ou arquivo da candidata foi alterado.
+
+### Fatos confirmados e limites
+
+- Fonte/linhagem: HEADs #69–73, #75–84 e #86–97 são ancestrais de 3ab8df55.
+  #85 é Issue. #74 é paralela; não é perda: #76 contém exatamente o mesmo
+  local_sn.py e teste agent-local-sn-operator-evidence da #74. Hashes e comandos
+  de conferência estão na matriz. O HEAD posterior de apoio #98 é descendente
+  do produto, portanto não deve substituir seu SHA nem ter ancestralidade lida
+  no sentido inverso. PRs consultadas seguem DRAFT/abertas; nenhum merge.
+- Auditoria de bytes posterior passou a dispor dos ZIPs reais: EEDACC65 345
+  caminhos, PR98 393; 345 antigos presentes, 48 novos, 47 antigos modificados,
+  298 antigos idênticos e nenhum removido. A antiga indisponibilidade descreve
+  o ensaio daquela data; não invalida a prova posterior. Nesta sessão só as
+  evidências finas estavam no filesystem, por isso os números de bytes são
+  atribuídos explicitamente à auditoria independente, sem inventar nova inspeção.
+- Sete fontes AT (quatro módulos e três scripts) comparadas diretamente entre
+  Git EEDACC65 e 3ab são idênticas; backend continua conectado. Teste AT dedicado
+  não foi localizado pelos nomes desses módulos nos arquivos de teste pesquisados;
+  isso não demonstra perda de função nem cobertura específica. Preservar perfis/
+  contas existentes e verificar uso/provisionamento real quando autorizado.
+- Conferidas fontes e contraprovas de 3012, 2114/Hist Seq, nomes, timeline #86,
+  3074 #87, horários #88/BRM, SN/rastreabilidade/FPY, recuperação #72–84,
+  identidades de escopo, rede persistente, dependências/worker e R0/R1/R2.
+  Não foi reproduzido nem demonstrado novo defeito funcional; não criar patches
+  para preencher lacunas físicas por suposição. Travamentos reais L1/L3/2114/
+  3012 e contadores/horários físicos antigos continuam sem nova comprovação.
+
+[Matriz objetiva de 30 requisitos](../audits/PR98_MATRIZ_CONTINUIDADE_INSTALACAO_20261119.md):
+requisito → origem/PR → implementação → teste/CI → prova → lacuna real. Referências
+imutáveis aos arquivos existentes e execuções aprovadas; nenhuma suíte/build foi
+repetida. Identificador permanece byte a byte no SHA de apoio validado 310cf7e7,
+PS1 SHA256 b655315610ac3459f7a3a91e592c6333f00ba75f6b2bd306c2f10217be27eb51,
+CI 44550376501 com 22 contratos por Windows 2022/2025. Produto/ZIP permanecem
+3ab8df55/5 CIs aprovadas. Esta continuidade só acrescenta documentação e corrige
+a cronologia da disponibilidade dos ZIPs; não gera nova versão.
+
+### Ação operacional preparada
+
+O roteiro existente foi mantido e recebeu referência à matriz, evidência nova
+sobre ZIPs reais e tabela STOP→motivo→ação segura. Não se exige que o usuário
+adivinhe pastas, procure PIDs ou faça dezenas de comandos. Primeiro: obter apenas
+observação pelo identificador, fora de A/B, sem HTTP/SQLite/token/stop/rede. Não
+usar 01_TROCAR para diagnosticar nem confundir IDENTIFIED com autorização.
+
+Depois: confirmar versão real e todos os escritores/guardian/Run/jobs; preservar
+SQLite/WAL/checkpoints/revisões/config/identidade e estado externo Edge/Chrome/AT;
+C0 consistente privado e restauração ensaiada; capacidade e compatibilidade real;
+rede/rota OPPO persistente autorizada. A abertura Edge local já é conhecida;
+Windows, raiz, UID/perfil/pendências e estado do posto ainda não são atestados.
+
+Somente com janela autorizada e gates fechados: pasta B nova + 01_TROCAR normal,
+comparação de todos os registros antigos/novos e nove telas, ativação/estilos/SHA,
+reinício e piloto de coleta pequeno com prova independente. Validar clocks e
+atores por ocorrência e uso físico sem substituir ausência por zero. Só ampliar
+após aceite; R2/dado novo ou desconhecido preserva A/B/C0 sem retorno antigo.
+
+P02 real, P04 real, P05/P07/P08 reais e G0–G7 físicos PENDENTES. Main/PRs anteriores,
+rede/guardian/SQLite/perfis/credenciais operacionais intocados. Sem nova PR,
+instalador, ZIP, merge, deploy ou acesso OPPO. O ponto de continuidade é a
+identificação assistida da estação e o plano de troca existente, não outra pesquisa.

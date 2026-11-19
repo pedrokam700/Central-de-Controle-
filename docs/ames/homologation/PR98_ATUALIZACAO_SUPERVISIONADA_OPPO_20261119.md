@@ -47,6 +47,16 @@ A referência histórica dos pacotes de teste é EEDACC65
 nem escolher 0.5.39 como retorno padrão. A prova Windows usou A reconstruída das
 fontes Git EEDACC65; o ZIP histórico original não estava disponível no ensaio.
 
+**Atualização da evidência histórica:** a [auditoria posterior dos ZIPs reais](https://github.com/pedrokam700/Central-de-Controle-/pull/98#issuecomment-7013286618)
+passou a dispor do EEDACC65 original e confirmou seus 345 caminhos presentes no
+produto PR98: 48 novos, 47 antigos modificados e nenhum removido. Isso fecha a
+comparação estrutural de pacotes, sem identificar qual versão está instalada.
+A [matriz de 30 requisitos](../audits/PR98_MATRIZ_CONTINUIDADE_INSTALACAO_20261119.md)
+confronta origem/PR, fonte, teste/CI, resultado e lacuna física. Não é necessário
+refazer essa comparação para identificar a estação ou implementar de novo as
+funções presentes. O identificador é apenas complemento da detecção já existente
+no coordenador; a atualização continua sendo pasta nova + `01_TROCAR.bat`.
+
 ## 1. Identificação automática, somente leitura — futura autorização de inventário
 
 Usar o suplemento [IDENTIFICAR_CENTRAL_8765_READONLY.ps1](../../../scripts/install98/IDENTIFICAR_CENTRAL_8765_READONLY.ps1).
@@ -57,9 +67,9 @@ Hash SHA256 do suplemento:
 Se o download não coincidir, STOP; não executar HTML salvo como PS1 ou normalizar
 bytes para forçar o hash. Somente este apoio tem esse hash, não o ZIP da Central.
 
-Validação isolada: [CI 44549705564](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44549705564),
-22 contratos em CADA Windows 2022/2025, SHA de apoio
-`2912b3c064cedb516462f5bfb12eac1330b4832f`, SUCCESS. Sintaxe nativa, metadados
+Validação final do apoio: [CI 44550376501](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44550376501),
+22 contratos em CADA Windows 2022/2025, SHA
+`310cf7e7a00a7cdaa8d0b6b0772736a2a3922123`, SUCCESS. Sintaxe nativa, metadados
 sintéticos, arquivos privados opacos travados contra leitura, PID reutilizado,
 links e listener real não agente; sem iniciar Central/MES ou abrir SQLite.
 A discussão da PR registra a última CI específica do HEAD documental. Isso não
@@ -105,6 +115,23 @@ ser recusado: isso exige análise, não significa que os dados desapareceram.
 A saída é PRIVADA e mostra caminhos. Guardá-la localmente de modo aprovado.
 No GitHub, compartilhar apenas estado/código, versão Windows e SHA declarado
 sem dados pessoais; nunca JSON completo, CommandLine, token, banco ou perfis.
+
+### Se aparecer STOP: motivo e próximo passo
+
+| Código / situação | Próximo passo seguro, sem adivinhar pasta ou PID |
+|---|---|
+| `STOP_NO_LISTENER` | A porta não estava atendendo na observação. Não concluir que o banco sumiu nem abrir outra instalação. Preservar a situação e informar o código para revisão assistida do estado/atalho |
+| `STOP_AMBIGUOUS_OWNER` / `STOP_NON_LOOPBACK_BIND` | Propriedade/bind exige esclarecimento. Não escolher um PID, matar processos ou alterar host/rotas para passar |
+| `STOP_UNSUPPORTED_COMMAND_SHAPE` / `STOP_UNRECOGNIZED_ENTRYPOINT` / `STOP_UNRECOGNIZED_INTERPRETER` | Pode haver formato antigo/desconhecido. Informar o código; revisão privada do comando real será necessária. Não renomear scripts nem afrouxar o parser por tentativa |
+| `STOP_OWNER_CHANGED_DURING_OBSERVATION` / metadados de processo indisponíveis | O testemunho não é estável/completo. Não substituir nada; aguardar análise do reinício/proprietário e nova observação assistida |
+| Cmdlet, permissão, política ou `STOP_OBSERVATION_FAILED` | Não usar Bypass/elevação automática; confirmar com TI a leitura permitida e o Windows utilizado |
+| Caminho não local, drive ou link/junction | Não acessar share ou copiar dados para contornar. Rever privadamente o armazenamento e a raiz, sem seguir links |
+| Estado crítico ausente, caminho não é arquivo ou manifesto inválido | Não criar banco/config/token vazios. Preservar o conjunto e investigar antes de atualizar |
+
+Um resultado IDENTIFIED só determina a raiz observada e seus limites. O usuário
+não precisa procurar PIDs ou selecionar instalação: os dados detalhados ficam
+na saída privada, e o resumo redigido orienta a próxima etapa. Não repetir a
+instalação antiga como ferramenta de descoberta.
 
 ## 2. Baseline privada da instalação A — antes de autorizar a troca
 
@@ -171,7 +198,9 @@ A pequena reserva interna do helper não é orçamento da estação inteira.
 1. Inventariar todo o estado: `ames-agent/data`, banco/WAL/SHM/journal, config,
    identidade/token, checkpoints, revisões/raw, exports/logs necessários, motor,
    configurações externas, perfis Edge/Chrome e dados de navegador, autostart e
-   tarefa/serviço. Backup privado protegido por ACL/armazenamento aprovado; não
+   tarefa/serviço. Incluir arquivos de contas AT existentes, como
+   `ames-agent/data/at_user_profiles.json` e `at_admin_auth.json`, sem ler/divulgar
+   senhas, redefinir administrador ou provisionar contas novas nesta preparação. Backup privado protegido por ACL/armazenamento aprovado; não
    anonimizar o backup de recuperação nem publicá-lo.
 2. Definir com TI a captura coerente do conjunto, com todos os escritores sob
    controle. Não copiar somente `.sqlite3` ativo, não apagar WAL/SHM, não executar
