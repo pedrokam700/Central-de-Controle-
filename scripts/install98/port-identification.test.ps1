@@ -59,10 +59,31 @@ Test-Case 'missing manifest is unknown never 0.5.39' {
   try{$r=Read-CentralInstallationMetadata (Resolve-CentralPortOwner $rows $process);if($r.manifest_sha_claim -ne $null -or $r.manifest_state -ne 'ABSENT'){throw 'INVENTED_VERSION'}}finally{[IO.File]::WriteAllBytes($path,$raw)}
 }
 Test-Case 'junction rejected without choosing target' {
-  $link=Join-Path $fixture 'junction';$null=New-Item -ItemType Junction -Path $link -Target $root
-  try{Expect-Stop 'STOP_LINK_OR_JUNCTION' {Assert-CentralLocalRegularPath (Join-Path $link 'ames-agent\agent_hardened_entry.py')}}finally{[IO.Directory]::Delete($link)}
+  $target=Join-Path $fixture 'junction-target';$null=New-Item -ItemType Directory -Path $target
+  [IO.File]::WriteAllText((Join-Path $target 'entry.py'),'SYNTHETIC JUNCTION TARGET')
+  $link=Join-Path $fixture 'junction';$null=New-Item -ItemType Junction -Path $link -Target $target
+  try{Expect-Stop 'STOP_LINK_OR_JUNCTION' {Assert-CentralLocalRegularPath (Join-Path $link 'entry.py')}}finally{[IO.Directory]::Delete($link)}
 }
 Test-Case 'no fixture state bytes changed' {if((Fingerprint-Tree) -cne $before){throw 'STATE_CHANGED'}}
+function Invoke-MetadataFixture([switch]$ChangedBirth){
+  $script:fixtureCimCalls=0;$script:fixtureChangedBirth=[bool]$ChangedBirth
+  function Get-NetTCPConnection { [CmdletBinding()]param([string]$State) return $script:rows }
+  function Get-CimInstance {
+    [CmdletBinding()]param([string]$ClassName,[string]$Filter)
+    if($ClassName -eq 'Win32_OperatingSystem'){return [pscustomobject]@{Caption='SYNTHETIC WINDOWS METADATA';Version='10.0';BuildNumber='SYNTHETIC'}}
+    if($ClassName -ne 'Win32_Process'){throw 'UNEXPECTED_CIM_CLASS'}
+    $script:fixtureCimCalls++
+    $p=[pscustomobject]@{ProcessId=$script:process.ProcessId;ExecutablePath=$script:process.ExecutablePath;CommandLine=$script:process.CommandLine;CreationDate=$script:process.CreationDate}
+    if($script:fixtureChangedBirth -and $script:fixtureCimCalls -gt 1){$p.CreationDate=$p.CreationDate.AddSeconds(1)}
+    return $p
+  }
+  Invoke-CentralReadOnlyIdentification
+}
+Test-Case 'complete observation over synthetic OS metadata does not authorize update' {
+  $r=Invoke-MetadataFixture
+  if($r.status -ne 'IDENTIFIED' -or $r.installation.root -cne $root -or $r.database_opened -or $r.profiles_opened -or $r.http_requests -or $r.maintenance_lease -or $r.operational_update_authorized -or $r.all_sessions_attested){throw 'FALSE_AUTHORIZATION_OR_ROOT'}
+}
+Test-Case 'reused PID with changed creation time stops final observation' {Expect-Stop 'STOP_OWNER_CHANGED_DURING_OBSERVATION' {Invoke-MetadataFixture -ChangedBirth}}
 Test-Case 'real OS observation refuses live non-agent owner without HTTP' {
   $existing=@(Get-NetTCPConnection -State Listen -ErrorAction Stop|Where-Object LocalPort -eq 8765)
   if($existing.Count){throw 'SYNTHETIC_PORT_PREOCCUPIED'}
