@@ -10,11 +10,11 @@ LAB=pathlib.Path(os.environ['INSTALL98_ROOT']).resolve()
 TARGET=pathlib.Path(sys.argv[1]).resolve()
 assert os.name=='nt' and os.environ.get('GITHUB_ACTIONS')=='true' and os.environ.get('RUNNER_OS')=='Windows'
 assert LAB.parent==pathlib.Path(os.environ['RUNNER_TEMP']).resolve() and LAB.name=='CENTRAL-INSTALL-LAB-'+os.environ['GITHUB_RUN_ID'] and TARGET.parent==LAB
-assert (LAB/'.installation98-synthetic.json').read_text()=='CENTRAL98_SYNTHETIC_INSTALLATION_ONLY'
+assert (LAB/'.installation98-synthetic.json').read_text(encoding='utf-8')=='CENTRAL98_SYNTHETIC_INSTALLATION_ONLY'
 proof=json.loads((LAB/'containment.json').read_text(encoding='utf-8-sig'));assert proof['kernel_deny_proven'] is True
 for name in ('FIREBASE_TOKEN','GOOGLE_APPLICATION_CREDENTIALS','FIREBASE_CONFIG','GOOGLE_GHA_CREDS_PATH','CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE'):
  assert not os.environ.get(name),'UNEXPECTED_CLOUD_CREDENTIAL_ENVIRONMENT'
-TOOLS=LAB/'auth-tools';INPUTS=json.loads((ROOT/'scripts/install98/firebase-lab-inputs.json').read_text())
+TOOLS=LAB/'auth-tools';INPUTS=json.loads((ROOT/'scripts/install98/firebase-lab-inputs.json').read_text(encoding='utf-8'))
 for entry in INPUTS['sources']:
  p=TOOLS/entry['path'];h=hashlib.sha256()
  with p.open('rb') as stream:
@@ -22,7 +22,7 @@ for entry in INPUTS['sources']:
  assert p.stat().st_size==entry['size'] and h.hexdigest()==entry['sha256']
 PROFILE=LAB/'existing-synthetic-profile';assert not PROFILE.exists(),'PREEXISTING_BROWSER_IDENTITY_REFUSED'
 # Use exactly the deployed public namespace/API key; no real credential is read.
-source=(ROOT/'offline-bootstrap.mjs').read_text();literal=re.search(r'const firebaseConfig=({.*?});',source,re.S).group(1)
+source=(ROOT/'offline-bootstrap.mjs').read_text(encoding='utf-8');literal=re.search(r'const firebaseConfig=({.*?});',source,re.S).group(1)
 CONFIG={k:json.loads(v) for k,v in re.findall(r'(\w+)\s*:\s*("(?:[^"\\]|\\.)*")',literal)}
 assert set(CONFIG)=={'apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId','measurementId'}
 RULES=ROOT/'firestore.rules';rules_hash=hashlib.sha256(RULES.read_bytes()).hexdigest()
