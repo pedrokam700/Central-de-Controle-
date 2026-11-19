@@ -70,6 +70,11 @@ jobs:
           Get-Command Get-FileHash,Get-CimInstance,Get-NetTCPConnection -ErrorAction Stop | Select-Object Name,ModuleName
           if ($PSVersionTable.PSVersion.Major -ne 5) { throw 'NATIVE_WINDOWS_POWERSHELL_REQUIRED' }
           $PSVersionTable | Out-String | Write-Output
+      - name: Reject incomplete corrupt and contradictory synthetic wheel inventories
+        shell: powershell
+        run: |
+          python -B scripts/install98/archive-dependencies.test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build genuine GUI dependencies offline under proven containment
         shell: pwsh
         run: |
