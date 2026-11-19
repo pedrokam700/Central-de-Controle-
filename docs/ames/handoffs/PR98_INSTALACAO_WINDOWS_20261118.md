@@ -726,3 +726,10 @@ candidata entregue por este texto ou por artefato intermediário. P02/P04/P05/
 P07/P08 reais e G0–G7 físicos permanecem pendentes. Não usar /lab no computador
 do usuário nem presumir sua versão EEDACC65/0.5.39. Sem política alterada, dados
 reais, MES, merge, deploy ou atualização operacional nesta preparação.
+
+
+Ajuste de mensagem antes da entrega: o BAT agora orienta falar com o responsável
+pelo computador, sem encaminhamento obrigatório à TI. STOP_TI_EXECUTION_POLICY
+permanece apenas como código histórico estável; nenhuma política é modificada.
+Como isso muda bytes do ZIP, a entrega final exige as cinco CIs no NOVO SHA;
+a execução 44595435931 de 5c4c9e90 é preservada como etapa intermediária.

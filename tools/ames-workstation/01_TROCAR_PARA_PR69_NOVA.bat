@@ -38,14 +38,14 @@ if "%IDENTIFY_RESULT%"=="0" (
   echo Raiz ativa observada. Isto NAO autoriza atualizar; dados e pendencias nao foram abertos.
 ) else (
   echo STOP: instalacao nao comprovada ou execucao nao autorizada. Preserve todas as pastas.
-  echo Se houver PSSecurityException, assinatura, AppLocker ou WDAC: encaminhar a TI.
+  echo Se houver bloqueio de execucao: pare e informe a mensagem ao responsavel pelo computador.
 )
 pause
 exit /b %IDENTIFY_RESULT%
 
 :IDENTIFY_TI_STOP
 echo STOP_TI_EXECUTION_POLICY
- echo A TI deve avaliar a politica efetiva e autorizar o preflight pelos controles corporativos.
+echo O responsavel pelo computador deve avaliar a politica efetiva antes de autorizar qualquer mudanca.
 echo Nenhuma politica foi alterada. Nao iniciar a troca nem tentar contornar o bloqueio.
 pause
 exit /b 77
