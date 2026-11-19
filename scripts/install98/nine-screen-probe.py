@@ -41,7 +41,7 @@ with sync_playwright() as p:
  result['login_visible']=page.locator('#accountScreen').is_visible()
  result['login_button_enabled']=page.locator('#loginButton').is_enabled()
  result['qualified']=all(s['rendered'] for s in samples) and not errors
- result['blocker']=None if result['qualified'] else ('LOGIN_REQUIRED_FRESH_PROFILE' if result['application_module_loaded'] and result['login_visible'] else 'COLD_OFFLINE_FIREBASE_BOOTSTRAP_OR_AUTH' if any('gstatic.com/firebasejs/' in x for x in external) else 'REAL_UI_NOT_READY'))
+ result['blocker']=None if result['qualified'] else ('LOGIN_REQUIRED_FRESH_PROFILE' if result['application_module_loaded'] and result['login_visible'] else 'COLD_OFFLINE_FIREBASE_BOOTSTRAP_OR_AUTH' if any('gstatic.com/firebasejs/' in x for x in external) else 'REAL_UI_NOT_READY')
  (out/'nine-screen-receipt.json').write_text(json.dumps(result,indent=2,ensure_ascii=True))
  print(json.dumps(result),flush=True);context.close()
 # A failed render is reported to the parent; it must NOT become a PASS.
