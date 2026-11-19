@@ -682,3 +682,47 @@ Produto/agente/motor/frontend, coleta, clique 3022, regras fabris e três barrei
 públicas permanecem intocados em relação a 3ab8df55. Main e PRs anteriores não
 foram alteradas; PR98 segue DRAFT. Nenhum dado, rede, guardian, perfil, banco ou
 credencial real foi acessado. Não há homologação física nem autorização de troca.
+
+
+## Nova entrega integrada autorizada — 19/11/2026, base ab81dd98
+
+O usuário confirmou controle do computador e liberdade para instalar programas.
+Isso substitui a suposição anterior de TI obrigatória: NÃO é um bloqueador
+presumido. Foram autorizados ZIP completo integrado, instalação/atualização reais
+no Windows descartável com fixtures e publicação do artefato para testar. A
+mudança de política e a troca sobre dados reais continuam exigindo confirmação.
+Nenhuma operação no computador real foi autorizada por este bloco.
+
+Fonte inicial exata ab81dd988ccae4a5ab766450bc9bdb15af7bb354, worktree limpa e
+estado preservado antes de editar. Mesma branch/PR98 DRAFT, sem auditoria geral,
+nova PR ou alteração no agente/motor/frontend. Produto 3ab8df55 preservado como
+referência anterior; esta entrega será um ZIP NOVO, com SHA/manifestos próprios.
+
+A entrada 00_CONFERIR_ATUALIZACAO já integra FIRST_RUN_FILES. O job assistido
+passa a executar também no push e vira dependência obrigatória de entrega, junto
+com a instalação Windows e as quatro regressões no SHA exato. full-switch.py
+executa a entrada EXTRAÍDA DO ZIP contra A/guardian/Run reais da fixture antes
+da troca, sem override de política, exigindo IDENTIFIED_ACTIVE e flags de
+autorização false, A intacta e B sem estado. O delivery-gate exige esse recibo.
+As provas existentes de instalação, WAL, preservação histórica, nove telas,
+reinício e falha de I/O/R2 continuam obrigatórias nos mesmos bytes.
+
+Contraprova local de inventário: listas fechadas LAB/P04/P08 recusavam oito
+arquivos já publicados de suporte/documentação da continuação, sem falha fabril.
+[Registro antes do ajuste](https://github.com/pedrokam700/Central-de-Controle-/pull/98#issuecomment-7019336415).
+Foram acrescentados somente esses oito caminhos revisados; comparação de blobs,
+hashes de módulos e comandos anteriores permanece exigida. Nenhum teste excluído.
+
+LEIA_PRIMEIRO/INSTRUCOES no próprio ZIP passam a orientar o teste em seis passos:
+extrair em pasta nova; abrir só a conferência; informar status/motivo; STOP se
+política bloquear (responsável é o usuário, sem TI presumida); preparar backup
+privado consistente/restauração/pendências; obter confirmação antes da troca.
+A conferência não abre SQLite/token/config nem instala/inicia serviços. O nome
+histórico STOP_TI_EXECUTION_POLICY não significa TI obrigatória.
+
+O recibo final, artefato para download, SHA256, contagens/CRC e CIs exatas serão
+registrados na discussão da PR98 depois da qualificação. Não considerar a
+candidata entregue por este texto ou por artefato intermediário. P02/P04/P05/
+P07/P08 reais e G0–G7 físicos permanecem pendentes. Não usar /lab no computador
+do usuário nem presumir sua versão EEDACC65/0.5.39. Sem política alterada, dados
+reais, MES, merge, deploy ou atualização operacional nesta preparação.

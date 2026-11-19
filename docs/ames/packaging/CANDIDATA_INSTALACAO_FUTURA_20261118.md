@@ -14,6 +14,37 @@ Esta Central completa preserva a linhagem EEDACC65 → PR98. A antiga release
 eedacc65445dea9967a92085777b878c1ee9c123. O ZIP histórico original não estava
 disponível; não foi comprovada igualdade de seus bytes/CRC.
 
+## Primeiro teste neste computador — uma entrada, sem troca automática
+
+O usuário autorizou gerar e testar esta candidata completa. Não é necessário
+presumir intervenção de TI para um computador sob seu controle. Isso NÃO é
+confirmação para trocar dados reais nem para alterar política de segurança.
+
+1. Extraia o ZIP completo em uma pasta NOVA e vazia, fora da Central atual e
+   dos backups. Não substitua arquivos nem copie banco/config/token manualmente.
+2. Abra somente **00_CONFERIR_ATUALIZACAO.bat** dessa pasta. Não execute ainda
+   01_TROCAR, 00_INICIAR, instalador ou reparador. A conferência não instala,
+   inicia ou para agentes, prepara rede, abre SQLite ou transfere estado.
+3. Informe apenas status e motivo. A saída completa contém caminhos privados.
+   IDENTIFIED_ACTIVE é observação, não autorização para atualizar. Sem listener,
+   Run/guardian podem apontar uma raiz candidata; se a origem não for comprovada,
+   a resposta correta é STOP. Não escolher pastas nem abrir A para criar prova.
+4. Se aparecer STOP_TI_EXECUTION_POLICY, PSSecurityException ou outro bloqueio de
+   execução, pare e informe a mensagem. O nome histórico do código NÃO exige TI:
+   neste computador o responsável é você. Avaliaremos o controle efetivo e uma
+   proposta específica; nenhuma política será alterada sem sua autorização.
+   Não usar Bypass ou tentar contornar o bloqueio. Se existir gestão corporativa,
+   o responsável pelo controle deve participar apenas quando necessário.
+5. Com raiz/versão comprovadas, preparar o backup PRIVADO consistente de SQLite,
+   WAL, históricos, revisões, configurações, identidade, checkpoints e estado
+   externo Edge/Chrome/filas, com exclusividade e restauração verificada. Não
+   copiar só o arquivo SQLite enquanto houver escritores. O helper da troca
+   também exige backup verificado e restauração ensaiada antes de iniciar B;
+   isso não substitui a preservação externa do navegador ou o C0 privado.
+6. Só após conferir pendências/backup e obter sua confirmação explícita para
+   trocar sobre dados reais, orientar a execução supervisionada do 01_TROCAR.
+   Até essa confirmação, o próximo passo é exclusivamente a conferência.
+
 ## Antes da atualização futura
 
 1. Guardar download original, SHA256SUMS.txt e recibos. Conferir SHA256 do ZIP,

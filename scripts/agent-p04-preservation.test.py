@@ -10,6 +10,16 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1];BASE='5856eb3f0cc1dd391cf93217fd068f0a044f8ab2'
 BRANCH='work/ames-p04-windows-preflight-20261118'
 ALLOWED={
+ # PR98 integrated delivery: eight already reviewed support/doc paths from ab81dd98.
+ 'docs/ames/audits/PR98_MATRIZ_CONTINUIDADE_INSTALACAO_20261119.md',
+ 'docs/ames/homologation/PR98_ATUALIZACAO_SUPERVISIONADA_OPPO_20261119.md',
+ 'scripts/agent-package-contract.test.py',
+ 'scripts/ames-pr69-complete-package.test.mjs',
+ 'scripts/install98/IDENTIFICAR_CENTRAL_8765_READONLY.ps1',
+ 'scripts/install98/assisted-preflight.test.ps1',
+ 'scripts/install98/port-identification.test.ps1',
+ 'tools/ames-workstation/00_CONFERIR_ATUALIZACAO.bat',
+
  'scripts/install98/complete-archive.py','scripts/install98/archive-dependencies.test.py','scripts/install98/delivery-gate.py',
  'scripts/install98/firebase-lab-inputs.json','scripts/install98/auth-fixture.py',
  'scripts/build-static.mjs','scripts/install98/offline-assets.test.py','scripts/install98/browser-dependencies.json','vendor/browser/manifest.json','vendor/browser/firebase/10.8.0/firebase-app.js','vendor/browser/firebase/10.8.0/firebase-auth.js','vendor/browser/firebase/10.8.0/firebase-firestore.js','vendor/browser/firebase/10.8.0/LICENSE.txt','vendor/browser/sheetjs/0.20.3/xlsx.full.min.js','vendor/browser/sheetjs/0.20.3/LICENSE.txt',

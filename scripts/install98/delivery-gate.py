@@ -10,6 +10,7 @@ assert actual==load('complete-archive-receipt.json')['zip_sha256']==load('indepe
 assert load('independent-archive-receipt.json')['sha']==sha and load('complete-archive-receipt.json')['sha']==sha
 assert load('progress.json')['full_switch_qualified'] is True and load('progress.json')['physical']=='PENDING'
 assert all(r['status'] in ('PASS','EXPECTED_RED_BASELINE') for r in load('progress.json')['checks'])
+assert any(r['check']=='delivered_assisted_preflight_identifies_real_A' and r['status']=='PASS' and r.get('actual_ZIP_entry') is True and r.get('no_policy_override') is True for r in load('progress.json')['checks']),'ACTUAL_ZIP_ASSISTED_PREFLIGHT_NOT_PROVEN'
 ui=load('nine-screen-receipt.json');assert ui['qualified'] is True and ui['sha']==sha and len(ui['views'])==9 and all(v['rendered'] for v in ui['views'])
 assert ui['identity_preserved'] and ui['agent_evidence_matches'] and not ui['auth_mocked'] and not ui['storage_injected'] and not ui['data_mocked']
 expected={'ames-lab-existing-regressions.yml','ames-lab-isolation.yml','ames-p04-windows-preflight.yml','ames-p08-generations.yml'}

@@ -135,7 +135,7 @@ jobs:
 
   qualified-delivery:
     if: github.event_name == 'push'
-    needs: [genuine-windows, transfer-counterproof]
+    needs: [genuine-windows, transfer-counterproof, assisted-preflight]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -181,7 +181,7 @@ jobs:
           if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   assisted-preflight:
-    if: github.event_name == 'workflow_dispatch' && inputs.assisted_only
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.assisted_only)
     strategy:
       fail-fast: false
       matrix:

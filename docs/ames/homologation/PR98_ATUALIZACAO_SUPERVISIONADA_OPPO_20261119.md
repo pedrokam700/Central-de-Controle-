@@ -8,24 +8,28 @@ identificados. Essa URL confirma o endereço usado, não a versão, raiz ou banc
 A sessão da interface Edge e uma eventual sessão MES/Chrome são estados distintos.
 Não trocar de navegador ou origem para contornar autenticação ou pendências.
 
-## O que fazer primeiro — bloqueio real de 19/11/2026
+## O que fazer primeiro — autorização atualizada de 19/11/2026
 
-**Não repetir o download/execução do PS1 avulso nem executar comandos de PID ou
-política. Não executar o `01_TROCAR.bat` normal para diagnosticar.** O arquivo
-anterior tinha hash correto, mas a estação bloqueou sua execução. A consulta
-anterior só comprovou `owner_count != 1`: zero OU múltiplos proprietários.
-Uma aba Edge aberta não comprova servidor ativo.
+O usuário confirmou controle do computador e liberdade para instalar programas.
+**Não presumir TI como pré-condição.** Autorizou o novo ZIP integrado e o ensaio
+Windows sintético; mudança de política e troca sobre dados reais continuam
+exigindo sua confirmação explícita.
 
-A próxima interação do usuário é **uma solicitação à TI**, com o texto da seção 1.
-A engenharia acrescentou um pré-flight no coordenador existente, com entrada
-única `00_CONFERIR_ATUALIZACAO.bat`; ele não inicia troca nem serviços. A entrada
-é código novo de suporte na PR, **não está no ZIP congelado 3ab8df55**. Não pedir
-que o usuário baixe scripts separados ou substitua arquivos do pacote aprovado.
+Na candidata integrada desta retomada, extrair em pasta NOVA e abrir somente
+`00_CONFERIR_ATUALIZACAO.bat`. Informar status/motivo, sem enviar dados privados.
+Não repetir PS1 avulso, procurar PIDs/pastas ou executar o atualizador para
+identificar A. A entrada reutiliza o coordenador e não faz a troca.
 
-Somente depois de resolver o controle corporativo e disponibilizar uma revisão
-integrada validada, a etapa assistida será: abrir a entrada de conferência uma
-vez, acompanhado pelo responsável autorizado. `IDENTIFIED_ACTIVE` é observação,
-não GO. Backup, janela de manutenção e coleta continuam exigindo os gates abaixo.
+Se houver bloqueio de execução, parar. O código histórico
+`STOP_TI_EXECUTION_POLICY` indica a política, não uma exigência de acionar TI.
+Neste computador, discutir a solução com o próprio usuário; nenhum Bypass ou
+mudança de política está autorizado. Controle corporativo efetivamente existente
+pode exigir seu responsável, mas isso precisa ser comprovado.
+
+Depois da identificação: preparar C0 consistente/privado e restauração verificada,
+conferir pendências e só então pedir a confirmação da troca. A candidata completa
+nova somente pode ser oferecida com artefato final, hashes e CI Windows do mesmo
+SHA/bytes; o fechamento da discussão da PR98 registra a referência vinculante.
 
 ## Candidata congelada e comprovada
 
@@ -66,27 +70,18 @@ no coordenador; a atualização continua sendo pasta nova + `01_TROCAR.bat`.
 
 ## 1. Conferência assistida no coordenador existente
 
-### Solicitação única à TI — pode ser encaminhada sem comandos ou anexos privados
+### Controle do computador e política
 
-> Preciso identificar, somente por leitura, a instalação A-MES usada pelo Edge em
-> `http://127.0.0.1:8765/Central-de-Controle-/`, antes de qualquer atualização.
-> O PS1 aprovado foi bloqueado por PSSecurityException/UnauthorizedAccess; os
-> escopos de ExecutionPolicy foram informados como Undefined. A consulta de porta
-> não comprovou um proprietário único. Não sabemos ainda Windows, pasta ou banco.
-> Solicito análise da política efetiva, GPO e eventuais AppLocker/WDAC/assinatura,
-> e definição do método corporativo permitido para executar a entrada somente
-> leitura da PR98. Não autorizo Bypass, mudança da política pelo usuário, abertura
-> de banco, parada/início de serviços, acesso MES ou alteração de rede nesta fase.
-> A TI deve revisar/aprovar a revisão exata, sua distribuição íntegra e as leituras
-> locais TCP/CIM/HKCU Run. Se não forem permitidas, o resultado é STOP, com motivo.
-> Não liberar o atualizador inteiro por consequência da aprovação deste inventário.
-> Referência: PR98, checkpoint 7017792994 e esta seção do roteiro supervisionado.
+A evidência anterior de PSSecurityException/UnauthorizedAccess é preservada.
+Todos os escopos Undefined não provam permissão efetiva, mas tampouco provam
+necessidade de TI. Uma assinatura isolada não torna Restricted permissivo.
+A conferência não muda política; em caso de bloqueio, registrar o motivo e
+propor ao usuário uma medida específica para autorização separada. Não executar
+arquivos por conteúdo inline nem usar Bypass para contornar a restrição.
 
-`Undefined` em todos os escopos não informa uma permissão efetiva. A assinatura
-isolada também não torna um PS1 executável sob `Restricted`. A TI precisa dizer
-qual mecanismo autorizado se aplica à estação; não há liberação genérica ou
-mudança de escopo implícita. A coleta destas informações pela TI é uma futura
-observação autorizada; nada foi executado remotamente nesta missão.
+A autorização atual permite construir/publicar o ZIP e ensaiá-lo no LAB; não
+permite tocar dados reais ou iniciar a troca sem confirmação. Nenhuma sessão,
+coleta, rede ou banco do computador foi acessado nesta retomada.
 
 ### Uma única entrada, sem nova descoberta independente
 
@@ -112,7 +107,7 @@ só presença/metadados. A raiz apontada não comprova conteúdo, frescor ou C0.
 
 | Resultado | Interpretação / próximo passo |
 |---|---|
-| `STOP_TI_EXECUTION_POLICY` / PSSecurityException / assinatura / AppLocker / WDAC | TI define método permitido. Não repetir comandos, usar Bypass, mudar política ou abrir o atualizador normal |
+| `STOP_TI_EXECUTION_POLICY` / PSSecurityException / assinatura / AppLocker / WDAC | Parar e apresentar o bloqueio ao usuário responsável. Nenhuma mudança de política, Bypass ou troca implícita; envolver TI apenas se um controle corporativo realmente exigir |
 | `NO_LISTENER_NO_PROVEN_ROOT` | Zero proprietários distintos e nenhuma raiz reconhecida. Preservar tudo; responsável autorizado precisa comprovar a origem por evidência privada. Não varrer pastas nem iniciar A para criar prova |
 | `MULTIPLE_LISTENER_OWNERS` | Mais de um proprietário. Não escolher PID, encerrar processo ou adotar o registro como substituto |
 | `UNKNOWN_LISTENER_OWNER` | O dono não foi reconhecido como agente da instalação. STOP mesmo havendo Run válido |
@@ -132,27 +127,26 @@ O Windows pode gerar auditoria e o parser nativo existente pode usar temporário
 do compilador .NET; não se promete ausência de eventos/artefatos do próprio OS.
 Nenhum arquivo de instalação ou estado é criado por este ramo.
 
-### Distribuição e limites desta correção
+### Distribuição e limites desta retomada
 
-A candidata 3ab8df55 permanece intocada, com as cinco CIs aprovadas. A extensão
-está no fonte da mesma PR98; não foi publicado ZIP novo nem é permitido copiá-la
-sobre arquivos manifestados da candidata aprovada. A aprovação antiga não atesta
-a extensão nova nem a política da estação. A inclusão íntegra da entrada numa
-futura revisão do pacote exige validação própria de manifesto e distribuição,
-sem instalar na estação. Primeiro fechar com TI o método realmente permitido;
-gerar outro ZIP agora não resolveria uma restrição corporativa.
+A candidata anterior 3ab8df55 permanece preservada como referência. A nova
+candidata incorpora a entrada em FIRST_RUN_FILES, manifesto/hash e verificação
+independente, sem edição manual de arquivos aprovados. É qualificada por ensaio
+Windows completo: entrada extraída do ZIP contra A real sintética, instalação,
+SQLite/WAL, inicialização, nove telas, reinício, R0 e STOP R2 com dados novos.
+Entrega exige todas as regressões do mesmo SHA e a matriz assistida 2022/2025.
+O checkpoint final da discussão registra artefato/SHA256/CI e distingue as
+aprovações históricas das provas efetivamente novas.
 
-O BAT legado de troca normal ainda contém `ExecutionPolicy Bypass`. **Ele não é
-um caminho aprovado para esta estação sob o bloqueio informado.** A aprovação
-corporativa deve abranger posteriormente a cadeia real de atualização/início,
-não só a conferência. Se a TI exigir assinatura ou outra alteração que mude os
-hashes das barreiras, STOP e preparar uma revisão íntegra qualificada; não assinar
-ou editar isoladamente A/B para fazer o identificador aceitar. Não existe GO
-operacional nesta documentação.
+O BAT legado de troca normal contém ExecutionPolicy Bypass. A autorização para
+este teste inicial não libera sua execução na estação nem qualquer contorno da
+política. Primeiro conferência, depois C0 e pendências, e só com proposta clara e
+confirmação explícita orientar a troca. Se um controle exigir alterar/assinar
+arquivos e seus hashes, isso precisa de revisão íntegra qualificada; nunca editar
+A/B ou hashes por tentativa. Homologação física/MES permanece PENDENTE.
 
-O suplemento antigo e seus 22 contratos por Windows continuam no histórico;
-não precisam ser repetidos nem recomendados ao usuário neste cenário. A prova
-nova e os SHAs exatos constam no handoff e nos checkpoints da discussão da PR98.
+O suplemento avulso e seus 22 contratos permanecem no histórico. Não pedir nova
+execução/download separado: a etapa inicial pertence ao pacote completo novo.
 
 ## 2. Baseline privada da instalação A — antes de autorizar a troca
 
@@ -361,8 +355,8 @@ campo de journal. Não usar `update_candidate.py rollback` para este ZIP CLEAN.
 Além de URL local e Edge, há agora prova relatada do bloqueio de execução e de
 propriedade de porta não única; zero e múltiplos ainda não foram separados no posto. P02 real, P04 real,
 P05/P07/P08 reais e G0–G7 físicos não são concluídos por documentação ou CI.
-Próxima ação única: **encaminhar a solicitação acima à TI**; depois da aprovação
-corporativa e da distribuição íntegra, inventário assistido somente leitura.
+Próxima ação única, após publicar o novo artefato qualificado: extrair em pasta
+nova e abrir **00_CONFERIR_ATUALIZACAO.bat**; inventário somente leitura.
 Nenhuma substituição, backup ou coleta automática está autorizada nesta etapa.
 
 ### Registro privado mínimo da sessão futura

@@ -77,6 +77,17 @@ ConvertTo-Json -InputObject $owners -Compress
   set_run(guardian_command(A))
   controller=subprocess.Popen(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(A/'suporte/ames-workstation/KEEP_AGENT_RUNNING.ps1'),'-Root',str(A)],stdout=guard_out,stderr=guard_err,env=environment())
   time.sleep(1);assert len(guardians(A))==1
+  # Run the NEW entry from the actual complete ZIP, against the genuine A
+  # process/guardian/Run under containment, before any switch or backup.
+  # No policy override is passed to this preflight and no file is substituted.
+  preflight=run(['cmd.exe','/d','/c','call',S/'00_CONFERIR_ATUALIZACAO.bat'],cwd=S,stdin=subprocess.DEVNULL)
+  observed=json.loads(preflight[preflight.index('{'):preflight.rindex('}')+1])
+  assert observed['status']=='IDENTIFIED_ACTIVE' and pathlib.Path(observed['root']).resolve()==A
+  assert observed['listener_owner_count']==1
+  assert all(observed[k] is False for k in ('update_authorized','maintenance_lease','browser_sync_attested','state_originality_proven'))
+  assert pristine(S) and tables(A)==original_A and read_run()==guardian_command(A)
+  assert api(A,'/api/v1/ready')['pid']==pid_A
+  record('delivered_assisted_preflight_identifies_real_A','PASS',actual_ZIP_entry=True,real_A_process=True,real_Run=True,no_policy_override=True,no_state_mutation=True,update_authorized=False)
   # Negative scope and WFP proofs use the actual entry without stopping A.
   rc,text=batch(S,{'GITHUB_ACTIONS':'false'})
   assert rc!=0 and 'LAB_HOST_UNVERIFIED' in text and api(A,'/api/v1/ready')['pid']==pid_A and pristine(S)
