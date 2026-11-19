@@ -119,6 +119,7 @@ def test_integrated_clean_support_files_are_explicit():
 def test_pr69_clean_retains_supervised_switch_and_first_run_network():
     builder = integrated_builder_module()
     assert set(builder.FIRST_RUN_FILES) == {
+        "00_CONFERIR_ATUALIZACAO.bat",
         "01_TROCAR.bat",
         "01_TROCAR_PARA_PR69_NOVA.bat",
         "TROCAR_PARA_PR69_NOVA.ps1",

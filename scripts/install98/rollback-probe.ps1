@@ -1,0 +1,29 @@
+# Execute the REAL rollback branch with REAL CIM/listener/canonical starter.
+# Controlled fault point: B has already run and produced evidence; no mocks.
+param([Parameter(Mandatory=$true)][string]$OldRoot,[Parameter(Mandatory=$true)][string]$CandidateRoot)
+$ErrorActionPreference='Stop'
+$lab=[IO.Path]::GetFullPath($env:INSTALL98_ROOT)
+if($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_OS -cne 'Windows' -or
+ (Split-Path $lab -Parent) -ine [IO.Path]::GetFullPath($env:RUNNER_TEMP)){throw 'DISPOSABLE_LAB_ONLY'}
+foreach($root in @($OldRoot,$CandidateRoot)){if((Split-Path ([IO.Path]::GetFullPath($root)) -Parent) -ine $lab){throw 'ROOT_OUTSIDE_LAB'}}
+$proof=Get-Content (Join-Path $lab 'containment.json') -Raw|ConvertFrom-Json
+if($proof.kernel_deny_proven -ne $true){throw 'NO_CONTAINMENT'}
+$source=Get-Content (Join-Path $CandidateRoot 'TROCAR_PARA_PR69_NOVA.ps1') -Raw
+$tokens=$null;$parseErrors=$null
+$ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$parseErrors)
+if($parseErrors){throw 'SOURCE_PARSE_FAILED'}
+$main=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.TryStatementAst]})
+$tail=@($ast.EndBlock.Statements|Where-Object {$_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.StartsWith('if($rollbackNeeded){')})
+if($main.Count -ne 1 -or $tail.Count -ne 1){throw 'ROLLBACK_AST_CONTRACT_CHANGED'}
+$prefixEnd=$main[0].Extent.StartOffset
+$tailStart=$tail[0].Extent.StartOffset
+if($prefixEnd -lt 0 -or $tailStart -lt 0){throw 'ROLLBACK_SOURCE_CONTRACT_CHANGED'}
+# Definitions are untouched. Only state normally set by the failed update is
+# supplied at the isolated fault boundary; the branch and all OS calls are real.
+$preservedOld=$OldRoot;$preservedCandidate=$CandidateRoot
+. ([scriptblock]::Create($source.Substring(0,$prefixEnd).Replace('$PSScriptRoot','$preservedCandidate')))
+$oldRoot=$preservedOld;$NewRoot=$preservedCandidate;$oldRun=$null
+$stopped=$true;$committed=$false;$rollbackNeeded=$true;$failed=$true
+$candidateMayHaveRun=$true
+Write-Output 'NATIVE_ROLLBACK_BRANCH_ENTERED'
+. ([scriptblock]::Create($source.Substring($tailStart)))

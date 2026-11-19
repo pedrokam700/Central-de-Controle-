@@ -1,0 +1,13 @@
+{
+  "schema": "central-browser-inputs-v1",
+  "audit_date": "2026-11-19",
+  "root": "vendor/browser",
+  "files": [
+    {"path":"firebase/10.8.0/firebase-app.js","url":"https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js","sha256":"039f62b40bec14479291b93e0a35d9ad71cc4e6d64e9abf1285e1d2c6f9d83cb","size":94489,"kind":"javascript"},
+    {"path":"firebase/10.8.0/firebase-auth.js","url":"https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js","sha256":"33b487bc8e0dd6007ea461c6e63374b51c01101a9f5ad5450a580ea40dfc26ae","size":147398,"kind":"javascript"},
+    {"path":"firebase/10.8.0/firebase-firestore.js","url":"https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js","sha256":"d5b81349f2b7b2317bacdd3effd576d4e0a747ff12eab684f77956ebc1fe7040","size":434464,"kind":"javascript"},
+    {"path":"firebase/10.8.0/LICENSE.txt","url":"https://raw.githubusercontent.com/firebase/firebase-js-sdk/firebase%4010.8.0/LICENSE","sha256":"6bcc23f2ed5dde5b7f0de4fa8ab94ec669799f227970aea93b998d5a17d52ea8","size":13351,"kind":"license"},
+    {"path":"sheetjs/0.20.3/xlsx.full.min.js","url":"https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js","sha256":"cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41","size":951904,"kind":"javascript"},
+    {"path":"sheetjs/0.20.3/LICENSE.txt","url":"https://cdn.sheetjs.com/xlsx-0.20.3/package/LICENSE","sha256":"4d2a38ac35cda06a555c84074a819d413339cd3691b822cae50f8f322fe01f64","size":11355,"kind":"license"}
+  ]
+}

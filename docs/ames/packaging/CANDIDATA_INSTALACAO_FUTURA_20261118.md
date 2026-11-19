@@ -1,71 +1,125 @@
-# CENTRAL A-MES — CANDIDATA DE TESTE __CANDIDATE_VERSION__
+# Central A-MES — __CANDIDATE_VERSION__
 
 SHA completo: __CANDIDATE_SHA__
 
 **NÃO AUTORIZADO PARA INSTALAÇÃO OPERACIONAL.**
-Somente geração, extração e verificação passiva foram autorizadas nesta missão.
-Não execute os BAT/CMD/PS1/PY do pacote para iniciar, instalar, reparar rede,
-guardian, Chrome, agente, atualização ou rollback. Não abra uma instalação real.
+Instalação operacional exige autorização específica e verificação supervisionada.
+Este documento não autoriza alterações no computador da fábrica. Exigir o recibo
+externo QUALIFICACAO_LAB.json: somente a entrega final depois desse gate tem
+ensaio Windows sintético aprovado no mesmo SHA e nos mesmos bytes. ZIP de fonte,
+artefato intermediário ou log parcial não constitui qualificação.
 
-Este é o pacote CLEAN integrado completo da linhagem EEDACC65 → PR96 e correções
-de empacotamento posteriores. O último teste entregue foi EEDACC65
-eedacc65445dea9967a92085777b878c1ee9c123; a release oficial antiga 0.5.39 não
-identifica automaticamente o pacote ou a instalação anterior do usuário.
+Esta Central completa preserva a linhagem EEDACC65 → PR98. A antiga release
+0.5.39 não identifica o último pacote de teste recebido. Referência Git EEDACC65:
+eedacc65445dea9967a92085777b878c1ee9c123. O ZIP histórico original não estava
+disponível; não foi comprovada igualdade de seus bytes/CRC.
 
-PACKAGE_IDENTITY.json identifica versão candidata, SHA, frontend/agente/motor,
-hashes de componentes e limites. CANDIDATE_MANIFEST cobre todos os membros exceto
-ele próprio; LOCAL_BUNDLE_MANIFEST conserva o contrato de assets locais. SHA256
-comprova integridade, não assinatura ou homologação física. Os rótulos internos
-legados de versão do frontend/agente não substituem o SHA desta candidata.
+## Primeiro teste neste computador — uma entrada, sem troca automática
 
-## Caminho de entrega e instalação FUTURA, não executar agora
+O usuário autorizou gerar e testar esta candidata completa. Não é necessário
+presumir intervenção de TI para um computador sob seu controle. Isso NÃO é
+confirmação para trocar dados reais nem para alterar política de segurança.
 
-O formato é CLEAN completo, não overlay do updater legado. Não executar
-update_candidate.py update/rollback com este ZIP: não contém candidate-files.json
-nem o conjunto ROOT_FILES daquele formato. Os arquivos originais de suporte,
-troca, rede, AT e atualização foram preservados como fontes do produto, sem
-atestado de execução operacional ou de rollback após novas escritas.
+1. Extraia o ZIP completo em uma pasta NOVA e vazia, fora da Central atual e
+   dos backups. Não substitua arquivos nem copie banco/config/token manualmente.
+2. Abra somente **00_CONFERIR_ATUALIZACAO.bat** dessa pasta. Não execute ainda
+   01_TROCAR, 00_INICIAR, instalador ou reparador. A conferência não instala,
+   inicia ou para agentes, prepara rede, abre SQLite ou transfere estado.
+3. Informe apenas status e motivo. A saída completa contém caminhos privados.
+   IDENTIFIED_ACTIVE é observação, não autorização para atualizar. Sem listener,
+   Run/guardian podem apontar uma raiz candidata; se a origem não for comprovada,
+   a resposta correta é STOP. Não escolher pastas nem abrir A para criar prova.
+4. Se aparecer STOP_TI_EXECUTION_POLICY, PSSecurityException ou outro bloqueio de
+   execução, pare e informe a mensagem. O nome histórico do código NÃO exige TI:
+   neste computador o responsável é você. Avaliaremos o controle efetivo e uma
+   proposta específica; nenhuma política será alterada sem sua autorização.
+   Não usar Bypass ou tentar contornar o bloqueio. Se existir gestão corporativa,
+   o responsável pelo controle deve participar apenas quando necessário.
+5. Com raiz/versão comprovadas, preparar o backup PRIVADO consistente de SQLite,
+   WAL, históricos, revisões, configurações, identidade, checkpoints e estado
+   externo Edge/Chrome/filas, com exclusividade e restauração verificada. Não
+   copiar só o arquivo SQLite enquanto houver escritores. O helper da troca
+   também exige backup verificado e restauração ensaiada antes de iniciar B;
+   isso não substitui a preservação externa do navegador ou o C0 privado.
+6. Só após conferir pendências/backup e obter sua confirmação explícita para
+   trocar sobre dados reais, orientar a execução supervisionada do 01_TROCAR.
+   Até essa confirmação, o próximo passo é exclusivamente a conferência.
 
-1. Sob autorização futura específica, identificar somente por leitura a pasta A
-   realmente ativa, SHA servido/carregado, guardian/PIDs/porta 8765, origem,
-   snapshots/revisões/linhas/períodos e estado de jobs/outbox. Não inferir a raiz
-   ativa pelo nome do ZIP, nem escolher 0.5.39 como retorno padrão.
-2. Exigir G0–G7, exclusividade externa e backup privado consistente SQLite/WAL,
-   evidências externas/configuração/identidade, verificado e ensaiado. Nunca usar
-   cópia desidentificada LAB como backup de recuperação.
-3. Extrair candidata em pasta NOVA; nunca sobrepor A/C0, copiar banco antigo sobre
-   B ou iniciar dois agentes. O caminho histórico de troca é 01_TROCAR.bat →
-   01_TROCAR_PARA_PR69_NOVA.bat → TROCAR_PARA_PR69_NOVA.ps1; deve ser qualificado
-   no ensaio autorizado antes de qualquer uso. Não executar nesta missão.
-4. Launchers normais podem instalar dependências, configurar rede, carregar
-   identidade e iniciar serviços; não são entrada LAB. Nesta missão a verificação
-   Windows só lê/analisa os arquivos extraídos e faz parsing de PowerShell.
-5. Antes de permitir execução, comprovar versão conjunta dos manifestos,
-   release-build, CACHE_REVISION, ExpectedSha e módulos servidos/carregados.
-   Preservar SQLite/WAL/revisões/históricos/config/token/source_id/outbox; não
-   limpar cache/IndexedDB para contornar versão divergente.
-6. Se houver problema: R0 sem execução não restaura; R1 exige compatibilidade
-   provada com dados ATUAIS em destino novo; R2 com dados novos/estado desconhecido
-   é STOP. Preservar C0/A/B e solicitar recuperação supervisionada. Não iniciar A
-   com histórico antigo apresentado como atual. P08 sintético não integra esse
-   protocolo ao launcher operacional nem prova retorno real seguro.
+## Antes da atualização futura
 
-## Melhorias incluídas e limites
+1. Guardar download original, SHA256SUMS.txt e recibos. Conferir SHA256 do ZIP,
+   SHA da candidata, PACKAGE_IDENTITY e CANDIDATE_MANIFEST. Hash comprova
+   integridade, não assinatura ou homologação física. O ZIP da #97 não contém
+   as correções da #98.
+2. Identificar por leitura a pasta A realmente ativa, versão/SHA, agente,
+   guardian, HKCU Run e dono de 8765. Não inferir a raiz pelo nome do ZIP,
+   nem escolher 0.5.39 como retorno padrão. Inventariar linhas, source_id, snapshots,
+   revisões, períodos, históricos, arquivos externos/configurações/identidades.
+   Resolver jobs, outbox e sincronização pendentes antes da janela supervisionada.
+3. Exigir G0–G7 aplicáveis e autorização específica. Confirmar Python 3.12 x64
+   genuíno com venv/pip e Chrome x64. O ensaio usa Python 3.12.10, Windows Server
+   2025 e Chrome do runner; não prova o computador original. Este ZIP não inclui
+   instaladores de Python/Chrome. Não baixar ou autorreparar software operacional
+   sem autorização.
+4. Preparar backup PRIVADO fiel de A/C0, consistente para SQLite/WAL e arquivos
+   externos, sob exclusividade, com hashes, integridade e restauração ensaiada
+   em destino novo. Cópia desidentificada LAB não é backup de recuperação. Não
+   copiar apenas SQLite de banco ativo ignorando WAL.
 
-Nove telas, coletas 3028/3074/2114/3012/3022 L1/L2/L3, recuperação/checkpoints,
-nomes/papéis, timeline integral, reuso físico 1º/2º/3º, componentes, reincidência,
-horários produtivos separados de AT/reparo, FPY/tendências/SN/alertas e performance
-foram preservados. Histórico sem prova continua desconhecido; ausência não é zero.
-Os handoffs atuais estão em evidence/current/. O motor não é um segundo agente.
+## Troca supervisionada — somente após autorização
 
-P04 núcleo em runners Windows não prova workstation completa: seis dependências
-GUI ainda não têm wheels oficiais nas versões auditadas. Não há wheelhouse,
-instalador AT offline pronto ou garantia de bootstrap frio offline. As ferramentas
-LAB de P02/P04/P08 são fontes separadas no Git do SHA informado; não fazem parte
-do boot operacional nem autorizam usar dados reais.
+5. Extrair em pasta B NOVA e vazia, fora de A/C0. Não sobrepor arquivos, copiar
+   .venv antigo ou usar update_candidate.py com este ZIP CLEAN: são formatos
+   diferentes. A entrega final inclui 21 wheels genuínos em vendor/wheels e
+   RUNTIME_DEPENDENCIES.json com origem/hashes, além de Firebase 10.8.0/SheetJS
+   0.20.3 locais e suas licenças. Os seis wheels sem distribuição oficial foram
+   construídos de fontes oficiais fixas, offline no runner Windows descartável.
+6. Executar uma única vez **01_TROCAR.bat da pasta B**, na janela acompanhada.
+   O caminho normal mantém diálogo humano e gate de rede A-MES, identifica A,
+   prepara dependências, verifica backup/transferência, preserva identidade,
+   escolhe motor B e inicia por START_LOCAL_CANDIDATE. Após a barreira persistente
+   de intenção, A é marcada como retirada. Não iniciar A manualmente depois disso.
+   Não escolher /lab na fábrica: exige CI Windows sintética, raiz autorizada e
+   prova WFP. /local omite preparação MES/Chrome para consulta local; não isola
+   rede nem prova MES.
+7. Se aparecer BLOCKED, STOP ou journal pendente, parar. Preservar A/B/C0, backup,
+   logs e journals. Não apagar marcadores, limpar IndexedDB, alterar hashes ou
+   repetir a troca para forçar aceitação. B pode ter produzido dados novos antes
+   da confirmação final. Não reabrir A apresentando histórico antigo como atual.
 
-ZIP EEDACC65 original não estava disponível na geração desta candidata; seleção
-e fontes Git foram comparadas, sem inventar paridade de seus bytes/CRC.
-P02 real, P04 completa/real, P05, P07, P08 real e homologação G0–G7 PENDENTES.
-Sem instalação, MES, Firebase, dados fabris, alteração de rede/guardian, deploy,
-merge ou release oficial nesta missão.
+## Verificações depois da troca
+
+8. Confirmar um único agente/guardian e dono de 8765, raiz/motor B, versões dos
+   componentes, manifestos, release-build e revisão do worker. Não limpar sessão
+   ou cache para contornar conflito de versões.
+9. Conferir integridade SQLite, contagens e identidades inventariadas: registros
+   antigos/novos, origem, linhas, períodos, snapshots/revisões, PCBAs/componentes,
+   nomes/papéis/comentários, Hist Seq, Y/N, falhas independentes, classificação
+   3074 e horários produtivos 3022. Ausência continua desconhecida, nunca zero,
+   uso ou horário inventado. Abrir as nove telas e o período histórico original;
+   testar reinício/recuperação parcial sem disparar coleta não autorizada.
+10. A prova offline do navegador usa sessão anterior SINTÉTICA preparada por
+    SDK/emuladores oficiais, backend encerrado antes da candidata. Perfis, JWTs,
+    usuários, emuladores e bancos da fixture NÃO são entregues. Perfil vazio
+    mantém login legítimo. Sessão Cloud real, permissões e possível mudança de
+    origem HTTPS/localhost precisam de verificação específica; não copiar Auth
+    manualmente ou simular credenciais.
+11. Rede fabril, Chrome/MES e coleta física só serão testados em etapa específica
+    autorizada. A recusa do diagnóstico de rede para host sintético é preservada
+    no LAB; não equivale a rede operacional validada.
+
+## Interrupção e retorno seguro
+
+R0: antes de possível execução de B, preservar estados; manifesto inválido não
+exige restaurar dados nem reiniciar A já ativa. R1: retorno de código exige dados
+ATUAIS preservados, compatibilidade demonstrada e destino novo, sob recuperação
+supervisionada. R2 com dados novos/estado desconhecido: B pode ter executado —
+**STOP**. Nunca restaurar SQLite antigo sobre dados novos, mesclar bancos
+automaticamente ou reabrir A com histórico desatualizado. Journals e retirada de
+A são barreiras conservadoras, não transação atômica do Windows. Preservar as
+provas quando a recuperação automática não puder ser demonstrada.
+
+Recibos externos registram o que passou no Windows sintético. Handoffs estão em
+evidence/current/. P02 real, P04 real/completa, P05, P07, P08 real e G0–G7 físicos
+permanecem PENDENTES. Nenhum ensaio autoriza instalar na fábrica, acessar MES ou
+Firebase reais, fazer merge, deploy ou release operacional.

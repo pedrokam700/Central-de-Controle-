@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import ast
 import contextlib
+import email
 import hashlib
 import functools
 import io
@@ -33,6 +34,35 @@ def pairs(values):
 def obj(raw):return json.loads(raw,object_pairs_hook=pairs)
 def require(condition,message):
     if not condition:raise ValueError(message)
+
+def verify_runtime_wheels(data,receipt,expected_sha):
+    """Independent receipt/source/metadata comparison; never execute a wheel."""
+    lock=obj((ROOT/'scripts/install98/dependencies.json').read_bytes())
+    expected={re.sub('[-_.]+','-',x['name']).lower():x for x in lock['artifacts'] if x['scope']=='runtime'}
+    require(receipt['sources']==[{k:x[k] for k in ('name','version','url','sha256')} for x in lock['artifacts']],'Wheel source provenance mismatch')
+    provenance=obj(data['vendor/RUNTIME_DEPENDENCIES.json'])
+    require(set(provenance)=={'schema','sha','python','platform','sources_lock_sha256','packages','requirements_sha256','prerequisites','includes_emulators','physical'},'Unexpected runtime provenance metadata')
+    require(provenance['schema']=='central98-offline-runtime-v1' and provenance['sha']==expected_sha and provenance['python']=='3.12.10' and provenance['platform']=='Windows x86_64' and provenance['includes_emulators'] is False and provenance['physical']=='PENDING','Runtime compatibility metadata mismatch')
+    require(provenance['prerequisites']==['Genuine Python 3.12 x64 with venv/pip','Genuine Google Chrome x64'],'Runtime prerequisites mismatch')
+    require(provenance['sources_lock_sha256']==sha((ROOT/'scripts/install98/dependencies.json').read_bytes()) and provenance['requirements_sha256']==sha(data['ames-agent/requirements.txt']),'Runtime lock mismatch')
+    require(len(provenance['packages'])==len(expected)==len(receipt['built_and_official_wheels'])==21,'Runtime dependency count mismatch')
+    seen=set()
+    for row in provenance['packages']:
+        require(set(row)=={'name','version','wheel','wheel_sha256','source_url','source_sha256','method'},'Unexpected wheel provenance')
+        name=re.sub('[-_.]+','-',row['name']).lower();source=expected.get(name)
+        require(source is not None and name not in seen,'Unexpected/duplicate runtime package');seen.add(name)
+        require(row['name']==source['name'] and row['version']==source['version'] and row['source_url']==source['url'] and row['source_sha256']==source['sha256'],'Wheel source identity mismatch')
+        content=data['vendor/wheels/'+row['wheel']]
+        require(row['wheel_sha256']==sha(content)==receipt['built_and_official_wheels'].get(row['wheel']),'Independent runtime wheel hash mismatch')
+        require(row['wheel'].endswith(('-py3-none-any.whl','-py2.py3-none-any.whl','-cp312-cp312-win_amd64.whl')) or source['kind']=='bdist_wheel' and row['wheel'].endswith('-py3-none-win_amd64.whl'),'Unreviewed runtime architecture')
+        method='OFFICIAL_WHEEL' if source['kind']=='bdist_wheel' else 'GENUINE_SOURCE_BUILT_OFFLINE_UNDER_WFP'
+        require(row['method']==method,'Wheel build method mismatch')
+        if source['kind']=='bdist_wheel':require(row['wheel']==source['filename'] and sha(content)==source['sha256'],'Official wheel bytes mismatch')
+        with zipfile.ZipFile(io.BytesIO(content)) as wheel:
+            metadata=[n for n in wheel.namelist() if n.endswith('.dist-info/METADATA')]
+            require(len(metadata)==1 and wheel.testzip() is None,'Wheel metadata/CRC mismatch')
+            header=email.message_from_bytes(wheel.read(metadata[0]))
+            require(re.sub('[-_.]+','-',header['Name']).lower()==name and header['Version']==source['version'],'Wheel internal identity mismatch')
 def safe_name(name):
     p=PurePosixPath(name)
     require(bool(name) and not name.startswith('/') and '\\' not in name and ':' not in name and '/'.join(p.parts)==name,'Unsafe path')
@@ -63,7 +93,14 @@ def verify(archive,expected_sha,extract_to=None):
             require(stat.S_IFMT(info.external_attr>>16) in (0,stat.S_IFREG) and not info.flag_bits&1,'Special/encrypted member')
             require(info.file_size<=64*1024*1024,'Member capacity')
         require(sum(i.file_size for i in infos)<=256*1024*1024,'Archive capacity')
-        require(set(names)==set(model['current']),'Actual members differ from independently selected sources')
+        expected_members=set(model['current']);wheel_receipt=None
+        if 'vendor/RUNTIME_DEPENDENCIES.json' in names:
+            receipt_path=os.environ.get('INSTALL98_DEPENDENCY_RECEIPT')
+            require(receipt_path is not None,'Independent wheel provenance receipt required')
+            wheel_receipt=obj(Path(receipt_path).read_bytes())
+            expected_members|={'vendor/wheels/'+n for n in wheel_receipt['built_and_official_wheels']}
+            expected_members|={'vendor/RUNTIME_DEPENDENCIES.json','evidence/current/PR98_INSTALACAO_WINDOWS_20261118.md'}
+        require(set(names)==expected_members,'Actual members differ from independently selected sources')
         require(z.testzip() is None,'CRC mismatch')
         data={n:z.read(n) for n in names}
     hashes={n:sha(v) for n,v in data.items()}
@@ -79,31 +116,50 @@ def verify(archive,expected_sha,extract_to=None):
     for label,prefix in [('frontend','frontend/'),('agent','ames-agent/'),('engine','factory-engine/')]:
         members={n:h for n,h in sorted(hashes.items()) if n.startswith(prefix)}
         components[label]={'code_sha':expected_sha,'files':len(members),'members_sha256':sha(canonical(members))}
-    require(identity=={'schema':'central-complete-candidate-v1','sha':expected_sha,'candidate_version':version,
+    expected_identity={'schema':'central-complete-candidate-v1','sha':expected_sha,'candidate_version':version,
         'delivery':'INTEGRATED_CLEAN_COMPLETE','reference_test_sha':EED,'installation_authorized':False,
         'physical':'PENDING','legacy_updater_compatible':False,'future_supervised_entry':'01_TROCAR.bat','components':components,
-        'limits':['P02_REAL_PENDING','P04_FULL_GUI_BLOCKED','P05_PENDING','P07_PENDING','P08_REAL_PENDING','G0_G7_PENDING','EEDACC65_ZIP_BYTES_UNAVAILABLE']},'Unreviewed identity metadata')
+        'limits':['P02_REAL_PENDING','P04_FULL_GUI_BLOCKED','P05_PENDING','P07_PENDING','P08_REAL_PENDING','G0_G7_PENDING','EEDACC65_ZIP_BYTES_UNAVAILABLE']}
+    if wheel_receipt is not None:
+        expected_identity['limits'][1]='P04_ORIGINAL_WINDOWS_PENDING'
+        expected_identity['offline_runtime']={'packages':21,'manifest':'vendor/RUNTIME_DEPENDENCIES.json','platform':'Windows x86_64','python':'3.12.10'}
+        verify_runtime_wheels(data,wheel_receipt,expected_sha)
+        require(data['evidence/current/PR98_INSTALACAO_WINDOWS_20261118.md']==model['read_git'](expected_sha,'docs/ames/handoffs/PR98_INSTALACAO_WINDOWS_20261118.md'),'Current handoff mismatch')
+    require(identity==expected_identity,'Unreviewed identity metadata')
     require(identity['installation_authorized'] is False and identity['legacy_updater_compatible'] is False,'Typed safety metadata required')
     # Every direct source, including each collector and dependency, is checked.
     for name,source in model['current'].items():
         if source is not None and name not in model['cd']:
             require(data[name]==model['read_git'](expected_sha,source),'Source bytes mismatch: '+name)
     def source(path):return model['read_git'](expected_sha,path)
+    def local_dependencies(raw):
+        return raw.replace(b'https://www.gstatic.com/firebasejs/10.8.0/',b'/Central-de-Controle-/vendor/browser/firebase/10.8.0/').replace(b'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',b'/Central-de-Controle-/vendor/browser/sheetjs/0.20.3/xlsx.full.min.js')
     static=source('scripts/build-static.mjs').decode()
     def literal(key):
         found=re.search(r'const '+key+r"='([^']*)';",static);require(found is not None,'Static transform contract absent');return found[1]
     guard=re.search(r'const bootGuard=`([^`]+)`;',static)[1].replace('\\n','\n')
     front='frontend/Central-de-Controle-/'
     expected_index=source('index.html').decode().replace(literal('appTag'),guard+'\n'+literal('bootstrapTag'))
-    require(data[front+'index.html']==expected_index.encode(),'Transformed integrated index mismatch')
+    require(data[front+'index.html']==local_dependencies(expected_index.encode()),'Transformed integrated index mismatch')
     expected_app=source('app.js').decode().replace(literal('oldImport'),literal('newImport')).replace(literal('oldInit'),literal('newInit'))
-    require(data[front+'app.js']==expected_app.encode(),'Transformed app mismatch')
+    require(data[front+'app.js']==local_dependencies(expected_app.encode()),'Transformed app mismatch')
     expected_sw=re.sub(r'^const CACHE_REVISION=[^;]+;','const CACHE_REVISION='+json.dumps(expected_sha)+';',source('sw.js').decode(),flags=re.M)
+    expected_sw=local_dependencies(expected_sw.encode()).decode().replace('\n]);\n\nasync function precache','\n].map(url=>new URL(url,self.location.origin).href));\n\nasync function precache').replace('const FIREBASE_SDK=Object.freeze([',"ASSETS.push(BASE+'vendor/browser/sheetjs/0.20.3/xlsx.full.min.js');\nconst FIREBASE_SDK=Object.freeze([")
     require(data[front+'sw.js']==expected_sw.encode(),'Transformed SW mismatch')
+    inputs=obj(source('vendor/browser/manifest.json'));expected_browser=[]
+    for entry in inputs['files']:
+        raw=source('vendor/browser/'+entry['path']);require(len(raw)==entry['size'] and sha(raw)==entry['sha256'],'Official browser input mismatch')
+        packaged=local_dependencies(raw) if entry['kind']=='javascript' else raw
+        require(data[front+'vendor/browser/'+entry['path']]==packaged,'Browser dependency transform mismatch')
+        expected_browser.append({**entry,'source_sha256':entry['sha256'],'packaged_sha256':sha(packaged),'transform':'SAME_ORIGIN_IMPORT_LOCATIONS_ONLY' if entry['kind']=='javascript' else 'NONE'})
+    require(obj(data[front+'vendor/browser/manifest.json'])=={**inputs,'files':expected_browser},'Browser manifest provenance mismatch')
+    for name,origin in model['current'].items():
+        if origin and name in model['cd'] and name.endswith(('.js','.mjs')) and name not in (front+'app.js',front+'sw.js'):
+            require(data[name]==local_dependencies(source(origin)),'Transformed module mismatch: '+name)
     root_entry=re.search(r'function rootEntry\(\)\{\s*return `([^`]+)`;',static)[1].replace('\\n','\n')
     require(data['frontend/index.html']==root_entry.encode(),'Root entry mismatch')
     release=obj(data['frontend/release-build.json'])
-    require(release=={'sha':expected_sha,'branch':'work/ames-complete-candidate-20261118','provider':'github-actions','build':'15.1.13.54','project':'central-cora-v2'},'Release identity mismatch')
+    require(release=={'sha':expected_sha,'branch':os.environ.get('GITHUB_REF_NAME'),'provider':'github-actions','build':'15.1.13.54','project':'central-cora-v2'},'Release identity mismatch')
     require('offline-bootstrap.mjs' in expected_index and 'src="/Central-de-Controle-/local-entry.mjs"' not in expected_index,'Standalone Console regression')
     require(data['TROCAR_PARA_PR69_NOVA.ps1']==source('tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1').replace(b'__BUNDLE_SHA__',expected_sha.encode()),'Switch SHA transform mismatch')
     instruction=source('docs/ames/packaging/CANDIDATA_INSTALACAO_FUTURA_20261118.md').decode().replace('__CANDIDATE_SHA__',expected_sha).replace('__CANDIDATE_VERSION__',version).encode()

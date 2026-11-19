@@ -1,0 +1,217 @@
+name: A-MES genuine Windows installation isolated synthetic qualification
+on:
+  push:
+    branches: [work/ames-windows-installation-20261118]
+  workflow_dispatch:
+    inputs:
+      identification_only:
+        description: 'Only read-only port identification tests; never rerun installation/build'
+        type: boolean
+        required: true
+        default: true
+      assisted_only:
+        description: 'Only integrated assisted preflight tests; no installation or builder'
+        type: boolean
+        required: false
+        default: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  transfer-counterproof:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash ./scripts/audit/guarded-ci.sh {0}
+    env:
+      PYTHONPATH: '${{ github.workspace }}/scripts/audit/no_distribution'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: |
+          python3 -B scripts/install98/transfer-red.test.py -v
+          python3 -B scripts/install98/source-contract.test.py -v
+          python3 -B scripts/install98/full-entry.test.py -v
+          python3 -B scripts/install98/static-mime.test.py -v
+          python3 -B scripts/install98/offline-assets.test.py -v
+  genuine-windows:
+    if: github.event_name == 'push'
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PIP_NO_CACHE_DIR: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21.0.9'
+          architecture: x64
+          check-latest: false
+      - name: Download official pinned inputs without executing source packages
+        shell: pwsh
+        run: |
+          $lab=Join-Path $env:RUNNER_TEMP "CENTRAL-INSTALL-LAB-$($env:GITHUB_RUN_ID)"
+          "INSTALL98_ROOT=$lab" >> $env:GITHUB_ENV
+          $env:INSTALL98_ROOT=$lab
+          python -B scripts/install98/prepare.py download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Path "$lab/tmp" | Out-Null
+          "TEMP=$lab/tmp" >> $env:GITHUB_ENV
+          "TMP=$lab/tmp" >> $env:GITHUB_ENV
+      - name: Require OS firewall and WFP denial proof before source build or agent
+        shell: pwsh
+        run: ./scripts/install98/containment.ps1
+      - name: Verify genuine Windows PowerShell hash and process prerequisites
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          Get-Command Get-FileHash,Get-CimInstance,Get-NetTCPConnection -ErrorAction Stop | Select-Object Name,ModuleName
+          if ($PSVersionTable.PSVersion.Major -ne 5) { throw 'NATIVE_WINDOWS_POWERSHELL_REQUIRED' }
+          $PSVersionTable | Out-String | Write-Output
+      - name: Reject incomplete corrupt and contradictory synthetic wheel inventories
+        shell: powershell
+        run: |
+          python -B scripts/install98/archive-dependencies.test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build genuine GUI dependencies offline under proven containment
+        shell: pwsh
+        run: |
+          python -B scripts/install98/prepare.py build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prove static module MIME independently of Windows file associations
+        shell: powershell
+        run: |
+          python -B scripts/install98/static-mime.test.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Execute real installers canonical processes and state transfer using only synthetic copies
+        timeout-minutes: 20
+        shell: powershell
+        run: |
+          python -B scripts/install98/integration.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Transport only the exact archive installed and qualified on Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: INTERNAL_WINDOWS_QUALIFIED_${{ github.sha }}
+          path: ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/delivery/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Preserve safe synthetic evidence even on refusal no installation payload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WINDOWS_INSTALLATION_EVIDENCE_${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/containment.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/dependency-receipt.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/progress.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/complete-archive-receipt.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/independent-archive-receipt.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/startup-*.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/browser-evidence/
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/auth-fixture-receipt.json
+          if-no-files-found: warn
+          retention-days: 7
+# User authorization: actual execution ONLY on disposable Windows with synthetic data.
+# Kernel denial is mandatory. No agent starts if isolation is unproven.
+
+  qualified-delivery:
+    if: github.event_name == 'push'
+    needs: [genuine-windows, transfer-counterproof, assisted-preflight]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v5
+        with:
+          name: INTERNAL_WINDOWS_QUALIFIED_${{ github.sha }}
+          path: ${{ runner.temp }}/delivery98
+      - name: Require real installation evidence and all guarded regressions on this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALL98_DELIVERY: ${{ runner.temp }}/delivery98
+        run: python3 -B scripts/install98/delivery-gate.py
+      - name: Downloadable complete candidate with LAB qualification and physical gates pending
+        uses: actions/upload-artifact@v4
+        with:
+          name: CENTRAL_AMES_CANDIDATA_WINDOWS_${{ github.sha }}
+          path: ${{ runner.temp }}/delivery98/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  readonly-identification:
+    if: github.event_name == 'workflow_dispatch' && inputs.identification_only
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Standalone read-only identification synthetic counterproofs only
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          Write-Output 'PRODUCT_SHA=3ab8df55e03fa2b961df100649de6541d2232bd6; ONLY_PORT_IDENTIFICATION_TESTS; NO_BUILD_OR_INSTALLATION'
+          & ./scripts/install98/port-identification.test.ps1
+          if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  assisted-preflight:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.assisted_only)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Integrated coordinator preflight and restrictive policy counterproofs only
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & ./scripts/install98/assisted-preflight.test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Existing switch parser compatibility without running transaction
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & ./scripts/ames-pr69-switch-parser.windows.test.ps1
+          if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Existing focused Node and Python entry contracts without builders
+        shell: powershell
+        run: |
+          node --test scripts/ames-pr69-complete-package.test.mjs scripts/ames-pr70-safe-switch.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B scripts/install98/full-entry.test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
