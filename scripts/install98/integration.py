@@ -92,7 +92,9 @@ def main():
    manifest=json.loads(z.read('CANDIDATE_MANIFEST.json'));assert manifest['sha']==(EED if label=='A' else os.environ['GITHUB_SHA'])
    for n,h in manifest['files'].items():assert hashlib.sha256(z.read(n)).hexdigest()==h
    z.extractall(LAB/label)
-  root=LAB/label;shutil.copytree(LAB/'wheels',root/'vendor/wheels')
+  root=LAB/label
+  if label=='B':run([sys.executable,'-B',ROOT/'scripts/install98/offline-assets.test.py','--built-root',root/'frontend/Central-de-Controle-'])
+  shutil.copytree(LAB/'wheels',root/'vendor/wheels')
   out=run(['cmd.exe','/d','/c','call',root/'01_INSTALAR_UMA_VEZ.bat','/prepare'],cwd=root,timeout=300)
   assert not (root/'ames-agent/config.json').exists() and not (root/'ames-agent/data').exists()
   record('actual_installer_prepare_'+label,'PASS',no_runtime_created=True)
