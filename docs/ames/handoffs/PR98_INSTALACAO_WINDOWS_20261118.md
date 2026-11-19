@@ -340,3 +340,24 @@ de etapa supervisionada autorizada. P02 real, P04 real/completa, P05/P07/P08 rea
 e G0–G7 físicos PENDENTES. Nunca oferecer banco desidentificado como recuperação,
 limpar Auth/cache para contornar proteção ou restaurar SQLite antigo sobre novos
 registros. O manual da candidata contém verificações antes/depois e STOP/retorno.
+
+
+### Prova do ZIP fechado e R2; transição do worker medida
+
+61be1f7ef9d6e5b402d377a6c1a49a0f6754e7b0 / Windows 44517913273:
+ZIP fechado/verificador independente/13 contraprovas de arquivo PASS, 21 wheels;
+troca completa PASS e falha I/O tardia da segunda troca PASS. T recebeu nova linha,
+conservou todos os dados anteriores, S não voltou e o launcher S foi recusado.
+As quatro matrizes deste SHA também SUCCESS. Windows integral ainda FAILURE:
+9/9 views renderizaram, mas houve 409 de CSS durante ativação do worker.
+
+O harness esperava serviceWorker.ready, que pode resolver com worker ainda
+activating; sua navegação seguinte podia entrar no inventário conservador de
+clientes antigos. O worker recusou dependências daquele documento corretamente.
+NÃO afrouxar guard/client inventory, excluir CSS, limpar cache ou forçar ativação.
+A prova passa a aguardar estado real activated + controlador; só depois realiza
+nova navegação. Registra 409 completos com fase e mensagem exata, aceita apenas
+recusa legítima ANTES da barreira e exige ausência de 409 na nova navegação,
+todas as folhas de estilo carregadas/cssRules e cache SHA/inventário persistente
+comprovados por leitura. Erros inesperados continuam reprovando. Sem apagar as
+reproduções anteriores e sem mudar runtime produtivo para facilitar o ensaio.
