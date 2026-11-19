@@ -78,7 +78,7 @@ Case 'opaque config token SQLite WAL may stay exclusively locked' {
 Case 'all fixture files unchanged; no backup config or journal created' {if((Fingerprint) -cne $before){throw 'FILES_CHANGED'}}
 Case 'normal mutation tail is exact approved code; read branch terminates before it' {
  $old=(& git -C $repo show 3ab8df55e03fa2b961df100649de6541d2232bd6:tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1) -join "`n"
- $anchor="try {`n  if(Test-Path -LiteralPath (Join-Path `\$NewRoot '.ames-switch'))".Replace('\$','$')
+ $anchor="try {`n  if(Test-Path -LiteralPath (Join-Path `$NewRoot '.ames-switch'))"
  $index=$text.IndexOf($anchor);$oldIndex=$old.IndexOf($anchor)
  if($index -lt 0 -or $oldIndex -lt 0 -or $text.Substring($index).Trim() -cne $old.Substring($oldIndex).Trim()){throw 'APPROVED_MUTATION_TAIL_CHANGED'}
 }

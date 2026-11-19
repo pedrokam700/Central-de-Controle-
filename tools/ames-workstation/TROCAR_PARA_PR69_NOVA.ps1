@@ -1,4 +1,4 @@
-param([switch]$LocalOnly,[switch]$NoBrowser,[switch]$Laboratory)
+param([switch]$LocalOnly,[switch]$NoBrowser,[switch]$Laboratory,[switch]$IdentifyOnly)
 # Supervised PR69 switch. Never copies, overwrites or deletes old operational data.
 # The CLEAN builder injects the exact expected SHA into the value below.
 $ErrorActionPreference='Stop'
@@ -16,8 +16,22 @@ if($Laboratory -and (-not $LocalOnly -or -not $NoBrowser)){throw 'LAB_REQUIRES_L
 function Fail([string]$message){throw $message}
 function EqualPath($a,$b){return ([string]$a).TrimEnd('\') -ieq ([string]$b).TrimEnd('\')}
 function Full([string]$path){if(-not [IO.Path]::IsPathRooted($path)){return $null};try{return [IO.Path]::GetFullPath($path).TrimEnd('\')}catch{return $null}}
+function Assert-ReadOnlySwitchPath([string]$path){
+  $full=Full $path
+  if(-not $full -or $full -notmatch '^[A-Za-z]:\\'){throw 'NONLOCAL_PATH'}
+  $drive=New-Object IO.DriveInfo([IO.Path]::GetPathRoot($full))
+  if($drive.DriveType -ne [IO.DriveType]::Fixed){throw 'NONLOCAL_DRIVE'}
+  # Inspect parents BEFORE descendants: never traverse a junction/network target.
+  $current=[IO.Path]::GetPathRoot($full)
+  foreach($part in $full.Substring($current.Length).Split('\')){
+    if(-not $part){continue};$current=Join-Path $current $part
+    $info=Get-Item -LiteralPath $current -Force -ErrorAction Stop
+    if($info.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'REPARSE_PATH'}
+  }
+}
 function RootFor([string]$entry,[string]$parentName){
   $path=Full $entry
+  if($IdentifyOnly){try{Assert-ReadOnlySwitchPath $path}catch{return $null}}
   if(-not $path -or -not(Test-Path -LiteralPath $path -PathType Leaf)){return $null}
   $parent=Split-Path $path -Parent
   if((Split-Path $parent -Leaf) -ine $parentName){return $null}
@@ -27,6 +41,7 @@ function RootFor([string]$entry,[string]$parentName){
     $root=Split-Path (Split-Path $parent -Parent) -Parent
   }
   foreach($required in @('00_INICIAR_AQUI.bat','ames-agent\agent_hardened_entry.py','CANDIDATE_MANIFEST.json')){
+    if($IdentifyOnly){try{Assert-ReadOnlySwitchPath (Join-Path $root $required)}catch{return $null}}
     if(-not(Test-Path -LiteralPath (Join-Path $root $required) -PathType Leaf)){return $null}
   }
   return $root
@@ -75,6 +90,7 @@ function Identify($process){
         if($leaf -ieq 'KEEP_AGENT_RUNNING.ps1'){$kind='guardian'}else{$kind='launcher'}
       }elseif($leaf -ieq 'START_LOCAL_CANDIDATE.ps1'){
         $path=Full $entry
+        if($IdentifyOnly){try{Assert-ReadOnlySwitchPath $path}catch{return $null}}
         if($path -and (Test-Path -LiteralPath $path -PathType Leaf)){
           $candidateRoot=Split-Path $path -Parent
           if((RootFor (Join-Path $candidateRoot 'ames-agent\agent_hardened_entry.py') 'ames-agent') -and
@@ -96,6 +112,95 @@ function RegistryRun {
   $prop=$item.PSObject.Properties[$RunName]
   if($prop){return [string]$prop.Value}
   return $null
+}
+function Get-ReadOnlySwitchObservation {
+  # No HTTP, state reader, database, token, engine, starter or network setup.
+  # Query all listeners so a genuinely empty result is distinct from query failure.
+  return [pscustomobject]@{
+    listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object {$_.LocalPort -eq 8765})
+    processes=@(Get-CimInstance Win32_Process -ErrorAction Stop)
+    run=RegistryRun
+  }
+}
+function Resolve-RegisteredSwitchRoot([string]$command){
+  $argv=SplitArgv $command
+  if($argv.Count -lt 3 -or [IO.Path]::GetFileName($argv[0]) -notin @('powershell.exe','pwsh.exe')){return $null}
+  $entry=ValueAfter $argv '-File'
+  if(-not $entry -or [IO.Path]::GetFileName($entry) -ine 'KEEP_AGENT_RUNNING.ps1'){return $null}
+  $root=RootFor $entry 'ames-workstation';$given=Full (ValueAfter $argv '-Root')
+  if(-not $root -or -not $given -or -not(EqualPath $root $given)){return $null}
+  return $root
+}
+function Read-OnlySwitchPreflight {
+  $result=[ordered]@{schema='central-assisted-identification-v1';status='STOP';reason='OBSERVATION_UNAVAILABLE';root=$null;listener_owner_count=$null;update_authorized=$false;maintenance_lease=$false;browser_sync_attested=$false;state_originality_proven=$false}
+  try{$first=Get-ReadOnlySwitchObservation}catch{return [pscustomobject]$result}
+  $owners=@($first.listeners|Select-Object -ExpandProperty OwningProcess -Unique)
+  $result.listener_owner_count=$owners.Count
+  if($owners.Count -gt 1){$result.reason='MULTIPLE_LISTENER_OWNERS';return [pscustomobject]$result}
+  $known=@();$unrecognized=$false
+  foreach($p in $first.processes){
+    $id=Identify $p
+    if($id){$known+=,$id}
+    elseif((RelauncherType $p) -or ([string]$p.CommandLine -match 'agent_hardened_entry\.py|agent_entry\.py')){$unrecognized=$true}
+  }
+  if($owners.Count -eq 1 -and @($known|Where-Object {$_.pid -eq $owners[0] -and $_.kind -eq 'agent'}).Count -ne 1){$result.reason='UNKNOWN_LISTENER_OWNER';return [pscustomobject]$result}
+  if($unrecognized){$result.reason='UNRECOGNIZED_INSTALLATION_PROCESS';return [pscustomobject]$result}
+  $registered=$null
+  if($first.run){
+    $registered=Resolve-RegisteredSwitchRoot $first.run
+    if(-not $registered){$result.reason='REGISTERED_ROOT_UNRECOGNIZED';return [pscustomobject]$result}
+  }
+  $roots=@($known|ForEach-Object {$_.root})
+  if($registered){$roots+=,$registered}
+  $roots=@($roots|Sort-Object -Unique)
+  if($roots.Count -gt 1){$result.reason='CONFLICTING_ROOT_EVIDENCE';return [pscustomobject]$result}
+  if($roots.Count -eq 0){$result.reason='NO_LISTENER_NO_PROVEN_ROOT';return [pscustomobject]$result}
+  $result.root=$roots[0]
+  if(@($known|Where-Object {$_.kind -eq 'guardian'}).Count -and -not $registered){$result.reason='GUARDIAN_NOT_REGISTERED';return [pscustomobject]$result}
+  try{
+    $root=$result.root
+    Assert-ReadOnlySwitchPath $root
+    foreach($marker in @('.ames-update','.ames-switch')){
+      if(Test-Path -LiteralPath (Join-Path $root $marker)){$result.reason='MAINTENANCE_STATE_REQUIRES_REVIEW';return [pscustomobject]$result}
+    }
+    # Hash only public code barriers. Never read/hash private state or SQLite/WAL.
+    $barriers=@{
+      'START_AGENT_CANONICAL.ps1'='56db5762c44525c5c7238d37aa24785b6b5a13792f5bc1b1f50830a8e25c71e4'
+      'KEEP_AGENT_RUNNING.ps1'='af9234f9e044e84dda95b7e3a31790989badb7c68c092a13484f10b1bb856627'
+      'ISSUE57_RELAUNCH_ENROLLMENT.ps1'='f16cfaf34125a26052635b6d0c422cb11a192e5d5c51b9f225a29a2a9093be00'
+    }
+    foreach($name in $barriers.Keys){
+      $file=Join-Path $root ('suporte\ames-workstation\'+$name);Assert-ReadOnlySwitchPath $file
+      if((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -cne $barriers[$name]){$result.reason='PUBLIC_BARRIER_UNRECOGNIZED';return [pscustomobject]$result}
+    }
+    foreach($relative in @('ames-agent\config.json','ames-agent\data\local_agent_token','ames-agent\data\ames_local.sqlite3')){
+      $file=Join-Path $root $relative;Assert-ReadOnlySwitchPath $file
+      if((Get-Item -LiteralPath $file -Force).PSIsContainer){throw 'PRIVATE_STATE_NOT_FILE'}
+    }
+    foreach($relative in @('ames-agent\data\ames_local.sqlite3-wal','ames-agent\data\ames_local.sqlite3-shm')){
+      $file=Join-Path $root $relative
+      if(Test-Path -LiteralPath $file){Assert-ReadOnlySwitchPath $file}
+    }
+  }catch{$result.reason='ROOT_OR_STATE_METADATA_UNVERIFIED';return [pscustomobject]$result}
+  # Detect relevant PID reuse/relaunch/Run changes; no global lease is claimed.
+  try{
+    $second=Get-ReadOnlySwitchObservation
+    $nextOwners=@($second.listeners|Select-Object -ExpandProperty OwningProcess -Unique|Sort-Object)
+    $nextKnown=@($second.processes|ForEach-Object {Identify $_}|Sort-Object pid)
+    if(($owners|Sort-Object|ConvertTo-Json -Compress) -cne ($nextOwners|ConvertTo-Json -Compress) -or
+       [string]$first.run -cne [string]$second.run -or
+       ($known|Sort-Object pid|ConvertTo-Json -Compress) -cne ($nextKnown|ConvertTo-Json -Compress)){
+      $result.reason='OBSERVATION_CHANGED';return [pscustomobject]$result
+    }
+  }catch{$result.reason='OBSERVATION_UNAVAILABLE';return [pscustomobject]$result}
+  if($owners.Count -eq 0){
+    if(@($known|Where-Object {$_.kind -eq 'agent'}).Count){$result.reason='AGENT_NOT_LISTENING'}
+    elseif($known.Count){$result.reason='INACTIVE_ROOT_FOUND_DATA_UNVERIFIED'}
+    else{$result.reason='REGISTERED_ROOT_WITHOUT_ACTIVE_WITNESS'}
+    return [pscustomobject]$result
+  }
+  $result.status='IDENTIFIED_ACTIVE';$result.reason='OBSERVED_ONLY_NOT_UPDATE_AUTHORIZATION'
+  return [pscustomobject]$result
 }
 function WriteRun($value){
   if($null -eq $value){Remove-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue}
@@ -189,6 +294,15 @@ function StopKnown($known){
   Stop-Process -Id $known.pid -Force -ErrorAction Stop
   try{Wait-Process -Id $known.pid -Timeout 12 -ErrorAction Stop}catch{if(Get-Process -Id $known.pid -ErrorAction SilentlyContinue){throw}}
   $script:stopped=$true
+}
+
+if($IdentifyOnly){
+  # Terminal read branch. Nothing below (network/dependencies/stop/transfer) runs.
+  if($LocalOnly -or $NoBrowser -or $Laboratory){Write-Output 'STOP: IDENTIFICATION_FLAGS_CONFLICT';exit 2}
+  try{$receipt=Read-OnlySwitchPreflight}catch{Write-Output 'STOP: IDENTIFICATION_UNVERIFIED';exit 2}
+  $receipt|ConvertTo-Json -Depth 4|Write-Output
+  Write-Output 'Observacao privada. Nao enviar caminhos ou identidade ao GitHub. Nao autoriza atualizar.'
+  if($receipt.status -eq 'IDENTIFIED_ACTIVE'){exit 0};exit 2
 }
 
 try {
