@@ -80,7 +80,11 @@ Case 'UNC path refused before share access' {
  if(-not $stopped){throw 'UNC_NOT_REFUSED'}
 }
 Case 'junction ancestor is refused without following its destination' {
- $link=Join-Path $lab 'junction';$null=New-Item -ItemType Junction -Path $link -Target $A
+ $link=Join-Path $lab 'junction'
+ # Native mklink preserves literal brackets; Windows PowerShell New-Item's
+ # -Target expands them as a wildcard and failed before testing the reader.
+ $null=& cmd.exe /d /c ('mklink /J "'+$link+'" "'+$A+'"')
+ if($LASTEXITCODE -ne 0){throw 'JUNCTION_FIXTURE_NOT_CREATED'}
  try{
   $stopped=$false;try{Assert-ReadOnlySwitchPath (Join-Path $link 'ames-agent\agent_hardened_entry.py')}catch{$stopped=$_.Exception.Message -eq 'REPARSE_PATH'}
   if(-not $stopped){throw 'JUNCTION_NOT_REFUSED'}
