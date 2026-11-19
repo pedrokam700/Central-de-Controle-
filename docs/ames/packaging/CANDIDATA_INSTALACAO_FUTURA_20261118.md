@@ -2,7 +2,8 @@
 
 SHA completo: __CANDIDATE_SHA__
 
-**Instalação operacional exige autorização específica e verificação supervisionada.**
+**NÃO AUTORIZADO PARA INSTALAÇÃO OPERACIONAL.**
+Instalação operacional exige autorização específica e verificação supervisionada.
 Este documento não autoriza alterações no computador da fábrica. Exigir o recibo
 externo QUALIFICACAO_LAB.json: somente a entrega final depois desse gate tem
 ensaio Windows sintético aprovado no mesmo SHA e nos mesmos bytes. ZIP de fonte,
@@ -20,7 +21,8 @@ disponível; não foi comprovada igualdade de seus bytes/CRC.
    integridade, não assinatura ou homologação física. O ZIP da #97 não contém
    as correções da #98.
 2. Identificar por leitura a pasta A realmente ativa, versão/SHA, agente,
-   guardian, HKCU Run e dono de 8765. Inventariar linhas, source_id, snapshots,
+   guardian, HKCU Run e dono de 8765. Não inferir a raiz pelo nome do ZIP,
+   nem escolher 0.5.39 como retorno padrão. Inventariar linhas, source_id, snapshots,
    revisões, períodos, históricos, arquivos externos/configurações/identidades.
    Resolver jobs, outbox e sincronização pendentes antes da janela supervisionada.
 3. Exigir G0–G7 aplicáveis e autorização específica. Confirmar Python 3.12 x64
@@ -80,7 +82,7 @@ disponível; não foi comprovada igualdade de seus bytes/CRC.
 R0: antes de possível execução de B, preservar estados; manifesto inválido não
 exige restaurar dados nem reiniciar A já ativa. R1: retorno de código exige dados
 ATUAIS preservados, compatibilidade demonstrada e destino novo, sob recuperação
-supervisionada. R2: B pode ter executado, há dados novos ou estado desconhecido —
+supervisionada. R2 com dados novos/estado desconhecido: B pode ter executado —
 **STOP**. Nunca restaurar SQLite antigo sobre dados novos, mesclar bancos
 automaticamente ou reabrir A com histórico desatualizado. Journals e retirada de
 A são barreiras conservadoras, não transação atômica do Windows. Preservar as

@@ -54,7 +54,7 @@ def verify_runtime_wheels(data,receipt,expected_sha):
         require(row['name']==source['name'] and row['version']==source['version'] and row['source_url']==source['url'] and row['source_sha256']==source['sha256'],'Wheel source identity mismatch')
         content=data['vendor/wheels/'+row['wheel']]
         require(row['wheel_sha256']==sha(content)==receipt['built_and_official_wheels'].get(row['wheel']),'Independent runtime wheel hash mismatch')
-        require(row['wheel'].endswith(('-py3-none-any.whl','-py2.py3-none-any.whl','-cp312-cp312-win_amd64.whl')),'Unreviewed runtime architecture')
+        require(row['wheel'].endswith(('-py3-none-any.whl','-py2.py3-none-any.whl','-cp312-cp312-win_amd64.whl')) or source['kind']=='bdist_wheel' and row['wheel'].endswith('-py3-none-win_amd64.whl'),'Unreviewed runtime architecture')
         method='OFFICIAL_WHEEL' if source['kind']=='bdist_wheel' else 'GENUINE_SOURCE_BUILT_OFFLINE_UNDER_WFP'
         require(row['method']==method,'Wheel build method mismatch')
         if source['kind']=='bdist_wheel':require(row['wheel']==source['filename'] and sha(content)==source['sha256'],'Official wheel bytes mismatch')

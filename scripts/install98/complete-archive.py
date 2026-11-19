@@ -26,7 +26,7 @@ def dependencies(wheels,receipt,lock):
   source=expected.get(name)
   if not source or name in seen or source['version']!=version:raise ValueError('UNEXPECTED_OR_DUPLICATE_WHEEL_IDENTITY')
   if source['kind']=='bdist_wheel' and (source['filename']!=path.name or source['sha256']!=actual):raise ValueError('OFFICIAL_WHEEL_BYTES_CHANGED')
-  if not (path.name.endswith('-py3-none-any.whl') or path.name.endswith('-py2.py3-none-any.whl') or path.name.endswith('-cp312-cp312-win_amd64.whl')):raise ValueError('UNREVIEWED_WHEEL_PLATFORM')
+  if not (path.name.endswith('-py3-none-any.whl') or path.name.endswith('-py2.py3-none-any.whl') or path.name.endswith('-cp312-cp312-win_amd64.whl') or (source['kind']=='bdist_wheel' and path.name.endswith('-py3-none-win_amd64.whl'))):raise ValueError('UNREVIEWED_WHEEL_PLATFORM')
   seen.add(name);result['vendor/wheels/'+path.name]=content
   records.append({'name':source['name'],'version':version,'wheel':path.name,'wheel_sha256':actual,'source_url':source['url'],'source_sha256':source['sha256'],'method':'OFFICIAL_WHEEL' if source['kind']=='bdist_wheel' else 'GENUINE_SOURCE_BUILT_OFFLINE_UNDER_WFP'})
  if seen!=set(expected):raise ValueError('RUNTIME_DEPENDENCY_MISSING')
