@@ -1,8 +1,9 @@
-> Continuidade 19/11/2026: última validação integral anterior à entrega completa:
-> `782ec43abd10b293a444c629d82528ff6513c510`. Troca real + nove telas PASS.
-> Os gates da entrega do ZIP fechado executam novamente no HEAD; só o recibo
-> externo QUALIFICACAO_LAB.json e a CI daquele SHA comprovam a entrega final.
-> Homologação operacional/física PENDENTE. Ver atualização ao final.
+> **Fechamento LAB confirmado em 19/11/2026:** produto congelado
+> `3ab8df55e03fa2b961df100649de6541d2232bd6`, cinco CIs SUCCESS e download final
+> conferido no checkpoint 7008796942. Homologação física/operacional PENDENTE.
+> As seções antigas abaixo preservam a cronologia RED/GREEN; não são instruções
+> para repetir trabalhos já aprovados. Ver o fechamento e a próxima etapa ao final.
+> [Roteiro supervisionado OPPO](../homologation/PR98_ATUALIZACAO_SUPERVISIONADA_OPPO_20261119.md).
 
 # Instalação Windows — continuidade após PR97, 18/11/2026
 
@@ -361,3 +362,103 @@ recusa legítima ANTES da barreira e exige ausência de 409 na nova navegação,
 todas as folhas de estilo carregadas/cssRules e cache SHA/inventário persistente
 comprovados por leitura. Erros inesperados continuam reprovando. Sem apagar as
 reproduções anteriores e sem mudar runtime produtivo para facilitar o ensaio.
+
+
+## Fechamento definitivo do produto 3ab8df55 e preparação da estação real
+
+Checkpoint independente lido integralmente:
+https://github.com/pedrokam700/Central-de-Controle-/pull/98#issuecomment-7008796942.
+Na retomada, HEAD era exatamente 3ab8df55 e a worktree estava limpa; registro
+privado de continuidade preservado antes de editar. Nada foi descartado.
+
+### Produto aprovado, sem reconstrução
+
+**SHA de código/ZIP: 3ab8df55e03fa2b961df100649de6541d2232bd6.**
+Cinco execuções conferidas por consulta de estado, sem repetir testes/builds:
+
+| Gate | Run | Resultado |
+|---|---|---|
+| Instalação Windows real sintética + entrega | [44519337968](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44519337968) | SUCCESS |
+| Integração Python/876 Node/Chromium | [44519337941](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44519337941) | SUCCESS |
+| LAB/D01/D02 | [44519337962](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44519337962) | SUCCESS |
+| P04 | [44519337991](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44519337991) | SUCCESS |
+| P08 | [44519338069](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44519338069) | SUCCESS |
+
+[Artefato final 14527418568](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44519337968/artifacts/14527418568),
+retenção informada até 19/12/2026. ZIP interno
+CENTRAL_AMES_CANDIDATA_3ab8df55e03fa2b961df100649de6541d2232bd6.zip,
+69.551.529 bytes, 393 membros, CRC geral OK, SHA256
+`e503a42702a7931994b2a1f11d7ae01b668a8fc8a743d326871fe209c484a5a9`.
+Transporte externo: 9 membros/CRC OK, SHA256
+`5f59cb38893032bcaf659f80ec788467833de773c2d73ea2f1ec9379dfc90f40`.
+A verificação adicional dos bytes recebidos foi feita e registrada no checkpoint
+independente; não foi refeita nesta missão. Manter SHA externo/interno distintos.
+
+QUALIFICACAO_LAB.json exige instalação e nove telas PASS, física PENDING e
+factory_installation_authorized=false. Inclui o ZIP fechado com 21 wheels,
+verificação independente de fontes/manifestos/hashes/CRC, troca real, SQLite/WAL,
+identidade, histórias, motor correto, reinício, nova evidência e recusa do retorno
+antigo. A segunda troca com I/O falho após nova evidência exige STOP R2.
+O teste final do worker exige ativação concluída, nova navegação, estilos reais
+carregados, cache SHA e inventário persistente; não removeu a proteção 409.
+Não alterar ou gerar nova candidata para atualizar apenas esta documentação.
+
+### Contexto informado pelo usuário e apoio solicitado
+
+Interface atual: Microsoft Edge em
+http://127.0.0.1:8765/Central-de-Controle-/.
+Windows/build e raiz ativa NÃO IDENTIFICADOS. Não presumir 0.5.39 ou EEDACC65.
+A origem local foi informada, mas UID/perfil/outbox e código servido continuam
+sem atestado. Não trocar para localhost, Chrome ou HTTPS para contornar isso.
+Chrome/CDP de coleta OPPO e sessão da interface Edge são escopos separados.
+
+O usuário pediu identificação preferencialmente automática e somente leitura,
+sem escolher pastas. Suplemento novo, FORA do produto congelado:
+`scripts/install98/IDENTIFICAR_CENTRAL_8765_READONLY.ps1`.
+Parte do PID proprietário de 8765, exige imagem/argv canônicos absolutos, deriva
+root, verifica arquivos por metadados e repete identidade do proprietário. Não
+faz HTTP, importa agente, abre SQLite/WAL/config/token/perfis, altera processos,
+rede, registro, políticas ou arquivos. Versão do manifesto é declaração, não
+prova completa. Saída privada IDENTIFIED/STOP nunca concede lease/autorização.
+Porta sem listener, donos diferentes, bind não loopback, metadata inacessível,
+comando não reconhecido, link/junction/UNC ou mudança de identidade dão STOP.
+
+Apoio tem suíte própria em Windows descartáveis 2022/2025, metadados sintéticos,
+estados privados opacos bloqueados contra leitura e recusa de listener real não
+agente, sem requisição HTTP. Não inicia a Central nem usa MES. A primeira prova
+44548671756 reprovou sintaxe PowerShell; corrigida antes de qualquer uso real.
+Não declarar o suplemento validado até a CI específica concluir.
+
+A workflow já existente ganhou dispatch exclusivo desse apoio; jobs de build,
+instalação e entrega anteriores só rodam em push e NÃO são executados pelo
+novo dispatch. Commits de apoio/documentação usam [skip ci] para respeitar a
+instrução de não repetir gates aprovados. As cinco CIs do produto são as de
+3ab8df55, não testes do HEAD documental. A CI focada não é homologação física,
+revalidação global nem novo pacote. Runtime e arquivo aprovado ficam inalterados.
+
+### Próxima etapa única e bloqueadores concretos
+
+[Roteiro prático completo](../homologation/PR98_ATUALIZACAO_SUPERVISIONADA_OPPO_20261119.md):
+identificação por porta; baseline/versão; pendências de jobs/checkpoints/Edge/
+outboxes; C0 íntegro e externo; coordenação dos escritores; compatibilidade;
+troca normal; aceite local; piloto OPPO; STOP/R0/R1/R2. Contém entrada de leitura,
+critérios GO/NO-GO e registro privado. Não é permissão para executá-los.
+
+Faltam observações e autorização específicas da estação: versão/raiz reais,
+contratos de retirada/guardian/todas as sessões; pendências e ACK Edge; método
+coerente de C0/exclusividade/restauração com estado externo; Python/Windows/
+SQLite/JSON1/tzdata/Edge/Chrome; integridade e dados reais antes/depois; rede,
+credenciais/permissões e piloto físico OPPO. O coordenador pode preparar rede/
+dependências ANTES do popup. Não clicar para “só diagnosticar”. Seu backup não
+atesta browser_sync nem lease e não captura sozinho todo o estado externo.
+
+Não parar A e depois tentar usar o coordenador sem raiz ativa identificável;
+a captura e eventual reabertura R0 precisam plano, scheduler sob controle e
+baseline atualizada antes de B. R2 nunca volta ao A antigo nem restaura C0 sobre
+B. Não limpar journals/cache, inventar vínculos/horários ou confirmar popup sem
+prova das pendências. P02 real, P04 real e P05/P07/P08/G0–G7 físicos PENDENTES.
+Não houve acesso a instalação, SQLite, credencial, rede, Edge/Chrome ou MES reais.
+PR permanece DRAFT; nenhuma instalação/deploy/merge ou alteração de main/PRs
+anteriores. A entrega do arquivo não encerra a meta de coletar no OPPO: a próxima
+ação é o inventário assistido de leitura, seguido dos gates da estação e piloto,
+quando autorizados.
