@@ -202,3 +202,16 @@ jobs:
           $ErrorActionPreference='Stop'
           & ./scripts/install98/assisted-preflight.test.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Existing switch parser compatibility without running transaction
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & ./scripts/ames-pr69-switch-parser.windows.test.ps1
+          if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Existing focused Node and Python entry contracts without builders
+        shell: powershell
+        run: |
+          node --test scripts/ames-pr69-complete-package.test.mjs scripts/ames-pr70-safe-switch.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B scripts/install98/full-entry.test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

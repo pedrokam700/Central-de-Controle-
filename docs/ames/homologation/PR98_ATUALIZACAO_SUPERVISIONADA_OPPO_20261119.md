@@ -8,17 +8,24 @@ identificados. Essa URL confirma o endereço usado, não a versão, raiz ou banc
 A sessão da interface Edge e uma eventual sessão MES/Chrome são estados distintos.
 Não trocar de navegador ou origem para contornar autenticação ou pendências.
 
-## O que fazer primeiro
+## O que fazer primeiro — bloqueio real de 19/11/2026
 
-1. Na próxima etapa autorizada, executar somente o identificador abaixo. Ele
-   descobre a pasta pelo PID dono de 8765; não exige escolher uma instalação.
-2. Conferir versão, pendências e preservação privada com o responsável da estação.
-   **IDENTIFIED não significa autorização para atualizar.**
-3. Só depois de fechar os bloqueadores e autorizar a janela, executar a troca
-   normal, verificar os dados e fazer um piloto pequeno de coleta no MES OPPO.
+**Não repetir o download/execução do PS1 avulso nem executar comandos de PID ou
+política. Não executar o `01_TROCAR.bat` normal para diagnosticar.** O arquivo
+anterior tinha hash correto, mas a estação bloqueou sua execução. A consulta
+anterior só comprovou `owner_count != 1`: zero OU múltiplos proprietários.
+Uma aba Edge aberta não comprova servidor ativo.
 
-Não executar `01_TROCAR`, instalador, reparador, guardian, diagnóstico MES,
-backup, abertura de banco ou alteração de rede nesta fase de identificação.
+A próxima interação do usuário é **uma solicitação à TI**, com o texto da seção 1.
+A engenharia acrescentou um pré-flight no coordenador existente, com entrada
+única `00_CONFERIR_ATUALIZACAO.bat`; ele não inicia troca nem serviços. A entrada
+é código novo de suporte na PR, **não está no ZIP congelado 3ab8df55**. Não pedir
+que o usuário baixe scripts separados ou substitua arquivos do pacote aprovado.
+
+Somente depois de resolver o controle corporativo e disponibilizar uma revisão
+integrada validada, a etapa assistida será: abrir a entrada de conferência uma
+vez, acompanhado pelo responsável autorizado. `IDENTIFIED_ACTIVE` é observação,
+não GO. Backup, janela de manutenção e coleta continuam exigindo os gates abaixo.
 
 ## Candidata congelada e comprovada
 
@@ -57,81 +64,95 @@ refazer essa comparação para identificar a estação ou implementar de novo as
 funções presentes. O identificador é apenas complemento da detecção já existente
 no coordenador; a atualização continua sendo pasta nova + `01_TROCAR.bat`.
 
-## 1. Identificação automática, somente leitura — futura autorização de inventário
+## 1. Conferência assistida no coordenador existente
 
-Usar o suplemento [IDENTIFICAR_CENTRAL_8765_READONLY.ps1](../../../scripts/install98/IDENTIFICAR_CENTRAL_8765_READONLY.ps1).
-Salvar isoladamente numa pasta de apoio/Downloads, **fora de A, B e backups**.
-Não é necessário instalar Python, escolher a pasta da Central ou abrir SQLite.
-Hash SHA256 do suplemento:
-`b655315610ac3459f7a3a91e592c6333f00ba75f6b2bd306c2f10217be27eb51`.
-Se o download não coincidir, STOP; não executar HTML salvo como PS1 ou normalizar
-bytes para forçar o hash. Somente este apoio tem esse hash, não o ZIP da Central.
+### Solicitação única à TI — pode ser encaminhada sem comandos ou anexos privados
 
-Validação final do apoio: [CI 44550376501](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44550376501),
-22 contratos em CADA Windows 2022/2025, SHA
-`310cf7e7a00a7cdaa8d0b6b0772736a2a3922123`, SUCCESS. Sintaxe nativa, metadados
-sintéticos, arquivos privados opacos travados contra leitura, PID reutilizado,
-links e listener real não agente; sem iniciar Central/MES ou abrir SQLite.
-A discussão da PR registra a última CI específica do HEAD documental. Isso não
-é novo teste da candidata, instalação na estação nem concessão de exclusividade.
+> Preciso identificar, somente por leitura, a instalação A-MES usada pelo Edge em
+> `http://127.0.0.1:8765/Central-de-Controle-/`, antes de qualquer atualização.
+> O PS1 aprovado foi bloqueado por PSSecurityException/UnauthorizedAccess; os
+> escopos de ExecutionPolicy foram informados como Undefined. A consulta de porta
+> não comprovou um proprietário único. Não sabemos ainda Windows, pasta ou banco.
+> Solicito análise da política efetiva, GPO e eventuais AppLocker/WDAC/assinatura,
+> e definição do método corporativo permitido para executar a entrada somente
+> leitura da PR98. Não autorizo Bypass, mudança da política pelo usuário, abertura
+> de banco, parada/início de serviços, acesso MES ou alteração de rede nesta fase.
+> A TI deve revisar/aprovar a revisão exata, sua distribuição íntegra e as leituras
+> locais TCP/CIM/HKCU Run. Se não forem permitidas, o resultado é STOP, com motivo.
+> Não liberar o atualizador inteiro por consequência da aprovação deste inventário.
+> Referência: PR98, checkpoint 7017792994 e esta seção do roteiro supervisionado.
 
-No Windows PowerShell, quando autorizada a identificação:
+`Undefined` em todos os escopos não informa uma permissão efetiva. A assinatura
+isolada também não torna um PS1 executável sob `Restricted`. A TI precisa dizer
+qual mecanismo autorizado se aplica à estação; não há liberação genérica ou
+mudança de escopo implícita. A coleta destas informações pela TI é uma futura
+observação autorizada; nada foi executado remotamente nesta missão.
 
-```powershell
-Get-FileHash -LiteralPath "$env:USERPROFILE\Downloads\IDENTIFICAR_CENTRAL_8765_READONLY.ps1" -Algorithm SHA256
-powershell.exe -NoProfile -File "$env:USERPROFILE\Downloads\IDENTIFICAR_CENTRAL_8765_READONLY.ps1"
-```
+### Uma única entrada, sem nova descoberta independente
 
-A localização acima é apenas a do suplemento baixado; a raiz A vem do processo.
-Não elevar privilégios automaticamente, alterar ExecutionPolicy ou usar Bypass.
-Se permissões/política impedirem a leitura, parar e tratar com TI. Não executar
-scripts existentes da instalação para tentar obter o mesmo resultado.
+Fonte: [00_CONFERIR_ATUALIZACAO.bat](../../../tools/ames-workstation/00_CONFERIR_ATUALIZACAO.bat)
+→ `01_TROCAR.bat /identificar` → ramo seguro do BAT existente → mesmo
+`TROCAR_PARA_PR69_NOVA.ps1 -IdentifyOnly`.
 
-O suplemento:
+O ramo consulta somente o nome da política efetiva antes de executar qualquer
+arquivo PowerShell. Sob `Restricted`, retorna `STOP_TI_EXECUTION_POLICY`, exit 77,
+sem carregar o coordenador. O comando dessa consulta não lê/interpreta PS1.
+Sob outra política, usa `-File` normalmente, sem mudar a política ou burlá-la;
+assinatura/controle de aplicação ainda podem bloquear e exigem TI. Não usa IEX,
+EncodedCommand, Unblock-File ou leitura do script para execução inline.
 
-- lê a tabela TCP local e exige um único PID em 8765; IPv4/IPv6 do mesmo PID
-  contam como um processo. Não faz requisição HTTP nem conexão ao listener;
-- exige metadados CIM de imagem/criação/linha de comando e o formato canônico
-  estrito `python.exe -u <entrypoint absoluto>` (ou `pythonw.exe`), com
-  entrypoint `<raiz>\ames-agent\agent_hardened_entry.py`;
-  nomes parecidos, argumentos adicionais ou formato não reconhecido dão STOP;
-- deriva a raiz do entrypoint absoluto, recusa caminhos de rede e links/junctions,
-  verifica a presença dos arquivos de estado por **metadados**, sem ler seus bytes;
-- lê só o manifesto de código e hashes dos scripts públicos de suporte. O SHA
-  do manifesto é uma **declaração**, não prova completa dos arquivos instalados;
-- repete a observação de porta/PID/criação/argv e hash do entrypoint. Mudança
-  durante a observação dá STOP. Não concede lease/exclusividade global;
-- informa Windows/build/64 bits, raiz, metadados SQLite/WAL/SHM e presença de
-  journals; não abre banco/config/token/perfis e não lê source_id ou credenciais;
-- não inicia/para processos, importa agente, instala software, modifica arquivos,
-  registro, rede, rotas, firewall ou sessões. O Windows pode manter sua auditoria
-  normal; não se promete ausência de eventos do próprio sistema operacional.
+O coordenador reutiliza `Identify`, `RootFor`, parser nativo de argv e leitura
+HKCU Run do fluxo existente. O ramo termina antes da rede, dependências, mutex
+transacional, popup, paradas, registro, journal e transferência. O corpo da
+transação aprovada permanece idêntico a 3ab8df55. Os três scripts públicos de
+barreira de A são conferidos pelos hashes já aprovados; versão desconhecida
+não é adotada por nome. Caminhos de rede e junctions são recusados antes da
+travessia. Config, token, SQLite e WAL não são abertos nem têm bytes calculados:
+só presença/metadados. A raiz apontada não comprova conteúdo, frescor ou C0.
 
-Saída `IDENTIFIED`, exit 0: raiz observada, **operational_update_authorized=false**.
-Saída `STOP`, exit 2: preservar a situação e informar o código; não procurar uma
-pasta por nome/data e não executar a instalação. Um formato antigo legítimo pode
-ser recusado: isso exige análise, não significa que os dados desapareceram.
-
-A saída é PRIVADA e mostra caminhos. Guardá-la localmente de modo aprovado.
-No GitHub, compartilhar apenas estado/código, versão Windows e SHA declarado
-sem dados pessoais; nunca JSON completo, CommandLine, token, banco ou perfis.
-
-### Se aparecer STOP: motivo e próximo passo
-
-| Código / situação | Próximo passo seguro, sem adivinhar pasta ou PID |
+| Resultado | Interpretação / próximo passo |
 |---|---|
-| `STOP_NO_LISTENER` | A porta não estava atendendo na observação. Não concluir que o banco sumiu nem abrir outra instalação. Preservar a situação e informar o código para revisão assistida do estado/atalho |
-| `STOP_AMBIGUOUS_OWNER` / `STOP_NON_LOOPBACK_BIND` | Propriedade/bind exige esclarecimento. Não escolher um PID, matar processos ou alterar host/rotas para passar |
-| `STOP_UNSUPPORTED_COMMAND_SHAPE` / `STOP_UNRECOGNIZED_ENTRYPOINT` / `STOP_UNRECOGNIZED_INTERPRETER` | Pode haver formato antigo/desconhecido. Informar o código; revisão privada do comando real será necessária. Não renomear scripts nem afrouxar o parser por tentativa |
-| `STOP_OWNER_CHANGED_DURING_OBSERVATION` / metadados de processo indisponíveis | O testemunho não é estável/completo. Não substituir nada; aguardar análise do reinício/proprietário e nova observação assistida |
-| Cmdlet, permissão, política ou `STOP_OBSERVATION_FAILED` | Não usar Bypass/elevação automática; confirmar com TI a leitura permitida e o Windows utilizado |
-| Caminho não local, drive ou link/junction | Não acessar share ou copiar dados para contornar. Rever privadamente o armazenamento e a raiz, sem seguir links |
-| Estado crítico ausente, caminho não é arquivo ou manifesto inválido | Não criar banco/config/token vazios. Preservar o conjunto e investigar antes de atualizar |
+| `STOP_TI_EXECUTION_POLICY` / PSSecurityException / assinatura / AppLocker / WDAC | TI define método permitido. Não repetir comandos, usar Bypass, mudar política ou abrir o atualizador normal |
+| `NO_LISTENER_NO_PROVEN_ROOT` | Zero proprietários distintos e nenhuma raiz reconhecida. Preservar tudo; responsável autorizado precisa comprovar a origem por evidência privada. Não varrer pastas nem iniciar A para criar prova |
+| `MULTIPLE_LISTENER_OWNERS` | Mais de um proprietário. Não escolher PID, encerrar processo ou adotar o registro como substituto |
+| `UNKNOWN_LISTENER_OWNER` | O dono não foi reconhecido como agente da instalação. STOP mesmo havendo Run válido |
+| `REGISTERED_ROOT_WITHOUT_ACTIVE_WITNESS` | Run aponta raiz candidata, mas pode estar obsoleto. Raiz mostrada privadamente, STOP; não é prova dos dados originais |
+| `INACTIVE_ROOT_FOUND_DATA_UNVERIFIED` / `AGENT_NOT_LISTENING` | Guardian/processo aponta raiz sem listener; agente parado/transitório continua hipótese. STOP, sem relançar |
+| `CONFLICTING_ROOT_EVIDENCE` / `GUARDIAN_NOT_REGISTERED` / `REGISTERED_ROOT_UNRECOGNIZED` | Run/processos não fornecem uma origem coerente. STOP sem corrigir registro ou escolher pastas |
+| `OBSERVATION_UNAVAILABLE` / `OBSERVATION_CHANGED` | Consulta falhou ou testemunho mudou; não converter falta de evidência em zero/ausência |
+| `PUBLIC_BARRIER_UNRECOGNIZED` / `ROOT_OR_STATE_METADATA_UNVERIFIED` / journal existente | Versão, armazenamento ou manutenção requerem revisão. Não criar arquivos vazios, editar hashes ou limpar journal |
+| `IDENTIFIED_ACTIVE` | Um agente reconhecido atende 8765 e as referências observadas são coerentes. `update_authorized`, `maintenance_lease`, `browser_sync_attested` e `state_originality_proven` continuam **false**. Próxima etapa é baseline privada, não troca automática |
 
-Um resultado IDENTIFIED só determina a raiz observada e seus limites. O usuário
-não precisa procurar PIDs ou selecionar instalação: os dados detalhados ficam
-na saída privada, e o resumo redigido orienta a próxima etapa. Não repetir a
-instalação antiga como ferramenta de descoberta.
+A saída contém raiz/caminhos privados. Não publicar JSON completo, linhas de
+comando, registros, tokens, banco ou perfis. O resumo público só precisa do
+estado e motivo. Nenhuma busca global, reinício ou seleção de pasta é solicitada
+ao usuário. Não são verificados serviços/tarefas de todas as contas, integridade
+do banco, outbox ou ACK nesta leitura; isso pertence aos gates seguintes.
+O Windows pode gerar auditoria e o parser nativo existente pode usar temporários
+do compilador .NET; não se promete ausência de eventos/artefatos do próprio OS.
+Nenhum arquivo de instalação ou estado é criado por este ramo.
+
+### Distribuição e limites desta correção
+
+A candidata 3ab8df55 permanece intocada, com as cinco CIs aprovadas. A extensão
+está no fonte da mesma PR98; não foi publicado ZIP novo nem é permitido copiá-la
+sobre arquivos manifestados da candidata aprovada. A aprovação antiga não atesta
+a extensão nova nem a política da estação. A inclusão íntegra da entrada numa
+futura revisão do pacote exige validação própria de manifesto e distribuição,
+sem instalar na estação. Primeiro fechar com TI o método realmente permitido;
+gerar outro ZIP agora não resolveria uma restrição corporativa.
+
+O BAT legado de troca normal ainda contém `ExecutionPolicy Bypass`. **Ele não é
+um caminho aprovado para esta estação sob o bloqueio informado.** A aprovação
+corporativa deve abranger posteriormente a cadeia real de atualização/início,
+não só a conferência. Se a TI exigir assinatura ou outra alteração que mude os
+hashes das barreiras, STOP e preparar uma revisão íntegra qualificada; não assinar
+ou editar isoladamente A/B para fazer o identificador aceitar. Não existe GO
+operacional nesta documentação.
+
+O suplemento antigo e seus 22 contratos por Windows continuam no histórico;
+não precisam ser repetidos nem recomendados ao usuário neste cenário. A prova
+nova e os SHAs exatos constam no handoff e nos checkpoints da discussão da PR98.
 
 ## 2. Baseline privada da instalação A — antes de autorizar a troca
 
@@ -337,10 +358,12 @@ campo de journal. Não usar `update_candidate.py rollback` para este ZIP CLEAN.
 | G6 — contingência | STOP R2 aprovado no LAB; exclusividade/captura e recuperação supervisionada da estação continuam PENDENTES |
 | G7 — aceite MES | PENDENTE: autorização, conexão e piloto físico OPPO com referências independentes; só depois uso normal |
 
-Os fatos novos conhecidos são somente URL local e Edge. P02 real, P04 real,
+Além de URL local e Edge, há agora prova relatada do bloqueio de execução e de
+propriedade de porta não única; zero e múltiplos ainda não foram separados no posto. P02 real, P04 real,
 P05/P07/P08 reais e G0–G7 físicos não são concluídos por documentação ou CI.
-Próxima ação única: **inventário assistido somente leitura**, após autorização
-para essa observação; nenhuma substituição, backup ou coleta automática.
+Próxima ação única: **encaminhar a solicitação acima à TI**; depois da aprovação
+corporativa e da distribuição íntegra, inventário assistido somente leitura.
+Nenhuma substituição, backup ou coleta automática está autorizada nesta etapa.
 
 ### Registro privado mínimo da sessão futura
 

@@ -568,3 +568,117 @@ P02 real, P04 real, P05/P07/P08 reais e G0–G7 físicos PENDENTES. Main/PRs ant
 rede/guardian/SQLite/perfis/credenciais operacionais intocados. Sem nova PR,
 instalador, ZIP, merge, deploy ou acesso OPPO. O ponto de continuidade é a
 identificação assistida da estação e o plano de troca existente, não outra pesquisa.
+
+
+## Retomada 19/11/2026 — bloqueio real de identificação / entrada integrada
+
+**Este bloco substitui a recomendação anterior de baixar e executar o PS1
+avulso no cenário desta estação.** Checkpoint obrigatório
+[7017792994](https://github.com/pedrokam700/Central-de-Controle-/pull/98#issuecomment-7017792994)
+lido integralmente. Retomada em `5d20a1b5211d30d6ca92adc2b685df58f3b1132d`,
+branch `work/ames-windows-installation-20261118`, worktree limpa. Estado Git
+preservado antes de editar. Nenhum reset/limpeza/restauração ou nova PR.
+
+### Causas comprovadas e limites
+
+- PS1 avulso teve hash correto, mas a execução foi negada na estação, segundo
+  evidência do usuário. Todos os escopos Undefined não identificam uma política
+  efetiva permissiva. GPO/WDAC/AppLocker, assinatura e edição Windows reais ainda
+  não foram observados; não inferir qual controle causou a negativa.
+- O resultado anterior da porta é `owner_count != 1`, zero OU múltiplos. A URL
+  da aba Edge não comprova listener atual, versão ou desaparecimento de dados.
+- O identificador avulso exige listener único. O coordenador existente já tinha
+  Identify/RootFor/parser/guardian/Run, mas não possuía um ramo terminal de leitura.
+  O BAT normal usa Bypass e pode preparar rede/dependências antes do popup;
+  não é um diagnóstico permitido nem uma solução para política corporativa.
+- Registro válido pode estar obsoleto; guardian sem listener também não atesta
+  a origem/frescor do SQLite. Sem prova, a resposta continua STOP, mostrando
+  apenas a raiz candidata privada quando derivável. Não relançar A para obter
+  listener. C0/outbox/ACK/escritores globais não são certificados nesta leitura.
+
+### Correção estritamente de suporte
+
+`00_CONFERIR_ATUALIZACAO.bat` delega a `01_TROCAR.bat /identificar`. O ramo novo
+no BAT consulta só metadados de política; Restricted retorna exit 77 e
+STOP_TI_EXECUTION_POLICY sem carregar PS1. Caso permitido, chama `-File` com
+IdentifyOnly sem Bypass/alterar política/executar conteúdo inline. Assinatura e
+controle de aplicação continuam sendo aplicados; falha exige TI.
+
+O mesmo coordenador recebe IdentifyOnly e usa seus próprios helpers existentes,
+acrescentando leitura fail-closed de TCP/CIM/Run, referências coerentes, hashes
+públicos das três barreiras, caminhos locais sem reparse e metadados privados.
+Zero/múltiplos/desconhecido/conflito/transição/journal/estado ausente resultam em
+STOP distinto. Um proprietário reconhecido resulta apenas IDENTIFIED_ACTIVE:
+update_authorized, maintenance_lease, browser_sync_attested e
+state_originality_proven permanecem false. O ramo termina antes da transação.
+A parte mutável aprovada do coordenador é comparada literalmente com 3ab8df55.
+Os helpers normais só recebem a proteção extra de caminho quando IdentifyOnly
+está ativo; não há mudança no fluxo fabril normal.
+
+FIRST_RUN_FILES passou a exigir a entrada única numa FUTURA geração íntegra;
+REQUIRED_FILES e manifesto já derivam desse inventário. Contratos Python/Node
+passam a exigir o novo membro sem excluir os antigos. Somente inventário foi
+editado: builder não foi executado. O ZIP 3ab8df55 NÃO foi alterado/reconstruído,
+nem contém a extensão. Não copiar arquivos novos sobre ele ou repetir downloads
+avulsos. Primeiro fechar o método aprovado pela TI; qualificação e distribuição
+integrada posterior ainda são gates próprios, não cobertos pela CI histórica.
+
+### RED / GREEN verificáveis
+
+| Etapa | SHA / execução / resultado |
+|---|---|
+| RED antes de corrigir | `21b75e2f2af4c1b4bce81c49968feefb6bc7c1bb`, [44587248492](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44587248492), ambos Windows: RED_NO_ASSISTED_READ_BRANCH_IN_EXISTING_COORDINATOR |
+| Primeiros 18 contratos | `a6f514dcc7a578ace4e368dfe340f412a45495a1`, [44587659242](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44587659242), PASS nos dois Windows |
+| Falha de preparação da ampliação | `adc22381ae9748366f50f51d5edbcfd4cfc17fec`, [44587966665](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44587966665), New-Item -Target tratou colchetes como wildcard; corrigida criação da junction sintética com mklink nativo |
+| Contraprova de estado ausente | `affbcbbdb921b95b353a11024904309b31af5da3`, [44588154513](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44588154513), banco sintético removido ainda recebeu IDENTIFIED_ACTIVE; não atribuir ao SQLite ou a dados reais |
+| 24 contratos ampliados | `804c751b11a41dabbd714b0cddb199420e06548d`, [44588562412](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44588562412), PASS nos dois Windows após exigir atributos literais de cada membro |
+| Fechamento de inventário | [7018274828](https://github.com/pedrokam700/Central-de-Controle-/pull/98#issuecomment-7018274828), contraprova AST de FIRST_RUN_FILES ausente, sem builder; entrada acrescentada e teste 25 exige presença |
+| SHA final e CI vinculantes | [Checkpoint de fechamento 7018296412](https://github.com/pedrokam700/Central-de-Controle-/pull/98#issuecomment-7018296412), atualizado após a execução do HEAD exato; consultar conclusão, não presumir aprovação por etapas parciais |
+
+A matriz final exige 25 contratos por Windows Server 2022/2025, o parser nativo
+anterior (seis classificações + mesma raiz de autostart/entrypoint), sete contratos
+Node existentes e três Python BAT/LAB. Sem instalação de dependências, builder,
+ZIP ou agente. O job novo só é disparado manualmente com assisted_only=true e
+identification_only=false; jobs históricos de construção/instalação não executam
+neste dispatch. Não se reporta a seleção focada como nova execução das cinco
+CIs completas, dos 876 contratos ou das nove telas já aprovados no produto.
+
+As provas novas incluem tabela sintética de zero/múltiplos/desconhecido,
+Run/guardian coerentes/conflitantes, agente temporariamente sem listener, origem
+não reconhecida, journal, mudança de observação, UNC/junction, metadados ausentes,
+hash público alterado, falha de consulta que não vira zero, privados opacos com
+FileShare.None e fingerprint sem mutação. Os processos positivos são metadados
+sintéticos, não agentes executados. A cadeia BAT completa também é executada
+realmente sobre uma estação Windows descartável vazia, com CIM/TCP/Run genuínos,
+e retorna NO_LISTENER_NO_PROVEN_ROOT sem criar estado. Restricted é aplicado
+apenas ao ambiente dos processos filhos da fixture; a política da máquina/GPO
+não é alterada nem flexibilizada. O sentinela prova que o PS1 não executou.
+
+### Próxima ação exata e bloqueadores
+
+[Roteiro supervisionado atualizado](../homologation/PR98_ATUALIZACAO_SUPERVISIONADA_OPPO_20261119.md),
+seção 1: **uma solicitação à TI**, pronta para encaminhar, sem mais comandos,
+PIDs, seleção de pasta ou script avulso. TI deve comprovar a política efetiva e
+um método permitido, revisar a revisão exata e a distribuição íntegra e aprovar
+as leituras TCP/CIM/HKCU Run. Assinar um PS1 isoladamente não torna Restricted
+permissivo; não prometer que só assinatura resolve. Se não permitido, STOP.
+
+A aprovação desse inventário não aprova a cadeia antiga de atualização/início
+com Bypass. Se a TI exigir alteração/assinatura que muda hashes, preparar uma
+revisão íntegra qualificada; não editar A, hashes ou manifesto por tentativa.
+A entrada integrada ainda precisa ser distribuída com integridade validada;
+gerar outro ZIP antes de resolver a política não fecha o impedimento.
+
+Depois da observação permitida, baseline privada da origem real e versão, todos
+os escritores/pendências, C0 consistente e restaurável, compatibilidade Windows/
+Edge/Chrome/Python, rede OPPO autorizada e comparação histórica são gates para
+uma janela de troca separadamente autorizada. Só então nove telas locais,
+reinício, preservação de dados novos e piloto pequeno MES com referência
+independente antes de ampliar coletas. Não usar /lab na estação e não abrir A
+com histórico velho depois de B possivelmente executada: STOP R2 e preservar
+A/B/C0. P02/P04/P05/P07/P08 reais e G0–G7 físicos continuam PENDENTES.
+
+Produto/agente/motor/frontend, coleta, clique 3022, regras fabris e três barreiras
+públicas permanecem intocados em relação a 3ab8df55. Main e PRs anteriores não
+foram alteradas; PR98 segue DRAFT. Nenhum dado, rede, guardian, perfil, banco ou
+credencial real foi acessado. Não há homologação física nem autorização de troca.

@@ -117,6 +117,10 @@ Case 'one entry delegates to existing BAT and never installs or bypasses policy'
  $entry=[IO.File]::ReadAllText((Join-Path $repo 'tools\ames-workstation\00_CONFERIR_ATUALIZACAO.bat'))
  if(-not $entry.Contains('01_TROCAR.bat') -or -not $entry.Contains('/identificar') -or $entry -match '(?i)ExecutionPolicy|Bypass|Invoke-Expression|EncodedCommand'){throw 'ENTRY_NOT_SINGLE_SAFE_DELEGATION'}
 }
+Case 'explicit future package inventory includes single entry without executing builder' {
+ $builder=[IO.File]::ReadAllText((Join-Path $repo 'scripts\build-integrated-candidate.py'))
+ if($builder -notmatch "FIRST_RUN_FILES=\('[^']*00_CONFERIR_ATUALIZACAO\.bat'"){throw 'ASSISTED_ENTRY_NOT_PACKAGED'}
+}
 Case 'real integrated entry executes only read branch on an empty disposable station' {
  # Genuine local CIM/TCP/Run observation on the runner. No fixture process/Run
  # is injected, and no Central/SQLite/guardian is opened to create a witness.
