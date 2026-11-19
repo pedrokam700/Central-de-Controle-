@@ -34,8 +34,6 @@ env.update(FIREBASE_EMULATORS_PATH=str(TOOLS/'emulator-cache'),CI='true',NO_UPDA
 configstore=LAB/'firebase-config/configstore';configstore.mkdir();(configstore/'firebase-tools.json').write_text('{"usage":false}')
 config=LAB/'firebase-emulator-fixture.json';config.write_text(json.dumps({'firestore':{'rules':str(RULES)},'emulators':{'auth':{'host':'127.0.0.1','port':9099},'firestore':{'host':'127.0.0.1','port':8080},'hub':{'host':'127.0.0.1','port':4400},'logging':{'host':'127.0.0.1','port':4500},'ui':{'enabled':False},'singleProjectMode':True}}))
 CLI=TOOLS/'firebase-tools-win.exe';java=shutil.which('java');assert java
-java_version=subprocess.run([java,'-version'],capture_output=True,text=True,check=True).stderr
-assert re.search(r'version "21\.',java_version),'GENUINE_JAVA21_REQUIRED'
 # Read back ACTIVE OS rules before executing either genuine tool.
 policy=LAB/'verify-auth-containment.ps1'
 policy.write_text("""param([string]$Group,[string]$CLI,[string]$Java)
@@ -49,6 +47,10 @@ if(@(Get-NetFirewallProfile|Where-Object {-not $_.Enabled}).Count){throw 'AUTH_F
 Write-Output 'OFFICIAL_EMULATOR_PROGRAMS_CONTAINED'
 """)
 subprocess.run(['powershell.exe','-NoProfile','-File',str(policy),'-Group','CENTRAL98-'+os.environ['GITHUB_RUN_ID'],'-CLI',str(CLI),'-Java',java],env=env,check=True)
+java_version=subprocess.run([java,'-version'],capture_output=True,text=True,check=True).stderr
+assert re.search(r'version "21\.',java_version),'GENUINE_JAVA21_REQUIRED'
+cli_version=subprocess.run([str(CLI),'--version'],cwd=LAB,env=env,capture_output=True,text=True,check=True,timeout=45).stdout
+assert INPUTS['cli_version'] in cli_version,'OFFICIAL_CLI_VERSION_MISMATCH'
 def port_open(port):
  with socket.socket() as sock:sock.settimeout(.3);return sock.connect_ex(('127.0.0.1',port))==0
 assert not any(port_open(p) for p in (8765,8080,9099)),'LAB_PORT_ALREADY_OWNED'
@@ -107,7 +109,7 @@ try:
   page.wait_for_function('window.__authFixture!==undefined',timeout=45000)
   receipt=page.evaluate('window.__authFixture');assert receipt.get('ready'),receipt
   assert receipt['sdk']=='10.8.0';context.close()
- receipt.update(schema='central98-genuine-prior-session-v1',method='OFFICIAL_AUTH_AND_FIRESTORE_EMULATORS',auth_mocked=False,storage_injected=False,cloud_access=False,operator_approval_simulated=False,rules_sha256=rules_hash,physical='PENDING')
+ receipt.update(cli_version=INPUTS['cli_version'],java_version=java_version.splitlines()[0],schema='central98-genuine-prior-session-v1',method='OFFICIAL_AUTH_AND_FIRESTORE_EMULATORS',auth_mocked=False,storage_injected=False,cloud_access=False,operator_approval_simulated=False,rules_sha256=rules_hash,physical='PENDING')
 finally:
  if server:server.shutdown();server.server_close()
  if thread:thread.join(timeout=3)
