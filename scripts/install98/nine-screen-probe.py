@@ -40,7 +40,15 @@ with sync_playwright() as p:
  context.route('**/*',local_only);page=context.new_page()
  page.on('pageerror',lambda error:errors.append(str(error)))
  page.on('console',lambda message:console_errors.append(message.text) if message.type=='error' else None)
- page.on('response',lambda response:http_errors.append({'url':response.url.split('?',1)[0],'status':response.status,'content_type':response.headers.get('content-type')}) if response.status>=400 else None)
+ def response_error(response):
+  if response.status<400:return
+  item={'url':response.url.split('?',1)[0],'status':response.status,'content_type':response.headers.get('content-type')}
+  if item['url']=='http://127.0.0.1:8765/api/v1/network/status':
+   try:
+    body=response.json();item.update(error=body.get('error'),message=body.get('message'))
+   except Exception:item['body_unverified']=True
+  http_errors.append(item)
+ page.on('response',response_error)
  page.on('requestfailed',lambda request:failed.append({'url':request.url.split('?',1)[0],'failure':request.failure}))
  page.on('request',lambda request:api_reads.append({'path':request.url.split('?',1)[0].split('8765',1)[-1],'method':request.method}) if request.url.startswith('http://127.0.0.1:8765/api/v1/') else None)
  def on_dialog(dialog):dialogs.append({'type':dialog.type,'message':dialog.message});dialog.dismiss()
@@ -75,8 +83,9 @@ with sync_playwright() as p:
   excel=page.evaluate("""()=>{if(!window.XLSX)return {available:false};const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['SYNTHETIC98'],[42]]),'LAB');const read=XLSX.read(XLSX.write(book,{bookType:'xlsx',type:'array'}),{type:'array'});return {available:true,version:XLSX.version,roundtrip:XLSX.utils.sheet_to_json(read.Sheets.LAB,{header:1})[1][0]===42};}""")
  valid_identity=identity.get('present') and identity.get('uid_sha256')==prior['uid_sha256'] and not identity.get('emulator_connected')
  valid_data=evidence.get('agent_status')=='connected' and evidence.get('source_id')==cap.get('source_id') and evidence.get('defects') is not None and evidence.get('defects')>0
+ expected_lab_network_refusals=all(x['url']=='http://127.0.0.1:8765/api/v1/network/status' and x['status']==500 and x.get('error')=='ValueError' and x.get('message')=='Guardian limitado ao host A-MES 172.29.185.215' for x in http_errors)
  no_mutation=not any(x['method']!='GET' and any(part in x['path'] for part in ('/jobs','/chrome/','/collect','/run/')) for x in api_reads)
- result={'schema':'central98-real-windows-nine-screen-v2','sha':os.environ['GITHUB_SHA'],'candidate_root':root.name,'scope':'UPDATE_WITH_GENUINE_PRESERVED_SYNTHETIC_SESSION','fresh_profile_bypassed':False,'real_agent':True,'auth_mocked':False,'data_mocked':False,'storage_injected':False,'auth_backend_stopped':prior['backend_stopped_before_candidate'],'identity':identity,'identity_preserved':bool(valid_identity),'real_sqlite_evidence':evidence,'agent_evidence_matches':bool(valid_data),'no_MES_mutation':no_mutation,'excel':excel,'cold_profile':cold_result,'views':samples,'external_network_permitted':False,'external_requests_blocked':sorted(set(external)),'page_errors':errors,'console_errors':console_errors,'http_errors':http_errors,'dialogs':dialogs,'static_MIME':mime,'failed_requests':failed,'api_calls':api_reads,'physical':'PENDING'}
- result['qualified']=all(x['rendered'] for x in samples) and bool(valid_identity) and valid_data and no_mutation and excel.get('version')=='0.20.3' and excel.get('roundtrip') and not errors and not dialogs and cold_result['module_ready'] and cold_result['login_visible'] and cold_result['login_button_enabled'] and not cold_result['anonymous_console_visible']
+ result={'schema':'central98-real-windows-nine-screen-v2','sha':os.environ['GITHUB_SHA'],'candidate_root':root.name,'scope':'UPDATE_WITH_GENUINE_PRESERVED_SYNTHETIC_SESSION','fresh_profile_bypassed':False,'real_agent':True,'auth_mocked':False,'data_mocked':False,'storage_injected':False,'auth_backend_stopped':prior['backend_stopped_before_candidate'],'identity':identity,'identity_preserved':bool(valid_identity),'real_sqlite_evidence':evidence,'agent_evidence_matches':bool(valid_data),'no_MES_mutation':no_mutation,'network_diagnostic':{'expected_synthetic_host_refusal':bool(http_errors) and expected_lab_network_refusals,'factory_network_exercised':False,'guardian_protection_changed':False},'excel':excel,'cold_profile':cold_result,'views':samples,'external_network_permitted':False,'external_requests_blocked':sorted(set(external)),'page_errors':errors,'console_errors':console_errors,'http_errors':http_errors,'dialogs':dialogs,'static_MIME':mime,'failed_requests':failed,'api_calls':api_reads,'physical':'PENDING'}
+ result['qualified']=all(x['rendered'] for x in samples) and bool(valid_identity) and valid_data and no_mutation and excel.get('version')=='0.20.3' and excel.get('roundtrip') and not errors and not dialogs and expected_lab_network_refusals and cold_result['module_ready'] and cold_result['login_visible'] and cold_result['login_button_enabled'] and not cold_result['anonymous_console_visible']
  result['blocker']=None if result['qualified'] else 'REAL_UI_OR_PRESERVED_SESSION_NOT_QUALIFIED'
  (out/'nine-screen-receipt.json').write_text(json.dumps(result,indent=2,ensure_ascii=True));print(json.dumps(result),flush=True);context.close()

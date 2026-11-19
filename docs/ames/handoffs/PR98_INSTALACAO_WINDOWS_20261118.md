@@ -227,3 +227,29 @@ preservado, ausência de conexão a emulador na candidata, nove telas reais,
 origem/revisão/dados SQLite via controles históricos genuínos e Excel genuíno.
 Sem esse conjunto, manter FAILURE e preservar screenshots/recibos. Sessão de
 emulador não é prova de credenciais/permissões Cloud nem do PC operacional.
+
+
+## Nove telas reais renderizadas; leitura histórica ainda RED
+
+f757462a0b62817e14e95098b4438db0a4d73f54 / Windows 44515615555:
+9/9 views renderizadas no HTML original, UID preservado, Auth da candidata sem
+emulador, login habilitado e Console fechado no perfil vazio; zero pageerrors e
+diálogos. Regras originais recusaram elevação user→admin no backend sintético.
+Artefato 14525637556 / SHA256 externo
+2bf634f87b8f92c6765766769442f219006171cb172c75ec3cd6d49fd92c0ccc.
+Qualificação integral FAILURE: snapshot não selecionado, não mascarado por 9/9.
+
+Causa comprovada da fixture: snapshots P02 têm window_id NULL e summary.period
+vazio, intencionalmente; o índice histórico JOIN analysis_windows os exclui
+corretamente. O ensaio de INSTALAÇÃO define períodos sintéticos explicitamente
+ANTES de C0/A, por Store.ensure_window, sem apagar dados/revisões ou modificar a
+fixture P02 compartilhada. Incrementa epoch da fonte sintética quando acrescenta
+o vínculo de janela; a projeção nativa reconstrói uma revisão nova normalmente.
+Não atribuir isso a perda de dados produtiva nem inventar períodos em leitores.
+
+HTTP 500 /network/status: a proteção herdada network_watch.route_state recusa
+host diferente de 172.29.185.215. LAB usa 127.0.0.1; NÃO mudar guardian, alvo ou
+rota para contornar a recusa. Capturar mensagem exata do endpoint e classificá-la
+como restrição sintética esperada. Qualquer outro HTTP error continua pendência;
+rede fabril não exercitada. Cloud externo bloqueado é esperado, nunca sucesso
+simulado. Próxima CI exige dados reais do SQLite sintético por controles da UI.

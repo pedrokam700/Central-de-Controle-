@@ -109,6 +109,28 @@ def main():
  record('genuine_windows_GUI_dependencies','PASS',**gui)
  A=LAB/'A';B=LAB/'B';data=A/'ames-agent/data';data.mkdir()
  fixture=runpy.run_path(str(ROOT/'scripts/fixtures/p02_installation.py'));fixture['database'](data/'ames_local.sqlite3')
+ # P02 deliberately has no operational periods. Define this INSTALLATION fixture
+ # before C0/A exists; never manufacture a period while reading real history.
+ # Keep every original raw row and immutable revision. Only the synthetic
+ # fixture's window membership/source epoch is extended using the real Store.
+ window_fixture=LAB/'define-synthetic-periods.py'
+ window_fixture.write_text("""import pathlib,sys
+root=pathlib.Path(sys.argv[1]);sys.path.insert(0,str(root/'ames-agent'))
+from store import Store
+store=Store(root/'ames-agent/data/ames_local.sqlite3')
+with store.connect() as con:
+ before=[tuple(r) for r in con.execute('SELECT * FROM mes_revisions ORDER BY snapshot_id,line,revision')]
+ assert con.execute('SELECT COUNT(*) FROM analysis_windows').fetchone()[0]==0
+for sid,line in ((1,'TAN10103'),(2,'TAN10102')):
+ window=store.ensure_window('previous_day','2026-11-03T07:00:00-03:00','2026-11-04T07:00:00-03:00',None,[line])
+ with store.connect() as con:
+  assert con.execute('SELECT window_id FROM snapshots WHERE id=?',(sid,)).fetchone()[0] is None
+  con.execute('UPDATE snapshots SET window_id=? WHERE id=?',(window,sid))
+  con.execute('UPDATE mes_source_clock SET epoch=epoch+1 WHERE snapshot_id=?',(sid,))
+with store.connect() as con:assert before==[tuple(r) for r in con.execute('SELECT * FROM mes_revisions ORDER BY snapshot_id,line,revision')]
+print('SYNTHETIC_FIXTURE_PERIODS_DEFINED_BEFORE_C0; ALL_OLD_REVISIONS_UNCHANGED')
+""",encoding='utf-8')
+ run([A/'.venv/Scripts/python.exe','-B',window_fixture,A])
  (data/'local_agent_token').write_text('SYNTHETIC98-'+64*'x')
  (data/'checkpoints').mkdir();(data/'checkpoints/fixture.json').write_text('{"scope":"SYNTHETIC98","complete":true}')
  cfg=json.loads((A/'ames-agent/config.example.json').read_text());cfg.update(host='127.0.0.1',port=8765,engine_dir=str(A/'factory-engine'),
