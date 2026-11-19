@@ -9,6 +9,11 @@ on:
         type: boolean
         required: true
         default: true
+      assisted_only:
+        description: 'Only integrated assisted preflight tests; no installation or builder'
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
   actions: read
@@ -174,3 +179,26 @@ jobs:
           Write-Output 'PRODUCT_SHA=3ab8df55e03fa2b961df100649de6541d2232bd6; ONLY_PORT_IDENTIFICATION_TESTS; NO_BUILD_OR_INSTALLATION'
           & ./scripts/install98/port-identification.test.ps1
           if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  assisted-preflight:
+    if: github.event_name == 'workflow_dispatch' && inputs.assisted_only
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Integrated coordinator preflight and restrictive policy counterproofs only
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & ./scripts/install98/assisted-preflight.test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
