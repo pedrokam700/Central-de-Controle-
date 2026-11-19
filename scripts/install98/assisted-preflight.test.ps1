@@ -75,6 +75,29 @@ Case 'opaque config token SQLite WAL may stay exclusively locked' {
   $r=Observe @((Listener 10)) @((Proc 10 'agent' $A)) (Run-For $A);if($r.status -ne 'IDENTIFIED_ACTIVE'){throw 'PRIVATE_CONTENT_WAS_REQUIRED'}
  }finally{foreach($h in $locks){$h.Dispose()}}
 }
+Case 'UNC path refused before share access' {
+ $stopped=$false;try{Assert-ReadOnlySwitchPath '\\SYNTHETIC-UNREACHABLE\private\agent.py'}catch{$stopped=$_.Exception.Message -eq 'NONLOCAL_PATH'}
+ if(-not $stopped){throw 'UNC_NOT_REFUSED'}
+}
+Case 'junction ancestor is refused without following its destination' {
+ $link=Join-Path $lab 'junction';$null=New-Item -ItemType Junction -Path $link -Target $A
+ try{
+  $stopped=$false;try{Assert-ReadOnlySwitchPath (Join-Path $link 'ames-agent\agent_hardened_entry.py')}catch{$stopped=$_.Exception.Message -eq 'REPARSE_PATH'}
+  if(-not $stopped){throw 'JUNCTION_NOT_REFUSED'}
+ }finally{[IO.Directory]::Delete($link)}
+}
+Case 'missing private state never creates a replacement identity or database' {
+ $file=Join-Path $A 'ames-agent\data\ames_local.sqlite3';$raw=[IO.File]::ReadAllBytes($file);[IO.File]::Delete($file)
+ try{Check-Stop (Observe @((Listener 10)) @((Proc 10 'agent' $A)) (Run-For $A)) 'ROOT_OR_STATE_METADATA_UNVERIFIED';if(Test-Path -LiteralPath $file){throw 'DATABASE_CREATED'}}finally{[IO.File]::WriteAllBytes($file,$raw)}
+}
+Case 'unknown public guardian version is not adopted' {
+ $file=Join-Path $A 'suporte\ames-workstation\KEEP_AGENT_RUNNING.ps1';$raw=[IO.File]::ReadAllBytes($file)
+ try{[IO.File]::WriteAllText($file,'SYNTHETIC UNKNOWN');Check-Stop (Observe @((Listener 10)) @((Proc 10 'agent' $A)) (Run-For $A)) 'PUBLIC_BARRIER_UNRECOGNIZED'}finally{[IO.File]::WriteAllBytes($file,$raw)}
+}
+Case 'query failure is unknown evidence and never a zero observation' {
+ function Get-ReadOnlySwitchObservation {throw 'SYNTHETIC_CIM_OR_TCP_ACCESS_DENIED'}
+ $r=Read-OnlySwitchPreflight;Check-Stop $r 'OBSERVATION_UNAVAILABLE';if($null -ne $r.listener_owner_count){throw 'FAILURE_BECAME_ZERO'}
+}
 Case 'all fixture files unchanged; no backup config or journal created' {if((Fingerprint) -cne $before){throw 'FILES_CHANGED'}}
 Case 'normal mutation tail is exact approved code; read branch terminates before it' {
  $old=(& git -C $repo show 3ab8df55e03fa2b961df100649de6541d2232bd6:tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1) -join "`n"
@@ -85,6 +108,17 @@ Case 'normal mutation tail is exact approved code; read branch terminates before
 Case 'one entry delegates to existing BAT and never installs or bypasses policy' {
  $entry=[IO.File]::ReadAllText((Join-Path $repo 'tools\ames-workstation\00_CONFERIR_ATUALIZACAO.bat'))
  if(-not $entry.Contains('01_TROCAR.bat') -or -not $entry.Contains('/identificar') -or $entry -match '(?i)ExecutionPolicy|Bypass|Invoke-Expression|EncodedCommand'){throw 'ENTRY_NOT_SINGLE_SAFE_DELEGATION'}
+}
+Case 'real integrated entry executes only read branch on an empty disposable station' {
+ # Genuine local CIM/TCP/Run observation on the runner. No fixture process/Run
+ # is injected, and no Central/SQLite/guardian is opened to create a witness.
+ $sandbox=Join-Path $lab 'REAL_ENTRY';$null=New-Item -ItemType Directory -Path $sandbox
+ foreach($name in @('01_TROCAR.bat','01_TROCAR_PARA_PR69_NOVA.bat','00_CONFERIR_ATUALIZACAO.bat','TROCAR_PARA_PR69_NOVA.ps1')){Copy-Item -LiteralPath (Join-Path $repo ('tools\ames-workstation\'+$name)) -Destination (Join-Path $sandbox $name)}
+ $beforeReal=@(Get-ChildItem -LiteralPath $sandbox -Recurse -File|ForEach-Object {$_.FullName+' '+(Get-FileHash -LiteralPath $_.FullName).Hash}) -join "`n"
+ $out=& cmd.exe /d /c ('call "'+(Join-Path $sandbox '00_CONFERIR_ATUALIZACAO.bat')+'" <NUL') 2>&1;$code=$LASTEXITCODE
+ if($code -ne 2 -or ($out -join "`n") -notmatch 'NO_LISTENER_NO_PROVEN_ROOT'){throw ('REAL_EMPTY_STATION_UNEXPECTED_RESULT '+($out -join "`n"))}
+ $afterReal=@(Get-ChildItem -LiteralPath $sandbox -Recurse -File|ForEach-Object {$_.FullName+' '+(Get-FileHash -LiteralPath $_.FullName).Hash}) -join "`n"
+ if($afterReal -cne $beforeReal){throw 'READ_BRANCH_WROTE_FILES'}
 }
 Case 'restricted PowerShell causes TI STOP through real BAT without executing coordinator' {
  $sandbox=Join-Path $lab 'POLICY';$null=New-Item -ItemType Directory -Path $sandbox
