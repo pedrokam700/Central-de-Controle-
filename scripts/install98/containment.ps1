@@ -12,7 +12,7 @@ $base=(& $python -B -c 'import sys;print(sys._base_executable)').Trim()
 $programs=@($python,$base,($base -replace 'python.exe$','pythonw.exe'),(Get-Command pwsh).Source,
  "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe",
  'C:\Program Files\Google\Chrome\Application\chrome.exe','C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
- "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe","$lab\build-tools\Scripts\python.exe")
+ "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe","$lab\build-tools\Scripts\python.exe",(Get-Command node -ErrorAction Stop).Source,(Get-Command java -ErrorAction Stop).Source,"$lab\auth-tools\firebase-tools-win.exe")
 foreach($role in @('A','B','S','T')){
  $programs+="$lab\$role\.venv\Scripts\python.exe"
  $programs+="$lab\$role\.venv\Scripts\pythonw.exe"

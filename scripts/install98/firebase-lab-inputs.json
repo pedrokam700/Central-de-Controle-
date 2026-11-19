@@ -1,0 +1,9 @@
+{
+  "schema":"central98-official-emulator-inputs-v1",
+  "cli_version":"15.37.0",
+  "java_major":21,
+  "sources":[
+    {"path":"firebase-tools-win.exe","url":"https://github.com/firebase/firebase-tools/releases/download/v15.37.0/firebase-tools-win.exe","sha256":"56c87b28c656c0bfd01ee746ff30e72a021b4ffd90edf2a269cb79d3e7416710","size":256924000,"authority":"https://api.github.com/repos/firebase/firebase-tools/releases/tags/v15.37.0"},
+    {"path":"emulator-cache/cloud-firestore-emulator-v1.22.0.jar","url":"https://storage.googleapis.com/firebase-preview-drop/emulator/cloud-firestore-emulator-v1.22.0.jar","sha256":"9b6498b7f62714d67f48f59b3818883cd682dbcd46b9f59511de81c97bb5166c","size":136707194,"authority":"https://github.com/firebase/firebase-tools/blob/v15.37.0/src/emulator/downloadableEmulatorInfo.json"}
+  ]
+}

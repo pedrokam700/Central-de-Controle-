@@ -20,6 +20,17 @@ def main():
   req=lab/'build-tools.txt';req.write_text('\n'.join(str(downloads/x['filename'])+' --hash=sha256:'+x['sha256'] for x in lock['artifacts'] if x['scope']=='build'))
   subprocess.run([str(tools/'Scripts/python.exe'),'-m','pip','install','--no-index','--no-deps','--require-hashes','-r',str(req)],check=True)
   print('VERIFIED_OFFICIAL_INPUTS',len(lock['artifacts']))
+  emulator_inputs=json.loads((ROOT/'scripts/install98/firebase-lab-inputs.json').read_text())
+  auth_tools=lab/'auth-tools';auth_tools.mkdir()
+  for entry in emulator_inputs['sources']:
+   target=auth_tools/entry['path'];target.parent.mkdir(parents=True,exist_ok=True)
+   assert entry['path'] in {'firebase-tools-win.exe','emulator-cache/cloud-firestore-emulator-v1.22.0.jar'}
+   part=target.with_name(target.name+'.part');digest=hashlib.sha256();size=0
+   with urllib.request.urlopen(urllib.request.Request(entry['url'],headers={'User-Agent':'CentralAMES-LAB-verified-inputs'}),timeout=180) as response,part.open('xb') as output:
+    while chunk:=response.read(1024*1024):output.write(chunk);digest.update(chunk);size+=len(chunk)
+   assert size==entry['size'] and digest.hexdigest()==entry['sha256'],entry['path']
+   part.rename(target);print('VERIFIED_OFFICIAL_EMULATOR_INPUT',entry['path'],size,flush=True)
+  (auth_tools/'verified-inputs.json').write_text(json.dumps(emulator_inputs,indent=2))
  else:
   assert json.loads((lab/'containment.json').read_text())['kernel_deny_proven'] is True
   for x in lock['artifacts']:

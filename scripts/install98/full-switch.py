@@ -65,6 +65,12 @@ ConvertTo-Json -InputObject $owners -Compress
   assert pristine(root)
  assert read_run() is None,'preexisting autostart identity must not be overwritten'
  S=lab/'S';extract(S)
+ # Previous-browser fixture is created by genuine SDK/backend calls, then the
+ # backend stops. The delivered candidate receives no emulator/Auth override.
+ run([B/'.venv/Scripts/python.exe','-B',ROOT/'scripts/install98/auth-fixture.py',S],timeout=240)
+ auth=json.loads((lab/'auth-fixture-receipt.json').read_text())
+ assert auth['ready'] and auth['backend_stopped_before_candidate'] and not auth['auth_mocked'] and not auth['storage_injected']
+ record('genuine_previous_browser_session_fixture','PASS',method=auth['method'],rules_real=True,role='user',admin_escalation_rejected=auth['admin_escalation_rejected'])
  original_A=tables(A);pid_A=start(A);controller=None
  guard_out=(lab/'guardian-A.stdout').open('w');guard_err=(lab/'guardian-A.stderr').open('w')
  try:

@@ -191,3 +191,39 @@ fixos nos gates anteriores). MIME dos downloads e demais arquivos permanece
 herdado. Sem tocar coletor/SQLite/normalização/auth/rede/guardian. Revalidar UI
 real para revelar os próximos bloqueios; não considerar essa correção GREEN
 completo nem substituir a Central integrada por mini-app.
+
+## Fechamento das dependências web e fixture genuína de sessão anterior
+
+43f17caf98c9febdcbc9e4969286058fedfc0ecb / Windows 44508716726 confirmou
+bootstrap.mjs application/javascript e revelou as dependências CDN Firebase e
+SheetJS bloqueadas. RED bdfd3a13 exige a presença delas no resultado real.
+3b663353 inclui EXATAMENTE Firebase 10.8.0 e SheetJS 0.20.3, fontes oficiais,
+SHA256/tamanho fixos e licenças completas. Build estático confere os inputs e
+muda somente locais de importação para mesma origem. Worker conserva revisão
+por SHA, inventário de clientes e cache imutável; SDKs usam href absoluto da
+origem local e SheetJS entra no precache. app.js/offline-bootstrap/sw originais
+não são reescritos no repositório; nenhum projeto/Auth/perfil é trocado.
+
+O guard genérico recusou corretamente um novo teste que tentava emitir estáticos
+na suíte protegida. O guard NÃO foi afrouxado: input/hash é verificado sem
+builder na suíte; o teste do OUTPUT real é obrigatório no Windows autorizado,
+após extrair/verificar B.zip. Um erro de sintaxe do diagnóstico foi corrigido
+em 4065b85b; d59cd62d não é validação aceita.
+
+Próxima prova: perfil anterior inteiramente sintético preparado por SDK oficial,
+Auth/Firestore emuladores oficiais fixos (CLI 15.37.0 e JAR 1.22.0; Java 21 só
+no runner). Binários precisam de hash e bloqueio por executável antes de rodar.
+Nunca login/deploy/projeto/conta Firebase REAL. Config/cache em LAB; metadados ADC
+desativados e host de fallback loopback. As regras originais são lidas pelo
+emulador sem alterá-las. Criar usuário por createUserWithEmailAndPassword e
+perfil por setDoc, exigir ACK/cache e rejeição real da elevação user→admin.
+Nenhum usuário/JWT é injetado em armazenamento ou no código da candidata.
+
+Backend e servidor de preparação devem ENCERRAR antes de A→S; manter C0 privado
+do perfil fechado. A candidata original só restaura a sessão/cache pelo SDK
+normal, com Cloud inacessível. Testar também perfil vazio: deve carregar login
+legítimo, nunca abrir Console anônimo. No perfil preparado, exigir UID hash
+preservado, ausência de conexão a emulador na candidata, nove telas reais,
+origem/revisão/dados SQLite via controles históricos genuínos e Excel genuíno.
+Sem esse conjunto, manter FAILURE e preservar screenshots/recibos. Sessão de
+emulador não é prova de credenciais/permissões Cloud nem do PC operacional.

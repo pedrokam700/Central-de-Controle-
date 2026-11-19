@@ -43,6 +43,12 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21.0.9+10'
+          architecture: x64
+          check-latest: false
       - name: Download official pinned inputs without executing source packages
         shell: pwsh
         run: |
@@ -91,6 +97,7 @@ jobs:
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/progress.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/startup-*.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/browser-evidence/
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/auth-fixture-receipt.json
           if-no-files-found: warn
           retention-days: 7
 # User authorization: actual execution ONLY on disposable Windows with synthetic data.
