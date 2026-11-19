@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = 'db3cb5b58c99bcf86c44b671280cb42f7dd31d4c'
 BRANCH = 'work/ames-lab-entry-p01-p03-p06-20261117'
 ALLOWED = {
+ 'scripts/install98/full-entry.test.py','scripts/install98/full-switch.py','scripts/install98/nine-screen-probe.py','tools/ames-workstation/01_TROCAR.bat','tools/ames-workstation/01_TROCAR_PARA_PR69_NOVA.bat',
  'tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1','tools/ames-workstation/START_LOCAL_CANDIDATE.ps1',
  # PR98: actual isolated Windows installation proofs and narrowly authorized transfer fix.
  '.github/workflows/ames-windows-installation.yml','scripts/install98/dependencies.json','scripts/install98/prepare.py','scripts/install98/containment.ps1','scripts/install98/integration.py','scripts/install98/transfer-red.test.py','scripts/install98/rollback-probe.ps1','scripts/install98/source-contract.test.py','docs/ames/handoffs/PR98_INSTALACAO_WINDOWS_20261118.md','tools/ames-workstation/SAFE_STATE_TRANSFER.py',

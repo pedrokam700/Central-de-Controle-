@@ -11,7 +11,7 @@ EED='eedacc65445dea9967a92085777b878c1ee9c123'
 ROWS=[]
 def record(name,status,**fields):
  row={'check':name,'status':status,**fields};ROWS.append(row);print(json.dumps(row),flush=True)
- (LAB/'progress.json').write_text(json.dumps({'checks':ROWS,'physical':'PENDING','full_switch_qualified':False},indent=2))
+ (LAB/'progress.json').write_text(json.dumps({'checks':ROWS,'physical':'PENDING','full_switch_qualified':any(x['check']=='full_01_TROCAR_and_START_LOCAL' and x['status']=='PASS' for x in ROWS) and any(x['check']=='nine_real_Windows_candidate_screens' and x['status']=='PASS' for x in ROWS)},indent=2))
 def run(args,**kw):
  # Files avoid a Windows pipe-reader waiting indefinitely for inherited handles
  # in a long-lived descendant. They do not change or replace any tested code.
@@ -153,7 +153,7 @@ def main():
   if old_is_serving:
    ready=api(A,'/api/v1/ready');stop(A,ready['pid'])
   assert tables(B)==newer
-  record('full_01_TROCAR_and_START_LOCAL','PENDING',cause='factory_network_gate_not_executed_as_LAB_bypass')
+  runpy.run_path(str(ROOT/'scripts/install98/full-switch.py'))['execute'](dict(LAB=LAB,A=A,B=B,ROOT=ROOT,run=run,api=api,start=start,stop=stop,tables=tables,record=record))
  finally:
   if pid is not None:
    try:stop(B if (B/'logs/agent_startup_state.json').exists() else A,pid)

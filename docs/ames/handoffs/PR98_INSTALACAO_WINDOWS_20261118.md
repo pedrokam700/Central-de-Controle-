@@ -131,3 +131,38 @@ suas regras permanecem iguais, e isolamento no ensaio é provado pelo firewall.
 Fluxo normal conserva a validação de rede e Chrome/CDP; partida local exige
 configuração já existente/verificada e não abre Chrome MES automaticamente.
 Boot/rota/MES da fábrica continuam PENDENTES.
+
+## Retomada 19/11 — execução integrada da entrada real
+
+Checkpoint independente 6990006741 lido integralmente. Worktree local estava em
+01537b0 com nove arquivos modificados; os nove eram idênticos ao remoto cdb0b34.
+Cópia privada de recuperação foi preservada antes de sincronizar o HEAD.
+No SHA cdb0b34, R2 realmente executou e confirmou STOP_NEW_OR_UNKNOWN_EVIDENCE,
+A ausente e B novo preservado; não reimplementar nem enfraquecer essa correção.
+As quatro matrizes anteriores desse SHA passaram; qualificação completa segue
+pendente somente enquanto entrada completa e nove telas reais não passarem.
+
+RED novo d9131a059d9fae8e4d22fdd9ea70303a1a66c47c: alias descartava argumentos;
+wrapper não oferecia escopo LAB verificável nem propagava comprovadamente RC.
+Correção proposta/executada somente em runners descartáveis: 01_TROCAR /lab
+encaminha -Laboratory -LocalOnly -NoBrowser ao coordenador REAL. Exigir GHA
+Windows, raiz RUNNER_TEMP/LAB exata, marcador sintético explícito, evento WFP
+nativo por RecordID/PID/destino, regras ativas por executável e configuração
+sintética loopback. Não executar preparador de rede fabril. A autorização LAB
+é separada de consentimento operacional: OPERATOR_DIALOG=NOT_EXERCISED, sem
+clique automático nem aprovação visual simulada. Fora do LAB, recusar /lab.
+O fluxo normal conserva o diálogo e a validação de rede anteriores.
+
+A próxima CI executa a cadeia BAT inteira contra instalação sintética A ativa,
+guardian e HKCU Run reais do runner. Contraprovas de escopo, WFP e manifesto
+precisam preservar A/PID/dados/Run. O caso positivo precisa provar stage,
+backup, journal, retirada de A, START_LOCAL real, guardian/Run da candidata,
+reinício após registro adicional e recusa do launcher original de A retirado.
+
+Nove telas: abrir o HTML original entregue, sobre agente REAL Windows, perfil
+Chrome novo e Playwright genuíno; nenhuma injeção de Auth ou datasets, nenhuma
+substituição de app.js/offline-bootstrap. Requests externos são ABORTADOS como
+contenção, nunca respondidos com bibliotecas/dados falsos. Registrar screenshots
+reais e recibo de cada view. Auth/SDK offline, se bloquear, deve manter a
+qualificação FAILURE/PENDING com causa e artefato; não confundir HTML 200 com UI.
+Não gerar nova candidata distribuível até concluir os gates exigidos.

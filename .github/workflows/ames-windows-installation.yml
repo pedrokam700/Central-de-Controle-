@@ -19,6 +19,7 @@ jobs:
       - run: |
           python3 -B scripts/install98/transfer-red.test.py -v
           python3 -B scripts/install98/source-contract.test.py -v
+          python3 -B scripts/install98/full-entry.test.py -v
   genuine-windows:
     runs-on: windows-2025
     timeout-minutes: 30
@@ -67,7 +68,7 @@ jobs:
           python -B scripts/install98/prepare.py build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Execute real installers canonical processes and state transfer using only synthetic copies
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: powershell
         run: |
           python -B scripts/install98/integration.py
@@ -82,6 +83,7 @@ jobs:
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/dependency-receipt.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/progress.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/startup-*.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/browser-evidence/
           if-no-files-found: warn
           retention-days: 7
 # User authorization: actual execution ONLY on disposable Windows with synthetic data.

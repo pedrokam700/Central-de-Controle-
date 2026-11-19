@@ -13,7 +13,7 @@ $programs=@($python,$base,($base -replace 'python.exe$','pythonw.exe'),(Get-Comm
  "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe",
  'C:\Program Files\Google\Chrome\Application\chrome.exe','C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
  "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe","$lab\build-tools\Scripts\python.exe")
-foreach($role in @('A','B')){
+foreach($role in @('A','B','S','T')){
  $programs+="$lab\$role\.venv\Scripts\python.exe"
  $programs+="$lab\$role\.venv\Scripts\pythonw.exe"
  $programs+="$lab\$role\.venv\Lib\site-packages\playwright\driver\node.exe"
@@ -61,6 +61,6 @@ for($attempt=0;$attempt -lt 20 -and $matching.Count -eq 0;$attempt++){
 }
 if($matching.Count -lt 1){throw 'KERNEL_DENIAL_NOT_PROVEN_NO_AGENT_MAY_START'}
 @{schema='central98-windows-containment-v1';kernel_deny_proven=$true;loopback_proven=[bool]$proof.loopback;
- rules=$count;wfp_denials=$matching.Count;scope='PINNED_PYTHON_POWERSHELL_CHROME_PLAYWRIGHT_PROCESSES';physical='PENDING'}|
+ rules=$count;wfp_denials=$matching.Count;wfp_record_id=$matching[0].RecordId;probe_pid=[long]$proof.pid;scope='PINNED_PYTHON_POWERSHELL_CHROME_PLAYWRIGHT_PROCESSES';physical='PENDING'}|
  ConvertTo-Json | Set-Content -LiteralPath (Join-Path $lab 'containment.json') -Encoding utf8
 Write-Output "KERNEL_DENIAL_PROVEN rules=$count; LOOPBACK_PROVEN; no MES endpoint probed"

@@ -1,4 +1,4 @@
-param([switch]$LocalOnly,[switch]$NoBrowser)
+param([switch]$LocalOnly,[switch]$NoBrowser,[switch]$Laboratory)
 # Supervised PR69 switch. Never copies, overwrites or deletes old operational data.
 # The CLEAN builder injects the exact expected SHA into the value below.
 $ErrorActionPreference='Stop'
@@ -11,6 +11,7 @@ $stopped=$false;$committed=$false;$failed=$false;$rollbackNeeded=$false
 $backupRoot=$null;$python=$null;$registrationChanged=$false
 $candidateMayHaveRun=$false;$switchDir=$null
 if($NoBrowser -and -not $LocalOnly){throw 'NoBrowser_requires_LocalOnly'}
+if($Laboratory -and (-not $LocalOnly -or -not $NoBrowser)){throw 'LAB_REQUIRES_LOCAL_ONLY_AND_NO_BROWSER'}
 
 function Fail([string]$message){throw $message}
 function EqualPath($a,$b){return ([string]$a).TrimEnd('\') -ieq ([string]$b).TrimEnd('\')}
@@ -145,6 +146,40 @@ function Preserve-CandidateIntent {
     try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
   }finally{if($locked){$gate.ReleaseMutex()};$gate.Dispose()}
 }
+function Assert-InstallationLaboratory([switch]$CheckSource){
+  # An explicit synthetic CI authorization, NEVER a fabricated operator click.
+  # This path cannot certify a factory network, account or workstation.
+  if($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_OS -cne 'Windows' -or $env:GITHUB_RUN_ID -notmatch '^\d+$'){Fail 'LAB_HOST_UNVERIFIED'}
+  $lab=[IO.Path]::GetFullPath($env:INSTALL98_ROOT).TrimEnd('\')
+  if((Split-Path $lab -Parent) -ine [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\') -or
+     (Split-Path $lab -Leaf) -cne ('CENTRAL-INSTALL-LAB-'+$env:GITHUB_RUN_ID) -or
+     (Split-Path $NewRoot -Parent) -ine $lab -or
+     [IO.File]::ReadAllText((Join-Path $lab '.installation98-synthetic.json')) -cne 'CENTRAL98_SYNTHETIC_INSTALLATION_ONLY'){Fail 'LAB_ROOT_UNVERIFIED'}
+  $proof=Get-Content -LiteralPath (Join-Path $lab 'containment.json') -Raw|ConvertFrom-Json
+  if($proof.kernel_deny_proven -ne $true -or $proof.loopback_proven -ne $true -or
+     [long]$proof.wfp_record_id -le 0 -or [long]$proof.probe_pid -le 0){Fail 'LAB_WFP_DENIAL_UNVERIFIED'}
+  $event=Get-WinEvent -LogName Security -FilterXPath ('*[System[EventRecordID='+[long]$proof.wfp_record_id+']]') -ErrorAction Stop
+  $xml=[xml]$event.ToXml();$fields=@{};foreach($d in $xml.Event.EventData.Data){$fields[$d.Name]=[string]$d.'#text'}
+  if($event.Id -notin @(5157,5152) -or $fields['DestAddress'] -cne '198.51.100.1' -or
+     [long]$fields['ProcessID'] -ne [long]$proof.probe_pid -or $event.TimeCreated -lt (Get-Date).AddHours(-1)){Fail 'LAB_WFP_DENIAL_UNVERIFIED'}
+  if(@(Get-NetFirewallProfile|Where-Object {-not $_.Enabled}).Count){Fail 'LAB_FIREWALL_DISABLED'}
+  $rules=@(Get-NetFirewallRule -Group ('CENTRAL98-'+$env:GITHUB_RUN_ID) -ErrorAction Stop)
+  if($rules.Count -ne [int]$proof.rules -or @($rules|Where-Object {$_.Enabled -ne 'True' -or $_.Action -ne 'Block' -or $_.Direction -ne 'Outbound'}).Count){Fail 'LAB_FIREWALL_RULES_UNVERIFIED'}
+  foreach($rule in $rules){if(@($rule|Get-NetFirewallAddressFilter|Where-Object {$_.RemoteAddress -ne 'Any'}).Count){Fail 'LAB_EGRESS_SCOPE_UNVERIFIED'}}
+  $programs=@($rules|Get-NetFirewallApplicationFilter|ForEach-Object {$_.Program})
+  foreach($required in @((Get-Command python -ErrorAction Stop).Source,(Join-Path $NewRoot '.venv\Scripts\python.exe'),(Join-Path $NewRoot '.venv\Lib\site-packages\playwright\driver\node.exe'),(Join-Path $PSHOME 'powershell.exe'),'C:\Program Files\Google\Chrome\Application\chrome.exe')){
+    if($programs -notcontains $required){Fail 'LAB_EXECUTABLE_NOT_CONTAINED'}
+  }
+  if($CheckSource){
+    if((Split-Path $oldRoot -Parent) -ine $lab){Fail 'LAB_SOURCE_OUTSIDE_ROOT'}
+    $cfg=Get-Content -LiteralPath (Join-Path $oldRoot 'ames-agent\config.json') -Raw|ConvertFrom-Json
+    if($cfg.host -cne '127.0.0.1' -or [int]$cfg.port -ne 8765 -or $cfg.ames_host -cne '127.0.0.1' -or [int]$cfg.ames_port -ne 9 -or
+       $cfg.ames_start_url -cne 'http://127.0.0.1:9/SYNTHETIC98' -or $cfg.ames_wifi_profile -cne 'SYNTHETIC98-NO-WLAN' -or
+       -not ([IO.Path]::GetFullPath($cfg.chrome_profile_dir)).StartsWith($lab+'\',[StringComparison]::OrdinalIgnoreCase)){Fail 'LAB_CONFIGURATION_NOT_SYNTHETIC'}
+    $identity=[IO.File]::ReadAllText((Join-Path $oldRoot 'ames-agent\data\local_agent_token')).Trim()
+    if(-not $identity.StartsWith('SYNTHETIC98-') -or $identity.Length -lt 64){Fail 'LAB_IDENTITY_NOT_SYNTHETIC'}
+  }
+}
 function StopKnown($known){
   $p=Get-CimInstance Win32_Process -Filter "ProcessId=$($known.pid)" -ErrorAction SilentlyContinue
   $now=Identify $p
@@ -198,6 +233,7 @@ try {
   Write-Host 'Depois de parar o agente, faz backup privado, ensaio de restauracao e transferencia verificada.'
   Write-Host 'Somente execute sem coletas/sincronizacoes pendentes.'
 
+  if($Laboratory){Assert-InstallationLaboratory}
   # Network checks happen before stopping the old agent; a failed Wi-Fi/UAC
   # must not cause production downtime.
   if(-not $LocalOnly){
@@ -312,6 +348,10 @@ try {
   # Ask only after validating the old agent, guardian and idle job queue.
   # A click on 01_TROCAR is the operator's intent; never demand a typed word.
   # PCs without an identified old agent exit above with the 00_INICIAR_AQUI path.
+  if($Laboratory){
+    Assert-InstallationLaboratory -CheckSource
+    Write-Host 'LAB_AUTHORIZATION=EXPLICIT_SYNTHETIC_CI; OPERATOR_DIALOG=NOT_EXERCISED'
+  }else{
   try {
     $dialog=New-Object -ComObject WScript.Shell -ErrorAction Stop
     $answer=$dialog.Popup('Agente antigo identificado e nenhuma coleta ativa observada. Confirmou que nao ha sincronizacao pendente no navegador? A troca fara backup privado e restauracao ensaiada antes de iniciar a nova versao. Continuar?',0,'Central/A-MES - troca com preservacao de historico',0x34)
@@ -319,6 +359,7 @@ try {
     Fail 'Confirmacao visual do Windows indisponivel; troca bloqueada sem desligar o agente antigo.'
   }
   if($answer -ne 6){Fail 'Operador escolheu nao prosseguir; agente antigo preservado.'}
+  }
   if($oldRun){WriteRun $null;$registrationChanged=$true}
   foreach($process in @($known|Where-Object {$_.kind -eq 'guardian'})){StopKnown $process}
   foreach($process in @($known|Where-Object {$_.kind -eq 'agent'})){StopKnown $process}

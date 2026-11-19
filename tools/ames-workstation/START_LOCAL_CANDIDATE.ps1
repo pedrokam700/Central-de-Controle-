@@ -62,9 +62,10 @@ try {
   Write-Host '[OK] Central + A-MES local. Login A-MES continua manual. Gate fisico pendente.'
 }catch{
   Write-Host ('[ERRO] '+$_.Exception.Message) -ForegroundColor Red
-  Invoke-StartupDiagnostic
+  if(-not $LocalOnly){Invoke-StartupDiagnostic}
   Write-Host ''
   Write-Host 'O posto NAO foi considerado pronto. Nao inicie coleta ate corrigir a causa acima.' -ForegroundColor Red
-  Read-Host 'Enter para fechar'
+  if(-not $NoBrowser){Read-Host 'Enter para fechar'}
+  exit 1
   exit 1
 }
