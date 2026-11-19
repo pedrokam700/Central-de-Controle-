@@ -166,3 +166,28 @@ contenção, nunca respondidos com bibliotecas/dados falsos. Registrar screensho
 reais e recibo de cada view. Auth/SDK offline, se bloquear, deve manter a
 qualificação FAILURE/PENDING com causa e artefato; não confundir HTML 200 com UI.
 Não gerar nova candidata distribuível até concluir os gates exigidos.
+
+## Troca inteira PASS; MIME Windows comprovado RED
+
+SHA 61a4d515 / CI 44506159525: cadeia BAT/PS inteira PASS, RC0, com stage,
+backup/journal, guardian/HKCU Run de S, A retirado e launcher original de A
+bloqueado. R0 por manifesto corrompido preserva PID/dados/Run. Escopo não-CI e
+prova WFP adulterada recusados. Reinício local S mantém linha nova sem apagar
+as anteriores. São provas reais do procedimento local, não homologação fabril.
+
+UI continua PENDING. Em e7d8ceafa88a9af98dac25dfec5ae233ff66ecd2,
+CI 44507278840 / artifact 14520521641 (SHA256 externo
+c54dfa96d222dae5b1bd3287d61145fdcdcfa98c29075be4fa193c533598a136),
+HTTP real de offline-bootstrap.mjs é text/plain; Chromium recusa estritamente
+módulos antes de Auth carregar. app.js=application/javascript e CSS=text/css.
+Não diagnosticar senha/Auth para essa recusa. SheetJS externo também bloqueado.
+
+RED 54447956147f5d0d4b997b333e2adc1c272f56e3 usa a função _send_static REAL,
+extraída por AST sem importar agente, em HTTP localhost temporário; associação
+text/plain do SO quebra tanto .mjs quanto .js. Correção única na atribuição MIME:
+JavaScript recebe application/javascript independentemente do Registro Windows.
+Nenhuma outra linha de agent.py muda (contraprova literal da fonte #97 + hashes
+fixos nos gates anteriores). MIME dos downloads e demais arquivos permanece
+herdado. Sem tocar coletor/SQLite/normalização/auth/rede/guardian. Revalidar UI
+real para revelar os próximos bloqueios; não considerar essa correção GREEN
+completo nem substituir a Central integrada por mini-app.

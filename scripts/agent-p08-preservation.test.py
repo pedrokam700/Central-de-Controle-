@@ -8,6 +8,7 @@ import subprocess
 import unittest
 ROOT=Path(__file__).resolve().parents[1];BASE='48112ea9e408f5dce7fe85f951616b06ed4020e0';BRANCH='work/ames-p08-generation-reconciliation-20261118'
 ALLOWED={
+ 'ames/agent/agent.py','scripts/install98/static-mime.test.py',
  'scripts/install98/full-entry.test.py','scripts/install98/full-switch.py','scripts/install98/nine-screen-probe.py','tools/ames-workstation/01_TROCAR.bat','tools/ames-workstation/01_TROCAR_PARA_PR69_NOVA.bat',
  'tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1','tools/ames-workstation/START_LOCAL_CANDIDATE.ps1',
  # PR98: actual isolated Windows installation proofs and narrowly authorized transfer fix.
@@ -29,6 +30,7 @@ class Preservation(unittest.TestCase):
         self.assertLessEqual(set(git('diff','--name-only',BASE,'HEAD').splitlines()),ALLOWED)
         def tree(ref):return {p:i for row in git('ls-tree','-r',ref).splitlines() for i,p in [row.split('\t',1)] if p not in ALLOWED}
         self.assertEqual(tree(BASE),tree('HEAD'))
+        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '531ae0a15150a8fa7e269f09dbd64d64de50092f407a97b907c4889ddbef1d58', 'Reviewed static MIME assignment only')
     def test_all_existing_test_commands_maintained_as_subsequence(self):
         for name in ('ames-lab-isolation.yml','ames-lab-existing-regressions.yml','ames-p04-windows-preflight.yml'):
             path='.github/workflows/'+name;before=git('show',BASE+':'+path);after=(ROOT/path).read_text()

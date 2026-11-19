@@ -5,10 +5,15 @@ BASE='52efc38182401e708dd9f80c6c57a27e7b8726ab'
 def git(*args):return subprocess.check_output(['git',*args],cwd=ROOT,text=True).strip()
 class Source(unittest.TestCase):
  def test_exact_base_ancestry(self):subprocess.run(['git','merge-base','--is-ancestor',BASE,'HEAD'],cwd=ROOT,check=True)
- def test_all_agent_engine_frontend_and_past_contracts_unchanged(self):
+ def test_all_runtime_bytes_preserved_except_reviewed_static_MIME(self):
   frozen=['ames/','sw.js','index.html','app.js','styles.css','tools/ames-lab/']
   changed=git('diff','--name-only',BASE,'HEAD').splitlines()
-  self.assertFalse([p for p in changed if any(p==x or p.startswith(x) for x in frozen)])
+  self.assertFalse([p for p in changed if p!='ames/agent/agent.py' and any(p==x or p.startswith(x) for x in frozen)])
+  before=git('show',BASE+':ames/agent/agent.py')
+  old='        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"'
+  reviewed='        mime = "application/javascript" if path.suffix.lower() in {".js", ".mjs"} else (mimetypes.guess_type(str(path))[0] or "application/octet-stream")'
+  self.assertTrue(before.index('    def _send_static(')<before.index(old)<before.index('    def _send_download('))
+  self.assertEqual((ROOT/'ames/agent/agent.py').read_text().strip(),before.replace(old,reviewed,1))
  def test_local_history_startup_has_explicit_route_free_entry(self):
   # Native boot already proves the local app works without MES/WLAN.
   # Current entrypoints nevertheless unconditionally require the factory route.

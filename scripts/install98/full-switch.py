@@ -108,6 +108,7 @@ ConvertTo-Json -InputObject $owners -Compress
   # Actual cold profile and actual delivered HTML/modules, no auth/data injection.
   run([S/'.venv/Scripts/python.exe','-B',ROOT/'scripts/install98/nine-screen-probe.py',S],timeout=90)
   ui=json.loads((lab/'browser-evidence/nine-screen-receipt.json').read_text())
+  print('REAL_UI_DIAGNOSTIC '+json.dumps({k:ui.get(k) for k in ('blocker','static_MIME','console_errors','http_errors','external_dependencies_blocked')}),flush=True)
   record('nine_real_Windows_candidate_screens','PASS' if ui['qualified'] else 'PENDING',rendered=sum(x['rendered'] for x in ui['views']),blocker=ui['blocker'],auth_mocked=False)
   # New independent row keeps every existing record, technician and raw payload.
   with closing(sqlite3.connect(S/'ames-agent/data/ames_local.sqlite3')) as db:

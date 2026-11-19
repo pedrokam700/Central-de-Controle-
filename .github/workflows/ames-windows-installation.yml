@@ -20,6 +20,7 @@ jobs:
           python3 -B scripts/install98/transfer-red.test.py -v
           python3 -B scripts/install98/source-contract.test.py -v
           python3 -B scripts/install98/full-entry.test.py -v
+          python3 -B scripts/install98/static-mime.test.py -v
   genuine-windows:
     runs-on: windows-2025
     timeout-minutes: 30
@@ -66,6 +67,11 @@ jobs:
         shell: pwsh
         run: |
           python -B scripts/install98/prepare.py build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prove static module MIME independently of Windows file associations
+        shell: powershell
+        run: |
+          python -B scripts/install98/static-mime.test.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Execute real installers canonical processes and state transfer using only synthetic copies
         timeout-minutes: 20

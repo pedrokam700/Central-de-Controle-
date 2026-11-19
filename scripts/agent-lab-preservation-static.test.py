@@ -1,5 +1,6 @@
 """Static source preservation and gate scope. No agent/updater/engine imports."""
 import ast
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -9,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = 'db3cb5b58c99bcf86c44b671280cb42f7dd31d4c'
 BRANCH = 'work/ames-lab-entry-p01-p03-p06-20261117'
 ALLOWED = {
+ 'ames/agent/agent.py','scripts/install98/static-mime.test.py',
  'scripts/install98/full-entry.test.py','scripts/install98/full-switch.py','scripts/install98/nine-screen-probe.py','tools/ames-workstation/01_TROCAR.bat','tools/ames-workstation/01_TROCAR_PARA_PR69_NOVA.bat',
  'tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1','tools/ames-workstation/START_LOCAL_CANDIDATE.ps1',
  # PR98: actual isolated Windows installation proofs and narrowly authorized transfer fix.
@@ -60,7 +62,8 @@ class LabSourcePreservation(unittest.TestCase):
                 if path not in ALLOWED:result[path]=identity
             return result
         self.assertEqual(entries(BASE),entries('HEAD'))
-        for path in ('ames/agent/update_candidate.py','ames/agent/agent.py',
+        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '531ae0a15150a8fa7e269f09dbd64d64de50092f407a97b907c4889ddbef1d58', 'Only reviewed static MIME assignment may change; literal delta checked by PR98 source suite')
+        for path in ('ames/agent/update_candidate.py',
                      'ames/agent/agent_entry.py','ames/agent/agent_hardened_entry.py',
                      'ames/agent/engine_bridge.py','ames/agent/process_r11.py',
                      'tools/ames-workstation/START_AGENT_CANONICAL.ps1',

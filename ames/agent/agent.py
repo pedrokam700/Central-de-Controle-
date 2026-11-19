@@ -1288,7 +1288,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send({"error": "static_not_found"}, 404)
             return
         data = path.read_bytes()
-        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        mime = "application/javascript" if path.suffix.lower() in {".js", ".mjs"} else (mimetypes.guess_type(str(path))[0] or "application/octet-stream")
         self.send_response(200)
         self._cors()
         self.send_header("Content-Type", mime + ("; charset=utf-8" if mime.startswith("text/") or mime in {"application/javascript"} else ""))
