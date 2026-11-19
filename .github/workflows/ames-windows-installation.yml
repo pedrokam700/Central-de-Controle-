@@ -21,6 +21,7 @@ jobs:
           python3 -B scripts/install98/source-contract.test.py -v
           python3 -B scripts/install98/full-entry.test.py -v
           python3 -B scripts/install98/static-mime.test.py -v
+          python3 -B scripts/install98/offline-assets.test.py -v
   genuine-windows:
     runs-on: windows-2025
     timeout-minutes: 30

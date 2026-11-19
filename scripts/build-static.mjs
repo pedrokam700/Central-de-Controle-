@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 
 const sha=process.env.COMMIT||process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||null;
 const out=path.resolve(process.env.CENTRAL_STATIC_OUT||'dist');
@@ -7,6 +8,25 @@ const names=['index.html','app.js','offline-bootstrap.mjs','styles.css','mobile.
 // Nested HTML routes (e.g. the isolated AT viewer) are genuine application
 // entrypoints and must survive a static/offline build as real files.
 const allowed=/\.(mjs|css|svg|png|json|html)$/;
+
+// Ship the SAME approved SDK/parser versions; only module locations change.
+// No credential, Auth behavior or Firebase project is changed by this closure.
+const browserRoot='vendor/browser';
+const browserInputs=JSON.parse(fs.readFileSync(browserRoot+'/manifest.json','utf8'));
+const expectedBrowserFiles=['firebase/10.8.0/firebase-app.js','firebase/10.8.0/firebase-auth.js','firebase/10.8.0/firebase-firestore.js','firebase/10.8.0/LICENSE.txt','sheetjs/0.20.3/xlsx.full.min.js','sheetjs/0.20.3/LICENSE.txt'];
+if(JSON.stringify(browserInputs.files.map(x=>x.path))!==JSON.stringify(expectedBrowserFiles))throw Error('Browser dependency inventory changed without review');
+function localBrowserImports(source){
+  return source.replaceAll('https://www.gstatic.com/firebasejs/10.8.0/','/Central-de-Controle-/vendor/browser/firebase/10.8.0/')
+    .replaceAll('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js','/Central-de-Controle-/vendor/browser/sheetjs/0.20.3/xlsx.full.min.js');
+}
+const packagedBrowserFiles=browserInputs.files.map(entry=>{
+  const file=browserRoot+'/'+entry.path,bytes=fs.readFileSync(file);
+  if(!fs.lstatSync(file).isFile()||bytes.length!==entry.size||createHash('sha256').update(bytes).digest('hex')!==entry.sha256)throw Error('Unverified browser dependency: '+entry.path);
+  names.push(file);
+  const output=entry.kind==='javascript'?Buffer.from(localBrowserImports(bytes.toString('utf8'))):bytes;
+  return {...entry,source_sha256:entry.sha256,packaged_sha256:createHash('sha256').update(output).digest('hex'),transform:entry.kind==='javascript'?'SAME_ORIGIN_IMPORT_LOCATIONS_ONLY':'NONE'};
+});
+names.push(browserRoot+'/manifest.json');
 
 function collect(dir){
   for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
@@ -43,15 +63,22 @@ collect('icons');
 for(const name of [...new Set(names)]){
   const target=path.join(out,'Central-de-Controle-',name);
   fs.mkdirSync(path.dirname(target),{recursive:true});
-  if(name==='index.html')fs.writeFileSync(target,deployedIndex(fs.readFileSync(name,'utf8')));
-  else if(name==='app.js')fs.writeFileSync(target,deployedApp(fs.readFileSync(name,'utf8')));
+  if(name==='index.html')fs.writeFileSync(target,localBrowserImports(deployedIndex(fs.readFileSync(name,'utf8'))));
+  else if(name==='app.js')fs.writeFileSync(target,localBrowserImports(deployedApp(fs.readFileSync(name,'utf8'))));
   else if(name==='sw.js'){
     const source=fs.readFileSync(name,'utf8');
     if(!/^const CACHE_REVISION=[^;]+;/m.test(source))throw new Error('Service worker sem revisão de cache');
-    fs.writeFileSync(target,source.replace(/^const CACHE_REVISION=[^;]+;/m,'const CACHE_REVISION='+JSON.stringify(sha||'integration-20261019-pr38')+';'));
+    let output=localBrowserImports(source.replace(/^const CACHE_REVISION=[^;]+;/m,'const CACHE_REVISION='+JSON.stringify(sha||'integration-20261019-pr38')+';'));
+    const end='\n]);\n\nasync function precache';
+    if(!output.includes(end))throw Error('Firebase worker dependency boundary changed');
+    output=output.replace(end,'\n].map(url=>new URL(url,self.location.origin).href));\n\nasync function precache');
+    output=output.replace('const FIREBASE_SDK=Object.freeze([',"ASSETS.push(BASE+'vendor/browser/sheetjs/0.20.3/xlsx.full.min.js');\nconst FIREBASE_SDK=Object.freeze([");
+    fs.writeFileSync(target,output);
   }
+  else if(/\.(?:js|mjs)$/.test(name))fs.writeFileSync(target,localBrowserImports(fs.readFileSync(name,'utf8')));
   else fs.copyFileSync(name,target);
 }
+fs.writeFileSync(path.join(out,'Central-de-Controle-',browserRoot,'manifest.json'),JSON.stringify({...browserInputs,files:packagedBrowserFiles},null,2));
 // Entrada raiz é um arquivo real, não um redirect/rewrite do provedor. Isso evita
 // conflitos com Pretty URLs/canonicalização e mantém a Central no base path único.
 fs.mkdirSync(out,{recursive:true});
