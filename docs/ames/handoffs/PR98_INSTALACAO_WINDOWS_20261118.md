@@ -462,3 +462,39 @@ PR permanece DRAFT; nenhuma instalação/deploy/merge ou alteração de main/PRs
 anteriores. A entrega do arquivo não encerra a meta de coletar no OPPO: a próxima
 ação é o inventário assistido de leitura, seguido dos gates da estação e piloto,
 quando autorizados.
+
+
+### Apoio de identificação aprovado em teste próprio
+
+Suplemento no SHA `2912b3c064cedb516462f5bfb12eac1330b4832f`,
+[CI manual 44549705564](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44549705564):
+22/22 contratos em Windows 2022 e 22/22 em Windows 2025, ambos SUCCESS.
+Jobs 135649818232/135649818945. Nenhum teste do apoio foi omitido. Os jobs
+anteriores de produto/build/entrega ficaram intencionalmente não executados.
+O produto continua exclusivamente no SHA/ZIP aprovado 3ab8df55.
+
+Reproduções anteriores preservadas: 44548671756 recusou sintaxe PS; corrigido
+operador para -cnotmatch. 44549300794 passou os primeiros 17 contratos, mas a
+criação da fixture de junction interpretava colchetes no caminho; corrigida a
+fixture, mantendo o teste positivo de raiz com espaços/colchetes e a recusa de
+junction. Não alterar produto, repetir seus gates ou mascarar essas falhas.
+
+A observação completa em fixture não concede GO; o teste de PID com criação
+alterada exige STOP. O caso positivo de metadados funciona com SQLite/WAL/SHM/
+config/token bloqueados contra abertura. Um listener TCP REAL de PowerShell é
+recusado sem o cliente estabelecer conexão/HTTP. Arquivos sentinela permanecem
+com os mesmos bytes. Essas provas não são boot de agente real, acesso MES,
+verificação física do Edge ou identidade da estação do usuário.
+
+Hash do PS1 independente:
+`b655315610ac3459f7a3a91e592c6333f00ba75f6b2bd306c2f10217be27eb51`.
+O proprietário pode observar a pasta na saída privada; não pedimos que adivinhe
+ou selecione uma instalação. Se formato/estado divergir, STOP com código sem
+expor dados. Política Windows bloqueada não deve ser contornada com Bypass.
+O suplemento fica fora de A/B/backup e não consta dos 393 membros do produto.
+
+Roteiro também exige verificar o navegador padrão antes de Start-Process:
+interface informada é Edge, mas isso não identifica o padrão ou perfil aberto
+pelo launcher. Nenhuma troca para Chrome/localhost nem migração de Auth será
+feita para contornar pendências. A preparação está publicada; a identificação
+da estação, o backup completo e a coleta OPPO continuam etapas futuras.

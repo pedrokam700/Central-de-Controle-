@@ -52,7 +52,18 @@ fontes Git EEDACC65; o ZIP histórico original não estava disponível no ensaio
 Usar o suplemento [IDENTIFICAR_CENTRAL_8765_READONLY.ps1](../../../scripts/install98/IDENTIFICAR_CENTRAL_8765_READONLY.ps1).
 Salvar isoladamente numa pasta de apoio/Downloads, **fora de A, B e backups**.
 Não é necessário instalar Python, escolher a pasta da Central ou abrir SQLite.
-Conferir o hash do suplemento publicado no checkpoint antes de executá-lo.
+Hash SHA256 do suplemento:
+`b655315610ac3459f7a3a91e592c6333f00ba75f6b2bd306c2f10217be27eb51`.
+Se o download não coincidir, STOP; não executar HTML salvo como PS1 ou normalizar
+bytes para forçar o hash. Somente este apoio tem esse hash, não o ZIP da Central.
+
+Validação isolada: [CI 44549705564](https://github.com/pedrokam700/Central-de-Controle-/actions/runs/44549705564),
+22 contratos em CADA Windows 2022/2025, SHA de apoio
+`2912b3c064cedb516462f5bfb12eac1330b4832f`, SUCCESS. Sintaxe nativa, metadados
+sintéticos, arquivos privados opacos travados contra leitura, PID reutilizado,
+links e listener real não agente; sem iniciar Central/MES ou abrir SQLite.
+A discussão da PR registra a última CI específica do HEAD documental. Isso não
+é novo teste da candidata, instalação na estação nem concessão de exclusividade.
 
 No Windows PowerShell, quando autorizada a identificação:
 
@@ -71,7 +82,8 @@ O suplemento:
 - lê a tabela TCP local e exige um único PID em 8765; IPv4/IPv6 do mesmo PID
   contam como um processo. Não faz requisição HTTP nem conexão ao listener;
 - exige metadados CIM de imagem/criação/linha de comando e o formato canônico
-  estrito `python[ w ].exe -u <raiz>\ames-agent\agent_hardened_entry.py`;
+  estrito `python.exe -u <entrypoint absoluto>` (ou `pythonw.exe`), com
+  entrypoint `<raiz>\ames-agent\agent_hardened_entry.py`;
   nomes parecidos, argumentos adicionais ou formato não reconhecido dão STOP;
 - deriva a raiz do entrypoint absoluto, recusa caminhos de rede e links/junctions,
   verifica a presença dos arquivos de estado por **metadados**, sem ler seus bytes;
@@ -201,6 +213,11 @@ Windows/dependências/Edge e rede aprovados, B nova e íntegra, autorização da
   de dependências podem ocorrer ANTES do diálogo visual e da parada de A. O popup
   não é um dry-run. Python/Chrome ausentes ou dependências incompletas podem levar
   a instalação/download; se isso não estiver aprovado, NO-GO antes de clicar.
+- Antes de clicar, verificar também o navegador padrão e o perfil que abrirão
+  a URL: START_LOCAL_CANDIDATE usa Start-Process. Não supor que o padrão é o Edge
+  já utilizado. Abertura em outra conta/perfil/origem pode ter estado diferente;
+  sem plano aprovado para conservar a sessão Edge, NO-GO. Não mudar o navegador
+  padrão ou copiar Auth para forçar o aceite.
 - Executar uma vez `01_TROCAR.bat` da B. Usar o caminho normal com confirmação
   humana. Nunca `/lab` na fábrica, nunca automatizar o “Sim”. `/local` não é
   isolamento de rede nem teste MES e não substitui o caminho operacional aprovado.
