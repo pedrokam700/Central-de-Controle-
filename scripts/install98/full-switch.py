@@ -1,6 +1,6 @@
 """Whole delivered BAT/PS chain, real processes and journal, synthetic Windows only."""
 from contextlib import closing
-import json,os,pathlib,shutil,sqlite3,subprocess,time,winreg,zipfile
+import json,os,pathlib,shutil,sqlite3,subprocess,threading,time,winreg,zipfile
 RUN_KEY=r'Software\Microsoft\Windows\CurrentVersion\Run';RUN_NAME='CentralAMESOperatorAgent'
 def quote(value):return str(value).replace("'","''")
 def environment():return {k:v for k,v in os.environ.items() if k.casefold()!='psmodulepath'}
@@ -64,7 +64,7 @@ ConvertTo-Json -InputObject $owners -Compress
   run(['cmd.exe','/d','/c','call',root/'01_INSTALAR_UMA_VEZ.bat','/prepare'],cwd=root,timeout=300)
   assert pristine(root)
  assert read_run() is None,'preexisting autostart identity must not be overwritten'
- S=lab/'S';extract(S)
+ S=lab/'S';T=lab/'T';extract(S)
  # Previous-browser fixture is created by genuine SDK/backend calls, then the
  # backend stops. The delivered candidate receives no emulator/Auth override.
  run([B/'.venv/Scripts/python.exe','-B',ROOT/'scripts/install98/auth-fixture.py',S],timeout=240)
@@ -127,13 +127,58 @@ ConvertTo-Json -InputObject $owners -Compress
   run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',S/'START_LOCAL_CANDIDATE.ps1','-LocalOnly','-NoBrowser'],timeout=90)
   assert tables(S)==newer;record('whole_entry_local_restart_preserves_added_row','PASS',old_rows_preserved=True,new_rows=1)
   stop(S,api(S,'/api/v1/ready')['pid'])
+  # A SECOND complete transition fails at the real durable commit write, after
+  # the next generation has started and a new independent row was committed.
+  # Fault injection is external I/O; no coordinator function or approval changes.
+  extract(T);run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',S/'START_LOCAL_CANDIDATE.ps1','-LocalOnly','-NoBrowser'],timeout=90)
+  prior=tables(S);set_run(guardian_command(S))
+  g_out=(lab/'guardian-S.stdout').open('w');g_err=(lab/'guardian-S.stderr').open('w')
+  s_guard=subprocess.Popen(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(S/'suporte/ames-workstation/KEEP_AGENT_RUNNING.ps1'),'-Root',str(S)],stdout=g_out,stderr=g_err,env=environment())
+  witness={};worker_errors=[]
+  def inject_commit_failure():
+   try:
+    deadline=time.monotonic()+140
+    while not (T/'.ames-switch/candidate-intent.json').exists():
+     if time.monotonic()>deadline:raise TimeoutError('REAL_CANDIDATE_INTENT_NOT_OBSERVED')
+     time.sleep(.05)
+    with (T/'.ames-switch/committed.json').open('xb') as stream:stream.write(b'SYNTHETIC98_EXTERNAL_COMMIT_IO_FAULT');stream.flush();os.fsync(stream.fileno())
+    witness['commit_io_fault']=True
+    while time.monotonic()<deadline:
+     try:
+      if pathlib.Path(api(T,'/api/v1/v2/capabilities')['package_root']).resolve()==T:
+       with closing(sqlite3.connect(T/'ames-agent/data/ames_local.sqlite3')) as db:
+        db.row_factory=sqlite3.Row;row=dict(db.execute('SELECT * FROM repair_history_3012 LIMIT 1').fetchone());row.update(row_key='SYNTHETIC98-NEW-T',repair_comment='SYNTHETIC98 new evidence before failed commit')
+        raw=json.loads(row['raw_json']);raw.update(row_key=row['row_key'],repair_comment=row['repair_comment']);row['raw_json']=json.dumps(raw)
+        db.execute('INSERT INTO repair_history_3012('+','.join('"'+k+'"' for k in row)+') VALUES('+','.join('?' for _ in row)+')',list(row.values()));db.commit()
+       witness['new_row_committed']=True;return
+     except (OSError,KeyError):pass
+     time.sleep(.05)
+    raise TimeoutError('REAL_NEXT_GENERATION_NOT_READY_BEFORE_COMMIT')
+   except Exception as error:worker_errors.append(type(error).__name__+': '+str(error))
+  worker=threading.Thread(target=inject_commit_failure,daemon=True);worker.start()
+  rc,text=batch(T);worker.join(timeout=15)
+  assert not worker.is_alive() and not worker_errors and witness=={'commit_io_fault':True,'new_row_committed':True},(worker_errors,witness)
+  assert rc!=0 and 'TROCA_PR69=BLOCKED' in text and 'ROLLBACK_ANTIGO=STOP_NEW_OR_UNKNOWN_EVIDENCE' in text
+  assert pathlib.Path(api(T,'/api/v1/v2/capabilities')['package_root']).resolve()==T
+  after=tables(T);assert tables(S)==prior
+  for table,rows in prior.items():assert all(row in after[table] for row in rows),table+' lost original evidence'
+  assert len(after['repair_history_3012'])==len(prior['repair_history_3012'])+1
+  assert (T/'.ames-switch/candidate-intent.json').is_file() and (T/'.ames-switch/committed.json').read_bytes()==b'SYNTHETIC98_EXTERNAL_COMMIT_IO_FAULT'
+  assert (S/'.ames-update/switch-retired.txt').is_file() and read_run()==guardian_command(T) and not guardians(S)
+  refusal=lab/'retired-S-refusal.stdout'
+  with refusal.open('w') as stream:
+   attempt=subprocess.run(['powershell.exe','-NoProfile','-File',str(S/'suporte/ames-workstation/START_AGENT_CANONICAL.ps1'),'-Root',str(S),'-MaxAttempts','1'],stdout=stream,stderr=subprocess.STDOUT,env=environment(),timeout=45)
+  assert attempt.returncode!=0 and 'MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED' in refusal.read_text(errors='replace')
+  assert tables(T)==after and pathlib.Path(api(T,'/api/v1/v2/capabilities')['package_root']).resolve()==T
+  record('whole_entry_R2_commit_IO_failure_preserves_all_new_data','PASS',actual_write_failure=True,new_independent_rows=1,old_launcher_refused=True,old_Run_not_restored=True,automatic_resume=False)
+  stop_guardian(T);stop(T,api(T,'/api/v1/ready')['pid']);s_guard.wait(timeout=5);g_out.close();g_err.close()
  finally:
   # Only this synthetic fixture's attested processes/Run entry are eligible.
-  for root in (A,S):
+  for root in (A,S,T):
    try:stop_guardian(root)
    except Exception as error:print('OWNED_GUARDIAN_CLEANUP_REFUSED '+str(type(error).__name__),flush=True)
   value=read_run()
-  if value in (guardian_command(A),guardian_command(S)):set_run(None)
+  if value in (guardian_command(A),guardian_command(S),guardian_command(T)):set_run(None)
   elif value is not None:raise RuntimeError('UNEXPECTED_RUN_ENTRY_PRESERVED')
   if controller is not None:
    try:controller.wait(timeout=2)
