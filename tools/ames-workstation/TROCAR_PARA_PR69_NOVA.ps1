@@ -25,8 +25,10 @@ function Assert-ReadOnlySwitchPath([string]$path){
   $current=[IO.Path]::GetPathRoot($full)
   foreach($part in $full.Substring($current.Length).Split('\')){
     if(-not $part){continue};$current=Join-Path $current $part
-    $info=Get-Item -LiteralPath $current -Force -ErrorAction Stop
-    if($info.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'REPARSE_PATH'}
+    # GetAttributes is a direct, literal metadata lookup and throws on a missing
+    # member; do not treat a provider's absent/null item as a regular file.
+    $attributes=[IO.File]::GetAttributes($current)
+    if($attributes -band [IO.FileAttributes]::ReparsePoint){throw 'REPARSE_PATH'}
   }
 }
 function RootFor([string]$entry,[string]$parentName){
@@ -175,7 +177,7 @@ function Read-OnlySwitchPreflight {
     }
     foreach($relative in @('ames-agent\config.json','ames-agent\data\local_agent_token','ames-agent\data\ames_local.sqlite3')){
       $file=Join-Path $root $relative;Assert-ReadOnlySwitchPath $file
-      if((Get-Item -LiteralPath $file -Force).PSIsContainer){throw 'PRIVATE_STATE_NOT_FILE'}
+      if([IO.File]::GetAttributes($file) -band [IO.FileAttributes]::Directory){throw 'PRIVATE_STATE_NOT_FILE'}
     }
     foreach($relative in @('ames-agent\data\ames_local.sqlite3-wal','ames-agent\data\ames_local.sqlite3-shm')){
       $file=Join-Path $root $relative

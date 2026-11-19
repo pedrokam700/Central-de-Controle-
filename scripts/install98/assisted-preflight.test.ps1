@@ -92,7 +92,11 @@ Case 'junction ancestor is refused without following its destination' {
 }
 Case 'missing private state never creates a replacement identity or database' {
  $file=Join-Path $A 'ames-agent\data\ames_local.sqlite3';$raw=[IO.File]::ReadAllBytes($file);[IO.File]::Delete($file)
- try{Check-Stop (Observe @((Listener 10)) @((Proc 10 'agent' $A)) (Run-For $A)) 'ROOT_OR_STATE_METADATA_UNVERIFIED';if(Test-Path -LiteralPath $file){throw 'DATABASE_CREATED'}}finally{[IO.File]::WriteAllBytes($file,$raw)}
+ try{
+  if([IO.File]::Exists($file)){throw 'MISSING_DATABASE_FIXTURE_NOT_ACTIVE'}
+  Check-Stop (Observe @((Listener 10)) @((Proc 10 'agent' $A)) (Run-For $A)) 'ROOT_OR_STATE_METADATA_UNVERIFIED'
+  if(Test-Path -LiteralPath $file){throw 'DATABASE_CREATED'}
+ }finally{[IO.File]::WriteAllBytes($file,$raw)}
 }
 Case 'unknown public guardian version is not adopted' {
  $file=Join-Path $A 'suporte\ames-workstation\KEEP_AGENT_RUNNING.ps1';$raw=[IO.File]::ReadAllBytes($file)
