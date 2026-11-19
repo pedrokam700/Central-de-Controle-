@@ -18,10 +18,30 @@ def execute(c):
    if value is None:winreg.DeleteValue(key,RUN_NAME)
    else:winreg.SetValueEx(key,RUN_NAME,0,winreg.REG_SZ,value)
  def guardian_command(root):return 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+str(root/'suporte/ames-workstation/KEEP_AGENT_RUNNING.ps1')+'" -Root "'+str(root)+'"'
+ identity_probe=lab/'guardian-identity.ps1'
+ identity_probe.write_text(r"""param([string]$Source,[string]$ExpectedRoot)
+$ErrorActionPreference='Stop'
+$text=Get-Content -LiteralPath $Source -Raw
+$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($text,[ref]$tokens,[ref]$errors)
+if($errors){throw 'COORDINATOR_PARSE_FAILED'}
+$interop=[regex]::Match($text,"(?s)Add-Type -TypeDefinition @'\s*\r?\n(.*?)\r?\n'@")
+if(-not $interop.Success){throw 'NATIVE_ARGV_PARSER_MISSING'}
+Add-Type -TypeDefinition $interop.Groups[1].Value
+foreach($name in @('Full','EqualPath','RootFor','SplitArgv','ValueAfter','Identify')){
+ $node=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true))
+ if($node.Count -ne 1){throw 'IDENTITY_HELPER_MISSING'}
+ . ([scriptblock]::Create($node[0].Extent.Text))
+}
+$owners=@(Get-CimInstance Win32_Process|ForEach-Object {
+ $p=$_;$identity=Identify $p
+ if($identity -and $identity.kind -eq 'guardian' -and (EqualPath $identity.root $ExpectedRoot)){
+  @{pid=[int]$p.ProcessId;created=([datetime]$p.CreationDate).ToUniversalTime().ToString('o');command=$p.CommandLine}
+ }
+})
+ConvertTo-Json -InputObject $owners -Compress
+""")
  def guardians(root):
-  path=quote(root/'suporte/ames-workstation/KEEP_AGENT_RUNNING.ps1')
-  script="$a=@(Get-CimInstance Win32_Process|Where-Object {$_.CommandLine -and $_.CommandLine.Contains('"+path+"') -and $_.Name -in @('powershell.exe','pwsh.exe')}|ForEach-Object {@{pid=[int]$_.ProcessId;created=([datetime]$_.CreationDate).ToUniversalTime().ToString('o');command=$_.CommandLine}});ConvertTo-Json -InputObject $a -Compress"
-  return json.loads(run(['powershell.exe','-NoProfile','-Command',script]))
+  return json.loads(run(['powershell.exe','-NoProfile','-File',identity_probe,'-Source',B/'TROCAR_PARA_PR69_NOVA.ps1','-ExpectedRoot',root]))
  def stop_guardian(root):
   owners=guardians(root)
   assert len(owners)<=1,'guardian identity ambiguous'
