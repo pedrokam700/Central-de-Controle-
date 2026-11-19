@@ -86,7 +86,17 @@ def main():
  sourceA=LAB/'source-A'
  run(['git','worktree','add','--detach',sourceA,EED],cwd=ROOT)
  for label,source in [('A',sourceA),('B',ROOT)]:
-  archive=LAB/(label+'.zip');run([sys.executable,'-B',source/'scripts/build-integrated-candidate.py',archive],cwd=source)
+  archive=LAB/(label+'.zip');base=LAB/'B-source.zip' if label=='B' else archive
+  run([sys.executable,'-B',source/'scripts/build-integrated-candidate.py',base],cwd=source)
+  if label=='B':
+   with zipfile.ZipFile(base) as z:
+    assert not any(n.startswith('vendor/wheels/') for n in z.namelist()) and 'vendor/RUNTIME_DEPENDENCIES.json' not in z.namelist()
+   record('source_only_archive_lacks_offline_wheelhouse','EXPECTED_RED_BASELINE',runtime_wheels=0)
+   run([sys.executable,'-B',ROOT/'scripts/install98/complete-archive.py',base,archive])
+   os.environ['INSTALL98_DEPENDENCY_RECEIPT']=str(LAB/'dependency-receipt.json');os.environ['CANDIDATE_ZIP']=str(archive)
+   run([sys.executable,'-B',ROOT/'scripts/verify-complete-candidate.py',archive,'--sha',os.environ['GITHUB_SHA'],'--extract-to',LAB/'independent-verified-B','--receipt',LAB/'independent-archive-receipt.json'])
+   run([sys.executable,'-B',ROOT/'scripts/candidate97-artifact.test.py','-v'],timeout=240)
+   record('complete_archive_independent_verification','PASS',wheels=21,all_source_components_verified=True)
   with zipfile.ZipFile(archive) as z:
    assert z.testzip() is None
    manifest=json.loads(z.read('CANDIDATE_MANIFEST.json'));assert manifest['sha']==(EED if label=='A' else os.environ['GITHUB_SHA'])
@@ -94,7 +104,8 @@ def main():
    z.extractall(LAB/label)
   root=LAB/label
   if label=='B':run([sys.executable,'-B',ROOT/'scripts/install98/offline-assets.test.py','--built-root',root/'frontend/Central-de-Controle-'])
-  shutil.copytree(LAB/'wheels',root/'vendor/wheels')
+  if label=='A':shutil.copytree(LAB/'wheels',root/'vendor/wheels')
+  else:assert len(list((root/'vendor/wheels').glob('*.whl')))==21
   out=run(['cmd.exe','/d','/c','call',root/'01_INSTALAR_UMA_VEZ.bat','/prepare'],cwd=root,timeout=300)
   assert not (root/'ames-agent/config.json').exists() and not (root/'ames-agent/data').exists()
   record('actual_installer_prepare_'+label,'PASS',no_runtime_created=True)
@@ -184,4 +195,14 @@ print('SYNTHETIC_FIXTURE_PERIODS_DEFINED_BEFORE_C0; ALL_OLD_REVISIONS_UNCHANGED'
    except Exception:pass
  if any(r['status']=='RED' for r in ROWS):raise SystemExit('PROVEN_INSTALLATION_DEFECT_REQUIRES_CORRECTION')
  if any(r['status']=='PENDING' for r in ROWS):raise SystemExit('FULL_INSTALLATION_QUALIFICATION_STILL_PENDING')
+ assert json.loads((LAB/'progress.json').read_text())['full_switch_qualified'] is True
+ delivery=LAB/'delivery';delivery.mkdir()
+ sha=os.environ['GITHUB_SHA'];archive=delivery/('CENTRAL_AMES_CANDIDATA_'+sha+'.zip')
+ shutil.copyfile(LAB/'B.zip',archive)
+ for name in ('complete-archive-receipt.json','independent-archive-receipt.json','progress.json','dependency-receipt.json'):
+  shutil.copyfile(LAB/name,delivery/name)
+ shutil.copyfile(LAB/'browser-evidence/nine-screen-receipt.json',delivery/'nine-screen-receipt.json')
+ with zipfile.ZipFile(archive) as z:(delivery/'LEIA_PRIMEIRO.txt').write_bytes(z.read('LEIA_PRIMEIRO.txt'))
+ (delivery/'SHA256SUMS.txt').write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  '+archive.name+'\n',encoding='ascii')
+ print('CANDIDATE_BYTES_INSTALLED_AND_QUALIFIED_IN_SYNTHETIC_WINDOWS; PHYSICAL_PENDING',flush=True)
 if __name__=='__main__':main()

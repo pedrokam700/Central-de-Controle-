@@ -4,6 +4,7 @@ on:
     branches: [work/ames-windows-installation-20261118]
 permissions:
   contents: read
+  actions: read
 jobs:
   transfer-counterproof:
     runs-on: ubuntu-24.04
@@ -91,6 +92,14 @@ jobs:
         run: |
           python -B scripts/install98/integration.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Transport only the exact archive installed and qualified on Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: INTERNAL_WINDOWS_QUALIFIED_${{ github.sha }}
+          path: ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/delivery/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
       - name: Preserve safe synthetic evidence even on refusal no installation payload
         if: always()
         uses: actions/upload-artifact@v4
@@ -100,6 +109,8 @@ jobs:
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/containment.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/dependency-receipt.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/progress.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/complete-archive-receipt.json
+            ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/independent-archive-receipt.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/startup-*.json
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/browser-evidence/
             ${{ runner.temp }}/CENTRAL-INSTALL-LAB-${{ github.run_id }}/auth-fixture-receipt.json
@@ -107,3 +118,27 @@ jobs:
           retention-days: 7
 # User authorization: actual execution ONLY on disposable Windows with synthetic data.
 # Kernel denial is mandatory. No agent starts if isolation is unproven.
+
+  qualified-delivery:
+    needs: [genuine-windows, transfer-counterproof]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v5
+        with:
+          name: INTERNAL_WINDOWS_QUALIFIED_${{ github.sha }}
+          path: ${{ runner.temp }}/delivery98
+      - name: Require real installation evidence and all guarded regressions on this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALL98_DELIVERY: ${{ runner.temp }}/delivery98
+        run: python3 -B scripts/install98/delivery-gate.py
+      - name: Downloadable complete candidate with LAB qualification and physical gates pending
+        uses: actions/upload-artifact@v4
+        with:
+          name: CENTRAL_AMES_CANDIDATA_WINDOWS_${{ github.sha }}
+          path: ${{ runner.temp }}/delivery98/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

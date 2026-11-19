@@ -60,7 +60,7 @@ ConvertTo-Json -InputObject $owners -Compress
  def extract(root):
   with zipfile.ZipFile(lab/'B.zip') as z:
    assert z.testzip() is None;z.extractall(root)
-  shutil.copytree(lab/'wheels',root/'vendor/wheels')
+  assert len(list((root/'vendor/wheels').glob('*.whl')))==21,'OFFLINE_DEPENDENCIES_MUST_BE_INSIDE_ACTUAL_ZIP'
   run(['cmd.exe','/d','/c','call',root/'01_INSTALAR_UMA_VEZ.bat','/prepare'],cwd=root,timeout=300)
   assert pristine(root)
  assert read_run() is None,'preexisting autostart identity must not be overwritten'
