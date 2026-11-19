@@ -2,11 +2,19 @@ name: A-MES genuine Windows installation isolated synthetic qualification
 on:
   push:
     branches: [work/ames-windows-installation-20261118]
+  workflow_dispatch:
+    inputs:
+      identification_only:
+        description: 'Only read-only port identification tests; never rerun installation/build'
+        type: boolean
+        required: true
+        default: true
 permissions:
   contents: read
   actions: read
 jobs:
   transfer-counterproof:
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -24,6 +32,7 @@ jobs:
           python3 -B scripts/install98/static-mime.test.py -v
           python3 -B scripts/install98/offline-assets.test.py -v
   genuine-windows:
+    if: github.event_name == 'push'
     runs-on: windows-2025
     timeout-minutes: 30
     env:
@@ -120,6 +129,7 @@ jobs:
 # Kernel denial is mandatory. No agent starts if isolation is unproven.
 
   qualified-delivery:
+    if: github.event_name == 'push'
     needs: [genuine-windows, transfer-counterproof]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -142,3 +152,25 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+
+  readonly-identification:
+    if: github.event_name == 'workflow_dispatch' && inputs.identification_only
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Standalone read-only identification synthetic counterproofs only
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          Write-Output 'PRODUCT_SHA=3ab8df55e03fa2b961df100649de6541d2232bd6; ONLY_PORT_IDENTIFICATION_TESTS; NO_BUILD_OR_INSTALLATION'
+          & ./scripts/install98/port-identification.test.ps1
+          if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
