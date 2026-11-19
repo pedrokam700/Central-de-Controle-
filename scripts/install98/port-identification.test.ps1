@@ -4,7 +4,7 @@ Set-StrictMode -Version 2
 $probe=Join-Path $PSScriptRoot 'IDENTIFICAR_CENTRAL_8765_READONLY.ps1'
 $tokens=$null;$parseErrors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($probe,[ref]$tokens,[ref]$parseErrors)
-if($parseErrors.Count){throw 'PROBE_PARSE_FAILED'}
+if($parseErrors.Count){$parseErrors|ForEach-Object {Write-Output ($_.ErrorId+' line='+$_.Extent.StartLineNumber+' '+$_.Message)};throw 'PROBE_PARSE_FAILED'}
 . $probe
 $fixture=Join-Path $env:RUNNER_TEMP ('PR98-READONLY-'+[guid]::NewGuid().ToString('N'))
 if($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_OS -cne 'Windows'){throw 'DISPOSABLE_WINDOWS_ONLY'}
@@ -27,7 +27,7 @@ function Fingerprint-Tree {return (@(Get-ChildItem -LiteralPath $root -File -Rec
 $before=Fingerprint-Tree
 Test-Case 'strict native PowerShell parse' {if($parseErrors.Count){throw 'PARSE'}}
 Test-Case 'only read commands and no dynamic execution' {
-  $allowed=@('Set-StrictMode','Get-Item','Test-Path','Get-Content','ConvertFrom-Json','Get-FileHash','Get-Command','Get-CimInstance','Get-NetTCPConnection','Where-Object','ForEach-Object','Sort-Object','ConvertTo-Json','Assert-CentralLocalRegularPath','Resolve-CentralPortOwner','Read-CentralInstallationMetadata','Invoke-CentralReadOnlyIdentification')
+  $allowed=@('Set-StrictMode','Get-Item','Join-Path','Test-Path','Get-Content','ConvertFrom-Json','Get-FileHash','Get-Command','Get-CimInstance','Get-NetTCPConnection','Where-Object','ForEach-Object','Sort-Object','ConvertTo-Json','Assert-CentralLocalRegularPath','Resolve-CentralPortOwner','Read-CentralInstallationMetadata','Invoke-CentralReadOnlyIdentification')
   foreach($node in $ast.FindAll({param($n)$n -is [Management.Automation.Language.CommandAst]},$true)){
     if($node.GetCommandName() -notin $allowed -or $node.InvocationOperator.ToString() -in @('Ampersand','Dot')){throw ('UNSAFE_COMMAND '+$node.GetCommandName())}
   }
@@ -74,3 +74,5 @@ Test-Case 'real OS observation refuses live non-agent owner without HTTP' {
   }finally{$socket.Stop()}
 }
 Write-Output ('READONLY_IDENTIFICATION_CONTRACTS='+$passed+'; NO_AGENT_STARTED; NO_SQLITE_OPENED; NO_INSTALLATION_AUTHORIZED')
+
+exit 0

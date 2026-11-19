@@ -63,7 +63,7 @@ function Read-CentralInstallationMetadata($Identity){
     $null=Assert-CentralLocalRegularPath $manifest
     if((Get-Item -LiteralPath $manifest).Length -gt 1048576){throw 'STOP_MANIFEST_OVERSIZED'}
     $value=Get-Content -LiteralPath $manifest -Raw -Encoding UTF8|ConvertFrom-Json
-    if(-not $value.PSObject.Properties['sha'] -or [string]$value.sha -notcmatch '^[a-f0-9]{40}$'){throw 'STOP_MANIFEST_IDENTITY_INVALID'}
+    if(-not $value.PSObject.Properties['sha'] -or [string]$value.sha -cnotmatch '^[a-f0-9]{40}$'){throw 'STOP_MANIFEST_IDENTITY_INVALID'}
     $sha=[string]$value.sha;$manifestState='CLAIM_ONLY_NOT_FULL_CODE_VERIFICATION'
   }
   $expected=@{
