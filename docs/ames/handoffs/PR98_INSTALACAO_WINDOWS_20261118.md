@@ -1,3 +1,9 @@
+> Continuidade 19/11/2026: última validação integral anterior à entrega completa:
+> `782ec43abd10b293a444c629d82528ff6513c510`. Troca real + nove telas PASS.
+> Os gates da entrega do ZIP fechado executam novamente no HEAD; só o recibo
+> externo QUALIFICACAO_LAB.json e a CI daquele SHA comprovam a entrega final.
+> Homologação operacional/física PENDENTE. Ver atualização ao final.
+
 # Instalação Windows — continuidade após PR97, 18/11/2026
 
 Base exclusiva 52efc38182401e708dd9f80c6c57a27e7b8726ab. Checkpoint obrigatório
@@ -253,3 +259,84 @@ rota para contornar a recusa. Capturar mensagem exata do endpoint e classificá-
 como restrição sintética esperada. Qualquer outro HTTP error continua pendência;
 rede fabril não exercitada. Cloud externo bloqueado é esperado, nunca sucesso
 simulado. Próxima CI exige dados reais do SQLite sintético por controles da UI.
+
+
+## Consolidação para entrega Windows — 19/11/2026
+
+### Última validação integral antes do ZIP fechado
+
+SHA 782ec43abd10b293a444c629d82528ff6513c510:
+Windows 44516837193, integração 44516837428, LAB 44516837424,
+P04 44516837156, P08 44516838060: todas SUCCESS.
+Artefato fino Windows 14526496426, SHA256 externo
+b9f27b0c22b4cf203c68849bfdba5d5c32868e5704b7ee45cc70e004fe8b7beb.
+Checkpoint público https://github.com/pedrokam700/Central-de-Controle-/pull/98#issuecomment-7008198363.
+A confirmação de 9/9 inclui identidade restaurada, agente conectado, leitura do
+SQLite sintético pelo período original e ausência de erro JS/diálogo; não apenas
+HTML servido. O perfil vazio conserva login habilitado e Console fechado.
+
+### ZIP fechado e gate de publicação
+
+b7e502d8 acrescenta o fechamento do arquivo instalado com 21 wheels genuínos,
+proveniência das fontes oficiais e hashes dos seis resultados construídos sob
+WFP. A montagem do arquivo recusa inventário incompleto, hash/corpo/metadados
+alterados, versão/arquitetura/origem inesperada e links. Dez contraprovas de
+inventário sintético; nenhum desses wheels de teste é instalado.
+
+RED medido na base do builder: zero wheels e ausência do manifesto runtime.
+O arquivo fechado inclui todos os wheels dentro dos manifestos principal/local;
+B e S NÃO recebem wheels por cópia auxiliar. A é reconstrução sintética da fonte
+EEDACC65, cujo ZIP original segue indisponível. Não inventar equivalência binária.
+Python 3.12 x64 e Chrome x64 genuínos são pré-requisitos externos explícitos.
+Nenhum instalador de sistema ou emulador é colocado na candidata.
+
+O verificador passivo independente compara fontes Git, transformações exatas,
+SDKs/licenças/hashes, worker/release/troca/componentes no mesmo SHA, wheel metadata,
+recibo externo da construção genuína e inventário/CRC/hash do ZIP real. Exige
+extração nova; os 13 testes adversariais originais de arquivo continuam exigidos.
+A prova da UI compara também content_hash, revisão, período e contagem de TODOS
+os datasets com a API da revisão exata lida do SQLite.
+
+Em b7e502d8, Windows 44517540008 recusou a tag legítima oficial do Playwright
+py3-none-win_amd64; a origem e os bytes já estavam fixos no lock. Integração
+44517540547 recusou a retirada de frases de segurança do manual. Corrigidos em
+61be1f7e sem alterar testes anteriores ou aceitar wheel fora do inventário/hash.
+Essas recusas não foram atribuídas a ambiente nem ocultadas.
+
+A publicação é um artefato de candidata, não release/deploy. Só ocorre após
+instalar OS MESMOS bytes no Windows, qualificar troca/nove telas/reinício/falhas
+e passar as quatro matrizes protegidas no SHA exato. Recebidos publicamente:
+ZIP completo, SHA256SUMS, inventário/verificador independente, recibos de
+instalação/9 telas/regressões e procedimento. Artefatos intermediários não são
+atestado de prontidão; perfis, tokens, SQLite, configurações e emuladores da
+fixture ficam privados no runner descartável e não são entregues.
+
+### Falha I/O após dados novos — prova adicional obrigatória
+
+0d634373 acrescenta segunda troca completa S→T: um observador externo ocupa
+committed.json com criação exclusiva para provocar uma falha I/O real do
+coordenador e insere uma nova linha 3012 depois que T realmente inicia.
+Exigir BLOCKED + STOP_NEW_OR_UNKNOWN_EVIDENCE, todos os registros S e T presentes,
+S retirada, Run antigo não restaurado e starter original S recusado, com T ainda
+detendo a API e seus dados novos. Não substituir função, hash ou aprovação.
+Isso testa interrupção do retorno antigo; não promete transação atômica ou
+recuperação automática de toda situação. O cenário só é PASS depois de executado
+na CI final. R0 por manifesto/WFP/escopo e reinício após kill já são exigidos.
+
+### Limitações e próxima ação
+
+A CI gera recibos com o SHA de execução; a discussão da PR registra os links
+finais. Se um gate falhar, preservar o commit/evidência e corrigir a causa sem
+publicar o arquivo como qualificado. PR continua DRAFT contra #97. Main continua
+b283b1764432f5d90486d38a7553b30542a5c118 e #97 continua
+52efc38182401e708dd9f80c6c57a27e7b8726ab (conferidos por refs remotas).
+Nenhuma alteração no guardian, rota fabril, clique 3022, coletor, regras de
+3074/3022, timeline ou armazenamento operacional. Agente só tem a atribuição MIME
+revisada: SHA256 531ae0a15150a8fa7e269f09dbd64d64de50092f407a97b907c4889ddbef1d58.
+
+Instalação original/Windows real, sessão e permissões Cloud reais, eventual
+mudança de origem HTTPS/localhost, Chrome/MES, rede e dados físicos ainda precisam
+de etapa supervisionada autorizada. P02 real, P04 real/completa, P05/P07/P08 real
+e G0–G7 físicos PENDENTES. Nunca oferecer banco desidentificado como recuperação,
+limpar Auth/cache para contornar proteção ou restaurar SQLite antigo sobre novos
+registros. O manual da candidata contém verificações antes/depois e STOP/retorno.

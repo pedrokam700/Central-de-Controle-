@@ -170,7 +170,7 @@ ConvertTo-Json -InputObject $owners -Compress
    attempt=subprocess.run(['powershell.exe','-NoProfile','-File',str(S/'suporte/ames-workstation/START_AGENT_CANONICAL.ps1'),'-Root',str(S),'-MaxAttempts','1'],stdout=stream,stderr=subprocess.STDOUT,env=environment(),timeout=45)
   assert attempt.returncode!=0 and 'MAINTENANCE_TRANSACTION_PENDING_OR_UNVERIFIED' in refusal.read_text(errors='replace')
   assert tables(T)==after and pathlib.Path(api(T,'/api/v1/v2/capabilities')['package_root']).resolve()==T
-  record('whole_entry_R2_commit_IO_failure_preserves_all_new_data','PASS',actual_write_failure=True,new_independent_rows=1,old_launcher_refused=True,old_Run_not_restored=True,automatic_resume=False)
+  record('whole_entry_R2_commit_IO_failure_preserves_all_new_data','PASS',actual_write_failure=True,new_independent_rows=1,old_launcher_refused=True,old_Run_not_restored=True,old_generation_automatic_restart=False)
   stop_guardian(T);stop(T,api(T,'/api/v1/ready')['pid']);s_guard.wait(timeout=5);g_out.close();g_err.close()
  finally:
   # Only this synthetic fixture's attested processes/Run entry are eligible.
