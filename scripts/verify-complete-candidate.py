@@ -191,7 +191,8 @@ def verify(archive,expected_sha,extract_to=None):
         '08_PREPARAR_REDE_AMES.bat','05_ABRIR_CHROME_AMES.bat','01_TROCAR.bat',
         '01_TROCAR_PARA_PR69_NOVA.bat','suporte/ames-workstation/START_AGENT_CANONICAL.ps1',
         'suporte/ames-workstation/KEEP_AGENT_RUNNING.ps1','suporte/ames-workstation/ISSUE57_RELAUNCH_ENROLLMENT.ps1',
-        'suporte/ames-workstation/SAFE_STATE_TRANSFER.py','suporte/ames-workstation/issue57_update_preflight.py','network/ensure_ames_route.ps1']
+        'suporte/ames-workstation/SAFE_STATE_TRANSFER.py','suporte/ames-workstation/issue57_update_preflight.py',
+        'suporte/ames-workstation/check_install_path.py','network/ensure_ames_route.ps1']
     require(all(n in data for n in critical),'Missing startup/switch dependency')
     require('ames-agent/candidate-files.json' not in data,'CLEAN mixed with legacy overlay')
     extracted=None

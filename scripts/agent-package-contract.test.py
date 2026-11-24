@@ -105,6 +105,7 @@ def test_integrated_clean_support_files_are_explicit():
         "ISSUE57_RELAUNCH_ENROLLMENT.ps1",
         "SAFE_STATE_TRANSFER.py",
         "issue57_update_preflight.py",
+        "check_install_path.py",
     )
     source = (ROOT / "scripts" / "build-integrated-candidate.py").read_text(encoding="utf-8")
     assert "for p in ws.iterdir()" not in source
