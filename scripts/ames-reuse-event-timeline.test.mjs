@@ -101,3 +101,29 @@ test('U1b: canonical and local copies of the same explicit 3022 event are shown 
  events=buildReuseHistoryTimeline({failures:f.board.history_2114,operators:[canonical,{...local,snapshot_revision:17}]});
  assert.equal(events.filter(e=>e.source_view==='3022').length,2,'explicitly different revisions remain different observations');
 });
+
+test('snapshot and cache copies of one 3012 repair share a row and recover the explicit name',()=>{
+ const f=reuseTimelineFixture();
+ const partial={...f.repairs[0],repair_user_name:undefined,raw_ref:'sqlite:3012:R0'};
+ const cached={...partial,raw_ref:undefined,raw:{repairUserDesc:'Nome registrado'}};
+ const rows=buildReuseHistoryTimeline({repairs:[partial,cached,{...cached,row_key:'R1'}]});
+ assert.equal(rows.length,2);
+ assert.equal(rows.find(r=>r.row_key==='R0').actors[0].name,'Nome registrado');
+ assert.equal(rows.find(r=>r.row_key==='R0').raw_ref,'sqlite:3012:R0');
+ const conflict={...cached,repair_comment:'Revisão diferente'};
+ assert.equal(buildReuseHistoryTimeline({repairs:[partial,conflict]}).length,2);
+});
+
+test('legacy 3022 code in Tran User does not shadow its explicit name; names stay on the same PCBA',()=>{
+ const f=reuseTimelineFixture(), repair={...f.repairs[0],repair_user_name:undefined};
+ const operator={pcba_sn:repair.pcba_sn,raw:{'Tran User Id':repair.repair_user,'Tran User':repair.repair_user,'Tran User Desc':'Pessoa do reparo'}};
+ const html=renderBoardComparisonTable(f.board,{repairs:[repair],operators:[operator]});
+ assert.match(html.match(/<tr[^>]*data-source-view="3012"[\s\S]*?<\/tr>/)[0],/Pessoa do reparo/);
+});
+
+test('durable 3022 passage with short operation and full terminal is only displayed once',()=>{
+ const f=reuseTimelineFixture(),op={...f.operators[0],station:'A5160'};
+ const events=buildReuseHistoryTimeline({pcbas:[f.board.sn],operators:[op,{...op,station:'TAN10101A516001'}]});
+ assert.equal(events.length,1);
+ assert.equal(buildReuseHistoryTimeline({pcbas:[f.board.sn],operators:[op,{...op,station:'TAN10102A516001'}]}).length,2);
+});

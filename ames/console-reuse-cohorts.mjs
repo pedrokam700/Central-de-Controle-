@@ -1,6 +1,6 @@
 import {buildReuseCohorts,filterReuseCohorts,analysisScope2114} from './data/reuse-cohorts.mjs';
 import {reuseHistoryIdentity} from './data/reuse-history-timeline.mjs';
-import {renderReuseHistoryTimeline} from './console-reuse-history-timeline.mjs';
+import {renderReuseHistoryTimeline,paginateReuseHistory} from './console-reuse-history-timeline.mjs';
 import {a6900TechnicianFor} from './data/a6900-technician.mjs';
 import {projectRepairTechnicianNames} from './console-sn-repair-evidence.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
@@ -268,6 +268,7 @@ export function mountReuseCohorts(root,snapshot,{cachedRepairHistory,cached3022O
    loaded.add(detail);
    const row=rows[index],target=detail.querySelector('[data-reuse-history-timeline]');
    if(!row||!target)return;
+   paginateReuseHistory(target);
    const groups=rowKind==='components'?timelineComponent(row):null;
    const boards=rowKind==='components'?[...new Set(groups.map(g=>g.pcba_sn))]:[row.sn];
    const results=await Promise.all(boards.map(async board=>{
@@ -288,6 +289,7 @@ export function mountReuseCohorts(root,snapshot,{cachedRepairHistory,cached3022O
    }));
    target.outerHTML=rowKind==='components'?renderComponentComparisonTable(groups,{repairs,operators,status}):
     renderBoardComparisonTable(timelineBoard(row),{repairs,operators,status});
+   paginateReuseHistory(detail.querySelector('[data-reuse-history-timeline]'));
   }));
  }
 

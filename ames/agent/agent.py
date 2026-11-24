@@ -61,7 +61,7 @@ from urllib.request import Request, urlopen
 
 from ames_3028 import parse_export
 from ames_3028_live import collect_live_3028 as _collect_live_3028
-from comment_provenance_3028 import preserve_3028_comment
+from comment_provenance_3028 import preserve_3028_comment, recover_3028_period
 collect_live_3028 = mes_call(_collect_live_3028)
 from engine_bridge import (choose_current_history, discover_engine, refresh_2114, repair_state,
                            run_full_v016, run_deep_v016_records, run_individual_lookup, regenerate_v016_excel, build_trace_insights)
@@ -377,13 +377,20 @@ def _persist_3028_live(live, *, mode="today", start_at=None, end_at=None, shift=
 def ingest_3028_live(*, mode="today", start_at=None, end_at=None, shift=None, lines=None):
     if not start_at or not end_at:
         raise RuntimeError("Janela 3028 incompleta")
-    live = collect_live_3028(
+    arguments = dict(
         cdp_url=str(CONFIG.get("chrome_cdp") or "http://127.0.0.1:9222"),
         ames_host=str(CONFIG.get("ames_host") or "172.29.185.215"),
         lines=normalize_lines(lines or CONFIG.get("configured_lines") or []),
         start_at=start_at,
         end_at=end_at,
     )
+    try:
+        live = collect_live_3028(**arguments)
+    except RuntimeError as exc:
+        if (mode != "custom" or not arguments["lines"] or "coleta rejeitada" not in str(exc).lower()
+                or datetime.fromisoformat(end_at) - datetime.fromisoformat(start_at) <= timedelta(days=1)):
+            raise
+        live = mes_call(recover_3028_period)(**arguments)
     return _persist_3028_live(live, mode=mode, start_at=start_at, end_at=end_at, shift=shift)
 
 

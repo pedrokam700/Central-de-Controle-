@@ -11,7 +11,7 @@ const fixture=${JSON.stringify(fixture)};window.qa={calls:{repairs:0,operators:0
 qa.show=(lang='pt-BR',dark=false,mode='ok')=>{
  document.documentElement.lang=lang;document.body.classList.toggle('dark',dark);qa.calls={repairs:0,operators:0};
  mountReuseCohorts(document.querySelector('#root'),fixture.snapshot,{
- cachedRepairHistory:async()=>{qa.calls.repairs++;if(mode==='repair-error')throw Error('synthetic read failure');return fixture.repairs;},
+ cachedRepairHistory:async()=>{qa.calls.repairs++;if(mode==='repair-error')throw Error('synthetic read failure');return mode==='long'?Array.from({length:23},(_,i)=>({...fixture.repairs[0],row_key:'R'+i,repair_comment:'Nota '+i})):fixture.repairs;},
  cached3022Operators:async()=>{qa.calls.operators++;if(mode==='operator-error')throw Error('synthetic read failure');return fixture.operators.map(e=>({...e,snapshot_id:Number(e.snapshot_id),source_id:undefined,snapshot_revision:undefined,operator_role:'observed_process_operator'}));}});
 };qa.show();`;
 const root=process.cwd(),server=http.createServer((req,res)=>{
@@ -50,7 +50,7 @@ try{
   const current=page.locator('details[data-cohort-row]').first();await current.locator('summary').first().click();
   await current.locator('[data-timeline-coverage="3012"]').waitFor();
   assert.equal(await current.locator('table').count(),1);assert.equal(await current.locator('[data-reuse-timeline-row]').count(),8);
-  assert.equal(await current.locator('[data-reuse-history-timeline] details').count(),0,'no hidden operational names or comments');
+  assert.equal(await current.locator('[data-reuse-history-timeline] details:not([data-event-proof])').count(),0,'operational names and comments remain visible');
   const text=await current.locator('[data-reuse-history-timeline]').innerText();
   assert.ok(!/\+\d/.test(text));assert.match(text,lang==='en-US'?/Person \/ role/i:/Técnico \/ papel/i);
   if(dark)assert.notEqual(await current.locator('th').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(245, 246, 248)');
@@ -64,6 +64,15 @@ try{
   assert.match(await status.innerText(),/indisponível.*preservadas/);
   assert.equal(await current.locator('[data-reuse-timeline-row]').count(),expected);
  }
+ await page.evaluate(()=>qa.show('pt-BR',false,'long'));
+ await page.locator('[data-cohort-kind="pcbas"][data-cohort-metric="observed"]').click();
+ const long=page.locator('details[data-cohort-row]').first();await long.locator('summary').first().click();
+ await long.locator('[data-timeline-coverage="3012"]').waitFor();
+ assert.equal(await long.locator('[data-reuse-timeline-row]:visible').count(),20);
+ await long.locator('[data-page-step="1"]').click();
+ assert.equal(await long.locator('[data-reuse-timeline-row]:visible').count(),9);
+ await long.locator('[data-page-step="-1"]').click();
+ assert.equal(await long.locator('[data-reuse-timeline-row]:visible').count(),20);
  await page.evaluate(()=>qa.show());await page.locator('[data-cohort-kind="components"][data-cohort-metric="observed"]').click();
  const component=page.locator('details[data-cohort-row]').first();await component.locator('summary').first().click();
  await component.locator('[data-timeline-coverage="3012"]').waitFor();

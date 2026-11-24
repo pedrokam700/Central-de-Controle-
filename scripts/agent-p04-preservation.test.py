@@ -10,6 +10,15 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1];BASE='5856eb3f0cc1dd391cf93217fd068f0a044f8ab2'
 BRANCH='work/ames-p04-windows-preflight-20261118'
 ALLOWED={
+ 'ames/agent/comment_provenance_3028.py',
+ 'ames/console-improvements.css',
+ 'ames/console-reuse-cohorts.mjs',
+ 'ames/console-reuse-history-timeline.mjs',
+ 'ames/console-sn-repair-evidence.mjs',
+ 'ames/data/reuse-history-timeline.mjs',
+ 'scripts/install98/period-3028.test.py',
+ 'scripts/ames-reuse-event-timeline.test.mjs',
+ 'scripts/ames-reuse-timeline.browser.mjs',
  'AGENTS.md','tools/ames-workstation/check_install_path.py',
  'tools/ames-workstation/01_INSTALAR_UMA_VEZ.bat','tools/ames-workstation/09_REPARAR_DEPENDENCIAS_CLEAN.bat',
  # PR98 integrated delivery: eight already reviewed support/doc paths from ab81dd98.
@@ -51,7 +60,7 @@ class P04Preservation(unittest.TestCase):
         def tree(ref):
             return {p:i for row in git('ls-tree','-r',ref).splitlines() for i,p in [row.split('\t',1)] if p not in ALLOWED}
         self.assertEqual(tree(BASE),tree('HEAD'))
-        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '531ae0a15150a8fa7e269f09dbd64d64de50092f407a97b907c4889ddbef1d58', 'Reviewed static MIME assignment only')
+        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '830ea05de6b5c454d932b35c7316de023d2356fe4434df7cf05619e944e717fd', 'Reviewed period recovery entry and static MIME')
 
     def test_all_existing_business_test_commands_preserved(self):
         for path in ('.github/workflows/ames-lab-isolation.yml','.github/workflows/ames-lab-existing-regressions.yml'):
