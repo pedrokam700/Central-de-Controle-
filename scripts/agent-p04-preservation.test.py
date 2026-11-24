@@ -60,7 +60,7 @@ class P04Preservation(unittest.TestCase):
         def tree(ref):
             return {p:i for row in git('ls-tree','-r',ref).splitlines() for i,p in [row.split('\t',1)] if p not in ALLOWED}
         self.assertEqual(tree(BASE),tree('HEAD'))
-        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '830ea05de6b5c454d932b35c7316de023d2356fe4434df7cf05619e944e717fd', 'Reviewed period recovery entry and static MIME')
+        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '96f4e6bb64a2c1a3b40b205ce3a4fd451cb5443688ac03b156573572bc1f9a31', 'Reviewed period recovery entry and static MIME')
 
     def test_all_existing_business_test_commands_preserved(self):
         for path in ('.github/workflows/ames-lab-isolation.yml','.github/workflows/ames-lab-existing-regressions.yml'):

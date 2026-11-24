@@ -38,6 +38,29 @@ def fixture(count, excess=0, missing_groups=0, corrupt_slice=False):
 
 
 class Period(unittest.TestCase):
+    def test_normal_entry_selects_only_long_custom_windows_and_persists_after_validation(self):
+        # Execute the installed entry function with isolated persistence and MES boundaries.
+        import ast
+        from datetime import timedelta
+        from unittest.mock import Mock
+        tree = ast.parse((Path(__file__).resolve().parents[2] / "ames/agent/agent.py").read_text())
+        ingest = next(fn for fn in tree.body if getattr(fn, "name", None) == "ingest_3028_live")
+        saved, native, period = Mock(), Mock(), Mock()
+        context = dict(CONFIG={}, normalize_lines=list, collect_live_3028=native, collect_3028_period=period,
+                       mes_call=lambda f: f, datetime=datetime, timedelta=timedelta, _persist_3028_live=saved)
+        exec(compile(ast.Module(body=[ingest], type_ignores=[]), "<3028 entry>", "exec"), context)
+        run = context["ingest_3028_live"]
+        for mode, end in [("today", END), ("custom", START + timedelta(days=1))]:
+            run(mode=mode, lines=["L2"], start_at=START.isoformat(), end_at=end.isoformat())
+        self.assertEqual(native.call_count, 2)
+        run(mode="custom", lines=["L2"], start_at=START.isoformat(), end_at=END.isoformat())
+        period.assert_called_once()
+        self.assertEqual(saved.call_args.args, (period.return_value,))
+        period.side_effect = ValueError("mismatch")
+        with self.assertRaises(ValueError):
+            run(mode="custom", lines=["L2"], start_at=START.isoformat(), end_at=END.isoformat())
+        self.assertEqual(saved.call_count, 3)
+
     def test_full_detail_confirmed_even_if_full_grouped_missing_136(self):
         result = _capture_checked_period(fixture(3775, missing_groups=136), "L2", START, END)
         self.assertEqual(result["detail"]["total"], 3775)

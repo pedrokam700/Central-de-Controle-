@@ -124,7 +124,7 @@ def _capture_checked_period(read, line, start, end):
     return result
 
 
-def recover_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
+def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
     from datetime import datetime
     from playwright.sync_api import sync_playwright
     import ames_3028_live as source

@@ -127,3 +127,11 @@ test('durable 3022 passage with short operation and full terminal is only displa
  assert.equal(events.length,1);
  assert.equal(buildReuseHistoryTimeline({pcbas:[f.board.sn],operators:[op,{...op,station:'TAN10102A516001'}]}).length,2);
 });
+
+test('historical named 3012 row resolves the same board and login; a different board cannot supply a name',()=>{
+ const f=reuseTimelineFixture(),a=f.repairs[0],b={...a,row_key:'OLDER',repair_user_name:null};
+ const timeline=repairs=>buildReuseHistoryTimeline({repairs,pcbas:[f.board.sn]}).find(e=>e.row_key==='OLDER').actors[0].name;
+ assert.equal(timeline([a,b]),'Reparadora Alfa');
+ assert.equal(timeline([{...a,pcba_sn:'OTHER'},b]),null);
+ assert.equal(timeline([a,{...a,row_key:'THIRD',repair_user_name:'Conflict'},b]),null);
+});

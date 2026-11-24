@@ -244,7 +244,12 @@ export function mountReuseCohorts(root,snapshot,{cachedRepairHistory,cached3022O
    const rawHistory=displayHistory.get(binding.pcba_sn)||[];
    const rawCurrent=displayCurrent.get(binding.pcba_sn)||[];
    const failures=rawHistory.length||rawCurrent.length
-    ?[...rawHistory.map(h=>({...h,source_view:'2114'})),...rawCurrent.map(h=>({...h,source_view:'3028'}))]:binding.failures;
+    ?[...rawHistory.map(h=>({...h,source_view:'2114'})),...rawCurrent.map(h=>({...h,source_view:'3028'}))]:binding.failures.map(f=>({...f}));
+   for(const failure of failures){
+    const recurrence=(row.cross_board_recurrences||[]).find(g=>
+     g.pcbas.includes(binding.pcba_sn)&&compareFailures(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT');
+    if(recurrence)failure.recurrence_pcba_count=recurrence.pcba_count;
+   }
    const own=(row.evidence||[]).filter(ref=>ref.source_view==='3074'&&boardOf(ref.raw||{})===binding.pcba_sn);
    if(!own.length)return [{...binding,failures}];
    return own.map(ref=>({...binding,...ref.raw,pcba_sn:binding.pcba_sn,

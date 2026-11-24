@@ -90,8 +90,22 @@ export function provenRepairUserName(repair={},result={},currentPcba=''){
 // names or an exactly matching PCBA+MES ID, rejecting source/line conflicts.
 export function projectRepairTechnicianNames(repairs=[],events=[]){
  const operators=normalize3022OperatorRows(events);
- return (repairs||[]).map(repair=>({...repair,
-  repair_technician_name:resolvedRepairName(repair,operators)}));
+ // A named 3012 row is also an identity witness for the same board and MES ID.
+ for(const r of repairs||[]){
+  const name=explicitRepairName(r);
+  if(name&&r.repair_user&&pcbaOf(r))operators.push({...scopeOf(r),pcba_sn:pcbaOf(r),operator_id:r.repair_user,operator_name:name});
+ }
+ const witnesses=new Map();
+ const key=(board,id)=>JSON.stringify([board,normalizedId(id)]);
+ for(const person of operators){
+  const k=key(pcbaOf(person),operatorId(person));
+  if(!witnesses.has(k))witnesses.set(k,new Map());
+  witnesses.get(k).set(JSON.stringify([scopeOf(person),operatorName(person)]),person);
+ }
+ return (repairs||[]).map(repair=>{
+  const people=witnesses.get(key(pcbaOf(repair),value(repair,'repair_user','Repair User')));
+  return {...repair,repair_technician_name:resolvedRepairName(repair,people?.values()||[])};
+ });
 }
 
 const exactRepair=repairs=>(repairs||[]).find(repair=>repair?.association==='exact_occurrence')||null;
