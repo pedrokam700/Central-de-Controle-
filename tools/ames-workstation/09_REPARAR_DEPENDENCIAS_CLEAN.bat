@@ -23,6 +23,12 @@ echo para controlar o Google Chrome ja instalado via CDP 9222.
 echo Este reparo NAO instala Chromium do Playwright.
 echo.
 
+"%VPY%" -I -B "suporte\ames-workstation\check_install_path.py"
+if errorlevel 1 (
+  if "%AUTO_MODE%"=="0" pause
+  exit /b 22
+)
+
 echo [1/3] Verificando pip...
 "%VPY%" -m ensurepip --upgrade >nul 2>nul
 "%VPY%" -m pip --version || goto :fail
@@ -47,7 +53,6 @@ exit /b 0
 :fail
 echo.
 echo [ERRO] Nao foi possivel reparar as dependencias Python.
-echo Verifique a Ethernet/internet normal e tente novamente.
-echo O Wi-Fi A-MES pode permanecer conectado em paralelo; nenhuma senha e alterada.
+echo Consulte o primeiro erro Python ou pip acima. O pacote completo usa wheels locais.
 if "%AUTO_MODE%"=="0" pause
 exit /b 21

@@ -8,6 +8,8 @@ import subprocess
 import unittest
 ROOT=Path(__file__).resolve().parents[1];BASE='48112ea9e408f5dce7fe85f951616b06ed4020e0';BRANCH='work/ames-p08-generation-reconciliation-20261118'
 ALLOWED={
+ 'AGENTS.md','tools/ames-workstation/check_install_path.py',
+ 'tools/ames-workstation/01_INSTALAR_UMA_VEZ.bat','tools/ames-workstation/09_REPARAR_DEPENDENCIAS_CLEAN.bat',
  # PR98 integrated delivery: eight already reviewed support/doc paths from ab81dd98.
  'docs/ames/audits/PR98_MATRIZ_CONTINUIDADE_INSTALACAO_20261119.md',
  'docs/ames/homologation/PR98_ATUALIZACAO_SUPERVISIONADA_OPPO_20261119.md',

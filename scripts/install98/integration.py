@@ -79,6 +79,22 @@ def stop(root,pid):
 def tables(root):
  with closing(sqlite3.connect(root/'ames-agent/data/ames_local.sqlite3')) as con:
   return {t:[list(r) for r in con.execute('SELECT * FROM "'+t+'" ORDER BY rowid')] for t in ('defect_observations','pcba_history','material_reuse','mes_revisions','snapshot_payload_revisions','repair_history_3012','process_raw_events','process_events','process_defect_contexts')}
+def check_download_paths(root):
+ # Use the actual delivered wheel inventory with the old and new Explorer defaults.
+ guard = runpy.run_path(str(root / 'suporte/ames-workstation/check_install_path.py'))
+ previous = '976b45113b74f4c53d613c34f04a4573449b6379'
+ downloads = LAB / 'Downloads'
+ deep = downloads / ('CENTRAL_AMES_CANDIDATA_WINDOWS_' + previous) / ('CENTRAL_AMES_CANDIDATA_' + previous)
+ short = downloads / 'AMES' / 'Central'
+ for destination in (deep, short):
+  (destination / 'vendor').mkdir(parents=True)
+  shutil.copytree(root / 'vendor/wheels', destination / 'vendor/wheels')
+ assert guard['check'](deep, False) == 22
+ assert guard['check'](deep, True) == 0
+ assert guard['check'](short, False) == 0
+ assert not (deep / '.venv').exists()
+ record('explorer_download_paths_offline_wheels', 'PASS', long_path_refused=True, short_path_accepted=True)
+
 def main():
  assert os.name=='nt' and os.environ['GITHUB_ACTIONS']=='true'
  assert LAB.parent==pathlib.Path(os.environ['RUNNER_TEMP']).resolve() and LAB.name=='CENTRAL-INSTALL-LAB-'+os.environ['GITHUB_RUN_ID']
@@ -105,7 +121,9 @@ def main():
   root=LAB/label
   if label=='B':run([sys.executable,'-B',ROOT/'scripts/install98/offline-assets.test.py','--built-root',root/'frontend/Central-de-Controle-'])
   if label=='A':shutil.copytree(LAB/'wheels',root/'vendor/wheels')
-  else:assert len(list((root/'vendor/wheels').glob('*.whl')))==21
+  else:
+   assert len(list((root/'vendor/wheels').glob('*.whl')))==21
+   check_download_paths(root)
   out=run(['cmd.exe','/d','/c','call',root/'01_INSTALAR_UMA_VEZ.bat','/prepare'],cwd=root,timeout=300)
   assert not (root/'ames-agent/config.json').exists() and not (root/'ames-agent/data').exists()
   record('actual_installer_prepare_'+label,'PASS',no_runtime_created=True)
@@ -197,7 +215,7 @@ print('SYNTHETIC_FIXTURE_PERIODS_DEFINED_BEFORE_C0; ALL_OLD_REVISIONS_UNCHANGED'
  if any(r['status']=='PENDING' for r in ROWS):raise SystemExit('FULL_INSTALLATION_QUALIFICATION_STILL_PENDING')
  assert json.loads((LAB/'progress.json').read_text())['full_switch_qualified'] is True
  delivery=LAB/'delivery';delivery.mkdir()
- sha=os.environ['GITHUB_SHA'];archive=delivery/('CENTRAL_AMES_CANDIDATA_'+sha+'.zip')
+ archive=delivery/'Central.zip'
  shutil.copyfile(LAB/'B.zip',archive)
  for name in ('complete-archive-receipt.json','independent-archive-receipt.json','progress.json','dependency-receipt.json'):
   shutil.copyfile(LAB/name,delivery/name)

@@ -20,8 +20,10 @@ O usuário autorizou gerar e testar esta candidata completa. Não é necessário
 presumir intervenção de TI para um computador sob seu controle. Isso NÃO é
 confirmação para trocar dados reais nem para alterar política de segurança.
 
-1. Extraia o ZIP completo em uma pasta NOVA e vazia, fora da Central atual e
-   dos backups. Não substitua arquivos nem copie banco/config/token manualmente.
+1. Use **Extrair tudo** no download AMES. Dentro dele, extraia **Central.zip**
+   em uma pasta NOVA, curta e vazia, por exemplo `%USERPROFILE%\AMES2`.
+   Se essa pasta já existir, escolha outro nome curto. Preserve a instalação
+   anterior, o ambiente parcial e os backups nas pastas originais.
 2. Abra somente **00_CONFERIR_ATUALIZACAO.bat** dessa pasta. Não execute ainda
    01_TROCAR, 00_INICIAR, instalador ou reparador. A conferência não instala,
    inicia ou para agentes, prepara rede, abre SQLite ou transfere estado.
