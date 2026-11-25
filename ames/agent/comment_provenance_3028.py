@@ -27,14 +27,34 @@ def _counts(rows):
     return Counter(json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows)
 
 
+def _model_scope(value):
+    """3028 sends the original CSV query to MES; compare only its exact codes here."""
+    members = [item.strip().casefold() for item in value.split(",")]
+    if len(members) > 1 and not all(members):
+        raise ValueError("3028: lista de modelos incompleta no resumo")
+    return frozenset(members)
+
+
 def _model_tables(capture):
-    """Only identical repeated model queries may represent the same source table."""
+    """Never concatenate overlapping model queries from the same MES window."""
     tables = {}
+    seen = set()
     for run in capture["modelRuns"]:
-        model = run["prodModel"]
-        if model in tables and tables[model] != run:
-            raise ValueError("3028: respostas diferentes para o mesmo modelo e período")
-        tables[model] = run
+        scope = _model_scope(run["prodModel"])
+        if scope in tables:
+            previous = tables[scope]
+            # Only the ordering/spelling of the model parameter may differ.
+            params = {**run.get("params", {}), "prodModel": previous["prodModel"]}
+            comparable = {**run, "prodModel": previous["prodModel"]}
+            if "params" in run:
+                comparable["params"] = params
+            if comparable != previous:
+                raise ValueError("3028: respostas diferentes para o mesmo modelo e período")
+            continue
+        if seen.intersection(scope) or (seen and ("" in scope or "" in seen)):
+            raise ValueError("3028: consultas de modelos sobrepostas no mesmo período")
+        tables[scope] = run
+        seen.update(scope)
     return tables
 
 
@@ -50,7 +70,12 @@ def _group_counts(rows):
         qty = int(str(row["qty"]))
         if qty < 0:
             raise ValueError("3028: quantidade agrupada negativa")
-        key = json.dumps({k: v for k, v in row.items() if k != "qty"}, sort_keys=True)
+        fields = {k: v for k, v in row.items() if k != "qty"}
+        for key in ("prodModel", "productModel"):
+            value = fields.get(key)
+            if isinstance(value, str) and "," in value:
+                fields[key] = sorted(_model_scope(value))
+        key = json.dumps(fields, sort_keys=True)
         counts[key] += qty
     return counts
 
@@ -72,6 +97,8 @@ def _scope_error(table, grid, line, model, accepted_models, columns):
         if not value or value.casefold() == line.casefold():
             field, value = _field(row, columns.get("model"), model_fields)
             if not model or not value or value.casefold() in accepted_models:
+                continue
+            if "," in value and _model_scope(value) == _model_scope(model):
                 continue
             what, expected = "modelo esperado", model
         # Use actual callback lengths; pages may have fewer rows than pageSize.
@@ -98,12 +125,14 @@ def _scope_runs(cap, line):
     for row in cap["summary"]["records"]:
         _, query = _field(row, "prodModel", ("productModel",))
         _, display = _field(row, "productModel", ())
-        for name in (query, display):
+        scope = _model_scope(query)
+        for name in (*scope, query, display):
             if name:
-                owners[name.casefold()].add(query)
+                owners[name.casefold()].add(scope)
     runs = _model_tables(cap)
-    for model, run in runs.items():
-        allowed = {name for name, keys in owners.items() if keys == {model}}
+    for scope, run in runs.items():
+        model = run["prodModel"]
+        allowed = {name for name, keys in owners.items() if keys == {scope}}
         allowed.add(model.casefold())
         errors = {}
         for grid in ("grouped", "detail"):
@@ -111,7 +140,7 @@ def _scope_runs(cap, line):
             if issue:
                 errors[grid] = issue
         if errors:
-            runs[model] = {**run, "scope_errors": errors}
+            runs[scope] = {**run, "scope_errors": errors}
     return summary_error, runs
 
 
@@ -222,11 +251,24 @@ def _capture_checked_period(read, line, start, end, rescope=None):
             collect_slice(left, right)
             left = right
 
-    if set(models) != {model for _, runs in parts for model in runs}:
+    # A shorter window can contain just one member of a full-window model list.
+    # Group complete subqueries under their unique full scope; original detail
+    # and group counts must still independently witness the recovered records.
+    selected_by_scope = {scope: [] for scope in models}
+    covered = set()
+    for _, runs in parts:
+        for scope, run in runs.items():
+            parent = next((candidate for candidate in models if scope <= candidate), None)
+            if parent is None:
+                raise ValueError("3028: modelos das subconsultas divergem do resumo do período")
+            selected_by_scope[parent].append(run)
+            covered.update(scope)
+    if covered != set().union(*models):
         raise ValueError("3028: modelos das subconsultas divergem do resumo do período")
     grouped, detail = [], []
-    for model, original in models.items():
-        selected = [runs[model] for _, runs in parts if model in runs]
+    for scope, original in models.items():
+        model = original["prodModel"]
+        selected = selected_by_scope[scope]
         rows = [row for r in selected for row in r["detail"]["records"]]
         groups = [row for r in selected for row in r["grouped"]["records"]]
         if parts[0][0] is not full:
@@ -391,5 +433,6 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
             except Exception as exc:
                 visible = {"warning": f"UI_SYNC_FAILED: {exc}", **params(line, start, end)}
     return dict(source="AWIP3028_DIRECT_EXTJS", captured_at=datetime.now().isoformat(timespec="seconds"),
-                requested_lines=lines, lines=lines, window=window, line_metrics=metrics, records=records,
+                requested_lines=lines, lines=sorted({r["line"] for r in metrics} | {r["line"] for r in records}),
+                window=window, line_metrics=metrics, records=records,
                 records_count=len(records), captures=captures, validations=validations, visible_state=visible)

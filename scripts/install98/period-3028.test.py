@@ -38,6 +38,62 @@ def fixture(count, excess=0, missing_groups=0, corrupt_slice=False):
 
 
 class Period(unittest.TestCase):
+    def test_mes_summary_model_list_keeps_native_metrics_and_every_occurrence(self):
+        order = "CPH2817BR,CPH2815BR"
+        cap = fixture(246)("L2", START, END)
+        cap["summary"]["records"][0].update(prodModel=order, qty=1531, totalDefectQty=227)
+        run = cap["modelRuns"][0]
+        run["prodModel"] = order
+        run["grouped"]["records"][0]["prodModel"] = "CPH2815BR,CPH2817BR"
+        details = run["detail"]
+        for i, row in enumerate(details["records"]):
+            row.update(lineId="L2", productModel=order.split(",")[i % 2])
+        details["pageResults"] = [{"page":i+1, "success":True, "count":min(20,246-i*20)} for i in range(13)]
+        read = Mock(return_value=cap)
+        result = _capture_checked_period(read, "L2", START, END)
+        read.assert_called_once()
+        self.assertEqual(result["summary"], cap["summary"])
+        self.assertEqual(result["detail"]["records"], details["records"])
+        for foreign in ("CPH2817", "CPH2817BRX", "CPH2815BR,OTHER"):
+            details["records"][-1]["productModel"] = foreign
+            with self.assertRaisesRegex(ValueError, "registro 246, página 13"):
+                _capture_checked_period(read, "L2", START, END)
+
+    def test_subwindows_can_reverse_or_narrow_the_full_model_list(self):
+        members = ["CPH2815BR", "CPH2817BR"]
+        for split in (False, True):
+            def read(line, left, right):
+                cap = fixture(3775, missing_groups=136)(line, left, right)
+                full = (left, right) == (START, END)
+                # First seven days precede the change to the other model.
+                mid = 3775*7//60
+                run = cap["modelRuns"][0]
+                rows = run["detail"]["records"]
+                for row in rows:
+                    row["productModel"] = members[int(row["seq"] >= mid)]
+                name = ",".join(members if full else reversed(members))
+                if split and not full:
+                    name = rows[0]["productModel"]
+                run["prodModel"] = name
+                cap["summary"]["records"][0]["prodModel"] = name
+                return cap
+            result = _capture_checked_period(read, "L2", START, END)
+            self.assertEqual(result["detail"]["total"], 3775)
+            self.assertEqual(result["summary"]["records"][0]["prodModel"], ",".join(members))
+
+    def test_overlapping_scopes_in_one_capture_cannot_double_count(self):
+        from comment_provenance_3028 import _model_tables
+        cap = fixture(24)("L2", START, END)
+        run = cap["modelRuns"][0]
+        run["prodModel"] = "CPH2815BR,CPH2817BR"
+        copy = deepcopy(run)
+        cap["modelRuns"].append(copy)
+        copy["prodModel"] = "CPH2817BR,CPH2815BR"
+        self.assertEqual(len(_model_tables(cap)), 1)
+        copy["prodModel"] = "CPH2817BR"
+        with self.assertRaisesRegex(ValueError, "sobrepostas"):
+            _model_tables(cap)
+
     def test_every_live_mode_validates_before_persistence(self):
         import ast
         tree = ast.parse((Path(__file__).resolve().parents[2] / "ames/agent/agent.py").read_text())
