@@ -86,7 +86,7 @@ class LabSourcePreservation(unittest.TestCase):
                 if path not in ALLOWED:result[path]=identity
             return result
         self.assertEqual(entries(BASE),entries('HEAD'))
-        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '96f4e6bb64a2c1a3b40b205ce3a4fd451cb5443688ac03b156573572bc1f9a31', 'Reviewed period recovery entry and static MIME')
+        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '06e0a556850c976fa62a8aba0cd763175ff4605b5afec221c18ae307496921f8', 'Reviewed all-mode 3028 entry and static MIME')
         for path in ('ames/agent/update_candidate.py',
                      'ames/agent/agent_entry.py','ames/agent/agent_hardened_entry.py',
                      'ames/agent/engine_bridge.py','ames/agent/process_r11.py',

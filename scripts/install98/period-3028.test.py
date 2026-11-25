@@ -66,6 +66,19 @@ class Period(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "L2.*agrupado=258, detalhe=260"):
             _capture_checked_period(Mock(return_value=bad), "L2", START, end)
 
+    def test_changed_model_set_or_balanced_but_unrelated_repeat_refused(self):
+        bad = fixture(258, excess=2)("L2", START, END)
+        for empty in (False, True):
+            different = fixture(258)("L2", START, END)
+            if empty:
+                different["modelRuns"].clear()
+            else:
+                run = different["modelRuns"][0]
+                run["grouped"]["records"][0]["defectCode"] = "OTHER"
+                run["detail"]["records"][0]["seq"] = -1
+            with self.assertRaisesRegex(ValueError, "sem confirmação"):
+                _capture_checked_period(Mock(side_effect=[bad, different]), "L2", START, END)
+
     def test_foreground_mes_tab_and_failed_middle_line_keep_operator_context(self):
         from unittest.mock import MagicMock, patch
         from types import ModuleType
