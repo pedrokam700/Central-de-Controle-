@@ -61,30 +61,74 @@ def _balanced(tables):
                for run in tables.values())
 
 
+def _confirmed(original, rows, groups):
+    native = _counts(original["detail"]["records"])
+    recovered = _counts(rows)
+    exact = _complete(original["detail"]) and native == recovered
+    grouped = (_complete(original["grouped"]) and
+               _group_counts(groups) == _group_counts(original["grouped"]["records"]))
+    return exact, exact or (grouped and (native <= recovered or recovered <= native))
+
+
 def _capture_checked_period(read, line, start, end):
     """Read smaller windows if needed, retaining the native full-range FPY and quantity."""
     from datetime import timedelta
-    full = read(line, start, end)
+    def capture(left, right):
+        cap = read(line, left, right)
+        if cap["lineId"] != line:
+            raise ValueError(f"3028 {line}: resposta de outra linha")
+        runs = _model_tables(cap)
+        for model, run in runs.items():
+            for grid in ("grouped", "detail"):
+                for row in run[grid]["records"]:
+                    assigned = row.get("lineIdNew") or row.get("lineId")
+                    product = row.get("prodModel") or row.get("productModel")
+                    if (assigned and str(assigned).strip() != line) or (product and model and str(product).strip() != model):
+                        raise ValueError(f"3028 {line}: {grid} contém outra linha ou modelo")
+        return cap, runs
+
+    def complete(cap, runs):
+        return _complete(cap["summary"]) and _complete(cap["classification"]) and _balanced(runs)
+
+    full, models = capture(start, end)
+    if not complete(full, models):
+        # The grids are read sequentially. Re-query the exact scope once before
+        # attempting subdivision, including a single native MES hour.
+        repeat, repeated = capture(start, end)
+        if complete(repeat, repeated):
+            if models.keys() != repeated.keys() or not all(
+                    _confirmed(models[m], r["detail"]["records"], r["grouped"]["records"])[1]
+                    for m, r in repeated.items()):
+                raise ValueError(f"3028 {line}: releitura integral sem confirmação por modelo")
+            full, models = repeat, repeated
+        elif not _complete(full["summary"]) or not _complete(full["classification"]):
+            full, models = repeat, repeated
     if not _complete(full["summary"]) or not _complete(full["classification"]):
-        raise ValueError("3028: resumo ou classificação incompletos no período solicitado")
-    models = _model_tables(full)
+        raise ValueError(f"3028 {line}: resumo ou classificação incompletos no período solicitado")
+    def mismatch(runs, left, right):
+        grouped = sum(sum(_group_counts(r["grouped"]["records"]).values()) for r in runs.values())
+        detail = sum(len(r["detail"]["records"]) for r in runs.values())
+        return ValueError(f"3028 {line} entre {left} e {right}: agrupado={grouped}, detalhe={detail}; "
+                          "paginação ou totais por modelo sem confirmação.")
+
     parts = []
     if _balanced(models):
         parts.append((full, models))
     else:
         # Keep all boundaries at an MES hour. Recursively narrow only a failed slice.
         def collect_slice(left, right):
-            cap = read(line, left, right)
-            runs = _model_tables(cap)
-            if _complete(cap["summary"]) and _balanced(runs):
+            cap, runs = capture(left, right)
+            if complete(cap, runs):
                 parts.append((cap, runs))
                 return
-            if right - left <= timedelta(days=1):
-                raise ValueError(f"3028 {line}: agrupamento, detalhe ou paginação divergente entre {left} e {right}")
+            if right - left <= timedelta(hours=1):
+                raise mismatch(runs, left, right)
             pivot = left + timedelta(hours=int((right - left).total_seconds() // 7200))
             collect_slice(left, pivot)
             collect_slice(pivot, right)
 
+        if end - start <= timedelta(hours=1):
+            raise mismatch(models, start, end)
         step = timedelta(hours=min(168, max(1, int((end-start).total_seconds() // 7200))))
         left = start
         while left < end:
@@ -100,11 +144,7 @@ def _capture_checked_period(read, line, start, end):
         rows = [row for r in selected for row in r["detail"]["records"]]
         groups = [row for r in selected for row in r["grouped"]["records"]]
         if parts[0][0] is not full:
-            native = _counts(original["detail"]["records"])
-            recovered = _counts(rows)
-            native_detail = _complete(original["detail"]) and native == recovered
-            native_groups = (_complete(original["grouped"]) and
-                             _group_counts(groups) == _group_counts(original["grouped"]["records"]))
+            native_detail, confirmed = _confirmed(original, rows, groups)
             # Same raw event returned by neighboring intervals: never count it twice.
             # A unique full-range multiset is stronger evidence than a guessed boundary.
             seen = set()
@@ -113,7 +153,7 @@ def _capture_checked_period(read, line, start, end):
                 if seen.intersection(keys) and not native_detail:
                     raise ValueError(f"3028 {line}: limite entre subconsultas ambíguo para {model}")
                 seen.update(keys)
-            if not (native_detail or (native_groups and (native <= recovered or recovered <= native))):
+            if not confirmed:
                 raise ValueError(f"3028 {line}: subconsultas sem confirmação independente no período para {model}")
         detail.extend(rows)
         grouped.extend(groups)
@@ -122,6 +162,49 @@ def _capture_checked_period(read, line, start, end):
               "modelRuns": [run for _, runs in parts for run in runs.values()]}
     result["verified_windows"] = [cap["baseParams"] for cap, _ in parts]
     return result
+
+
+def _work_page(browser, host):
+    """Choose one same-host 3028 tab and keep it throughout the batch."""
+    from urllib.parse import urlsplit
+    target = urlsplit(host if "://" in host else "//" + host)
+    pages = []
+    for context in browser.contexts:
+        for page in context.pages:
+            url = urlsplit(page.url)
+            if (url.scheme in ("http", "https") and url.hostname == target.hostname
+                    and (target.port is None or url.port == target.port)
+                    and "asymes" in url.path.split("/")):
+                pages.append(page)
+    if not pages:
+        raise RuntimeError("Nenhuma sessão A-MES aberta no Chrome dedicado para o posto configurado.")
+
+    def foreground(page):
+        try:
+            return page.evaluate("document.visibilityState === 'visible'")
+        except Exception:
+            return False
+
+    views = [p for p in pages if "vwfpyinquireview" in urlsplit(p.url).fragment.lower()]
+    candidates = views or pages
+    page = next((p for p in candidates if foreground(p)), candidates[0])
+    if not views:
+        page.goto(page.url.split("#", 1)[0] + "#UAWIP.form.VwFpyInquireView",
+                  wait_until="domcontentloaded", timeout=20000)
+    return page
+
+
+# Wait for the four 3028 stores, including loads started by MES selection
+# listeners. A URL/hash change alone does not mean the new grids are ready.
+_READY = """() => {
+  const all = window.Ext?.ComponentManager?.all;
+  const items = all?.items || all?.getArray?.() || window.Ext?.ComponentQuery?.query('*') || [];
+  return ['grdListByConds', 'grdListByConds2', 'grdSum', 'grdListDetail'].every(id => {
+    const c = items.find(c => c?.itemId === id);
+    const s = c?.getStore?.() || c?.store;
+    return s && !s.isLoading?.();
+  });
+}"""
 
 
 def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
@@ -138,27 +221,50 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
 
     metrics, records, captures, validations = [], [], [], []
     with source.MES_LOCK, sync_playwright() as pw:
-        page = source._select_3028_page(pw.chromium.connect_over_cdp(cdp_url), ames_host)
+        page = _work_page(pw.chromium.connect_over_cdp(cdp_url), ames_host)
+        page.wait_for_function(_READY, timeout=20000)
+        if not lines:
+            current = page.evaluate("""() => {
+                const grid = Ext.ComponentQuery.query('*').find(c => c.itemId === 'grdListByConds');
+                const row = (grid.getStore?.() || grid.store).getRange()[0];
+                const data = row?.getData?.() || row?.data || {};
+                return String(data.lineIdNew || data.lineId || '').trim();
+            }""")
+            if not current:
+                raise RuntimeError("Nenhuma linha configurada. Use 'Configurar posto' e informe as linhas A-MES.")
+            lines = [current]
+
         def read(line, left, right):
+            page.wait_for_function(_READY, timeout=20000)
             return page.evaluate(source.QUERY_LINE_JS, params(line, left, right))
-        for line in lines:
-            cap = _capture_checked_period(read, line, start, end)
-            line_metrics = [source._summary_to_metric(r, line) for r in cap["summary"]["records"]]
-            details = [source._detail_to_record(r, line) for r in cap["detail"]["records"]]
-            units = sum(m["total_defect_qty"] or 0 for m in line_metrics)
-            if units > len(details) or any(r["line"] != line for r in details + line_metrics):
-                raise ValueError(f"3028 {line}: linha ou quantidade do resumo incompatível com o detalhe")
-            metrics.extend(line_metrics)
-            records.extend(details)
-            captures.append(cap)
-            validations.append(dict(line=line, summary_defective_units=units, detail_occurrences=len(details),
-                unique_pcbas=len({r["pcba_sn"] for r in details if r["pcba_sn"]}),
-                extra_defect_occurrences=len(details)-units, grouped_total=len(details), grouped_matches_detail=True,
-                ok=True, models=[m["product_model"] for m in line_metrics], verified_windows=len(cap["verified_windows"])))
+        # Even a rejected batch must return the operator to the line that
+        # actually failed. The native query restores its previous store filters.
+        line = lines[0]
         try:
-            visible = page.evaluate(source.SYNC_VISIBLE_JS, params(lines[-1], start, end))
-        except Exception as exc:
-            visible = {"warning": f"UI_SYNC_FAILED: {exc}"}
+            for line in lines:
+                # Seed the visible filters before the native query saves their
+                # state. Its finally block then restores this line between pages
+                # and subwindows instead of the previous line's view.
+                page.evaluate(source.SYNC_VISIBLE_JS, params(line, start, end))
+                cap = _capture_checked_period(read, line, start, end)
+                line_metrics = [source._summary_to_metric(r, line) for r in cap["summary"]["records"]]
+                details = [source._detail_to_record(r, line) for r in cap["detail"]["records"]]
+                units = sum(m["total_defect_qty"] or 0 for m in line_metrics)
+                if units > len(details) or any(r["line"] != line for r in details + line_metrics):
+                    raise ValueError(f"3028 {line}: linha ou quantidade do resumo incompatível com o detalhe")
+                metrics.extend(line_metrics)
+                records.extend(details)
+                captures.append(cap)
+                validations.append(dict(line=line, summary_defective_units=units, detail_occurrences=len(details),
+                    unique_pcbas=len({r["pcba_sn"] for r in details if r["pcba_sn"]}),
+                    extra_defect_occurrences=len(details)-units, grouped_total=len(details), grouped_matches_detail=True,
+                    ok=True, models=[m["product_model"] for m in line_metrics], verified_windows=len(cap["verified_windows"])))
+        finally:
+            try:
+                visible = page.evaluate(source.SYNC_VISIBLE_JS, params(line, start, end))
+                page.wait_for_function(_READY, timeout=20000)
+            except Exception as exc:
+                visible = {"warning": f"UI_SYNC_FAILED: {exc}", **params(line, start, end)}
     return dict(source="AWIP3028_DIRECT_EXTJS", captured_at=datetime.now().isoformat(timespec="seconds"),
                 requested_lines=lines, lines=lines, window=window, line_metrics=metrics, records=records,
                 records_count=len(records), captures=captures, validations=validations, visible_state=visible)
