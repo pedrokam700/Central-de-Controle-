@@ -83,7 +83,7 @@ class Period(unittest.TestCase):
         from unittest.mock import MagicMock, patch
         from types import ModuleType
         import ames_3028_live as source
-        from comment_provenance_3028 import collect_3028_period
+        from comment_provenance_3028 import _COLUMNS, collect_3028_period
 
         def tab(host, visible):
             p = Mock(url=f"http://{host}/asymes/home#UAWIP.form.VwFpyInquireView")
@@ -93,6 +93,8 @@ class Period(unittest.TestCase):
         other, hidden, active = tab("other.test", True), tab("fixture.test", False), tab("fixture.test", True)
         syncs, queries = [], []
         def evaluate(script, args=None):
+            if script == _COLUMNS:
+                return {"detail": {}}
             if args is None:
                 return True
             line = args["lineId"]
@@ -123,8 +125,47 @@ class Period(unittest.TestCase):
         for grid, key, wrong in [("detail", "lineIdNew", "L1"), ("grouped", "prodModel", "OTHER")]:
             cap = fixture(258)("L2", START, END)
             cap["modelRuns"][0][grid]["records"][0][key] = wrong
-            with self.assertRaisesRegex(ValueError, "outra linha ou modelo"):
+            with self.assertRaisesRegex(ValueError, "linha esperada|modelo esperado"):
                 _capture_checked_period(Mock(return_value=cap), "L2", START, END)
+
+    def test_native_detail_model_and_bound_line_match_while_preserving_raw_keys(self):
+        cap = fixture(260)("L2", START, END)
+        cap["scope_columns"] = {"detail": {"line": "lineId"}}
+        row = cap["modelRuns"][0]["detail"]["records"][0]
+        row.update(lineId="L2", lineIdNew="unbound", productModel=" test ", prodModel="internal")
+        read = Mock(return_value=cap)
+        result = _capture_checked_period(read, "L2", START, END)
+        read.assert_called_once()
+        self.assertEqual(result["detail"]["records"][0], row)
+
+    def test_summary_alias_must_be_unique(self):
+        cap = fixture(260)("L2", START, END)
+        cap["summary"]["records"][0]["productModel"] = "display"
+        cap["modelRuns"][0]["detail"]["records"][0]["productModel"] = "DISPLAY"
+        _capture_checked_period(Mock(return_value=cap), "L2", START, END)
+        cap["summary"] = table(cap["summary"]["records"] + [{"prodModel":"ALT","productModel":"display"}])
+        cap["modelRuns"].append({"prodModel":"ALT","detail":table([]),"grouped":table([])})
+        with self.assertRaisesRegex(ValueError, "modelo esperado 'TEST', recebido 'DISPLAY'"):
+            _capture_checked_period(Mock(return_value=cap), "L2", START, END)
+
+    def test_stale_page_13_rebinds_then_requires_clean_scope(self):
+        from datetime import timedelta
+        end = START + timedelta(hours=1)
+        good = fixture(260)("L2", START, END)
+        dirty = deepcopy(good)
+        detail = dirty["modelRuns"][0]["detail"]
+        detail["pageResults"] = [{"page": n, "success": True, "count": 20} for n in range(1,14)]
+        detail["records"][252]["lineId"] = "L1"
+        rescope = Mock()
+        read = Mock(side_effect=[dirty, good, deepcopy(good)])
+        result = _capture_checked_period(read, "L2", START, end, rescope)
+        self.assertEqual(result["detail"]["records"], good["modelRuns"][0]["detail"]["records"])
+        self.assertEqual(read.call_count, 3)
+        rescope.assert_called_once_with("L2", START, end)
+        with self.assertRaisesRegex(ValueError, "registro 253, página 13, linha 13 da grade: linha esperada 'L2', recebido 'L1'"):
+            _capture_checked_period(Mock(return_value=dirty), "L2", START, end)
+        with self.assertRaisesRegex(ValueError, "sem confirmação"):
+            _capture_checked_period(Mock(side_effect=[dirty, good, dirty]), "L2", START, end)
 
     def test_full_detail_confirmed_even_if_full_grouped_missing_136(self):
         result = _capture_checked_period(fixture(3775, missing_groups=136), "L2", START, END)

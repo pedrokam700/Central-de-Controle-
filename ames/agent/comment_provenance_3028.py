@@ -55,8 +55,68 @@ def _group_counts(rows):
     return counts
 
 
+def _field(row, preferred, fallback):
+    for key in (preferred, *fallback):
+        if key and row.get(key) is not None and str(row[key]).strip():
+            return key, str(row[key]).strip()
+    return None, ""
+
+
+def _scope_error(table, grid, line, model, accepted_models, columns):
+    """Identify the first conflicting source field, without exposing the whole row."""
+    label = {"summary": "resumo", "grouped": "agrupamento", "detail": "detalhe"}[grid]
+    model_fields = ("productModel", "prodModel") if grid == "detail" else ("prodModel", "productModel")
+    for index, row in enumerate(table["records"]):
+        field, value = _field(row, columns.get("line"), ("lineIdNew", "lineId"))
+        what, expected = "linha esperada", line
+        if not value or value.casefold() == line.casefold():
+            field, value = _field(row, columns.get("model"), model_fields)
+            if not model or not value or value.casefold() in accepted_models:
+                continue
+            what, expected = "modelo esperado", model
+        # Use actual callback lengths; pages may have fewer rows than pageSize.
+        offset = 0
+        location = f"registro {index + 1}"
+        for info in table.get("pageResults", []):
+            count = info.get("count", 0)
+            if offset <= index < offset + count:
+                location += f", página {info.get('page')}, linha {index - offset + 1} da grade"
+                break
+            offset += count
+        return (f"{label}, {location}: {what} {expected[:80]!r}, "
+                f"recebido {value[:80]!r} ({field})")
+    return None
+
+
+def _scope_runs(cap, line):
+    from collections import defaultdict
+    bindings = cap.get("scope_columns", {})
+    summary_error = _scope_error(cap["summary"], "summary", line, "", set(), bindings.get("summary", {}))
+    # A query key and display model are aliases only when the same summary
+    # record supplies both and no other query key claims the display model.
+    owners = defaultdict(set)
+    for row in cap["summary"]["records"]:
+        _, query = _field(row, "prodModel", ("productModel",))
+        _, display = _field(row, "productModel", ())
+        for name in (query, display):
+            if name:
+                owners[name.casefold()].add(query)
+    runs = _model_tables(cap)
+    for model, run in runs.items():
+        allowed = {name for name, keys in owners.items() if keys == {model}}
+        allowed.add(model.casefold())
+        errors = {}
+        for grid in ("grouped", "detail"):
+            issue = _scope_error(run[grid], grid, line, model, allowed, bindings.get(grid, {}))
+            if issue:
+                errors[grid] = issue
+        if errors:
+            runs[model] = {**run, "scope_errors": errors}
+    return summary_error, runs
+
+
 def _balanced(tables):
-    return all(_complete(run["detail"]) and _complete(run["grouped"]) and
+    return all(not run.get("scope_errors") and _complete(run["detail"]) and _complete(run["grouped"]) and
                sum(_group_counts(run["grouped"]["records"]).values()) == len(run["detail"]["records"])
                for run in tables.values())
 
@@ -64,48 +124,71 @@ def _balanced(tables):
 def _confirmed(original, rows, groups):
     native = _counts(original["detail"]["records"])
     recovered = _counts(rows)
-    exact = _complete(original["detail"]) and native == recovered
-    grouped = (_complete(original["grouped"]) and
+    errors = original.get("scope_errors", {})
+    exact = "detail" not in errors and _complete(original["detail"]) and native == recovered
+    grouped = ("grouped" not in errors and _complete(original["grouped"]) and
                _group_counts(groups) == _group_counts(original["grouped"]["records"]))
     return exact, exact or (grouped and (native <= recovered or recovered <= native))
 
 
-def _capture_checked_period(read, line, start, end):
+def _capture_checked_period(read, line, start, end, rescope=None):
     """Read smaller windows if needed, retaining the native full-range FPY and quantity."""
     from datetime import timedelta
     def capture(left, right):
         cap = read(line, left, right)
         if cap["lineId"] != line:
             raise ValueError(f"3028 {line}: resposta de outra linha")
-        runs = _model_tables(cap)
-        for model, run in runs.items():
-            for grid in ("grouped", "detail"):
-                for row in run[grid]["records"]:
-                    assigned = row.get("lineIdNew") or row.get("lineId")
-                    product = row.get("prodModel") or row.get("productModel")
-                    if (assigned and str(assigned).strip() != line) or (product and model and str(product).strip() != model):
-                        raise ValueError(f"3028 {line}: {grid} contém outra linha ou modelo")
+        summary_error, runs = _scope_runs(cap, line)
+        if summary_error:
+            cap = {**cap, "summary_scope_error": summary_error}
         return cap, runs
 
+    def scope_issue(cap, runs):
+        if cap.get("summary_scope_error"):
+            return cap["summary_scope_error"]
+        return next((issue for run in runs.values() for issue in run.get("scope_errors", {}).values()), None)
+
     def complete(cap, runs):
-        return _complete(cap["summary"]) and _complete(cap["classification"]) and _balanced(runs)
+        return (not cap.get("summary_scope_error") and _complete(cap["summary"])
+                and _complete(cap["classification"]) and _balanced(runs))
 
     full, models = capture(start, end)
     if not complete(full, models):
-        # The grids are read sequentially. Re-query the exact scope once before
-        # attempting subdivision, including a single native MES hour.
+        contaminated = scope_issue(full, models)
+        if contaminated and rescope:
+            rescope(line, start, end)
         repeat, repeated = capture(start, end)
         if complete(repeat, repeated):
-            if models.keys() != repeated.keys() or not all(
-                    _confirmed(models[m], r["detail"]["records"], r["grouped"]["records"])[1]
-                    for m, r in repeated.items()):
-                raise ValueError(f"3028 {line}: releitura integral sem confirmação por modelo")
+            confirmed = (not full.get("summary_scope_error") and models.keys() == repeated.keys() and all(
+                _confirmed(models[m], r["detail"]["records"], r["grouped"]["records"])[1]
+                for m, r in repeated.items()))
+            if not confirmed and contaminated and models.keys() == repeated.keys():
+                # The first read is an unreliable witness. Require two complete
+                # clean reads of the scope, with the same groups and occurrences.
+                witness, witnesses = capture(start, end)
+                confirmed = (complete(witness, witnesses) and witnesses.keys() == repeated.keys()
+                             and _counts(witness["summary"]["records"]) == _counts(repeat["summary"]["records"])
+                             and all(_counts(witnesses[m]["detail"]["records"]) == _counts(r["detail"]["records"])
+                                     and _group_counts(witnesses[m]["grouped"]["records"]) == _group_counts(r["grouped"]["records"])
+                                     for m, r in repeated.items()))
+            if not confirmed:
+                raise ValueError(f"3028 {line}: releitura integral sem confirmação por modelo"
+                                 + (f" ({contaminated})" if contaminated else ""))
             full, models = repeat, repeated
-        elif not _complete(full["summary"]) or not _complete(full["classification"]):
+        elif contaminated or not _complete(full["summary"]) or not _complete(full["classification"]):
             full, models = repeat, repeated
+    if full.get("summary_scope_error"):
+        raise ValueError(f"3028 {line}: {full['summary_scope_error']}")
     if not _complete(full["summary"]) or not _complete(full["classification"]):
         raise ValueError(f"3028 {line}: resumo ou classificação incompletos no período solicitado")
-    def mismatch(runs, left, right):
+    original_issue = scope_issue(full, models)
+
+    def mismatch(cap, runs, left, right):
+        issue = scope_issue(cap, runs)
+        if issue:
+            context = (f" | Consulta integral: {original_issue}"
+                       if original_issue and (left, right) != (start, end) else "")
+            return ValueError(f"3028 {line} entre {left} e {right}: {issue}{context}")
         grouped = sum(sum(_group_counts(r["grouped"]["records"]).values()) for r in runs.values())
         detail = sum(len(r["detail"]["records"]) for r in runs.values())
         return ValueError(f"3028 {line} entre {left} e {right}: agrupado={grouped}, detalhe={detail}; "
@@ -118,17 +201,20 @@ def _capture_checked_period(read, line, start, end):
         # Keep all boundaries at an MES hour. Recursively narrow only a failed slice.
         def collect_slice(left, right):
             cap, runs = capture(left, right)
+            if scope_issue(cap, runs) and rescope:
+                rescope(line, left, right)
+                cap, runs = capture(left, right)
             if complete(cap, runs):
                 parts.append((cap, runs))
                 return
             if right - left <= timedelta(hours=1):
-                raise mismatch(runs, left, right)
+                raise mismatch(cap, runs, left, right)
             pivot = left + timedelta(hours=int((right - left).total_seconds() // 7200))
             collect_slice(left, pivot)
             collect_slice(pivot, right)
 
         if end - start <= timedelta(hours=1):
-            raise mismatch(models, start, end)
+            raise mismatch(full, models, start, end)
         step = timedelta(hours=min(168, max(1, int((end-start).total_seconds() // 7200))))
         left = start
         while left < end:
@@ -154,7 +240,9 @@ def _capture_checked_period(read, line, start, end):
                     raise ValueError(f"3028 {line}: limite entre subconsultas ambíguo para {model}")
                 seen.update(keys)
             if not confirmed:
-                raise ValueError(f"3028 {line}: subconsultas sem confirmação independente no período para {model}")
+                issue = scope_issue(full, models)
+                raise ValueError(f"3028 {line}: subconsultas sem confirmação independente no período para {model}"
+                                 + (f" ({issue})" if issue else ""))
         detail.extend(rows)
         grouped.extend(groups)
     result = {**full, "detail": {"records": detail, "total": len(detail)},
@@ -207,6 +295,30 @@ _READY = """() => {
 }"""
 
 
+# Consult the dataIndex of the actual labelled column, since some MES rows
+# contain both legacy and display fields. Only read known line/model keys.
+_COLUMNS = """() => {
+  const all = window.Ext?.ComponentManager?.all;
+  const items = all?.items || all?.getArray?.() || window.Ext?.ComponentQuery?.query('*') || [];
+  const result = {};
+  for (const [name, id] of Object.entries({summary:'grdListByConds', grouped:'grdSum', detail:'grdListDetail'})) {
+    const grid = items.find(c => c?.itemId === id);
+    const cols = grid?.getColumnManager?.()?.getColumns?.() || grid?.columns || [];
+    result[name] = {};
+    for (const [kind, labels, keys] of [
+      ['line', ['lineid'], ['lineId', 'lineIdNew']],
+      ['model', ['prodmodel', 'productmodel'], ['prodModel', 'productModel']]
+    ]) {
+      const fields = new Set(Array.from(cols).filter(c => !c.hidden &&
+        labels.includes(String(c.text || '').replace(/<[^>]*>/g,'').toLowerCase().replace(/[^a-z]/g,'')))
+        .map(c => c.dataIndex).filter(k => keys.includes(k)));
+      if (fields.size === 1) result[name][kind] = [...fields][0];
+    }
+  }
+  return result;
+}"""
+
+
 def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
     from datetime import datetime
     from playwright.sync_api import sync_playwright
@@ -234,9 +346,16 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
                 raise RuntimeError("Nenhuma linha configurada. Use 'Configurar posto' e informe as linhas A-MES.")
             lines = [current]
 
+        columns = page.evaluate(_COLUMNS)
+
+        def rescope(line, left, right):
+            page.evaluate(source.SYNC_VISIBLE_JS, params(line, left, right))
+
         def read(line, left, right):
             page.wait_for_function(_READY, timeout=20000)
-            return page.evaluate(source.QUERY_LINE_JS, params(line, left, right))
+            cap = page.evaluate(source.QUERY_LINE_JS, params(line, left, right))
+            cap["scope_columns"] = columns
+            return cap
         # Even a rejected batch must return the operator to the line that
         # actually failed. The native query restores its previous store filters.
         line = lines[0]
@@ -245,13 +364,19 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
                 # Seed the visible filters before the native query saves their
                 # state. Its finally block then restores this line between pages
                 # and subwindows instead of the previous line's view.
-                page.evaluate(source.SYNC_VISIBLE_JS, params(line, start, end))
-                cap = _capture_checked_period(read, line, start, end)
+                rescope(line, start, end)
+                cap = _capture_checked_period(read, line, start, end, rescope)
                 line_metrics = [source._summary_to_metric(r, line) for r in cap["summary"]["records"]]
                 details = [source._detail_to_record(r, line) for r in cap["detail"]["records"]]
+                for metric in line_metrics:
+                    metric["line"] = line  # summary validated against its bound line column
+                for record in details:
+                    record["line"] = line  # validated detailed rows; retain original fields in raw
+                    _, model = _field(record["raw"], columns["detail"].get("model"), ("productModel", "prodModel"))
+                    record["product_model"] = model
                 units = sum(m["total_defect_qty"] or 0 for m in line_metrics)
-                if units > len(details) or any(r["line"] != line for r in details + line_metrics):
-                    raise ValueError(f"3028 {line}: linha ou quantidade do resumo incompatível com o detalhe")
+                if units > len(details):
+                    raise ValueError(f"3028 {line}: {units} unidades com defeito no resumo e {len(details)} ocorrências no detalhe")
                 metrics.extend(line_metrics)
                 records.extend(details)
                 captures.append(cap)
