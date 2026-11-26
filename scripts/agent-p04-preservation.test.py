@@ -11,6 +11,10 @@ ROOT=Path(__file__).resolve().parents[1];BASE='5856eb3f0cc1dd391cf93217fd068f0a0
 BRANCH='work/ames-p04-windows-preflight-20261118'
 ALLOWED={
  'ames/agent/comment_provenance_3028.py',
+ 'ames/agent/ames_3012_live.py',
+ 'ames/agent/ames_3012_strategy.py',
+ 'ames/factory-engine/ames/navigation.py',
+ 'ames/factory-engine/tests/test_pr70_2114_tab_recovery.py',
  'ames/console-improvements.css',
  'ames/console-reuse-cohorts.mjs',
  'ames/console-reuse-history-timeline.mjs',

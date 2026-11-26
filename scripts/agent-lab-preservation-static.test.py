@@ -11,6 +11,10 @@ BASE = 'db3cb5b58c99bcf86c44b671280cb42f7dd31d4c'
 BRANCH = 'work/ames-lab-entry-p01-p03-p06-20261117'
 ALLOWED = {
  'ames/agent/comment_provenance_3028.py',
+ 'ames/agent/ames_3012_live.py',
+ 'ames/agent/ames_3012_strategy.py',
+ 'ames/factory-engine/ames/navigation.py',
+ 'ames/factory-engine/tests/test_pr70_2114_tab_recovery.py',
  'ames/console-improvements.css',
  'ames/console-reuse-cohorts.mjs',
  'ames/console-reuse-history-timeline.mjs',

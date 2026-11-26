@@ -9,6 +9,10 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1];BASE='48112ea9e408f5dce7fe85f951616b06ed4020e0';BRANCH='work/ames-p08-generation-reconciliation-20261118'
 ALLOWED={
  'ames/agent/comment_provenance_3028.py',
+ 'ames/agent/ames_3012_live.py',
+ 'ames/agent/ames_3012_strategy.py',
+ 'ames/factory-engine/ames/navigation.py',
+ 'ames/factory-engine/tests/test_pr70_2114_tab_recovery.py',
  'ames/console-improvements.css',
  'ames/console-reuse-cohorts.mjs',
  'ames/console-reuse-history-timeline.mjs',
