@@ -733,3 +733,15 @@ pelo computador, sem encaminhamento obrigatório à TI. STOP_TI_EXECUTION_POLICY
 permanece apenas como código histórico estável; nenhuma política é modificada.
 Como isso muda bytes do ZIP, a entrega final exige as cinco CIs no NOVO SHA;
 a execução 44595435931 de 5c4c9e90 é preservada como etapa intermediária.
+
+## Continuidade da 3028 em 26/11/2026
+
+A base deste incremento é a candidata 79de999a8a1178366b260e89a3938c307139b40a da própria PR98. O ZIP baixado do GitHub para essa base contém 395 entradas internas. A identidade do software ativo no posto depende da conferência local.
+
+Na base, três observações sintéticas com a mesma placa, código e hora, duas operações e uma repetição legítima produziram apenas uma linha no SQLite. No lote de três linhas, uma divergência da segunda impediu gravar a primeira e consultar a terceira. A candidata passa a atribuir chaves por ocorrência dentro da origem e janela, aproveitar as chaves históricas compatíveis e gravar cada linha em uma transação que inclui dados, índices, evidência e conclusão. Uma linha recusada aparece como pendente. Uma sessão indisponível interrompe as próximas consultas. A leitura das removidas reconstrói a revisão selecionada. Dados que já tenham se perdido em uma coleta antiga só podem ser recuperados de uma fonte que ainda os contenha.
+
+Cada consulta paginada verifica página, escopo, contagem e conteúdo. A confirmação nativa exige seleção identificada no resumo e leituras independentes dos dois conjuntos. Diferenças por código, inclusive quando se compensam no total, passam pelo caminho de conferência. Duas linhas de resumo disjuntas podem fundamentar um único histórico. A ocorrência conserva o modelo individual. Uma consulta sem resumo verifica as grades de ocorrência antes de registrar ausência. Uma retificação posterior produz outra revisão. A representação JSON de Date é a mesma nas duas leituras nativas. Nos quatro testes da ferramenta V3, datas com fuso, espaços e multiplicidades explicam como isolar diferenças na comparação anterior. A origem física das 35 diferenças de chave segue indeterminada.
+
+Para reproduzir no repositório, executar `python -B scripts/install98/period-3028.test.py`. Para o fluxo com Chromium e Playwright instalados, executar `python -B scripts/install98/browser-3028-replay.py`. O segundo ensaio lê grades ExtJS simuladas em Chromium, publica pelo agente em SQLite temporário, reabre a revisão canônica e verifica os indicadores e filtros na interface. Aceita os diretórios de agente e interface extraídos de Central.zip como argumentos. Os cenários de referência incluem 245/241, 293/275, 294/274 e 35/35. Também exercita resumo vazio, seleção de duas linhas de resumo, agrupamento maior, agrupamento vazio, compensação entre códigos, contaminação e alteração durante a paginação. Apenas dados sintéticos participam desses ensaios.
+
+A Issue #99 contém o recibo específico da entrega após a qualificação e a conferência dos bytes baixados. A medição física no A-MES e a execução noturna no posto são etapas em aberto.

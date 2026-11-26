@@ -8,6 +8,11 @@ import subprocess
 import unittest
 ROOT=Path(__file__).resolve().parents[1];BASE='48112ea9e408f5dce7fe85f951616b06ed4020e0';BRANCH='work/ames-p08-generation-reconciliation-20261118'
 ALLOWED={
+ 'ames/agent/store.py',
+ 'ames/agent/ames_3028_live.py',
+ 'ames/agent-client.mjs',
+ 'ames/console-view.mjs',
+ 'scripts/install98/browser-3028-replay.py',
  'ames/agent/comment_provenance_3028.py',
  'ames/agent/ames_3012_live.py',
  'ames/agent/ames_3012_strategy.py',
@@ -58,7 +63,7 @@ class Preservation(unittest.TestCase):
         self.assertLessEqual(set(git('diff','--name-only',BASE,'HEAD').splitlines()),ALLOWED)
         def tree(ref):return {p:i for row in git('ls-tree','-r',ref).splitlines() for i,p in [row.split('\t',1)] if p not in ALLOWED}
         self.assertEqual(tree(BASE),tree('HEAD'))
-        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '06e0a556850c976fa62a8aba0cd763175ff4605b5afec221c18ae307496921f8', 'Reviewed all-mode 3028 entry and static MIME')
+        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), 'f7587c31197ae311b40c88ae96a1140d41307e58662c09c05bdf3bf658cd7db0', 'Reviewed all-mode 3028 entry and static MIME')
     def test_all_existing_test_commands_maintained_as_subsequence(self):
         for name in ('ames-lab-isolation.yml','ames-lab-existing-regressions.yml','ames-p04-windows-preflight.yml'):
             path='.github/workflows/'+name;before=git('show',BASE+':'+path);after=(ROOT/path).read_text()

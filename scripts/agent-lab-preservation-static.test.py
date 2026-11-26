@@ -10,6 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = 'db3cb5b58c99bcf86c44b671280cb42f7dd31d4c'
 BRANCH = 'work/ames-lab-entry-p01-p03-p06-20261117'
 ALLOWED = {
+ 'ames/agent/store.py',
+ 'ames/agent/ames_3028_live.py',
+ 'ames/agent-client.mjs',
+ 'ames/console-view.mjs',
+ 'scripts/install98/browser-3028-replay.py',
  'ames/agent/comment_provenance_3028.py',
  'ames/agent/ames_3012_live.py',
  'ames/agent/ames_3012_strategy.py',
@@ -90,7 +95,7 @@ class LabSourcePreservation(unittest.TestCase):
                 if path not in ALLOWED:result[path]=identity
             return result
         self.assertEqual(entries(BASE),entries('HEAD'))
-        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), '06e0a556850c976fa62a8aba0cd763175ff4605b5afec221c18ae307496921f8', 'Reviewed all-mode 3028 entry and static MIME')
+        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), 'f7587c31197ae311b40c88ae96a1140d41307e58662c09c05bdf3bf658cd7db0', 'Reviewed all-mode 3028 entry and static MIME')
         for path in ('ames/agent/update_candidate.py',
                      'ames/agent/agent_entry.py','ames/agent/agent_hardened_entry.py',
                      'ames/agent/engine_bridge.py','ames/agent/process_r11.py',

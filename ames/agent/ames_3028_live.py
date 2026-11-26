@@ -31,7 +31,13 @@ async (cfg) => {
   }
 
   const comps=allComponents();
-  const byItemId=(id)=>comps.find(c=>c&&c.itemId===id)||null;
+  const byItemId=(id)=>{
+    const found=comps.filter(c=>c&&c.itemId===id);
+    if(found.length<2) return found[0]||null;
+    const shown=found.filter(c=>c.isVisible?.(true));
+    if(shown.length!==1) throw Error('3028: componente ambiguo '+id);
+    return shown[0];
+  };
   const dataOf=(r)=>{try{return JSON.parse(JSON.stringify(r.getData?r.getData():r.data||{}))}catch(e){return {}}};
 
   function getStore(itemId){
@@ -77,7 +83,10 @@ async (cfg) => {
           callback:(records,operation,success)=>{
             if(done)return;
             done=true;clearTimeout(timer);
-            resolve({success:!!success,timeout:false,records:(records||[]).map(dataOf),error:null});
+            const returnedPage=operation?.getPage?.() ?? operation?.page ?? store.currentPage;
+            const current=Object.entries(params).every(([k,v])=>
+              String((store.getProxy?.() || store.proxy)?.extraParams?.[k])===String(v));
+            resolve({success:!!success && current && Number(returnedPage)===pageNo,timeout:false,records:(records||[]).map(dataOf),error:null});
           }
         });
       }catch(e){
@@ -88,17 +97,31 @@ async (cfg) => {
 
   async function loadAll(store,params){
     const first=await loadPage(store,1,params);
-    if(!first.success) throw new Error('Falha pagina 1: '+(first.error||'sem detalhe'));
+    if(!first.success) throw new Error('3028: Falha pagina 1: '+(first.error||'sem detalhe'));
     const total=store.getTotalCount?store.getTotalCount():first.records.length;
     const pageSize=store.pageSize||first.records.length||100;
     const pages=first.records.length>=total?1:Math.max(1,Math.ceil(total/pageSize));
+    if (!Number.isSafeInteger(total) || total<0 || !Number.isSafeInteger(pageSize) || pageSize<1)
+      throw Error('3028: total ou tamanho de pagina invalido');
     const records=[...first.records];
+    const signatures=[JSON.stringify(first.records)];
+    const seen=new Set(signatures);
     const pageResults=[{page:1,success:true,count:first.records.length}];
     for(let p=2;p<=pages;p++){
       const r=await loadPage(store,p,params);
       pageResults.push({page:p,success:r.success,count:r.records.length,timeout:r.timeout,error:r.error||null});
-      if(!r.success) throw new Error('Falha pagina '+p+': '+(r.error||'sem detalhe'));
+      if(!r.success) throw new Error('3028: Falha pagina '+p+': '+(r.error||'sem detalhe'));
+      if (store.getTotalCount()!==total || !r.records.length) throw Error('3028: total mudou na paginacao');
+      const signature=JSON.stringify(r.records);
+      if (seen.has(signature)) throw Error('3028: pagina repetida sem identidade independente');
+      seen.add(signature); signatures.push(signature);
       records.push(...r.records);
+    }
+    if(records.length!==total) throw Error('3028: pagina incompleta');
+    for(let p=pages; pages>1 && p>=1; p--){
+      const check=await loadPage(store,p,params);
+      if(!check.success || store.getTotalCount()!==total || JSON.stringify(check.records)!==signatures[p-1])
+        throw Error('3028: conteudo mudou durante a paginacao');
     }
     return {records,total,pageSize,pages,pageResults};
   }
@@ -166,6 +189,11 @@ async (cfg) => {
       modelRuns.push({prodModel,detail:d,grouped:g,params:p});
     }
 
+    for(const [store,table] of [[stores.summary,summary],[stores.classification,classification]]){
+      const final=await loadAll(store,base);
+      if(JSON.stringify(final.records)!==JSON.stringify(table.records))
+        throw Error('3028: resumo ou classificacao mudou durante a coleta');
+    }
     return {
       lineId:cfg.lineId,
       baseParams:base,
@@ -203,7 +231,13 @@ async (cfg) => {
     return comps;
   }
   const comps=allComponents();
-  const byItemId=(id)=>comps.find(c=>c&&c.itemId===id)||null;
+  const byItemId=(id)=>{
+    const found=comps.filter(c=>c&&c.itemId===id);
+    if(found.length<2) return found[0]||null;
+    const shown=found.filter(c=>c.isVisible?.(true));
+    if(shown.length!==1) throw Error('3028: componente ambiguo '+id);
+    return shown[0];
+  };
   const dataOf=(r)=>{try{return JSON.parse(JSON.stringify(r.getData?r.getData():r.data||{}))}catch(e){return {}}};
 
   function setText(id,value){

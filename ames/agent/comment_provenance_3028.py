@@ -121,6 +121,8 @@ def _scope_runs(cap, line):
     summary_error = _scope_error(cap["summary"], "summary", line, "", set(), bindings.get("summary", {}))
     # A query key and display model are aliases only when the same summary
     # record supplies both and no other query key claims the display model.
+    if not summary_error:
+        summary_error = _scope_error(cap.get("classification", {"records":[]}), "summary", line, "", set(), {})
     owners = defaultdict(set)
     for row in cap["summary"]["records"]:
         _, query = _field(row, "prodModel", ("productModel",))
@@ -144,10 +146,24 @@ def _scope_runs(cap, line):
     return summary_error, runs
 
 
+def _codes_match(run):
+    from collections import Counter
+    details = run["detail"]["records"]
+    groups = run["grouped"]["records"]
+    if sum(_group_counts(groups).values()) != len(details):
+        return False
+    # Older source variants did not export the code field in every grid.
+    if not all("defectCode" in row for row in (*details, *groups)):
+        return True
+    grouped = Counter()
+    for row in groups:
+        grouped[str(row["defectCode"] or "").strip()] += int(row["qty"])
+    return Counter(str(r["defectCode"] or "").strip() for r in details) == grouped
+
+
 def _balanced(tables):
-    return all(not run.get("scope_errors") and _complete(run["detail"]) and _complete(run["grouped"]) and
-               sum(_group_counts(run["grouped"]["records"]).values()) == len(run["detail"]["records"])
-               for run in tables.values())
+    return all(not run.get("scope_errors") and _complete(run["detail"]) and _complete(run["grouped"])
+               and _codes_match(run) for run in tables.values())
 
 
 def _confirmed(original, rows, groups):
@@ -157,39 +173,39 @@ def _confirmed(original, rows, groups):
     exact = "detail" not in errors and _complete(original["detail"]) and native == recovered
     grouped = ("grouped" not in errors and _complete(original["grouped"]) and
                _group_counts(groups) == _group_counts(original["grouped"]["records"]))
-    return exact, exact or (grouped and (native <= recovered or recovered <= native))
+    return exact, exact or (grouped and "detail" not in errors and native.keys() == recovered.keys() and (native <= recovered or recovered <= native))
 
 
 def _native_agrees(cap, runs, repeat, repeated, line, read_visible):
     """An independently selected MES row must reproduce both whole source tables."""
-    if (not read_visible or len(runs) != 1 or runs.keys() != repeated.keys()
-            or any(c.get("summary_scope_error") or len(c["summary"]["records"]) != 1
-                   or not _complete(c["summary"]) or not _complete(c["classification"])
-                   for c in (cap, repeat))):
+    if (not read_visible or not runs or runs.keys() != repeated.keys()
+            or any(c.get("summary_scope_error") or not _complete(c["summary"])
+                   or not _complete(c["classification"]) for c in (cap, repeat))):
         return False
-    scope, run = next(iter(runs.items()))
-    other = repeated[scope]
-    if (not all(scope) or any(r.get("scope_errors") or not all(_complete(r[k]) for k in ("detail","grouped"))
-                              for r in (run,other))):
-        return False
-    if (_counts(cap["summary"]["records"]) != _counts(repeat["summary"]["records"])
+    summary = cap["summary"]["records"]
+    if (_counts(summary) != _counts(repeat["summary"]["records"])
             or _counts(cap["classification"]["records"]) != _counts(repeat["classification"]["records"])):
         return False
-    detail = _counts(run["detail"]["records"])
-    groups = _group_counts(run["grouped"]["records"])
-    if not 0 < sum(groups.values()) < len(run["detail"]["records"]):
-        return False
-    if detail != _counts(other["detail"]["records"]) or groups != _group_counts(other["grouped"]["records"]):
-        return False
     columns = cap.get("scope_columns", {}).get("detail", {})
-    for row in run["detail"]["records"]:
-        _, row_line = _field(row, columns.get("line"), ("lineIdNew", "lineId"))
-        _, model = _field(row, columns.get("model"), ("productModel", "prodModel"))
-        if row_line.casefold() != line.casefold() or model.casefold() not in scope:
+    for scope, run in runs.items():
+        matching = [row for row in summary if _model_scope(_field(row,"prodModel",("productModel",))[1]) == scope]
+        other = repeated[scope]
+        if (len(matching) != 1 or not all(scope) or any(r.get("scope_errors") or
+                not all(_complete(r[k]) for k in ("detail","grouped")) for r in (run,other))):
             return False
-    visible = read_visible(run["prodModel"])
-    return (visible is not None and _counts(visible["summary"]) == _counts(cap["summary"]["records"])
-            and _counts(visible["detail"]) == detail and _group_counts(visible["grouped"]) == groups)
+        detail = _counts(run["detail"]["records"])
+        if detail != _counts(other["detail"]["records"]) or _counts(run["grouped"]["records"]) != _counts(other["grouped"]["records"]):
+            return False
+        for row in run["detail"]["records"]:
+            _, row_line = _field(row, columns.get("line"), ("lineIdNew", "lineId"))
+            _, model = _field(row, columns.get("model"), ("productModel", "prodModel"))
+            if row_line.casefold() != line.casefold() or model.casefold() not in scope:
+                return False
+        visible = read_visible(run["prodModel"])
+        if (visible is None or _counts(visible["summary"]) != _counts(matching)
+                or _counts(visible["detail"]) != detail or _counts(visible["grouped"]) != _counts(run["grouped"]["records"])):
+            return False
+    return True
 
 
 def _capture_checked_period(read, line, start, end, rescope=None, read_models=None, read_visible=None):
@@ -220,6 +236,21 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
         summary_error, runs = _scope_runs(cap, line)
         if summary_error:
             cap = {**cap, "summary_scope_error": summary_error}
+        if not runs and not inherited and read_models and not summary_error:
+            # An empty production summary can coexist with defects during repairs.
+            # Query both occurrence grids using the line and period, without a model filter.
+            fetched = read_models(line, left, right, [""])
+            if len(fetched) != 1 or fetched[0]["prodModel"] != "":
+                raise ValueError(f"3028 {line}: consulta sem filtro de modelo não confirmada")
+            cap = {**cap, "modelRuns": fetched}
+            _, runs = _scope_runs(cap, line)
+            unfiltered = fetched[0]
+            if any(not _field(row, cap.get("scope_columns", {}).get("detail", {}).get("line"),
+                              ("lineIdNew","lineId"))[1] for row in unfiltered["detail"]["records"]):
+                raise ValueError(f"3028 {line}: ocorrências sem linha comprovada na consulta sem resumo")
+            if all(_complete(unfiltered[k]) and not unfiltered[k]["records"] for k in ("detail","grouped")):
+                cap = {**cap, "modelRuns": []}
+                runs = {}
         if inherited and not summary_error:
             # No production summary is not evidence of zero defect occurrences.
             missing = {k:v for k,v in inherited.items() if k not in model_names(runs)}
@@ -240,11 +271,15 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
 
     native_verified = False
     full, models = capture(start, end)
-    if not complete(full, models):
+    if not complete(full, models) or (not full["summary"]["records"] and read_models):
         contaminated = scope_issue(full, models)
         if contaminated and rescope:
             rescope(line, start, end)
         repeat, repeated = capture(start, end)
+        if (_counts(full["summary"]["records"]) != _counts(repeat["summary"]["records"])
+                or _counts(full["classification"]["records"]) != _counts(repeat["classification"]["records"])):
+            # A correction in MES is valid in a later capture. Do not assemble two generations.
+            raise ValueError(f"3028 {line}: resumo ou classificação mudou durante a coleta")
         if complete(repeat, repeated):
             confirmed = (not full.get("summary_scope_error") and models.keys() == repeated.keys() and all(
                 _confirmed(models[m], r["detail"]["records"], r["grouped"]["records"])[1]
@@ -366,6 +401,8 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
               "modelRuns": [run for _, runs in parts for run in runs.values()]}
     if native_verified:
         result["verification_method"] = "native_selected_3028_grids"
+    if parts[0][0] is not full or full["modelRuns"] != result["modelRuns"]:
+        result["full_period_model_runs"] = full["modelRuns"]
     result["verified_windows"] = [cap["baseParams"] for cap, _ in parts]
     return result
 
@@ -406,7 +443,9 @@ _READY = """() => {
   const all = window.Ext?.ComponentManager?.all;
   const items = all?.items || all?.getArray?.() || window.Ext?.ComponentQuery?.query('*') || [];
   return ['grdListByConds', 'grdListByConds2', 'grdSum', 'grdListDetail'].every(id => {
-    const c = items.find(c => c?.itemId === id);
+    const matching = items.filter(c => c?.itemId === id);
+    const visible = matching.filter(c => c.isVisible?.(true));
+    const c = matching.length === 1 ? matching[0] : (visible.length === 1 ? visible[0] : null);
     const s = c?.getStore?.() || c?.store;
     return s && !s.isLoading?.();
   });
@@ -420,7 +459,10 @@ _COLUMNS = """() => {
   const items = all?.items || all?.getArray?.() || window.Ext?.ComponentQuery?.query('*') || [];
   const result = {};
   for (const [name, id] of Object.entries({summary:'grdListByConds', grouped:'grdSum', detail:'grdListDetail'})) {
-    const grid = items.find(c => c?.itemId === id);
+    const matching = items.filter(c => c?.itemId === id);
+    const visible = matching.filter(c => c.isVisible?.(true));
+    const c = matching.length === 1 ? matching[0] : (visible.length === 1 ? visible[0] : null);
+    const grid = c;
     const cols = grid?.getColumnManager?.()?.getColumns?.() || grid?.columns || [];
     result[name] = {};
     for (const [kind, labels, keys] of [
@@ -448,7 +490,8 @@ _READ_MODELS = """async ({query, models}) => {
       try {
         store.loadPage(page, {callback(records, operation, success) {
           clearTimeout(timer);
-          if (!success) return reject(Error('3028: falha ao ler página ' + page));
+          if (!success || Number(operation?.getPage?.() ?? operation?.page ?? store.currentPage)!==page)
+            return reject(Error('3028: falha ao ler página ' + page));
           try { resolve((records || []).map(r => JSON.parse(JSON.stringify(r.getData ? r.getData() : r.data)))); }
           catch (err) { reject(err); }
         }});
@@ -456,7 +499,10 @@ _READ_MODELS = """async ({query, models}) => {
     });
   }
   async function read(gridId, params) {
-    const grid = items.find(c => c.itemId === gridId);
+    const matches=items.filter(c => c.itemId === gridId);
+    const visible=matches.filter(c=>c.isVisible?.(true));
+    const grid=matches.length===1?matches[0]:(visible.length===1?visible[0]:null);
+    if(!grid) throw Error('3028: grade de modelo ambígua');
     const store = grid.getStore?.() || grid.store;
     const proxy = store.getProxy?.() || store.proxy;
     const saved = {...(proxy.extraParams || {})}, savedPage = store.currentPage || 1;
@@ -468,13 +514,24 @@ _READ_MODELS = """async ({query, models}) => {
       if (!Number.isSafeInteger(total) || total < 0) throw Error('3028: total de registros inválido');
       const pageSize = store.pageSize || records.length || 100;
       const pages = records.length >= total ? 1 : Math.ceil(total / pageSize);
+      const signatures = [JSON.stringify(records)];
+      const seen = new Set(signatures);
       const pageResults = [{page:1, count:records.length, success:true}];
       for (let page=2; page<=pages; page++) {
         apply(params);
         const batch = await load(store, page);
         if (store.getTotalCount() !== total) throw Error('3028: total mudou durante a paginação');
+        const signature = JSON.stringify(batch);
+        if (!batch.length || seen.has(signature)) throw Error('3028: página repetida ou vazia');
+        seen.add(signature); signatures.push(signature);
         records.push(...batch);
         pageResults.push({page, count:batch.length, success:true});
+      }
+      if (records.length!==total) throw Error('3028: consulta de modelo incompleta');
+      for (let n=pages;pages>1 && n>=1;n--) {
+        const check=await load(store,n);
+        if (store.getTotalCount()!==total || JSON.stringify(check)!==signatures[n-1])
+          throw Error('3028: conteúdo mudou durante a paginação');
       }
       return {records, total, pageSize, pages, pageResults};
     } finally {
@@ -495,19 +552,37 @@ _READ_MODELS = """async ({query, models}) => {
 
 # Reproduce the operator's selection. The occurrence stores keep their own native
 # filters. Only their page number changes, and each page is checked before use.
-_NATIVE_SELECTION = r"""cfg => {
+_NATIVE_SELECTION = r"""async cfg => {
   const components = window.Ext?.ComponentQuery?.query('*') || [];
   function component(id) {
     const found = components.filter(c => c.itemId === id);
-    return found.length === 1 ? found[0] : found.find(c => c.isVisible?.(true));
+    const visible = found.filter(c => c.isVisible?.(true));
+    return found.length === 1 ? found[0] : (visible.length === 1 ? visible[0] : null);
   }
   const grid = component('grdListByConds'), summary = grid?.getStore?.() || grid?.store;
   const sm = grid?.getSelectionModel?.();
-  if (!summary || summary.getCount() !== 1 || summary.getTotalCount() !== 1 || !sm?.deselectAll) return null;
-  const row = summary.getRange()[0], node = grid.getView()?.getNode(row);
-  if (!node) return null;
+  if (!summary || !sm?.deselectAll) return null;
   const modelSet = s => String(s || '').split(',').map(m => m.trim().toUpperCase()).sort().join(',');
   const raw = r => JSON.parse(JSON.stringify(r.getData ? r.getData() : r.data));
+  if (!scope(summary,false)) return null;
+  function candidates() {
+    return summary.getRange().filter(r => {
+      const d=raw(r);
+      return modelSet(d.prodModel || d.productModel) === modelSet(cfg.model);
+    });
+  }
+  let matches=candidates();
+  if (!matches.length && summary.pageSize > 0) {
+    const total=summary.getTotalCount(), pages=Math.ceil(total/summary.pageSize);
+    for (let n=1; n<=pages && !matches.length; n++) {
+      if (n !== summary.currentPage) await page(summary,n);
+      if (!scope(summary,false) || summary.currentPage!==n || summary.getTotalCount()!==total) return null;
+      matches=candidates();
+    }
+  }
+  if(matches.length !== 1) return null;
+  const row = matches[0], node = grid.getView()?.getNode(row);
+  if(!node) return null;
   const summaryRow = raw(row);
   if (modelSet(summaryRow.prodModel || summaryRow.productModel) !== modelSet(cfg.model)) return null;
   const tables = {};
@@ -526,11 +601,17 @@ _NATIVE_SELECTION = r"""cfg => {
   if (!scope(summary,false)) return null;
   const status = {}, cleanup = [];
   for (const [key,s] of Object.entries(tables)) {
-    const listen = (_store,_rows,ok) => {status[key] = ok !== false;};
+    const listen = (source,rows,ok,operation) => {
+      const page = operation?.getPage?.() ?? operation?.page ?? s.currentPage;
+      const current = s.getRange();
+      status[key] = source === s && ok === true && page === 1 && scope(s,true)
+        && validSelection() && rows.length === current.length
+        && rows.every((record,i) => record === current[i]);
+    };
     s.on('load',listen); cleanup.push(() => s.un('load',listen));
   }
   function release() {for (const off of cleanup.splice(0)) off();}
-  function validSelection() {return sm.getSelection()?.[0] === row && scope(summary,false);}
+  function validSelection() {const selected=sm.getSelection();return selected?.length===1 && selected[0] === row && scope(summary,false);}
   async function page(s,n) {
     const q = {...s.lastOptions?.params};
     const proxy=s.getProxy?.() || s.proxy;
@@ -538,7 +619,7 @@ _NATIVE_SELECTION = r"""cfg => {
     await new Promise((resolve,reject) => {
       const t=setTimeout(() => reject(Error('3028: tempo esgotado na pagina nativa')),20000);
       try {s.loadPage(n,{params:q,callback:(_rows,_op,ok) => {
-        clearTimeout(t); if (ok) resolve(); else reject(Error('3028: pagina nativa incompleta'));
+        clearTimeout(t); if (ok && Number(_op?.getPage?.() ?? _op?.page ?? s.currentPage) === n) resolve(); else reject(Error('3028: pagina nativa incompleta'));
       }});} catch(e) {clearTimeout(t);reject(e);}
     });
   }
@@ -626,12 +707,24 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
 
         def read(line, left, right):
             page.wait_for_function(_READY, timeout=20000)
-            cap = page.evaluate(source.QUERY_LINE_JS, params(line, left, right))
+            try:
+                cap = page.evaluate(source.QUERY_LINE_JS, params(line, left, right))
+            except Exception as exc:
+                if "3028:" not in str(exc):
+                    raise
+                if "mudou durante a coleta" in str(exc):
+                    raise ValueError(f"3028 {line}: resumo ou classificação mudou durante a coleta") from exc
+                raise ValueError(f"3028 {line}: páginas ou escopo da grade não confirmados") from exc
             cap["scope_columns"] = columns
             return cap
         def read_models(line, left, right, models):
             page.wait_for_function(_READY, timeout=20000)
-            return page.evaluate(_READ_MODELS, {"query": params(line, left, right), "models": models})
+            try:
+                return page.evaluate(_READ_MODELS, {"query": params(line, left, right), "models": models})
+            except Exception as exc:
+                if "3028:" not in str(exc):
+                    raise
+                raise ValueError(f"3028 {line}: paginação da consulta por modelo sem confirmação") from exc
 
         # Even a rejected batch must return the operator to the line that
         # actually failed. The native query restores its previous store filters.
@@ -650,7 +743,13 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
                         # Keep the established subwindow recovery if the native view is unavailable.
                         return None
 
-                cap = _capture_checked_period(read, line, start, end, rescope, read_models, visible_grids)
+                try:
+                    cap = _capture_checked_period(read, line, start, end, rescope, read_models, visible_grids)
+                except ValueError as exc:
+                    if "mudou durante a coleta" not in str(exc):
+                        raise
+                    rescope(line,start,end)
+                    cap = _capture_checked_period(read, line, start, end, rescope, read_models, visible_grids)
                 line_metrics = [source._summary_to_metric(r, line) for r in cap["summary"]["records"]]
                 details = [source._detail_to_record(r, line) for r in cap["detail"]["records"]]
                 for metric in line_metrics:
@@ -659,16 +758,20 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
                     record["line"] = line  # validated detailed rows; retain original fields in raw
                     _, model = _field(record["raw"], columns["detail"].get("model"), ("productModel", "prodModel"))
                     record["product_model"] = model
-                units = sum(m["total_defect_qty"] or 0 for m in line_metrics)
-                if units > len(details):
+                units = (sum(m["total_defect_qty"] for m in line_metrics)
+                         if line_metrics and all(m["total_defect_qty"] is not None for m in line_metrics) else None)
+                if units is not None and units > len(details):
                     raise ValueError(f"3028 {line}: {units} unidades com defeito no resumo e {len(details)} ocorrências no detalhe")
                 metrics.extend(line_metrics)
                 records.extend(details)
                 captures.append(cap)
                 grouped_total = sum(_group_counts(cap["grouped"]["records"]).values())
-                validations.append(dict(line=line, summary_defective_units=units, detail_occurrences=len(details),
+                original = cap.get("full_period_model_runs", cap["modelRuns"])
+                validations.append(dict(native_grouped_total=sum(sum(_group_counts(r["grouped"]["records"]).values()) for r in original),
+                    native_detail_occurrences=sum(len(r["detail"]["records"]) for r in original), line=line, summary_defective_units=units, detail_occurrences=len(details),
                     unique_pcbas=len({r["pcba_sn"] for r in details if r["pcba_sn"]}),
-                    extra_defect_occurrences=len(details)-units, grouped_total=grouped_total, grouped_matches_detail=grouped_total == len(details),
+                    extra_defect_occurrences=len(details)-units if units is not None else None, grouped_total=grouped_total, grouped_matches_detail=grouped_total == len(details),
+                    grouped_matches_by_code=all(_codes_match(run) for run in cap["modelRuns"]),
                     verification_method=cap.get("verification_method", "balanced_grids"),
                     ok=True, models=[m["product_model"] for m in line_metrics], verified_windows=len(cap["verified_windows"])))
         finally:

@@ -148,7 +148,8 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       // An operator-triggered 3028 run carries only the immutable IDs and
       // period needed to reopen its exact local revision. Do not copy the
       // full MES dashboard, records, or raw job configuration into UI state.
-      const ids=['analysis','deep_trace'].includes(raw.kind)&&raw.status==='done'&&raw.result?.snapshot_ids;
+      const hasSavedLines=raw.kind==='analysis' && raw.stage==='partial' && raw.status==='error';
+      const ids=['analysis','deep_trace'].includes(raw.kind)&&(raw.status==='done'||hasSavedLines)&&raw.result?.snapshot_ids;
       const collected=ids&&typeof ids==='object'&&!Array.isArray(ids)
         ?Object.fromEntries(LINE_IDS.filter(line=>Number.isSafeInteger(Number(ids[line]))&&Number(ids[line])>0)
           .map(line=>[line,String(ids[line])])):null;
@@ -164,7 +165,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
       if(done||(partial!==lastPartial&&now()-Math.max(lastRefresh,lastLiveRefreshAttempt)>=LIVE_DATA_REFRESH_INTERVAL_MS)){
         lastLiveRefreshAttempt=now(); // retry budget even when a slow SQLite/HTTP read fails
-        try{await refresh({afterJob:raw.status==='done'&&['analysis','deep_trace'].includes(raw.kind)});lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
+        try{await refresh({afterJob:(raw.status==='done'||hasSavedLines)&&['analysis','deep_trace'].includes(raw.kind)});lastPartial=partial;}catch(error){if(token!==generation)return;publish({error:error.message});}
       }
       // /v2/snapshots intentionally exposes TODAY only. A completed 3028
       // previous-day capture is available through /local-history, not through

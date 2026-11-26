@@ -10,6 +10,10 @@ class Source(unittest.TestCase):
   changed=git('diff','--name-only',BASE,'HEAD').splitlines()
   # Exact reviewed deltas for owned Home/OPC tabs and session-failure recovery.
   navigation_files = {
+   'ames/agent/store.py': 'df74d6af848f70231fbb0f36051e21931a7b1648c402f9648e2c926fc425d929',
+   'ames/agent/ames_3028_live.py': '477225190316249f916424c00cf0606b32bb5172494be399b16b704da263de33',
+   'ames/agent-client.mjs': 'f5a7fd117d6a5217f9f99c3015ce45c3943d00cb3d8b4852814179a0c7242f0b',
+   'ames/console-view.mjs': 'ee927306eaf679e0b98ea3be9feb9d4e3364faceaa2491856b9140810b578767',
    'ames/agent/ames_3012_live.py': '7b2e1cfb1905bb1d8b07a8fcabb70a5092e068c0711e8f0e322b8c71ccc4fdb3',
    'ames/agent/ames_3012_strategy.py': 'fbc70efbfc3fc8656d49052882c6d4a77768289fd5926c97ea084871f368e287',
    'ames/factory-engine/ames/navigation.py': '74d3d4249029099d75edbe1c3cbcae438e21952fb9d7e41de71a9b36f49f64fb',
