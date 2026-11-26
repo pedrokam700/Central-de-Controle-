@@ -160,7 +160,39 @@ def _confirmed(original, rows, groups):
     return exact, exact or (grouped and (native <= recovered or recovered <= native))
 
 
-def _capture_checked_period(read, line, start, end, rescope=None, read_models=None):
+def _native_agrees(cap, runs, repeat, repeated, line, read_visible):
+    """An independently selected MES row must reproduce both whole source tables."""
+    if (not read_visible or len(runs) != 1 or runs.keys() != repeated.keys()
+            or any(c.get("summary_scope_error") or len(c["summary"]["records"]) != 1
+                   or not _complete(c["summary"]) or not _complete(c["classification"])
+                   for c in (cap, repeat))):
+        return False
+    scope, run = next(iter(runs.items()))
+    other = repeated[scope]
+    if (not all(scope) or any(r.get("scope_errors") or not all(_complete(r[k]) for k in ("detail","grouped"))
+                              for r in (run,other))):
+        return False
+    if (_counts(cap["summary"]["records"]) != _counts(repeat["summary"]["records"])
+            or _counts(cap["classification"]["records"]) != _counts(repeat["classification"]["records"])):
+        return False
+    detail = _counts(run["detail"]["records"])
+    groups = _group_counts(run["grouped"]["records"])
+    if not 0 < sum(groups.values()) < len(run["detail"]["records"]):
+        return False
+    if detail != _counts(other["detail"]["records"]) or groups != _group_counts(other["grouped"]["records"]):
+        return False
+    columns = cap.get("scope_columns", {}).get("detail", {})
+    for row in run["detail"]["records"]:
+        _, row_line = _field(row, columns.get("line"), ("lineIdNew", "lineId"))
+        _, model = _field(row, columns.get("model"), ("productModel", "prodModel"))
+        if row_line.casefold() != line.casefold() or model.casefold() not in scope:
+            return False
+    visible = read_visible(run["prodModel"])
+    return (visible is not None and _counts(visible["summary"]) == _counts(cap["summary"]["records"])
+            and _counts(visible["detail"]) == detail and _group_counts(visible["grouped"]) == groups)
+
+
+def _capture_checked_period(read, line, start, end, rescope=None, read_models=None, read_visible=None):
     """Read smaller windows if needed, retaining the native full-range FPY and quantity."""
     from datetime import timedelta
     def model_names(runs):
@@ -206,6 +238,7 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
         return (not cap.get("summary_scope_error") and _complete(cap["summary"])
                 and _complete(cap["classification"]) and _balanced(runs))
 
+    native_verified = False
     full, models = capture(start, end)
     if not complete(full, models):
         contaminated = scope_issue(full, models)
@@ -229,6 +262,8 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
                 raise ValueError(f"3028 {line}: releitura integral sem confirmação por modelo"
                                  + (f" ({contaminated})" if contaminated else ""))
             full, models = repeat, repeated
+        elif _native_agrees(full, models, repeat, repeated, line, read_visible):
+            native_verified = True
         elif contaminated or not _complete(full["summary"]) or not _complete(full["classification"]):
             full, models = repeat, repeated
     if full.get("summary_scope_error"):
@@ -249,7 +284,7 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
                           "paginação ou totais por modelo sem confirmação.")
 
     inherited = None
-    if read_models and any(len(scope) > 1 for scope in models) and not _balanced(models):
+    if not native_verified and read_models and any(len(scope) > 1 for scope in models) and not _balanced(models):
         inherited = model_names(models)
         individual = explicit_runs(full, start, end, inherited)
         # Accept the explicit grids only if balanced and their disjoint detail
@@ -263,7 +298,7 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
             models = individual
 
     parts = []
-    if _balanced(models):
+    if native_verified or _balanced(models):
         parts.append((full, models))
     else:
         # Keep all boundaries at an MES hour. Recursively narrow only a failed slice.
@@ -329,6 +364,8 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
     result = {**full, "detail": {"records": detail, "total": len(detail)},
               "grouped": {"records": grouped, "total": len(grouped)},
               "modelRuns": [run for _, runs in parts for run in runs.values()]}
+    if native_verified:
+        result["verification_method"] = "native_selected_3028_grids"
     result["verified_windows"] = [cap["baseParams"] for cap, _ in parts]
     return result
 
@@ -456,6 +493,105 @@ _READ_MODELS = """async ({query, models}) => {
 }"""
 
 
+# Reproduce the operator's selection. The occurrence stores keep their own native
+# filters. Only their page number changes, and each page is checked before use.
+_NATIVE_SELECTION = r"""cfg => {
+  const components = window.Ext?.ComponentQuery?.query('*') || [];
+  function component(id) {
+    const found = components.filter(c => c.itemId === id);
+    return found.length === 1 ? found[0] : found.find(c => c.isVisible?.(true));
+  }
+  const grid = component('grdListByConds'), summary = grid?.getStore?.() || grid?.store;
+  const sm = grid?.getSelectionModel?.();
+  if (!summary || summary.getCount() !== 1 || summary.getTotalCount() !== 1 || !sm?.deselectAll) return null;
+  const row = summary.getRange()[0], node = grid.getView()?.getNode(row);
+  if (!node) return null;
+  const modelSet = s => String(s || '').split(',').map(m => m.trim().toUpperCase()).sort().join(',');
+  const raw = r => JSON.parse(JSON.stringify(r.getData ? r.getData() : r.data));
+  const summaryRow = raw(row);
+  if (modelSet(summaryRow.prodModel || summaryRow.productModel) !== modelSet(cfg.model)) return null;
+  const tables = {};
+  for (const [key,id] of [['grouped','grdSum'],['detail','grdListDetail']]) {
+    const c=component(id), s=c?.getStore?.() || c?.store;
+    if (!s || s.isLoading?.() || !s.on || !s.un) return null;
+    tables[key]=s;
+  }
+  function scope(s, withModel) {
+    const proxy = s.getProxy?.() || s.proxy;
+    const p = {...proxy?.extraParams, ...s.lastOptions?.params};
+    return ['lineId','dateFrom','dateTo','startTimeZone','endTimeZone'].every(k =>
+      k.endsWith('TimeZone') ? p[k] != null && Number(p[k]) === Number(cfg[k]) : String(p[k]) === cfg[k])
+      && (!withModel || modelSet(p.prodModel || p.productModel) === modelSet(cfg.model));
+  }
+  if (!scope(summary,false)) return null;
+  const status = {}, cleanup = [];
+  for (const [key,s] of Object.entries(tables)) {
+    const listen = (_store,_rows,ok) => {status[key] = ok !== false;};
+    s.on('load',listen); cleanup.push(() => s.un('load',listen));
+  }
+  function release() {for (const off of cleanup.splice(0)) off();}
+  function validSelection() {return sm.getSelection()?.[0] === row && scope(summary,false);}
+  async function page(s,n) {
+    const q = {...s.lastOptions?.params};
+    const proxy=s.getProxy?.() || s.proxy;
+    for (const k of ['page','start','limit',proxy?.pageParam,proxy?.startParam,proxy?.limitParam]) delete q[k];
+    await new Promise((resolve,reject) => {
+      const t=setTimeout(() => reject(Error('3028: tempo esgotado na pagina nativa')),20000);
+      try {s.loadPage(n,{params:q,callback:(_rows,_op,ok) => {
+        clearTimeout(t); if (ok) resolve(); else reject(Error('3028: pagina nativa incompleta'));
+      }});} catch(e) {clearTimeout(t);reject(e);}
+    });
+  }
+  async function records(s) {
+    if (!scope(s,true) || (s.currentPage || 1) !== 1) return null;
+    const total=s.getTotalCount(), size=s.pageSize || s.getCount() || 1;
+    if (!Number.isSafeInteger(total) || total<0 || !Number.isSafeInteger(size) || size<1) return null;
+    const batches = s.getCount() === total ? 1 : Math.max(1,Math.ceil(total/size));
+    const rows=[];
+    try {
+      for(let n=1;n<=batches;n++) {
+        if(n>1) await page(s,n);
+        if (!validSelection() || !scope(s,true) || s.isLoading?.() || (s.currentPage || 1)!==n || s.getTotalCount()!==total) return null;
+        rows.push(...s.getRange().map(raw));
+      }
+      return rows.length === total ? rows : null;
+    } finally {if((s.currentPage || 1)!==1 && validSelection()) await page(s,1);}
+  }
+  return {node,release, async read() {
+    const deadline=Date.now()+15000;
+    while ((!status.grouped || !status.detail) && Date.now()<deadline) {
+      if(status.grouped===false || status.detail===false) return null;
+      await new Promise(r=>setTimeout(r,80));
+    }
+    if (!status.grouped || !status.detail || !validSelection()) return null;
+    release();
+    const grouped=await records(tables.grouped);
+    if (!grouped) return null;
+    const detail=await records(tables.detail);
+    return detail && validSelection() ? {summary:[summaryRow],grouped,detail} : null;
+  }, prepare() {sm.deselectAll(true);}};
+}"""
+
+
+def _read_selected_grids(page, cfg, model):
+    handle = page.evaluate_handle(_NATIVE_SELECTION, {**cfg, "model": model})
+    try:
+        if not handle.evaluate("s => Boolean(s)"):
+            return None
+        node = handle.get_property("node")
+        try:
+            handle.evaluate("s => s.prepare()")
+            node.as_element().click(timeout=5000)
+            return handle.evaluate("s => s.read()")
+        finally:
+            node.dispose()
+    finally:
+        try:
+            handle.evaluate("s => s?.release()")
+        finally:
+            handle.dispose()
+
+
 def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
     from datetime import datetime
     from playwright.sync_api import sync_playwright
@@ -506,7 +642,15 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
                 # state. Its finally block then restores this line between pages
                 # and subwindows instead of the previous line's view.
                 rescope(line, start, end)
-                cap = _capture_checked_period(read, line, start, end, rescope, read_models)
+                def visible_grids(model):
+                    from playwright.sync_api import Error as BrowserError
+                    try:
+                        return _read_selected_grids(page, params(line, start, end), model)
+                    except BrowserError:
+                        # Keep the established subwindow recovery if the native view is unavailable.
+                        return None
+
+                cap = _capture_checked_period(read, line, start, end, rescope, read_models, visible_grids)
                 line_metrics = [source._summary_to_metric(r, line) for r in cap["summary"]["records"]]
                 details = [source._detail_to_record(r, line) for r in cap["detail"]["records"]]
                 for metric in line_metrics:
@@ -521,9 +665,11 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
                 metrics.extend(line_metrics)
                 records.extend(details)
                 captures.append(cap)
+                grouped_total = sum(_group_counts(cap["grouped"]["records"]).values())
                 validations.append(dict(line=line, summary_defective_units=units, detail_occurrences=len(details),
                     unique_pcbas=len({r["pcba_sn"] for r in details if r["pcba_sn"]}),
-                    extra_defect_occurrences=len(details)-units, grouped_total=len(details), grouped_matches_detail=True,
+                    extra_defect_occurrences=len(details)-units, grouped_total=grouped_total, grouped_matches_detail=grouped_total == len(details),
+                    verification_method=cap.get("verification_method", "balanced_grids"),
                     ok=True, models=[m["product_model"] for m in line_metrics], verified_windows=len(cap["verified_windows"])))
         finally:
             try:

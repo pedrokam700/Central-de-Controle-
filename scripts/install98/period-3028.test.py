@@ -127,6 +127,29 @@ class Period(unittest.TestCase):
             _capture_checked_period(read, "TAN10102", start, end,
                                     read_models=lambda l,a,b,ms:[run(m, [], 0) for m in ms])
 
+    def test_divergent_native_3028_grids_must_each_match_their_visible_source(self):
+        from datetime import timedelta
+        end = START + timedelta(hours=1)
+        for total, grouped, second in [(293,275,0), (245,241,12)]:
+            label = "M1,M2" if second else "M1"
+            rows = [{"lineId":"L2","productModel":"M2" if i<second else "M1","lotId":str(i//2),
+                     "defectCode":"X" if i>=100 else "Y","defectTime":str(i//2)} for i in range(total)]
+            groups = [{"defectCode":"Y","qty":100},{"defectCode":"X","qty":grouped-100}]
+            summary = [{"lineId":"L2","prodModel":label,"qty":999}]
+            run = {"prodModel":label,"detail":table(rows),"grouped":table(groups)}
+            cap = {"lineId":"L2","baseParams":{},"summary":table(summary),"classification":table([]),"modelRuns":[run]}
+            native = {"summary":summary,"grouped":groups,"detail":rows}
+            result = _capture_checked_period(Mock(return_value=cap),"L2",START,end,read_visible=lambda _:native)
+            self.assertEqual(result["verification_method"], "native_selected_3028_grids")
+            self.assertEqual(result["detail"]["records"], rows)
+            self.assertEqual(result["grouped"]["records"], groups)
+            for key,changed in [("detail",rows[:-1]),("detail",[dict(rows[0],lotId="other")]+rows[1:]),
+                                ("grouped",[dict(groups[0],defectCode="other"),groups[1]]),
+                                ("summary",[dict(summary[0],qty=998)])]:
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    _capture_checked_period(Mock(return_value=cap),"L2",START,end,
+                                            read_visible=lambda _:{**native,key:changed})
+
     def test_overlapping_scopes_in_one_capture_cannot_double_count(self):
         from comment_provenance_3028 import _model_tables
         cap = fixture(24)("L2", START, END)
