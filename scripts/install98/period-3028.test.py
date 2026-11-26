@@ -81,6 +81,52 @@ class Period(unittest.TestCase):
             self.assertEqual(result["detail"]["total"], 3775)
             self.assertEqual(result["summary"]["records"][0]["prodModel"], ",".join(members))
 
+    def test_mixed_day_reads_defects_even_in_windows_without_summary(self):
+        from datetime import timedelta
+        start = datetime(2026, 11, 24, 7)
+        end = start + timedelta(days=1)
+        names = ["CPH2817BR", "CPH2815BR"]
+        # Accepted subwindows in the station report cover only the first 130.
+        boundaries = {0:0, 6:62, 9:111, 10:129, 11:130, 12:139, 24:245}
+        data = [{"lineId":"TAN10102", "productModel":names[i % 2], "lotId":str(i),
+                 "defectCode":"X"} for i in range(245)]
+
+        def indices(a, b):
+            return ((a - start) // timedelta(hours=1), (b - start) // timedelta(hours=1))
+
+        def run(model, records, shortfall):
+            return {"prodModel":model, "detail":table(records),
+                    "grouped":table([{"defectCode":"X", "qty":len(records)-shortfall}])}
+
+        def read(line, a, b):
+            lo, hi = indices(a, b)
+            missing = lo >= 11
+            model = ",".join(names)
+            runs = [] if missing else [run(model, data[boundaries[lo]:boundaries[hi]],
+                                           4 if (lo,hi)==(0,24) else 2 if lo<11 and hi==12 else 0)]
+            cap = {"lineId":line, "baseParams":{"from":a.isoformat(),"to":b.isoformat()},
+                   "classification":table([]), "modelRuns":runs}
+            cap["summary"] = table([] if missing else [{"prodModel":model, "qty":1531}])
+            return cap
+
+        with self.assertRaisesRegex(ValueError, "subconsultas sem confirmação"):
+            _capture_checked_period(read, "TAN10102", start, end)
+
+        for recover_by_slicing in (False, True):
+            def read_models(line, a, b, models):
+                lo, hi = indices(a,b)
+                rows = data[boundaries[lo]:boundaries[hi]]
+                return [run(m, [r for r in rows if r["productModel"] == m],
+                            2 if recover_by_slicing and (lo,hi)==(0,24) else 0) for m in models]
+            result = _capture_checked_period(read, "TAN10102", start, end, read_models=read_models)
+            self.assertCountEqual([r["lotId"] for r in result["detail"]["records"]], [r["lotId"] for r in data])
+            self.assertEqual(result["summary"]["records"][0]["qty"],1531)
+            self.assertEqual(sum(r["qty"] for r in result["grouped"]["records"]),245)
+            self.assertEqual(len(result["verified_windows"]) > 1, recover_by_slicing)
+        with self.assertRaisesRegex(ValueError, "sem confirmação"):
+            _capture_checked_period(read, "TAN10102", start, end,
+                                    read_models=lambda l,a,b,ms:[run(m, [], 0) for m in ms])
+
     def test_overlapping_scopes_in_one_capture_cannot_double_count(self):
         from comment_provenance_3028 import _model_tables
         cap = fixture(24)("L2", START, END)

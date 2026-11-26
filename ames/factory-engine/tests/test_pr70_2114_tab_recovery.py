@@ -1,6 +1,6 @@
 """Guard the 2114 OPC tab recovery without querying or changing real MES."""
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from ames.tela_2114 import Tela2114, SHIFT_UNCONFIRMED
 from ames.navigation import AmesNavigation
@@ -43,6 +43,26 @@ ROUTE='http://172.29.185.215/asymes/opc/#UAWIP.form.TrDefectLotByHandView'
 
 
 class Recovery(unittest.TestCase):
+    def test_unavailable_login_does_not_create_blank_tabs_per_pcba(self):
+        browser = Browser([Page("http://mes.test/asymes/login")])
+        browser.context = Mock()
+        nav = AmesNavigation(browser)
+        for _ in range(314):
+            with self.assertRaisesRegex(RuntimeError, "LOGIN_AMES_REQUIRED"):
+                nav.ensure_2114()
+        browser.context.new_page.assert_not_called()
+
+    def test_failed_open_closes_only_the_automation_tab(self):
+        home = Page("http://mes.test/asymes/home")
+        browser = Browser([home])
+        browser.context = Mock()
+        created = browser.context.new_page.return_value
+        created.goto.side_effect = RuntimeError("timeout")
+        with self.assertRaisesRegex(RuntimeError, "timeout"):
+            AmesNavigation(browser).ensure_2114()
+        created.close.assert_called_once()
+        self.assertFalse(home.is_closed())
+
     def test_pinned_view_wins_over_another_focused_duplicate(self):
         original=Page(ROUTE)
         duplicate=Page(ROUTE,focused=True)

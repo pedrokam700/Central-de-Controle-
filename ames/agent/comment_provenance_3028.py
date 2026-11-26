@@ -160,16 +160,41 @@ def _confirmed(original, rows, groups):
     return exact, exact or (grouped and (native <= recovered or recovered <= native))
 
 
-def _capture_checked_period(read, line, start, end, rescope=None):
+def _capture_checked_period(read, line, start, end, rescope=None, read_models=None):
     """Read smaller windows if needed, retaining the native full-range FPY and quantity."""
     from datetime import timedelta
-    def capture(left, right):
+    def model_names(runs):
+        return {name.strip().casefold(): name.strip() for run in runs.values()
+                for name in run["prodModel"].split(",") if name.strip()}
+
+    def explicit_runs(cap, left, right, names):
+        fetched = read_models(line, left, right, list(names.values()))
+        _, runs = _scope_runs({**cap, "modelRuns": fetched}, line)
+        if runs.keys() != {frozenset([name]) for name in names}:
+            raise ValueError(f"3028 {line}: resposta incompleta à consulta explícita por modelo")
+        columns = cap.get("scope_columns", {}).get("detail", {})
+        for scope, run in runs.items():
+            for row in run["detail"]["records"]:
+                _, model = _field(row, columns.get("model"), ("productModel", "prodModel"))
+                if model.casefold() not in scope:
+                    run.setdefault("scope_errors", {})["detail"] = "modelo do detalhe sem confirmação individual"
+                    break
+        return runs
+
+    def capture(left, right, inherited=None):
         cap = read(line, left, right)
         if cap["lineId"] != line:
             raise ValueError(f"3028 {line}: resposta de outra linha")
         summary_error, runs = _scope_runs(cap, line)
         if summary_error:
             cap = {**cap, "summary_scope_error": summary_error}
+        if inherited and not summary_error:
+            # No production summary is not evidence of zero defect occurrences.
+            missing = {k:v for k,v in inherited.items() if k not in model_names(runs)}
+            if missing:
+                extra = explicit_runs(cap, left, right, missing)
+                runs.update(extra)
+                cap = {**cap, "modelRuns": list(runs.values())}
         return cap, runs
 
     def scope_issue(cap, runs):
@@ -223,16 +248,30 @@ def _capture_checked_period(read, line, start, end, rescope=None):
         return ValueError(f"3028 {line} entre {left} e {right}: agrupado={grouped}, detalhe={detail}; "
                           "paginação ou totais por modelo sem confirmação.")
 
+    inherited = None
+    if read_models and any(len(scope) > 1 for scope in models) and not _balanced(models):
+        inherited = model_names(models)
+        individual = explicit_runs(full, start, end, inherited)
+        # Accept the explicit grids only if balanced and their disjoint detail
+        # occurrences reproduce every original full-period record, per scope.
+        if _balanced(individual) and all(
+            not run.get("scope_errors") and _complete(run["detail"]) and
+            _counts(run["detail"]["records"]) == _counts(
+                row for member in scope for row in individual[frozenset([member])]["detail"]["records"])
+            for scope, run in models.items()
+        ):
+            models = individual
+
     parts = []
     if _balanced(models):
         parts.append((full, models))
     else:
         # Keep all boundaries at an MES hour. Recursively narrow only a failed slice.
         def collect_slice(left, right):
-            cap, runs = capture(left, right)
+            cap, runs = capture(left, right, inherited)
             if scope_issue(cap, runs) and rescope:
                 rescope(line, left, right)
-                cap, runs = capture(left, right)
+                cap, runs = capture(left, right, inherited)
             if complete(cap, runs):
                 parts.append((cap, runs))
                 return
@@ -361,6 +400,62 @@ _COLUMNS = """() => {
 }"""
 
 
+# Query only the occurrence stores when a model was established by the full
+# period. Production summary rows can be absent during an interval with repairs.
+_READ_MODELS = """async ({query, models}) => {
+  const all = window.Ext?.ComponentManager?.all;
+  const items = all?.items || all?.getArray?.() || window.Ext?.ComponentQuery?.query('*') || [];
+  function load(store, page) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(Error('3028: tempo esgotado na página ' + page)), 20000);
+      try {
+        store.loadPage(page, {callback(records, operation, success) {
+          clearTimeout(timer);
+          if (!success) return reject(Error('3028: falha ao ler página ' + page));
+          try { resolve((records || []).map(r => JSON.parse(JSON.stringify(r.getData ? r.getData() : r.data)))); }
+          catch (err) { reject(err); }
+        }});
+      } catch (err) { clearTimeout(timer); reject(err); }
+    });
+  }
+  async function read(gridId, params) {
+    const grid = items.find(c => c.itemId === gridId);
+    const store = grid.getStore?.() || grid.store;
+    const proxy = store.getProxy?.() || store.proxy;
+    const saved = {...(proxy.extraParams || {})}, savedPage = store.currentPage || 1;
+    const apply = p => { if (proxy.setExtraParams) proxy.setExtraParams(p); else proxy.extraParams = p; };
+    try {
+      apply(params);
+      const records = await load(store, 1);
+      const total = store.getTotalCount();
+      if (!Number.isSafeInteger(total) || total < 0) throw Error('3028: total de registros inválido');
+      const pageSize = store.pageSize || records.length || 100;
+      const pages = records.length >= total ? 1 : Math.ceil(total / pageSize);
+      const pageResults = [{page:1, count:records.length, success:true}];
+      for (let page=2; page<=pages; page++) {
+        apply(params);
+        const batch = await load(store, page);
+        if (store.getTotalCount() !== total) throw Error('3028: total mudou durante a paginação');
+        records.push(...batch);
+        pageResults.push({page, count:batch.length, success:true});
+      }
+      return {records, total, pageSize, pages, pageResults};
+    } finally {
+      apply(saved);
+      await load(store, savedPage);
+    }
+  }
+  const result = [];
+  for (const prodModel of models) {
+    const params = {...query, prodModel, procstep:1, orderId:'', workShift:'ALL'};
+    const detail = await read('grdListDetail', params);
+    const grouped = await read('grdSum', params);
+    result.push({prodModel, params, detail, grouped});
+  }
+  return result;
+}"""
+
+
 def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
     from datetime import datetime
     from playwright.sync_api import sync_playwright
@@ -398,6 +493,10 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
             cap = page.evaluate(source.QUERY_LINE_JS, params(line, left, right))
             cap["scope_columns"] = columns
             return cap
+        def read_models(line, left, right, models):
+            page.wait_for_function(_READY, timeout=20000)
+            return page.evaluate(_READ_MODELS, {"query": params(line, left, right), "models": models})
+
         # Even a rejected batch must return the operator to the line that
         # actually failed. The native query restores its previous store filters.
         line = lines[0]
@@ -407,7 +506,7 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
                 # state. Its finally block then restores this line between pages
                 # and subwindows instead of the previous line's view.
                 rescope(line, start, end)
-                cap = _capture_checked_period(read, line, start, end, rescope)
+                cap = _capture_checked_period(read, line, start, end, rescope, read_models)
                 line_metrics = [source._summary_to_metric(r, line) for r in cap["summary"]["records"]]
                 details = [source._detail_to_record(r, line) for r in cap["detail"]["records"]]
                 for metric in line_metrics:
