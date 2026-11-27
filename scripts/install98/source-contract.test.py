@@ -21,7 +21,7 @@ class Source(unittest.TestCase):
    'ames/console-reading-period.mjs': '0f94a101f1029ff9029906d004c4f87ba3ddeec9387f2e4868610c4c0e9493e3',
    'ames/collection-status.mjs': '5d51a9205b08cc4a88ffd9e4ac2c47bc82e0e87b75e4c67ffa2f526cc90ab6b7',
    'ames/agent/store.py': 'df74d6af848f70231fbb0f36051e21931a7b1648c402f9648e2c926fc425d929',
-   'ames/agent/comment_provenance_3028.py': '4bef2b71e64782958eef4e23113cfb43fb5e7df525824308f9d5699f88f01812',
+   'ames/agent/comment_provenance_3028.py': '50fe7e13c98989e5401764a53ebdc2122bf3896824c9f805282f304da3263c20',
    'ames/agent-client.mjs': 'b83fab495e185a1b40c2eb430cd57e1c46ab25f4153b40605166a6b9ce02a0f8',
    'ames/console-view.mjs': 'ee927306eaf679e0b98ea3be9feb9d4e3364faceaa2491856b9140810b578767',
    'ames/agent/ames_3012_live.py': '7b2e1cfb1905bb1d8b07a8fcabb70a5092e068c0711e8f0e322b8c71ccc4fdb3',

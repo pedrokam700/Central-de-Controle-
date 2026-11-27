@@ -4,6 +4,8 @@ python -B scripts/install98/browser-3028-replay.py [path/to/ames-agent] [path/to
 Requires Playwright and Chromium. All browser traffic is fulfilled from this fixture.
 """
 import argparse
+from collections import Counter
+import json
 import importlib.util
 import os
 from pathlib import Path
@@ -17,79 +19,80 @@ ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
 parser.add_argument("agent_dir", type=Path, nargs="?", default=ROOT / "ames/agent")
 parser.add_argument("ui_dir", type=Path, nargs="?", default=ROOT / "ames")
+parser.add_argument("--case")
 args = parser.parse_args()
 sys.path.insert(0, str(args.agent_dir.resolve()))
 from canonical import export_revision
 
-# No network MES. Each click on a real HTML button selects a different Ext record
-# and dispatches the load events using the selected row's own proxy parameters.
-FIXTURE = """({line,counts,group,units,split,fault,quantity,empty}) => {
-  const hourly=fault==='hourRecovery';
-  const names=Object.keys(counts), summaryNames=split?names:[names.join(',')];
-  const buttons=summaryNames.map((_,i)=>document.body.appendChild(document.createElement('button')));
-  let selected=null, native=false;
+# ExtJS-shaped stores return fixtures for the supplied line/period/model filters.
+# The summary has no selectable DOM node. The active path must never need one.
+FIXTURE = """({line,counts,summary,group,units,fault,quantity}) => {
   const grids=[];
-  const data=names.flatMap((name,model)=>Array.from({length:counts[name]},(_,i)=>({
+  const data=Object.entries(counts).flatMap(([name,count],model)=>Array.from({length:count},(_,i)=>({
     lineId:line,productModel:name,lotId:'LAB-'+model+'-'+Math.floor(i/2),
-    sampleIndex:i,defectOper:'OP'+(i%2),defectCode:i<10?'A':'B',defectDesc:'synthetic',
-    defectTime:new Date(Date.UTC(2026,10,25,7,0,Math.floor(i/2))),repairComment:'lab'
+    defectOper:i<2?'OP0':'OP'+(i%2),defectCode:i<10?'A':'B',defectDesc:'synthetic',
+    defectTime:new Date(Date.UTC(2026,10,26,14,0,Math.floor(i/2))),repairComment:'lab'
   })));
+  const requests=[];
   function grid(itemId){
-    const events=new Set();
-    const store={pageSize:20,currentPage:1,rows:[],proxy:{extraParams:{}},reads:{},
+    const store={pageSize:20,currentPage:1,rows:[],total:0,proxy:{extraParams:{}},reads:{},
       getRange(){return this.rows},getTotalCount(){return this.total},getCount(){return this.rows.length},
-      on(_,fn){events.add(fn)},un(_,fn){events.delete(fn)},isLoading(){return false},
-      loadPage(n,options){
+      isLoading(){return false},
+      loadPage(page,options){
         const p=this.proxy.extraParams;
-        const allowed=(p.prodModel||names.join(',')).split(',');
-        const whole=!hourly||Number(p.endTimeZone)-Number(p.startTimeZone)>1;
-        const filtered=data.filter(r=>allowed.includes(r.productModel)&&
-          (whole|| (r.sampleIndex<15)===(Number(p.startTimeZone)===11)));
+        requests.push({itemId,page,...p});
+        const allowed=String(p.prodModel||'').split(',').filter(Boolean);
+        const filtered=data.filter(r=>!allowed.length||allowed.includes(r.productModel));
         let result=[];
         if(itemId==='grdListByConds'){
-          native=false;
-          result=empty?[]:summaryNames.map((name,i)=>({lineIdNew:line,prodModel:name,
-            qty:split?counts[name]:quantity,totalDefectQty:split?0:units,fpy:95,checkFpy:96}));
+          result=summary.map(name=>({lineIdNew:line,prodModel:name,qty:quantity,totalDefectQty:units,fpy:95,checkFpy:96}));
         }else if(itemId==='grdListByConds2'){
-          result=empty?[]:[{lineId:line,qty:quantity}];
+          result=summary.length?[{lineId:line,qty:quantity}]:[];
         }else if(itemId==='grdListDetail'){
           result=filtered.map(r=>({...r}));
-          if((fault==='nativeChanged'||hourly&&whole) && native && result.length)result[0].repairComment='updated';
-          if(fault==='foreign' && result.length)result[0].lineId='TAN10101';
+          if(fault==='foreign'&&result.length)result[0].lineId='TAN10101';
+          if(fault==='missingLine'&&result.length)delete result[0].lineId;
+          if(fault==='blankUnsupported'&&!p.prodModel)result=[];
         }else{
-          const a=filtered.filter(r=>r.defectCode==='A').length;
-          const q=hourly&&!whole?(Number(p.startTimeZone)===11?11:4):split?group[names.indexOf(p.prodModel)]??0:group[0];
-          if(q)result=[{defectCode:'A',qty:fault==='compensated'?a-1:a},
-                       {defectCode:'B',qty:q-a+(fault==='compensated'?1:0)}];
+          result=fault==='unpagedGrouping'
+            ? Array.from({length:group},(_,i)=>({defectCode:'D'+i,qty:1}))
+            : group? [{defectCode:'A',qty:group}]:[];
         }
-        this.total=result.length;this.currentPage=n;
-        this.reads[n]=(this.reads[n]||0)+1;
-        const start=fault==='repeatPage' && itemId==='grdListDetail' && n===2?0:(n-1)*20;
-        const batch=result.slice(start,start+20);
-        if (fault==='unstablePage' && itemId==='grdListDetail' && n===2 && this.reads[n]%2===0)
+        // Each response has its own captured request, independent of extraParams.
+        const opParams={...p};
+        if(itemId==='grdListDetail'&&fault==='foreignPeriod')opParams.endTimeZone='08';
+        if(itemId==='grdListDetail'&&fault==='foreignModel')opParams.prodModel='ANOTHER';
+        if(itemId==='grdListDetail'&&fault==='wrongRequestPage')opParams.page=page+1;
+        this.total=result.length;this.currentPage=page;
+        this.reads[page]=(this.reads[page]||0)+1;
+        const start=fault==='repeatPage'&&itemId==='grdListDetail'&&page===2?0:(page-1)*20;
+        const batch=fault==='unpagedGrouping'&&itemId==='grdSum'?result:result.slice(start,start+20);
+        if((fault==='unstablePage'&&page===2||fault==='unstableSingle'&&page===1)&&
+           itemId==='grdListDetail'&&this.reads[page]%2===0&&batch.length)
           batch[0]={...batch[0],repairComment:'mutation'};
-        this.rows=batch.map(data=>({data}));const operation={page:n,params:{...p}};
-        options.callback(this.rows,operation,true);
-        for(const fn of events)fn(this,this.rows,true,operation);
+        if(fault==='incomplete'&&itemId==='grdListDetail'&&page===2)batch.pop();
+        this.rows=batch.map(data=>({data}));
+        options.callback(this.rows,{page,request:{params:opParams},resultSet:{total:this.total}},true);
       }
     };
-    const instance={itemId,store,getStore:()=>store,getSelectionModel:()=>({
-      select(i){selected=summary.store.rows[i]},getSelection:()=>selected?[selected]:[],
-      deselectAll(){selected=null}
-    }),getView:()=>({getNode:r=>buttons[summary.store.rows.indexOf(r)],focusRow(){}})};
+    const instance={itemId,store,getStore:()=>store};
     grids.push(instance);return instance;
   }
-  const summary=grid('grdListByConds');grid('grdListByConds2');
-  const details=grid('grdListDetail'),groups=grid('grdSum');
-  buttons.forEach((btn,i)=>btn.onclick=()=>{
-    selected=summary.store.rows[i];native=true;
-    for(const table of [groups,details]){
-      table.store.proxy.extraParams={...summary.store.proxy.extraParams,prodModel:selected.data.prodModel};
-      table.store.loadPage(1,{callback(){}});
-    }
-  });
+  grid('grdListByConds');grid('grdListByConds2');grid('grdSum');
+  const detail=grid('grdListDetail').store;
   window.Ext={ComponentManager:{all:{items:grids}},ComponentQuery:{query:()=>grids}};
+  window.requests=requests;
+  window.byModel=scope=>Object.keys(counts).flatMap(model=>{
+    const rows=[];
+    detail.proxy.extraParams={...scope,prodModel:model};
+    for(let page=1;page===1||page<=Math.ceil(detail.total/detail.pageSize);page++)
+      detail.loadPage(page,{callback(records){rows.push(...records.map(r=>r.data));}});
+    return JSON.parse(JSON.stringify(rows));
+  });
 }"""
+
+def multiset(rows):
+    return Counter(json.dumps(row,sort_keys=True) for row in rows)
 
 def run():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory, sync_playwright() as pw:
@@ -119,22 +122,38 @@ def run():
         second={"CPH2817BR":233,"CPH2815BR":12}
         primary=lambda n:{"CPH2817BR":n}
         cases=[
-            ("mixed",second,[241],224),("single",primary(293),[275],246),
-            ("revised",primary(294),[274],245),("control",{"CPH2853BR":33,"CPH2783BR":2},[35],35),
-            ("separate",second,[232,10],224),("empty",primary(40),[40],0),
-            ("zero",primary(40),[0],0),("larger",primary(40),[41],0),
-            ("compensated",primary(40),[40],0),("nativeChanged",primary(40),[38],0),
-            ("repeatPage",primary(60),[60],0),("unstablePage",primary(60),[60],0),
-            ("foreign",primary(40),[40],0),("hourRecovery",primary(19),[18],0)]
+            ("emptySummary15",{"CPH2817BR":8,"CPH2815BR":7},11,[],None),
+            ("emptySummary11",{"CPH2817BR":10,"CPH2815BR":1},9,[],None),
+            ("missingModel",second,241,["CPH2817BR"],224),
+            ("single",primary(293),275,["CPH2817BR"],246),
+            ("revised",primary(294),274,["CPH2817BR"],245),
+            ("separate",second,241,list(second),224),
+            ("control",{"CPH2853BR":33,"CPH2783BR":2},35,["CPH2853BR,CPH2783BR"],35),
+            ("zeroGrouped",primary(15),0,[],None),
+            ("unpagedGrouping",primary(48),40,[],None),
+            ("greaterGrouped",primary(15),16,[],None),
+            ("long",{"CPH2817BR":3000,"CPH2815BR":775},3639,["CPH2817BR"],3300),
+            *((name, primary(60 if name in ("repeatPage","unstablePage","incomplete") else 15),11,[],None)
+              for name in ("repeatPage","unstablePage","unstableSingle","incomplete","foreign","missingLine",
+                           "foreignPeriod","foreignModel","blankUnsupported","wrongRequestPage"))
+        ]
+        invalid_cases={"repeatPage","unstablePage","unstableSingle","incomplete","foreign","missingLine",
+                       "foreignPeriod","foreignModel","blankUnsupported","wrongRequestPage"}
         revisions={}
-        for name,counts,groups,units in cases:
+        for name,counts,group,summary,units in cases:
+            if args.case and args.case != name:
+                continue
             line="TAN10103" if name=="control" else "TAN10102"
-            day=24 if name=="mixed" else 25
-            quantity=1531 if day==24 else 1786
+            quantity=1786
+            start,end={
+                "emptySummary15":("2026-11-26T11:00","2026-11-26T12:00"),
+                "emptySummary11":("2026-11-27T13:00","2026-11-27T14:00"),
+                "long":("2026-09-01T07:00","2026-10-31T07:00"),
+            }.get(name,("2026-11-25T07:00","2026-11-26T07:00"))
             page.goto("http://fixture.invalid/asymes/home#UAWIP.form.VwFpyInquireView")
-            page.evaluate(FIXTURE,dict(line=line,counts=counts,group=groups,units=units,quantity=quantity,
-                                      split=name=="separate",empty=name=="empty",fault=name))
-            invalid=name in ("nativeChanged","repeatPage","unstablePage","foreign")
+            page.evaluate(FIXTURE,dict(line=line,counts=counts,group=group,units=units,quantity=quantity,
+                                      summary=summary,fault=name))
+            invalid=name in invalid_cases
             with agent.STORE.connect() as db:
                 before=db.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
             try:
@@ -142,8 +161,7 @@ def run():
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=1) as pool:
                     result=pool.submit(agent.ingest_3028_live,mode="custom",lines=[line],
-                          start_at="2026-11-26T11:00" if name=="hourRecovery" else f"2026-11-{day}T07:00",
-                          end_at="2026-11-26T13:00" if name=="hourRecovery" else f"2026-11-{day+1}T07:00").result()
+                          start_at=start,end_at=end).result()
             except ValueError:
                 if not invalid:
                     raise
@@ -154,17 +172,23 @@ def run():
             assert not invalid,name
             sid=result["snapshot_id"]; total=sum(counts.values())
             validation=result["live"]["validations"][0]
-            assert (validation["detail_occurrences"],validation["grouped_total"])==(total,15 if name=="hourRecovery" else sum(groups)),validation
-            if name=="hourRecovery":
-                assert validation["native_grouped_total"]==18
-                assert validation["verification_method"]=="native_selected_3028_subwindows"
-            if name=="compensated":
-                assert validation["verification_method"]=="native_selected_3028_grids"
-                assert validation["grouped_matches_by_code"] is False
+            assert (validation["detail_occurrences"],validation["grouped_total"])==(total,group),validation
+            assert validation["summary_defective_units"]==(units*len(summary) if units is not None else None)
+            captured=result["live"]["captures"][0]
+            native_calls=page.evaluate("requests.filter(r=>r.itemId==='grdListDetail'&&r.lineId)")
+            assert len(native_calls)==2*((total+19)//20)
+            assert all(r["prodModel"]=="" for r in native_calls)
+            integral=captured["detail"]["records"]
+            individual=page.evaluate("scope=>byModel(scope)",captured["filters"]["detail"])
+            assert multiset(integral)==multiset(individual)
+            assert max(multiset(integral).values())==2
+            with agent.STORE.connect() as db:
+                stored=[json.loads(r[0])["raw"] for r in db.execute(
+                    "SELECT raw_json FROM defect_observations WHERE snapshot_id=?",(sid,))]
+                assert multiset(stored)==multiset(individual)
             payload=export_revision(agent.STORE,sid,line)
-            from collections import Counter
             assert Counter(row["product_model"] for row in payload["datasets"]["defects"])==counts
-            assert payload["summary"]["quantity"]==(None if name in ("separate","empty") else quantity)
+            assert payload["summary"]["quantity"]==(quantity if len(summary)==1 else None)
             if name=="single":
                 revisions[sid]=payload
             if name=="revised":
@@ -179,11 +203,11 @@ def run():
               store.setLocalConnected(true);createOccurrenceView(document.body,store).render();
             }""",payload)
             page.locator("#dashMesLine").select_option(line)
-            assert page.locator("#dashMesRecords .stat-value").inner_text()==str(total)
+            assert page.locator("#dashMesRecords .stat-value").inner_text().replace(".","")==str(total)
             for model,count in counts.items():
                 page.locator("#dashMesProduct").select_option(model)
-                assert page.locator("#dashMesRecords .stat-value").inner_text()==str(count)
-            print(name,total,sum(groups),validation["verification_method"],"SQLite → revision → UI",flush=True)
+                assert page.locator("#dashMesRecords .stat-value").inner_text().replace(".","")==str(count)
+            print(name,total,group,validation["verification_method"],"SQLite → revision → UI",flush=True)
         context.close()
 
 if __name__=="__main__":
