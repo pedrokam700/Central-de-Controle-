@@ -11,7 +11,8 @@ ROOT=Path(__file__).resolve().parents[1];BASE='5856eb3f0cc1dd391cf93217fd068f0a0
 BRANCH='work/ames-p04-windows-preflight-20261118'
 ALLOWED={
  'ames/agent/store.py',
- 'ames/agent/ames_3028_live.py',
+ 'ames/agent/period_grids_3028.py',
+ 'scripts/agent-canonical.test.py',
  'ames/agent-client.mjs',
  'ames/console-view.mjs',
  'scripts/install98/browser-3028-replay.py',

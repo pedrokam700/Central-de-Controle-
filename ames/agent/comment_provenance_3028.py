@@ -1,6 +1,9 @@
 """Preserve 3028 source evidence for comments and reconciled historical captures."""
 
 
+from period_grids_3028 import QUERY_LINE_JS, SYNC_VISIBLE_JS, READ_MODELS as _READ_MODELS
+
+
 def preserve_3028_comment(record):
     """Recover explicit 3028 raw-field aliases without inventing comments.
 
@@ -481,75 +484,6 @@ _COLUMNS = """() => {
 
 # Query only the occurrence stores when a model was established by the full
 # period. Production summary rows can be absent during an interval with repairs.
-_READ_MODELS = """async ({query, models}) => {
-  const all = window.Ext?.ComponentManager?.all;
-  const items = all?.items || all?.getArray?.() || window.Ext?.ComponentQuery?.query('*') || [];
-  function load(store, page) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(Error('3028: tempo esgotado na página ' + page)), 20000);
-      try {
-        store.loadPage(page, {callback(records, operation, success) {
-          clearTimeout(timer);
-          if (!success || Number(operation?.getPage?.() ?? operation?.page ?? store.currentPage)!==page)
-            return reject(Error('3028: falha ao ler página ' + page));
-          try { resolve((records || []).map(r => JSON.parse(JSON.stringify(r.getData ? r.getData() : r.data)))); }
-          catch (err) { reject(err); }
-        }});
-      } catch (err) { clearTimeout(timer); reject(err); }
-    });
-  }
-  async function read(gridId, params) {
-    const matches=items.filter(c => c.itemId === gridId);
-    const visible=matches.filter(c=>c.isVisible?.(true));
-    const grid=matches.length===1?matches[0]:(visible.length===1?visible[0]:null);
-    if(!grid) throw Error('3028: grade de modelo ambígua');
-    const store = grid.getStore?.() || grid.store;
-    const proxy = store.getProxy?.() || store.proxy;
-    const saved = {...(proxy.extraParams || {})}, savedPage = store.currentPage || 1;
-    const apply = p => { if (proxy.setExtraParams) proxy.setExtraParams(p); else proxy.extraParams = p; };
-    try {
-      apply(params);
-      const records = await load(store, 1);
-      const total = store.getTotalCount();
-      if (!Number.isSafeInteger(total) || total < 0) throw Error('3028: total de registros inválido');
-      const pageSize = store.pageSize || records.length || 100;
-      const pages = records.length >= total ? 1 : Math.ceil(total / pageSize);
-      const signatures = [JSON.stringify(records)];
-      const seen = new Set(signatures);
-      const pageResults = [{page:1, count:records.length, success:true}];
-      for (let page=2; page<=pages; page++) {
-        apply(params);
-        const batch = await load(store, page);
-        if (store.getTotalCount() !== total) throw Error('3028: total mudou durante a paginação');
-        const signature = JSON.stringify(batch);
-        if (!batch.length || seen.has(signature)) throw Error('3028: página repetida ou vazia');
-        seen.add(signature); signatures.push(signature);
-        records.push(...batch);
-        pageResults.push({page, count:batch.length, success:true});
-      }
-      if (records.length!==total) throw Error('3028: consulta de modelo incompleta');
-      for (let n=pages;pages>1 && n>=1;n--) {
-        const check=await load(store,n);
-        if (store.getTotalCount()!==total || JSON.stringify(check)!==signatures[n-1])
-          throw Error('3028: conteúdo mudou durante a paginação');
-      }
-      return {records, total, pageSize, pages, pageResults};
-    } finally {
-      apply(saved);
-      await load(store, savedPage);
-    }
-  }
-  const result = [];
-  for (const prodModel of models) {
-    const params = {...query, prodModel, procstep:1, orderId:'', workShift:'ALL'};
-    const detail = await read('grdListDetail', params);
-    const grouped = await read('grdSum', params);
-    result.push({prodModel, params, detail, grouped});
-  }
-  return result;
-}"""
-
-
 # Reproduce the operator's selection. The occurrence stores keep their own native
 # filters. Only their page number changes, and each page is checked before use.
 _NATIVE_SELECTION = r"""async cfg => {
@@ -703,12 +637,12 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
         columns = page.evaluate(_COLUMNS)
 
         def rescope(line, left, right):
-            page.evaluate(source.SYNC_VISIBLE_JS, params(line, left, right))
+            page.evaluate(SYNC_VISIBLE_JS, params(line, left, right))
 
         def read(line, left, right):
             page.wait_for_function(_READY, timeout=20000)
             try:
-                cap = page.evaluate(source.QUERY_LINE_JS, params(line, left, right))
+                cap = page.evaluate(QUERY_LINE_JS, params(line, left, right))
             except Exception as exc:
                 if "3028:" not in str(exc):
                     raise
@@ -776,7 +710,7 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
                     ok=True, models=[m["product_model"] for m in line_metrics], verified_windows=len(cap["verified_windows"])))
         finally:
             try:
-                visible = page.evaluate(source.SYNC_VISIBLE_JS, params(line, start, end))
+                visible = page.evaluate(SYNC_VISIBLE_JS, params(line, start, end))
                 page.wait_for_function(_READY, timeout=20000)
             except Exception as exc:
                 visible = {"warning": f"UI_SYNC_FAILED: {exc}", **params(line, start, end)}

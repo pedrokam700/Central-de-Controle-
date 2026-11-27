@@ -84,7 +84,13 @@ class ContractTests(unittest.TestCase):
         self.store.ingest_defects(self.sid,[row,row])
         p=canonical.export_revision(self.store,self.sid,'TAN10101')
         self.assertEqual({r['product'] for r in p['datasets']['defects']},{'CPH2859','CPH2859V'})
-        self.assertEqual(len({r['occurrence_id'] for r in p['datasets']['defects']}),2)
+        records=p['datasets']['defects']
+        self.assertEqual(sum(r['product']=='CPH2859V' for r in records),2)
+        ids={r['occurrence_id'] for r in records}
+        self.assertEqual(len(ids),3)
+        self.store.ingest_defects(self.sid,[row,row])
+        reread=canonical.export_revision(self.store,self.sid,'TAN10101')
+        self.assertEqual({r['occurrence_id'] for r in reread['datasets']['defects']},ids)
     def test_process_adapter_absent_and_temporal_boundary(self):
         with self.assertRaises(RuntimeError):process_timeline.collect(self.store,line_id='TAN10101',product='CPH2859',pcba_sn='P')
         p=canonical.export_revision(self.store,self.sid,'TAN10101');self.assertFalse(p['capabilities']['process_timeline']);self.assertEqual(p['coverage']['process_timeline']['status'],'not_collected')

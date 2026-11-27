@@ -11,7 +11,7 @@ class Source(unittest.TestCase):
   # Exact reviewed deltas for owned Home/OPC tabs and session-failure recovery.
   navigation_files = {
    'ames/agent/store.py': 'df74d6af848f70231fbb0f36051e21931a7b1648c402f9648e2c926fc425d929',
-   'ames/agent/ames_3028_live.py': '477225190316249f916424c00cf0606b32bb5172494be399b16b704da263de33',
+   'ames/agent/period_grids_3028.py': '0132e0879bd8ec56d4ef7a5e329860f575bb8fe7aa5f0d0acb749d14ff19113d',
    'ames/agent-client.mjs': 'f5a7fd117d6a5217f9f99c3015ce45c3943d00cb3d8b4852814179a0c7242f0b',
    'ames/console-view.mjs': 'ee927306eaf679e0b98ea3be9feb9d4e3364faceaa2491856b9140810b578767',
    'ames/agent/ames_3012_live.py': '7b2e1cfb1905bb1d8b07a8fcabb70a5092e068c0711e8f0e322b8c71ccc4fdb3',
