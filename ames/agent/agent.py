@@ -1559,7 +1559,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if u.path == "/api/v1/runs":
                 cfg = dict(body)
-                if cfg.get("preset") == "previous_day":
+                if cfg.get("preset") == "retry_pending":
+                    with JOBS_LOCK:
+                        original = JOBS.get(str(cfg.get("job_id") or ""), {})
+                        result = original.get("result") or {}
+                        pending = normalize_lines(result.get("pending_lines") or [])
+                        if original.get("kind") != "analysis" or original.get("stage") != "partial" or not pending:
+                            raise ValueError("Job sem linhas pendentes para repetir")
+                        cfg = {key: original["config"].get(key) for key in
+                               ("mode","start_at","end_at","shift","performance")}
+                        cfg.update(lines=pending, request_id=body.get("request_id"))
+                elif cfg.get("preset") == "previous_day":
                     cfg["start_at"], cfg["end_at"] = previous_day_window()
                     cfg["mode"] = "previous_day"
                 elif cfg.get("preset") == "today":

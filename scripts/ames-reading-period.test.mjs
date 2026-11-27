@@ -122,7 +122,7 @@ test('unreadable newest historical revision recovers an older revision without c
  assert.equal(store.read(l3).snapshot?.revision,1);
  assert.equal(store.agent().period_read.status,'partial');
  assert.deepEqual(store.agent().period_read.recovered_lines,[{
-   line_id:l3,unreadable_revisions:1,source_id:'factory-A',snapshot_id:'14',snapshot_revision:1}]);
+   line_id:l3,unreadable_revisions:1,source_id:'factory-A',snapshot_id:'14',snapshot_revision:1,reason:'revision_read_failed'}]);
  assert.equal(traceTargetForLine(store,l3).available,false,'recovered older revision must not be sent to MES');
  ctl.clear();
 });
@@ -521,4 +521,31 @@ test('changing account or resetting session invalidates source overrides and sta
  account='SYNTHETIC-C';release(p);await pending;
  assert.equal(store.agent().period_read.status,'loading','response from prior account must not complete the new account read');
  ctl.clear();
+});
+
+test('daily history prefers exact period and newest local snapshot at the same timestamp',async()=>{
+ const {createReadingPeriodController}=await import('../ames/reading-period-controller.mjs');
+ const store=createAmesStore({now:()=>now.getTime()});
+ const full=id=>{const p=snapshot(id,'2026-10-16','previous_day');p.summary.period.end_at='2026-10-17T07:00';return p;};
+ const current=full('11'),old=full('9'),shorter=snapshot('32','2026-10-16','today');
+ shorter.source_id='shared';shorter.collected_at='2026-10-19T16:00:00Z';
+ const rows=[shorter,old,current].map(p=>({source_id:p.source_id,line_id:line,
+   history_source:p===shorter?'shared':'local',snapshot_id:p.snapshot_id,snapshot_revision:1,
+   collected_at:p.collected_at,period_start:p.summary.period.start_at,period_end:p.summary.period.end_at,payload:p}));
+ let failed=false,opened=[];
+ const controller=createReadingPeriodController(store,{
+  list:async requested=>requested===line?rows:[],
+  open:async entry=>{opened.push(entry.snapshot_id);if(failed&&entry.snapshot_id==='11')throw Error('synthetic');return entry.payload;}
+ });
+ await controller.select('previous');
+ assert.deepEqual(opened,['11']);assert.deepEqual(store.agent().period_read.exact_lines,[line]);
+ assert.equal(store.read(line).snapshot.snapshot_id,'11');
+ opened=[];failed=true;await controller.select('previous');
+ assert.deepEqual(opened,['11','9']);
+ assert.equal(store.agent().period_read.recovered_lines[0].reason,'revision_read_failed');
+ rows.splice(1,2);
+ await controller.select('previous');
+ assert.deepEqual(store.agent().period_read.fallback_lines,[line]);
+ assert.deepEqual(store.agent().period_read.exact_lines,[]);
+ assert.equal(store.read(line).snapshot.snapshot_id,'32');
 });

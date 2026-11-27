@@ -31,8 +31,9 @@ try{
  await page.locator('[data-cohort-kind="pcbas"][data-cohort-metric="observed"]').click();
  const detail=page.locator('details[data-cohort-row]').first();await detail.locator('summary').first().click();
  await page.waitForFunction(()=>qa.calls.repairs===1&&qa.calls.operators===1);
- await detail.locator('[data-timeline-coverage="3012"]').waitFor();
- assert.equal(await detail.locator('table').count(),1,'ONE operational timeline, no second 3012 table');
+ await detail.locator('[data-timeline-coverage="3012"]').waitFor({state:'attached'});
+ assert.equal(await detail.locator('table:visible').count(),1,'Only operational rows visible initially');
+ await detail.locator('[data-reuse-technical] > summary').click();
  assert.equal(await detail.locator('[data-reuse-timeline-row]').count(),8);
  for(const text of ['Reparadora Alfa','Reparador Beta','Operadora Gama','Autor histórico zero','Comentário completo Alfa','Comentário independente Beta <seguro>']){
   const element=detail.getByText(text,{exact:false}).first();assert.equal(await element.isVisible(),true,text);
@@ -48,11 +49,11 @@ try{
   await page.evaluate(({lang,dark})=>qa.show(lang,dark),{lang,dark});
   await page.locator('[data-cohort-kind="pcbas"][data-cohort-metric="observed"]').click();
   const current=page.locator('details[data-cohort-row]').first();await current.locator('summary').first().click();
-  await current.locator('[data-timeline-coverage="3012"]').waitFor();
-  assert.equal(await current.locator('table').count(),1);assert.equal(await current.locator('[data-reuse-timeline-row]').count(),8);
-  assert.equal(await current.locator('[data-reuse-history-timeline] details:not([data-event-proof])').count(),0,'operational names and comments remain visible');
+  await current.locator('[data-timeline-coverage="3012"]').waitFor({state:'attached'});
+  assert.equal(await current.locator('table:visible').count(),1);assert.equal(await current.locator('[data-reuse-timeline-row]').count(),8);
+  assert.equal(await current.locator('[data-reuse-technical]').getAttribute('open'),null);
   const text=await current.locator('[data-reuse-history-timeline]').innerText();
-  assert.ok(!/\+\d/.test(text));assert.match(text,lang==='en-US'?/Person \/ role/i:/Técnico \/ papel/i);
+  assert.ok(!/\+\d/.test(text));assert.match(text,lang==='en-US'?/Repair technician/i:/Técnico AT/i);
   if(dark)assert.notEqual(await current.locator('th').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(245, 246, 248)');
   await page.screenshot({path:path.join(out,`reuse-timeline-${lang}-${dark?'dark':'light'}.png`),fullPage:true});
  }
@@ -60,14 +61,15 @@ try{
   await page.evaluate(mode=>qa.show('pt-BR',false,mode),mode);
   await page.locator('[data-cohort-kind="pcbas"][data-cohort-metric="observed"]').click();
   const current=page.locator('details[data-cohort-row]').first();await current.locator('summary').first().click();
-  const status=current.locator(`[data-timeline-coverage="${mode==='repair-error'?'3012':'3022'}"]`);await status.waitFor();
+  const status=current.locator(`[data-timeline-coverage="${mode==='repair-error'?'3012':'3022'}"]`);await status.waitFor({state:'attached'});await current.locator('[data-reuse-technical] > summary').click();
   assert.match(await status.innerText(),/indisponível.*preservadas/);
   assert.equal(await current.locator('[data-reuse-timeline-row]').count(),expected);
  }
  await page.evaluate(()=>qa.show('pt-BR',false,'long'));
  await page.locator('[data-cohort-kind="pcbas"][data-cohort-metric="observed"]').click();
  const long=page.locator('details[data-cohort-row]').first();await long.locator('summary').first().click();
- await long.locator('[data-timeline-coverage="3012"]').waitFor();
+ await long.locator('[data-timeline-coverage="3012"]').waitFor({state:'attached'});
+ await long.locator('[data-reuse-technical] > summary').click();
  assert.equal(await long.locator('[data-reuse-timeline-row]:visible').count(),20);
  await long.locator('[data-page-step="1"]').click();
  assert.equal(await long.locator('[data-reuse-timeline-row]:visible').count(),9);
@@ -75,11 +77,11 @@ try{
  assert.equal(await long.locator('[data-reuse-timeline-row]:visible').count(),20);
  await page.evaluate(()=>qa.show());await page.locator('[data-cohort-kind="components"][data-cohort-metric="observed"]').click();
  const component=page.locator('details[data-cohort-row]').first();await component.locator('summary').first().click();
- await component.locator('[data-timeline-coverage="3012"]').waitFor();
- assert.equal(await component.locator('table').count(),1);
- assert.match(await component.locator('table').innerText(),/SYNTH-PCBA-OLD/);
- assert.match(await component.locator('table').innerText(),/Histórico não disponível/);
- assert.match(await component.locator('table').innerText(),/Vínculo 3074 · Y/);
+ await component.locator('[data-timeline-coverage="3012"]').waitFor({state:'attached'});
+ assert.equal(await component.locator('table:visible').count(),1);
+ assert.match(await component.locator('table:visible').innerText(),/SYNTH-PCBA-OLD/);
+ assert.match(await component.locator('table:visible').innerText(),/Histórico não disponível/);
+ assert.match(await component.locator('table:visible').innerText(),/Vínculo 3074 · Y/);
  assert.deepEqual(errors,[]);
  console.log('U1b Chromium PASS: independent events, single table, PT/EN × themes, visible names/comments, cached reads, partial/error safety, multiple bound boards');
 }finally{await browser.close();await new Promise(r=>server.close(r));}

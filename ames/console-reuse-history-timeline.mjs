@@ -1,5 +1,6 @@
 import {buildReuseHistoryTimeline} from './data/reuse-history-timeline.mjs';
 import {analysisScope2114} from './data/reuse-cohorts.mjs';
+import {compatibleExplicitLineage} from './data/production-evidence.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 const t=(pt,en)=>globalThis.document?.documentElement?.lang?.startsWith('en')?en:pt;
@@ -18,12 +19,37 @@ function provenance(e){
 }
 export function renderReuseHistoryTimeline(input={}, {board=false,status={}}={}){
  const rows=buildReuseHistoryTimeline(input);
- const routine=e=>e.source_view==='3022'&&!/A69[0-9]{2}/i.test(e.station||'')&&!e.repair_comment;
- const routineCount=rows.filter(routine).length;
+ const operational=rows.filter(e=>e.source_view==='3074'||(['2114','3028'].includes(e.source_view)&&e.defect_code));
+ const repairRows=rows.filter(e=>e.source_view==='3012'&&e.occurrence_match==='proven');
+ const compact=operational.length?`<div class="table-wrap ames-component-comparison${board?' ames-board-comparison':''}"><table><thead><tr>
+  <th>PCBA / ${t('Vínculo','Binding')} 3074</th><th>${t('Falha','Failure')}</th>
+  <th>${t('Análise 2114','2114 analysis')}</th><th>${t('Hora da falha','Failure time')}</th>
+  <th>${t('Técnico AT','Repair technician')}</th><th>${t('Hora do reparo','Repair time')}</th>
+  <th>${t('Comentário AT','AT comment')}</th><th>${t('Relação com a falha atual','Relation to current failure')}</th></tr></thead>
+  <tbody>${operational.map(e=>{
+   const occurrence=e.occurrence_id||e.record_id;
+   const repairs=occurrence?repairRows.filter(r=>r.current_occurrence_id===occurrence&&r.pcba_sn===e.pcba_sn&&compatibleExplicitLineage(e,r)):[];
+   const values=(get)=>[...new Set(repairs.map(get).filter(Boolean))];
+   const names=values(r=>r.actors.find(a=>a.role==='repair_user'&&!a.name_conflict)?.name);
+   const clocks=values(r=>r.repair_time);
+   const comments=values(r=>r.repair_comment);
+   const relation=e.current_comparison==='EXACT'?t('Mesma falha','Same defect'):
+    e.current_comparison==='SIMILAR'?t('Mesma família','Same family'):
+    e.current_comparison==='OTHER'?t('Outra falha','Different defect'):
+    e.source_view==='3028'?t('Falha atual','Current failure'):t('Indeterminada','Undetermined');
+   return `<tr data-operational-failure-row><td class="ames-component-compare-pcba">${esc(e.pcba_sn)}
+    ${e.bindings.length?bindingText(e.bindings):''}${e.proven_use_index?`<small>${esc(e.proven_use_index)}${t('º uso',' · use')}</small>`:''}</td>
+    <td><strong>${esc(e.defect_desc||e.defect_code||t('Histórico não disponível','History unavailable'))}</strong>
+    ${e.defect_code?`<small>${esc(e.defect_code)}</small>`:''}</td>
+    <td>${e.source_view==='2114'?esc(e.defect_type||'—'):'—'}</td><td>${clock(e.defect_time)}</td>
+    <td>${names.map(esc).join('<br>')||'—'}</td><td>${clocks.map(clock).join('<br>')||'—'}</td>
+    <td>${comments.map(esc).join('<br>')||'—'}</td><td>${esc(relation)}</td></tr>`;
+  }).join('')}</tbody></table>${operational.length>20?`<nav data-operational-pages aria-label="${t('Páginas de falhas','Failure pages')}"><button type="button" class="button secondary" data-page-step="-1">${t('Anterior','Previous')}</button> <span aria-live="polite"></span> <button type="button" class="button secondary" data-page-step="1">${t('Próxima','Next')}</button></nav>`:''}</div>`:'';
  const warnings=Object.entries(status).map(([view,value])=>`<p class="mes-context" data-timeline-coverage="${esc(view)}">${esc(view)} · ${value==='error'?t('Leitura local indisponível; evidências já carregadas preservadas. Ausência não comprovada.','Local read unavailable; loaded evidence preserved. Absence unproven.'):value==='loaded'?t('Cache local consultado; ausência de registros não comprova ausência no MES.','Local cache read; no rows does not prove MES absence.'):t('Cache local não consultado; cobertura não comprovada.','Local cache not queried; coverage unproven.')}</p>`).join('');
  return `<section data-reuse-history-timeline data-reuse-3012-history>
- <p class="mes-context">${t('Falhas e reparos por PCBA. Cada passagem conserva seu horário, técnico e comentário de origem.','Faults and repairs by board. Each visit retains its source time, person and comment.')}</p>
- ${routineCount?`<label class="ames-reuse-process-filter"><input type="checkbox" data-show-process> ${t('Mostrar passagens de processo 3022','Show 3022 process visits')} (${routineCount})</label>`:''}
+ ${compact}
+ <details data-reuse-technical><summary>${t('Evidências técnicas · 2114, 3028, 3012 e 3022','Technical evidence · 2114, 3028, 3012 and 3022')}</summary>
+ <p class="mes-context">${t('Registros de origem, com seus horários e papéis.','Source records with their own times and roles.')}</p>
  <div class="table-wrap ames-component-comparison${board?' ames-board-comparison':''}"><table><thead><tr>
  <th>PCBA / ${t('Vínculo','Binding')} 3074</th><th>${t('Falha / processo','Fault / process')}</th>
  <th>${t('Análise 2114 / reparo','2114 analysis / repair')}</th>
@@ -31,7 +57,7 @@ export function renderReuseHistoryTimeline(input={}, {board=false,status={}}={})
  <th>${t('Hora do reparo','Repair time')}</th><th>${t('Comentário AT','AT comment')}</th><th>${t('Origem','Source')}</th>
  </tr></thead><tbody>${rows.map(e=>{
   const failure=['2114','3028'].includes(e.source_view);
-  return `<tr data-reuse-timeline-row ${routine(e)?'data-routine-process':''} data-source-view="${esc(e.source_view)}" data-event-key="${esc(e.identity)}" data-pcba="${esc(e.pcba_sn)}" data-defect-code="${esc(e.defect_code||'')}" ${failure?'data-reuse-source-row':''} ${board&&failure?'data-board-failure-row':''} ${e.source_view==='3012'?'data-reuse-3012-occurrence':''}>
+  return `<tr data-reuse-timeline-row data-source-view="${esc(e.source_view)}" data-event-key="${esc(e.identity)}" data-pcba="${esc(e.pcba_sn)}" data-defect-code="${esc(e.defect_code||'')}" ${failure?'data-reuse-source-row':''} ${board&&failure?'data-board-failure-row':''} ${e.source_view==='3012'?'data-reuse-3012-occurrence':''}>
   <td class="ames-component-compare-pcba">${esc(e.pcba_sn)}${input.bindings?.length?bindingText(e.bindings):board&&failure?`<small>${e.source_view==='3028'?t('Atual','Current'):t('Histórico','Historical')}</small>`:'' }</td>
   <td><strong>${esc(e.defect_desc||e.operation_name||e.process||e.station||(e.source_view==='3074'?t('Histórico não disponível','History unavailable'):'—'))}</strong><small>${esc(e.defect_code||e.station||'')}</small>${e.recurrence_pcba_count>1?`<small>${t('Mesma falha em','Same fault on')} ${esc(e.recurrence_pcba_count)} PCBAs</small>`:''}</td>
   <td>${e.defect_type?`<span class="ames-reuse-time-line">${esc(e.defect_type)}</span>`:e.repair_desc||e.repair_code||e.repaired_location?'':'—'}${e.source_view==='2114'?`<small>${t('Escopo do processo','Process scope')}: ${esc(scopes()[e.analysis_scope]||scopes()[analysisScope2114(e.defect_type)])}</small><small>Repair: ${esc(e.repair_status||'—')}</small><small>${!e.history_order_proven?t('Ordem não comprovada','Order unproven'):e.repeat_exact_prior_count?t('Mesma falha anterior','Same prior defect')+' ('+e.repeat_exact_prior_count+')':e.repeat_family_prior_count?t('Mesma família anterior','Same prior family'):'—'}</small>`:esc([e.repair_status,e.repair_desc||e.repair_code,e.repaired_location].filter(Boolean).join(' · '))}</td>
@@ -43,17 +69,18 @@ export function renderReuseHistoryTimeline(input={}, {board=false,status={}}={})
  }).join('')}</tbody></table></div>
  ${rows.length>20?`<nav data-history-pages hidden aria-label="${t('Páginas do histórico','History pages')}"><button type="button" class="button secondary" data-page-step="-1">${t('Anterior','Previous')}</button> <span aria-live="polite"></span> <button type="button" class="button secondary" data-page-step="1">${t('Próxima','Next')}</button></nav>`:''}${warnings}
  ${!rows.length?`<p class="ames-reuse-unproven">${t('Eventos não disponíveis nesta leitura; ausência não comprovada.','Events unavailable in this reading; absence unproven.')}</p>`:''}
- </section>`;
+ </details></section>`;
 }
 
 export function paginateReuseHistory(section){
- const nav=section?.querySelector('[data-history-pages]');
- if(!nav)return;
- const rows=[...section.querySelectorAll('[data-reuse-timeline-row]')];
- const checkbox=section.querySelector('[data-show-process]');
+ if(!section)return;
+ for(const [control,selector] of [['data-operational-pages','data-operational-failure-row'],['data-history-pages','data-reuse-timeline-row']]){
+ const nav=section.querySelector('['+control+']');
+ if(!nav)continue;
+ const rows=[...section.querySelectorAll('['+selector+']')];
  let page=0;
  function paint(){
-  const visible=rows.filter(r=>checkbox?.checked||!r.hasAttribute('data-routine-process'));
+  const visible=rows;
   page=Math.max(0,Math.min(page,Math.ceil(visible.length/20)-1));
   const start=20*page,shown=new Set(visible.slice(start,start+20));
   for(const row of rows)row.hidden=!shown.has(row);
@@ -66,6 +93,6 @@ export function paginateReuseHistory(section){
   const step=event.target.closest('[data-page-step]');if(!step)return;
   page+=Number(step.dataset.pageStep);paint();
  });
- checkbox?.addEventListener('change',()=>{page=0;paint();});
  paint();
+ }
 }

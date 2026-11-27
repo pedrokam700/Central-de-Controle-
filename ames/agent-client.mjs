@@ -156,12 +156,22 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
       const collection_receipt=raw.kind==='analysis'&&collected&&Object.keys(collected).length&&
         typeof raw.result?.start_at==='string'&&typeof raw.result?.end_at==='string'
         ?{snapshot_ids:collected,period_start:raw.result.start_at,period_end:raw.result.end_at}:null;
+      const pending=hasSavedLines?LINE_IDS.filter(line=>raw.result?.pending_lines?.includes(line)&&!collected?.[line]):[];
+      const collection_summary=collection_receipt?{
+        ...collection_receipt,source_id:store.agent()?.capabilities?.source_id||null,pending_lines:pending,
+        line_errors:Object.fromEntries(pending.map(line=>{
+          const error=raw.result?.line_errors?.[line];
+          // Only projected 3028 validation diagnostics, never a browser stack or raw rows.
+          const safe=typeof error==='string'&&error.startsWith('3028 '+line)&&!/\n|https?:|[\\]|[0-9]{17,}/i.test(error);
+          return [line,safe?error.slice(0,450):'Consulta ou gravação sem confirmação'];
+        }))
+      }:null;
       // Deep trace enriches an existing immutable 3028 snapshot. Its exact
       // local IDs can select the corresponding period after 3074/2114/3022,
       // without copying MES evidence into the source-selection receipt.
       const trace_receipt=raw.kind==='deep_trace'&&collected&&Object.keys(collected).length
         ?{snapshot_ids:collected}:null;
-      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,created_at:raw.created_at,started_at:raw.started_at,finished_at:raw.finished_at,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}}, ['done','error','cancelled','skipped'].includes(raw.status)?'job-finished':'job-poll');
+      publish({...(raw.kind==='sn_lookup'&&raw.result?{resultSource:'sn'}:{}),job:{id:raw.id,kind:raw.kind,status:raw.status,stage:raw.stage,message:raw.message,progress:raw.progress,created_at:raw.created_at,started_at:raw.started_at,finished_at:raw.finished_at,mes_state:raw.mes_state,stage_progress:raw.stage_progress||{},live_events:projectLiveJobEvents(raw.live_events),partial_refresh:raw.partial_refresh||0,scope:raw.scope,error:raw.error,collection_receipt,collection_summary,trace_receipt,result:['sn_lookup','deep_trace'].includes(raw.kind)?raw.result:undefined}}, ['done','error','cancelled','skipped'].includes(raw.status)?'job-finished':'job-poll');
       const partial=Number(raw.partial_refresh||0),done=['done','error','cancelled','skipped'].includes(raw.status);
       if(done||(partial!==lastPartial&&now()-Math.max(lastRefresh,lastLiveRefreshAttempt)>=LIVE_DATA_REFRESH_INTERVAL_MS)){
         lastLiveRefreshAttempt=now(); // retry budget even when a slow SQLite/HTTP read fails
@@ -352,7 +362,7 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
     saveConfig:value=>action(async()=>{check();const scope=collectionScope(value);const cfg={configured_lines:scope.lines,performance:scope.performance};const saved=await request('/config',cfg);publish({config:publicConfig(saved?.config||saved)});}),
     collect:(type,value)=>action(async()=>{
       check();if(store.agent().job&&!['done','error','cancelled','skipped'].includes(store.agent().job.status))throw new Error('Aguarde ou cancele o job atual.');
-      const scope=type==='sn'?null:collectionScope(value);let path,body;
+      const scope=['sn','retry_pending'].includes(type)?null:collectionScope(value);let path,body;
       if(type==='deep'){
         path='/deep-trace';body={...scope};
         if(store.agent().capabilities?.exact_trace_targets!==true)throw Error('Atualize o agente para rastrear o snapshot exato do período selecionado.');
@@ -429,6 +439,12 @@ export function createAgentClient(store, {fetcher=fetch, changed=()=>{}, schedul
         }
         if(value.repair_partials===true)body.repair_partials=true;
         if(value.force_new_run===true)body.force_new_run=true;
+      }
+      else if(type==='retry_pending'){
+        const job=store.agent().job;
+        if(job?.kind!=='analysis'||job.stage!=='partial'||!job.collection_summary?.pending_lines.length)
+          throw Error('Nenhuma linha pendente neste job.');
+        path='/runs';body={preset:'retry_pending',job_id:job.id};
       }
       else if(type==='today'||type==='previous_day'){path='/runs';body={preset:type,lines:scope.lines,performance:scope.performance};}
       else if(type==='custom'){path='/runs';body={preset:'custom',mode:'custom',lines:scope.lines,performance:scope.performance,start_at:value.start_at,end_at:value.end_at,shift:value.shift||null};if(!body.start_at||!body.end_at||body.start_at>=body.end_at)throw Error('Informe período válido.');}

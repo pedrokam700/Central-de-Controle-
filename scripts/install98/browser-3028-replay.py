@@ -24,13 +24,14 @@ from canonical import export_revision
 # No network MES. Each click on a real HTML button selects a different Ext record
 # and dispatches the load events using the selected row's own proxy parameters.
 FIXTURE = """({line,counts,group,units,split,fault,quantity,empty}) => {
+  const hourly=fault==='hourRecovery';
   const names=Object.keys(counts), summaryNames=split?names:[names.join(',')];
   const buttons=summaryNames.map((_,i)=>document.body.appendChild(document.createElement('button')));
   let selected=null, native=false;
   const grids=[];
   const data=names.flatMap((name,model)=>Array.from({length:counts[name]},(_,i)=>({
     lineId:line,productModel:name,lotId:'LAB-'+model+'-'+Math.floor(i/2),
-    defectOper:'OP'+(i%2),defectCode:i<10?'A':'B',defectDesc:'synthetic',
+    sampleIndex:i,defectOper:'OP'+(i%2),defectCode:i<10?'A':'B',defectDesc:'synthetic',
     defectTime:new Date(Date.UTC(2026,10,25,7,0,Math.floor(i/2))),repairComment:'lab'
   })));
   function grid(itemId){
@@ -41,7 +42,9 @@ FIXTURE = """({line,counts,group,units,split,fault,quantity,empty}) => {
       loadPage(n,options){
         const p=this.proxy.extraParams;
         const allowed=(p.prodModel||names.join(',')).split(',');
-        const filtered=data.filter(r=>allowed.includes(r.productModel));
+        const whole=!hourly||Number(p.endTimeZone)-Number(p.startTimeZone)>1;
+        const filtered=data.filter(r=>allowed.includes(r.productModel)&&
+          (whole|| (r.sampleIndex<15)===(Number(p.startTimeZone)===11)));
         let result=[];
         if(itemId==='grdListByConds'){
           native=false;
@@ -51,11 +54,11 @@ FIXTURE = """({line,counts,group,units,split,fault,quantity,empty}) => {
           result=empty?[]:[{lineId:line,qty:quantity}];
         }else if(itemId==='grdListDetail'){
           result=filtered.map(r=>({...r}));
-          if(fault==='nativeChanged' && native && result.length)result[0].repairComment='updated';
+          if((fault==='nativeChanged'||hourly&&whole) && native && result.length)result[0].repairComment='updated';
           if(fault==='foreign' && result.length)result[0].lineId='TAN10101';
         }else{
           const a=filtered.filter(r=>r.defectCode==='A').length;
-          const q=split?group[names.indexOf(p.prodModel)]??0:group[0];
+          const q=hourly&&!whole?(Number(p.startTimeZone)===11?11:4):split?group[names.indexOf(p.prodModel)]??0:group[0];
           if(q)result=[{defectCode:'A',qty:fault==='compensated'?a-1:a},
                        {defectCode:'B',qty:q-a+(fault==='compensated'?1:0)}];
         }
@@ -122,7 +125,7 @@ def run():
             ("zero",primary(40),[0],0),("larger",primary(40),[41],0),
             ("compensated",primary(40),[40],0),("nativeChanged",primary(40),[38],0),
             ("repeatPage",primary(60),[60],0),("unstablePage",primary(60),[60],0),
-            ("foreign",primary(40),[40],0)]
+            ("foreign",primary(40),[40],0),("hourRecovery",primary(19),[18],0)]
         revisions={}
         for name,counts,groups,units in cases:
             line="TAN10103" if name=="control" else "TAN10102"
@@ -139,7 +142,8 @@ def run():
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=1) as pool:
                     result=pool.submit(agent.ingest_3028_live,mode="custom",lines=[line],
-                          start_at=f"2026-11-{day}T07:00",end_at=f"2026-11-{day+1}T07:00").result()
+                          start_at="2026-11-26T11:00" if name=="hourRecovery" else f"2026-11-{day}T07:00",
+                          end_at="2026-11-26T13:00" if name=="hourRecovery" else f"2026-11-{day+1}T07:00").result()
             except ValueError:
                 if not invalid:
                     raise
@@ -150,7 +154,10 @@ def run():
             assert not invalid,name
             sid=result["snapshot_id"]; total=sum(counts.values())
             validation=result["live"]["validations"][0]
-            assert (validation["detail_occurrences"],validation["grouped_total"])==(total,sum(groups)),validation
+            assert (validation["detail_occurrences"],validation["grouped_total"])==(total,15 if name=="hourRecovery" else sum(groups)),validation
+            if name=="hourRecovery":
+                assert validation["native_grouped_total"]==18
+                assert validation["verification_method"]=="native_selected_3028_subwindows"
             if name=="compensated":
                 assert validation["verification_method"]=="native_selected_3028_grids"
                 assert validation["grouped_matches_by_code"] is False

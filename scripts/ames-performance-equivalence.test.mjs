@@ -9,6 +9,21 @@ const descriptions=['Camera impurity','Front camera failed','Rear camera failed'
  'Camera frontal traseira','Light sensor failed','Proximity sensor failed','WiFi failed','GPS failed','Screen failed','UNKNOWN',''];
 const codes=['D','D2','UNKNOWN','N/A','-','',null];
 let seed=90289;const random=n=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed%n;};
+// The operator contract changed the current-failure classification and
+// prior-evidence eligibility. Keep the PR89 comparison for all other fields.
+function preservedPopulation(model){
+ for(const name of ['pcbas','components']){
+  const population=model[name];
+  for(const row of population.rows){
+   delete row.current_failure_relations;delete row.same_failure;delete row.same_family;
+   delete row.prior_events;
+  }
+  for(const metric of ['same_failure','same_family','prior_failure']){
+   delete population.counts[metric];delete population.metrics[metric];
+  }
+ }
+ return model;
+}
 test('historical projections equal PR89 including partial/conflicting scopes, missing clocks and independent actors',()=>{
  for(let run=0;run<24;run++){
   const rows=Array.from({length:40},(_,i)=>({pcba_sn:i%11?'P':'OTHER',source_view:'2114',hist_seq:i%13?random(12):null,
@@ -34,8 +49,8 @@ test('multi-PCBA/component populations preserve complete rows, identity, counts 
   const snapshot=multi(size);snapshot.pcba_history.records.push({...snapshot.pcba_history.records[0],snapshot_revision:13,defect_user_name:'Revisão antiga'});
   const original=structuredClone(snapshot);
   for(const filters of [{},{sn:'SYNTH-1'},{item_type:'Camera'},{product:'OTHER'},{part_number:'UNKNOWN'}]){
-   assert.deepEqual(buildReuseCohorts(snapshot,filters),base.buildReuseCohorts(snapshot,filters));
-   assert.deepEqual(filterReuseCohorts(buildReuseCohorts(snapshot),filters),base.buildReuseCohorts(snapshot,filters));
+   assert.deepEqual(preservedPopulation(buildReuseCohorts(snapshot,filters)),preservedPopulation(base.buildReuseCohorts(snapshot,filters)));
+   assert.deepEqual(preservedPopulation(filterReuseCohorts(buildReuseCohorts(snapshot),filters)),preservedPopulation(base.buildReuseCohorts(snapshot,filters)));
   }
   assert.deepEqual(snapshot,original);
  }
@@ -44,7 +59,7 @@ test('proof indexes retain trimmed legacy board identities and alias order',()=>
  const snapshot=multi(40),sn=snapshot.occurrences[0].pcba_sn;
  snapshot.pcba_history.records.push({pcba_sn:' '+sn+' ',defect_type:'MainBoard',defect_time:'2026-11-02 08:00:00'});
  snapshot.process_timeline={events:[{pcba_sn:' '+sn+' ',station:'A5162',event_time:'2026-11-03T12:00:00Z'}],contexts:[]};
- assert.deepEqual(buildReuseCohorts(snapshot),base.buildReuseCohorts(snapshot));
+ assert.deepEqual(preservedPopulation(buildReuseCohorts(snapshot)),preservedPopulation(base.buildReuseCohorts(snapshot)));
 });
 test('dense partial legacy lineages retain all observations with bounded index memory',()=>{
  const rows=Array.from({length:300},(_,i)=>({pcba_sn:'P',source_view:'2114',hist_seq:i,
@@ -66,7 +81,7 @@ test('independent faults retain last-winning prior annotations, all actors, cloc
    occurrences,pcba_history:{records:history},process_timeline:{
     events:run%3?[{pcba_sn:'P',station:'A5162',event_time:'2026-11-03T09:00:00Z'}]:[],contexts:[]}};
   const original=structuredClone(snapshot);
-  assert.deepEqual(buildReuseCohorts(snapshot),base.buildReuseCohorts(snapshot),'independent run '+run);
+  assert.deepEqual(preservedPopulation(buildReuseCohorts(snapshot)),preservedPopulation(base.buildReuseCohorts(snapshot)),'independent run '+run);
   assert.deepEqual(snapshot,original);
  }
 });

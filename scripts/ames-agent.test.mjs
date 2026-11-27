@@ -271,3 +271,22 @@ test('source capture metadata from exact immutable revision is local, bounded an
   assert.equal(h.calls.length,count);
   h.client.clear();
 });
+
+test('a terminal partial job exposes its sanitized reason and retries by authenticated job ID',async()=>{
+ const h=harness();await h.client.connect();
+ h.routes['jobs/J']={id:'J',kind:'analysis',status:'error',stage:'partial',progress:100,result:{
+  snapshot_ids:{TAN10101:9,TAN10103:10},pending_lines:['TAN10102'],
+  line_errors:{TAN10102:'3028 TAN10102 entre 11:00 e 12:00: agrupado=11, detalhe=15'},
+  start_at:'2026-11-26T07:00:00-03:00',end_at:'2026-11-27T07:00:00-03:00'
+ }};
+ await h.client.collect('previous_day',scope);await h.tick();
+ const {collectionStatus}=await import('../ames/collection-status.mjs');
+ const html=collectionStatus(h.store.agent());
+ assert.match(html,/Concluída parcialmente — 2 de 3 linhas salvas/);
+ assert.match(html,/Linha 2.*agrupado=11, detalhe=15/);
+ assert.doesNotMatch(html,/99%|<progress/);
+ await h.client.collect('retry_pending',{});
+ const last=h.calls.filter(c=>c.key==='runs').at(-1).body;
+ assert.deepEqual(last,{preset:'retry_pending',job_id:'J',request_id:last.request_id});
+ h.client.clear();
+});

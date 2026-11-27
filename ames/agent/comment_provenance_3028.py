@@ -208,7 +208,7 @@ def _native_agrees(cap, runs, repeat, repeated, line, read_visible):
     return True
 
 
-def _capture_checked_period(read, line, start, end, rescope=None, read_models=None, read_visible=None):
+def _capture_checked_period(read, line, start, end, rescope=None, read_models=None, read_visible=None, read_visible_slice=None):
     """Read smaller windows if needed, retaining the native full-range FPY and quantity."""
     from datetime import timedelta
     def model_names(runs):
@@ -333,6 +333,7 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
             models = individual
 
     parts = []
+    native_windows = []
     if native_verified or _balanced(models):
         parts.append((full, models))
     else:
@@ -346,6 +347,17 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
                 parts.append((cap, runs))
                 return
             if right - left <= timedelta(hours=1):
+                if read_visible_slice and not scope_issue(cap, runs):
+                    if rescope:
+                        rescope(line, left, right)
+                    witness, repeated_runs = capture(left, right, inherited)
+                    if _native_agrees(cap, runs, witness, repeated_runs, line,
+                                      lambda model: read_visible_slice(model, left, right)):
+                        parts.append((cap, runs))
+                        native_windows.append(cap["baseParams"])
+                        return
+                    raise ValueError(f"{mismatch(cap, runs, left, right)} "
+                                     "seleção nativa da fatia sem confirmação entre as duas consultas.")
                 raise mismatch(cap, runs, left, right)
             pivot = left + timedelta(hours=int((right - left).total_seconds() // 7200))
             collect_slice(left, pivot)
@@ -387,10 +399,10 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
             seen = set()
             for r in selected:
                 keys = set(_counts(r["detail"]["records"]))
-                if seen.intersection(keys) and not native_detail:
+                if seen.intersection(keys) and (native_windows or not native_detail):
                     raise ValueError(f"3028 {line}: limite entre subconsultas ambíguo para {model}")
                 seen.update(keys)
-            if not confirmed:
+            if not confirmed or (native_windows and not native_detail):
                 issue = scope_issue(full, models)
                 raise ValueError(f"3028 {line}: subconsultas sem confirmação independente no período para {model}"
                                  + (f" ({issue})" if issue else ""))
@@ -399,6 +411,9 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
     result = {**full, "detail": {"records": detail, "total": len(detail)},
               "grouped": {"records": grouped, "total": len(grouped)},
               "modelRuns": [run for _, runs in parts for run in runs.values()]}
+    if native_windows:
+        result["verification_method"] = "native_selected_3028_subwindows"
+        result["native_verified_windows"] = native_windows
     if native_verified:
         result["verification_method"] = "native_selected_3028_grids"
     if parts[0][0] is not full or full["modelRuns"] != result["modelRuns"]:
@@ -791,20 +806,22 @@ _NATIVE_SELECTION = r"""async cfg => {
     if (!s || s.isLoading?.() || !s.on || !s.un) return null;
     tables[key]=s;
   }
-  function scope(s, withModel) {
+  function scope(s, withModel, operation=null) {
     const proxy = s.getProxy?.() || s.proxy;
-    const p = {...proxy?.extraParams, ...s.lastOptions?.params};
+    const p = {...proxy?.extraParams, ...s.lastOptions?.params, ...(operation?.getParams?.() || operation?.params)};
     return ['lineId','dateFrom','dateTo','startTimeZone','endTimeZone'].every(k =>
       k.endsWith('TimeZone') ? p[k] != null && Number(p[k]) === Number(cfg[k]) : String(p[k]) === cfg[k])
       && (!withModel || modelSet(p.prodModel || p.productModel) === modelSet(cfg.model));
   }
   if (!scope(summary,false)) return null;
   const status = {}, cleanup = [];
+  let armed=false;
   for (const [key,s] of Object.entries(tables)) {
     const listen = (source,rows,ok,operation) => {
       const page = operation?.getPage?.() ?? operation?.page ?? s.currentPage;
       const current = s.getRange();
-      status[key] = source === s && ok === true && page === 1 && scope(s,true)
+      if(!armed)return;
+      status[key] = source === s && ok === true && Number(page) === 1 && scope(s,true,operation)
         && validSelection() && rows.length === current.length
         && rows.every((record,i) => record === current[i]);
     };
@@ -850,7 +867,7 @@ _NATIVE_SELECTION = r"""async cfg => {
     if (!grouped) return null;
     const detail=await records(tables.detail);
     return detail && validSelection() ? {summary:[summaryRow],grouped,detail} : null;
-  }, prepare() {sm.deselectAll(true);}};
+  }, prepare() {sm.deselectAll(true); armed=true;}};
 }"""
 
 
@@ -935,21 +952,21 @@ def collect_3028_period(*, cdp_url, ames_host, lines, start_at, end_at):
                 # state. Its finally block then restores this line between pages
                 # and subwindows instead of the previous line's view.
                 rescope(line, start, end)
-                def visible_grids(model):
+                def visible_grids(model, left=start, right=end):
                     from playwright.sync_api import Error as BrowserError
                     try:
-                        return _read_selected_grids(page, params(line, start, end), model)
+                        return _read_selected_grids(page, params(line, left, right), model)
                     except BrowserError:
                         # Keep the established subwindow recovery if the native view is unavailable.
                         return None
 
                 try:
-                    cap = _capture_checked_period(read, line, start, end, rescope, read_models, visible_grids)
+                    cap = _capture_checked_period(read, line, start, end, rescope, read_models, visible_grids, visible_grids)
                 except ValueError as exc:
                     if "mudou durante a coleta" not in str(exc):
                         raise
                     rescope(line,start,end)
-                    cap = _capture_checked_period(read, line, start, end, rescope, read_models, visible_grids)
+                    cap = _capture_checked_period(read, line, start, end, rescope, read_models, visible_grids, visible_grids)
                 line_metrics = [source._summary_to_metric(r, line) for r in cap["summary"]["records"]]
                 details = [source._detail_to_record(r, line) for r in cap["detail"]["records"]]
                 for metric in line_metrics:

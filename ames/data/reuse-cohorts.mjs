@@ -2,7 +2,7 @@ import {compareFailures,describeFailure} from './failure-taxonomy.mjs';
 // Read-only populations. A defect investigation is never a production denominator.
 import {factoryWallMinute} from './history.mjs';
 import {processBackedBoardReuses,contextBackedBoardReuses} from './reuse-cycle-evidence.mjs';
-import {compatibleExplicitLineage} from './production-evidence.mjs';
+import {compatibleExplicitLineage,parseFailureInstant} from './production-evidence.mjs';
 import {reuseHistoryIdentity} from './reuse-history-timeline.mjs';
 const value=(r,...keys)=>keys.map(k=>r?.[k]).find(v=>v!==undefined&&v!==null&&v!=='')??null;
 const unique=items=>[...new Set(items.filter(v=>v!==null&&v!==undefined&&v!==''))];
@@ -21,7 +21,8 @@ const knownPcbaCycles=r=>index(value(r,'Usos conhecidos da PCBA','pcba_known_use
 const knownMaterialCycles=r=>index(value(r,'Usos conhecidos material','known_use_count','total_pcba_count_known_now'));
 
 
-const eventKey=r=>JSON.stringify([sn(r),code(r),time(r),r.occurrence_id||r.record_id||null]);
+const eventKey=r=>JSON.stringify([r.source_id,r.line_id||r.line,r.snapshot_id,r.snapshot_revision??r.revision,
+ sn(r),code(r),time(r),r.occurrence_id||r.record_id||r.defect_key||null]);
 const sequence=r=>{
  const v=value(r,'hist_seq','Defect Hist Seq');
  return v!==null&&v!==''&&Number.isInteger(Number(v))&&Number(v)>=0?Number(v):null;
@@ -188,6 +189,14 @@ export function board2114Timeline(board,history=[]){
  return output;
 }
 
+export function materialBoundAtFailure(row,event){
+ const observed=parseFailureInstant(event.defect_time);
+ const from=value(row,'bind_time_utc','bind_time','Bind Time'),to=value(row,'unbind_time_utc','unbind_time','Unbind Time');
+ const start=parseFailureInstant(from),end=parseFailureInstant(to);
+ if(observed===null||(from&&start===null)||(to&&end===null)||(start!==null&&start>observed)||(end!==null&&end<=observed))return false;
+ return start!==null||index(row['Uso material na falha'])!==null||
+  [true,'Y','YES','TRUE','1'].includes(value(row,'linked_at_defect','binding_active_at_defect','is_current_at_failure'));
+}
 function exactOccurrence(row,occurrences,kind){
  const candidates=occurrences.filter(o=>sn(o)===sn(row)&&
   (!code(row)||code(row)===code(o))&&(!time(row)||time(row)===time(o))&&
@@ -196,7 +205,10 @@ function exactOccurrence(row,occurrences,kind){
  const explicit=code(row)&&time(row)||row.current_defect_key;
  if(!explicit||candidates.length!==1)return null;
  const event=candidates[0],bound=factoryWallMinute(row.bind_time_utc);
- if(kind==='component'&&bound&&time(event)&&bound>time(event))return null;
+ if(!compatibleExplicitLineage(row,event))return null;
+ const unbound=factoryWallMinute(value(row,'unbind_time_utc','unbind_time','Unbind Time'));
+ if(kind==='component'&&((bound&&time(event)&&bound>time(event))||
+    (unbound&&time(event)&&unbound<=time(event))))return null;
  return event;
 }
 function reference(snapshot,row,source){
@@ -216,7 +228,7 @@ function comparisonRows(rows){
  }
  return out;
 }
-function finish(map,history=[],compare=compareFailures){
+function finish(map,history=[],compare=compareFailures,relations){
  const historyByPcba=new Map();
  for(const row of history){
   const id=sn(row);if(!id||!code(row))continue;
@@ -237,9 +249,13 @@ function finish(map,history=[],compare=compareFailures){
   row.outcome=row.kind==='pcba'&&row.events.length?'failed':'unknown';
   // Component association alone is never a diagnosed component failure.
   row.associated_current_failure=row.kind==='component'&&row.events.length>0;
-  const priorComparisons=comparisonRows(row.prior_events),eventComparisons=comparisonRows(row.events);
-  row.same_failure=priorComparisons.some(p=>eventComparisons.some(e=>compare(code(e),e.defect_desc,code(p),p.defect_desc).classification==='EXACT'));
-  row.same_family=priorComparisons.some(p=>eventComparisons.some(e=>compare(code(e),e.defect_desc,code(p),p.defect_desc,{currentFamily:family(e)??undefined,oldFamily:family(p)??undefined}).classification==='SIMILAR'));
+  row.current_failure_relations=row.events.map(event=>{
+   const observed=relations.get(row)?.get(eventKey(event))||new Set();
+   const classification=['EXACT','SIMILAR','OTHER'].find(kind=>observed.has(kind))||'UNKNOWN';
+   return {event,classification,same_family:observed.has('SIMILAR')};
+  });
+  row.same_failure=row.current_failure_relations.some(r=>r.classification==='EXACT');
+  row.same_family=row.current_failure_relations.some(r=>r.same_family);
   row.reused=row.use_index>=2;
   // A material's 3074 physical mounting history and each board's 2114
   // failures are separate evidence. Never hide three known mountings merely
@@ -287,7 +303,6 @@ function finish(map,history=[],compare=compareFailures){
      compare(g.defect_code,g.defect_desc,failure.defect_code,failure.defect_desc).classification==='EXACT')?.pcba_count||0;
    }
    row.cross_board_same_failure=row.cross_board_recurrences.length>0;
-   row.same_failure=row.same_failure||row.cross_board_same_failure;
   }
   return row;
  }).sort((a,b)=>a.id.localeCompare(b.id));
@@ -342,6 +357,7 @@ export function buildReuseCohorts(snapshot={},filters={}){
    .sort((a,b)=>a.position-b.position).map(e=>({row:e.row,at:time(e.row)})).filter(e=>e.at&&code(e.row)));
   return clockCandidates.get(key);
  };
+ const relations=new WeakMap();
  const preparedSequences=new Map(),priorMaps=new WeakMap(),eventKeys=new WeakMap(),lastPriors=new WeakMap();
  const keyOf=row=>{if(!eventKeys.has(row))eventKeys.set(row,eventKey(row));return eventKeys.get(row);};
  const addPriors=(item,rows)=>{
@@ -398,16 +414,27 @@ export function buildReuseCohorts(snapshot={},filters={}){
    if(sn(row))item.current_pcbas.push(sn(row));
   }
   if(event){item.events.push(event);const cutoff=time(event);
-   const priorByClock=priorRows(previous).filter(h=>cutoff&&h.at<cutoff).map(h=>h.row);
+   const bindingProven=kind==='pcba'||materialBoundAtFailure(row,event);
+   const priorByClock=bindingProven?priorRows(previous).filter(h=>cutoff&&h.at<cutoff&&
+     compatibleExplicitLineage(event,h.row)).map(h=>h.row):[];
    // Hist Seq is a valid order within one 2114 PCBA, including MES variants
    // that never return Defect Time. Never use this rule across materials/PCBAs.
    let priorBySeq=[];
    if(kind==='pcba'){
     const id=sn(event);
     if(!preparedSequences.has(id))preparedSequences.set(id,prepareHistSeq(id,historyByPcba.get(id)||[]));
-    priorBySeq=histSeqRecurrence(event,[],compare,preparedSequences.get(id));
+    priorBySeq=histSeqRecurrence(event,[],compare,preparedSequences.get(id)).filter(h=>
+      compatibleExplicitLineage(event,h)&&(!cutoff||!time(h)||time(h)<cutoff));
    }
    addPriors(item,priorByClock);addPriors(item,priorBySeq);
+   if(!relations.has(item))relations.set(item,new Map());
+   const byEvent=relations.get(item),key=keyOf(event);
+   if(!byEvent.has(key))byEvent.set(key,new Set());
+   const eligible=byEvent.get(key);
+   for(const old of comparisonRows([...priorByClock,...priorBySeq])){
+    eligible.add(compare(code(event),event.defect_desc,code(old),old.defect_desc,
+      {currentFamily:family(event)??undefined,oldFamily:family(old)??undefined}).classification);
+   }
   }
  }
  for(const o of occurrences)add(pcbas,sn(o),'pcba',o,o,'3028');
@@ -432,7 +459,7 @@ export function buildReuseCohorts(snapshot={},filters={}){
  }
  for(const item of [...pcbas.values(),...components.values()])item.prior_events=[...(priorMaps.get(item)?.values()||[])];
  const filter=rows=>selectCohortRows(rows,filters);
- const pcbaRows=filter(finish(pcbas,history,compare)),componentRows=filter(finish(components,history,compare));
+ const pcbaRows=filter(finish(pcbas,history,compare,relations)),componentRows=filter(finish(components,history,compare,relations));
  // A PCBA's full 2114 sequence is always inspectable even when 3074 has
  // insufficient self-mounting evidence to determine a physical use count.
  // Keep it separate from the current 3028-vs-2114 recurrence KPI.

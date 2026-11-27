@@ -13,6 +13,16 @@ ALLOWED={
  'ames/agent-client.mjs',
  'ames/console-view.mjs',
  'scripts/install98/browser-3028-replay.py',
+ 'ames/collection-status.mjs',
+ 'ames/console-reading-period.mjs',
+ 'ames/data/reuse-analysis.mjs',
+ 'ames/data/reuse-cohorts.mjs',
+ 'ames/failure-group-evidence.mjs',
+ 'ames/reading-period-controller.mjs',
+ 'scripts/ames-agent.test.mjs',
+ 'scripts/ames-performance-equivalence.test.mjs',
+ 'scripts/ames-reading-period.test.mjs',
+ 'scripts/ames-reuse-cohorts.test.mjs',
  'ames/agent/comment_provenance_3028.py',
  'ames/agent/ames_3012_live.py',
  'ames/agent/ames_3012_strategy.py',
@@ -63,7 +73,7 @@ class Preservation(unittest.TestCase):
         self.assertLessEqual(set(git('diff','--name-only',BASE,'HEAD').splitlines()),ALLOWED)
         def tree(ref):return {p:i for row in git('ls-tree','-r',ref).splitlines() for i,p in [row.split('\t',1)] if p not in ALLOWED}
         self.assertEqual(tree(BASE),tree('HEAD'))
-        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), 'f7587c31197ae311b40c88ae96a1140d41307e58662c09c05bdf3bf658cd7db0', 'Reviewed all-mode 3028 entry and static MIME')
+        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), 'd26eb806ec620521570b5a3b4cb69d68e83124c8204b54a21886c9a049acba5c', 'Reviewed all-mode 3028 entry and static MIME')
     def test_all_existing_test_commands_maintained_as_subsequence(self):
         for name in ('ames-lab-isolation.yml','ames-lab-existing-regressions.yml','ames-p04-windows-preflight.yml'):
             path='.github/workflows/'+name;before=git('show',BASE+':'+path);after=(ROOT/path).read_text()

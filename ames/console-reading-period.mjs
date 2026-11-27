@@ -19,7 +19,6 @@ export function paintReadingPeriod(root,store,controller,{onContinueTrace,onColl
   if(!samePeriod&&p?.mode!=='custom')root.dataset.readingEditorOpen='false';
   const editing=root.dataset.readingEditorOpen==='true'||p?.mode==='custom';
   root.dataset.readingScopeKey=JSON.stringify(p);
-  const loaded=LINE_IDS.filter(line=>!!store.read(line).snapshot);
   const line=store.context?.()?.line_id||store.preferredLine?.();
   const missing=p?.mode!=='today'&&status?.status!=='loading'&&!!line&&!store.read(line).snapshot;
   const sourceChoice=status?.source_choices?.find(choice=>choice.line_id===line&&choice.options?.length);
@@ -37,10 +36,23 @@ export function paintReadingPeriod(root,store,controller,{onContinueTrace,onColl
   const note=status?.status==='loading'?t('Consultando revisões salvas…','Reading saved revisions…'):
     unresolved?t('Existem coletas de postos diferentes. Escolha a origem para abrir; nada será descartado.','Multiple workstation captures exist. Choose one to open; nothing will be discarded.') :
     missing?t('Nenhuma revisão salva disponível nesta linha e período. Não significa zero falhas. Após a coleta, use Atualizar leitura se necessário.','No saved revision for this line and period. This is not zero failures. After collection, use Refresh reading if needed.') :
-    p?.mode!=='today'&&status?.status==='ready'?loaded.length+' '+t('linha(s) com revisão disponível','line(s) with saved revisions'):'';
+    p?.mode!=='today'&&status?.exact_lines?
+      [status.exact_lines.length+' '+t('com período exato','with exact period'),
+       (status.fallback_lines?.length||0)+' '+t('com período parcial','with shorter period'),
+       recovered.length+' '+t('com revisão recuperada','with recovered revision'),
+       (LINE_IDS.length-status.loaded_lines.length)+' '+t('indisponível(is)','unavailable')].join(' · '):'' ;
   const advancedOpen=Boolean(root.querySelector('[data-history-source-advanced]')?.open);
   root.setAttribute('data-no-i18n','');
   root.innerHTML=`<nav class="ames-history-tabs" aria-label="${t('Período de leitura','Reading period')}">${[['today',t('Hoje','Today')],['previous',t('Último dia produtivo','Last production day')],['custom',t('Período…','Period…')]].map(([id,label])=>`<button type="button" class="button secondary" data-read-period="${id}" aria-pressed="${editing?id==='custom':p?.mode===id}">${label}</button>`).join('')}</nav><p class="mes-context" data-reading-label>${p?esc(formatFactoryDateTime(p.start)+' → '+formatFactoryDateTime(p.end)):''} · America/Sao_Paulo · ${t('07:00 → 07:00; turnos são outra dimensão','07:00 → 07:00; shifts are a separate dimension')}${p?.mode!=='today'?' · '+t('Somente leitura do passado','Read-only history'):''}</p><form data-reading-range${editing?'':' hidden'}><p class="mes-context">${t('Escolha a janela desejada. Ver dados não inicia A-MES; coletar exige clique explícito.','Choose a time window. Viewing saved data does not start MES; collection requires an explicit click.')}</p><div class="mes-filters"><label>${t('Início','Start')}<input type="datetime-local" name="start" required value="${esc(draftStart)}"></label><label>${t('Fim','End')}<input type="datetime-local" name="end" required value="${esc(draftEnd)}"></label></div><div class="mes-pagination"><button class="button secondary" type="submit">${t('Ver dados armazenados','View stored data')}</button>${typeof onCollectCustom==='function'?`<button class="button primary" type="button" data-reading-collect${store.agent().status==='connected'?'':' disabled'}>${t('Coletar período desta linha','Collect this line period')}</button>`:''}</div>${typeof onCollectCustom==='function'?`<small>${t('Linha selecionada','Selected line')}: ${esc(line||'—')}. ${t('A coleta será salva como histórico, sem substituir Hoje.','The capture will be saved as history without replacing Today.')}</small>`:''}</form><p role="status" data-reading-status>${esc(status?.errors?.length?status.errors.map(e=>e.line_id+': '+e.error).join(' · '):note)}</p>${recovered.length?`<div class="notice warn" data-reading-recovery role="status">${recovered.map(x=>esc(t('Linha','Line')+' '+x.line_id+' · '+t('revisão anterior aberta para leitura','older revision opened read-only')+' · snapshot '+x.snapshot_id+' / r'+x.snapshot_revision+' · '+x.unreadable_revisions+' '+t('revisão(ões) recente(s) indisponível(is). Atualize a leitura; não execute coleta MES nesta versão recuperada.','newer revision(s) unavailable. Refresh reading; do not collect MES from this recovered version.'))).join('<br>')}</div>`:''}${sourcePicker}${p?.mode!=='today'?'<button type="button" class="button secondary" data-reading-reload>'+t('Atualizar leitura','Refresh reading')+'</button>':''}`;
+  if(status?.fallback_lines?.includes(line)){
+    const loaded=store.read(line),snapshot=loaded.snapshot;
+    const bounds=snapshot?.canonical?.summary?.period;
+    const warning=root.ownerDocument.createElement('p');
+    warning.className='notice warn';
+    warning.textContent=t('Consulta parcial preservada','Saved partial capture')+' · '+t('Origem','Source')+' '+(snapshot?.source_id||'—')+
+      ' · '+formatFactoryDateTime(bounds?.start_at)+' → '+formatFactoryDateTime(bounds?.end_at);
+    root.querySelector('[data-reading-status]').after(warning);
+  }
   if(p?.mode!=='today'&&typeof onContinueTrace==='function'){
     const target=traceTargetForLine(store,line),agent=store.agent();
     const enabled=target.available&&agent.status==='connected'&&agent.capabilities?.exact_trace_targets===true;

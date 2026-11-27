@@ -747,3 +747,15 @@ Para reproduzir no repositório, executar `python -B scripts/install98/period-30
 A Issue #99 contém o recibo específico da entrega após a qualificação e a conferência dos bytes baixados. A medição física no A-MES e a execução noturna no posto são etapas em aberto.
 
 Em 27/11, a qualificação de f8fc44c recusou a alteração no coletor selado CLEAN V3 e a expectativa antiga de duas identidades após importar uma ocorrência mais duas iguais de outro modelo. A versão seguinte mantém o arquivo clássico com o SHA-256 histórico. O adaptador existente comment_provenance_3028.py contém os programas de leitura por período. A qualificação intermediária identificou que o atualizador selado não distribui módulos Python extras. Os leitores viajam junto com esse adaptador já inventariado em todas as rotas de atualização. O teste da projeção canônica exige três identidades nessa amostra e verifica que reler o mesmo lote no mesmo snapshot conserva exatamente essas três. O ensaio com 13 cenários em Chromium foi repetido após essa correção.
+
+## Continuidade no posto em 27/11/2026
+
+O operador informou uso da 7ae90c5c. Cinco tentativas do dia produtivo 26–27/11 salvaram as Linhas 1 e 3 e recusaram a Linha 2 no intervalo 11h–12h com 15 ocorrências no detalhe e 11 no agrupamento. O extrato tem os recibos, mas não contém as grades da Linha 2. A causa física da divergência e da falta de confirmação integral continua em aberto.
+
+Reprodução em Chromium na versão anterior e no novo código: quando a seleção integral devolve um comentário divergente, a fatia de 15/11 é recusada na versão antiga. O leitor atualizado confere seleção, filtros e as duas grades no intervalo exato. Só publica a união se todas as fatias forem comprovadas e o multiset de detalhe for reproduzido pela janela integral. Preserva o agrupamento nativo do período e o obtido das fatias em campos distintos. A coleta parcial continua preservando as linhas confirmadas. O operador pode repetir apenas as linhas pendentes de um job autorizado, com os horários do recibo original.
+
+A leitura diária prioriza a cobertura exata, usa ordenação numérica de snapshots e identifica coberturas parciais de outra origem. Foi reproduzida uma ordenação incorreta com IDs 9 e 11 no mesmo segundo. Os avisos físicos de revisão indisponível não traziam a causa da falha de abertura. A revisão antiga continua disponível em modo de leitura, com indicação separada de recuperação e período.
+
+O indicador de reuso compara cada ocorrência atual às suas evidências anteriores elegíveis. Repetições históricas em duas PCBAs permanecem no detalhe histórico. A tabela de falhas preserva os registros 3012 e as passagens 3022 em Evidências técnicas. A ligação de nome, hora e comentário ao resumo exige prova individual. A auditoria continua exibindo o registro original e o papel de cada pessoa.
+
+A Issue #99 e a PR #98 documentam o SHA e os recibos efetivamente verificados. A homologação física requer nova revisão local da Linha 2 para o dia original.

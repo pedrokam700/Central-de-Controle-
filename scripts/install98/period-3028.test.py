@@ -163,6 +163,44 @@ class Period(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "sobrepostas"):
             _model_tables(cap)
 
+    def test_native_hour_recovery_requires_exact_window_and_complete_full_detail(self):
+        from datetime import timedelta
+        end = START + timedelta(hours=2)
+        boundary = START + timedelta(hours=1)
+        line = "TAN10102"
+        summary = [{"lineIdNew": line, "prodModel": "M1", "qty": 100}]
+        rows = [{"lineId":line,"productModel":"M1","lotId":str(i),"defectCode":"TEST"} for i in range(19)]
+        calls = []
+
+        def read(line, left, right):
+            records = rows if (left,right)==(START,end) else rows[:15] if left==START else rows[15:]
+            qty = len(records) - (1 if (left,right)==(START,end) else 4 if left==START else 0)
+            grouped = table([{"defectCode":"TEST","qty":qty}])
+            run = {"prodModel":"M1","detail":table(records),"grouped":grouped}
+            return {"lineId":line,"summary":table(summary),"classification":table([]),
+                    "modelRuns":[run],"baseParams":{"from":left.isoformat(),"to":right.isoformat()}}
+
+        def selected(model,left,right):
+            calls.append((model,left,right))
+            data = read(line,left,right)["modelRuns"][0]
+            return {"summary":summary,"detail":data["detail"]["records"],"grouped":data["grouped"]["records"]}
+
+        with self.assertRaisesRegex(ValueError,"agrupado=11, detalhe=15"):
+            _capture_checked_period(read,line,START,end,read_visible=lambda _:None)
+        result = _capture_checked_period(read,line,START,end,read_visible=lambda _:None,read_visible_slice=selected)
+        self.assertEqual(calls,[("M1",START,boundary)])
+        self.assertEqual(result["detail"]["records"],rows)
+        self.assertEqual(sum(r["qty"] for r in result["grouped"]["records"]),15)
+        self.assertEqual(result["full_period_model_runs"][0]["grouped"]["records"][0]["qty"],18)
+
+        def corrupt(model,left,right):
+            data = selected(model,left,right)
+            data["detail"] = [dict(data["detail"][0],repairComment="changed"),*data["detail"][1:]]
+            return data
+
+        with self.assertRaisesRegex(ValueError,"seleção nativa da fatia sem confirmação"):
+            _capture_checked_period(read,line,START,end,read_visible=lambda _:None,read_visible_slice=corrupt)
+
     def test_each_mode_publishes_confirmed_lines_despite_invalid_middle_line(self):
         import ast
         import tempfile

@@ -23,8 +23,9 @@ const orderEntries=(a,b)=>{
   // Make this a total ordering (not a pair-specific comparator) so sorting
   // stays deterministic even when other workstations share the same clock.
   const pending=e=>e.history_source==='local'&&e.revision_pending===true?1:0;
-  return pending(b)-pending(a)||Number(b.snapshot_revision||0)-Number(a.snapshot_revision||0)||
-    String(b.snapshot_id||'').localeCompare(String(a.snapshot_id||''));
+  return (Number(b.snapshot_id||0)-Number(a.snapshot_id||0))||
+    pending(b)-pending(a)||Number(b.snapshot_revision||0)-Number(a.snapshot_revision||0)||
+    String(b.snapshot_id||'').localeCompare(String(a.snapshot_id||''),undefined,{numeric:true});
 };
 
 export function createReadingPeriodController(store,history,{changed=()=>{},preferenceScope=null,
@@ -66,7 +67,8 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
       const listScoped=async()=>(await history.list(line)).filter(e=>{
         const start=factoryWallMinute(e.period_start),end=factoryWallMinute(e.period_end);
         return start===selected.start&&end&&end>start&&(mode==='custom'?end===selected.end:end<=selected.end);
-      }).sort(orderEntries);
+      }).sort((a,b)=>Number(factoryWallMinute(b.period_end)===selected.end)-
+        Number(factoryWallMinute(a.period_end)===selected.end)||orderEntries(a,b));
       let entries=await listScoped();
       if(!alive())return;
       const collectedId=collectionReceipt?.snapshot_ids?.[line];
@@ -141,7 +143,9 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
         // infer a source from a different period or workstation.
         const retained=previouslyOpened&&matchesReadingPeriod(previouslyOpened,selected)&&
           sources.includes(previouslyOpened.source_id)?previouslyOpened.source_id:null;
-        const resolution=resolveHistorySource(entries,{
+        const exactEntries=selected.mode==='previous'?entries.filter(e=>factoryWallMinute(e.period_end)===selected.end):[];
+        const candidates=remembered?entries:(exactEntries.length?exactEntries:entries);
+        const resolution=resolveHistorySource(candidates,{
           preferredSource:remembered,agentSource:provenSource,retainedSource:retained
         });
         const resolved=verifiedRefresh?.source_id||resolution.source_id;
@@ -197,7 +201,8 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
           // MES state: surface the degraded read with its exact identity.
           if(unreadable)recovered.push({line_id:line,unreadable_revisions:unreadable,
             source_id:entry.source_id,snapshot_id:payload.snapshot_id,
-            snapshot_revision:payload.snapshot_revision});
+            snapshot_revision:payload.snapshot_revision,
+            reason:lastFailure?.message?.startsWith('historical_')?lastFailure.message.split(':')[0]:'revision_read_failed'});
           return;
         }catch(error){
           if(!alive())return;
@@ -210,9 +215,14 @@ export function createReadingPeriodController(store,history,{changed=()=>{},pref
     if(!alive())return;
     results.forEach((r,i)=>{if(r.status==='rejected')errors.push({line_id:LINE_IDS[i],error:r.reason?.message||'history_unavailable'});});
     const loaded_lines=LINE_IDS.filter(line=>!!store.read(line).snapshot);
+    const fallback_lines=selected.mode==='previous'?loaded_lines.filter(line=>{
+      const snapshot=store.read(line).snapshot;
+      return factoryWallMinute(snapshot?.canonical?.summary?.period?.end_at)!==selected.end;
+    }):[];
+    const exact_lines=loaded_lines.filter(line=>!fallback_lines.includes(line)&&!recovered.some(r=>r.line_id===line));
     source_choices.sort((a,b)=>LINE_IDS.indexOf(a.line_id)-LINE_IDS.indexOf(b.line_id));
     store.updateAgent({period_read:{status:errors.length||unresolved.length||recovered.length?'partial':'ready',
-      errors,source_choices,loaded_lines,unresolved_lines:unresolved,recovered_lines:recovered}});
+      errors,source_choices,loaded_lines,exact_lines,fallback_lines,unresolved_lines:unresolved,recovered_lines:recovered}});
     changed();
   }
   async function chooseSource(line,source_id){

@@ -5,9 +5,9 @@ import {reuseTimelineFixture} from './fixtures/reuse-timeline.mjs';
 import {buildReuseHistoryTimeline} from '../ames/data/reuse-history-timeline.mjs';
 globalThis.document={documentElement:{lang:'pt-BR'}};
 
-test('U1b: all eight source events share one table, independent clocks, people and comments',()=>{
+test('U1b: all eight source events share the expandable evidence table, independent clocks, people and comments',()=>{
  const f=reuseTimelineFixture(),html=renderBoardComparisonTable(f.board,{repairs:f.repairs,operators:f.operators});
- assert.equal((html.match(/<table[ >]/g)||[]).length,1);
+ assert.equal((html.match(/<table[ >]/g)||[]).length,2);
  assert.equal((html.match(/data-reuse-timeline-row/g)||[]).length,8);
  for(const text of ['Autor histórico zero','Autor histórico um','Reparadora Alfa','Reparador Beta','Operadora Gama',
   'MainBoard','Phone Disassembly','Phone Battery Cover','Comentário completo Alfa','Segunda linha Alfa',
@@ -134,4 +134,16 @@ test('historical named 3012 row resolves the same board and login; a different b
  assert.equal(timeline([a,b]),'Reparadora Alfa');
  assert.equal(timeline([{...a,pcba_sn:'OTHER'},b]),null);
  assert.equal(timeline([a,{...a,row_key:'THIRD',repair_user_name:'Conflict'},b]),null);
+});
+
+test('sole operational rows are the three pertinent failures; source history remains expandable',()=>{
+ const f=reuseTimelineFixture();
+ f.board.history_2114=f.board.history_2114.slice(0,2);
+ f.board.events=f.board.events.slice(0,1);
+ const html=renderBoardComparisonTable(f.board,{repairs:f.repairs,operators:f.operators});
+ const compact=html.split('<details data-reuse-technical>')[0];
+ assert.equal((compact.match(/data-operational-failure-row/g)||[]).length,3);
+ assert.doesNotMatch(compact,/Export Repair|A6900|H01/);
+ assert.match(html,/<details data-reuse-technical>/);
+ assert.match(html,/data-reuse-3012-occurrence/);
 });
