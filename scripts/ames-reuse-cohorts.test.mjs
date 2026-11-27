@@ -325,3 +325,13 @@ test('previous boards repeating A do not classify current B, and prior evidence 
  assert.equal(foreign.same_failure,false);
  assert.deepEqual(matched.current_failure_relations.map(x=>x.classification),['EXACT','OTHER']);
 });
+
+test('a future or foreign 2114 anchor cannot make an undated sequence a prior failure',()=>{
+ const selected={...event,source_id:'here'};
+ const undated={pcba_sn:selected.pcba_sn,hist_seq:3,defect_code:selected.defect_code,source_id:'here'};
+ for(const explicit of [{source_id:'elsewhere'},{defect_time:'2026-10-20T10:00:00-03:00'}]){
+  const evidence=[undated,{...undated,hist_seq:4,...explicit}];
+  assert.deepEqual(boardHistSeqRecurrence(selected,evidence),[]);
+ }
+ assert.equal(boardHistSeqRecurrence(selected,[undated,{...undated,hist_seq:4}]).length,1);
+});

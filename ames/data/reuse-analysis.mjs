@@ -97,7 +97,11 @@ export function reuseLinks(snapshot){
   const group=componentGroup(r,family);
   const history=previous.flatMap(pc=>historyIndex.get(String(pc))||[]);
   const observedAt=parseFailureInstant(explicit?.defect_time);
-  const eligible=proven&&compatibleExplicitLineage(explicit,r)&&materialBoundAtFailure(r,explicit);
+  const summaryBound=proven&&match&&compatibleExplicitLineage(explicit,match)&&
+   String(value(match,'Defect Code atual','defect_code'))===String(explicit.defect_code)&&observedAt!==null&&
+   parseFailureInstant(value(match,'Defect Time atual','defect_time'))===observedAt;
+  const binding=summaryBound?{...match,...original}:original;
+  const eligible=proven&&compatibleExplicitLineage(explicit,binding)&&materialBoundAtFailure(binding,explicit);
   const relationLabels={EXACT:'MESMA FALHA',SIMILAR:'MESMA FAMÍLIA',OTHER:'OUTRA FALHA'};
   const relations=eligible?unique(history.filter(old=>{
    const at=parseFailureInstant(old.defect_time);

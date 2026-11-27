@@ -59,6 +59,8 @@ function histSeqRecurrence(occurrence,history,compare,prepared){
  const state=prepared||prepareHistSeq(pcba,history),ordered=state.ordered;
  if(ordered.length<2)return [];
  const latest=ordered.at(-1)[1];
+ const selectedAt=time(occurrence),latestAt=time(latest);
+ if(!compatibleExplicitLineage(occurrence,latest)||(selectedAt&&latestAt&&latestAt>selectedAt))return [];
  if(compare(code(occurrence),occurrence.defect_desc,code(latest),latest.defect_desc).classification!=='EXACT')return [];
  // All callers within one projection observe the same immutable source rows.
  // Copies/annotations are prepared once; no cache crosses a snapshot boundary.
@@ -194,8 +196,8 @@ export function materialBoundAtFailure(row,event){
  const from=value(row,'bind_time_utc','bind_time','Bind Time'),to=value(row,'unbind_time_utc','unbind_time','Unbind Time');
  const start=parseFailureInstant(from),end=parseFailureInstant(to);
  if(observed===null||(from&&start===null)||(to&&end===null)||(start!==null&&start>observed)||(end!==null&&end<=observed))return false;
- return start!==null||index(row['Uso material na falha'])!==null||
-  [true,'Y','YES','TRUE','1'].includes(value(row,'linked_at_defect','binding_active_at_defect','is_current_at_failure'));
+ const active=String(value(row,'linked_at_defect','binding_active_at_defect','is_current_at_failure')??'').trim().toUpperCase();
+ return start!==null||index(row['Uso material na falha'])!==null||['Y','YES','TRUE','1'].includes(active);
 }
 function exactOccurrence(row,occurrences,kind){
  const candidates=occurrences.filter(o=>sn(o)===sn(row)&&
