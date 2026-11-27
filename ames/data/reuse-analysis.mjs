@@ -1,4 +1,6 @@
-import {parseFailureInstant} from './production-evidence.mjs';
+import {materialBoundAtFailure} from './reuse-cohorts.mjs';
+import {compareFailures} from './failure-taxonomy.mjs';
+import {parseFailureInstant,compatibleExplicitLineage} from './production-evidence.mjs';
 const value=(r,...keys)=>keys.map(k=>r?.[k]).find(v=>v!==null&&v!==undefined&&v!=='')??null;
 const list=v=>{if(Array.isArray(v))return v;try{const a=JSON.parse(v);if(Array.isArray(a))return a;}catch{}return typeof v==='string'?v.split(/[,;|\n]/).map(x=>x.trim()).filter(Boolean):[];};
 const unique=a=>[...new Set(a.filter(v=>v!==null&&v!==undefined&&v!==''))];
@@ -93,12 +95,18 @@ export function reuseLinks(snapshot){
   const corr=corrIndex.get(key(pcba,material))||[];
   const family=componentFamily(value(r,'item_type','material_type','Tipo material'));
   const group=componentGroup(r,family);
-  const relations=unique(corr.map(c=>value(c,'Classificação desta PCBA','relation')).concat([
-    Number(value(r,'PCBAs com mesma falha'))>0?'MESMA FALHA':null,
-    Number(value(r,'PCBAs com mesma família'))>0?'MESMA FAMÍLIA':null,
-    Number(value(r,'PCBAs com falha diferente'))>0?'OUTRA FALHA':null
-  ])).map(x=>String(x).replaceAll('_',' ').replace('FALHA SIMILAR','MESMA FAMÍLIA').replace('FALHA DIFERENTE','OUTRA FALHA'));
   const history=previous.flatMap(pc=>historyIndex.get(String(pc))||[]);
+  const observedAt=parseFailureInstant(explicit?.defect_time);
+  const summaryBound=proven&&match&&compatibleExplicitLineage(explicit,match)&&
+   String(value(match,'Defect Code atual','defect_code'))===String(explicit.defect_code)&&observedAt!==null&&
+   parseFailureInstant(value(match,'Defect Time atual','defect_time'))===observedAt;
+  const binding=summaryBound?{...match,...original}:original;
+  const eligible=proven&&compatibleExplicitLineage(explicit,binding)&&materialBoundAtFailure(binding,explicit);
+  const relationLabels={EXACT:'MESMA FALHA',SIMILAR:'MESMA FAMÍLIA',OTHER:'OUTRA FALHA'};
+  const relations=eligible?unique(history.filter(old=>{
+   const at=parseFailureInstant(old.defect_time);
+   return at!==null&&observedAt!==null&&at<observedAt&&compatibleExplicitLineage(explicit,old);
+  }).map(old=>relationLabels[compareFailures(explicit.defect_code,explicit.defect_desc,old.defect_code,old.defect_desc).classification])):[];
   const currentProcess=processIndex.get(String(pcba))||[];
   const operators=currentProcess.flatMap(e=>e.provenance?.adapter?.operator_events||[]);
   const repairs=[...(r.repair_evidence_3012||[]),...history.flatMap(h=>h.repair_evidence_3012||[])];
@@ -113,6 +121,8 @@ export function reuseLinks(snapshot){
    previous_pcbas:unique(evidence.map(e=>e.pcba)).join(', ')||unique(previous.concat(corr.map(c=>value(c,'historical_pcba','PCBA desvinculada')))).join(', '),
    defect_code:value(r,'defect_code','Defect Code atual')||occurrence?.defect_code,defect_desc:value(r,'defect_desc','Defect Description atual','Defect Desc atual')||occurrence?.defect_desc,
    defect_time:occurrence?.defect_time||value(r,'defect_time','Defect Time atual'),usage:uses==null?null:Number(uses)===2?'2º uso':Number(uses)>=3?'3º+ uso':null,
+   occurrence_id:proven?explicit.occurrence_id||null:null,
+   defect_key:proven?explicit.defect_key||null:null,
    relations:relations.join(', ')||null,
    history_code:historyCodeText(evidence,historyCodes),
    history_desc:historyDescText(evidence,historyDescriptions),
@@ -122,7 +132,7 @@ export function reuseLinks(snapshot){
    operator:unique(operators.flatMap(o=>[o.operator_id,o.operator_name])).join(', ')||null,
    root_cause_confirmed:Boolean(value(r,'root_cause_confirmed','cause_confirmed','Causa confirmada')),
    _sourceRows:[r],_history:history};
-  const rowKey=JSON.stringify([row.line,pcba,material,r.bind_id||r.bind_time_utc||null,r.unbind_id||r.unbind_time_utc||null]);
+  const rowKey=JSON.stringify([row.line,pcba,material,proven?(explicit.occurrence_id||explicit.defect_key||observedAt):null,r.bind_id||r.bind_time_utc||null,r.unbind_id||r.unbind_time_utc||null]);
   if(out.has(rowKey)){
    const old=out.get(rowKey);old._sourceRows.push(r);
    for(const k of ['defect_code','defect_desc','defect_time','relations','production_shift','production_operational_date','production_event_time','repair_user','repair_comment','repair_source','component_group'])old[k]=unique([old[k],row[k]]).join(', ')||null;

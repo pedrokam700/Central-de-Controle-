@@ -1,3 +1,4 @@
+import {formatFactoryDateTime} from './data/time-display.mjs';
 import {escapeHtml as esc} from './evidence-view.mjs';
 
 const sourceState=value=>String(value||'').trim().toUpperCase();
@@ -128,6 +129,17 @@ export function collectionStatus(state){
   const error=state.error?`<div role="alert" class="notice warn">${esc(state.error)}</div>`:'';
   if(state.submitting)return error+'<p role="status">Iniciando rastreabilidade...</p>';
   if(!job)return error||'<p>Nenhuma coleta iniciada nesta sessão.</p>';
+  if(job.kind==='analysis'&&job.stage==='partial'&&job.collection_summary){
+    const receipt=job.collection_summary,lines=Object.keys(receipt.snapshot_ids),pending=receipt.pending_lines;
+    const heading=t('Concluída parcialmente','Partially completed')+' — '+lines.length+
+      t(' de ',' of ')+(lines.length+pending.length)+t(' linhas salvas',' lines saved');
+    return `${error}<div class="ames-job-head" role="status"><b>${heading}</b><span>Job ${esc(job.id)}</span></div>
+      <p>${esc(formatFactoryDateTime(receipt.period_start))} → ${esc(formatFactoryDateTime(receipt.period_end))} ·
+        ${t('Origem local','Local source')} ${esc(receipt.source_id||'—')}</p>
+      <ul>${lines.map(line=>`<li>${esc(friendlyLine(line))} · snapshot ${esc(receipt.snapshot_ids[line])}</li>`).join('')}
+      ${pending.map(line=>`<li>${esc(friendlyLine(line))} · ${esc(receipt.line_errors[line])}</li>`).join('')}</ul>
+      ${pending.length?`<button type="button" class="button secondary" data-agent-action="retry_pending"${state.submitting||state.status!=='connected'?' disabled':''}>${t('Repetir somente linhas pendentes','Retry pending lines only')}</button>`:''}`;
+  }
   const mode=job.scope?.trace_mode||job.result?.scope?.trace_mode||'full';
   const progress=job.stage_progress||{};
   const result=job.result?.deep_trace;
@@ -145,7 +157,8 @@ export function collectionStatus(state){
   const resumeNotice=job.scope?.resumed_from_job?`<div class="notice warn" data-trace-recovery-active><b>${t('Recuperação seletiva automática','Automatic selective recovery')}</b> · ${t('job anterior','previous job')} ${esc(job.scope.resumed_from_job)}. ${t('Lê apenas lacunas verificadas na mesma revisão de origem; dados já comprovados são preservados.','Reads only verified gaps from the same source revision; previously proven data is preserved.')}</div>`:'';
   const failures3012=completedTrace?Object.entries(result||{}).flatMap(([line,row])=>(Array.isArray(row?.['3012']?.failed)?row['3012'].failed:[]).map(f=>({line,...f}))):[];
   const periodWarning=failures3012.length?`<div class="notice warn" data-trace-3012-failures role="alert"><b>3012 ${t('interrompida — histórico não coberto até hoje','interrupted — history not covered through today')}</b> · ${esc(failures3012.length)} ${t('consulta(s) com erro','query failure(s)')}. ${failures3012.slice(0,2).map(f=>`<p>${esc(f.line)} · ${esc(f.sn)} · ${esc(f.error||'sem diagnóstico')}</p>`).join('')}${failures3012.length>2?`<small>+${failures3012.length-2} ${t('erro(s) no resultado detalhado','additional errors in details')}</small>`:''}</div>`:'';
-  const overall=job.status==='done'?100:Math.min(99,Math.max(0,Math.round(Number(job.progress)||0)));
+  const terminal=['done','error','cancelled','skipped'].includes(job.status);
+  const overall=job.status==='done'?100:Math.min(terminal?100:99,Math.max(0,Math.round(Number(job.progress)||0)));
   const mesWait=job.status==='queued'||job.mes_state==='waiting_mes'
     ?`<div class="notice warn" data-mes-waiting role="status">${t('Aguardando a sessão A-MES ficar livre. O job está na fila; isso não significa que uma PCBA esteja sendo consultada neste momento.','Waiting for the A-MES session. This job is queued, not currently querying a board.')}</div>`:'';
   return `${error}${mesWait}<div class="ames-job-head"><b>Job ${esc(job.id)}</b><span>${esc(job.status)}</span></div><p>${esc(job.message||job.error||'Aguardando execução.')}</p>

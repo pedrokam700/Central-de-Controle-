@@ -179,3 +179,13 @@ body.dark .ames-legacy-shell .ames-health-agent.unknown{background:var(--ames-so
 [data-reuse-cohorts] [data-reuse-history-timeline] tbody tr:nth-child(even){background:var(--ames-soft2,#f8fbfc)}
 [data-reuse-cohorts] [data-reuse-history-timeline] tbody tr:hover{background:var(--ames-soft,#ecf4f8)}
 [data-reuse-cohorts] [data-reuse-history-timeline] td small{color:var(--ames-muted,#64748b)}
+
+[data-reuse-history-timeline]:not(:has([data-show-process]:checked)) [data-routine-process]{display:none}
+[data-reuse-cohorts] [data-reuse-history-timeline] .ames-component-comparison{max-height:none;height:auto}
+[data-reuse-cohorts] [data-reuse-history-timeline] .ames-component-comparison table{min-width:800px}
+[data-reuse-cohorts] [data-reuse-history-timeline] .ames-component-comparison td{padding:6px 8px}
+[data-reuse-history-timeline] [data-event-proof] summary{white-space:nowrap;cursor:pointer}
+[data-reuse-history-timeline] [data-event-proof][open]{max-width:25ch}
+.ames-reuse-process-filter{display:inline-flex;align-items:center;gap:.45rem}
+
+[data-reuse-history-timeline] [hidden]{display:none!important}

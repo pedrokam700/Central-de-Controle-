@@ -1,5 +1,6 @@
 """Static source preservation and gate scope. No agent/updater/engine imports."""
 import ast
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -9,6 +10,59 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = 'db3cb5b58c99bcf86c44b671280cb42f7dd31d4c'
 BRANCH = 'work/ames-lab-entry-p01-p03-p06-20261117'
 ALLOWED = {
+ 'ames/agent/store.py',
+ 'scripts/agent-canonical.test.py',
+ 'ames/agent-client.mjs',
+ 'ames/console-view.mjs',
+ 'scripts/install98/browser-3028-replay.py',
+ 'ames/collection-status.mjs',
+ 'ames/console-reading-period.mjs',
+ 'ames/data/reuse-analysis.mjs',
+ 'ames/data/reuse-cohorts.mjs',
+ 'ames/failure-group-evidence.mjs',
+ 'ames/reading-period-controller.mjs',
+ 'scripts/ames-agent.test.mjs',
+ 'scripts/ames-performance-equivalence.test.mjs',
+ 'scripts/ames-reading-period.test.mjs',
+ 'scripts/ames-reuse-cohorts.test.mjs',
+ 'ames/console-failure-evidence.mjs',
+ 'ames/console-monitor-runtime.mjs',
+ 'scripts/ames-failure-occurrence-evidence.test.mjs',
+ 'scripts/ames-history-origin-choice.test.mjs',
+ 'scripts/ames-sn-contract.test.mjs',
+ 'ames/agent/comment_provenance_3028.py',
+ 'ames/agent/ames_3012_live.py',
+ 'ames/agent/ames_3012_strategy.py',
+ 'ames/factory-engine/ames/navigation.py',
+ 'ames/factory-engine/tests/test_pr70_2114_tab_recovery.py',
+ 'ames/console-improvements.css',
+ 'ames/console-reuse-cohorts.mjs',
+ 'ames/console-reuse-history-timeline.mjs',
+ 'ames/console-sn-repair-evidence.mjs',
+ 'ames/data/reuse-history-timeline.mjs',
+ 'scripts/install98/period-3028.test.py',
+ 'scripts/ames-reuse-event-timeline.test.mjs',
+ 'scripts/ames-reuse-timeline.browser.mjs',
+ 'AGENTS.md','tools/ames-workstation/check_install_path.py',
+ 'tools/ames-workstation/01_INSTALAR_UMA_VEZ.bat','tools/ames-workstation/09_REPARAR_DEPENDENCIAS_CLEAN.bat',
+ # PR98 integrated delivery: eight already reviewed support/doc paths from ab81dd98.
+ 'docs/ames/audits/PR98_MATRIZ_CONTINUIDADE_INSTALACAO_20261119.md',
+ 'docs/ames/homologation/PR98_ATUALIZACAO_SUPERVISIONADA_OPPO_20261119.md',
+ 'scripts/agent-package-contract.test.py',
+ 'scripts/ames-pr69-complete-package.test.mjs',
+ 'scripts/install98/IDENTIFICAR_CENTRAL_8765_READONLY.ps1',
+ 'scripts/install98/assisted-preflight.test.ps1',
+ 'scripts/install98/port-identification.test.ps1',
+ 'tools/ames-workstation/00_CONFERIR_ATUALIZACAO.bat',
+
+ 'scripts/install98/complete-archive.py','scripts/install98/archive-dependencies.test.py','scripts/install98/delivery-gate.py',
+ 'scripts/install98/firebase-lab-inputs.json','scripts/install98/auth-fixture.py',
+ 'scripts/build-static.mjs','scripts/install98/offline-assets.test.py','scripts/install98/browser-dependencies.json','vendor/browser/manifest.json','vendor/browser/firebase/10.8.0/firebase-app.js','vendor/browser/firebase/10.8.0/firebase-auth.js','vendor/browser/firebase/10.8.0/firebase-firestore.js','vendor/browser/firebase/10.8.0/LICENSE.txt','vendor/browser/sheetjs/0.20.3/xlsx.full.min.js','vendor/browser/sheetjs/0.20.3/LICENSE.txt',
+ 'ames/agent/agent.py','scripts/install98/static-mime.test.py',
+ 'scripts/install98/full-entry.test.py','scripts/install98/full-switch.py','scripts/install98/nine-screen-probe.py','tools/ames-workstation/01_TROCAR.bat','tools/ames-workstation/01_TROCAR_PARA_PR69_NOVA.bat',
+ 'tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1','tools/ames-workstation/START_LOCAL_CANDIDATE.ps1',
+ # PR98: actual isolated Windows installation proofs and narrowly authorized transfer fix.
+ '.github/workflows/ames-windows-installation.yml','scripts/install98/dependencies.json','scripts/install98/prepare.py','scripts/install98/containment.ps1','scripts/install98/integration.py','scripts/install98/transfer-red.test.py','scripts/install98/rollback-probe.ps1','scripts/install98/source-contract.test.py','docs/ames/handoffs/PR98_INSTALACAO_WINDOWS_20261118.md','tools/ames-workstation/SAFE_STATE_TRANSFER.py',
  'scripts/build-integrated-candidate.py','scripts/verify-complete-candidate.py','scripts/candidate97-source.test.py','scripts/candidate97-artifact.test.py','scripts/candidate97-ci-gate.py','scripts/audit/package-source-inventory.py','scripts/ames-candidate-legacy-port-guard.test.mjs','.github/workflows/ames-complete-candidate.yml','docs/ames/packaging/CANDIDATA_INSTALACAO_FUTURA_20261118.md','docs/ames/audits/PR97_PACOTE_COMPLETO_20261118.md','docs/ames/handoffs/PR97_CANDIDATA_COMPLETA_20261118.md',
  'scripts/audit/package-source-inventory.py',
  'docs/ames/audits/CONSOLIDACAO_EEDACC65_PR96_20261118.md',
@@ -56,7 +110,8 @@ class LabSourcePreservation(unittest.TestCase):
                 if path not in ALLOWED:result[path]=identity
             return result
         self.assertEqual(entries(BASE),entries('HEAD'))
-        for path in ('ames/agent/update_candidate.py','ames/agent/agent.py',
+        self.assertEqual(hashlib.sha256((ROOT/'ames/agent/agent.py').read_bytes()).hexdigest(), 'd26eb806ec620521570b5a3b4cb69d68e83124c8204b54a21886c9a049acba5c', 'Reviewed all-mode 3028 entry and static MIME')
+        for path in ('ames/agent/update_candidate.py',
                      'ames/agent/agent_entry.py','ames/agent/agent_hardened_entry.py',
                      'ames/agent/engine_bridge.py','ames/agent/process_r11.py',
                      'tools/ames-workstation/START_AGENT_CANONICAL.ps1',

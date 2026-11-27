@@ -1,8 +1,8 @@
 // Grouped 3028 context is investigative, never an exact reuse/defect denominator.
 // A reported association needs the same PCBA + defect code + MES defect instant;
 // a PCBAs-only join must not borrow an unrelated occurrence's correlation.
-import {parseFailureInstant,sameFailureOccurrence} from './data/production-evidence.mjs';
-import {boardHistSeqRecurrence,buildReuseCohorts} from './data/reuse-cohorts.mjs';
+import {parseFailureInstant,sameFailureOccurrence,compatibleExplicitLineage} from './data/production-evidence.mjs';
+import {boardHistSeqRecurrence,buildReuseCohorts,materialBoundAtFailure} from './data/reuse-cohorts.mjs';
 import {processBackedBoardReuses,contextBackedBoardReuses} from './data/reuse-cycle-evidence.mjs';
 import {compareFailures} from './data/failure-taxonomy.mjs';
 import {formatFactoryDateTime} from './data/time-display.mjs';
@@ -33,22 +33,13 @@ const boardUse=row=>ordinal(row,['_pcba_use_index','pcba_use_index','use_index',
 const materialUse=row=>ordinal(row,['material_use_index','known_use_count','total_pcba_count_known_now','Usos conhecidos material','Uso material na falha']);
 const unpack=v=>{if(Array.isArray(v))return v;try{const x=JSON.parse(v);if(Array.isArray(x))return x;}catch{}return typeof v==='string'?v.split(/[|,;\n]/).map(x=>x.trim()).filter(Boolean):[];};
 const exactFailure=(a,b)=>compareFailures(code(a),a.defect_desc,code(b),b.defect_desc).classification==='EXACT';
-const earlier=(h,e)=>{const htime=parseFailureInstant(h.defect_time),etime=parseFailureInstant(e.defect_time);return htime!==null&&etime!==null&&htime<etime;};
+const earlier=(h,e)=>{if(!compatibleExplicitLineage(h,e))return false;const htime=parseFailureInstant(h.defect_time),etime=parseFailureInstant(e.defect_time);return htime!==null&&etime!==null&&htime<etime;};
 function exactEvent(row,event){
  if(pcba(row)!==nonempty(event.pcba_sn))return false;
  const suppliedCode=code(row),suppliedTime=when(row),key=value(row,['current_defect_key','defect_key']);
  if(key&&event.defect_key&&key===nonempty(event.defect_key))
   return sameFailureOccurrence(event,{...row,pcba_sn:pcba(row),defect_key:key});
  return Boolean(suppliedCode&&suppliedTime&&sameFailureOccurrence(event,{...row,pcba_sn:pcba(row),defect_code:suppliedCode,defect_time:suppliedTime}));
-}
-function boundAtFailure(row,event){
- const time=parseFailureInstant(event.defect_time);if(time===null)return false;
- const from=value(row,['bind_time_utc','bind_time','Bind Time']),to=value(row,['unbind_time_utc','unbind_time','Unbind Time']);
- const started=from?parseFailureInstant(from):null,ended=to?parseFailureInstant(to):null;
- if(from&&started===null||to&&ended===null)return false;
- if(started!==null&&started>time||ended!==null&&ended<=time)return false;
- return Boolean(started!==null||(materialUse(row)>=2&&value(row,['Uso material na falha']))||
- ['Y','YES','TRUE','1'].includes(value(row,['linked_at_defect','binding_active_at_defect','is_current_at_failure']).toUpperCase()));
 }
 const observed=set=>({count:set.size,observed:true,population_complete:false});
 
@@ -74,7 +65,8 @@ export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailur
  for(const g of grouped.values())for(const e of g.events){
   const board=nonempty(e.pcba_sn);
   const boardHistorySame=history.some(h=>pcba(h)===board&&earlier(h,e)&&exactFailure(h,e))||
-   boardHistSeqRecurrence(e,history).some(h=>exactFailure(h,e));
+   boardHistSeqRecurrence(e,history).some(h=>compatibleExplicitLineage(h,e)&&
+    (!h.defect_time||!e.defect_time||earlier(h,e))&&exactFailure(h,e));
   if(boardHistorySame)g.bHistoricalSame.add(board);
   const reusedForThisEvent=boardReused.has(board)&&(!processOnlyBoards.has(board)||
    (processBackedBoardReuses(board,e,history,snapshot?.process_timeline?.events||[]).minimum_uses||0)>=2||
@@ -90,7 +82,7 @@ export function failureGroupReuseSummaries(snapshot,rows=[],nameOf=groupedFailur
   if(historicalComponents.some(item=>item.current_pcbas.includes(board)&&item.cross_board_recurrences.some(recurrence=>
    compareFailures(code(e),e.defect_desc,recurrence.defect_code,recurrence.defect_desc).classification==='EXACT')))
    g.materialHistoricalSame.add(board);
-  const links=components.filter(r=>material(r)&&materialUse(r)>=2&&exactEvent(r,e)&&boundAtFailure(r,e));
+  const links=components.filter(r=>material(r)&&materialUse(r)>=2&&exactEvent(r,e)&&materialBoundAtFailure(r,e));
   if(!links.length)continue;
   g.materialBoards.add(board);
   for(const link of links){

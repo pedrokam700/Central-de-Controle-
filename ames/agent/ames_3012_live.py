@@ -1030,31 +1030,43 @@ def _select_page(browser, ames_host: str):
             return page
 
     home_pages=[p for p in host_pages if _is_home_surface_url(getattr(p,"url", ""),ames_host)]
+    created = not home_pages
     if home_pages:
         page=home_pages[-1]
     else:
+        if any("/login" in urlsplit(p.url).path.lower() for p in host_pages):
+            raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES e tente novamente.")
         source=host_pages[-1]
-        context=getattr(source,"context",None) or (browser.contexts[0] if browser.contexts else None)
-        if context is None:
-            raise RuntimeError("Contexto do Chrome dedicado nao encontrado para abrir a 3012 Home")
+        home_url=_home_base_from_url(source.url)
+        context=source.context
         page=context.new_page()
-        page.goto(_home_base_from_url(getattr(source,"url", "")),wait_until="domcontentloaded",timeout=25000)
-
-    base=_home_base_from_url(getattr(page,"url", ""))
-    target=base+"#"+ROUTE_3012
-    page.goto(target,wait_until="domcontentloaded",timeout=25000)
-    deadline=time.time()+25
-    while time.time()<deadline:
-        if not _is_home_surface_url(getattr(page,"url", ""),ames_host):
-            raise RuntimeError("3012 abriu fora da superficie Home; variante OPC foi recusada")
-        try:
-            ready=page.evaluate("""() => !!(window.Ext && Ext.ComponentQuery && Ext.ComponentQuery.query('*').some(c=>String(c?.text||'').trim()==='View'))""")
-            if ready and _is_home_3012_url(getattr(page,"url", ""),ames_host):
-                return page
-        except Exception:
-            pass
-        time.sleep(.4)
-    raise RuntimeError("Tela 3012 Home nao carregou automaticamente")
+    try:
+        if created:
+            page.goto(home_url,wait_until="domcontentloaded",timeout=25000)
+            if not _is_home_surface_url(page.url, ames_host):
+                raise RuntimeError("3012_HOME_NOT_READY: 3012 abriu fora da superficie Home; variante OPC foi recusada")
+        base=_home_base_from_url(getattr(page,"url", ""))
+        target=base+"#"+ROUTE_3012
+        page.goto(target,wait_until="domcontentloaded",timeout=25000)
+        deadline=time.time()+25
+        while time.time()<deadline:
+            if not _is_home_surface_url(getattr(page,"url", ""),ames_host):
+                raise RuntimeError("3012_HOME_NOT_READY: 3012 abriu fora da superficie Home; variante OPC foi recusada")
+            try:
+                ready=page.evaluate("""() => !!(window.Ext && Ext.ComponentQuery && Ext.ComponentQuery.query('*').some(c=>String(c?.text||'').trim()==='View'))""")
+                if ready and _is_home_3012_url(getattr(page,"url", ""),ames_host):
+                    return page
+            except Exception:
+                pass
+            time.sleep(.4)
+        raise RuntimeError("Tela 3012 Home nao carregou automaticamente")
+    except Exception:
+        if created:
+            try:
+                page.close()
+            except Exception:
+                pass
+        raise
 
 
 def collect_live_3012(*, cdp_url: str, ames_host: str, sns: Iterable[str] | None = None,

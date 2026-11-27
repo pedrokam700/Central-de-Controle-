@@ -2,7 +2,9 @@ const text=value=>String(value??'').trim();
 const value=(row,...keys)=>keys.map(key=>row?.[key]).find(item=>item!==undefined&&item!==null&&text(item)!=='')??null;
 const pcbaOf=row=>text(value(row,'pcba_sn','PCBA','Lot Id','current_pcba_sn'));
 const operatorId=row=>text(value(row,'operator_id','Operator ID','Tran User Id','Tran User ID','Transaction User Id','Employee ID','User Id'));
-const operatorName=row=>text(value(row,'operator_name','tran_user_name','Operator Name','Tran User Name','Tran User','Transaction User Name','Employee Name','User Name','Tran User Desc','User Full Name'));
+const normalizedId=v=>text(v).normalize('NFKC').toUpperCase();
+const namedField=(row,id,keys)=>keys.map(k=>text(row?.[k])).find(n=>n&&normalizedId(n)!==normalizedId(id))||'';
+const operatorName=row=>namedField(row,operatorId(row),['Tran User Name','Employee Name','User Full Name','Tran User Desc','tran_user_name','Operator Name','Transaction User Name','User Name','operator_name','Tran User']);
 const scopeOf=row=>({
  source_id:text(value(row,'source_id')??value(row?.provenance,'source_id')),
  line_id:text(value(row,'line_id','line')??value(row?.provenance,'line_id','line'))
@@ -14,19 +16,19 @@ const sameExplicitScope=(left={},right={})=>['source_id','line_id'].every(key=>
 const explicitRepairName=repair=>{
  const id=text(value(repair,'repair_user','Repair User'));
  const raw=repair?.raw?.raw&&typeof repair.raw.raw==='object'?repair.raw.raw:repair?.raw||{};
- const direct=text(value(repair,'repair_user_name','Repair User Name','RepairUserName',
-  'repairUserName')||value(raw,'repairUserName','Repair User Name','repair_user_name','RepairUserName'));
- return direct&&direct!==id?direct:null;
+ const keys=['repair_user_name','Repair User Name','RepairUserName','repairUserName','repairUserDesc','repair_user_desc','Repair User Desc','repair_technician_name'];
+ return namedField(repair,id,keys)||namedField(raw,id,keys)||null;
 };
 function resolvedRepairName(repair,operators=[]){
  const id=text(value(repair,'repair_user','Repair User')),pcba=pcbaOf(repair);
- if(!id||!pcba)return null;
+ if(!pcba)return null;
  // Direct 3012 fields are proof of the repairer's name independently of
  // the 3022 event used only as a possible identity source.
  const direct=explicitRepairName(repair);if(direct)return direct;
+ if(!id)return null;
  const names=new Set(),scope=scopeOf(repair);
  for(const row of operators){
-  if(pcbaOf(row)!==pcba||operatorId(row)!==id||
+  if(pcbaOf(row)!==pcba||normalizedId(operatorId(row))!==normalizedId(id)||
      !sameExplicitScope(scope,scopeOf(row)))continue;
   const name=operatorName(row);
   if(name&&name!==id)names.add(name);
@@ -49,7 +51,8 @@ export function normalize3022OperatorRows(rows=[],{currentPcba='',allowCurrentSc
    const explicit=pcbaOf(entry)||pcbaOf(raw)||pcbaOf(wrapper)||pcbaOf(wrapper.raw);
    const pcba=explicit||(allowCurrentScope?text(currentPcba):'');
    const id=operatorId(entry)||operatorId(raw),name=operatorName(entry)||operatorName(raw);
-   if(!pcba||!id||!name||id.toUpperCase()===name.toUpperCase())continue;
+   if(!pcba||!id||!name||normalizedId(id)===normalizedId(name))continue;
+   if(pcbaOf(wrapper)&&pcbaOf(wrapper)!==pcba)continue;
    const station=text(value(raw,'Working Oper Code','Station Code','Station')||
     value(entry,'station','operation_code','Working Oper Code')||
     value(wrapper,'station','operation_code'));
@@ -87,8 +90,22 @@ export function provenRepairUserName(repair={},result={},currentPcba=''){
 // names or an exactly matching PCBA+MES ID, rejecting source/line conflicts.
 export function projectRepairTechnicianNames(repairs=[],events=[]){
  const operators=normalize3022OperatorRows(events);
- return (repairs||[]).map(repair=>({...repair,
-  repair_technician_name:resolvedRepairName(repair,operators)}));
+ // A named 3012 row is also an identity witness for the same board and MES ID.
+ for(const r of repairs||[]){
+  const name=explicitRepairName(r);
+  if(name&&r.repair_user&&pcbaOf(r))operators.push({...scopeOf(r),pcba_sn:pcbaOf(r),operator_id:r.repair_user,operator_name:name});
+ }
+ const witnesses=new Map();
+ const key=(board,id)=>JSON.stringify([board,normalizedId(id)]);
+ for(const person of operators){
+  const k=key(pcbaOf(person),operatorId(person));
+  if(!witnesses.has(k))witnesses.set(k,new Map());
+  witnesses.get(k).set(JSON.stringify([scopeOf(person),operatorName(person)]),person);
+ }
+ return (repairs||[]).map(repair=>{
+  const people=witnesses.get(key(pcbaOf(repair),value(repair,'repair_user','Repair User')));
+  return {...repair,repair_technician_name:resolvedRepairName(repair,people?.values()||[])};
+ });
 }
 
 const exactRepair=repairs=>(repairs||[]).find(repair=>repair?.association==='exact_occurrence')||null;

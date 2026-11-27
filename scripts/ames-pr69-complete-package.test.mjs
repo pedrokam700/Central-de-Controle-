@@ -11,6 +11,7 @@ const switcher = readFileSync('tools/ames-workstation/TROCAR_PARA_PR69_NOVA.ps1'
 
 test('PR69 CLEAN inclui utilitario de troca, rede inicial e os 5 documentos perdidos',()=>{
   for(const name of [
+    '00_CONFERIR_ATUALIZACAO.bat',
     '01_TROCAR_PARA_PR69_NOVA.bat','TROCAR_PARA_PR69_NOVA.ps1',
     '08_PREPARAR_REDE_AMES.bat','12_APLICAR_ROTA_AMES_PERSISTENTE.bat',
     'INSTRUCOES_INSTALACAO_LIMPA.txt',

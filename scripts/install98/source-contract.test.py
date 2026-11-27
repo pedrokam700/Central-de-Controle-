@@ -1,0 +1,56 @@
+"""Installation changes must preserve the exact PR97 functional runtime."""
+import ast,hashlib,pathlib,subprocess,unittest
+ROOT=pathlib.Path(__file__).resolve().parents[2]
+BASE='52efc38182401e708dd9f80c6c57a27e7b8726ab'
+def git(*args):return subprocess.check_output(['git',*args],cwd=ROOT,text=True).strip()
+class Source(unittest.TestCase):
+ def test_exact_base_ancestry(self):subprocess.run(['git','merge-base','--is-ancestor',BASE,'HEAD'],cwd=ROOT,check=True)
+ def test_runtime_changes_limited_to_reviewed_installation_period_and_history_files(self):
+  frozen=['ames/','sw.js','index.html','app.js','styles.css','tools/ames-lab/']
+  changed=git('diff','--name-only',BASE,'HEAD').splitlines()
+  # Exact reviewed deltas for owned Home/OPC tabs and session-failure recovery.
+  navigation_files = {
+   'ames/console-monitor-runtime.mjs': 'f34c1784160664a2eaf3b9f2d1a2509da00d0e6591192c8e1dc40de46f2ad1e1',
+   'ames/console-failure-evidence.mjs': 'b14a1ee6d74a7d3c7fa504b4febd7b4e3041181d817db5839c1f836f8c1bb947',
+   'ames/reading-period-controller.mjs': 'e891b77cea7ba95edb6b65f6a9640dc511a6c3fd5df37929abc98f59d10617f0',
+   'ames/failure-group-evidence.mjs': '9ceaf2b08ca872aee9d9f041edbe47c6a8e89f2600e9ddcc3c45a275b1e50e56',
+   'ames/data/reuse-cohorts.mjs': '8952d3a52d8746fc93ad6beed1288346b37b7043acf2a9664176672eca34f9d1',
+   'ames/data/reuse-analysis.mjs': '046b7a9dfa4ddc428ce8dcec44e84f71af8befccb146d7db932b0726785495d5',
+   'ames/console-reuse-history-timeline.mjs': '178221676670c26e88e0bb1dab6a669f82b1b53ef5ec6b78b272d9b335d79563',
+   'ames/console-reuse-cohorts.mjs': 'ca2bf2b519589687391937ea53e5618f8c6d8459f43c74ab8016d52dae9a4007',
+   'ames/console-reading-period.mjs': '0f94a101f1029ff9029906d004c4f87ba3ddeec9387f2e4868610c4c0e9493e3',
+   'ames/collection-status.mjs': '5d51a9205b08cc4a88ffd9e4ac2c47bc82e0e87b75e4c67ffa2f526cc90ab6b7',
+   'ames/agent/store.py': 'df74d6af848f70231fbb0f36051e21931a7b1648c402f9648e2c926fc425d929',
+   'ames/agent/comment_provenance_3028.py': '50fe7e13c98989e5401764a53ebdc2122bf3896824c9f805282f304da3263c20',
+   'ames/agent-client.mjs': 'b83fab495e185a1b40c2eb430cd57e1c46ab25f4153b40605166a6b9ce02a0f8',
+   'ames/console-view.mjs': 'ee927306eaf679e0b98ea3be9feb9d4e3364faceaa2491856b9140810b578767',
+   'ames/agent/ames_3012_live.py': '7b2e1cfb1905bb1d8b07a8fcabb70a5092e068c0711e8f0e322b8c71ccc4fdb3',
+   'ames/agent/ames_3012_strategy.py': 'fbc70efbfc3fc8656d49052882c6d4a77768289fd5926c97ea084871f368e287',
+   'ames/factory-engine/ames/navigation.py': '74d3d4249029099d75edbe1c3cbcae438e21952fb9d7e41de71a9b36f49f64fb',
+   'ames/factory-engine/tests/test_pr70_2114_tab_recovery.py': '6373fd71728f045128f9d33dc6eb84aebc3dab99fbce3d4dd19e726c03ccac54',
+  }
+  for path, digest in navigation_files.items():
+   self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(),digest,path)
+  self.assertFalse([p for p in changed if p not in navigation_files and p not in {'ames/console-improvements.css', 'ames/console-reuse-history-timeline.mjs', 'ames/agent/agent.py', 'ames/console-reuse-cohorts.mjs', 'ames/console-sn-repair-evidence.mjs', 'ames/data/reuse-history-timeline.mjs', 'ames/agent/comment_provenance_3028.py'} and any(p==x or p.startswith(x) for x in frozen)])
+  before=git('show',BASE+':ames/agent/agent.py')
+  old='        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"'
+  reviewed='        mime = "application/javascript" if path.suffix.lower() in {".js", ".mjs"} else (mimetypes.guess_type(str(path))[0] or "application/octet-stream")'
+  self.assertTrue(before.index('    def _send_static(')<before.index(old)<before.index('    def _send_download('))
+  self.assertEqual(git('show','150c32e025e8ba440b7d20d13a4f666dfb3289ae:ames/agent/agent.py'),before.replace(old,reviewed,1))
+  self.assertIn(reviewed, (ROOT/'ames/agent/agent.py').read_text())
+ def test_local_history_startup_has_explicit_route_free_entry(self):
+  # Native boot already proves the local app works without MES/WLAN.
+  # Current entrypoints nevertheless unconditionally require the factory route.
+  for name in ('TROCAR_PARA_PR69_NOVA.ps1','START_LOCAL_CANDIDATE.ps1'):
+   source=(ROOT/'tools/ames-workstation'/name).read_text()
+   self.assertTrue('[switch]$LocalOnly' in source,name+' lacks explicit local-history startup')
+ def test_runtime_imports_not_added_to_transfer(self):
+  tree=ast.parse((ROOT/'tools/ames-workstation/SAFE_STATE_TRANSFER.py').read_text())
+  modules={a.name.split('.')[0] for n in ast.walk(tree) if isinstance(n,ast.Import) for a in n.names}
+  modules|={(n.module or '').split('.')[0] for n in ast.walk(tree) if isinstance(n,ast.ImportFrom)}
+  self.assertFalse(modules&{'agent','agent_entry','store','engine_bridge','socket','requests','urllib'})
+ def test_kernel_proof_required_before_genuine_code_execution(self):
+  s=(ROOT/'scripts/install98/containment.ps1').read_text();self.assertIn('KERNEL_DENIAL_NOT_PROVEN_NO_AGENT_MAY_START',s)
+  self.assertIn("$fields['DestAddress'] -eq '198.51.100.1'",s);self.assertIn("$fields['ProcessID']",s)
+  s=(ROOT/'scripts/install98/integration.py').read_text();self.assertLess(s.index("['kernel_deny_proven']"),s.index("sourceA=LAB"))
+if __name__=='__main__':unittest.main()

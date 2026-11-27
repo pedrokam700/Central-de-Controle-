@@ -58,6 +58,7 @@ if not defined PYEXE (
 )
 if not defined PYEXE goto :python_error
 "%PYEXE%" --version || goto :python_error
+"%PYEXE%" -I -B "suporte\ames-workstation\check_install_path.py" || goto :fail
 
 if not exist ".venv\Scripts\python.exe" (
   echo [2/7] Criando ambiente Python isolado nesta pasta...

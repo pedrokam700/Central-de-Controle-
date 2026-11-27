@@ -116,7 +116,7 @@ export function createConsoleView(root, store, { locale, onChange = () => {}, tr
   // must not alter today's head or launch another MES collection.
   function refreshHistoricalOnCompletedJob(){
     const job=store.agent()?.job,period=store.readingPeriod?.();
-    if(!job?.id||job.status!=='done'||!period||period.mode==='today')return;
+    if(!job?.id||(job.status!=='done' && job.stage!=='partial')||!period||period.mode==='today')return;
     // Polling publishes job completion before its final canonical refresh.
     // Re-read the local index once more if that refresh installs a newer
     // immutable revision; otherwise the first read can race the transport.

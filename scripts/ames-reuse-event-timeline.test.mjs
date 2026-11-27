@@ -5,9 +5,9 @@ import {reuseTimelineFixture} from './fixtures/reuse-timeline.mjs';
 import {buildReuseHistoryTimeline} from '../ames/data/reuse-history-timeline.mjs';
 globalThis.document={documentElement:{lang:'pt-BR'}};
 
-test('U1b: all eight source events share one table, independent clocks, people and comments',()=>{
+test('U1b: all eight source events share the expandable evidence table, independent clocks, people and comments',()=>{
  const f=reuseTimelineFixture(),html=renderBoardComparisonTable(f.board,{repairs:f.repairs,operators:f.operators});
- assert.equal((html.match(/<table[ >]/g)||[]).length,1);
+ assert.equal((html.match(/<table[ >]/g)||[]).length,2);
  assert.equal((html.match(/data-reuse-timeline-row/g)||[]).length,8);
  for(const text of ['Autor histórico zero','Autor histórico um','Reparadora Alfa','Reparador Beta','Operadora Gama',
   'MainBoard','Phone Disassembly','Phone Battery Cover','Comentário completo Alfa','Segunda linha Alfa',
@@ -100,4 +100,50 @@ test('U1b: canonical and local copies of the same explicit 3022 event are shown 
  assert.equal(events.find(e=>e.source_view==='3022').record_id,'CANONICAL-O0');
  events=buildReuseHistoryTimeline({failures:f.board.history_2114,operators:[canonical,{...local,snapshot_revision:17}]});
  assert.equal(events.filter(e=>e.source_view==='3022').length,2,'explicitly different revisions remain different observations');
+});
+
+test('snapshot and cache copies of one 3012 repair share a row and recover the explicit name',()=>{
+ const f=reuseTimelineFixture();
+ const partial={...f.repairs[0],repair_user_name:undefined,raw_ref:'sqlite:3012:R0'};
+ const cached={...partial,raw_ref:undefined,raw:{repairUserDesc:'Nome registrado'}};
+ const rows=buildReuseHistoryTimeline({repairs:[partial,cached,{...cached,row_key:'R1'}]});
+ assert.equal(rows.length,2);
+ assert.equal(rows.find(r=>r.row_key==='R0').actors[0].name,'Nome registrado');
+ assert.equal(rows.find(r=>r.row_key==='R0').raw_ref,'sqlite:3012:R0');
+ const conflict={...cached,repair_comment:'Revisão diferente'};
+ assert.equal(buildReuseHistoryTimeline({repairs:[partial,conflict]}).length,2);
+});
+
+test('legacy 3022 code in Tran User does not shadow its explicit name; names stay on the same PCBA',()=>{
+ const f=reuseTimelineFixture(), repair={...f.repairs[0],repair_user_name:undefined};
+ const operator={pcba_sn:repair.pcba_sn,raw:{'Tran User Id':repair.repair_user,'Tran User':repair.repair_user,'Tran User Desc':'Pessoa do reparo'}};
+ const html=renderBoardComparisonTable(f.board,{repairs:[repair],operators:[operator]});
+ assert.match(html.match(/<tr[^>]*data-source-view="3012"[\s\S]*?<\/tr>/)[0],/Pessoa do reparo/);
+});
+
+test('durable 3022 passage with short operation and full terminal is only displayed once',()=>{
+ const f=reuseTimelineFixture(),op={...f.operators[0],station:'A5160'};
+ const events=buildReuseHistoryTimeline({pcbas:[f.board.sn],operators:[op,{...op,station:'TAN10101A516001'}]});
+ assert.equal(events.length,1);
+ assert.equal(buildReuseHistoryTimeline({pcbas:[f.board.sn],operators:[op,{...op,station:'TAN10102A516001'}]}).length,2);
+});
+
+test('historical named 3012 row resolves the same board and login; a different board cannot supply a name',()=>{
+ const f=reuseTimelineFixture(),a=f.repairs[0],b={...a,row_key:'OLDER',repair_user_name:null};
+ const timeline=repairs=>buildReuseHistoryTimeline({repairs,pcbas:[f.board.sn]}).find(e=>e.row_key==='OLDER').actors[0].name;
+ assert.equal(timeline([a,b]),'Reparadora Alfa');
+ assert.equal(timeline([{...a,pcba_sn:'OTHER'},b]),null);
+ assert.equal(timeline([a,{...a,row_key:'THIRD',repair_user_name:'Conflict'},b]),null);
+});
+
+test('sole operational rows are the three pertinent failures; source history remains expandable',()=>{
+ const f=reuseTimelineFixture();
+ f.board.history_2114=f.board.history_2114.slice(0,2);
+ f.board.events=f.board.events.slice(0,1);
+ const html=renderBoardComparisonTable(f.board,{repairs:f.repairs,operators:f.operators});
+ const compact=html.split('<details data-reuse-technical>')[0];
+ assert.equal((compact.match(/data-operational-failure-row/g)||[]).length,3);
+ assert.doesNotMatch(compact,/Export Repair|A6900|H01/);
+ assert.match(html,/<details data-reuse-technical>/);
+ assert.match(html,/data-reuse-3012-occurrence/);
 });

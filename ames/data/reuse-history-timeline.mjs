@@ -48,9 +48,11 @@ function processObservations(rows){
    // A nested actor cannot erase explicit observation lineage or its event ID.
    ...Object.fromEntries(Object.entries(meta(wrapper)).map(([key,value])=>[key,value??meta(entry)[key]])),record_id:wrapper.record_id??entry.record_id,
    event_id:wrapper.event_id??entry.event_id,
+   hist_seq:read(wrapper,'hist_seq','Hist Seq')??adapter.hist_seq??read(entry,'hist_seq','Hist Seq'),
    event_time:wrapper.event_time??read(entry,'event_time','Tran Time','Transaction Time','Event Time'),
    operator_id:read(entry,...operatorIds),operator_name:read(entry,...operatorNames),
-   station:read(entry,'station','operation_code','Working Oper Code')??wrapper.station,
+   station:read(entry,'operation_code','Working Oper Code','station')??wrapper.station,
+   station_id:read(entry,'station')??wrapper.station,
   }));
  });
  // /local/sn can return the SAME durable event_id without the canonical
@@ -61,11 +63,15 @@ function processObservations(rows){
   const left=meta(a),right=meta(b);
   const identityValue=(key,value)=>['snapshot_id','snapshot_revision'].includes(key)?String(value):JSON.stringify(value);
   if(Object.keys(left).some(k=>left[k]!==null&&right[k]!==null&&identityValue(k,left[k])!==identityValue(k,right[k])))return false;
-  return ['record_id','operator_id','operator_name','operator_role','station','event_time'].every(k=>
+  const [short,long]=[text(a.station),text(b.station)].sort((x,y)=>x.length-y.length);
+  const line=left.line_id||right.line_id;
+  if(short&&short!==long&&!(line&&/^A[0-9]{4}$/.test(short)&&long.startsWith(line+short)&&/^\d+$/.test(long.slice((line+short).length))))return false;
+  return ['record_id','hist_seq','operator_id','operator_name','operator_role','event_time'].every(k=>
    !text(a[k])||!text(b[k])||text(a[k])===text(b[k]));
  };
  for(const row of observations){
-  const key=row.event_id?JSON.stringify([pcba(row),row.event_id]):null;
+  const durable=row.event_id||row.raw_ref;
+  const key=durable?JSON.stringify([pcba(row),durable]):null;
   const previous=key?(byId.get(key)||[]).find(old=>compatible(old,row)):null;
   if(previous){
    for(const [k,v] of Object.entries(row))if(previous[k]===undefined||previous[k]===null||previous[k]==='')previous[k]=v;
@@ -76,10 +82,41 @@ function processObservations(rows){
  }
  return result;
 }
+// Snapshot and local cache project different subsets of the same durable 3012 row.
+function mergeRepairCopies(rows){
+ const buckets=new Map(),unkeyed=[];
+ const fields=['record_id','repair_technician_id','repair_user_name','defect_user_name','reason_code','repair_status','defect_code','defect_desc','defect_time','repair_time','repair_code','repair_desc',
+  'repair_user','repair_technician_name','repair_comment','defect_user','hist_seq','repaired_location','reason_desc'];
+ for(const row of rows){
+  if(!row.row_key){unkeyed.push(row);continue;}
+  const key=JSON.stringify([pcba(row),row.row_key]);
+  if(!buckets.has(key))buckets.set(key,[]);
+  buckets.get(key).push(row);
+ }
+ const result=[...unkeyed];
+ for(const copies of buckets.values()){
+  const merged=[];
+  // Start with the best identified revisions. An unscoped copy that could
+  // belong to two contradictory revisions must not bridge them.
+  const rank=r=>Object.values(meta(r)).filter(v=>v!=null).length;
+  for(const row of copies.sort((a,b)=>rank(b)-rank(a))){
+   const values=r=>({...meta(r),...Object.fromEntries(fields.map(k=>[k,r[k]]))});
+   const current=values(row);
+   const matches=merged.filter(old=>Object.entries(values(old)).every(([k,v])=>
+    v==null||v===''||current[k]==null||current[k]===''||
+    (typeof v==='object'?JSON.stringify(v)===JSON.stringify(current[k]):text(v)===text(current[k]))));
+   if(matches.length!==1){merged.push({...row,...meta(row)});continue;}
+   const target=matches[0];
+   for(const [k,v] of Object.entries({...row,...meta(row)}))if(target[k]==null||target[k]==='')target[k]=v;
+  }
+  result.push(...merged);
+ }
+ return result;
+}
 export function buildReuseHistoryTimeline({failures=[],repairs=[],operators=[],bindings=[],pcbas=[]}={}){
  const boards=new Set((pcbas.length?pcbas:[...failures,...bindings,...repairs].map(pcba)).filter(Boolean));
  const process=processObservations(operators).filter(r=>boards.has(pcba(r)));
- const named=projectRepairTechnicianNames(repairs,operators);
+ const named=mergeRepairCopies(projectRepairTechnicianNames(repairs.filter(r=>boards.has(pcba(r))),operators));
  const input=[...failures,...named.map(r=>({...r,source_view:'3012'})),...process];
  // A physically linked board with no available history still needs an explicit
  // context row. It must not disappear or acquire a fabricated zero history.

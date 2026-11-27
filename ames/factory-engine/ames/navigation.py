@@ -109,12 +109,23 @@ class AmesNavigation:
             raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES/OPC e tente novamente.")
         home_url = urlunsplit((parts.scheme, parts.netloc, "/asymes/home", parts.query, ""))
         page = self.browser.context.new_page()
-        page.goto(home_url, wait_until="domcontentloaded", timeout=15000)
-        if self._is_login(page):
-            raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES e tente novamente.")
-        if not self._is_home_surface(page):
-            raise RuntimeError("HOME_SESSION_NOT_READY: navegação Home não confirmada, sem consulta ao MES.")
-        return page
+        try:
+            page.goto(home_url, wait_until="domcontentloaded", timeout=15000)
+            if self._is_login(page):
+                raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES e tente novamente.")
+            if not self._is_home_surface(page):
+                raise RuntimeError("HOME_SESSION_NOT_READY: navegação Home não confirmada, sem consulta ao MES.")
+            return page
+        except Exception:
+            self._close_created(page)
+            raise
+
+    @staticmethod
+    def _close_created(page):
+        try:
+            page.close()
+        except Exception:
+            pass
 
     def _wait_view(self, page, route: str, selector: str | None, timeout_s: float):
         deadline = time.time() + timeout_s
@@ -215,17 +226,26 @@ class AmesNavigation:
                     break
             except Exception:
                 pass
-        if opc is None:
+        created = opc is None
+        if created:
+            # Resolving Home can raise LOGIN_AMES_REQUIRED. Do it before new_page.
+            url = self._opc_url_from_main()
             opc = self.browser.context.new_page()
-            opc.goto(self._opc_url_from_main(), wait_until="domcontentloaded", timeout=int(timeout_s * 1000))
-        if self._is_login(opc):
-            raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES/OPC e tente novamente.")
         try:
-            opc.evaluate("r => { if (location.hash !== '#' + r) location.hash = '#' + r; }", route)
+            if created:
+                opc.goto(url, wait_until="domcontentloaded", timeout=int(timeout_s * 1000))
+            if self._is_login(opc):
+                raise RuntimeError("LOGIN_AMES_REQUIRED: faça login manualmente no A-MES/OPC e tente novamente.")
+            try:
+                opc.evaluate("r => { if (location.hash !== '#' + r) location.hash = '#' + r; }", route)
+            except Exception:
+                base = (opc.url or "").split("#", 1)[0]
+                opc.goto(base + "#" + route, wait_until="domcontentloaded", timeout=int(timeout_s * 1000))
+            return self._wait_view(opc, route, 'input[name="snImei"]:visible', timeout_s)
         except Exception:
-            base = (opc.url or "").split("#", 1)[0]
-            opc.goto(base + "#" + route, wait_until="domcontentloaded", timeout=int(timeout_s * 1000))
-        return self._wait_view(opc, route, 'input[name="snImei"]:visible', timeout_s)
+            if created:
+                self._close_created(opc)
+            raise
 
     def ensure_current_shift_2114(self, page=None, strict: bool = False):
         """Best-effort preparation of the 2114 shift selector.

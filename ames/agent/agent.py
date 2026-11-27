@@ -60,9 +60,8 @@ from urllib.parse import parse_qs, urlparse, quote
 from urllib.request import Request, urlopen
 
 from ames_3028 import parse_export
-from ames_3028_live import collect_live_3028 as _collect_live_3028
-from comment_provenance_3028 import preserve_3028_comment
-collect_live_3028 = mes_call(_collect_live_3028)
+from comment_provenance_3028 import preserve_3028_comment, collect_3028_period
+collect_live_3028 = mes_call(collect_3028_period)
 from engine_bridge import (choose_current_history, discover_engine, refresh_2114, repair_state,
                            run_full_v016, run_deep_v016_records, run_individual_lookup, regenerate_v016_excel, build_trace_insights)
 from store import Store, stable_json, utc_now
@@ -344,26 +343,29 @@ def _persist_3028_live(live, *, mode="today", start_at=None, end_at=None, shift=
             "visible_state": live.get("visible_state") if len(actual_lines) == 1 else None,
             "captures": line_caps,
         }
-        window_id = STORE.ensure_window(mode, start_at, end_at, shift, [line])
-        raw_bytes = stable_json(line_live).encode("utf-8")
-        snapshot_id = STORE.create_snapshot(
-            window_id=window_id,
-            source_kind="3028_live_extjs",
-            source_name=f"AWIP3028 direct ExtJS · {line}",
-            source_bytes=raw_bytes,
-            notes="Coleta direta por linha; sem Excel intermediario",
-        )
-        STORE.ingest_line_metrics(snapshot_id, line_metrics)
-        STORE.ingest_defects(snapshot_id, line_records, reconcile_window=True)
-        STORE.save_snapshot_payload(snapshot_id, "3028_live_raw", line_live)
-        STORE.rebuild_cora_index(snapshot_id)
-        STORE.record_audit(
-            "INGEST_3028_LIVE", workstation=WORKSTATION, snapshot_id=snapshot_id, line=line,
-            details={
-                "mode": mode, "line": line, "records": len(line_records),
-                "window": live.get("window"), "validations": line_valid,
-            },
-        )
+        with STORE.snapshot_transaction():
+            window_id = STORE.ensure_window(mode, start_at, end_at, shift, [line])
+            raw_bytes = stable_json(line_live).encode("utf-8")
+            snapshot_id = STORE.create_snapshot(
+                window_id=window_id,
+                source_kind="3028_live_extjs",
+                source_name=f"AWIP3028 direct ExtJS · {line}",
+                source_bytes=raw_bytes,
+                notes="Coleta direta por linha; sem Excel intermediario",
+            )
+            STORE.ingest_line_metrics(snapshot_id, line_metrics)
+            STORE.ingest_defects(snapshot_id, line_records, reconcile_window=True)
+            STORE.save_snapshot_payload(snapshot_id, "3028_live_raw", line_live)
+            STORE.rebuild_cora_index(snapshot_id)
+            STORE.record_audit(
+                "INGEST_3028_LIVE", workstation=WORKSTATION, snapshot_id=snapshot_id, line=line,
+                details={
+                    "mode": mode, "line": line, "records": len(line_records),
+                    "window": live.get("window"), "validations": line_valid,
+                },
+            )
+            if hasattr(STORE, "finalize_snapshot"):
+                STORE.finalize_snapshot(snapshot_id)
         snapshot_ids[line] = snapshot_id
     latest = max(snapshot_ids.values()) if snapshot_ids else None
     return {
@@ -377,14 +379,48 @@ def _persist_3028_live(live, *, mode="today", start_at=None, end_at=None, shift=
 def ingest_3028_live(*, mode="today", start_at=None, end_at=None, shift=None, lines=None):
     if not start_at or not end_at:
         raise RuntimeError("Janela 3028 incompleta")
-    live = collect_live_3028(
+    arguments = dict(
         cdp_url=str(CONFIG.get("chrome_cdp") or "http://127.0.0.1:9222"),
         ames_host=str(CONFIG.get("ames_host") or "172.29.185.215"),
         lines=normalize_lines(lines or CONFIG.get("configured_lines") or []),
         start_at=start_at,
         end_at=end_at,
     )
-    return _persist_3028_live(live, mode=mode, start_at=start_at, end_at=end_at, shift=shift)
+    requested = arguments.pop("lines")
+    if not requested:
+        # Preserve discovery from the currently selected row.
+        live = collect_live_3028(lines=[], **arguments)
+        return _persist_3028_live(live, mode=mode, start_at=start_at, end_at=end_at, shift=shift)
+    saved, errors, captures = {}, {}, []
+    for line in requested:
+        try:
+            live = collect_live_3028(lines=[line], **arguments)
+        except ValueError as exc:
+            errors[line] = str(exc)
+            continue
+        except Exception as exc:
+            # Lost browser/session: retain completed lines and stop navigating.
+            errors[line] = str(exc)
+            break
+        try:
+            result = _persist_3028_live(live, mode=mode, start_at=start_at, end_at=end_at, shift=shift)
+        except Exception as exc:
+            errors[line] = f"3028 {line}: falha de persistência ({type(exc).__name__})"
+            if not saved:
+                raise
+            break
+        saved.update(result["snapshot_ids"])
+        captures.append(live)
+    if not saved:
+        raise ValueError(" | ".join(errors.values()) or "3028: nenhuma linha confirmada")
+    combined = dict(captures[-1])
+    for field in ("line_metrics","records","captures","validations","lines"):
+        combined[field] = [item for capture in captures for item in capture.get(field, [])]
+    combined.update(requested_lines=requested, records_count=len(combined["records"]))
+    return dict(snapshot_id=max(saved.values()), snapshot_ids=saved, live=combined,
+                dashboard=STORE.team_dashboard(list(saved)), line_errors=errors,
+                pending_lines=[line for line in requested if line not in saved])
+
 
 
 def enrich_snapshot_from_integrated(snapshot_id, payload, source_path=None):
@@ -534,20 +570,23 @@ def _run_full_pipeline_job(job_id, cfg):
         lines_done = imported.get("live", {}).get("lines") or []
 
         job = _job_update(
-            job_id, status="done", stage="done", progress=100, finished_at=utc_now(),
-            message="3028 direta concluida; FPY/Top 3/base local atualizados",
+            job_id, status="error" if imported.get("pending_lines") else "done", stage="partial" if imported.get("pending_lines") else "done", progress=100, finished_at=utc_now(),
+            message=("3028 parcial. Salvas: " + ", ".join(snapshot_ids) + ". Pendentes: " + ", ".join(imported["pending_lines"])
+                     if imported.get("pending_lines") else "3028 direta concluida; FPY/Top 3/base local atualizados"),
             result={
                 "snapshot_id": snapshot_id,
                 "snapshot_ids": snapshot_ids,
                 "dashboard": STORE.team_dashboard(lines_done),
                 "records_3028": rows,
+                "line_errors": imported.get("line_errors", {}),
+                "pending_lines": imported.get("pending_lines", []),
                 "lines": lines_done,
                 "validations": validations,
                 "start_at": cfg.get("start_at"),
                 "end_at": cfg.get("end_at"),
                 "requested_lines": normalize_lines(cfg.get("lines") or CONFIG.get("configured_lines") or []),
                 "stages": {
-                    "3028": "done",
+                    "3028": "partial" if imported.get("pending_lines") else "done",
                     "3074": "not_run",
                     "2114": "not_run",
                     "3022": "pending_adapter",
@@ -1288,7 +1327,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send({"error": "static_not_found"}, 404)
             return
         data = path.read_bytes()
-        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        mime = "application/javascript" if path.suffix.lower() in {".js", ".mjs"} else (mimetypes.guess_type(str(path))[0] or "application/octet-stream")
         self.send_response(200)
         self._cors()
         self.send_header("Content-Type", mime + ("; charset=utf-8" if mime.startswith("text/") or mime in {"application/javascript"} else ""))
@@ -1520,7 +1559,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if u.path == "/api/v1/runs":
                 cfg = dict(body)
-                if cfg.get("preset") == "previous_day":
+                if cfg.get("preset") == "retry_pending":
+                    with JOBS_LOCK:
+                        original = JOBS.get(str(cfg.get("job_id") or ""), {})
+                        result = original.get("result") or {}
+                        pending = normalize_lines(result.get("pending_lines") or [])
+                        if original.get("kind") != "analysis" or original.get("stage") != "partial" or not pending:
+                            raise ValueError("Job sem linhas pendentes para repetir")
+                        cfg = {key: original["config"].get(key) for key in
+                               ("mode","start_at","end_at","shift","performance")}
+                        cfg.update(lines=pending, request_id=body.get("request_id"))
+                elif cfg.get("preset") == "previous_day":
                     cfg["start_at"], cfg["end_at"] = previous_day_window()
                     cfg["mode"] = "previous_day"
                 elif cfg.get("preset") == "today":

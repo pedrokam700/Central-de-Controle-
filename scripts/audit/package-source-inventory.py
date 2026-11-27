@@ -46,7 +46,12 @@ def sources(ref):
  for p in paths:
   parts=PurePosixPath(p).parts
   if parts[0] in ('ames','core','icons') and not {'agent','factory-engine'}&set(parts[1:-1]) and re.search(r'\.(mjs|css|svg|png|json|html)$',p):front.add(p)
- for p in sorted(front):add('frontend/Central-de-Controle-/'+p,p,p in ('index.html','app.js','sw.js'))
+ if 'vendor/browser/manifest.json' in paths:
+  inputs=json.loads(read_git(ref,'vendor/browser/manifest.json'))
+  front.update('vendor/browser/'+entry['path'] for entry in inputs['files']);front.add('vendor/browser/manifest.json')
+ for p in sorted(front):
+  transform=p in ('index.html','app.js','sw.js','vendor/browser/manifest.json') or (p.endswith(('.js','.mjs')) and b'https://www.gstatic.com/firebasejs/10.8.0/' in read_git(ref,p))
+  add('frontend/Central-de-Controle-/'+p,p,transform)
  for p in ('frontend/index.html','frontend/release-build.json','LOCAL_BUNDLE_MANIFEST.json','CANDIDATE_MANIFEST.json','LEIA_PRIMEIRO.txt'):add(p,None)
  for p in paths:
   name=PurePosixPath(p)

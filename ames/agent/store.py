@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import defaultdict, deque
+from threading import local
 import hashlib
 import base64
 import binascii
@@ -44,6 +46,11 @@ CREATE TABLE IF NOT EXISTS snapshots(
   status TEXT NOT NULL DEFAULT 'complete',
   notes TEXT,
   FOREIGN KEY(window_id) REFERENCES analysis_windows(id)
+);
+
+CREATE TABLE IF NOT EXISTS defect_reconciliation(
+  snapshot_id INTEGER PRIMARY KEY REFERENCES snapshots(id) ON DELETE CASCADE,
+  covers_window INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS line_metrics(
@@ -331,9 +338,25 @@ def to_int(v: Any) -> Optional[int]:
 class Store:
     def __init__(self, path: str | Path):
         self.path = Path(path)
+        self._local = local()
+
+    @contextmanager
+    def snapshot_transaction(self):
+        """Publish one complete line, including indexes and audit, in one commit."""
+        with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            self._local.snapshot_connection = con
+            try:
+                yield
+            finally:
+                del self._local.snapshot_connection
 
     @contextmanager
     def connect(self):
+        current = getattr(self._local, "snapshot_connection", None)
+        if current is not None:
+            yield current
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         con = sqlite3.connect(self.path, timeout=30)
         con.row_factory = sqlite3.Row
@@ -567,7 +590,8 @@ class Store:
         """Preserve old raw evidence before replacing the compatible current head."""
         kind=str(kind);value=stable_json(payload);at=utc_now()
         with self.connect() as con:
-            con.execute('BEGIN IMMEDIATE')
+            if not con.in_transaction:
+                con.execute('BEGIN IMMEDIATE')
             old=con.execute('SELECT payload_json,created_at FROM snapshot_payloads WHERE snapshot_id=? AND kind=?',(snapshot_id,kind)).fetchone()
             # Capture the legacy head on first update, without rewriting old DBs
             # in bulk. Also captures a head written during a rollback to old code.
@@ -648,22 +672,65 @@ class Store:
                     + [vals[f] for f in fields] + [stable_json(row)],
                 )
 
+    @staticmethod
+    def _occurrence_keys(con, sid, window_id, source, records):
+        """Match only within this local source/window. Do not rewrite legacy observations."""
+        def identity(rec):
+            return tuple(str(rec[k] or "").strip() for k in
+                         ("line","pcba_sn","defect_time","defect_code","defect_oper","product_model"))
+
+        previous = defaultdict(list)
+        for row in con.execute("""
+            SELECT o.* FROM snapshots s JOIN defect_observations o ON o.snapshot_id=s.id
+            JOIN defect_entities e ON e.defect_key=o.defect_key AND e.last_seen_snapshot_id=s.id
+            WHERE s.source_kind=? AND ((? IS NOT NULL AND s.window_id=?) OR s.id=?)
+            ORDER BY o.defect_key""", (source,window_id,window_id,sid)):
+            previous[identity(row)].append(row)
+
+        batches = defaultdict(list)
+        for rec in records:
+            normalized = dict.fromkeys(("line","pcba_sn","defect_time","defect_code","defect_oper","product_model"))
+            normalized.update(rec)
+            batches[identity(normalized)].append((stable_json(rec),rec))
+
+        for signature, batch in batches.items():
+            old = previous[signature]
+            by_raw = defaultdict(deque)
+            for row in old:
+                by_raw[row["raw_json"]].append(row["defect_key"])
+            reserved = set()
+            unmatched = []
+            for raw, rec in sorted(batch, key=lambda pair:pair[0]):
+                if by_raw[raw]:
+                    key = by_raw[raw].popleft()
+                    reserved.add(key)
+                    yield key, rec
+                else:
+                    unmatched.append(rec)
+            remaining = deque(row["defect_key"] for row in old if row["defect_key"] not in reserved)
+            ordinal = len(old)
+            for rec in unmatched:
+                if remaining:
+                    key = remaining.popleft()
+                else:
+                    key = hashlib.sha256(stable_json(["3028-occurrence",source,window_id,
+                        sid if window_id is None else None,signature,ordinal]).encode()).hexdigest()[:20]
+                    ordinal += 1
+                yield key, rec
+
     def ingest_defects(self, snapshot_id: int, records: Iterable[Dict[str, Any]],
                        *, reconcile_window: bool = True) -> int:
         now = utc_now()
         keys_seen: set[str] = set()
         count = 0
         with self.connect() as con:
-            snapshot = con.execute("SELECT window_id FROM snapshots WHERE id=?", (snapshot_id,)).fetchone()
-            window_id = snapshot["window_id"] if snapshot else None
-            for rec in records:
-                key = defect_key(rec)
-                # Keep historical keys, but never overwrite a different CPH variant
-                # with the same legacy line/PCBA/time/defect tuple.
-                from canonical import cph
-                previous=con.execute('SELECT product_model FROM defect_entities WHERE defect_key=?',(key,)).fetchone()
-                if previous and cph(previous['product_model'])!=cph(rec.get('product_model')):
-                    key=hashlib.sha256((key+'|'+cph(rec.get('product_model'))).encode()).hexdigest()[:20]
+            if not con.in_transaction:
+                con.execute("BEGIN IMMEDIATE")
+            snapshot = con.execute("SELECT window_id,source_kind FROM snapshots WHERE id=?", (snapshot_id,)).fetchone()
+            window_id, source = snapshot
+            con.execute("INSERT OR REPLACE INTO defect_reconciliation VALUES(?,?)",
+                        (snapshot_id, int(reconcile_window and window_id is not None)))
+            for key, rec in self._occurrence_keys(con, snapshot_id, window_id, source, records):
                 keys_seen.add(key)
                 count += 1
                 existing = con.execute("SELECT defect_key FROM defect_entities WHERE defect_key=?", (key,)).fetchone()
@@ -704,8 +771,8 @@ class Store:
                     """SELECT DISTINCT de.defect_key
                        FROM defect_entities de
                        JOIN snapshots s ON s.id=de.last_seen_snapshot_id
-                       WHERE s.window_id=? AND de.last_seen_snapshot_id<>?""",
-                    (window_id, snapshot_id),
+                       WHERE s.window_id=? AND s.source_kind=? AND de.last_seen_snapshot_id<>?""",
+                    (window_id, source, snapshot_id),
                 ).fetchall()
                 missing = [r["defect_key"] for r in previous if r["defect_key"] not in keys_seen]
                 for key in missing:
@@ -1132,22 +1199,7 @@ class Store:
                        WHERE snapshot_id=? AND line=? AND COALESCE(repair_status_current,'')=''""",
                     (snapshot_id, line),
                 ).fetchone()["n"]
-                snap = con.execute("SELECT window_id FROM snapshots WHERE id=?", (snapshot_id,)).fetchone()
-                window_id = snap["window_id"] if snap else None
-                if window_id is None:
-                    removed = 0
-                else:
-                    removed = con.execute(
-                        """SELECT COUNT(DISTINCT de.defect_key) n
-                           FROM defect_entities de
-                           WHERE de.line=? AND de.removed_from_latest=1
-                             AND EXISTS (
-                               SELECT 1 FROM defect_observations o
-                               JOIN snapshots s ON s.id=o.snapshot_id
-                               WHERE o.defect_key=de.defect_key AND s.window_id=?
-                             )""",
-                        (line, window_id),
-                    ).fetchone()["n"]
+                removed = self._removed_at(con, snapshot_id, line)
                 result.append({
                     "line": line,
                     "defect_rows": total,
@@ -1172,7 +1224,7 @@ class Store:
             sql = """SELECT s.id AS snapshot_id,s.collected_at,lm.line,lm.product_model,lm.fpy,lm.check_fpy,lm.quantity,lm.total_defect_qty,
                             (SELECT COUNT(*) FROM defect_observations o WHERE o.snapshot_id=s.id AND o.line=lm.line) AS defect_rows,
                             (SELECT COUNT(*) FROM defect_observations o WHERE o.snapshot_id=s.id AND o.line=lm.line AND UPPER(COALESCE(o.repair_status_current,''))='N') AS repair_n,
-                            (SELECT COUNT(*) FROM defect_entities de WHERE de.removed_from_latest=1 AND de.line=lm.line AND EXISTS(SELECT 1 FROM defect_observations ox JOIN snapshots sx ON sx.id=ox.snapshot_id WHERE ox.defect_key=de.defect_key AND sx.window_id=s.window_id)) AS removed_latest
+                            0 AS removed_latest
                      FROM snapshots s JOIN line_metrics lm ON lm.snapshot_id=s.id
                      WHERE s.window_id=?"""
             params: List[Any] = [snap["window_id"]]
@@ -1181,6 +1233,7 @@ class Store:
             sql += " ORDER BY s.id DESC,lm.line LIMIT ?"; params.append(limit)
             rows = [dict(r) for r in con.execute(sql, params).fetchall()]
             for row in rows:
+                row["removed_latest"] = self._removed_at(con, row["snapshot_id"], row["line"])
                 top = con.execute(
                     """SELECT defect_code,defect_desc,COUNT(*) qty FROM defect_observations
                        WHERE snapshot_id=? AND line=? GROUP BY defect_code,defect_desc ORDER BY qty DESC,defect_code LIMIT 3""",
@@ -1188,6 +1241,34 @@ class Store:
                 ).fetchall()
                 row["top3"] = [dict(x) for x in top]
             return rows
+
+    @staticmethod
+    def _removed_at(con, sid, line=None, limit=None):
+        # Reconstruct the view at this revision, even after a later reappearance.
+        # Local origins have separate SQLite databases. Exclude other source types.
+        sql = """WITH past AS (
+            SELECT o.defect_key, MIN(s.collected_at) AS first_seen_at, MAX(s.id) AS last_id
+            FROM snapshots current JOIN snapshots s
+                ON s.window_id=current.window_id AND s.source_kind=current.source_kind
+            JOIN defect_observations o ON o.snapshot_id=s.id
+            WHERE current.id=? AND current.status='complete' AND s.status='complete' AND s.id<current.id
+                AND NOT EXISTS (SELECT 1 FROM defect_reconciliation x
+                                WHERE x.snapshot_id=current.id AND x.covers_window=0)
+                AND NOT EXISTS (SELECT 1 FROM defect_observations n
+                                WHERE n.snapshot_id=current.id AND n.defect_key=o.defect_key)"""
+        args = [sid]
+        if line:
+            sql += " AND o.line=?"
+            args.append(line)
+        sql += " GROUP BY o.defect_key) "
+        if limit is None:
+            return con.execute(sql + "SELECT COUNT(*) FROM past", args).fetchone()[0]
+        sql += """SELECT o.defect_key,p.first_seen_at,s.collected_at AS last_seen_at,o.line,o.pcba_sn,
+            o.defect_code,o.defect_desc,o.defect_time,o.product_model,o.repair_comment,
+            o.repair_status_current,o.defect_type_current,'REMOVED_FROM_LATEST' AS repair_state_current
+            FROM past p JOIN defect_observations o ON o.snapshot_id=p.last_id AND o.defect_key=p.defect_key
+            JOIN snapshots s ON s.id=p.last_id ORDER BY o.line,o.defect_time,o.defect_key LIMIT ?"""
+        return [dict(row) for row in con.execute(sql, [*args,limit])]
 
     def current_pcbas(self, snapshot_id: Optional[int] = None, line: Optional[str] = None,
                       only_unresolved: bool = False) -> List[str]:
@@ -1257,17 +1338,7 @@ class Store:
                 else:
                     n = con.execute(f"SELECT COUNT(*) n FROM {table} WHERE snapshot_id=?", (snapshot_id,)).fetchone()["n"]
                 out.append({"dataset": key, "label": label, "rows": int(n)})
-            snap = con.execute("SELECT window_id FROM snapshots WHERE id=?", (snapshot_id,)).fetchone()
-            if snap and snap["window_id"] is not None:
-                removed = con.execute(
-                    """SELECT COUNT(DISTINCT de.defect_key) n FROM defect_entities de
-                       WHERE de.removed_from_latest=1 AND EXISTS(
-                         SELECT 1 FROM defect_observations o JOIN snapshots s ON s.id=o.snapshot_id
-                         WHERE o.defect_key=de.defect_key AND s.window_id=?
-                       )""", (snap["window_id"],)
-                ).fetchone()["n"]
-            else:
-                removed = 0
+            removed = self._removed_at(con, snapshot_id)
             out.append({"dataset": "removed_defects", "label": "Removidas do export / validar AT", "rows": int(removed)})
             raw = con.execute("SELECT COUNT(*) n FROM snapshot_payloads WHERE snapshot_id=?", (snapshot_id,)).fetchone()["n"]
             out.append({"dataset": "raw_payloads", "label": "Payloads brutos preservados", "rows": int(raw)})
@@ -1291,27 +1362,7 @@ class Store:
                 return [dict(r) for r in con.execute(sql+' ORDER BY event_time LIMIT ?',params+[limit])]
         with self.connect() as con:
             if dataset == "removed_defects":
-                snap = con.execute("SELECT window_id FROM snapshots WHERE id=?", (snapshot_id,)).fetchone()
-                if not snap or snap["window_id"] is None:
-                    return []
-                sql = """SELECT de.defect_key,de.first_seen_at,de.last_seen_at,de.line,de.pcba_sn,de.defect_code,de.defect_desc,de.defect_time,de.product_model,
-                                (SELECT o.repair_comment FROM defect_observations o JOIN snapshots so ON so.id=o.snapshot_id
-                                 WHERE o.defect_key=de.defect_key AND so.window_id=? ORDER BY o.snapshot_id DESC LIMIT 1) AS repair_comment,
-                                (SELECT o.repair_status_current FROM defect_observations o JOIN snapshots so ON so.id=o.snapshot_id
-                                 WHERE o.defect_key=de.defect_key AND so.window_id=? ORDER BY o.snapshot_id DESC LIMIT 1) AS repair_status_current,
-                                (SELECT o.defect_type_current FROM defect_observations o JOIN snapshots so ON so.id=o.snapshot_id
-                                 WHERE o.defect_key=de.defect_key AND so.window_id=? ORDER BY o.snapshot_id DESC LIMIT 1) AS defect_type_current,
-                                'REMOVED_FROM_LATEST' AS repair_state_current
-                         FROM defect_entities de
-                         WHERE de.removed_from_latest=1 AND EXISTS(
-                           SELECT 1 FROM defect_observations o JOIN snapshots so ON so.id=o.snapshot_id
-                           WHERE o.defect_key=de.defect_key AND so.window_id=?
-                         )"""
-                params: List[Any] = [snap["window_id"], snap["window_id"], snap["window_id"], snap["window_id"]]
-                if line:
-                    sql += " AND de.line=?"; params.append(line)
-                sql += " ORDER BY de.line,de.defect_time LIMIT ?"; params.append(limit)
-                return [dict(r) for r in con.execute(sql, params).fetchall()]
+                return self._removed_at(con, snapshot_id, line, limit)
             if dataset == "defects":
                 sql = "SELECT * FROM defect_observations WHERE snapshot_id=?"; params: List[Any] = [snapshot_id]
                 if line:

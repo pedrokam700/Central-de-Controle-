@@ -8,7 +8,7 @@ function fixture(){return {source_id:'A',snapshot_id:'S',revision:2,line_id:'TAN
  pcba_history:{records:[{pcba_sn:'P1',defect_code:'D1',defect_time:'2026-10-17 08:00:00',failure_family:'DISPLAY',record_id:'H1'},
  {pcba_sn:'OLD',defect_code:'D1',defect_time:'2026-10-17 09:00:00',record_id:'H2'},
  {pcba_sn:'OLD',defect_code:'FUTURE',defect_time:'2026-10-20 09:00:00',record_id:'H3'}]},
- material_trace:{records:[{current_pcba_sn:'P1',item_sn:'M1',item_type:'generic',current_defect_key:'K1',part_number:'PN1',previous_pcbas_json:'["OLD"]',record_id:'M1'}]},
+ material_trace:{records:[{current_pcba_sn:'P1',item_sn:'M1',item_type:'generic',current_defect_key:'K1',bind_time_utc:'2026-10-19T08:00:00-03:00',part_number:'PN1',previous_pcbas_json:'["OLD"]',record_id:'M1'}]},
  insights:{drilldowns:{pcba_analysis:[{PCBA:'P1','Defect Code':'D1','Defect Time':event.defect_time,'Uso da PCBA na falha':'2º uso'}],
  material_analysis:[{'PCBA atual':'P1','Material SN':'M1','Tipo material':'generic','Defect Code atual':'D1','Defect Time atual':event.defect_time,'Uso material na falha':'3º uso'}]}}};}
 test('main PCBA own use and physical component association are independent, auditable populations',()=>{
@@ -298,4 +298,40 @@ test('material physical reuse cannot be inferred from 2114 failure count or from
  assert.equal(model.components.rows[0].known_cycle_conflict,true);
  assert.equal(model.components.counts.known_reused_mountings,0);
  assert.equal(model.components.counts.unknown_use,1);
+});
+
+test('previous boards repeating A do not classify current B, and prior evidence stays with its own occurrence',()=>{
+ const line='TAN10102',stamp='2026-11-26T12:00:00-03:00';
+ const a={pcba_sn:'C1',defect_code:'GN03-DL26',defect_desc:'Fingerprint',defect_time:stamp,defect_key:'KEY-A'};
+ const b={...a,pcba_sn:'C2',defect_code:'JG07-SX94',defect_desc:'Camera',defect_key:'KEY-B'};
+ const prior=(pcba,code)=>({pcba_sn:pcba,defect_code:code,defect_desc:code===a.defect_code?a.defect_desc:b.defect_desc,defect_time:'2026-11-25T09:00:00-03:00'});
+ const link=(current,previous)=>({current_pcba_sn:current.pcba_sn,current_defect_key:current.defect_key,
+   item_sn:'M',item_type:'Screen',material_use_index:3,bind_time_utc:'2026-11-26T08:00:00Z',previous_pcbas:previous});
+ const row=({occurrences,history,links})=>buildReuseCohorts({line_id:line,occurrences,pcba_history:{records:history},
+   material_trace:{records:links}}).components.rows[0];
+ const negative=row({occurrences:[b],links:[link(b,['P1','P2'])],history:[prior('P1',a.defect_code),prior('P2',a.defect_code)]});
+ assert.equal(negative.cross_board_same_failure,true);
+ assert.equal(negative.same_failure,false);
+ const crossed=row({occurrences:[a,b],links:[link(a,['P1']),link(b,['P2'])],
+   history:[prior('P1',b.defect_code),prior('P2',a.defect_code)]});
+ assert.equal(crossed.same_failure,false);
+ const matched=row({occurrences:[a,b],links:[link(a,['P1']),link(b,['P2'])],
+   history:[prior('P1',a.defect_code),prior('P2',a.defect_code)]});
+ assert.equal(matched.same_failure,true);
+ const unknown=row({occurrences:[a],links:[{...link(a,['P1']),bind_time_utc:null}],history:[prior('P1',a.defect_code)]});
+ assert.equal(unknown.current_failure_relations[0].classification,'UNKNOWN');
+ const foreign=row({occurrences:[{...a,source_id:'A'}],links:[link(a,['P1'])],
+   history:[{...prior('P1',a.defect_code),source_id:'B'}]});
+ assert.equal(foreign.same_failure,false);
+ assert.deepEqual(matched.current_failure_relations.map(x=>x.classification),['EXACT','OTHER']);
+});
+
+test('a future or foreign 2114 anchor cannot make an undated sequence a prior failure',()=>{
+ const selected={...event,source_id:'here'};
+ const undated={pcba_sn:selected.pcba_sn,hist_seq:3,defect_code:selected.defect_code,source_id:'here'};
+ for(const explicit of [{source_id:'elsewhere'},{defect_time:'2026-10-20T10:00:00-03:00'}]){
+  const evidence=[undated,{...undated,hist_seq:4,...explicit}];
+  assert.deepEqual(boardHistSeqRecurrence(selected,evidence),[]);
+ }
+ assert.equal(boardHistSeqRecurrence(selected,[undated,{...undated,hist_seq:4}]).length,1);
 });
