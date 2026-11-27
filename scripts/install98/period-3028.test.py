@@ -269,7 +269,7 @@ class Period(unittest.TestCase):
     def test_foreground_mes_tab_and_failed_middle_line_keep_operator_context(self):
         from unittest.mock import MagicMock, patch
         from types import ModuleType
-        import period_grids_3028 as source
+        import comment_provenance_3028 as source
         from comment_provenance_3028 import _COLUMNS, collect_3028_period
 
         def tab(host, visible):

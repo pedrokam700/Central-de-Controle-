@@ -11,7 +11,6 @@ BASE = 'db3cb5b58c99bcf86c44b671280cb42f7dd31d4c'
 BRANCH = 'work/ames-lab-entry-p01-p03-p06-20261117'
 ALLOWED = {
  'ames/agent/store.py',
- 'ames/agent/period_grids_3028.py',
  'scripts/agent-canonical.test.py',
  'ames/agent-client.mjs',
  'ames/console-view.mjs',

@@ -9,7 +9,6 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1];BASE='48112ea9e408f5dce7fe85f951616b06ed4020e0';BRANCH='work/ames-p08-generation-reconciliation-20261118'
 ALLOWED={
  'ames/agent/store.py',
- 'ames/agent/period_grids_3028.py',
  'scripts/agent-canonical.test.py',
  'ames/agent-client.mjs',
  'ames/console-view.mjs',
