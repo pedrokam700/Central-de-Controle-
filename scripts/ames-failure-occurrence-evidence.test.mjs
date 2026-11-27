@@ -14,8 +14,10 @@ function snapshot(){
     process_timeline:{contexts:[{
       pcba_sn:'PCB-A',defect_code:'F1',defect_time:'2026-10-17T10:00:00-03:00',production_shift_source:'3022',production_shift_basis:'reference_process',reference_station_code:'A5100',reference_operation_name:'OQC',reference_event_time:'2026-10-17T09:40:00-03:00',production_shift:'1st Shift',production_operational_date:'2026-10-17',return_station_code:'A5400',return_operation_name:'RF TEST',return_event_time:'2026-10-17T11:30:00-03:00',
     }]},
-    pcba_history:{records:[{pcba_sn:'PCB-A',defect_code:'F1',defect_desc:'LCD LEAK',defect_time:'2026-10-10T08:00:00-03:00'}]},
-    material_trace:{records:[{current_pcba_sn:'PCB-A',item_sn:'LCM-1',item_type:'LCM',known_use_count:2,previous_pcbas:['PCB-OLD'],current_defect_key:null}]},
+    pcba_history:{records:[{pcba_sn:'PCB-A',defect_code:'F1',defect_desc:'LCD LEAK',defect_time:'2026-10-10T08:00:00-03:00'},
+       {pcba_sn:'PCB-OLD',defect_code:'F1',defect_desc:'LCD LEAK',defect_time:'2026-10-09T10:00:00-03:00'}]},
+    material_trace:{records:[{current_pcba_sn:'PCB-A',item_sn:'LCM-1',item_type:'LCM',known_use_count:2,previous_pcbas:['PCB-OLD'],current_defect_key:null,
+      defect_code:occurrence.defect_code,defect_time:occurrence.defect_time,bind_time_utc:'2026-10-17T12:30:00Z'}]},
     insights:{drilldowns:{
       pcba_second_use:[{PCBA:'PCB-A','Defect Code atual':'F1','Defect Time atual':'2026-10-17T10:00:00-03:00'}],
       pcba_3plus_use:[],

@@ -87,6 +87,8 @@ function materialLinks(snapshot,occurrence){
   const all=reuseLinks(snapshot||{});
   const rows=all.filter(link=>{
     if(!same(link.pcba,occurrence.pcba_sn))return false;
+    if(link.occurrence_id&&link.occurrence_id!==occurrence.occurrence_id)return false;
+    if(link.defect_key&&link.defect_key!==occurrence.defect_key)return false;
     if(link.defect_code&&occurrence.defect_code&&!same(link.defect_code,occurrence.defect_code))return false;
     if(link.defect_time&&occurrence.defect_time&&!sameInstant(link.defect_time,occurrence.defect_time))return false;
     return true;

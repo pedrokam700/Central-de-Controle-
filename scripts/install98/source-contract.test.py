@@ -10,16 +10,18 @@ class Source(unittest.TestCase):
   changed=git('diff','--name-only',BASE,'HEAD').splitlines()
   # Exact reviewed deltas for owned Home/OPC tabs and session-failure recovery.
   navigation_files = {
+   'ames/console-monitor-runtime.mjs': 'f34c1784160664a2eaf3b9f2d1a2509da00d0e6591192c8e1dc40de46f2ad1e1',
+   'ames/console-failure-evidence.mjs': 'b14a1ee6d74a7d3c7fa504b4febd7b4e3041181d817db5839c1f836f8c1bb947',
    'ames/reading-period-controller.mjs': 'e891b77cea7ba95edb6b65f6a9640dc511a6c3fd5df37929abc98f59d10617f0',
    'ames/failure-group-evidence.mjs': '9ceaf2b08ca872aee9d9f041edbe47c6a8e89f2600e9ddcc3c45a275b1e50e56',
    'ames/data/reuse-cohorts.mjs': '1e1f0b4306363bc71a1699753dc1a36187589435025c55f4dcdf822f0f6bb4c8',
-   'ames/data/reuse-analysis.mjs': '5159e90943bf734f6206dfedd02d3a5cfa25b4fbf815023320bfa4a6d338f864',
-   'ames/console-reuse-history-timeline.mjs': '7c762928e4aa7a0b2282b51af9b513c7a561cc23faed27327f8131519866b55b',
+   'ames/data/reuse-analysis.mjs': 'a5e69bffeda6f5a66076102fd3e2019c7d9e369d7a12db04d1b7b1d6b0637286',
+   'ames/console-reuse-history-timeline.mjs': '178221676670c26e88e0bb1dab6a669f82b1b53ef5ec6b78b272d9b335d79563',
    'ames/console-reuse-cohorts.mjs': 'ca2bf2b519589687391937ea53e5618f8c6d8459f43c74ab8016d52dae9a4007',
-   'ames/console-reading-period.mjs': 'b10728d56d8cccb7614b9af028cbde5c328fff27ec74b3475bed6d921f0df067',
+   'ames/console-reading-period.mjs': '0f94a101f1029ff9029906d004c4f87ba3ddeec9387f2e4868610c4c0e9493e3',
    'ames/collection-status.mjs': '5d51a9205b08cc4a88ffd9e4ac2c47bc82e0e87b75e4c67ffa2f526cc90ab6b7',
    'ames/agent/store.py': 'df74d6af848f70231fbb0f36051e21931a7b1648c402f9648e2c926fc425d929',
-   'ames/agent/comment_provenance_3028.py': '9f4d33f9bd6d8692c57357c0ffa9252cc890adcef2d5f14a9d1658d76ac16d70',
+   'ames/agent/comment_provenance_3028.py': '4bef2b71e64782958eef4e23113cfb43fb5e7df525824308f9d5699f88f01812',
    'ames/agent-client.mjs': 'b83fab495e185a1b40c2eb430cd57e1c46ab25f4153b40605166a6b9ce02a0f8',
    'ames/console-view.mjs': 'ee927306eaf679e0b98ea3be9feb9d4e3364faceaa2491856b9140810b578767',
    'ames/agent/ames_3012_live.py': '7b2e1cfb1905bb1d8b07a8fcabb70a5092e068c0711e8f0e322b8c71ccc4fdb3',

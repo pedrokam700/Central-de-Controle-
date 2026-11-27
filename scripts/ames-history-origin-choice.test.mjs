@@ -38,7 +38,7 @@ test('reading-period and last-capture views import one source-of-truth resolver'
  const read=fs.readFileSync(new URL('../ames/reading-period-controller.mjs',import.meta.url),'utf8');
  const last=fs.readFileSync(new URL('../ames/console-latest-capture.mjs',import.meta.url),'utf8');
  const sw=fs.readFileSync(new URL('../sw.js',import.meta.url),'utf8');
- assert.match(read,/resolveHistorySource\(entries/);
+ assert.match(read,/resolveHistorySource\(candidates/);
  assert.match(last,/resolveHistorySource\(plan.candidates/);
  assert.match(sw,/ames\/data\/history-source-choice.mjs/);
 });

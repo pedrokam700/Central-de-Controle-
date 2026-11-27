@@ -20,7 +20,7 @@ function provenance(e){
 export function renderReuseHistoryTimeline(input={}, {board=false,status={}}={}){
  const rows=buildReuseHistoryTimeline(input);
  const operational=rows.filter(e=>e.source_view==='3074'||(['2114','3028'].includes(e.source_view)&&e.defect_code));
- const repairRows=rows.filter(e=>e.source_view==='3012'&&e.occurrence_match==='proven');
+ const repairRows=rows.filter(e=>e.source_view==='3012'&&(e.occurrence_match==='proven'||e.repair_confirmed===true&&e.association==='exact_occurrence'));
  const compact=operational.length?`<div class="table-wrap ames-component-comparison${board?' ames-board-comparison':''}"><table><thead><tr>
   <th>PCBA / ${t('Vínculo','Binding')} 3074</th><th>${t('Falha','Failure')}</th>
   <th>${t('Análise 2114','2114 analysis')}</th><th>${t('Hora da falha','Failure time')}</th>
@@ -31,8 +31,11 @@ export function renderReuseHistoryTimeline(input={}, {board=false,status={}}={})
    const repairs=occurrence?repairRows.filter(r=>r.current_occurrence_id===occurrence&&r.pcba_sn===e.pcba_sn&&compatibleExplicitLineage(e,r)):[];
    const values=(get)=>[...new Set(repairs.map(get).filter(Boolean))];
    const names=values(r=>r.actors.find(a=>a.role==='repair_user'&&!a.name_conflict)?.name);
+   if(e.source_view==='3028'&&e.repair_user_name)names.unshift(e.repair_user_name);
    const clocks=values(r=>r.repair_time);
+   if(e.source_view==='3028'&&e.repair_time)clocks.unshift(e.repair_time);
    const comments=values(r=>r.repair_comment);
+   if(e.source_view==='3028'&&e.repair_comment)comments.unshift(e.repair_comment);
    const relation=e.current_comparison==='EXACT'?t('Mesma falha','Same defect'):
     e.current_comparison==='SIMILAR'?t('Mesma família','Same family'):
     e.current_comparison==='OTHER'?t('Outra falha','Different defect'):
@@ -42,8 +45,8 @@ export function renderReuseHistoryTimeline(input={}, {board=false,status={}}={})
     <td><strong>${esc(e.defect_desc||e.defect_code||t('Histórico não disponível','History unavailable'))}</strong>
     ${e.defect_code?`<small>${esc(e.defect_code)}</small>`:''}</td>
     <td>${e.source_view==='2114'?esc(e.defect_type||'—'):'—'}</td><td>${clock(e.defect_time)}</td>
-    <td>${names.map(esc).join('<br>')||'—'}</td><td>${clocks.map(clock).join('<br>')||'—'}</td>
-    <td>${comments.map(esc).join('<br>')||'—'}</td><td>${esc(relation)}</td></tr>`;
+    <td>${[...new Set(names)].map(esc).join('<br>')||'—'}</td><td>${[...new Set(clocks)].map(clock).join('<br>')||'—'}</td>
+    <td>${[...new Set(comments)].map(esc).join('<br>')||'—'}</td><td>${esc(relation)}</td></tr>`;
   }).join('')}</tbody></table>${operational.length>20?`<nav data-operational-pages aria-label="${t('Páginas de falhas','Failure pages')}"><button type="button" class="button secondary" data-page-step="-1">${t('Anterior','Previous')}</button> <span aria-live="polite"></span> <button type="button" class="button secondary" data-page-step="1">${t('Próxima','Next')}</button></nav>`:''}</div>`:'';
  const warnings=Object.entries(status).map(([view,value])=>`<p class="mes-context" data-timeline-coverage="${esc(view)}">${esc(view)} · ${value==='error'?t('Leitura local indisponível; evidências já carregadas preservadas. Ausência não comprovada.','Local read unavailable; loaded evidence preserved. Absence unproven.'):value==='loaded'?t('Cache local consultado; ausência de registros não comprova ausência no MES.','Local cache read; no rows does not prove MES absence.'):t('Cache local não consultado; cobertura não comprovada.','Local cache not queried; coverage unproven.')}</p>`).join('');
  return `<section data-reuse-history-timeline data-reuse-3012-history>

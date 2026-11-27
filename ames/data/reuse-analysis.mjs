@@ -117,6 +117,8 @@ export function reuseLinks(snapshot){
    previous_pcbas:unique(evidence.map(e=>e.pcba)).join(', ')||unique(previous.concat(corr.map(c=>value(c,'historical_pcba','PCBA desvinculada')))).join(', '),
    defect_code:value(r,'defect_code','Defect Code atual')||occurrence?.defect_code,defect_desc:value(r,'defect_desc','Defect Description atual','Defect Desc atual')||occurrence?.defect_desc,
    defect_time:occurrence?.defect_time||value(r,'defect_time','Defect Time atual'),usage:uses==null?null:Number(uses)===2?'2º uso':Number(uses)>=3?'3º+ uso':null,
+   occurrence_id:proven?explicit.occurrence_id||null:null,
+   defect_key:proven?explicit.defect_key||null:null,
    relations:relations.join(', ')||null,
    history_code:historyCodeText(evidence,historyCodes),
    history_desc:historyDescText(evidence,historyDescriptions),

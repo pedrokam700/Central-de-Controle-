@@ -176,35 +176,40 @@ def _confirmed(original, rows, groups):
     return exact, exact or (grouped and "detail" not in errors and native.keys() == recovered.keys() and (native <= recovered or recovered <= native))
 
 
-def _native_agrees(cap, runs, repeat, repeated, line, read_visible):
+def _native_agrees(cap, runs, repeat, repeated, line, read_visible, diagnostic=None):
     """An independently selected MES row must reproduce both whole source tables."""
+    def reject(reason):
+        if diagnostic is not None:
+            diagnostic.append(reason)
+        return False
+
     if (not read_visible or not runs or runs.keys() != repeated.keys()
             or any(c.get("summary_scope_error") or not _complete(c["summary"])
                    or not _complete(c["classification"]) for c in (cap, repeat))):
-        return False
+        return reject("resumo/classificação incompletos ou escopos de modelo divergentes")
     summary = cap["summary"]["records"]
     if (_counts(summary) != _counts(repeat["summary"]["records"])
             or _counts(cap["classification"]["records"]) != _counts(repeat["classification"]["records"])):
-        return False
+        return reject("resumo ou classificação mudou durante a leitura")
     columns = cap.get("scope_columns", {}).get("detail", {})
     for scope, run in runs.items():
         matching = [row for row in summary if _model_scope(_field(row,"prodModel",("productModel",))[1]) == scope]
         other = repeated[scope]
         if (len(matching) != 1 or not all(scope) or any(r.get("scope_errors") or
                 not all(_complete(r[k]) for k in ("detail","grouped")) for r in (run,other))):
-            return False
+            return reject("resumo sem linha única selecionável ou grades sem completude")
         detail = _counts(run["detail"]["records"])
         if detail != _counts(other["detail"]["records"]) or _counts(run["grouped"]["records"]) != _counts(other["grouped"]["records"]):
-            return False
+            return reject("detalhe ou agrupamento mudou entre consultas")
         for row in run["detail"]["records"]:
             _, row_line = _field(row, columns.get("line"), ("lineIdNew", "lineId"))
             _, model = _field(row, columns.get("model"), ("productModel", "prodModel"))
             if row_line.casefold() != line.casefold() or model.casefold() not in scope:
-                return False
+                return reject("linha ou modelo de uma ocorrência não comprovado")
         visible = read_visible(run["prodModel"])
         if (visible is None or _counts(visible["summary"]) != _counts(matching)
                 or _counts(visible["detail"]) != detail or _counts(visible["grouped"]) != _counts(run["grouped"]["records"])):
-            return False
+            return reject("seleção sem resposta íntegra para as duas grades")
     return True
 
 
@@ -351,13 +356,14 @@ def _capture_checked_period(read, line, start, end, rescope=None, read_models=No
                     if rescope:
                         rescope(line, left, right)
                     witness, repeated_runs = capture(left, right, inherited)
+                    diagnostic = []
                     if _native_agrees(cap, runs, witness, repeated_runs, line,
-                                      lambda model: read_visible_slice(model, left, right)):
+                                      lambda model: read_visible_slice(model, left, right), diagnostic):
                         parts.append((cap, runs))
                         native_windows.append(cap["baseParams"])
                         return
                     raise ValueError(f"{mismatch(cap, runs, left, right)} "
-                                     "seleção nativa da fatia sem confirmação entre as duas consultas.")
+                                     "seleção nativa da fatia sem confirmação. " + " ".join(diagnostic))
                 raise mismatch(cap, runs, left, right)
             pivot = left + timedelta(hours=int((right - left).total_seconds() // 7200))
             collect_slice(left, pivot)
